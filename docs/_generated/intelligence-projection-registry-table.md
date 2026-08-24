@@ -17,7 +17,7 @@ A 360 is an intelligence projection over canonical Aether truth — never a comp
 
 ## Section states
 
-`available`, `degraded`, `empty`, `missing`, `not_applicable`, `unknown`
+`available`, `degraded`, `empty`, `missing`, `not_applicable`, `stale`, `suppressed`, `unknown`
 
 ## Graph mutation policies
 

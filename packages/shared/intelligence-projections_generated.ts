@@ -57,6 +57,8 @@ export const intelligenceProjectionSectionStates = [
   'empty',
   'missing',
   'not_applicable',
+  'stale',
+  'suppressed',
   'unknown',
 ] as const;
 export type IntelligenceProjectionSectionState = typeof intelligenceProjectionSectionStates[number];

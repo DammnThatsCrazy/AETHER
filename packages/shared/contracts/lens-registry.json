@@ -1,0 +1,319 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractVersion": "1.0.0",
+  "description": "Canonical Aether lens registry for the projection engine (A8). A lens is a composable viewing frame a projection applies over canonical Aether truth — a declared, typed refinement of how a 360 is asked and rendered. One default base lens ('standard') plus domain/capability overlay lenses that compose additively via the projection composition algebra. Overlays declare their base lens; composition is order-stable and grain-aware. A lens never owns canonical truth and never adds a write path.",
+  "lensKinds": [
+    "base",
+    "overlay"
+  ],
+  "lenses": [
+    {
+      "id": "standard",
+      "displayName": "Standard",
+      "kind": "base",
+      "baseLens": null,
+      "description": "The default lens: the plain, unadorned projection over canonical Aether truth — identity, relationship facts, graph, evidence, temporal, measurement. The identity element of lens composition; composing any overlay onto Standard leaves Standard intact.",
+      "domain": "general",
+      "applicableSubjectKinds": ["entity", "relationship", "campaign", "episode", "population", "source", "connection", "cluster", "agent"],
+      "temporalModes": ["window", "as_of", "compare", "relative"],
+      "default": true
+    },
+    {
+      "id": "temporal",
+      "displayName": "Temporal",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Foregrounds temporal structure — state over time, transitions, validity, bitemporal history, correction deltas. When composed with COMPARE/CORRECTION_DIFF modes it is the dominant lens for change detection.",
+      "domain": "temporal",
+      "applicableSubjectKinds": ["entity", "relationship", "campaign", "episode", "source"],
+      "temporalModes": ["window", "as_of", "compare", "relative"],
+      "default": false
+    },
+    {
+      "id": "geographic",
+      "displayName": "Geographic",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views a subject through place — locations, regions, geo observations, movement. Composes with the geographic360 projection's context-capsule semantics.",
+      "domain": "spatial",
+      "applicableSubjectKinds": ["entity", "population", "source"],
+      "temporalModes": ["window", "compare", "relative"],
+      "default": false
+    },
+    {
+      "id": "population",
+      "displayName": "Population",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views a subject as a member of a population or cohort — definitions, membership, clustering, comparison baselines.",
+      "domain": "population",
+      "applicableSubjectKinds": ["entity", "population", "cluster"],
+      "temporalModes": ["window", "relative"],
+      "default": false
+    },
+    {
+      "id": "relationship",
+      "displayName": "Relationship",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Foregrounds the relationship graph — connections, edges, hop structure, graph motifs. Composes with the relationship360 projection.",
+      "domain": "relationship",
+      "applicableSubjectKinds": ["entity", "relationship"],
+      "temporalModes": ["window", "as_of", "relative"],
+      "default": false
+    },
+    {
+      "id": "episode",
+      "displayName": "Episode",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views the subject as a sequence of episodes — events, boundaries, continuity, arc structure.",
+      "domain": "episode",
+      "applicableSubjectKinds": ["entity", "campaign", "episode"],
+      "temporalModes": ["window", "relative"],
+      "default": false
+    },
+    {
+      "id": "journey",
+      "displayName": "Journey",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Foregrounds journey structure — touchpoints, stages, path, completion. Composes with the episode360 / outcome360 journey semantics.",
+      "domain": "journey",
+      "applicableSubjectKinds": ["entity", "campaign", "episode"],
+      "temporalModes": ["window", "compare", "relative"],
+      "default": false
+    },
+    {
+      "id": "communication",
+      "displayName": "Communication",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views the subject through outbound communication — channels, messages, delivery, engagement. Composes with the communication360 projection.",
+      "domain": "communication",
+      "applicableSubjectKinds": ["campaign", "episode", "source"],
+      "temporalModes": ["window", "as_of", "relative"],
+      "default": false
+    },
+    {
+      "id": "campaign",
+      "displayName": "Campaign",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Foregrounds campaign structure — campaign facts, touchpoints, quality, source mapping. Composes with the campaign360 projection.",
+      "domain": "campaign",
+      "applicableSubjectKinds": ["campaign", "episode", "population", "source"],
+      "temporalModes": ["window", "compare", "relative"],
+      "default": false
+    },
+    {
+      "id": "attribution",
+      "displayName": "Attribution",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views conversions through attribution — credits, models, touchpoint contributions. Composes with the outcome360 measurement engine.",
+      "domain": "attribution",
+      "applicableSubjectKinds": ["campaign", "episode"],
+      "temporalModes": ["window", "compare", "relative"],
+      "default": false
+    },
+    {
+      "id": "economic",
+      "displayName": "Economic",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views the subject through economic value — flows, positions, obligations, allocations, settlements, cost/margin/exposure. Composes with the economic360 projection; never sums mixed currencies.",
+      "domain": "economic",
+      "applicableSubjectKinds": ["entity", "campaign", "episode", "source", "population"],
+      "temporalModes": ["window", "compare", "relative"],
+      "default": false
+    },
+    {
+      "id": "outcome",
+      "displayName": "Outcome",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views the subject through outcomes — state, finality, transitions, chains, journey completion. Composes with the outcome360 projection.",
+      "domain": "outcome",
+      "applicableSubjectKinds": ["entity", "campaign", "episode", "population"],
+      "temporalModes": ["window", "compare", "relative"],
+      "default": false
+    },
+    {
+      "id": "infrastructure",
+      "displayName": "Infrastructure",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views the subject through infrastructure — entities, deployments, state, relationships among infrastructure facts. Composes with the infrastructure360 projection (read-only).",
+      "domain": "infrastructure",
+      "applicableSubjectKinds": ["entity", "deployment", "infrastructure"],
+      "temporalModes": ["window", "as_of", "relative"],
+      "default": false
+    },
+    {
+      "id": "agent",
+      "displayName": "Agent",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views the subject through agentic structure — agents, access, tool use, executions. Composes with the agent360 / execution360 projections.",
+      "domain": "agentic",
+      "applicableSubjectKinds": ["entity", "agent"],
+      "temporalModes": ["window", "as_of", "relative"],
+      "default": false
+    },
+    {
+      "id": "execution",
+      "displayName": "Execution",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Foregrounds execution — actions taken, jobs, flows, resources consumed, outcomes produced. Composes with the execution360 projection.",
+      "domain": "execution",
+      "applicableSubjectKinds": ["entity", "agent", "episode"],
+      "temporalModes": ["window", "as_of", "relative"],
+      "default": false
+    },
+    {
+      "id": "risk",
+      "displayName": "Risk",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views the subject through risk — risk outputs, model governance, capability risk, exposure. Composes with the risk360 projection.",
+      "domain": "risk",
+      "applicableSubjectKinds": ["entity", "relationship", "cluster", "population"],
+      "temporalModes": ["window", "as_of", "relative"],
+      "default": false
+    },
+    {
+      "id": "fraud",
+      "displayName": "Fraud",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Foregrounds fraudulent structure — fraud synthesis, graph motifs, anomaly concentration. Composes with the fraud360 projection.",
+      "domain": "fraud",
+      "applicableSubjectKinds": ["entity", "relationship", "agent"],
+      "temporalModes": ["window", "as_of", "relative"],
+      "default": false
+    },
+    {
+      "id": "trust",
+      "displayName": "Trust",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views the subject through trust — reputation signals, provenance of the underlying truth, confidence of sources.",
+      "domain": "trust",
+      "applicableSubjectKinds": ["entity", "relationship", "source"],
+      "temporalModes": ["window", "as_of", "relative"],
+      "default": false
+    },
+    {
+      "id": "consent",
+      "displayName": "Consent",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views the subject through consent — consent state, historical consent evaluation, permitted purposes. Composes with policy evaluation; never leaks a use outside consented purposes.",
+      "domain": "consent",
+      "applicableSubjectKinds": ["entity", "population"],
+      "temporalModes": ["window", "as_of", "compare"],
+      "default": false
+    },
+    {
+      "id": "policy",
+      "displayName": "Policy",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views the subject through policy — governance constraints, export class, distillation risk, entitlements. A policy-supressed lens set drops the affected sections rather than rendering them.",
+      "domain": "policy",
+      "applicableSubjectKinds": ["entity", "campaign", "population", "source"],
+      "temporalModes": ["window", "as_of", "relative"],
+      "default": false
+    },
+    {
+      "id": "wallet",
+      "displayName": "Wallet",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views the subject through wallet structure — wallet identities, balances, on-chain positions. Composes with the economic360 wallet/payment authorities.",
+      "domain": "wallet",
+      "applicableSubjectKinds": ["entity", "source"],
+      "temporalModes": ["window", "as_of", "relative"],
+      "default": false
+    },
+    {
+      "id": "payment",
+      "displayName": "Payment",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Foregrounds payment structure — payments, settlements, refunds, obligations. Composes with the economic360 payment authorities.",
+      "domain": "payment",
+      "applicableSubjectKinds": ["entity", "source"],
+      "temporalModes": ["window", "compare", "relative"],
+      "default": false
+    },
+    {
+      "id": "source",
+      "displayName": "Source",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views the subject through its sources — provider registry, source provenance, ingestion health, schema, coverage. Composes with the source360 projection.",
+      "domain": "source",
+      "applicableSubjectKinds": ["source", "connection"],
+      "temporalModes": ["window", "relative"],
+      "default": false
+    },
+    {
+      "id": "evidence",
+      "displayName": "Evidence",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Foregrounds evidence — evidence refs, provenance, grounding of every claim. Every claim rendered under this lens must carry evidence refs or be marked ungrounded.",
+      "domain": "evidence",
+      "applicableSubjectKinds": ["entity", "relationship", "campaign", "episode", "source", "connection", "cluster"],
+      "temporalModes": ["window", "as_of", "compare"],
+      "default": false
+    },
+    {
+      "id": "data_quality",
+      "displayName": "Data Quality",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views the subject through data quality — completeness, freshness, confidence, limitations. A data-quality section always accompanies the sections it qualifies.",
+      "domain": "data_quality",
+      "applicableSubjectKinds": ["entity", "campaign", "source", "connection", "cluster", "population"],
+      "temporalModes": ["window", "as_of", "relative"],
+      "default": false
+    },
+    {
+      "id": "operational",
+      "displayName": "Operational",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views the subject through operations — operational health, coverage, workbench state. Composes with the operational_workbench projections.",
+      "domain": "operational",
+      "applicableSubjectKinds": ["source", "connection", "cluster"],
+      "temporalModes": ["window", "as_of", "relative"],
+      "default": false
+    },
+    {
+      "id": "deployment",
+      "displayName": "Deployment",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Foregrounds deployment structure — deployments, rollouts, environments, target states. Composes with the infrastructure360 projection.",
+      "domain": "deployment",
+      "applicableSubjectKinds": ["entity", "deployment", "infrastructure"],
+      "temporalModes": ["window", "as_of", "relative"],
+      "default": false
+    },
+    {
+      "id": "security",
+      "displayName": "Security",
+      "kind": "overlay",
+      "baseLens": "standard",
+      "description": "Views the subject through security posture — security state, exposure, hardening status. Composes with the infrastructure360 security authorities.",
+      "domain": "security",
+      "applicableSubjectKinds": ["entity", "deployment", "infrastructure"],
+      "temporalModes": ["window", "as_of", "relative"],
+      "default": false
+    }
+  ]
+}

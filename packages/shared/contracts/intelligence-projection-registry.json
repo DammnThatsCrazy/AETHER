@@ -28,7 +28,9 @@
     "missing",
     "degraded",
     "not_applicable",
-    "unknown"
+    "unknown",
+    "suppressed",
+    "stale"
   ],
   "temporalModes": [
     "window",

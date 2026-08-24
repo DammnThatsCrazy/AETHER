@@ -55,6 +55,8 @@ PROJECTION_SECTION_STATES: tuple[str, ...] = (
     "empty",
     "missing",
     "not_applicable",
+    "stale",
+    "suppressed",
     "unknown",
 )
 

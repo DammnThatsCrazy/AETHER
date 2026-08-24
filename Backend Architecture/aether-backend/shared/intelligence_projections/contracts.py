@@ -75,7 +75,15 @@ class ProjectionSubject(ProjectionContract):
 
 
 class ProjectionRequest(ProjectionContract):
-    """Request to run an intelligence projection over canonical Aether truth."""
+    """Request to run an intelligence projection over canonical Aether truth.
+
+    ``lensIds`` / ``temporalMode`` are projection-engine (A8) extensions,
+    strictly OPTIONAL so a minimal construction remains valid and providers
+    that do not yet understand lenses ignore them. ``temporalMode`` carries a
+    registry-surface temporal mode (``window`` / ``as_of`` / ``compare`` /
+    ``relative``); the richer engine-level ``TemporalMode`` enum dispatches
+    onto these four surface modes and never leaks into the wire contract.
+    """
 
     projectionId: ProjectionId
     tenantId: str
@@ -84,6 +92,8 @@ class ProjectionRequest(ProjectionContract):
     timeRange: Optional[TimeRangeFilter] = None
     includeSections: Optional[list[str]] = None
     includeClaims: Optional[bool] = None
+    lensIds: Optional[list[str]] = None
+    temporalMode: Optional[str] = None
 
 
 class ProjectionDependencyState(ProjectionContract):
@@ -126,8 +136,31 @@ class ClaimEnvelope(ProjectionContract):
     confidence: Optional[float] = Field(default=None, ge=0, le=1)
 
 
+class ProjectionDegradation(ProjectionContract):
+    """Engine-level (A8) degradation summary for a projection result.
+
+    ``level`` is ``"none"`` (every section available), ``"partial"`` (some
+    sections suppressed / degraded / missing) or ``"full"`` (the projection
+    could not be satisfied). ``reasons`` are engine-computed and content-free
+    with respect to provider diagnostics — provider exception messages are
+    NEVER echoed here (they stay on the fail-isolated degraded result's
+    ``degradedReasons``, which are exception class names only).
+    """
+
+    level: Literal["none", "partial", "full"]
+    reasons: list[str]
+    conflictedLenses: Optional[list[str]] = None
+    missingDependencies: Optional[list[str]] = None
+
+
 class ProjectionResult(ProjectionContract):
-    """The result of running a projection over canonical Aether truth."""
+    """The result of running a projection over canonical Aether truth.
+
+    ``digest`` / ``lensIds`` / ``temporalMode`` / ``degradation`` /
+    ``suppressedSections`` are projection-engine (A8) extensions, strictly
+    OPTIONAL so a provider that does not emit them (and any result produced by
+    the P0 runtime before the engine landed) remains a valid result.
+    """
 
     projectionId: ProjectionId
     tenantId: str
@@ -139,11 +172,17 @@ class ProjectionResult(ProjectionContract):
     generatedAt: str  # ISO-8601 UTC string (repo timestamp convention)
     page: Optional[PageInfo] = None
     degradedReasons: list[str]
+    digest: Optional[str] = None
+    lensIds: Optional[list[str]] = None
+    temporalMode: Optional[str] = None
+    degradation: Optional[ProjectionDegradation] = None
+    suppressedSections: Optional[list[str]] = None
 
 
 __all__ = [
     "ClaimEnvelope",
     "ProjectionContext",
+    "ProjectionDegradation",
     "ProjectionDependencyState",
     "ProjectionId",
     "ProjectionRegistryState",

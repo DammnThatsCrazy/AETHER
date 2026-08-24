@@ -18,6 +18,7 @@ Sources (read-only — canonical source of truth):
   packages/shared/contracts/model-registry.json
   packages/shared/contracts/task-profile-registry.json
   packages/shared/contracts/intelligence-projection-registry.json
+  packages/shared/contracts/lens-registry.json
 
 Generated outputs:
   packages/shared/temporal-policy.ts
@@ -53,6 +54,9 @@ Generated outputs:
   Backend Architecture/aether-backend/shared/intelligence_projections/generated_registry.py
   docs/_generated/intelligence-projection-registry-table.md
   docs/_generated/intelligence-projection-dependency-graph.md
+  packages/shared/lenses_generated.ts
+  Backend Architecture/aether-backend/shared/projection_engine/generated_lenses.py
+  docs/_generated/lens-registry-table.md
 
 Usage:
   python scripts/generate_platform_contracts.py           # write outputs in-place
@@ -88,6 +92,7 @@ if str(ROOT) not in sys.path:
 from scripts.lib.intelligence_projection_validation import (  # noqa: E402
     load_context as _projection_load_context,
     validate_all as _projection_validate_all,
+    validate_lens_registry as _projection_validate_lens_registry,
 )
 
 TEMPORAL_POLICY_JSON = CONTRACTS / "temporal-policy-registry.json"
@@ -2366,8 +2371,13 @@ _COST_PROFILE_FIELD_ORDER = ("class", "supportsAsync")
 _COMMERCIAL_CLASSIFICATION_FIELD_ORDER = ("sellableCapability", "meterRefs", "costClassRefs")
 _LEGACY_BINDINGS_FIELD_ORDER = ("routes", "surfaceIds", "services", "migrationMode", "migrationBlueprint")
 _PENDING_FIELD_ORDER = ("id", "kind", "reason", "resolvesInProjection")
+_LENS_FIELD_ORDER = (
+    "id", "displayName", "kind", "baseLens", "description", "domain",
+    "applicableSubjectKinds", "temporalModes", "default",
+)
 
 _OBJECT_FIELD_ORDERS = {
+    frozenset(_LENS_FIELD_ORDER): _LENS_FIELD_ORDER,
     frozenset(_PROJECTION_FIELD_ORDER): _PROJECTION_FIELD_ORDER,
     frozenset(_READINESS_REQUIREMENTS_FIELD_ORDER): _READINESS_REQUIREMENTS_FIELD_ORDER,
     frozenset(_SECURITY_FIELD_ORDER): _SECURITY_FIELD_ORDER,
@@ -2868,6 +2878,141 @@ def _summary_intelligence_projections(reg: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Registry: lens-registry (A8 — projection-engine lens registry)
+# ---------------------------------------------------------------------------
+
+LENS_REGISTRY_JSON = CONTRACTS / "lens-registry.json"
+LENS_REGISTRY_TS = ROOT / "packages" / "shared" / "lenses_generated.ts"
+LENS_REGISTRY_PY = BACKEND / "shared" / "projection_engine" / "generated_lenses.py"
+LENS_REGISTRY_MD = ROOT / "docs" / "_generated" / "lens-registry-table.md"
+
+# Fixed schema field order for deterministic emission (order-stable generation).
+# (``_LENS_FIELD_ORDER`` is defined with the projection field-order block.)
+
+
+def validate_lens_registry(reg: dict, ctx: dict) -> list[str]:
+    """Validate the lens registry (thin lib wrapper, rule group ``lens_registry``).
+
+    Delegates to scripts/lib/intelligence_projection_validation.validate_lens_registry
+    so generation and the standalone validator compute the SAME facts. Any error
+    exits non-zero (fail-closed) before any artifact is emitted.
+    """
+    errors = [
+        v.message
+        for v in _projection_validate_lens_registry(reg, ctx)
+        if v.severity == "error"
+    ]
+    if errors:
+        for message in errors:
+            print(f"ERROR: {message}", file=sys.stderr)
+        sys.exit(1)
+    return errors
+
+
+def gen_lens_registry_ts(reg: dict) -> str:
+    lenses = sorted(reg["lenses"], key=lambda l: l["id"])
+    lines = _ts_header(LENS_REGISTRY_JSON)
+    lines.append(f"export const lensRegistryContractVersion = '{reg['contractVersion']}' as const;")
+    lines.append("")
+    lines += _ts_const_array(
+        "lensRegistryKinds", "LensRegistryKind",
+        sorted(reg["lensKinds"]),
+        "Lens kinds a lens may be (sorted).",
+    )
+    lines += _ts_const_array(
+        "lensIds", "LensId",
+        [l["id"] for l in lenses],
+        "Registered projection-engine lenses (sorted).",
+    )
+    lines.append("/** One registered projection-engine lens (mirrors the registry schema). */")
+    lines.append("export interface LensDescriptor {")
+    lines.append("  id: LensId;")
+    lines.append("  displayName: string;")
+    lines.append("  kind: LensRegistryKind;")
+    lines.append("  baseLens: LensId | null;")
+    lines.append("  description: string;")
+    lines.append("  domain: string;")
+    lines.append("  applicableSubjectKinds: readonly string[];")
+    lines.append("  temporalModes: readonly string[];")
+    lines.append("  default: boolean;")
+    lines.append("}")
+    lines.append("")
+    lines.append("export const lensDefinitions: Record<LensId, LensDescriptor> = {")
+    for lens in lenses:
+        lines.append(f"  {lens['id']}: {_ts_literal(_sorted_value(lens), 1)},")
+    lines.append("};")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_lens_registry_py(reg: dict) -> str:
+    lenses = sorted(reg["lenses"], key=lambda l: l["id"])
+    lines = _py_header(
+        LENS_REGISTRY_JSON,
+        "Generated projection-engine lens registry (A8 projection engine).",
+    )
+    lines.append(f'LENS_REGISTRY_CONTRACT_VERSION = "{reg["contractVersion"]}"')
+    lines.append("")
+    lines += _py_tuple(
+        "LENS_KINDS",
+        sorted(reg["lensKinds"]),
+        "Lens kinds a lens may be.",
+    )
+    lines += _py_tuple(
+        "LENS_IDS",
+        [l["id"] for l in lenses],
+        "Registered projection-engine lenses (sorted).",
+    )
+    lines.append("# Full lens definitions (sorted by lens id).")
+    lines.append("LENS_DEFINITIONS: dict[str, dict] = {")
+    for lens in lenses:
+        lines.append(f'    "{lens["id"]}": {_py_literal(_sorted_value(lens), 1)},')
+    lines.append("}")
+    lines.append("")
+    lines.append("__all__ = [")
+    for name in sorted(("LENS_REGISTRY_CONTRACT_VERSION", "LENS_IDS", "LENS_KINDS", "LENS_DEFINITIONS")):
+        lines.append(f'    "{name}",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_lens_registry_md(reg: dict) -> str:
+    lenses = sorted(reg["lenses"], key=lambda l: l["id"])
+    lines = _md_header(LENS_REGISTRY_JSON)
+    lines.append("# Projection Engine — Lens Registry")
+    lines.append("")
+    lines.append(f"Contract version: `{reg['contractVersion']}`")
+    lines.append("")
+    lines.append("Composable viewing frames a projection applies over canonical Aether truth — one default base lens (`standard`) plus domain/capability overlay lenses.")
+    lines.append("")
+    lines.append("| Lens | Kind | Base | Domain | Subjects | Temporal modes | Default |")
+    lines.append("|---|---|---|---|---|---|---|")
+    for lens in lenses:
+        base = lens["baseLens"] or "—"
+        # Sort list-valued fields — the table must be order-stable the same way
+        # the TS/PY twins are (_sorted_value) so a registry reorder yields zero
+        # diff across all artifacts.
+        subjects = ", ".join(f"`{s}`" for s in sorted(lens["applicableSubjectKinds"]))
+        modes = ", ".join(f"`{m}`" for m in sorted(lens["temporalModes"]))
+        lines.append(
+            f"| `{lens['id']}` | {lens['kind']} | {base} | {lens['domain']} "
+            f"| {subjects} | {modes} | {'yes' if lens['default'] else ''} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _summary_lens_registry(reg: dict) -> str:
+    overlays = sum(1 for l in reg["lenses"] if l["kind"] == "overlay")
+    return (
+        f"lens-registry v{reg['contractVersion']} — "
+        f"{len(reg['lenses'])} lenses "
+        f"({len(reg['lenses']) - overlays} base, {overlays} overlays)"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registry table + write/check machinery
 # ---------------------------------------------------------------------------
 
@@ -2974,6 +3119,16 @@ REGISTRIES: tuple = (
             (INTELLIGENCE_PROJECTION_GRAPH_MD, gen_intelligence_projection_graph_md),
         ),
         _summary_intelligence_projections,
+    ),
+    (
+        LENS_REGISTRY_JSON,
+        validate_lens_registry,
+        (
+            (LENS_REGISTRY_TS, gen_lens_registry_ts),
+            (LENS_REGISTRY_PY, gen_lens_registry_py),
+            (LENS_REGISTRY_MD, gen_lens_registry_md),
+        ),
+        _summary_lens_registry,
     ),
 )
 
