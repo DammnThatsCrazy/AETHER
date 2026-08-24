@@ -56,6 +56,17 @@ Thumbs.db
 
 # Subsystems not needed for backend image
 ML Models/
+!ML Models/aether-ml/
+!ML Models/aether-ml/common/
+!ML Models/aether-ml/common/**
+!ML Models/aether-ml/serving/
+!ML Models/aether-ml/serving/**
+
+# Generated model artifacts must never enter the Docker build context.
+ML Models/aether-ml/**/*.onnx
+ML Models/aether-ml/**/*.joblib
+ML Models/aether-ml/**/*.pkl
+ML Models/aether-ml/**/model_output/
 Agent Layer/
 Smart Contracts/
 Aether Mobile SDK/
