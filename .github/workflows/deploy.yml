@@ -173,6 +173,10 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
+          # The frontends import @aether/shared from the local workspace.
+          # npm ci installs dependencies but does not build that workspace,
+          # so compile it before the per-app TypeScript/Vite builds.
+          npm run build --workspace @aether/shared
           VITE_AUTH0_CLIENT_ID="$AETHER_AUTH0_CLIENT_ID" \
             VITE_API_BASE_URL="$AETHER_API_BASE_URL" \
             npm --workspace frontend/aether run build
