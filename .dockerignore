@@ -55,7 +55,8 @@ Thumbs.db
 !.env.example
 
 # Subsystems not needed for backend image
-ML Models/
+# The backend image copies ML Models/aether-ml/serving/ for the inline
+# serving contract, so keep that source tree in the build context.
 Agent Layer/
 Smart Contracts/
 Aether Mobile SDK/
