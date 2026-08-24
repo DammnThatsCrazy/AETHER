@@ -58,6 +58,7 @@ COPY security/ ./security/
 
 # ML serving source tree (required when ML_SERVING_INLINE=true, E2).
 # Routes are lazy-loaded per request; the image boots without them.
+COPY ["ML Models/aether-ml/common/", "./common/"]
 COPY ["ML Models/aether-ml/serving/", "./serving/"]
 
 ENV ML_SERVING_INLINE=false

@@ -55,8 +55,18 @@ Thumbs.db
 !.env.example
 
 # Subsystems not needed for backend image
-# The backend image copies ML Models/aether-ml/serving/ for the inline
-# serving contract, so keep that source tree in the build context.
+ML Models/
+!ML Models/aether-ml/
+!ML Models/aether-ml/common/
+!ML Models/aether-ml/common/**
+!ML Models/aether-ml/serving/
+!ML Models/aether-ml/serving/**
+
+# Generated model artifacts must never enter the Docker build context.
+ML Models/aether-ml/**/*.onnx
+ML Models/aether-ml/**/*.joblib
+ML Models/aether-ml/**/*.pkl
+ML Models/aether-ml/**/model_output/
 Agent Layer/
 Smart Contracts/
 Aether Mobile SDK/
