@@ -62,6 +62,9 @@ flowchart LR
   geographic360 --> temporal_kernel
   geographic360 -.-> profile360
   geographic360 -.-> temporal360
+  infrastructure360 --> contract_spine
+  infrastructure360 --> infrastructure_model
+  infrastructure360 --> temporal_kernel
   outcome360 --> measurement_outcome_contract
   outcome360 --> temporal_kernel
   outcome360 -.-> temporal360
@@ -105,10 +108,6 @@ flowchart LR
 | Projection | Kind | Id | Reason | Resolves in projection |
 |---|---|---|---|---|
 | `connection360` | authority | `reconciled_control_plane` | harness control-plane rollup (PR #529) merged; reconciled control-plane spine not yet formalized as a projection-plane authority | `connection360` |
-| `economic360` | reference | `campaign_cac` | economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json | `economic360` |
-| `economic360` | reference | `campaign_ltv` | economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json | `economic360` |
-| `economic360` | reference | `campaign_roas` | economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json | `economic360` |
-| `economic360` | reference | `campaign_spend` | economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json | `economic360` |
 | `episode360` | authority | `journey_continuity` | journey continuity plane not yet formalized | `episode360` |
 | `geographic360` | authority | `context_capsule_semantics` | context-capsule plane not yet formalized | `geographic360` |
 | `population360` | authority | `grouping_membership` | canonical grouping/membership contract not yet formalized | `population360` |

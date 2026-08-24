@@ -148,6 +148,17 @@
       "supportsSelectionSets": false,
       "supportsSavedViews": true,
       "supportsExport": true
+    },
+    {
+      "surfaceId": "infrastructure360",
+      "supportedFieldCategories": ["entity", "time", "graph", "risk", "truth"],
+      "supportedTemporalModes": ["window", "as_of", "compare", "relative"],
+      "supportedViews": ["table", "graph", "map"],
+      "supportsFacets": true,
+      "supportsComparison": true,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": true,
+      "supportsExport": true
     }
   ]
 }

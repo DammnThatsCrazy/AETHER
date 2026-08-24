@@ -139,7 +139,9 @@ def test_projection_subject_kind_matches_generated_registry() -> None:
             }
         )
     )
-    assert len(expected) == 9  # entity/relationship/campaign/episode/population/source/connection/cluster/agent
+    # 11 kinds: entity/relationship/campaign/episode/population/source/
+    # connection/cluster/agent (P0) + deployment/infrastructure (Infrastructure360).
+    assert len(expected) == 11
     assert tuple(get_args(ProjectionSubjectKind)) == expected
 
 

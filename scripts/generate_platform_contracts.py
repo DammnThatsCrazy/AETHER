@@ -93,6 +93,7 @@ from scripts.lib.intelligence_projection_validation import (  # noqa: E402
     load_context as _projection_load_context,
     validate_all as _projection_validate_all,
     validate_lens_registry as _projection_validate_lens_registry,
+    validate_outcome_registry as _projection_validate_outcome_registry,
 )
 
 TEMPORAL_POLICY_JSON = CONTRACTS / "temporal-policy-registry.json"
@@ -3012,6 +3013,120 @@ def _summary_lens_registry(reg: dict) -> str:
     )
 
 
+OUTCOME_TYPES_JSON = CONTRACTS / "outcome-type-registry.json"
+OUTCOME_TYPES_TS = ROOT / "packages" / "shared" / "outcome-types_generated.ts"
+OUTCOME_TYPES_PY = BACKEND / "shared" / "measurement" / "generated_outcome_types.py"
+OUTCOME_TYPES_MD = ROOT / "docs" / "_generated" / "outcome-type-registry-table.md"
+
+
+def validate_outcome_registry(reg: dict, ctx: dict) -> list[str]:
+    """Validate the outcome-type registry (thin lib wrapper, rule group ``outcome_registry``).
+
+    Delegates to scripts/lib/intelligence_projection_validation.validate_outcome_registry
+    so generation and the standalone validator compute the SAME facts. Any error
+    exits non-zero (fail-closed) before any artifact is emitted.
+    """
+    errors = [
+        v.message
+        for v in _projection_validate_outcome_registry(reg, ctx)
+        if v.severity == "error"
+    ]
+    if errors:
+        for message in errors:
+            print(f"ERROR: {message}", file=sys.stderr)
+        sys.exit(1)
+    return errors
+
+
+def gen_outcome_types_ts(reg: dict) -> str:
+    types = sorted(reg["outcomeTypes"], key=lambda t: t["id"])
+    lines = _ts_header(OUTCOME_TYPES_JSON)
+    lines.append(f"export const outcomeTypeRegistryContractVersion = '{reg['contractVersion']}' as const;")
+    lines.append("")
+    lines += _ts_const_array(
+        "outcomeTypeDomains", "OutcomeTypeDomain",
+        sorted(reg["domains"]),
+        "Outcome domains a type may belong to (sorted).",
+    )
+    lines += _ts_const_array(
+        "outcomeTypeIds", "OutcomeTypeId",
+        [t["id"] for t in types],
+        "Registered outcome types (sorted).",
+    )
+    lines.append("/** One registered outcome type (mirrors the registry schema). */")
+    lines.append("export interface OutcomeTypeDescriptor {")
+    lines.append("  id: OutcomeTypeId;")
+    lines.append("  domain: OutcomeTypeDomain;")
+    lines.append("  name: string;")
+    lines.append("  description: string;")
+    lines.append("}")
+    lines.append("")
+    lines.append("export const outcomeTypeDefinitions: Record<OutcomeTypeId, OutcomeTypeDescriptor> = {")
+    for t in types:
+        lines.append(f"  {t['id']}: {_ts_literal(_sorted_value(t), 1)},")
+    lines.append("};")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_outcome_types_py(reg: dict) -> str:
+    types = sorted(reg["outcomeTypes"], key=lambda t: t["id"])
+    lines = _py_header(
+        OUTCOME_TYPES_JSON,
+        "Generated outcome-type registry (Outcome360).",
+    )
+    lines.append(f'OUTCOME_TYPE_REGISTRY_CONTRACT_VERSION = "{reg["contractVersion"]}"')
+    lines.append("")
+    lines += _py_tuple(
+        "OUTCOME_DOMAINS",
+        sorted(reg["domains"]),
+        "Outcome domains a type may belong to (sorted).",
+    )
+    lines += _py_tuple(
+        "OUTCOME_TYPE_IDS",
+        [t["id"] for t in types],
+        "Registered outcome types (sorted).",
+    )
+    lines.append("# Full outcome-type definitions (sorted by id).")
+    lines.append("OUTCOME_TYPE_DEFINITIONS: dict[str, dict] = {")
+    for t in types:
+        lines.append(f'    "{t["id"]}": {_py_literal(_sorted_value(t), 1)},')
+    lines.append("}")
+    lines.append("")
+    lines.append("__all__ = [")
+    for name in sorted(
+        ("OUTCOME_TYPE_REGISTRY_CONTRACT_VERSION", "OUTCOME_DOMAINS", "OUTCOME_TYPE_IDS", "OUTCOME_TYPE_DEFINITIONS")
+    ):
+        lines.append(f'    "{name}",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_outcome_types_md(reg: dict) -> str:
+    types = sorted(reg["outcomeTypes"], key=lambda t: t["id"])
+    lines = _md_header(OUTCOME_TYPES_JSON)
+    lines.append("# Outcome360 — Outcome Type Registry")
+    lines.append("")
+    lines.append(f"Contract version: `{reg['contractVersion']}`")
+    lines.append("")
+    lines.append("Canonical outcome-type vocabulary the Outcome360 projection consumes — every type belongs to exactly one domain.")
+    lines.append("")
+    lines.append("| Domain | Outcome type | Name | Description |")
+    lines.append("|---|---|---|---|")
+    for t in types:
+        lines.append(f"| `{t['domain']}` | `{t['id']}` | {t['name']} | {t['description']} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _summary_outcome_types(reg: dict) -> str:
+    return (
+        f"outcome-type-registry v{reg['contractVersion']} — "
+        f"{len(reg['outcomeTypes'])} outcome types across {len(reg['domains'])} domains"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Registry table + write/check machinery
 # ---------------------------------------------------------------------------
@@ -3129,6 +3244,16 @@ REGISTRIES: tuple = (
             (LENS_REGISTRY_MD, gen_lens_registry_md),
         ),
         _summary_lens_registry,
+    ),
+    (
+        OUTCOME_TYPES_JSON,
+        validate_outcome_registry,
+        (
+            (OUTCOME_TYPES_TS, gen_outcome_types_ts),
+            (OUTCOME_TYPES_PY, gen_outcome_types_py),
+            (OUTCOME_TYPES_MD, gen_outcome_types_md),
+        ),
+        _summary_outcome_types,
     ),
 )
 

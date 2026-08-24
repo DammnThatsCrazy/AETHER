@@ -81,7 +81,10 @@ and `docs/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md`.
 - [ ] The projection's public endpoint(s) are registered/classified in
       `config/route_registry.yaml` (no unregistered route prefix).
 - [ ] No *new* generic public 360 route prefix is introduced; existing
-      `legacyBindings` reference already-registered prefixes.
+      `legacyBindings` reference already-registered prefixes. A projection MAY
+      add one classified read-only prefix as part of its own vertical slice
+      (the `infrastructure360` `/v1/infrastructure` precedent — every route a
+      GET, no catch-all), never a generic projection route.
 
 ## 5. Surface join
 

@@ -111,6 +111,7 @@ AUTHORITY_INDEX = frozenset(
         "context_capsules",
         "credential_readiness",
         "currency_value_normalization",
+        "deployments",
         "economic",
         "economic_facts",
         "entities",
@@ -127,6 +128,8 @@ AUTHORITY_INDEX = frozenset(
         "graph_snapshots",
         "identity",
         "ingestion_health",
+        "infrastructure_facts",
+        "infrastructure_state",
         "journeys",
         "locations",
         "managed_integration_lifecycle",
@@ -174,6 +177,7 @@ SPINE_INDEX = frozenset(
         "measurement_outcome_contract",
         "tenant_readiness",
         "exploration_fabric",
+        "infrastructure_model",
         "model_governance",
         "agentic_runtime_access",
         "attribution_architecture",
@@ -212,6 +216,7 @@ _OUTPUT_SECTIONS = frozenset(
         "findings",
         "health",
         "coverage",
+        "deployments",
     }
 )
 
@@ -429,7 +434,7 @@ def load_context() -> dict:
 
     Returns ``{surface_ids, surface_temporal_modes, metric_names,
     graph_mutation_types, route_prefixes, backend_source_paths,
-    lens_registry}``:
+    lens_registry, outcome_registry}``:
     - ``surface_ids`` / ``surface_temporal_modes`` from
       ``packages/shared/contracts/surface-capability-registry.json``;
     - ``metric_names`` from ``packages/shared/contracts/metric-registry.json``;
@@ -441,7 +446,10 @@ def load_context() -> dict:
       ``Backend Architecture/aether-backend`` (route-existence source grep);
     - ``lens_registry`` — the parsed projection-engine lens registry
       (``packages/shared/contracts/lens-registry.json``), validated by the
-      ``lens_registry`` rule group (A8).
+      ``lens_registry`` rule group (A8);
+    - ``outcome_registry`` — the parsed Outcome360 outcome-type registry
+      (``packages/shared/contracts/outcome-type-registry.json``), validated by
+      the ``outcome_registry`` rule group.
     """
     import yaml
 
@@ -468,6 +476,11 @@ def load_context() -> dict:
             encoding="utf-8"
         )
     )
+    outcome_reg = json.loads(
+        (ROOT / "packages/shared/contracts/outcome-type-registry.json").read_text(
+            encoding="utf-8"
+        )
+    )
     return {
         "surface_ids": {s["surfaceId"] for s in surface_reg["surfaces"]},
         "surface_temporal_modes": {
@@ -479,6 +492,7 @@ def load_context() -> dict:
         "route_prefixes": set(route_cfg["known_prefixes"]),
         "backend_source_paths": set(_backend_py_paths()),
         "lens_registry": lens_reg,
+        "outcome_registry": outcome_reg,
     }
 
 
@@ -1437,6 +1451,146 @@ def validate_lens_registry(reg: dict, ctx: dict) -> list[Violation]:
     return violations
 
 
+# ── Outcome-type registry (Outcome360) ─────────────────────────────────────
+
+_OUTCOME_DOMAIN_RE = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)*$")
+
+
+def validate_outcome_registry(reg: dict, ctx: Optional[dict] = None) -> list[Violation]:
+    """Outcome-type registry rules (rule group ``outcome_registry``, Outcome360).
+
+    Dual-path like ``validate_lens_registry``: when ``reg`` is the outcome-type
+    registry itself (generator REGISTRIES loop) it is validated directly;
+    otherwise it falls back to ``ctx["outcome_registry"]`` (standalone
+    projection-registry validation). Rules:
+
+    * ``schemaVersion`` must be 1 and ``contractVersion`` a non-empty string;
+    * ``domains`` is a non-empty list of unique lower-snake ids;
+    * ``outcomeTypes`` is a non-empty list; every entry carries non-empty
+      ``id`` / ``domain`` / ``name`` / ``description``;
+    * outcome-type ids are unique and lower-snake, ordered by ``id`` ascending
+      (order-stable generation);
+    * every ``domain`` resolves within ``domains`` and every declared domain
+      has at least one outcome type (full coverage).
+    """
+    outcome_reg = (
+        reg
+        if isinstance(reg, dict) and reg.get("outcomeTypes")
+        else ((ctx or {}).get("outcome_registry"))
+    )
+    if not outcome_reg:
+        return [
+            Violation(
+                "outcome_registry",
+                "error",
+                "no outcome-type registry in cross-registry context "
+                "(load_context must load packages/shared/contracts/outcome-type-registry.json)",
+                None,
+            )
+        ]
+    violations: list[Violation] = []
+
+    if outcome_reg.get("schemaVersion") != 1:
+        violations.append(
+            Violation("outcome_registry", "error", "schemaVersion must be 1", None)
+        )
+    contract_version = outcome_reg.get("contractVersion")
+    if not isinstance(contract_version, str) or not contract_version:
+        violations.append(
+            Violation(
+                "outcome_registry", "error", "contractVersion must be a non-empty string", None
+            )
+        )
+
+    domains = outcome_reg.get("domains", [])
+    if not isinstance(domains, list) or not domains:
+        violations.append(
+            Violation("outcome_registry", "error", "domains must be a non-empty list", None)
+        )
+        domains = []
+    seen_domains: set[str] = set()
+    for d in domains:
+        if not isinstance(d, str) or not _OUTCOME_DOMAIN_RE.fullmatch(d):
+            violations.append(
+                Violation("outcome_registry", "error", f"domain {d!r} is not lower_snake", None)
+            )
+        if d in seen_domains:
+            violations.append(
+                Violation("outcome_registry", "error", f"duplicate domain {d!r}", None)
+            )
+        seen_domains.add(d)
+
+    types = outcome_reg.get("outcomeTypes", [])
+    if not isinstance(types, list) or not types:
+        violations.append(
+            Violation("outcome_registry", "error", "outcomeTypes must be a non-empty list", None)
+        )
+        types = []
+    seen_ids: set[str] = set()
+    ids_in_order: list[str] = []
+    covered: set[str] = set()
+    for t in types:
+        if not isinstance(t, dict):
+            violations.append(
+                Violation("outcome_registry", "error", "each outcomeType must be an object", None)
+            )
+            continue
+        tid = t.get("id")
+        if not isinstance(tid, str) or not _OUTCOME_DOMAIN_RE.fullmatch(tid):
+            violations.append(
+                Violation("outcome_registry", "error", f"outcomeType id {tid!r} is not lower_snake", None)
+            )
+        if tid in seen_ids:
+            violations.append(
+                Violation("outcome_registry", "error", f"duplicate outcomeType id {tid!r}", None)
+            )
+        seen_ids.add(tid)
+        for field in ("id", "domain", "name", "description"):
+            if not isinstance(t.get(field), str) or not t[field]:
+                violations.append(
+                    Violation(
+                        "outcome_registry",
+                        "error",
+                        f"outcomeType {tid!r} missing required field {field!r}",
+                        None,
+                    )
+                )
+        domain = t.get("domain")
+        if domain not in seen_domains:
+            violations.append(
+                Violation(
+                    "outcome_registry",
+                    "error",
+                    f"outcomeType {tid!r} domain {domain!r} not in domains",
+                    None,
+                )
+            )
+        else:
+            covered.add(domain)
+        ids_in_order.append(tid)
+
+    if ids_in_order != sorted(ids_in_order):
+        violations.append(
+            Violation(
+                "outcome_registry",
+                "error",
+                "outcomeTypes must be sorted by id ascending (order-stable generation)",
+                None,
+            )
+        )
+    missing = sorted(seen_domains - covered)
+    if missing:
+        violations.append(
+            Violation(
+                "outcome_registry",
+                "error",
+                f"domains with no outcome type: {', '.join(missing)}",
+                None,
+            )
+        )
+    return violations
+
+
 def validate_all(reg: dict, ctx: Optional[dict] = None) -> list[Violation]:
     """Run every rule group and return a flat, deterministically sorted list."""
     if ctx is None:
@@ -1451,6 +1605,7 @@ def validate_all(reg: dict, ctx: Optional[dict] = None) -> list[Violation]:
         + validate_metric_honesty(reg, ctx)
         + validate_degradation_vocab(reg)
         + validate_lens_registry(reg, ctx)
+        + validate_outcome_registry(reg, ctx)
     )
     return sorted(
         results,

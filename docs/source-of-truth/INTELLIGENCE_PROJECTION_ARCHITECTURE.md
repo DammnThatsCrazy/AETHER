@@ -56,24 +56,31 @@ architecture validator hard-fails on anything else.
 
 ## 2. The tetris inventory — what exists today
 
-The Aether backend is a **fully built platform**: every one of the eighteen
+The Aether backend is a **fully built platform**: every one of the nineteen
 projections already maps to shipped, mounted work. None is greenfield. The
 registry therefore records **honest state** per projection — `in_flight`
 (existing implementation, not yet converged onto the projection plane) — with
-`legacyBindings` resolving to the real routes, surfaces, and services. New
-work (missing surfaces, missing metrics, unformalized spines, native
-providers, any future projection) is declared **pending** and slots in
-additively. This table is the truthful inventory; the authoritative
-machine-readable copy is `packages/shared/contracts/intelligence-projection-registry.json`.
+`legacyBindings` resolving to the real routes, surfaces, and services. Three
+360 vertical slices (`outcome360`, `economic360`, `infrastructure360`) are now
+**`implemented`**: a real `IntelligenceProjectionProvider` registered in the
+`ProviderRegistry`, zero pending refs, zero unresolved refs, and
+`legacyBindings.migrationMode == "converged"`. New work (missing surfaces,
+missing metrics, unformalized spines, native providers, any future projection)
+is declared **pending** and slots in additively. This table is the truthful
+inventory; the authoritative machine-readable copy is
+`packages/shared/contracts/intelligence-projection-registry.json`.
 
-### Existing surfaces (10) — `packages/shared/contracts/surface-capability-registry.json`
+### Existing surfaces (14) — `packages/shared/contracts/surface-capability-registry.json`
 
 `graph`, `profile360`, `campaign360`, `cluster360`, `geo`, `journeys`,
 `timeline`, `product_intelligence`, `temporal_observatory`,
-`comparison_workbench`. Temporal modes: `window|as_of|compare|relative`.
-Three UI-less surfaces are **added in P0** so every projection's `surfaceIds`
-resolves: `outcome360`, `economic360`, `connection360` (following the
-`temporal_observatory` precedent — surfaces without adapters/pages are legal).
+`comparison_workbench`, `outcome360`, `economic360`, `connection360`,
+`infrastructure360`. Temporal modes: `window|as_of|compare|relative`.
+The four UI-less surfaces (`outcome360`, `economic360`, `connection360`,
+`infrastructure360`) exist so every projection's `surfaceIds` resolves
+(following the `temporal_observatory` precedent — surfaces without
+adapters/pages are legal; `infrastructure360` additionally owns the read-only
+`/v1/infrastructure` route classified in `config/route_registry.yaml`).
 
 ### Per-projection inventory
 
@@ -90,34 +97,37 @@ resolves: `outcome360`, `economic360`, `connection360` (following the
 | geographic360 | context_360 | `/v1/geo`; `geo` surface | geo | spine `context_capsule_semantics` |
 | population360 | context_360 | `/v1/population`; `services/population/` | comparison_workbench, cluster360 | spine `grouping_membership` |
 | cluster360 | operational_workbench | `/v1/clusters`; `cluster360` surface + tenant page | cluster360, graph | — |
-| outcome360 | measurement_360 | `/v1/conversions`, `/v1/attribution`, `/v1/spend`, `/v1/journeys`, `/v1/measurement`, `/v1/resolution`, `/v1/value-review`; outcome ledger | campaign360 (**new surface `outcome360` added in P0**) | metricRefs beyond `journey_completion_rate` |
-| economic360 | measurement_360 | `/v1/economic/*`, `/v1/profile/{id}/economic`; `services/economic/`, `economic-metrics.ts` (27 families) | campaign360, product_intelligence (**new surface `economic360`**) | metricRefs `campaign_spend`/`roas`/`cac`/`ltv` (pending metric registry) |
+| outcome360 | measurement_360 | **`implemented`** (S2) — `Outcome360Provider` in `services/measurement/outcome/`; reads outcome ledger + measurement engine (`gold_materializer`, `journey_compiler`); reads canonical `outcome_facts`/`measurement_contract`/`graph`/`evidence` | campaign360, outcome360 | — (zero pending; `migrationMode: converged`, `docs/blueprints/outcome360.md`) |
+| economic360 | measurement_360 | **`implemented`** (S3) — `Economic360Provider` in `services/economic/`; reads `ai_costs`/`ai_models`/`computed_results`/`value_diagnostics` + `economic-metrics.ts` taxonomy; USD-safe value semantics (`services.value`), no cross-currency sums | campaign360, product_intelligence, economic360 | — (metricRefs `revenue`/`campaign_spend`/`campaign_roas`/`campaign_cac`/`campaign_ltv` all resolve; zero pending; `converged`, `docs/blueprints/economic360.md`; `projectionDependencies profile360/relationship360` remain `in_flight` → those sections degrade, never lie) |
 | campaign360 | measurement_360 | `/v1/campaigns`, `/v1/campaign-sources`, `/v1/mapping-review`, `/v1/campaign-quality`; campaign materializer; measurement campaign engine | campaign360, comparison_workbench | metricRefs `conversion_rate`/`attributed_conversions`/`revenue`/`touchpoints` resolve |
 | risk360 | risk_360 | `/v1/risk-overlays` (flag-gated OFF), `/v1/capability-risk`; CIS gateway | graph, comparison_workbench | flag-gated today |
 | fraud360 | risk_360 | `/v1/fraud`, `/v1/fraud/networks`; `services/fraud/`, `fraud_networks/` | graph | — |
 | source360 | operational_workbench | `/v1/imports`, `/v1/kyber/imports`, `/v1/providers`; UPR; `services/traffic/classifier.py` | campaign360 | — |
 | connection360 | operational_workbench | `/v1/integrations/connectors`, `/v1/provider-connections`, `/v1/client-sync`; `provider_runtime` connections/credentials/health | (**new surface `connection360` added in P0**) | spine `reconciled_control_plane` (harness rollup PR #529 merged; spine not yet formalized) |
+| infrastructure360 | infrastructure_360 | **`implemented`** (S4) — 19th projection; `Infrastructure360Provider` in `services/infrastructure/` (read-only, `graphMutationPolicy: read_only`, no write path); `GET /v1/infrastructure/{subject_kind}/{subject_id}` + `/health` (classified in `config/route_registry.yaml`); reads `infrastructure_facts`/`infrastructure_state`/`deployments` authorities over the `infrastructure_model` spine | infrastructure360 | — (zero pending; `converged`, `docs/blueprints/infrastructure360.md`) |
 
-**Tetris mechanics.** Existing pieces (all 18) sit on the board with their
+**Tetris mechanics.** Existing pieces (all 19) sit on the board with their
 real coordinates (routes → `legacyBindings`, surfaces → `surfaceIds`, metrics
-→ `metricRefs`). New pieces — the 3 missing surfaces (UI-less), the
-economic/outcome metrics (pending until the metric registry absorbs them), the
-unformalized spines (`journey_continuity`, `context_capsule_semantics`,
-`grouping_membership`, `graph_history_replay`, `reconciled_control_plane` —
-declared `pendingAuthority`), native providers, and any future projection — are
-queued and drop into place when their slot opens, without moving or deleting
-placed pieces.
+→ `metricRefs`). The three 360 vertical slices dropped into place without
+disturbing placed pieces: `outcome360`/`economic360` flipped to `implemented`
+(their metric pending refs were absorbed once `metric-registry.json` gained the
+economic metric set) and `infrastructure360` landed as a new piece. Still-queued
+pieces — the unformalized spines (`journey_continuity`,
+`context_capsule_semantics`, `grouping_membership`, `graph_history_replay`,
+`reconciled_control_plane` — declared `pendingAuthority`), native providers for
+the remaining `in_flight` projections, and any future projection — drop into
+place when their slot opens, without moving or deleting placed pieces.
 
 ## 3. Registry ownership + generated artifacts
 
 The **Intelligence Projection Registry**
 (`packages/shared/contracts/intelligence-projection-registry.json`) is the
-single canonical registry for the 18 projections. `schemaVersion` /
+single canonical registry for the 19 projections. `schemaVersion` /
 `contractVersion` are present; vocab arrays (`projectionKinds`,
 `implementationStates`, `graphMutationPolicies`, `sectionStates`,
 `temporalModes`, `migrationModes`, `subjectKinds`) are non-empty unique
 `lower_snake` idents; every per-entry field is present and typed;
-`ownsCanonicalTruth` is `false` for all 18. `implementationState` is repo
+`ownsCanonicalTruth` is `false` for all 19. `implementationState` is repo
 metadata, **not** readiness (see `docs/decisions/ADR-010-intelligence-projection-plane.md` §D3).
 
 Generated artifacts (via `scripts/generate_platform_contracts.py`, the
@@ -238,9 +248,11 @@ regenerate; new surfaces/metrics are appended, never rewritten.
 - **A parallel surface / metric / readiness authority.** Surfaces stay owned
   by the surface registry, metrics by the metric registry, readiness by its
   own vocabulary; the projection plane never re-defines any of them.
-- **A generic public 360 route.** P0 adds no public projection route prefix;
-  routes exist only as `legacyBindings` references to already-registered
-  prefixes in `config/route_registry.yaml`.
+- **A generic public 360 route.** Projection routes exist only as `legacyBindings`
+  references to prefixes already classified in `config/route_registry.yaml`
+  (default-deny ratchet). A projection may add a new classified prefix only as
+  part of its vertical slice — `infrastructure360` did so with the read-only
+  `/v1/infrastructure` (every route a GET; no generic catch-all).
 - **Second EntityRef / EvidenceRef / PageRequest / time-range.** Projection
   contracts reuse the canonical primitives; re-declaring any of them is a
   parity/imports failure.
@@ -251,6 +263,10 @@ regenerate; new surfaces/metrics are appended, never rewritten.
   record (Context / Decision / Consequences).
 - `docs/source-of-truth/INTELLIGENCE_PROJECTION_VERTICAL_SLICE_CHECKLIST.md`
   — the Definition-of-Done checklist.
+- `docs/source-of-truth/PROJECTION_ENGINE_ARCHITECTURE.md` — the higher
+  orchestration layer (lens composition algebra, projection IR / compiler /
+  planner / executor / digest, typed degradation, `G @ C` context operator)
+  that runs projections through this plane's `ProviderRegistry`.
 - `docs/source-of-truth/BACKEND_INTELLIGENCE_ARCHITECTURE.md` — the additive
   target architecture this plane is a part of.
 - `docs/_generated/intelligence-projection-registry-table.md`,

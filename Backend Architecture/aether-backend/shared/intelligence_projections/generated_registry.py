@@ -18,6 +18,7 @@ INTELLIGENCE_PROJECTION_IDS: tuple[str, ...] = (
     "execution360",
     "fraud360",
     "geographic360",
+    "infrastructure360",
     "outcome360",
     "population360",
     "profile360",
@@ -33,6 +34,7 @@ PROJECTION_KINDS: tuple[str, ...] = (
     "agentic_360",
     "context_360",
     "entity_360",
+    "infrastructure_360",
     "measurement_360",
     "operational_workbench",
     "relationship_360",
@@ -69,8 +71,10 @@ PROJECTION_SUBJECT_KINDS: tuple[str, ...] = (
     "campaign",
     "cluster",
     "connection",
+    "deployment",
     "entity",
     "episode",
+    "infrastructure",
     "population",
     "relationship",
     "source",
@@ -389,7 +393,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "id": "economic360",
         "displayName": "Economic 360",
         "projectionKind": "measurement_360",
-        "implementationState": "in_flight",
+        "implementationState": "implemented",
         "implementationBlueprint": "docs/blueprints/economic360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("campaign", "episode", "source"),
@@ -402,7 +406,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "supportedTemporalModes": ("compare", "relative", "window"),
         "surfaceIds": ("campaign360", "economic360", "product_intelligence"),
         "capabilityKeys": ("economic360.explore", "economic360.read"),
-        "metricRefs": ("revenue",),
+        "metricRefs": ("campaign_cac", "campaign_ltv", "campaign_roas", "campaign_spend", "revenue"),
         "graphMutationPolicy": "read_only",
         "requiresEvidence": True,
         "requiresDimensionState": True,
@@ -437,38 +441,13 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
             "routes": ("/v1/economic", "/v1/profile"),
             "surfaceIds": ("campaign360", "economic360", "product_intelligence"),
             "services": ("Backend Architecture/aether-backend/services/economic",),
-            "migrationMode": "adapter",
+            "migrationMode": "converged",
             "migrationBlueprint": "docs/blueprints/economic360.md"
         },
         "deprecatedReason": None,
         "successorId": None,
         "pendingAuthority": [],
-        "pendingReference": [
-            {
-                "id": "campaign_cac",
-                "kind": "metric",
-                "reason": "economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json",
-                "resolvesInProjection": "economic360"
-            },
-            {
-                "id": "campaign_ltv",
-                "kind": "metric",
-                "reason": "economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json",
-                "resolvesInProjection": "economic360"
-            },
-            {
-                "id": "campaign_roas",
-                "kind": "metric",
-                "reason": "economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json",
-                "resolvesInProjection": "economic360"
-            },
-            {
-                "id": "campaign_spend",
-                "kind": "metric",
-                "reason": "economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json",
-                "resolvesInProjection": "economic360"
-            }
-        ]
+        "pendingReference": []
     },
     "episode360": {
         "id": "episode360",
@@ -724,11 +703,71 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         ],
         "pendingReference": []
     },
+    "infrastructure360": {
+        "id": "infrastructure360",
+        "displayName": "Infrastructure 360",
+        "projectionKind": "infrastructure_360",
+        "implementationState": "implemented",
+        "implementationBlueprint": "docs/blueprints/infrastructure360.md",
+        "ownsCanonicalTruth": False,
+        "subjectKinds": ("deployment", "infrastructure"),
+        "canonicalAuthorities": ("deployments", "infrastructure_facts", "infrastructure_state"),
+        "hardDependencies": ("contract_spine", "infrastructure_model", "temporal_kernel"),
+        "projectionDependencies": [],
+        "optionalProjectionDependencies": [],
+        "inputRefs": ("EntityRef", "EvidenceRef", "PageRequest", "TimeRangeFilter"),
+        "outputSections": ("deployments", "evidence", "findings", "state", "summary"),
+        "supportedTemporalModes": ("as_of", "compare", "relative", "window"),
+        "surfaceIds": ("infrastructure360",),
+        "capabilityKeys": ("infrastructure360.explore", "infrastructure360.read"),
+        "metricRefs": [],
+        "graphMutationPolicy": "read_only",
+        "requiresEvidence": True,
+        "requiresDimensionState": True,
+        "requiresFreshness": True,
+        "requiresLimitations": True,
+        "tenantScoped": True,
+        "policyScoped": True,
+        "readinessRequirements": {
+            "requiresImplementation": True,
+            "requiresDependencies": True,
+            "requiresTenantEntitlement": True,
+            "requiresProviderReadiness": False,
+            "requiresEvidenceHealth": True
+        },
+        "security": {
+            "tenantScoped": True,
+            "requiresAuthorization": True,
+            "requiresHistoricalConsentEvaluation": False,
+            "exportClass": "governed",
+            "distillationRisk": "moderate"
+        },
+        "costProfile": {
+            "class": "moderate",
+            "supportsAsync": False
+        },
+        "commercialClassification": {
+            "sellableCapability": True,
+            "meterRefs": [],
+            "costClassRefs": []
+        },
+        "legacyBindings": {
+            "routes": ("/v1/infrastructure",),
+            "surfaceIds": ("infrastructure360",),
+            "services": ("Backend Architecture/aether-backend/services/infrastructure",),
+            "migrationMode": "converged",
+            "migrationBlueprint": "docs/blueprints/infrastructure360.md"
+        },
+        "deprecatedReason": None,
+        "successorId": None,
+        "pendingAuthority": [],
+        "pendingReference": []
+    },
     "outcome360": {
         "id": "outcome360",
         "displayName": "Outcome 360",
         "projectionKind": "measurement_360",
-        "implementationState": "in_flight",
+        "implementationState": "implemented",
         "implementationBlueprint": "docs/blueprints/outcome360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("campaign", "episode", "population"),
@@ -776,7 +815,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
             "routes": ("/v1/attribution", "/v1/conversions", "/v1/journeys", "/v1/measurement", "/v1/resolution", "/v1/spend"),
             "surfaceIds": ("campaign360", "outcome360"),
             "services": ("Backend Architecture/aether-backend/services/measurement",),
-            "migrationMode": "adapter",
+            "migrationMode": "converged",
             "migrationBlueprint": "docs/blueprints/outcome360.md"
         },
         "deprecatedReason": None,
@@ -1232,6 +1271,7 @@ PROJECTION_DEPENDENCY_GRAPH: dict[str, dict] = {
     "execution360": {"required": ("agent360", "episode360", "outcome360", "temporal360"), "optional": ()},
     "fraud360": {"required": ("profile360", "risk360"), "optional": ()},
     "geographic360": {"required": ("profile360", "temporal360"), "optional": ()},
+    "infrastructure360": {"required": (), "optional": ()},
     "outcome360": {"required": ("temporal360",), "optional": ()},
     "population360": {"required": ("profile360", "relationship360", "temporal360"), "optional": ()},
     "profile360": {"required": (), "optional": ("risk360",)},
@@ -1254,6 +1294,7 @@ PROJECTION_SURFACE_MAP: dict[str, tuple] = {
     "execution360": ("timeline",),
     "fraud360": ("graph",),
     "geographic360": ("geo",),
+    "infrastructure360": ("infrastructure360",),
     "outcome360": ("campaign360", "outcome360"),
     "population360": ("cluster360", "comparison_workbench"),
     "profile360": ("profile360",),
@@ -1276,6 +1317,7 @@ PROJECTION_CAPABILITY_MAP: dict[str, tuple] = {
     "execution360": ("execution360.explore", "execution360.read"),
     "fraud360": ("fraud360.explore", "fraud360.read"),
     "geographic360": ("geographic360.explore", "geographic360.read"),
+    "infrastructure360": ("infrastructure360.explore", "infrastructure360.read"),
     "outcome360": ("outcome360.explore", "outcome360.read"),
     "population360": ("population360.explore", "population360.read"),
     "profile360": ("profile360.explore", "profile360.read"),
@@ -1332,32 +1374,6 @@ PENDING_AUTHORITIES: dict[str, list] = {
 
 # Pending reference declarations (sorted by projection id).
 PENDING_REFERENCES: dict[str, list] = {
-    "economic360": [
-        {
-            "id": "campaign_cac",
-            "kind": "metric",
-            "reason": "economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json",
-            "resolvesInProjection": "economic360"
-        },
-        {
-            "id": "campaign_ltv",
-            "kind": "metric",
-            "reason": "economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json",
-            "resolvesInProjection": "economic360"
-        },
-        {
-            "id": "campaign_roas",
-            "kind": "metric",
-            "reason": "economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json",
-            "resolvesInProjection": "economic360"
-        },
-        {
-            "id": "campaign_spend",
-            "kind": "metric",
-            "reason": "economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json",
-            "resolvesInProjection": "economic360"
-        }
-    ],
 }
 
 __all__ = [

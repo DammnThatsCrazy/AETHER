@@ -1,16 +1,17 @@
 {
   "schemaVersion": "1.0.0",
   "contractVersion": "1.0.0",
-  "description": "Canonical Aether intelligence-projection registry. A 360 is an intelligence projection over canonical Aether truth — never a competing system of record. implementationState is repo metadata, NOT readiness. ownsCanonicalTruth is structurally false. Unresolved refs MUST be declared in pendingAuthority/pendingReference. Every in_flight projection's legacyBindings must resolve against real routes/surfaces/services.",
+  "description": "Canonical Aether intelligence-projection registry. A 360 is an intelligence projection over canonical Aether truth \u2014 never a competing system of record. implementationState is repo metadata, NOT readiness. ownsCanonicalTruth is structurally false. Unresolved refs MUST be declared in pendingAuthority/pendingReference. Every in_flight projection's legacyBindings must resolve against real routes/surfaces/services.",
   "projectionKinds": [
-    "entity_360",
-    "relationship_360",
-    "sequence_360",
-    "context_360",
-    "measurement_360",
     "agentic_360",
+    "context_360",
+    "entity_360",
+    "infrastructure_360",
+    "measurement_360",
+    "operational_workbench",
+    "relationship_360",
     "risk_360",
-    "operational_workbench"
+    "sequence_360"
   ],
   "implementationStates": [
     "registered",
@@ -44,15 +45,17 @@
     "none"
   ],
   "subjectKinds": [
-    "entity",
-    "relationship",
+    "agent",
     "campaign",
-    "episode",
-    "population",
-    "source",
-    "connection",
     "cluster",
-    "agent"
+    "connection",
+    "deployment",
+    "entity",
+    "episode",
+    "infrastructure",
+    "population",
+    "relationship",
+    "source"
   ],
   "projections": [
     {
@@ -62,16 +65,55 @@
       "implementationState": "in_flight",
       "implementationBlueprint": "docs/blueprints/profile360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["entity", "agent"],
-      "canonicalAuthorities": ["identity", "entity_registry", "graph", "evidence", "temporal", "observations"],
-      "hardDependencies": ["contract_spine", "identity_resolution", "evidence_provenance", "temporal_kernel"],
+      "subjectKinds": [
+        "entity",
+        "agent"
+      ],
+      "canonicalAuthorities": [
+        "identity",
+        "entity_registry",
+        "graph",
+        "evidence",
+        "temporal",
+        "observations"
+      ],
+      "hardDependencies": [
+        "contract_spine",
+        "identity_resolution",
+        "evidence_provenance",
+        "temporal_kernel"
+      ],
       "projectionDependencies": [],
-      "optionalProjectionDependencies": ["risk360"],
-      "inputRefs": ["EntityRef", "EvidenceRef", "GraphSnapshotRef", "PageRequest", "TimeRangeFilter"],
-      "outputSections": ["summary", "state", "timeline", "evidence", "interactions", "findings"],
-      "supportedTemporalModes": ["window", "as_of", "relative"],
-      "surfaceIds": ["profile360"],
-      "capabilityKeys": ["profile360.read", "profile360.explore"],
+      "optionalProjectionDependencies": [
+        "risk360"
+      ],
+      "inputRefs": [
+        "EntityRef",
+        "EvidenceRef",
+        "GraphSnapshotRef",
+        "PageRequest",
+        "TimeRangeFilter"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "interactions",
+        "findings"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "as_of",
+        "relative"
+      ],
+      "surfaceIds": [
+        "profile360"
+      ],
+      "capabilityKeys": [
+        "profile360.read",
+        "profile360.explore"
+      ],
       "metricRefs": [],
       "graphMutationPolicy": "read_only",
       "requiresEvidence": true,
@@ -94,12 +136,26 @@
         "exportClass": "governed",
         "distillationRisk": "moderate"
       },
-      "costProfile": {"class": "moderate", "supportsAsync": false},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "moderate",
+        "supportsAsync": false
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/profile360", "/v1/profile"],
-        "surfaceIds": ["profile360"],
-        "services": ["Backend Architecture/aether-backend/services/profile"],
+        "routes": [
+          "/v1/profile360",
+          "/v1/profile"
+        ],
+        "surfaceIds": [
+          "profile360"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/profile"
+        ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/profile360.md"
       },
@@ -115,16 +171,60 @@
       "implementationState": "in_flight",
       "implementationBlueprint": "docs/blueprints/agent360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["entity", "agent"],
-      "canonicalAuthorities": ["agent_entity", "identity", "agent_access", "agent_executions", "graph", "evidence", "economic_facts", "outcome_facts"],
-      "hardDependencies": ["contract_spine", "agentic_runtime_access", "identity_resolution", "temporal_kernel"],
-      "projectionDependencies": ["profile360"],
-      "optionalProjectionDependencies": ["economic360", "outcome360"],
-      "inputRefs": ["EntityRef", "EvidenceRef", "GraphResult", "PageRequest", "TimeRangeFilter"],
-      "outputSections": ["summary", "state", "timeline", "evidence", "interactions", "outcomes"],
-      "supportedTemporalModes": ["window", "as_of", "relative"],
-      "surfaceIds": ["profile360"],
-      "capabilityKeys": ["agent360.read", "agent360.explore"],
+      "subjectKinds": [
+        "entity",
+        "agent"
+      ],
+      "canonicalAuthorities": [
+        "agent_entity",
+        "identity",
+        "agent_access",
+        "agent_executions",
+        "graph",
+        "evidence",
+        "economic_facts",
+        "outcome_facts"
+      ],
+      "hardDependencies": [
+        "contract_spine",
+        "agentic_runtime_access",
+        "identity_resolution",
+        "temporal_kernel"
+      ],
+      "projectionDependencies": [
+        "profile360"
+      ],
+      "optionalProjectionDependencies": [
+        "economic360",
+        "outcome360"
+      ],
+      "inputRefs": [
+        "EntityRef",
+        "EvidenceRef",
+        "GraphResult",
+        "PageRequest",
+        "TimeRangeFilter"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "interactions",
+        "outcomes"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "as_of",
+        "relative"
+      ],
+      "surfaceIds": [
+        "profile360"
+      ],
+      "capabilityKeys": [
+        "agent360.read",
+        "agent360.explore"
+      ],
       "metricRefs": [],
       "graphMutationPolicy": "read_only",
       "requiresEvidence": true,
@@ -147,12 +247,27 @@
         "exportClass": "governed",
         "distillationRisk": "moderate"
       },
-      "costProfile": {"class": "moderate", "supportsAsync": false},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "moderate",
+        "supportsAsync": false
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/agent", "/v1/agents", "/v1/profile360"],
-        "surfaceIds": ["profile360"],
-        "services": ["Backend Architecture/aether-backend/services/agent"],
+        "routes": [
+          "/v1/agent",
+          "/v1/agents",
+          "/v1/profile360"
+        ],
+        "surfaceIds": [
+          "profile360"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/agent"
+        ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/agent360.md"
       },
@@ -168,16 +283,61 @@
       "implementationState": "in_flight",
       "implementationBlueprint": "docs/blueprints/relationship360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["entity", "relationship"],
-      "canonicalAuthorities": ["relationship_facts", "graph", "identity", "evidence", "temporal"],
-      "hardDependencies": ["relationship_fidelity", "identity_resolution", "temporal_kernel"],
-      "projectionDependencies": ["profile360", "temporal360"],
-      "optionalProjectionDependencies": ["economic360", "communication360", "social360", "risk360"],
-      "inputRefs": ["EntityRef", "RelationshipRef", "EvidenceRef", "GraphSnapshotRef", "PageRequest", "TimeRangeFilter"],
-      "outputSections": ["summary", "state", "timeline", "evidence", "interactions", "findings"],
-      "supportedTemporalModes": ["window", "as_of", "relative"],
-      "surfaceIds": ["graph", "profile360"],
-      "capabilityKeys": ["relationship360.read", "relationship360.explore"],
+      "subjectKinds": [
+        "entity",
+        "relationship"
+      ],
+      "canonicalAuthorities": [
+        "relationship_facts",
+        "graph",
+        "identity",
+        "evidence",
+        "temporal"
+      ],
+      "hardDependencies": [
+        "relationship_fidelity",
+        "identity_resolution",
+        "temporal_kernel"
+      ],
+      "projectionDependencies": [
+        "profile360",
+        "temporal360"
+      ],
+      "optionalProjectionDependencies": [
+        "economic360",
+        "communication360",
+        "social360",
+        "risk360"
+      ],
+      "inputRefs": [
+        "EntityRef",
+        "RelationshipRef",
+        "EvidenceRef",
+        "GraphSnapshotRef",
+        "PageRequest",
+        "TimeRangeFilter"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "interactions",
+        "findings"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "as_of",
+        "relative"
+      ],
+      "surfaceIds": [
+        "graph",
+        "profile360"
+      ],
+      "capabilityKeys": [
+        "relationship360.read",
+        "relationship360.explore"
+      ],
       "metricRefs": [],
       "graphMutationPolicy": "read_only",
       "requiresEvidence": true,
@@ -200,11 +360,25 @@
         "exportClass": "governed",
         "distillationRisk": "moderate"
       },
-      "costProfile": {"class": "moderate", "supportsAsync": false},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "moderate",
+        "supportsAsync": false
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/graph", "/v1/semantic", "/v1/entities"],
-        "surfaceIds": ["graph", "profile360"],
+        "routes": [
+          "/v1/graph",
+          "/v1/semantic",
+          "/v1/entities"
+        ],
+        "surfaceIds": [
+          "graph",
+          "profile360"
+        ],
         "services": [
           "Backend Architecture/aether-backend/services/operational_intelligence",
           "Backend Architecture/aether-backend/services/semantic_intelligence"
@@ -224,16 +398,55 @@
       "implementationState": "in_flight",
       "implementationBlueprint": "docs/blueprints/social360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["entity", "relationship"],
-      "canonicalAuthorities": ["social_observations", "source_facts", "relationship_facts", "evidence", "graph"],
-      "hardDependencies": ["upr", "relationship_fidelity", "temporal_kernel"],
-      "projectionDependencies": ["profile360", "relationship360"],
+      "subjectKinds": [
+        "entity",
+        "relationship"
+      ],
+      "canonicalAuthorities": [
+        "social_observations",
+        "source_facts",
+        "relationship_facts",
+        "evidence",
+        "graph"
+      ],
+      "hardDependencies": [
+        "upr",
+        "relationship_fidelity",
+        "temporal_kernel"
+      ],
+      "projectionDependencies": [
+        "profile360",
+        "relationship360"
+      ],
       "optionalProjectionDependencies": [],
-      "inputRefs": ["EntityRef", "RelationshipRef", "EvidenceRef", "GraphSnapshotRef", "PageRequest", "TimeRangeFilter"],
-      "outputSections": ["summary", "state", "timeline", "evidence", "interactions", "findings"],
-      "supportedTemporalModes": ["window", "as_of", "relative"],
-      "surfaceIds": ["profile360"],
-      "capabilityKeys": ["social360.read", "social360.explore"],
+      "inputRefs": [
+        "EntityRef",
+        "RelationshipRef",
+        "EvidenceRef",
+        "GraphSnapshotRef",
+        "PageRequest",
+        "TimeRangeFilter"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "interactions",
+        "findings"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "as_of",
+        "relative"
+      ],
+      "surfaceIds": [
+        "profile360"
+      ],
+      "capabilityKeys": [
+        "social360.read",
+        "social360.explore"
+      ],
       "metricRefs": [],
       "graphMutationPolicy": "read_only",
       "requiresEvidence": true,
@@ -256,12 +469,25 @@
         "exportClass": "governed",
         "distillationRisk": "moderate"
       },
-      "costProfile": {"class": "moderate", "supportsAsync": false},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "moderate",
+        "supportsAsync": false
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/profile"],
-        "surfaceIds": ["profile360"],
-        "services": ["Backend Architecture/aether-backend/services/social"],
+        "routes": [
+          "/v1/profile"
+        ],
+        "surfaceIds": [
+          "profile360"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/social"
+        ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/social360.md"
       },
@@ -277,16 +503,57 @@
       "implementationState": "in_flight",
       "implementationBlueprint": "docs/blueprints/episode360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["entity", "campaign", "episode"],
-      "canonicalAuthorities": ["events", "journeys", "episode_facts", "graph", "evidence", "temporal"],
-      "hardDependencies": ["contract_spine", "temporal_kernel", "journey_continuity"],
-      "projectionDependencies": ["profile360", "relationship360"],
+      "subjectKinds": [
+        "entity",
+        "campaign",
+        "episode"
+      ],
+      "canonicalAuthorities": [
+        "events",
+        "journeys",
+        "episode_facts",
+        "graph",
+        "evidence",
+        "temporal"
+      ],
+      "hardDependencies": [
+        "contract_spine",
+        "temporal_kernel",
+        "journey_continuity"
+      ],
+      "projectionDependencies": [
+        "profile360",
+        "relationship360"
+      ],
       "optionalProjectionDependencies": [],
-      "inputRefs": ["EntityRef", "RelationshipRef", "EvidenceRef", "GraphSnapshotRef", "PageRequest", "TimeRangeFilter"],
-      "outputSections": ["summary", "state", "timeline", "evidence", "interactions", "outcomes"],
-      "supportedTemporalModes": ["window", "relative"],
-      "surfaceIds": ["journeys", "timeline"],
-      "capabilityKeys": ["episode360.read", "episode360.explore"],
+      "inputRefs": [
+        "EntityRef",
+        "RelationshipRef",
+        "EvidenceRef",
+        "GraphSnapshotRef",
+        "PageRequest",
+        "TimeRangeFilter"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "interactions",
+        "outcomes"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "relative"
+      ],
+      "surfaceIds": [
+        "journeys",
+        "timeline"
+      ],
+      "capabilityKeys": [
+        "episode360.read",
+        "episode360.explore"
+      ],
       "metricRefs": [],
       "graphMutationPolicy": "read_only",
       "requiresEvidence": true,
@@ -309,11 +576,24 @@
         "exportClass": "governed",
         "distillationRisk": "moderate"
       },
-      "costProfile": {"class": "moderate", "supportsAsync": false},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "moderate",
+        "supportsAsync": false
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/journeys", "/v1/events"],
-        "surfaceIds": ["journeys", "timeline"],
+        "routes": [
+          "/v1/journeys",
+          "/v1/events"
+        ],
+        "surfaceIds": [
+          "journeys",
+          "timeline"
+        ],
         "services": [
           "Backend Architecture/aether-backend/services/journeys",
           "Backend Architecture/aether-backend/services/events"
@@ -340,17 +620,63 @@
       "implementationState": "in_flight",
       "implementationBlueprint": "docs/blueprints/communication360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["campaign", "episode", "source"],
-      "canonicalAuthorities": ["communication_facts", "campaign_touchpoints", "entities", "outcomes", "evidence"],
-      "hardDependencies": ["contract_spine", "temporal_kernel"],
-      "projectionDependencies": ["profile360", "relationship360", "episode360", "outcome360"],
+      "subjectKinds": [
+        "campaign",
+        "episode",
+        "source"
+      ],
+      "canonicalAuthorities": [
+        "communication_facts",
+        "campaign_touchpoints",
+        "entities",
+        "outcomes",
+        "evidence"
+      ],
+      "hardDependencies": [
+        "contract_spine",
+        "temporal_kernel"
+      ],
+      "projectionDependencies": [
+        "profile360",
+        "relationship360",
+        "episode360",
+        "outcome360"
+      ],
       "optionalProjectionDependencies": [],
-      "inputRefs": ["EntityRef", "RelationshipRef", "EvidenceRef", "GraphSnapshotRef", "PageRequest", "TimeRangeFilter"],
-      "outputSections": ["summary", "state", "timeline", "evidence", "interactions", "outcomes"],
-      "supportedTemporalModes": ["window", "as_of", "relative"],
-      "surfaceIds": ["timeline", "profile360"],
-      "capabilityKeys": ["communication360.read", "communication360.explore"],
-      "metricRefs": ["email_open_rate", "email_click_rate", "email_reply_rate"],
+      "inputRefs": [
+        "EntityRef",
+        "RelationshipRef",
+        "EvidenceRef",
+        "GraphSnapshotRef",
+        "PageRequest",
+        "TimeRangeFilter"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "interactions",
+        "outcomes"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "as_of",
+        "relative"
+      ],
+      "surfaceIds": [
+        "timeline",
+        "profile360"
+      ],
+      "capabilityKeys": [
+        "communication360.read",
+        "communication360.explore"
+      ],
+      "metricRefs": [
+        "email_open_rate",
+        "email_click_rate",
+        "email_reply_rate"
+      ],
       "graphMutationPolicy": "read_only",
       "requiresEvidence": true,
       "requiresDimensionState": true,
@@ -372,12 +698,29 @@
         "exportClass": "governed",
         "distillationRisk": "moderate"
       },
-      "costProfile": {"class": "moderate", "supportsAsync": false},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "moderate",
+        "supportsAsync": false
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/comms", "/v1/contact", "/v1/delivery", "/v1/notifications"],
-        "surfaceIds": ["timeline", "profile360"],
-        "services": ["Backend Architecture/aether-backend/services/comms"],
+        "routes": [
+          "/v1/comms",
+          "/v1/contact",
+          "/v1/delivery",
+          "/v1/notifications"
+        ],
+        "surfaceIds": [
+          "timeline",
+          "profile360"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/comms"
+        ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/communication360.md"
       },
@@ -393,16 +736,61 @@
       "implementationState": "in_flight",
       "implementationBlueprint": "docs/blueprints/execution360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["entity", "agent", "episode"],
-      "canonicalAuthorities": ["execution_facts", "agent_entities", "tools", "actions", "resources", "graph", "evidence", "economic_facts", "outcome_facts"],
-      "hardDependencies": ["agentic_runtime_access", "temporal_kernel"],
-      "projectionDependencies": ["agent360", "temporal360", "episode360", "outcome360"],
+      "subjectKinds": [
+        "entity",
+        "agent",
+        "episode"
+      ],
+      "canonicalAuthorities": [
+        "execution_facts",
+        "agent_entities",
+        "tools",
+        "actions",
+        "resources",
+        "graph",
+        "evidence",
+        "economic_facts",
+        "outcome_facts"
+      ],
+      "hardDependencies": [
+        "agentic_runtime_access",
+        "temporal_kernel"
+      ],
+      "projectionDependencies": [
+        "agent360",
+        "temporal360",
+        "episode360",
+        "outcome360"
+      ],
       "optionalProjectionDependencies": [],
-      "inputRefs": ["EntityRef", "RelationshipRef", "EvidenceRef", "GraphSnapshotRef", "PageRequest", "TimeRangeFilter"],
-      "outputSections": ["summary", "state", "timeline", "evidence", "interactions", "outcomes"],
-      "supportedTemporalModes": ["window", "as_of", "relative"],
-      "surfaceIds": ["timeline"],
-      "capabilityKeys": ["execution360.read", "execution360.explore"],
+      "inputRefs": [
+        "EntityRef",
+        "RelationshipRef",
+        "EvidenceRef",
+        "GraphSnapshotRef",
+        "PageRequest",
+        "TimeRangeFilter"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "interactions",
+        "outcomes"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "as_of",
+        "relative"
+      ],
+      "surfaceIds": [
+        "timeline"
+      ],
+      "capabilityKeys": [
+        "execution360.read",
+        "execution360.explore"
+      ],
       "metricRefs": [],
       "graphMutationPolicy": "read_only",
       "requiresEvidence": true,
@@ -425,11 +813,26 @@
         "exportClass": "governed",
         "distillationRisk": "moderate"
       },
-      "costProfile": {"class": "heavy", "supportsAsync": true},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "heavy",
+        "supportsAsync": true
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/agent", "/v1/agents", "/v1/jobs", "/v1/flows", "/v1/computations"],
-        "surfaceIds": ["timeline"],
+        "routes": [
+          "/v1/agent",
+          "/v1/agents",
+          "/v1/jobs",
+          "/v1/flows",
+          "/v1/computations"
+        ],
+        "surfaceIds": [
+          "timeline"
+        ],
         "services": [
           "Backend Architecture/aether-backend/services/agent",
           "Backend Architecture/aether-backend/services/jobs",
@@ -450,16 +853,49 @@
       "implementationState": "in_flight",
       "implementationBlueprint": "docs/blueprints/temporal360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["entity", "relationship"],
-      "canonicalAuthorities": ["temporal_kernel", "graph_snapshots", "mutation_history", "validity_state"],
-      "hardDependencies": ["contract_spine", "graph_history_replay"],
+      "subjectKinds": [
+        "entity",
+        "relationship"
+      ],
+      "canonicalAuthorities": [
+        "temporal_kernel",
+        "graph_snapshots",
+        "mutation_history",
+        "validity_state"
+      ],
+      "hardDependencies": [
+        "contract_spine",
+        "graph_history_replay"
+      ],
       "projectionDependencies": [],
       "optionalProjectionDependencies": [],
-      "inputRefs": ["GraphSnapshotRef", "GraphResult", "PageRequest", "TimeRangeFilter"],
-      "outputSections": ["summary", "state", "timeline", "evidence", "findings"],
-      "supportedTemporalModes": ["window", "as_of", "compare", "relative"],
-      "surfaceIds": ["temporal_observatory", "timeline"],
-      "capabilityKeys": ["temporal360.read", "temporal360.explore"],
+      "inputRefs": [
+        "GraphSnapshotRef",
+        "GraphResult",
+        "PageRequest",
+        "TimeRangeFilter"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "findings"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "as_of",
+        "compare",
+        "relative"
+      ],
+      "surfaceIds": [
+        "temporal_observatory",
+        "timeline"
+      ],
+      "capabilityKeys": [
+        "temporal360.read",
+        "temporal360.explore"
+      ],
       "metricRefs": [],
       "graphMutationPolicy": "read_only",
       "requiresEvidence": true,
@@ -482,12 +918,27 @@
         "exportClass": "governed",
         "distillationRisk": "moderate"
       },
-      "costProfile": {"class": "moderate", "supportsAsync": false},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "moderate",
+        "supportsAsync": false
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/graph", "/v1/preferences"],
-        "surfaceIds": ["temporal_observatory", "timeline"],
-        "services": ["Backend Architecture/aether-backend/shared/temporal"],
+        "routes": [
+          "/v1/graph",
+          "/v1/preferences"
+        ],
+        "surfaceIds": [
+          "temporal_observatory",
+          "timeline"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/shared/temporal"
+        ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/temporal360.md"
       },
@@ -510,16 +961,52 @@
       "implementationState": "in_flight",
       "implementationBlueprint": "docs/blueprints/geographic360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["entity", "population", "source"],
-      "canonicalAuthorities": ["context_capsules", "geo_observations", "locations", "entity_graph", "temporal"],
-      "hardDependencies": ["temporal_kernel", "context_capsule_semantics"],
-      "projectionDependencies": ["profile360", "temporal360"],
+      "subjectKinds": [
+        "entity",
+        "population",
+        "source"
+      ],
+      "canonicalAuthorities": [
+        "context_capsules",
+        "geo_observations",
+        "locations",
+        "entity_graph",
+        "temporal"
+      ],
+      "hardDependencies": [
+        "temporal_kernel",
+        "context_capsule_semantics"
+      ],
+      "projectionDependencies": [
+        "profile360",
+        "temporal360"
+      ],
       "optionalProjectionDependencies": [],
-      "inputRefs": ["EntityRef", "GraphSnapshotRef", "PageRequest", "TimeRangeFilter"],
-      "outputSections": ["summary", "state", "timeline", "evidence", "findings"],
-      "supportedTemporalModes": ["window", "compare", "relative"],
-      "surfaceIds": ["geo"],
-      "capabilityKeys": ["geographic360.read", "geographic360.explore"],
+      "inputRefs": [
+        "EntityRef",
+        "GraphSnapshotRef",
+        "PageRequest",
+        "TimeRangeFilter"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "findings"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "compare",
+        "relative"
+      ],
+      "surfaceIds": [
+        "geo"
+      ],
+      "capabilityKeys": [
+        "geographic360.read",
+        "geographic360.explore"
+      ],
       "metricRefs": [],
       "graphMutationPolicy": "read_only",
       "requiresEvidence": true,
@@ -542,12 +1029,25 @@
         "exportClass": "governed",
         "distillationRisk": "moderate"
       },
-      "costProfile": {"class": "moderate", "supportsAsync": false},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "moderate",
+        "supportsAsync": false
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/geo"],
-        "surfaceIds": ["geo"],
-        "services": ["Backend Architecture/aether-backend/services/geo"],
+        "routes": [
+          "/v1/geo"
+        ],
+        "surfaceIds": [
+          "geo"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/geo"
+        ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/geographic360.md"
       },
@@ -570,16 +1070,55 @@
       "implementationState": "in_flight",
       "implementationBlueprint": "docs/blueprints/population360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["entity", "population", "cluster"],
-      "canonicalAuthorities": ["population_definitions", "cohort_membership", "cluster_definitions", "entities", "evidence", "temporal"],
-      "hardDependencies": ["contract_spine", "grouping_membership"],
-      "projectionDependencies": ["profile360", "relationship360", "temporal360"],
+      "subjectKinds": [
+        "entity",
+        "population",
+        "cluster"
+      ],
+      "canonicalAuthorities": [
+        "population_definitions",
+        "cohort_membership",
+        "cluster_definitions",
+        "entities",
+        "evidence",
+        "temporal"
+      ],
+      "hardDependencies": [
+        "contract_spine",
+        "grouping_membership"
+      ],
+      "projectionDependencies": [
+        "profile360",
+        "relationship360",
+        "temporal360"
+      ],
       "optionalProjectionDependencies": [],
-      "inputRefs": ["EntityRef", "GraphSnapshotRef", "GraphResult", "PageRequest", "TimeRangeFilter"],
-      "outputSections": ["summary", "state", "timeline", "evidence", "findings"],
-      "supportedTemporalModes": ["window", "relative"],
-      "surfaceIds": ["comparison_workbench", "cluster360"],
-      "capabilityKeys": ["population360.read", "population360.explore"],
+      "inputRefs": [
+        "EntityRef",
+        "GraphSnapshotRef",
+        "GraphResult",
+        "PageRequest",
+        "TimeRangeFilter"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "findings"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "relative"
+      ],
+      "surfaceIds": [
+        "comparison_workbench",
+        "cluster360"
+      ],
+      "capabilityKeys": [
+        "population360.read",
+        "population360.explore"
+      ],
       "metricRefs": [],
       "graphMutationPolicy": "read_only",
       "requiresEvidence": true,
@@ -602,12 +1141,26 @@
         "exportClass": "governed",
         "distillationRisk": "moderate"
       },
-      "costProfile": {"class": "moderate", "supportsAsync": false},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "moderate",
+        "supportsAsync": false
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/population"],
-        "surfaceIds": ["comparison_workbench", "cluster360"],
-        "services": ["Backend Architecture/aether-backend/services/population"],
+        "routes": [
+          "/v1/population"
+        ],
+        "surfaceIds": [
+          "comparison_workbench",
+          "cluster360"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/population"
+        ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/population360.md"
       },
@@ -630,16 +1183,52 @@
       "implementationState": "in_flight",
       "implementationBlueprint": "docs/blueprints/cluster360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["entity", "cluster", "population"],
-      "canonicalAuthorities": ["cluster_definitions", "cluster_membership", "population", "graph", "computation"],
-      "hardDependencies": ["exploration_fabric", "computation_substrate"],
-      "projectionDependencies": ["population360"],
+      "subjectKinds": [
+        "entity",
+        "cluster",
+        "population"
+      ],
+      "canonicalAuthorities": [
+        "cluster_definitions",
+        "cluster_membership",
+        "population",
+        "graph",
+        "computation"
+      ],
+      "hardDependencies": [
+        "exploration_fabric",
+        "computation_substrate"
+      ],
+      "projectionDependencies": [
+        "population360"
+      ],
       "optionalProjectionDependencies": [],
-      "inputRefs": ["EntityRef", "GraphResult", "PageRequest", "TimeRangeFilter", "FilterExpression"],
-      "outputSections": ["summary", "state", "evidence", "findings", "health"],
-      "supportedTemporalModes": ["window", "as_of"],
-      "surfaceIds": ["cluster360", "graph"],
-      "capabilityKeys": ["cluster360.read", "cluster360.explore"],
+      "inputRefs": [
+        "EntityRef",
+        "GraphResult",
+        "PageRequest",
+        "TimeRangeFilter",
+        "FilterExpression"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "evidence",
+        "findings",
+        "health"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "as_of"
+      ],
+      "surfaceIds": [
+        "cluster360",
+        "graph"
+      ],
+      "capabilityKeys": [
+        "cluster360.read",
+        "cluster360.explore"
+      ],
       "metricRefs": [],
       "graphMutationPolicy": "read_only",
       "requiresEvidence": true,
@@ -662,12 +1251,26 @@
         "exportClass": "governed",
         "distillationRisk": "moderate"
       },
-      "costProfile": {"class": "heavy", "supportsAsync": true},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "heavy",
+        "supportsAsync": true
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/clusters"],
-        "surfaceIds": ["cluster360", "graph"],
-        "services": ["Backend Architecture/aether-backend/services/cluster"],
+        "routes": [
+          "/v1/clusters"
+        ],
+        "surfaceIds": [
+          "cluster360",
+          "graph"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/cluster"
+        ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/cluster360.md"
       },
@@ -680,20 +1283,59 @@
       "id": "outcome360",
       "displayName": "Outcome 360",
       "projectionKind": "measurement_360",
-      "implementationState": "in_flight",
+      "implementationState": "implemented",
       "implementationBlueprint": "docs/blueprints/outcome360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["campaign", "episode", "population"],
-      "canonicalAuthorities": ["outcome_facts", "measurement_contract", "graph", "evidence"],
-      "hardDependencies": ["measurement_outcome_contract", "temporal_kernel"],
-      "projectionDependencies": ["temporal360"],
+      "subjectKinds": [
+        "campaign",
+        "episode",
+        "population"
+      ],
+      "canonicalAuthorities": [
+        "outcome_facts",
+        "measurement_contract",
+        "graph",
+        "evidence"
+      ],
+      "hardDependencies": [
+        "measurement_outcome_contract",
+        "temporal_kernel"
+      ],
+      "projectionDependencies": [
+        "temporal360"
+      ],
       "optionalProjectionDependencies": [],
-      "inputRefs": ["EntityRef", "EvidenceRef", "GraphResult", "PageRequest", "TimeRangeFilter", "FilterExpression"],
-      "outputSections": ["summary", "state", "evidence", "outcomes", "findings"],
-      "supportedTemporalModes": ["window", "compare", "relative"],
-      "surfaceIds": ["campaign360", "outcome360"],
-      "capabilityKeys": ["outcome360.read", "outcome360.explore"],
-      "metricRefs": ["journey_completion_rate"],
+      "inputRefs": [
+        "EntityRef",
+        "EvidenceRef",
+        "GraphResult",
+        "PageRequest",
+        "TimeRangeFilter",
+        "FilterExpression"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "evidence",
+        "outcomes",
+        "findings"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "compare",
+        "relative"
+      ],
+      "surfaceIds": [
+        "campaign360",
+        "outcome360"
+      ],
+      "capabilityKeys": [
+        "outcome360.read",
+        "outcome360.explore"
+      ],
+      "metricRefs": [
+        "journey_completion_rate"
+      ],
       "graphMutationPolicy": "read_only",
       "requiresEvidence": true,
       "requiresDimensionState": true,
@@ -715,13 +1357,32 @@
         "exportClass": "governed",
         "distillationRisk": "high"
       },
-      "costProfile": {"class": "heavy", "supportsAsync": true},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "heavy",
+        "supportsAsync": true
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/conversions", "/v1/attribution", "/v1/spend", "/v1/journeys", "/v1/measurement", "/v1/resolution"],
-        "surfaceIds": ["campaign360", "outcome360"],
-        "services": ["Backend Architecture/aether-backend/services/measurement"],
-        "migrationMode": "adapter",
+        "routes": [
+          "/v1/conversions",
+          "/v1/attribution",
+          "/v1/spend",
+          "/v1/journeys",
+          "/v1/measurement",
+          "/v1/resolution"
+        ],
+        "surfaceIds": [
+          "campaign360",
+          "outcome360"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/measurement"
+        ],
+        "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/outcome360.md"
       },
       "deprecatedReason": null,
@@ -733,20 +1394,68 @@
       "id": "economic360",
       "displayName": "Economic 360",
       "projectionKind": "measurement_360",
-      "implementationState": "in_flight",
+      "implementationState": "implemented",
       "implementationBlueprint": "docs/blueprints/economic360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["campaign", "episode", "source"],
-      "canonicalAuthorities": ["economic_facts", "currency_value_normalization", "payments", "commerce", "graph", "outcome_facts"],
-      "hardDependencies": ["measurement_outcome_contract", "temporal_kernel"],
-      "projectionDependencies": ["profile360", "relationship360", "outcome360"],
+      "subjectKinds": [
+        "campaign",
+        "episode",
+        "source"
+      ],
+      "canonicalAuthorities": [
+        "economic_facts",
+        "currency_value_normalization",
+        "payments",
+        "commerce",
+        "graph",
+        "outcome_facts"
+      ],
+      "hardDependencies": [
+        "measurement_outcome_contract",
+        "temporal_kernel"
+      ],
+      "projectionDependencies": [
+        "profile360",
+        "relationship360",
+        "outcome360"
+      ],
       "optionalProjectionDependencies": [],
-      "inputRefs": ["EntityRef", "EvidenceRef", "GraphResult", "PageRequest", "TimeRangeFilter", "FilterExpression"],
-      "outputSections": ["summary", "state", "evidence", "outcomes", "findings"],
-      "supportedTemporalModes": ["window", "compare", "relative"],
-      "surfaceIds": ["campaign360", "product_intelligence", "economic360"],
-      "capabilityKeys": ["economic360.read", "economic360.explore"],
-      "metricRefs": ["revenue"],
+      "inputRefs": [
+        "EntityRef",
+        "EvidenceRef",
+        "GraphResult",
+        "PageRequest",
+        "TimeRangeFilter",
+        "FilterExpression"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "evidence",
+        "outcomes",
+        "findings"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "compare",
+        "relative"
+      ],
+      "surfaceIds": [
+        "campaign360",
+        "product_intelligence",
+        "economic360"
+      ],
+      "capabilityKeys": [
+        "economic360.read",
+        "economic360.explore"
+      ],
+      "metricRefs": [
+        "revenue",
+        "campaign_spend",
+        "campaign_roas",
+        "campaign_cac",
+        "campaign_ltv"
+      ],
       "graphMutationPolicy": "read_only",
       "requiresEvidence": true,
       "requiresDimensionState": true,
@@ -768,44 +1477,35 @@
         "exportClass": "governed",
         "distillationRisk": "high"
       },
-      "costProfile": {"class": "heavy", "supportsAsync": true},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "heavy",
+        "supportsAsync": true
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/economic", "/v1/profile"],
-        "surfaceIds": ["campaign360", "product_intelligence", "economic360"],
-        "services": ["Backend Architecture/aether-backend/services/economic"],
-        "migrationMode": "adapter",
+        "routes": [
+          "/v1/economic",
+          "/v1/profile"
+        ],
+        "surfaceIds": [
+          "campaign360",
+          "product_intelligence",
+          "economic360"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/economic"
+        ],
+        "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/economic360.md"
       },
       "deprecatedReason": null,
       "successorId": null,
       "pendingAuthority": [],
-      "pendingReference": [
-        {
-          "id": "campaign_spend",
-          "kind": "metric",
-          "reason": "economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json",
-          "resolvesInProjection": "economic360"
-        },
-        {
-          "id": "campaign_roas",
-          "kind": "metric",
-          "reason": "economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json",
-          "resolvesInProjection": "economic360"
-        },
-        {
-          "id": "campaign_cac",
-          "kind": "metric",
-          "reason": "economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json",
-          "resolvesInProjection": "economic360"
-        },
-        {
-          "id": "campaign_ltv",
-          "kind": "metric",
-          "reason": "economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json",
-          "resolvesInProjection": "economic360"
-        }
-      ]
+      "pendingReference": []
     },
     {
       "id": "campaign360",
@@ -814,17 +1514,69 @@
       "implementationState": "in_flight",
       "implementationBlueprint": "docs/blueprints/campaign360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["campaign", "episode", "population", "source"],
-      "canonicalAuthorities": ["campaign_facts", "touchpoints", "journeys", "outcomes", "attribution_credits", "population", "communication", "economic"],
-      "hardDependencies": ["contract_spine", "attribution_architecture", "measurement_outcome_contract"],
-      "projectionDependencies": ["population360", "episode360", "outcome360", "communication360", "economic360"],
+      "subjectKinds": [
+        "campaign",
+        "episode",
+        "population",
+        "source"
+      ],
+      "canonicalAuthorities": [
+        "campaign_facts",
+        "touchpoints",
+        "journeys",
+        "outcomes",
+        "attribution_credits",
+        "population",
+        "communication",
+        "economic"
+      ],
+      "hardDependencies": [
+        "contract_spine",
+        "attribution_architecture",
+        "measurement_outcome_contract"
+      ],
+      "projectionDependencies": [
+        "population360",
+        "episode360",
+        "outcome360",
+        "communication360",
+        "economic360"
+      ],
       "optionalProjectionDependencies": [],
-      "inputRefs": ["EntityRef", "EvidenceRef", "GraphResult", "PageRequest", "TimeRangeFilter", "FilterExpression"],
-      "outputSections": ["summary", "state", "evidence", "outcomes", "findings"],
-      "supportedTemporalModes": ["window", "compare", "relative"],
-      "surfaceIds": ["campaign360", "comparison_workbench"],
-      "capabilityKeys": ["campaign360.read", "campaign360.explore"],
-      "metricRefs": ["conversion_rate", "attributed_conversions", "revenue", "touchpoints"],
+      "inputRefs": [
+        "EntityRef",
+        "EvidenceRef",
+        "GraphResult",
+        "PageRequest",
+        "TimeRangeFilter",
+        "FilterExpression"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "evidence",
+        "outcomes",
+        "findings"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "compare",
+        "relative"
+      ],
+      "surfaceIds": [
+        "campaign360",
+        "comparison_workbench"
+      ],
+      "capabilityKeys": [
+        "campaign360.read",
+        "campaign360.explore"
+      ],
+      "metricRefs": [
+        "conversion_rate",
+        "attributed_conversions",
+        "revenue",
+        "touchpoints"
+      ],
       "graphMutationPolicy": "canonical_gateway_only",
       "requiresEvidence": true,
       "requiresDimensionState": true,
@@ -846,12 +1598,29 @@
         "exportClass": "governed",
         "distillationRisk": "high"
       },
-      "costProfile": {"class": "heavy", "supportsAsync": true},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "heavy",
+        "supportsAsync": true
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/campaigns", "/v1/campaign-sources", "/v1/mapping-review", "/v1/campaign-quality"],
-        "surfaceIds": ["campaign360", "comparison_workbench"],
-        "services": ["Backend Architecture/aether-backend/services/campaign"],
+        "routes": [
+          "/v1/campaigns",
+          "/v1/campaign-sources",
+          "/v1/mapping-review",
+          "/v1/campaign-quality"
+        ],
+        "surfaceIds": [
+          "campaign360",
+          "comparison_workbench"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/campaign"
+        ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/campaign360.md"
       },
@@ -867,16 +1636,60 @@
       "implementationState": "in_flight",
       "implementationBlueprint": "docs/blueprints/risk360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["entity", "relationship", "cluster", "population"],
-      "canonicalAuthorities": ["risk_outputs", "entity_graph", "evidence", "economic_facts", "cluster_membership", "model_governance"],
-      "hardDependencies": ["evidence_provenance", "computation_substrate", "model_governance"],
-      "projectionDependencies": ["profile360", "economic360", "cluster360"],
+      "subjectKinds": [
+        "entity",
+        "relationship",
+        "cluster",
+        "population"
+      ],
+      "canonicalAuthorities": [
+        "risk_outputs",
+        "entity_graph",
+        "evidence",
+        "economic_facts",
+        "cluster_membership",
+        "model_governance"
+      ],
+      "hardDependencies": [
+        "evidence_provenance",
+        "computation_substrate",
+        "model_governance"
+      ],
+      "projectionDependencies": [
+        "profile360",
+        "economic360",
+        "cluster360"
+      ],
       "optionalProjectionDependencies": [],
-      "inputRefs": ["EntityRef", "RelationshipRef", "EvidenceRef", "GraphSnapshotRef", "PageRequest", "TimeRangeFilter", "FilterExpression"],
-      "outputSections": ["summary", "state", "evidence", "findings", "health"],
-      "supportedTemporalModes": ["window", "as_of", "relative"],
-      "surfaceIds": ["graph", "comparison_workbench"],
-      "capabilityKeys": ["risk360.read", "risk360.explore"],
+      "inputRefs": [
+        "EntityRef",
+        "RelationshipRef",
+        "EvidenceRef",
+        "GraphSnapshotRef",
+        "PageRequest",
+        "TimeRangeFilter",
+        "FilterExpression"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "evidence",
+        "findings",
+        "health"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "as_of",
+        "relative"
+      ],
+      "surfaceIds": [
+        "graph",
+        "comparison_workbench"
+      ],
+      "capabilityKeys": [
+        "risk360.read",
+        "risk360.explore"
+      ],
       "metricRefs": [],
       "graphMutationPolicy": "read_only",
       "requiresEvidence": true,
@@ -899,12 +1712,27 @@
         "exportClass": "governed",
         "distillationRisk": "high"
       },
-      "costProfile": {"class": "heavy", "supportsAsync": true},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "heavy",
+        "supportsAsync": true
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/risk-overlays", "/v1/capability-risk"],
-        "surfaceIds": ["graph", "comparison_workbench"],
-        "services": ["Backend Architecture/aether-backend/services/risk_overlay"],
+        "routes": [
+          "/v1/risk-overlays",
+          "/v1/capability-risk"
+        ],
+        "surfaceIds": [
+          "graph",
+          "comparison_workbench"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/risk_overlay"
+        ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/risk360.md"
       },
@@ -920,16 +1748,59 @@
       "implementationState": "in_flight",
       "implementationBlueprint": "docs/blueprints/fraud360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["entity", "relationship", "agent"],
-      "canonicalAuthorities": ["fraud_synthesis", "graph_motifs", "risk_outputs", "identity", "relationship_facts", "economic_facts", "execution_facts", "social_observations", "evidence"],
-      "hardDependencies": ["evidence_provenance", "model_governance"],
-      "projectionDependencies": ["profile360", "risk360"],
+      "subjectKinds": [
+        "entity",
+        "relationship",
+        "agent"
+      ],
+      "canonicalAuthorities": [
+        "fraud_synthesis",
+        "graph_motifs",
+        "risk_outputs",
+        "identity",
+        "relationship_facts",
+        "economic_facts",
+        "execution_facts",
+        "social_observations",
+        "evidence"
+      ],
+      "hardDependencies": [
+        "evidence_provenance",
+        "model_governance"
+      ],
+      "projectionDependencies": [
+        "profile360",
+        "risk360"
+      ],
       "optionalProjectionDependencies": [],
-      "inputRefs": ["EntityRef", "RelationshipRef", "EvidenceRef", "GraphSnapshotRef", "PageRequest", "TimeRangeFilter", "FilterExpression"],
-      "outputSections": ["summary", "state", "evidence", "findings", "health"],
-      "supportedTemporalModes": ["window", "as_of", "relative"],
-      "surfaceIds": ["graph"],
-      "capabilityKeys": ["fraud360.read", "fraud360.explore"],
+      "inputRefs": [
+        "EntityRef",
+        "RelationshipRef",
+        "EvidenceRef",
+        "GraphSnapshotRef",
+        "PageRequest",
+        "TimeRangeFilter",
+        "FilterExpression"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "evidence",
+        "findings",
+        "health"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "as_of",
+        "relative"
+      ],
+      "surfaceIds": [
+        "graph"
+      ],
+      "capabilityKeys": [
+        "fraud360.read",
+        "fraud360.explore"
+      ],
       "metricRefs": [],
       "graphMutationPolicy": "read_only",
       "requiresEvidence": true,
@@ -952,12 +1823,25 @@
         "exportClass": "governed",
         "distillationRisk": "high"
       },
-      "costProfile": {"class": "heavy", "supportsAsync": true},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "heavy",
+        "supportsAsync": true
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/fraud"],
-        "surfaceIds": ["graph"],
-        "services": ["Backend Architecture/aether-backend/services/fraud"],
+        "routes": [
+          "/v1/fraud"
+        ],
+        "surfaceIds": [
+          "graph"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/fraud"
+        ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/fraud360.md"
       },
@@ -973,16 +1857,47 @@
       "implementationState": "in_flight",
       "implementationBlueprint": "docs/blueprints/source360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["source", "connection"],
-      "canonicalAuthorities": ["provider_registry", "source_provenance", "ingestion_health", "source_schema", "source_coverage", "evidence"],
-      "hardDependencies": ["upr"],
+      "subjectKinds": [
+        "source",
+        "connection"
+      ],
+      "canonicalAuthorities": [
+        "provider_registry",
+        "source_provenance",
+        "ingestion_health",
+        "source_schema",
+        "source_coverage",
+        "evidence"
+      ],
+      "hardDependencies": [
+        "upr"
+      ],
       "projectionDependencies": [],
       "optionalProjectionDependencies": [],
-      "inputRefs": ["EntityRef", "EvidenceRef", "PageRequest", "TimeRangeFilter"],
-      "outputSections": ["summary", "state", "evidence", "health", "coverage"],
-      "supportedTemporalModes": ["window", "relative"],
-      "surfaceIds": ["campaign360"],
-      "capabilityKeys": ["source360.read", "source360.explore"],
+      "inputRefs": [
+        "EntityRef",
+        "EvidenceRef",
+        "PageRequest",
+        "TimeRangeFilter"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "evidence",
+        "health",
+        "coverage"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "relative"
+      ],
+      "surfaceIds": [
+        "campaign360"
+      ],
+      "capabilityKeys": [
+        "source360.read",
+        "source360.explore"
+      ],
       "metricRefs": [],
       "graphMutationPolicy": "read_only",
       "requiresEvidence": true,
@@ -1005,12 +1920,27 @@
         "exportClass": "governed",
         "distillationRisk": "moderate"
       },
-      "costProfile": {"class": "moderate", "supportsAsync": false},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "moderate",
+        "supportsAsync": false
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/imports", "/v1/kyber", "/v1/providers"],
-        "surfaceIds": ["campaign360"],
-        "services": ["Backend Architecture/aether-backend/services/imports"],
+        "routes": [
+          "/v1/imports",
+          "/v1/kyber",
+          "/v1/providers"
+        ],
+        "surfaceIds": [
+          "campaign360"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/imports"
+        ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/source360.md"
       },
@@ -1026,16 +1956,53 @@
       "implementationState": "in_flight",
       "implementationBlueprint": "docs/blueprints/connection360.md",
       "ownsCanonicalTruth": false,
-      "subjectKinds": ["source", "connection"],
-      "canonicalAuthorities": ["managed_integration_lifecycle", "credential_readiness", "connection_config", "sync_state", "provider_health", "connection_permissions", "source_coverage"],
-      "hardDependencies": ["upr", "reconciled_control_plane"],
-      "projectionDependencies": ["source360"],
+      "subjectKinds": [
+        "source",
+        "connection"
+      ],
+      "canonicalAuthorities": [
+        "managed_integration_lifecycle",
+        "credential_readiness",
+        "connection_config",
+        "sync_state",
+        "provider_health",
+        "connection_permissions",
+        "source_coverage"
+      ],
+      "hardDependencies": [
+        "upr",
+        "reconciled_control_plane"
+      ],
+      "projectionDependencies": [
+        "source360"
+      ],
       "optionalProjectionDependencies": [],
-      "inputRefs": ["EntityRef", "EvidenceRef", "PageRequest", "TimeRangeFilter", "MutationIntent"],
-      "outputSections": ["summary", "state", "evidence", "health", "coverage"],
-      "supportedTemporalModes": ["window", "as_of", "relative"],
-      "surfaceIds": ["connection360"],
-      "capabilityKeys": ["connection360.read", "connection360.explore"],
+      "inputRefs": [
+        "EntityRef",
+        "EvidenceRef",
+        "PageRequest",
+        "TimeRangeFilter",
+        "MutationIntent"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "evidence",
+        "health",
+        "coverage"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "as_of",
+        "relative"
+      ],
+      "surfaceIds": [
+        "connection360"
+      ],
+      "capabilityKeys": [
+        "connection360.read",
+        "connection360.explore"
+      ],
       "metricRefs": [],
       "graphMutationPolicy": "canonical_gateway_only",
       "requiresEvidence": true,
@@ -1058,12 +2025,27 @@
         "exportClass": "governed",
         "distillationRisk": "moderate"
       },
-      "costProfile": {"class": "moderate", "supportsAsync": false},
-      "commercialClassification": {"sellableCapability": true, "meterRefs": [], "costClassRefs": []},
+      "costProfile": {
+        "class": "moderate",
+        "supportsAsync": false
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
       "legacyBindings": {
-        "routes": ["/v1/integrations", "/v1/provider-connections", "/v1/client-sync"],
-        "surfaceIds": ["connection360"],
-        "services": ["Backend Architecture/aether-backend/services/provider_runtime"],
+        "routes": [
+          "/v1/integrations",
+          "/v1/provider-connections",
+          "/v1/client-sync"
+        ],
+        "surfaceIds": [
+          "connection360"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/provider_runtime"
+        ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/connection360.md"
       },
@@ -1077,6 +2059,104 @@
           "resolvesInProjection": "connection360"
         }
       ],
+      "pendingReference": []
+    },
+    {
+      "id": "infrastructure360",
+      "displayName": "Infrastructure 360",
+      "projectionKind": "infrastructure_360",
+      "implementationState": "implemented",
+      "implementationBlueprint": "docs/blueprints/infrastructure360.md",
+      "ownsCanonicalTruth": false,
+      "subjectKinds": [
+        "deployment",
+        "infrastructure"
+      ],
+      "canonicalAuthorities": [
+        "infrastructure_facts",
+        "infrastructure_state",
+        "deployments"
+      ],
+      "hardDependencies": [
+        "contract_spine",
+        "temporal_kernel",
+        "infrastructure_model"
+      ],
+      "projectionDependencies": [],
+      "optionalProjectionDependencies": [],
+      "inputRefs": [
+        "EntityRef",
+        "EvidenceRef",
+        "PageRequest",
+        "TimeRangeFilter"
+      ],
+      "outputSections": [
+        "summary",
+        "state",
+        "deployments",
+        "evidence",
+        "findings"
+      ],
+      "supportedTemporalModes": [
+        "window",
+        "as_of",
+        "relative",
+        "compare"
+      ],
+      "surfaceIds": [
+        "infrastructure360"
+      ],
+      "capabilityKeys": [
+        "infrastructure360.read",
+        "infrastructure360.explore"
+      ],
+      "metricRefs": [],
+      "graphMutationPolicy": "read_only",
+      "requiresEvidence": true,
+      "requiresDimensionState": true,
+      "requiresFreshness": true,
+      "requiresLimitations": true,
+      "tenantScoped": true,
+      "policyScoped": true,
+      "readinessRequirements": {
+        "requiresImplementation": true,
+        "requiresDependencies": true,
+        "requiresTenantEntitlement": true,
+        "requiresProviderReadiness": false,
+        "requiresEvidenceHealth": true
+      },
+      "security": {
+        "tenantScoped": true,
+        "requiresAuthorization": true,
+        "requiresHistoricalConsentEvaluation": false,
+        "exportClass": "governed",
+        "distillationRisk": "moderate"
+      },
+      "costProfile": {
+        "class": "moderate",
+        "supportsAsync": false
+      },
+      "commercialClassification": {
+        "sellableCapability": true,
+        "meterRefs": [],
+        "costClassRefs": []
+      },
+      "legacyBindings": {
+        "routes": [
+          "/v1/infrastructure"
+        ],
+        "surfaceIds": [
+          "infrastructure360"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/infrastructure"
+        ],
+        "migrationMode": "converged",
+        "migrationBlueprint": "docs/blueprints/infrastructure360.md"
+      },
+      "deprecatedReason": null,
+      "successorId": null,
+      "pendingAuthority": [],
       "pendingReference": []
     }
   ]

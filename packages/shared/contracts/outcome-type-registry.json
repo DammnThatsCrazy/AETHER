@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "contractVersion": "1.0.0",
+  "description": "Canonical outcome-type vocabulary for the Outcome360 intelligence projection. A 360 is an intelligence projection over canonical Aether truth — never a competing system of record. This registry names the outcome kinds the measurement plane can attest (each maps to an OutcomeState finality ladder on canonical outcome_facts); it never re-implements measurement facts.",
+  "domains": [
+    "commercial",
+    "product",
+    "operational",
+    "agentic",
+    "security",
+    "fraud",
+    "economic",
+    "institutional",
+    "onchain"
+  ],
+  "outcomeTypes": [
+    {
+      "id": "access_control_enforced",
+      "domain": "security",
+      "name": "Access Control Enforced",
+      "description": "An entitlement or access decision was evaluated and enforced correctly (allow/deny matches policy)."
+    },
+    {
+      "id": "agent_objective_attainment",
+      "domain": "agentic",
+      "name": "Agent Objective Attainment",
+      "description": "An agent-executed objective/OKR was attained within its declared budget and constraints."
+    },
+    {
+      "id": "agent_task_completion",
+      "domain": "agentic",
+      "name": "Agent Task Completion",
+      "description": "An agent-executed task reached its terminal success state with corroborating evidence."
+    },
+    {
+      "id": "campaign_conversion",
+      "domain": "commercial",
+      "name": "Campaign Conversion",
+      "description": "A campaign subject completed a target conversion event (signup, purchase, order, closed-won)."
+    },
+    {
+      "id": "chargeback_avoidance",
+      "domain": "fraud",
+      "name": "Chargeback Avoidance",
+      "description": "A dispute was resolved in the subject's favor without chargeback loss, or a predicted dispute was prevented."
+    },
+    {
+      "id": "compliance_milestone_met",
+      "domain": "institutional",
+      "name": "Compliance Milestone Met",
+      "description": "A compliance or regulatory milestone (audit, certification, filing, attestation) was met on schedule."
+    },
+    {
+      "id": "engagement_completion",
+      "domain": "product",
+      "name": "Engagement Completion",
+      "description": "A product workflow (onboarding, activation, migration) reached its defined completion state."
+    },
+    {
+      "id": "fraud_prevention_hit",
+      "domain": "fraud",
+      "name": "Fraud Prevention Hit",
+      "description": "A fraudulent activity was blocked or intercepted before material loss occurred."
+    },
+    {
+      "id": "governance_proposal_passed",
+      "domain": "institutional",
+      "name": "Governance Proposal Passed",
+      "description": "A governance proposal reached quorum and passed according to the governing policy."
+    },
+    {
+      "id": "journey_completion",
+      "domain": "commercial",
+      "name": "Journey Completion",
+      "description": "A journey reached its terminal converted state (backed by the measurement journey engine)."
+    },
+    {
+      "id": "onchain_settlement_completed",
+      "domain": "onchain",
+      "name": "On-Chain Settlement Completed",
+      "description": "An on-chain settlement finalized on its target chain with the expected finality."
+    },
+    {
+      "id": "reconciliation_completed",
+      "domain": "operational",
+      "name": "Reconciliation Completed",
+      "description": "A ledger or system reconciliation reached zero outstanding variance within the window."
+    },
+    {
+      "id": "retention_window_achieved",
+      "domain": "product",
+      "name": "Retention Window Achieved",
+      "description": "A subject retained engagement past a contractual or product retention window."
+    },
+    {
+      "id": "revenue_attainment",
+      "domain": "economic",
+      "name": "Revenue Attainment",
+      "description": "Recognized revenue attained the declared target within the measurement window."
+    },
+    {
+      "id": "roas_attainment",
+      "domain": "economic",
+      "name": "Return on Ad Spend Attainment",
+      "description": "Return on ad spend attained the declared target for the campaign or episode."
+    },
+    {
+      "id": "sla_attainment",
+      "domain": "operational",
+      "name": "SLA Attainment",
+      "description": "A service-level agreement (latency, uptime, response) was met within the measurement window."
+    }
+  ]
+}

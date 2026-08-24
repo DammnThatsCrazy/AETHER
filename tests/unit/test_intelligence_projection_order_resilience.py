@@ -42,7 +42,7 @@ _EXISTING_IDS = (
     "profile360", "agent360", "relationship360", "social360", "episode360",
     "communication360", "execution360", "temporal360", "geographic360",
     "population360", "cluster360", "outcome360", "economic360", "campaign360",
-    "risk360", "fraud360", "source360", "connection360",
+    "risk360", "fraud360", "source360", "connection360", "infrastructure360",
 )
 
 
@@ -224,7 +224,7 @@ def test_one_entry_removal_localized_diff() -> None:
     reg = _real_registry()
     removed = copy.deepcopy(reg)
     removed["projections"] = [p for p in removed["projections"] if p["id"] != "campaign360"]
-    assert len(removed["projections"]) == 17
+    assert len(removed["projections"]) == 18
 
     full_blocks = _per_id_blocks(gen_intelligence_projection_ts(reg))
     removed_blocks = _per_id_blocks(gen_intelligence_projection_ts(removed))
@@ -239,12 +239,12 @@ def test_one_entry_removal_localized_diff() -> None:
 
 def test_adding_pending_projection_keeps_existing_blocks_identical() -> None:
     # A follow-up blueprint adds a NEW projection (registered, with pending
-    # surface + metric refs). None of the 18 existing projections' blocks move:
+    # surface + metric refs). None of the 19 existing projections' blocks move:
     # new work drops into place without disturbing placed pieces (tetris).
     reg = _real_registry()
     plus = copy.deepcopy(reg)
     plus["projections"].append(_new_registered_projection())
-    assert len(plus["projections"]) == 19
+    assert len(plus["projections"]) == 20
 
     base_blocks = _per_id_blocks(gen_intelligence_projection_ts(reg))
     plus_blocks = _per_id_blocks(gen_intelligence_projection_ts(plus))

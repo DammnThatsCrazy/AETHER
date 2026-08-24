@@ -53,6 +53,32 @@ def test_frontend_data_truth_source_and_bundle_gates_present() -> None:
     assert 'scripts/validate_frontend_branding.py"]' in source
 
 
+def test_outcome_type_gate_wired_in_repo_doctor() -> None:
+    """repo_doctor.py must track the Outcome360 outcome-type generated twins.
+
+    The outcome-type registry (Outcome360) is part of the unified-platform
+    generated-contracts clean check: the TypeScript barrel and the backend
+    generated registry must be covered so a generator change can never ship a
+    stale twin. Pinning the filenames here locks the declaration targets in
+    place (underscore, non-dotted base) the same way the projection-plane test
+    does.
+    """
+    import inspect
+
+    source = inspect.getsource(repo_doctor)
+    assert "packages/shared/outcome-types_generated.ts" in source, (
+        "repo_doctor _check_clean must track the generated TS outcome-type "
+        "registry (packages/shared/outcome-types_generated.ts)"
+    )
+    assert (
+        "Backend Architecture/aether-backend/shared/measurement/generated_outcome_types.py"
+        in source
+    ), (
+        "repo_doctor _check_clean must track the backend generated outcome-type "
+        "registry (measurement/generated_outcome_types.py)"
+    )
+
+
 def test_intelligence_projection_gate_wired_in_repo_doctor() -> None:
     """repo_doctor.py must dispatch and track the intelligence-projection plane.
 

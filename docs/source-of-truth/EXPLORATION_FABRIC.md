@@ -35,7 +35,7 @@ envelope carries one applicability entry per requested filter
 | The ONE boolean filter language | `shared/contracts_models/filters.py` (moved from `services/operational_intelligence/models.py`, which re-exports unchanged) ↔ the `FilterOperator`/`FilterExpression`/`FilterGroup` section of `packages/shared/graph-contract.ts` |
 | `ExplorationContextV1` (COMPOSES FilterGroup — never a second filter system), `ApplicabilityReport`, `ExplorationResultEnvelope` (completeness/truth/execution blocks), `ContextLink` | `shared/exploration/models.py` ↔ `packages/shared/exploration-contract.ts` (parity-tested) |
 | Filterable-field catalog (33 seed fields: operators ⊆ FilterOperator, sensitivity tiers, consent purposes, minimum cohort sizes — e.g. `geography.city` ≥ 25) | `packages/shared/contracts/filter-field-registry.json` → generated twins |
-| Per-surface capability declarations (10 surfaces × field categories / temporal modes / views / facets / comparison / selection sets / saved views / export) | `packages/shared/contracts/surface-capability-registry.json` → generated twins |
+| Per-surface capability declarations (14 surfaces × field categories / temporal modes / views / facets / comparison / selection sets / saved views / export) | `packages/shared/contracts/surface-capability-registry.json` → generated twins |
 
 ## Rules
 
@@ -55,7 +55,7 @@ envelope carries one applicability entry per requested filter
 | Module | Responsibility |
 |---|---|
 | `planner.py` | Validates every leaf filter in an `ExplorationContextV1` against `FILTER_FIELDS` and the target surface's capabilities, emitting exactly one applicability disposition per submitted filter. Zero silent drops is asserted in-planner (`assert_complete`) and by the golden corpus. |
-| `adapters/` | One adapter per backed surface — `graph`, `profile360`, `cluster360`, `timeline`, `geo`, `campaign360`. The graph adapter delegates to the Universal Graph Query plane (`/v1/graph/query`: boolean filter, budgets, cursors, tenant isolation); the others are honest projections over the same real plane. Deferred surfaces (`comparison_workbench`, `journeys`, `product_intelligence`, `temporal_observatory`) have no adapter and yield an explicit not-available state. |
+| `adapters/` | One adapter per backed surface — `graph`, `profile360`, `cluster360`, `timeline`, `geo`, `campaign360`. The graph adapter delegates to the Universal Graph Query plane (`/v1/graph/query`: boolean filter, budgets, cursors, tenant isolation); the others are honest projections over the same real plane. Deferred surfaces (`comparison_workbench`, `journeys`, `product_intelligence`, `temporal_observatory`, `outcome360`, `economic360`, `connection360`, `infrastructure360`) have no adapter and yield an explicit not-available state. |
 | `facets.py` | Conditioned facets with cohort-minimum suppression — buckets below a field's registry-declared `minimum_cohort_size` (e.g. `geography.city` ≥ 25) are suppressed with a reason. |
 | `service.py` | Plans, executes an adapter, and wraps the result in the canonical `ExplorationResultEnvelope` (applicability attached to EVERY envelope, whether or not a surface has a backend). |
 | `routes.py` | `/v1/explore` `validate` / `query` / `facets` / `views` + `links/resolve` (ContextLink retargeting). Flag-gated inside every handler (off → honest 404), tenant-scoped. |

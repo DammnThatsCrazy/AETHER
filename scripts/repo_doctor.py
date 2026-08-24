@@ -417,6 +417,8 @@ def main(argv: Sequence[str] | None = None) -> None:
                 "Backend Architecture/aether-backend/shared/intelligence_projections/generated_registry.py",
                 "packages/shared/lenses_generated.ts",
                 "Backend Architecture/aether-backend/shared/projection_engine/generated_lenses.py",
+                "packages/shared/outcome-types_generated.ts",
+                "Backend Architecture/aether-backend/shared/measurement/generated_outcome_types.py",
             ],
             name="Unified-platform generated contracts — no uncommitted diff",
             results=results,
