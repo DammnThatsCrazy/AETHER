@@ -175,3 +175,34 @@ def test_validation_rejects_a_bad_projection_dependency():
         assert exc.code == 1
     else:
         raise AssertionError("undeclared dependency must fail validation")
+
+
+def test_pending_declaration_reasons_propagate_into_generated_artifacts():
+    """Registry -> generated parity of pending declarations, reasons included.
+
+    Every ``pendingAuthority``/``pendingReference`` ``reason`` string in the
+    registry JSON must be carried verbatim into the freshly-emitted TS twin
+    (single-quoted), the Python twin (double-quoted) and the dependency-graph
+    table. A reason edited in the registry without a regeneration desyncs the
+    generated artifacts; this pins them together. Expectations are derived from
+    the registry itself, so editing a reason updates the check automatically —
+    a stale/hand-edited generated twin fails here.
+    """
+    emitted_ts = gpc.gen_intelligence_projection_ts(REAL_REG)
+    emitted_py = gpc.gen_intelligence_projection_py(REAL_REG)
+    emitted_graph = gpc.gen_intelligence_projection_graph_md(REAL_REG)
+
+    pending = [
+        (p["id"], decl)
+        for p in REAL_REG["projections"]
+        for key in ("pendingAuthority", "pendingReference")
+        for decl in p.get(key, [])
+    ]
+    assert pending, "registry must declare at least one pending item"
+
+    for projection_id, decl in pending:
+        assert f"id: '{decl['id']}'" in emitted_ts, projection_id
+        assert f"reason: '{decl['reason']}'" in emitted_ts, projection_id
+        assert f'"id": "{decl["id"]}"' in emitted_py, projection_id
+        assert f'"reason": "{decl["reason"]}"' in emitted_py, projection_id
+        assert decl["reason"] in emitted_graph, projection_id

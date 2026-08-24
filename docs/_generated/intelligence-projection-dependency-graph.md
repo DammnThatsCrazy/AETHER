@@ -104,7 +104,7 @@ flowchart LR
 
 | Projection | Kind | Id | Reason | Resolves in projection |
 |---|---|---|---|---|
-| `connection360` | authority | `reconciled_control_plane` | harness control-plane rollup (PR #529) still in-flight | `connection360` |
+| `connection360` | authority | `reconciled_control_plane` | harness control-plane rollup (PR #529) merged; reconciled control-plane spine not yet formalized as a projection-plane authority | `connection360` |
 | `economic360` | reference | `campaign_cac` | economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json | `economic360` |
 | `economic360` | reference | `campaign_ltv` | economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json | `economic360` |
 | `economic360` | reference | `campaign_roas` | economic metric exists in packages/shared/economic-metrics.ts but is not yet absorbed into metric-registry.json | `economic360` |

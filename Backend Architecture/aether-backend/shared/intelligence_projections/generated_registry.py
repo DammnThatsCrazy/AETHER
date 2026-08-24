@@ -377,7 +377,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
             {
                 "id": "reconciled_control_plane",
                 "kind": "spine",
-                "reason": "harness control-plane rollup (PR #529) still in-flight",
+                "reason": "harness control-plane rollup (PR #529) merged; reconciled control-plane spine not yet formalized as a projection-plane authority",
                 "resolvesInProjection": "connection360"
             }
         ],
@@ -1290,7 +1290,7 @@ PENDING_AUTHORITIES: dict[str, list] = {
         {
             "id": "reconciled_control_plane",
             "kind": "spine",
-            "reason": "harness control-plane rollup (PR #529) still in-flight",
+            "reason": "harness control-plane rollup (PR #529) merged; reconciled control-plane spine not yet formalized as a projection-plane authority",
             "resolvesInProjection": "connection360"
         }
     ],
