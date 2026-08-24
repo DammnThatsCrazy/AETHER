@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/repositories/measurement_results_repo.py
   - Backend Architecture/aether-backend/services/measurement/routes/integrity.py
   - Backend Architecture/aether-backend/services/campaign/routes.py
-last_synced_commit: pending
+last_synced_commit: "ae973059"
 ---
 
 # Measurement Integrity Plane

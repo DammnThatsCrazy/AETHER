@@ -17,7 +17,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/intelligence_projections/provider.py
   - Backend Architecture/aether-backend/shared/intelligence_projections/readiness.py
   - Backend Architecture/aether-backend/shared/intelligence_projections/registry.py
-last_synced_commit: f3568cec
+last_synced_commit: "ae973059"
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3

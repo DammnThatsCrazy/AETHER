@@ -18,7 +18,7 @@ source_files:
   - Backend Architecture/aether-backend/services/exploration/store.py
   - Backend Architecture/aether-backend/services/exploration/adapters/base.py
   - Backend Architecture/aether-backend/services/exploration/adapters/graph.py
-last_synced_commit: a500f1f
+last_synced_commit: "ae973059"
 ---
 
 # Unified Exploration Fabric (PR 3 scope — backend landed)

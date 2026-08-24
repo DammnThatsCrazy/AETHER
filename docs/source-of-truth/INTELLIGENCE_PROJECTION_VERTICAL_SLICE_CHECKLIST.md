@@ -10,7 +10,7 @@ source_files:
   - docs/decisions/ADR-010-intelligence-projection-plane.md
   - docs/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md
   - packages/shared/contracts/intelligence-projection-registry.json
-last_synced_commit: f3568cec
+last_synced_commit: "ae973059"
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
