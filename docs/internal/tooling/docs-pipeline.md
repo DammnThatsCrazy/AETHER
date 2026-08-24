@@ -20,7 +20,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "eec2881a"
+last_synced_commit: "5fd634ba"
 ---
 
 # Documentation Pipeline
@@ -39,6 +39,11 @@ Every authored page carries **YAML frontmatter** (schema:
 (`visibility: P|C|I`), audience, section, and — critically — the
 `source_files:` it derives from. Tooling reads that metadata to
 validate, regenerate, and drift-check the corpus.
+
+`section:` draws from a fixed enum in the schema. The `blueprints` section
+registers the implementation-blueprint category that the intelligence-projection
+registry's `implementationBlueprint` convention points at
+(`docs/blueprints/<id>.md` per projection).
 
 ## The three tiers
 
