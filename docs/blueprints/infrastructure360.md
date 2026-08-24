@@ -1,3 +1,16 @@
+---
+title: "Infrastructure360 Vertical Slice Blueprint"
+slug: blueprints/infrastructure360
+section: blueprints
+visibility: I
+audience: [architect, dev-senior]
+status: stable
+since_version: "8.12.0"
+canonical_owner: platform@aether
+estimated_read_minutes: 8
+toc_depth: 3
+---
+
 # Infrastructure360 — implementation blueprint
 
 **Projection**: `infrastructure360` · **Display name**: Infrastructure 360 ·

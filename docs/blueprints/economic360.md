@@ -1,3 +1,16 @@
+---
+title: "Economic360 Vertical Slice Blueprint"
+slug: blueprints/economic360
+section: blueprints
+visibility: I
+audience: [architect, dev-senior]
+status: stable
+since_version: "8.12.0"
+canonical_owner: platform@aether
+estimated_read_minutes: 8
+toc_depth: 3
+---
+
 # Economic360 — Intelligence-Projection Blueprint
 
 **Registry id:** `economic360`
