@@ -16,8 +16,9 @@ variable "deployment_profile" {
   }
 }
 
-# No default: every plan must pin the exact digest approved by the release
-# manifest. terraform-promote.yml passes these as explicit -var inputs.
+# Backend releases are always pinned to an immutable digest. The optional ML
+# digest is profile-gated below because staging and production-lean run ML
+# inline and do not provision a dedicated ML image.
 variable "backend_image_digest" {
   type        = string
   description = "Immutable backend image digest selected by the release manifest"
@@ -29,10 +30,14 @@ variable "backend_image_digest" {
 
 variable "ml_image_digest" {
   type        = string
-  description = "Immutable optional ML serving image digest selected by the release manifest"
+  description = "Immutable ML serving digest; optional when the selected profile runs ML inline"
+  default     = ""
   validation {
-    condition     = can(regex("^sha256:[0-9a-f]{64}$", var.ml_image_digest))
-    error_message = "ml_image_digest must be an immutable sha256 digest."
+    condition = var.ml_image_digest != "" ? can(regex("^sha256:[0-9a-f]{64}$", var.ml_image_digest)) : contains(
+      ["staging", "production-lean", "demo", "preview"],
+      var.deployment_profile,
+    )
+    error_message = "ml_image_digest is required for production-scale and enterprise-isolated profiles and must be an immutable sha256 digest when provided."
   }
 }
 
