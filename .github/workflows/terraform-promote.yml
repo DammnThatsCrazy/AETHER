@@ -133,6 +133,7 @@ jobs:
           aws-region: us-east-1
       - name: Require immutable image digests
         env:
+          PROFILE: ${{ inputs.profile }}
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
         run: |
