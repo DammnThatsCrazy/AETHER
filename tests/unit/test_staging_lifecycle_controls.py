@@ -249,7 +249,12 @@ def test_every_action_is_actually_routed_to_work():
 def test_lifecycle_and_guard_are_shaped_like_the_repo_expects():
     for name in (LIFECYCLE, TTL_GUARD):
         doc = _workflow_yaml(name)
-        assert doc["permissions"] == {"contents": "read"}, f"{name} top-level permissions"
+        expected_permissions = (
+            {"contents": "read", "actions": "write"}
+            if name == LIFECYCLE
+            else {"contents": "read"}
+        )
+        assert doc["permissions"] == expected_permissions, f"{name} top-level permissions"
         assert doc["concurrency"]["group"], f"{name} has no concurrency group"
         assert doc["concurrency"]["cancel-in-progress"] is False, (
             f"{name} may cancel a lifecycle run mid-mutation"
