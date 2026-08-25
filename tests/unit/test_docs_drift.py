@@ -159,6 +159,27 @@ def test_commits_touching_after_returns_none_for_unknown_sha(dd):
     assert result is None
 
 
+def test_check_doc_accepts_unresolvable_stamp_when_squash_tip_reviews_source_and_doc(
+    dd, tmp_path, monkeypatch
+):
+    """A squash merge may erase the stamped branch SHA, but the final tip can
+    still contain the source change and the reviewed doc change together."""
+    monkeypatch.setattr(dd, "commits_touching_after", lambda declared, paths: None)
+    monkeypatch.setattr(dd, "squash_merge_reviewed_at_tip", lambda doc, sources: True)
+    p = tmp_path / "doc.md"
+    p.write_text(
+        "---\n"
+        "title: T\n"
+        "source_files:\n"
+        "  - README.md\n"
+        "last_synced_commit: vanished123\n"
+        "---\n"
+        "body\n"
+    )
+    r = dd.check_doc(p)
+    assert r["stale"] is False
+
+
 def test_commits_touching_after_returns_empty_for_no_paths(dd):
     assert dd.commits_touching_after("abc1234", []) == []
 

@@ -20,7 +20,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "eec2881a"
+last_synced_commit: "84f3355e"
 ---
 
 # Documentation Pipeline
@@ -59,7 +59,7 @@ This page is `I`.
 | `scripts/validate_docs.py` | Version-drift check across package manifests, changelogs, doc headers. |
 | `scripts/validate_frontmatter.py` | Validates every `docs/**/*.{md,mdx}` against `docs_schema.json`. Fails on invalid **or** missing frontmatter. |
 | `scripts/validate_contracts.py` | Cross-checks the generated artifacts: every event's consent purpose + family must exist in the canonical contracts. Catches cross-file drift the per-file generators can't. |
-| `scripts/docs_drift.py` | For each page with `source_files:`, verifies the paths exist (fatal if not) and — when `last_synced_commit:` is set — flags staleness. `--update` **selectively** re-stamps only docs whose source files have actually changed since `last_synced_commit` (clean docs are skipped to avoid mass `last_synced_commit` conflicts on every rebase). False-positive prevention: `doc_reviewed_after_sources()` suppresses stale warnings when a doc and its source files were both updated in the same commit range — but a doc commit whose only change is the `last_synced_commit` line is a restamp, not a review, and does **not** count. Known-stale docs pending genuine review live in `config/docs_review_backlog.yaml`: their staleness is reported without failing `--strict`, an unlisted stale doc still fails, a listed doc that is no longer stale fails until its entry is removed (shrink-only), and `--update` refuses to stamp them. The sync-managed pages (`REPO-INDEX.md`, `AUTOMATION.md`) are excluded from drift checks and stamping; their freshness is enforced by repo-doctor's diff-after-sync check instead. |
+| `scripts/docs_drift.py` | For each page with `source_files:`, verifies the paths exist (fatal if not) and — when `last_synced_commit:` is set — flags staleness. `--update` **selectively** re-stamps only docs whose source files have actually changed since `last_synced_commit` (clean docs are skipped to avoid mass `last_synced_commit` conflicts on every rebase). False-positive prevention: `doc_reviewed_after_sources()` suppresses stale warnings when a doc and its source files were both updated in the same commit range — including when GitHub squash-merges that reviewed source/doc pair into a new tip whose pre-merge stamp is no longer reachable. A doc commit whose only change is the `last_synced_commit` line is a restamp, not a review, and does **not** count. Known-stale docs pending genuine review live in `config/docs_review_backlog.yaml`: their staleness is reported without failing `--strict`, an unlisted stale doc still fails, a listed doc that is no longer stale fails until its entry is removed (shrink-only), and `--update` refuses to stamp them. The sync-managed pages (`REPO-INDEX.md`, `AUTOMATION.md`) are excluded from drift checks and stamping; their freshness is enforced by repo-doctor's diff-after-sync check instead. |
 | `scripts/sync_docs.py` | Regenerates `docs/REPO-INDEX.md` and `docs/AUTOMATION.md` from the live tree. |
 | `scripts/docs_extract/run_all.py` | Runs every generator (see below). |
 
