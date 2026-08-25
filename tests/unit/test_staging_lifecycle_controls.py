@@ -327,6 +327,17 @@ def test_every_promotion_dispatch_job_can_dispatch_workflows():
         )
 
 
+def test_every_promotion_dispatch_job_has_a_workspace_checkout():
+    """The gh CLI requires the checked-out workspace even for API dispatches."""
+    doc = _workflow_yaml(LIFECYCLE)
+    for job_name, _step in _dispatch_steps(doc):
+        uses = [str(step.get("uses", "")) for step in _steps(doc, job_name)]
+        assert any(use.startswith("actions/checkout@") for use in uses), (
+            f"{job_name} dispatches terraform-promote without a checkout; "
+            "gh cannot run from the runner workspace"
+        )
+
+
 def test_no_apply_is_dispatched_without_a_verified_plan_run_and_checksum():
     doc = _workflow_yaml(LIFECYCLE)
     applies = []
