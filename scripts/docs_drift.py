@@ -175,6 +175,43 @@ def is_ancestor(older: str, newer: str) -> bool:
     ).returncode == 0
 
 
+def commit_touches_paths(sha: str, paths: list[str]) -> bool:
+    """Return True when ``sha`` changes at least one path in ``paths``.
+
+    A squash merge produces a new commit that contains the net changes from
+    the review branch, while the branch's stamped SHA disappears from the
+    target branch.  This helper lets the drift check recognize that final
+    commit as the review boundary when it changed both the documented source
+    and the source-linked doc together.
+    """
+    if not paths:
+        return False
+    result = subprocess.run(
+        ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", sha, "--", *paths],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def squash_merge_reviewed_at_tip(doc_rel: str, source_paths: list[str]) -> bool:
+    """Recognize a reviewed source/doc pair collapsed by a squash merge.
+
+    The pre-merge ``last_synced_commit`` can be unreachable after squash
+    merging.  It is safe to accept that boundary only when the current tip
+    changed both the source and the doc; otherwise an unknown stamp remains a
+    strict failure.
+    """
+    tip = subprocess.run(
+        ["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=ROOT
+    )
+    if tip.returncode != 0:
+        return False
+    sha = tip.stdout.strip()
+    return commit_touches_paths(sha, source_paths) and commit_touches_paths(sha, [doc_rel])
+
+
 def _commit_is_restamp_only(sha: str, doc_rel: str) -> bool:
     """True when the commit's change to this doc touches only its stamp line.
 
@@ -269,13 +306,14 @@ def check_doc(path: Path) -> dict:
         present_sources = [s for s in sources if (ROOT / s).exists()]
         newer = commits_touching_after(declared, present_sources)
         if newer is None:
-            stale = True
-            detail = (
-                f"last_synced_commit={declared} cannot be resolved in this "
-                "clone, so review recency is unverifiable. Re-review the doc "
-                "against its source_files and restamp with a commit that "
-                "exists on the branch."
-            )
+            if not squash_merge_reviewed_at_tip(str(rel), present_sources):
+                stale = True
+                detail = (
+                    f"last_synced_commit={declared} cannot be resolved in this "
+                    "clone, so review recency is unverifiable. Re-review the doc "
+                    "against its source_files and restamp with a commit that "
+                    "exists on the branch."
+                )
         elif newer and not doc_reviewed_after_sources(declared, path, present_sources):
             stale = True
             detail = (
