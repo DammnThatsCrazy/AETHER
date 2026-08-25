@@ -355,9 +355,14 @@ jobs:
     needs: [build, acquire-release, delivery-armed]
     # NOT ARMED WITHOUT THE DEPLOY ROLE: skip the deploy when the role is
     # absent, and do not let a skipped build (also armed-gated) count as a
-    # success path into a real deployment.
+    # success path into a real deployment. Staging also stays asleep by
+    # default: the deploy role may exist for release builds, but ECS mutation
+    # requires the explicit STAGING_RUNTIME_ENABLED repository variable. This
+    # keeps the low-cost/asleep staging posture from turning a main push into
+    # an attempted runtime rollout before Terraform has provisioned services.
     if: >-
       always() && !cancelled() && needs.delivery-armed.outputs.armed == 'true'
+      && (github.event_name == 'workflow_dispatch' || vars.STAGING_RUNTIME_ENABLED == 'true')
       && ((needs.build.result == 'success' && needs.acquire-release.result == 'skipped')
           || (needs.acquire-release.result == 'success' && needs.build.result == 'skipped'))
     runs-on: ubuntu-latest
