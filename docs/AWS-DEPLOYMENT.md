@@ -82,9 +82,11 @@ cd "AWS Deployment/aether-aws/terraform"
 terraform plan -var-file=profiles/production-lean.tfvars -out=tfplan
 ```
 
-`backend_image_digest` and `ml_image_digest` have no defaults and are validated
-against `^sha256:[0-9a-f]{64}$`: every plan pins the exact digests approved by
-the release manifest.
+`backend_image_digest` is always required and is validated against
+`^sha256:[0-9a-f]{64}$`. `ml_image_digest` is required for the dedicated
+production-scale and enterprise-isolated profiles; lean, staging, demo, and
+preview profiles may leave it empty when `remote_ml` is disabled. Every digest
+that is supplied is still pinned to the exact release-manifest value.
 
 ### Account and environment topology
 
