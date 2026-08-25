@@ -29,7 +29,7 @@ on:
         default: validate
         required: true
       ml_image_digest:
-        description: Immutable ML serving image digest (sha256:...) — required for any wake or sleep plan
+        description: "Immutable ML serving image digest (sha256:...) — required only for profiles with remote_ml: true"
         type: string
         required: false
       backend_image_digest:
@@ -167,10 +167,21 @@ jobs:
             *) echo "::error::unknown lifecycle action '${ACTION}'"; exit 1 ;;
           esac
 
-          # A plan needs the immutable ML digest; terraform-promote refuses without it.
+          # Dedicated remote-ML profiles need an immutable ML digest. Inline-ML
+          # profiles (including staging) intentionally have no serving image.
           if [ "$plan_wake" = true ] || [ "$plan_sleep" = true ]; then
-            test -n "$ML_IMAGE_DIGEST" \
-              || { echo '::error::ml_image_digest is required for any wake or sleep plan'; exit 1; }
+            remote_ml="$(python - <<'PY'
+          import os, yaml
+          profiles = (yaml.safe_load(open("config/runtime_deployment.yaml")) or {}).get("profiles") or {}
+          print(str((profiles.get(os.environ["STAGING_PROFILE"]) or {}).get("remote_ml", False)).lower())
+          PY
+            )"
+            if [ "$remote_ml" = true ]; then
+              test -n "$ML_IMAGE_DIGEST" \
+                || { echo '::error::ml_image_digest is required for profiles with remote_ml: true'; exit 1; }
+            elif [ -n "$ML_IMAGE_DIGEST" ]; then
+              echo "Inline-ML profile $STAGING_PROFILE ignores the optional ML digest."
+            fi
           fi
           # Validating or applying without producing a plan here means an existing
           # reviewed plan must be named explicitly.
