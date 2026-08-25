@@ -65,6 +65,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: staging-lifecycle
@@ -301,7 +302,7 @@ jobs:
       - name: Dispatch the reviewed wake plan and wait for it
         id: dispatch
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
           STAGING_STATE: awake
           BACKEND_IMAGE_DIGEST: ${{ steps.release.outputs.backend_image_digest }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
@@ -310,7 +311,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${GH_TOKEN:-}" \
-            || { echo '::error::WORKFLOW_DISPATCH_TOKEN is required to dispatch the reviewed promotion workflow'; exit 1; }
+            || { echo '::error::no GitHub Actions token is available to dispatch the reviewed promotion workflow'; exit 1; }
           # Run IDs increase monotonically per repository, so anything created
           # after this watermark and on our ref is a candidate for our dispatch.
           before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
@@ -629,7 +630,7 @@ jobs:
     steps:
       - name: Dispatch the reviewed apply for the verified wake plan
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
           PLAN_RUN_ID: ${{ needs.wake-validate.outputs.plan_run_id }}
           PLAN_CHECKSUM: ${{ needs.wake-validate.outputs.plan_checksum }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
@@ -637,7 +638,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${GH_TOKEN:-}" \
-            || { echo '::error::WORKFLOW_DISPATCH_TOKEN is required to dispatch the reviewed promotion workflow'; exit 1; }
+            || { echo '::error::no GitHub Actions token is available to dispatch the reviewed promotion workflow'; exit 1; }
           # Both values come from the verification job, never straight from a
           # dispatch input: an apply here can only promote a plan this workflow
           # has already downloaded, checksummed and policy-validated.
@@ -1343,7 +1344,7 @@ jobs:
         id: sleep-plan
         if: steps.already.outputs.asleep != 'true'
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
           BACKEND_IMAGE_DIGEST: ${{ needs.wake-plan.outputs.backend_image_digest || inputs.backend_image_digest }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
@@ -1351,7 +1352,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${GH_TOKEN:-}" \
-            || { echo '::error::WORKFLOW_DISPATCH_TOKEN is required to dispatch the reviewed promotion workflow'; exit 1; }
+            || { echo '::error::no GitHub Actions token is available to dispatch the reviewed promotion workflow'; exit 1; }
           before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
             --jq '.workflow_runs[0].id // 0')"
           gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
@@ -1504,7 +1505,7 @@ jobs:
         id: sleep-apply
         if: needs.select-profile.outputs.apply_sleep == 'true' && steps.sleep-verify.outputs.plan_checksum != ''
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
           PLAN_RUN_ID: ${{ steps.sleep-plan.outputs.plan_run_id }}
           PLAN_CHECKSUM: ${{ steps.sleep-verify.outputs.plan_checksum }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
@@ -1512,7 +1513,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${GH_TOKEN:-}" \
-            || { echo '::error::WORKFLOW_DISPATCH_TOKEN is required to dispatch the reviewed promotion workflow'; exit 1; }
+            || { echo '::error::no GitHub Actions token is available to dispatch the reviewed promotion workflow'; exit 1; }
           test -n "$PLAN_RUN_ID" || { echo '::error::no verified sleep plan_run_id'; exit 1; }
           test -n "$PLAN_CHECKSUM" || { echo '::error::no verified sleep plan_checksum'; exit 1; }
           before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
