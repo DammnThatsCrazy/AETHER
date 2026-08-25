@@ -93,6 +93,16 @@ key id for `CREDENTIAL_KMS_KEY_ID`.
 | `production-scale` | production | **yes** | no | `dedicated` — 9 services | 1 (`single`) |
 | `enterprise-isolated` | enterprise | **yes** | no | `dedicated` — 9 services | 3 (`ha`) |
 
+### Immutable release digest requirements
+
+Every selectable profile requires an immutable `backend_image_digest` from the
+approved release manifest. `ml_image_digest` is required for the dedicated
+`production-scale` and `enterprise-isolated` profiles. The lean, staging, demo,
+and preview profiles may leave the ML digest empty when `remote_ml` is disabled,
+because those profiles run inline ML and do not start a dedicated ML service.
+The Terraform promotion workflow enforces this distinction and rejects an empty
+ML digest for profiles that declare dedicated remote ML.
+
 ---
 
 ## `local`
