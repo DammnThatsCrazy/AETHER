@@ -234,7 +234,7 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
-      actions: read
+      actions: write
     outputs:
       plan_run_id: ${{ steps.dispatch.outputs.plan_run_id }}
       plan_checksum: ${{ steps.verify.outputs.plan_checksum }}
@@ -625,7 +625,7 @@ jobs:
     timeout-minutes: 240
     permissions:
       contents: read
-      actions: read
+      actions: write
       id-token: write
     steps:
       - name: Dispatch the reviewed apply for the verified wake plan
@@ -1258,7 +1258,7 @@ jobs:
     timeout-minutes: 240
     permissions:
       contents: read
-      actions: read
+      actions: write
       id-token: write
     outputs:
       cleanup_result: ${{ steps.report.outputs.cleanup_result }}

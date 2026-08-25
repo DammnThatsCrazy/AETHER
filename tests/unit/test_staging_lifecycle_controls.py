@@ -310,6 +310,23 @@ def test_every_terraform_mutation_is_a_dispatch_of_the_reviewed_workflow():
     assert doc["env"]["PROMOTE_WORKFLOW_PATH"] == PROMOTE_PATH
 
 
+def test_every_promotion_dispatch_job_can_dispatch_workflows():
+    """Job-level permissions must not override the dispatch capability.
+
+    The lifecycle grants actions: write at the workflow level, but GitHub job
+    permissions replace (rather than merge with) that declaration. Keeping
+    this assertion next to the dispatch-structure checks prevents a future
+    job-level actions: read from turning every wake/apply/sleep handoff into
+    an opaque HTTP 403.
+    """
+    doc = _workflow_yaml(LIFECYCLE)
+    for job_name, _step in _dispatch_steps(doc):
+        permissions = doc["jobs"][job_name].get("permissions") or {}
+        assert permissions.get("actions") == "write", (
+            f"{job_name} dispatches terraform-promote but lacks actions: write"
+        )
+
+
 def test_no_apply_is_dispatched_without_a_verified_plan_run_and_checksum():
     doc = _workflow_yaml(LIFECYCLE)
     applies = []
