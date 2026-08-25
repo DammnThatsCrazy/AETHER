@@ -147,9 +147,28 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - uses: aws-actions/amazon-ecr-login@v2
         id: ecr
+      - name: Reuse existing immutable backend image when present
+        id: existing-backend
+        env:
+          AWS_REGION: ${{ env.AWS_REGION }}
+        run: |
+          set -euo pipefail
+          if digest=$(aws ecr describe-images \
+            --repository-name aether-backend \
+            --image-ids imageTag="${GITHUB_SHA}" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text 2>/dev/null) && [ -n "$digest" ] && [ "$digest" != "None" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "digest=$digest" >> "$GITHUB_OUTPUT"
+            echo "Immutable backend tag ${GITHUB_SHA} already exists; reusing ${digest}."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No existing immutable backend tag for ${GITHUB_SHA}; building it."
+          fi
       - uses: docker/setup-buildx-action@v3
       - name: Build backend by commit
         id: backend
+        if: steps.existing-backend.outputs.exists != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -158,6 +177,16 @@ jobs:
           tags: ${{ steps.ecr.outputs.registry }}/aether-backend:${{ github.sha }}
           cache-from: type=gha,scope=backend
           cache-to: type=gha,scope=backend,mode=max
+      - name: Resolve backend image digest
+        id: backend-digest
+        env:
+          EXISTING_DIGEST: ${{ steps.existing-backend.outputs.digest }}
+          BUILT_DIGEST: ${{ steps.backend.outputs.digest }}
+        run: |
+          set -euo pipefail
+          digest="${EXISTING_DIGEST:-${BUILT_DIGEST:-}}"
+          test -n "$digest"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - name: Build static frontends (per-app Auth0 client and endpoints)
         # Each SPA is built with its own Auth0 client ID and API endpoints.
         # AETHER_AUTH0_CLIENT_ID / KYBER_AUTH0_CLIENT_ID come from the
@@ -202,7 +231,7 @@ jobs:
       - name: Create commit-bound release manifest
         id: manifest
         env:
-          BACKEND_DIGEST: ${{ steps.backend.outputs.digest }}
+          BACKEND_DIGEST: ${{ steps.backend-digest.outputs.digest }}
           REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
           set -euo pipefail
