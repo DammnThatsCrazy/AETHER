@@ -81,8 +81,14 @@ takes exactly six values.
 | `apply-sleep` | `sleep` (plan + verify + apply) | Return staging to zero. |
 | `full-rehearsal` | all of the above plus `rehearse` | The complete cycle. |
 
+The ML digest is profile-dependent. Staging, demo, preview, and
+`production-lean` run inline ML (`remote_ml: false`) and must leave this input
+empty. Only profiles with a dedicated remote ML service require the immutable
+serving-image digest.
+
 ```bash
-# Wake for a manual investigation
+# Wake for a manual investigation (remote-ML profiles only; omit the ML input
+# for staging and other inline-ML profiles)
 gh workflow run staging-lifecycle.yml \
   -f action=plan-wake \
   -f ml_image_digest=sha256:<64hex> \
@@ -114,7 +120,7 @@ gh workflow run staging-lifecycle.yml \
 | Input | Default | Constraint |
 |---|---|---|
 | `action` | `validate` | one of the six above |
-| `ml_image_digest` | — | required for any wake or sleep **plan** |
+| `ml_image_digest` | — | required for wake or sleep **plans** only when the selected profile has `remote_ml: true`; optional for inline-ML profiles such as staging |
 | `backend_image_digest` | — | ignored when `release_run_id` is supplied |
 | `release_run_id` | — | required for `full-rehearsal`; must be a successful `.github/workflows/deploy.yml` run |
 | `release_manifest_checksum` | — | required for `full-rehearsal` |
@@ -442,7 +448,8 @@ intervention required.
 
 ### Staging is still awake and money is running
 
-1. Dispatch `staging-lifecycle.yml -f action=apply-sleep -f ml_image_digest=...`.
+1. Dispatch `staging-lifecycle.yml -f action=apply-sleep` (add
+   `-f ml_image_digest=...` only when the selected profile has `remote_ml: true`).
    This is the correct path: it goes through a reviewed plan and leaves
    Terraform state consistent.
 2. If that cannot run (promotion credentials broken, approval unavailable),

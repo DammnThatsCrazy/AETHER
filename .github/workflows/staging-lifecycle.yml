@@ -29,7 +29,7 @@ on:
         default: validate
         required: true
       ml_image_digest:
-        description: Immutable ML serving image digest (sha256:...) — required for any wake or sleep plan
+        description: Immutable ML serving image digest (sha256:...) — required only for profiles with remote_ml: true
         type: string
         required: false
       backend_image_digest:
