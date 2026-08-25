@@ -103,6 +103,15 @@ because those profiles run inline ML and do not start a dedicated ML service.
 The Terraform promotion workflow enforces this distinction and rejects an empty
 ML digest for profiles that declare dedicated remote ML.
 
+### AWS cost-model boundary
+
+The pinned AWS price book also classifies provider-local and external control
+plane objects explicitly. Auth0 Terraform resources configure the Auth0 tenant
+and do not create AWS-billed resources; CloudWatch metric filters are free
+configuration objects while their log groups and log ingestion remain priced.
+Unknown resource types remain a hard cost-model error, so these classifications
+are deliberately narrow and do not turn the cost gate into an allow-list bypass.
+
 ---
 
 ## `local`
