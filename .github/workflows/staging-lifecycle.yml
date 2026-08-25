@@ -628,6 +628,7 @@ jobs:
       actions: write
       id-token: write
     steps:
+      - uses: actions/checkout@v4
       - name: Dispatch the reviewed apply for the verified wake plan
         env:
           GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
