@@ -800,7 +800,6 @@ resource "aws_cloudwatch_log_metric_filter" "runtime_role_unhealthy" {
     name          = "RuntimeRoleUnhealthy"
     namespace     = "Aether/Runtime"
     value         = "1"
-    default_value = "0"
     unit          = "Count"
     dimensions = {
       Service = "$.service"
