@@ -138,7 +138,15 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$BACKEND_IMAGE_DIGEST" || { echo '::error::backend_image_digest is required for plan'; exit 1; }
-          test -n "$ML_IMAGE_DIGEST" || { echo '::error::ml_image_digest is required for plan'; exit 1; }
+          case "${PROFILE}" in
+            production-scale|enterprise-isolated)
+              test -n "$ML_IMAGE_DIGEST" || { echo '::error::ml_image_digest is required for dedicated-ML profiles'; exit 1; } ;;
+            staging|production-lean|demo|preview)
+              # These profiles run ML inline; an empty ML digest is intentional.
+              : ;;
+            *)
+              echo "::error::unsupported profile ${PROFILE}"; exit 1 ;;
+          esac
       - name: Create immutable reviewed plan
         working-directory: AWS Deployment/aether-aws/terraform
         env:
