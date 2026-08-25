@@ -157,6 +157,9 @@ zero_cost_types:
   # carry no charge; the invoked Lambda bills as Lambda below.
   - aws_cloudwatch_event_rule
   - aws_cloudwatch_event_target
+  # CloudWatch metric filters are free configuration objects; the matching
+  # log group and ingested log volume carry the billable CloudWatch cost.
+  - aws_cloudwatch_log_metric_filter
   # Lambda permission is an IAM-shaped grant, not a billable object.
   - aws_lambda_permission
   # Repository policy attaches to aws_ecr_repository, which is priced by storage.
@@ -176,6 +179,10 @@ zero_cost_types:
   - local_file
   - terraform_data
   - time_*
+  # Auth0 Terraform resources configure the external Auth0 control plane. They
+  # do not create AWS-billed resources; any Auth0 subscription cost is outside
+  # this AWS price book and must not be silently treated as AWS spend.
+  - auth0_*
 
 # ---------------------------------------------------------------------------
 # FIXED-COST RESOURCES
