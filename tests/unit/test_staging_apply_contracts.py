@@ -152,6 +152,9 @@ def test_state_role_checker_accepts_the_reviewed_staging_backend_alias() -> None
     assert module.validate_state_key("profiles/staging/terraform.tfstate") == []
     assert module.validate_state_key("profiles/access-probe")
     assert "--state-key" in PROMOTE.read_text(encoding="utf-8")
+    migration_workflow = STATE_MIGRATION_WORKFLOW.read_text(encoding="utf-8")
+    assert "TF_STATE_KEY: profiles/${{ inputs.profile }}/terraform.tfstate" in migration_workflow
+    assert "--state-key \"$TF_STATE_KEY\"" in migration_workflow
 
 
 def test_apply_revalidates_before_service_linked_role_mutation() -> None:

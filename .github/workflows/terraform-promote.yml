@@ -571,6 +571,7 @@ jobs:
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+          TF_STATE_KEY: profiles/${{ inputs.profile }}/terraform.tfstate
         run: |
           set -euo pipefail
           account_id="$(aws sts get-caller-identity --query Account --output text)"
