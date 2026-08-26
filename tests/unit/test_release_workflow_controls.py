@@ -748,6 +748,11 @@ def test_promotion_cannot_proceed_when_remote_plan_credentials_are_missing():
     assert "AWS_TERRAFORM_PLAN_ROLE_ARN" in guard["env"]
     assert '[ -z "${!name-}" ]' in guard["run"]
     assert "exit 1" in guard["run"]
+    # Plan-only promotion must remain runnable without mutation credentials;
+    # apply enforces its apply-role requirement in the protected apply job.
+    assert "AWS_TERRAFORM_APPLY_ROLE_ARN \\\n" not in guard["run"]
+    assert guard["run"].count("AWS_TERRAFORM_APPLY_ROLE_ARN") == 2
+    assert '"${{ inputs.action }}" = "apply"' in guard["run"]
     # The guard runs before any AWS credential is assumed or plan is produced.
     names = [s.get("name", "") for s in _steps(promote, "plan")]
     uses = [str(s.get("uses", "")) for s in _steps(promote, "plan")]
