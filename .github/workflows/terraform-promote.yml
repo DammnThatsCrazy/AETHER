@@ -451,6 +451,13 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check pyyaml
+      - name: Validate the reviewed staging apply IAM contract
+        if: inputs.profile == 'staging'
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_apply_policy.py \
+            --manifest config/staging_apply_iam_policy.yaml \
+            --profile staging
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}

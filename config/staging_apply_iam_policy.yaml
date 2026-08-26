@@ -1,0 +1,48 @@
+# Reviewed contract for the staging Terraform apply role.
+#
+# This is intentionally a contract, not an automatically attached broad IAM
+# policy. The bootstrap/console attachment must resolve the account-specific
+# ARNs and preserve these scopes. Unknown actions fail validation rather than
+# being silently added to the role.
+version: 1
+profile: staging
+role: AetherStagingDeploy
+region: us-east-1
+statements:
+  - sid: ReadStagingBucketEncryption
+    actions:
+      - s3:GetEncryptionConfiguration
+    resource: arn:aws:s3:::aether-staging-*
+    scope: staging-name-prefix
+  - sid: DiscoverVpcSecurityGroupsForStagingAlb
+    actions:
+      - ec2:GetSecurityGroupsForVpc
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: ReadStagingKeyRotation
+    actions:
+      - kms:GetKeyRotationStatus
+    resource: arn:aws:kms:us-east-1:${account_id}:key/*
+    scope: staging-kms-key-arns-from-reviewed-plan
+  - sid: ConfigureStagingNotifications
+    actions:
+      - sns:SetTopicAttributes
+    resource: arn:aws:sns:us-east-1:${account_id}:AETHER-staging-*
+    scope: staging-name-prefix
+  - sid: EnsureEcsServiceLinkedRole
+    actions:
+      - iam:CreateServiceLinkedRole
+    resource: '*'
+    conditions:
+      iam:AWSServiceName: ecs.amazonaws.com
+    scope: ecs-service-linked-role-only
+
+# The provider errors below are deliberately not represented as AWS IAM
+# actions: Auth0 permissions are governed by the Auth0 management API and must
+# be supplied through the apply job's AUTH0_* environment variables.
+external_provider_requirements:
+  - provider: auth0
+    required_scopes:
+      - create:resource_servers
+      - create:connections
+      - create:clients
