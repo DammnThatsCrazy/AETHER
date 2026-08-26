@@ -174,6 +174,30 @@ def test_target_group_lookup_fails_closed_on_non_not_found_errors() -> None:
     assert "2>/dev/null || true" not in block
 
 
+def test_apply_uses_reviewed_listener_artifact_when_dispatch_input_is_omitted() -> None:
+    """Lifecycle apply must not reject a valid plan because an optional input is blank."""
+    text = PROMOTE.read_text(encoding="utf-8")
+    start = text.index("      - name: Verify reviewed plan metadata, profile and 24h expiry")
+    end = text.index("      # Bind the apply to the plan's OWN commit", start)
+    verify = text[start:end]
+    assert "listener_target_group_arn=%s\\n" in verify
+    assert 'if [ -n "${STAGING_LISTENER_TARGET_GROUP_ARN:-}" ]' in verify
+    assert "steps.reviewed.outputs.listener_target_group_arn" in text
+    assert "maintenance listener ARN differs between reviewed plan and apply dispatch" in verify
+
+
+def test_maintenance_target_validation_is_only_for_replacements() -> None:
+    """An existing backend target group must not be mistaken for a maintenance target."""
+    text = PROMOTE.read_text(encoding="utf-8")
+    start = text.index("      - name: Validate reviewed staging maintenance target group")
+    end = text.index("      - name: Require live listener detachment before target-group replacement", start)
+    validation = text[start:end]
+    replacement_guard = validation.index("reviewed.tfplan.json")
+    name_guard = validation.index("aether-staging-maintenance")
+    assert replacement_guard < name_guard
+    assert "index(\"delete\") != null and index(\"create\") != null" in validation
+
+
 def test_reviewed_iam_manifest_matches_checker() -> None:
     result = subprocess.run(
         [sys.executable, str(POLICY_CHECKER), "--manifest", str(POLICY), "--profile", "staging"],
