@@ -460,6 +460,16 @@ jobs:
         run: |
           set -euo pipefail
           cp "${RUNNER_TEMP}/reviewed-plan"/reviewed.* .
+      - name: Validate AWS and external-provider apply inputs
+        env:
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+          AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_provider_apply_inputs.py \
+            --inventory "${TF_DIR}/reviewed.resources.json"
       # Re-run at the reviewed commit: the reports in the artifact are evidence,
       # not proof. The policy and cost rules that ship with the reviewed code
       # must still pass against the reviewed plan at apply time.
@@ -486,6 +496,9 @@ jobs:
           REVIEWED_COMMIT: ${{ steps.reviewed.outputs.commit }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+          AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+          AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
         run: |
           set -euo pipefail
           test "$(cat reviewed.profile)" = "$PROFILE"

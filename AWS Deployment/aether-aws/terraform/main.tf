@@ -630,7 +630,7 @@ resource "aws_s3_bucket" "static_frontend" {
 
   tags = {
     Name    = lower("${var.project}-${var.environment}-${each.key}-static")
-    Purpose = "Immutable static SPA origin (${each.key})"
+    Purpose = "immutable-static-spa-origin-${each.key}"
   }
 }
 
