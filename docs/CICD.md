@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "9d8df2a4"
+last_synced_commit: "2f28ad30"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -250,6 +250,11 @@ The staging apply handoff has explicit preflight contracts. The staging
 workflow validates its reviewed IAM manifest and ensures the ECS service-linked
 role is visible before capacity-provider changes. Other profiles remain
 blocked from this bootstrap until they have their own reviewed IAM contract.
+The maintenance target-group ARN is optional on the apply dispatch: when it is
+omitted, `terraform-promote.yml` adopts the exact ARN recorded in the verified
+plan artifact; a caller-supplied ARN must match that artifact or the apply is
+rejected. This keeps lifecycle dispatches from losing a plan input while
+preserving the reviewed-plan boundary.
 The apply path also checks Auth0 management credentials and
 required scopes when Auth0 resources are in the plan, and rejects an
 unmanaged deterministic staging target group instead of creating a same-name

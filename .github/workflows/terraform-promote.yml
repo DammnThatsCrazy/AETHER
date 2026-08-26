@@ -444,7 +444,13 @@ jobs:
 
           reviewed_listener_arn="$(cat reviewed.staging-listener-target-group-arn)"
           if [ "$PROFILE" = staging ]; then
-            if [ "$reviewed_listener_arn" != "${STAGING_LISTENER_TARGET_GROUP_ARN:-}" ]; then
+            # The reviewed artifact is authoritative. Lifecycle callers may
+            # omit this optional input; when they do, carry the exact value
+            # forward from the artifact instead of comparing it to an empty
+            # dispatch input. A supplied value is still checked strictly so
+            # a caller can never override the reviewed listener transition.
+            if [ -n "${STAGING_LISTENER_TARGET_GROUP_ARN:-}" ] \
+              && [ "$reviewed_listener_arn" != "$STAGING_LISTENER_TARGET_GROUP_ARN" ]; then
               echo '::error::maintenance listener ARN differs between reviewed plan and apply dispatch'
               exit 1
             fi
@@ -494,6 +500,7 @@ jobs:
           {
             printf 'commit=%s\n' "$reviewed_commit"
             printf 'terraform_version=%s\n' "$reviewed_tf_version"
+            printf 'listener_target_group_arn=%s\n' "$reviewed_listener_arn"
           } >> "$GITHUB_OUTPUT"
       # Bind the apply to the plan's OWN commit, not the dispatch ref. The ref
       # may have moved since review; github.sha says nothing about which code
@@ -584,7 +591,10 @@ jobs:
       - name: Validate reviewed staging maintenance target group
         if: inputs.profile == 'staging'
         env:
-          MAINTENANCE_TG_ARN: ${{ inputs.staging_listener_target_group_arn }}
+          # Use the value verified from the reviewed artifact. The lifecycle
+          # dispatcher intentionally does not need to duplicate this optional
+          # plan input, preventing empty-input false failures.
+          MAINTENANCE_TG_ARN: ${{ steps.reviewed.outputs.listener_target_group_arn }}
         run: |
           set -euo pipefail
           if [ -z "$MAINTENANCE_TG_ARN" ]; then
@@ -622,7 +632,7 @@ jobs:
       - name: Require live listener detachment before target-group replacement
         if: inputs.profile == 'staging'
         env:
-          MAINTENANCE_TG_ARN: ${{ inputs.staging_listener_target_group_arn }}
+          MAINTENANCE_TG_ARN: ${{ steps.reviewed.outputs.listener_target_group_arn }}
         run: |
           set -euo pipefail
           if ! jq -e '
