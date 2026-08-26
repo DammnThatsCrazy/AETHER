@@ -378,7 +378,8 @@ def test_doc_content_mentioning_stamp_field_is_not_restamp_only(dd, tmp_path, mo
     git("init", "-q")
     doc = repo / "doc.md"
     doc.write_text("---\nlast_synced_commit: \"aaa\"\n---\nold\n")
-    git("add", "doc.md"); git("commit", "-qm", "initial")
+    git("add", "doc.md")
+    git("commit", "-qm", "initial")
     doc.write_text("---\nlast_synced_commit: \"aaa\"\n---\nTable mentions last_synced_commit: as metadata.\n")
     git("commit", "-aqm", "document stamp behavior")
     monkeypatch.setattr(dd, "ROOT", repo)
