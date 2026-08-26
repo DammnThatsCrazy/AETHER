@@ -186,6 +186,18 @@ def test_apply_uses_reviewed_listener_artifact_when_dispatch_input_is_omitted() 
     assert "maintenance listener ARN differs between reviewed plan and apply dispatch" in verify
 
 
+def test_maintenance_target_validation_is_only_for_replacements() -> None:
+    """An existing backend target group must not be mistaken for a maintenance target."""
+    text = PROMOTE.read_text(encoding="utf-8")
+    start = text.index("      - name: Validate reviewed staging maintenance target group")
+    end = text.index("      - name: Require live listener detachment before target-group replacement", start)
+    validation = text[start:end]
+    replacement_guard = validation.index("reviewed.tfplan.json")
+    name_guard = validation.index("aether-staging-maintenance")
+    assert replacement_guard < name_guard
+    assert "index(\"delete\") != null and index(\"create\") != null" in validation
+
+
 def test_reviewed_iam_manifest_matches_checker() -> None:
     result = subprocess.run(
         [sys.executable, str(POLICY_CHECKER), "--manifest", str(POLICY), "--profile", "staging"],

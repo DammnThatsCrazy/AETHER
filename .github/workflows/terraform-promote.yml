@@ -597,6 +597,17 @@ jobs:
           MAINTENANCE_TG_ARN: ${{ steps.reviewed.outputs.listener_target_group_arn }}
         run: |
           set -euo pipefail
+          # The listener ARN is only a maintenance target during an actual
+          # backend target-group replacement. Normal staging plans record the
+          # existing backend target group for provenance; do not misclassify
+          # that ordinary ARN as a maintenance transition.
+          if ! jq -e '
+            any(.resource_changes[]?;
+              .address == "module.alb.aws_lb_target_group.backend[0]" and
+              ((.change.actions // []) | (index("delete") != null and index("create") != null)))
+          ' "${RUNNER_TEMP}/reviewed-plan/reviewed.tfplan.json" >/dev/null; then
+            exit 0
+          fi
           if [ -z "$MAINTENANCE_TG_ARN" ]; then
             exit 0
           fi

@@ -254,7 +254,9 @@ The maintenance target-group ARN is optional on the apply dispatch: when it is
 omitted, `terraform-promote.yml` adopts the exact ARN recorded in the verified
 plan artifact; a caller-supplied ARN must match that artifact or the apply is
 rejected. This keeps lifecycle dispatches from losing a plan input while
-preserving the reviewed-plan boundary.
+the maintenance-target validation runs only when the reviewed plan actually
+replaces the staging backend target group; ordinary existing backend ARNs are
+not treated as maintenance targets, preserving the reviewed-plan boundary.
 The apply path also checks Auth0 management credentials and
 required scopes when Auth0 resources are in the plan, and rejects an
 unmanaged deterministic staging target group instead of creating a same-name
