@@ -45,6 +45,16 @@ statements:
       - elasticloadbalancing:DescribeTargetGroups
     resource: '*'
     scope: global-read-required-by-api
+  - sid: DiscoverStagingLoadBalancers
+    actions:
+      - elasticloadbalancing:DescribeLoadBalancers
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: DiscoverStagingListeners
+    actions:
+      - elasticloadbalancing:DescribeListeners
+    resource: '*'
+    scope: global-read-required-by-api
   - sid: VerifyTerraformStateAccess
     actions:
       - iam:SimulatePrincipalPolicy

@@ -26,12 +26,16 @@ REQUIRED_ACTIONS = {
     "iam:GetRole",
     "iam:PassRole",
     "elasticloadbalancing:DescribeTargetGroups",
+    "elasticloadbalancing:DescribeLoadBalancers",
+    "elasticloadbalancing:DescribeListeners",
     "iam:SimulatePrincipalPolicy",
 }
 ALLOWED_GLOBAL_ACTIONS = {
     "ec2:GetSecurityGroupsForVpc",
     "iam:CreateServiceLinkedRole",
     "elasticloadbalancing:DescribeTargetGroups",
+    "elasticloadbalancing:DescribeLoadBalancers",
+    "elasticloadbalancing:DescribeListeners",
     "iam:SimulatePrincipalPolicy",
     "kms:GetKeyRotationStatus",
     "kms:ScheduleKeyDeletion",
@@ -133,6 +137,8 @@ def main() -> int:
         "iam:GetRole": "arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
         "iam:PassRole": "exact-staging-role-bindings",
         "elasticloadbalancing:DescribeTargetGroups": "*",
+        "elasticloadbalancing:DescribeLoadBalancers": "*",
+        "elasticloadbalancing:DescribeListeners": "*",
         "iam:SimulatePrincipalPolicy": "*",
     }
     for action, expected in expected_resources.items():

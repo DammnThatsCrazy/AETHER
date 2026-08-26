@@ -165,6 +165,12 @@ def test_reviewed_iam_manifest_matches_checker() -> None:
     assert "elasticloadbalancing:DescribeTargetGroups" in {
         action for statement in statements for action in statement["actions"]
     }
+    assert "elasticloadbalancing:DescribeLoadBalancers" in {
+        action for statement in statements for action in statement["actions"]
+    }
+    assert "elasticloadbalancing:DescribeListeners" in {
+        action for statement in statements for action in statement["actions"]
+    }
 
 
 def test_passrole_resource_principal_pairs_are_not_swappable(tmp_path: Path) -> None:
