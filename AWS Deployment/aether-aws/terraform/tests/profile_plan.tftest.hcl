@@ -249,6 +249,14 @@ run "staging_profile_plan" {
     error_message = "The staging plan provisions NAT egress."
   }
 
+  # The staging target group keeps its deterministic import identity and must
+  # replace in place; the module exposes the literal lifecycle choice so this
+  # profile contract cannot silently regress to same-name create-before-destroy.
+  assert {
+    condition     = module.alb.backend_target_group_replacement_strategy == "destroy-before-create"
+    error_message = "The staging plan does not use the collision-safe target-group replacement strategy."
+  }
+
   assert {
     condition = alltrue([
       length(module.ecs.dedicated_ml_service_arns) == 0,
@@ -831,6 +839,7 @@ run "production_lean_profile_plan" {
     condition = alltrue([
       module.alb.alb_name == "aether-production-alb",
       module.alb.backend_target_group_name == "aether-production-backend",
+      module.alb.backend_target_group_replacement_strategy == "create-before-destroy",
     ])
     error_message = "The production-lean plan does not provision the ALB and its backend target group."
   }

@@ -20,14 +20,36 @@ TF = ROOT / "AWS Deployment/aether-aws/terraform"
 ALB = TF / "modules/alb/main.tf"
 MONITORING = TF / "modules/monitoring/main.tf"
 PROMOTE = ROOT / ".github/workflows/terraform-promote.yml"
+STATE_MIGRATION = ROOT / "scripts/release/migrate_alb_target_group_state.sh"
 POLICY = ROOT / "config/staging_apply_iam_policy.yaml"
 POLICY_CHECKER = ROOT / "scripts/release/check_staging_apply_policy.py"
 
 
 def test_staging_target_group_replacement_is_name_safe() -> None:
     text = ALB.read_text(encoding="utf-8")
-    assert 'name = "${lower(var.project)}-${var.environment}-backend"' in text
-    assert 'create_before_destroy = var.environment != "staging"' in text
+    backend = re.search(
+        r'resource "aws_lb_target_group" "backend"\s*\{(?P<body>.*?)(?=\nresource "aws_lb_target_group"|\nmoved \{)',
+        text,
+        flags=re.DOTALL,
+    )
+    replacement = re.search(
+        r'resource "aws_lb_target_group" "backend_replacement"\s*\{(?P<body>.*?)(?=\n(?:locals \{|resource "|moved \{))',
+        text,
+        flags=re.DOTALL,
+    )
+    assert backend and replacement
+    assert 'name        = "${lower(var.project)}-${var.environment}-backend"' in backend.group("body")
+    assert 'count = var.environment == "staging" ? 1 : 0' in backend.group("body")
+    assert 'create_before_destroy = false' in backend.group("body")
+    assert 'name        = "${lower(var.project)}-${var.environment}-backend"' in replacement.group("body")
+    assert 'count = var.environment != "staging" ? 1 : 0' in replacement.group("body")
+    assert 'create_before_destroy = true' in replacement.group("body")
+    migration = STATE_MIGRATION.read_text(encoding="utf-8")
+    assert "legacy='module.alb.aws_lb_target_group.backend'" in migration
+    assert "staging) target='module.alb.aws_lb_target_group.backend[0]'" in migration
+    assert "production-lean|production-scale|enterprise-isolated|demo|preview)" in migration
+    assert "backend_replacement[0]" in migration
+    assert 'terraform state mv -lock-timeout=5m "$legacy" "$target"' in migration
 
 
 def test_unstructured_runtime_metric_filter_has_no_dimensions() -> None:

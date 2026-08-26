@@ -98,8 +98,8 @@ jobs:
           TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
         run: |
           set -euo pipefail
-          if terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend'; then
-            echo '::error::Refusing import: module.alb.aws_lb_target_group.backend is already in staging state'
+          if terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend[0]'; then
+            echo '::error::Refusing import: module.alb.aws_lb_target_group.backend[0] is already in staging state'
             exit 1
           fi
           # The address check above is not sufficient: a prior partial import
@@ -145,13 +145,13 @@ jobs:
           terraform import -input=false \
             -var-file=profiles/staging.tfvars \
             -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
-            'module.alb.aws_lb_target_group.backend' "$TARGET_GROUP_ARN"
+            'module.alb.aws_lb_target_group.backend[0]' "$TARGET_GROUP_ARN"
 
       - name: Emit reconciled state checksum
         working-directory: ${{ env.TF_DIR }}
         run: |
           set -euo pipefail
-          terraform state list | grep -Fx 'module.alb.aws_lb_target_group.backend'
+          terraform state list | grep -Fx 'module.alb.aws_lb_target_group.backend[0]'
           terraform state pull > reconciled-staging-state.json
           sha256sum reconciled-staging-state.json | tee reconciled-staging-state.sha256
           rm -f reconciled-staging-state.json

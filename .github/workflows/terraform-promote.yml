@@ -191,6 +191,10 @@ jobs:
             -backend-config="key=profiles/${PROFILE}/terraform.tfstate" \
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true"
+          # The ALB module split target-group lifecycle into literal resources.
+          # Migrate the legacy address before planning so staging and production
+          # workspaces both retain ownership without a destroy/create surprise.
+          bash "${GITHUB_WORKSPACE}/scripts/release/migrate_alb_target_group_state.sh" "$PROFILE"
           terraform validate
           # staging_state is recorded alongside the plan so a reviewer can see
           # which shape was approved. It is load-bearing, not decorative: apply
@@ -581,6 +585,10 @@ jobs:
             -backend-config="key=profiles/${PROFILE}/terraform.tfstate" \
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true"
+          if terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend'; then
+            echo '::error::legacy backend target-group state address remains; create a fresh plan after state migration'
+            exit 1
+          fi
           if [ "$PROFILE" = staging ]; then
             # A partially completed rehearsal can leave the deterministic
             # target group in AWS while its state entry is absent. Refuse
@@ -602,7 +610,7 @@ jobs:
               fi
             fi
             if [ -n "$existing_tg" ] && [ "$existing_tg" != None ] \
-              && ! terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend'; then
+              && ! terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend[0]'; then
               echo '::error::aether-staging-backend already exists outside Terraform state; run the import-only staging-state-reconcile workflow and create a fresh plan before applying'
               exit 1
             fi

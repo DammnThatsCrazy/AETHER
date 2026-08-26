@@ -83,6 +83,23 @@ def test_malformed_auth0_jwt_claims_fail_closed() -> None:
     }
 
 
+def test_auth0_scope_contract_rejects_missing_or_malformed_requirements() -> None:
+    module = _module()
+    for contract in ({}, {"external_provider_requirements": []},
+                     {"external_provider_requirements": [{"provider": "auth0"}]},
+                     {"external_provider_requirements": [{"provider": "auth0", "required_scopes": []}]},
+                     {"external_provider_requirements": [{"provider": "auth0", "required_scopes": [" ", 4]}]}):
+        scopes, errors = module.load_auth0_scope_contract(contract)
+        assert not scopes
+        assert errors
+
+    scopes, errors = module.load_auth0_scope_contract(
+        {"external_provider_requirements": [{"provider": "auth0", "required_scopes": ["read:clients"]}]}
+    )
+    assert scopes == {"read:clients"}
+    assert not errors
+
+
 class _Response:
     def __init__(self, payload: object):
         self.payload = json.dumps(payload).encode()

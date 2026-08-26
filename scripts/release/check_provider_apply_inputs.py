@@ -78,6 +78,36 @@ def verify_auth0_scopes(domain: str, client_id: str, client_secret: str, require
     return []
 
 
+def load_auth0_scope_contract(contract: object) -> tuple[set[str], list[str]]:
+    """Parse the Auth0 scope contract strictly, before making a token request."""
+    requirements = contract.get("external_provider_requirements") if isinstance(contract, dict) else None
+    if not isinstance(requirements, list):
+        return set(), ["Auth0 scope contract must contain a provider requirement list"]
+
+    auth0_items = [
+        item for item in requirements
+        if isinstance(item, dict) and item.get("provider") == "auth0"
+    ]
+    if not auth0_items:
+        return set(), ["Auth0 scope contract is missing its provider entry"]
+
+    scopes: set[str] = set()
+    errors: list[str] = []
+    for item in auth0_items:
+        raw_scopes = item.get("required_scopes")
+        if not isinstance(raw_scopes, list) or not raw_scopes:
+            errors.append("Auth0 required_scopes must be a non-empty list")
+            continue
+        invalid = [scope for scope in raw_scopes if not isinstance(scope, str) or not scope.strip()]
+        if invalid:
+            errors.append("Auth0 required_scopes must contain only non-blank strings")
+            continue
+        scopes.update(raw_scopes)
+    if not scopes and not errors:
+        errors.append("Auth0 scope contract is empty; refusing to apply")
+    return scopes, errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--inventory", required=True, type=Path)
@@ -113,23 +143,21 @@ def main() -> int:
             else:
                 try:
                     contract = yaml.safe_load(args.auth0_scope_contract.read_text()) or {}
-                    required_scopes = {
-                        scope
-                        for item in contract.get("external_provider_requirements", [])
-                        if item.get("provider") == "auth0"
-                        for scope in item.get("required_scopes", [])
-                    }
+                    required_scopes, contract_errors = load_auth0_scope_contract(contract)
                 except (OSError, yaml.YAMLError) as exc:
                     errors.append(f"cannot load Auth0 scope contract: {exc}")
                 else:
-                    errors.extend(
-                        verify_auth0_scopes(
-                            os.environ["AUTH0_DOMAIN"],
-                            os.environ["AUTH0_CLIENT_ID"],
-                            os.environ["AUTH0_CLIENT_SECRET"],
-                            required_scopes,
+                    if contract_errors:
+                        errors.extend(contract_errors)
+                    else:
+                        errors.extend(
+                            verify_auth0_scopes(
+                                os.environ["AUTH0_DOMAIN"],
+                                os.environ["AUTH0_CLIENT_ID"],
+                                os.environ["AUTH0_CLIENT_SECRET"],
+                                required_scopes,
+                            )
                         )
-                    )
 
     if errors:
         for error in errors:

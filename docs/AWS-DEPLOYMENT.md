@@ -356,7 +356,12 @@ or service prerequisite is a blocked apply, not a partial deployment.
 
 The backend target group keeps the stable
 `aether-staging-backend` identity used by the import-only reconciliation
-workflow. Staging intentionally disables `create_before_destroy`: AWS cannot
+workflow and remains at the stable state address
+`module.alb.aws_lb_target_group.backend[0]`. The promotion workflow runs the
+profile-aware, state-only migration helper once when it finds the unindexed
+legacy address; production-class profiles migrate to
+`module.alb.aws_lb_target_group.backend_replacement[0]`. Staging intentionally disables
+`create_before_destroy`: AWS cannot
 create a replacement with that deterministic name while the old group exists.
 An interrupted run must use `staging-state-reconcile.yml` to import the
 existing group and produce a fresh reviewed plan; the apply workflow refuses
