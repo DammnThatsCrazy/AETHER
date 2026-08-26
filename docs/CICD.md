@@ -257,6 +257,10 @@ rejected. This keeps lifecycle dispatches from losing a plan input while
 the maintenance-target validation runs only when the reviewed plan actually
 replaces the staging backend target group; ordinary existing backend ARNs are
 not treated as maintenance targets, preserving the reviewed-plan boundary.
+The staging collision guard is likewise action-aware: it checks for an
+unmanaged `aether-staging-backend` only when the reviewed plan creates that
+target group; update plans keep the existing managed target without a false
+collision failure.
 The apply path also checks Auth0 management credentials and
 required scopes when Auth0 resources are in the plan, and rejects an
 unmanaged deterministic staging target group instead of creating a same-name

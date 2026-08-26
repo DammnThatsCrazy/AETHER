@@ -174,6 +174,19 @@ def test_target_group_lookup_fails_closed_on_non_not_found_errors() -> None:
     assert "2>/dev/null || true" not in block
 
 
+def test_target_group_collision_lookup_only_runs_for_create_plans() -> None:
+    """Existing managed target groups are valid for update plans."""
+    text = PROMOTE.read_text(encoding="utf-8")
+    start = text.index("          if [ \"$PROFILE\" = staging ]; then")
+    end = text.index("          terraform apply -input=false reviewed.tfplan", start)
+    block = text[start:end]
+    create_guard = block.index("index(\"create\") != null")
+    lookup = block.index("existing_tg=\"")
+    assert create_guard < lookup
+    assert "reviewed.tfplan.json" in block
+    assert "already exists outside Terraform state" in block
+
+
 def test_apply_uses_reviewed_listener_artifact_when_dispatch_input_is_omitted() -> None:
     """Lifecycle apply must not reject a valid plan because an optional input is blank."""
     text = PROMOTE.read_text(encoding="utf-8")
