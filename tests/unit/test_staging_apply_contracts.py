@@ -10,6 +10,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import re
+import importlib.util
 from pathlib import Path
 
 import yaml
@@ -136,6 +137,18 @@ def test_state_access_contract_is_explicit_and_checked() -> None:
     verifier = STATE_ROLE_CHECKER.read_text(encoding="utf-8")
     assert "s3:GetBucketVersioning" in verifier
     assert "s3:GetBucketLocation" in verifier
+
+
+def test_state_role_checker_accepts_the_reviewed_staging_backend_alias() -> None:
+    spec = importlib.util.spec_from_file_location("verify_state_role", STATE_ROLE_CHECKER)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module.validate_backend_names(
+        "aether-staging-terraform-state-olympus", "aether-staging-terraform-lock"
+    ) == []
+    assert module.validate_backend_names("unreviewed-state", "unreviewed-lock")
 
 
 def test_apply_revalidates_before_service_linked_role_mutation() -> None:

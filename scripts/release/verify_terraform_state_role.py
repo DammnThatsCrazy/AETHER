@@ -14,6 +14,22 @@ import subprocess
 import sys
 
 
+# The repository's intended backend names are the canonical pair below.  The
+# staging account currently uses its already-provisioned, account-qualified
+# pair instead; accepting that exact reviewed pair lets the apply preflight
+# validate the real backend rather than rejecting it before IAM simulation.
+# Keep this an explicit allow-list: a prefix match would turn a typo or an
+# unrelated bucket into an accepted state backend.
+APPROVED_BUCKETS = {
+    "aether-terraform-state",
+    "aether-staging-terraform-state-olympus",
+}
+APPROVED_LOCK_TABLES = {
+    "aether-terraform-locks",
+    "aether-staging-terraform-lock",
+}
+
+
 def _simulate(role: str, actions: list[str], resource: str, context: str | None = None) -> list[str]:
     cmd = [
         "aws", "iam", "simulate-principal-policy",
@@ -42,6 +58,20 @@ def _simulate(role: str, actions: list[str], resource: str, context: str | None 
     return failures
 
 
+def validate_backend_names(bucket: str, lock_table: str) -> list[str]:
+    """Reject state backends outside the reviewed canonical/staging set."""
+    errors: list[str] = []
+    if bucket not in APPROVED_BUCKETS:
+        errors.append(
+            "TF_STATE_BUCKET must be one of the reviewed Terraform state backend buckets"
+        )
+    if lock_table not in APPROVED_LOCK_TABLES:
+        errors.append(
+            "TF_LOCK_TABLE must be one of the reviewed Terraform state lock tables"
+        )
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--role-arn", required=True)
@@ -49,15 +79,7 @@ def main() -> int:
     parser.add_argument("--lock-table", required=True)
     parser.add_argument("--account-id", required=True)
     args = parser.parse_args()
-    errors: list[str] = []
-    if args.bucket != "aether-terraform-state":
-        errors.append(
-            "TF_STATE_BUCKET must be the canonical aether-terraform-state backend bucket"
-        )
-    if args.lock_table != "aether-terraform-locks":
-        errors.append(
-            "TF_LOCK_TABLE must be the canonical aether-terraform-locks backend table"
-        )
+    errors = validate_backend_names(args.bucket, args.lock_table)
     if errors:
         for error in errors:
             print(f"::error::{error}", file=sys.stderr)
