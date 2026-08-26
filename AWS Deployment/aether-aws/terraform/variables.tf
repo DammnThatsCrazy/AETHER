@@ -410,5 +410,5 @@ variable "kyber_app_url" {
 variable "enable_social_connections" {
   type        = bool
   description = "Enable optional social identity-provider connections. Keep false until provider credentials and Auth0 management scopes are approved."
-  default     = true
+  default     = false
 }
