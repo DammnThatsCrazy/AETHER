@@ -22,6 +22,8 @@ MONITORING = TF / "modules/monitoring/main.tf"
 PROMOTE = ROOT / ".github/workflows/terraform-promote.yml"
 STATE_MIGRATION_WORKFLOW = ROOT / ".github/workflows/terraform-state-migrate.yml"
 STATE_MIGRATION = ROOT / "scripts/release/migrate_alb_target_group_state.sh"
+STATE_POLICY = ROOT / "config/terraform_state_access_policy.yaml"
+STATE_POLICY_CHECKER = ROOT / "scripts/release/check_terraform_state_access_policy.py"
 POLICY = ROOT / "config/staging_apply_iam_policy.yaml"
 POLICY_CHECKER = ROOT / "scripts/release/check_staging_apply_policy.py"
 
@@ -86,8 +88,30 @@ def test_ecs_service_linked_role_precedes_reviewed_apply() -> None:
         "role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
     )
     assert "has been taken" in text
-    role_step = text[text.index("Ensure the ECS service-linked role"):text.index("Stage the reviewed plan")]
+    role_step = text[text.index("Ensure the ECS service-linked role"):text.index("Apply the exact approved plan")]
     assert "if: inputs.profile == 'staging'" in role_step
+
+
+def test_external_provider_validation_precedes_service_linked_role() -> None:
+    text = PROMOTE.read_text(encoding="utf-8")
+    provider = text.index("Validate AWS and external-provider apply inputs")
+    service_role = text.index("Ensure the ECS service-linked role")
+    assert provider < service_role
+    assert "check_provider_apply_inputs.py" in text[provider:service_role]
+
+
+def test_state_access_contract_is_explicit_and_checked() -> None:
+    result = subprocess.run(
+        [sys.executable, str(STATE_POLICY_CHECKER), "--manifest", str(STATE_POLICY)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    manifest = yaml.safe_load(STATE_POLICY.read_text(encoding="utf-8"))
+    actions = {action for statement in manifest["statements"] for action in statement["actions"]}
+    assert {"s3:GetObject", "s3:PutObject", "dynamodb:DeleteItem"} <= actions
 
 
 def test_target_group_lookup_fails_closed_on_non_not_found_errors() -> None:

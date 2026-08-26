@@ -11,12 +11,14 @@ source_files:
   - config/terraform_resource_contracts.yaml
   - AWS Deployment/aether-aws/terraform/profiles.tf
   - AWS Deployment/aether-aws/terraform/main.tf
+  - AWS Deployment/aether-aws/terraform/modules/alb/main.tf
   - AWS Deployment/aether-aws/terraform/variables.tf
   - scripts/release/check_profile_config.py
   - scripts/release/check_profile_parity.py
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
+last_synced_commit: "a46166a7"
 ---
 
 # Deployment Profiles
@@ -593,7 +595,7 @@ If a staging resource exists in AWS but is absent from the reviewed Terraform
 state, reconcile state before generating a replacement plan. The guarded
 `Reconcile staging Terraform state` workflow accepts only the exact
 `aether-staging-backend` target-group ARN, imports only
-`module.alb.aws_lb_target_group.backend`, and refuses deletes or replacements.
+`module.alb.aws_lb_target_group.backend[0]`, and refuses deletes or replacements.
 After an import, discard the old binary plan and produce a fresh staging plan
 and checksum before any apply.
 

@@ -258,6 +258,11 @@ run "staging_profile_plan" {
   }
 
   assert {
+    condition     = module.alb.backend_target_group_name == "aether-staging-backend"
+    error_message = "The staging target-group transition must preserve the deterministic backend identity."
+  }
+
+  assert {
     condition = alltrue([
       length(module.ecs.dedicated_ml_service_arns) == 0,
       length(module.ecs.dedicated_ml_target_group_arns) == 0,
@@ -316,6 +321,28 @@ run "staging_profile_plan" {
       module.ecs.backend_autoscaling_bounds.max == 2,
     ])
     error_message = "An awake staging plan no longer runs the reviewed baseline capacity."
+  }
+
+}
+
+run "staging_listener_maintenance_transition" {
+  command = plan
+
+  variables {
+    deployment_profile                = "staging"
+    environment                       = "staging"
+    network_egress_mode               = null
+    staging_listener_target_group_arn = "arn:aws:elasticloadbalancing:us-east-1:111122223333:targetgroup/aether-staging-maintenance/0000000000000000"
+  }
+
+  assert {
+    condition     = module.alb.https_listener_target_group_arn == "arn:aws:elasticloadbalancing:us-east-1:111122223333:targetgroup/aether-staging-maintenance/0000000000000000"
+    error_message = "The maintenance transition must detach the staging listener from the backend target group."
+  }
+
+  assert {
+    condition     = module.alb.backend_target_group_name == "aether-staging-backend"
+    error_message = "The maintenance transition must preserve the deterministic backend target-group name."
   }
 }
 

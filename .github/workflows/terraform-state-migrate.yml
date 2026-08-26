@@ -47,6 +47,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install policy validation dependency
+        run: python -m pip install --disable-pip-version-check pyyaml
+      - name: Validate the reviewed Terraform state access contract
+        run: |
+          set -euo pipefail
+          python3 scripts/release/check_terraform_state_access_policy.py \
+            --manifest config/terraform_state_access_policy.yaml
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}

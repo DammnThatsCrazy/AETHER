@@ -354,6 +354,13 @@ verifies the Auth0 management token has every scope required by the reviewed
 Auth0 resources. These checks fail closed; a missing external-provider scope
 or service prerequisite is a blocked apply, not a partial deployment.
 
+Terraform backend access is a separate reviewed contract in
+`config/terraform_state_access_policy.yaml`. The confirmation-gated state
+migration workflow and the apply role may read/write only profile state objects,
+read the state-bucket metadata it needs, and lock the dedicated Terraform lock
+table; the policy checker rejects wildcard actions or resources. Plan-only runs
+do not use this write policy.
+
 The backend target group keeps the stable
 `aether-staging-backend` identity used by the import-only reconciliation
 workflow and remains at the stable state address
@@ -363,8 +370,19 @@ confirmation-gated `terraform-state-migrate.yml` state-only workflow first.
 Staging migrates to the indexed staging address, while production-class
 profiles migrate to
 `module.alb.aws_lb_target_group.backend_replacement[0]`. Staging intentionally disables
-`create_before_destroy`: AWS cannot
-create a replacement with that deterministic name while the old group exists.
+`create_before_destroy`: AWS cannot create a replacement with that deterministic
+name while the old group exists, and the listener still points at the existing
+group. A ForceNew staging change must
+therefore use a separately reviewed listener-detach/replacement/reattach
+transition; an ordinary apply fails closed instead of risking a listener
+cutover or an in-use target-group deletion.
+
+For an intentional ForceNew change, use three reviewed plans: first set
+`staging_listener_target_group_arn` to an existing maintenance target group and
+apply so the HTTPS listener is detached from the backend; then replace the
+backend while that ARN remains selected; finally clear the variable and apply
+again to reattach the listener. The normal promotion workflow never invents a
+maintenance target group or performs this transition implicitly.
 An interrupted run must use `staging-state-reconcile.yml` to import the
 existing group and produce a fresh reviewed plan; the apply workflow refuses
 to adopt an unmanaged group. The uncapped production profiles retain

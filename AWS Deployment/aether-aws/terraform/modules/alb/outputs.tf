@@ -40,6 +40,11 @@ output "backend_target_group_arn" {
   value       = local.backend_target_group.arn
 }
 
+output "https_listener_target_group_arn" {
+  description = "Target group currently selected by the HTTPS listener"
+  value       = var.environment == "staging" && var.staging_listener_target_group_arn != "" ? var.staging_listener_target_group_arn : local.backend_target_group.arn
+}
+
 output "ml_target_group_arn" {
   description = "ARN of the ML serving target group (empty string when enable_dedicated_ml = false)"
   value       = try(aws_lb_target_group.ml[0].arn, "")

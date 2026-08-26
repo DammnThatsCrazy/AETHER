@@ -82,6 +82,16 @@ variable "staging_state" {
   }
 }
 
+variable "staging_listener_target_group_arn" {
+  type        = string
+  description = "Optional maintenance target group ARN used during a reviewed staging backend target-group replacement transition"
+  default     = ""
+  validation {
+    condition     = var.staging_listener_target_group_arn == "" || can(regex("^arn:aws:elasticloadbalancing:[^:]+:[0-9]{12}:targetgroup/", var.staging_listener_target_group_arn))
+    error_message = "staging_listener_target_group_arn must be empty or an ELB target-group ARN."
+  }
+}
+
 variable "aws_region" {
   type        = string
   description = "AWS region to deploy resources into"

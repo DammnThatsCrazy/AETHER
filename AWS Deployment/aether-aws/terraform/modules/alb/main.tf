@@ -81,7 +81,9 @@ resource "aws_lb_target_group" "backend" {
   lifecycle {
     # The deterministic staging name is also the import/reconcile identity.
     # Replacements must not ask AWS for a second target group with that same
-    # name.
+    # name. The listener still references this group, so fail closed on a
+    # ForceNew change; a reviewed listener-detach transition must precede any
+    # intentional replacement.
     create_before_destroy = false
   }
 }
@@ -201,7 +203,7 @@ resource "aws_lb_listener" "https" {
   # Default: send everything to backend
   default_action {
     type             = "forward"
-    target_group_arn = local.backend_target_group.arn
+    target_group_arn = var.environment == "staging" && var.staging_listener_target_group_arn != "" ? var.staging_listener_target_group_arn : local.backend_target_group.arn
   }
 
   tags = {

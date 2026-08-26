@@ -38,6 +38,10 @@ on:
         options: [awake, asleep]
         default: awake
         required: false
+      staging_listener_target_group_arn:
+        description: "Optional existing maintenance target-group ARN for a reviewed staging backend replacement transition"
+        type: string
+        required: false
       plan_run_id:
         description: Plan workflow run ID (required for apply)
         type: string
@@ -175,6 +179,7 @@ jobs:
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
           STAGING_STATE: ${{ inputs.staging_state }}
+          STAGING_LISTENER_TARGET_GROUP_ARN: ${{ inputs.staging_listener_target_group_arn }}
           COMMIT_SHA: ${{ github.sha }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
@@ -211,6 +216,7 @@ jobs:
             -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
             -var "ml_image_digest=${ML_IMAGE_DIGEST}" \
             -var "staging_state=${STAGING_STATE}" \
+            -var "staging_listener_target_group_arn=${STAGING_LISTENER_TARGET_GROUP_ARN}" \
             -out=reviewed.tfplan
           # SECRET HYGIENE: `terraform show -json` does NOT redact `sensitive = true`
           # ROOT VARIABLES -- TF_VAR_auth0_management_client_secret would appear
@@ -485,6 +491,27 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check pyyaml
+      - name: Stage the reviewed plan before any AWS prerequisite mutation
+        working-directory: AWS Deployment/aether-aws/terraform
+        run: |
+          set -euo pipefail
+          cp "${RUNNER_TEMP}/reviewed-plan"/reviewed.* .
+      - name: Validate AWS and external-provider apply inputs
+        env:
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+          AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_provider_apply_inputs.py \
+            --inventory "${TF_DIR}/reviewed.resources.json" \
+            --verify-auth0-scopes
+      - name: Validate the reviewed Terraform state access contract
+        run: |
+          set -euo pipefail
+          python scripts/release/check_terraform_state_access_policy.py \
+            --manifest config/terraform_state_access_policy.yaml
       - name: Validate the reviewed staging apply IAM contract
         if: inputs.profile == 'staging'
         run: |
@@ -523,22 +550,6 @@ jobs:
           done
           echo '::error::AWSServiceRoleForECS was not visible after idempotent creation'
           exit 1
-      - name: Stage the reviewed plan into the reviewed working tree
-        working-directory: AWS Deployment/aether-aws/terraform
-        run: |
-          set -euo pipefail
-          cp "${RUNNER_TEMP}/reviewed-plan"/reviewed.* .
-      - name: Validate AWS and external-provider apply inputs
-        env:
-          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
-          AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
-          AUTH0_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
-          AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
-        run: |
-          set -euo pipefail
-          python scripts/release/check_provider_apply_inputs.py \
-            --inventory "${TF_DIR}/reviewed.resources.json" \
-            --verify-auth0-scopes
       # Re-run at the reviewed commit: the reports in the artifact are evidence,
       # not proof. The policy and cost rules that ship with the reviewed code
       # must still pass against the reviewed plan at apply time.
