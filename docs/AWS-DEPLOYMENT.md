@@ -14,7 +14,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "afc0cf1"
+last_synced_commit: "843eb6a6"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -342,6 +342,27 @@ the reviewed commit.
 
 Operator procedure: [Deployment Runbook](DEPLOYMENT-RUNBOOK.md). Staging's
 wake/validate/sleep cycle: [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md).
+
+### Staging apply prerequisites and collision safety
+
+The staging apply role is deliberately narrower than a general administrator.
+Its checked-in contract is `config/staging_apply_iam_policy.yaml`; the apply
+workflow validates that manifest before assuming the role and re-validates the
+resolved plan immediately before mutation. The workflow also creates (or
+waits for) the ECS service-linked role before capacity-provider operations and
+verifies the Auth0 management token has every scope required by the reviewed
+Auth0 resources. These checks fail closed; a missing external-provider scope
+or service prerequisite is a blocked apply, not a partial deployment.
+
+The backend target group keeps the stable
+`aether-staging-backend` identity used by the import-only reconciliation
+workflow. Staging intentionally disables `create_before_destroy`: AWS cannot
+create a replacement with that deterministic name while the old group exists.
+An interrupted run must use `staging-state-reconcile.yml` to import the
+existing group and produce a fresh reviewed plan; the apply workflow refuses
+to adopt an unmanaged group. The uncapped production profiles retain
+replacement-before-destroy behavior for availability and use separate
+accounts when their names would otherwise collide.
 
 ## Post-deploy steps
 

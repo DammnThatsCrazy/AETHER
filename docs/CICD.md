@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "632a3346"
+last_synced_commit: "843eb6a6"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -245,6 +245,16 @@ Approval is per profile: the apply job binds to `staging-terraform`,
 `staging_state` (`awake` | `asleep`) is a **plan-time** input, recorded next to
 the plan so a reviewer sees which shape was approved; an apply cannot reshape
 the stored plan.
+
+The staging apply handoff has explicit preflight contracts. The workflow
+validates the reviewed IAM manifest, ensures the ECS service-linked role is
+visible before capacity-provider changes, checks Auth0 management credentials
+and required scopes when Auth0 resources are in the plan, and rejects an
+unmanaged deterministic staging target group instead of creating a same-name
+replacement. If reconciliation is needed, use the import-only
+`staging-state-reconcile.yml` workflow and produce a new reviewed plan. These
+checks are intentionally fail-closed and run before Terraform mutation; they
+do not grant broad IAM permissions or wake staging on their own.
 
 ### Deployment gates
 

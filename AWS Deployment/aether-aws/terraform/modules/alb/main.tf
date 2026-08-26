@@ -77,7 +77,10 @@ resource "aws_lb_target_group" "backend" {
   }
 
   lifecycle {
-    create_before_destroy = true
+    # The deterministic staging name is also the import/reconcile identity.
+    # Replacements must not ask AWS for a second target group with that same
+    # name; production profiles retain create-before-destroy for availability.
+    create_before_destroy = var.environment != "staging"
   }
 }
 
