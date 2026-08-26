@@ -26,18 +26,26 @@ REQUIRED_ACTIONS = {
 ALLOWED_GLOBAL_ACTIONS = {
     "ec2:GetSecurityGroupsForVpc",
     "iam:CreateServiceLinkedRole",
+    "kms:GetKeyRotationStatus",
+    "kms:ScheduleKeyDeletion",
 }
 REQUIRED_AUTH0_SCOPES = {
     "create:resource_servers",
     "read:resource_servers",
+    "update:resource_servers",
+    "delete:resource_servers",
     "create:connections",
     "create:clients",
     "create:client_grants",
     "read:client_grants",
+    "update:client_grants",
+    "delete:client_grants",
     "read:clients",
     "read:connections",
     "update:connections",
     "update:clients",
+    "delete:clients",
+    "delete:connections",
 }
 
 
@@ -81,28 +89,34 @@ def main() -> int:
             actions.add(action)
             if resource == "*" and action not in ALLOWED_GLOBAL_ACTIONS:
                 fail(f"global resource scope is not allowed for {action}")
-        if resource == "*" and not statement.get("scope", "").endswith("required-by-api") and sid != "EnsureEcsServiceLinkedRole":
+        if resource == "*" and not (
+            statement.get("scope", "").endswith("required-by-api")
+            or sid in {"EnsureEcsServiceLinkedRole", "ReadStagingKeyRotation", "ScheduleDeletionForReviewedStagingKeys"}
+        ):
             fail(f"unqualified global resource scope in {sid}")
         if "iam:PassRole" in statement_actions:
             passed_to = (statement.get("conditions") or {}).get("iam:PassedToService")
             if set(passed_to or []) != {"ecs-tasks.amazonaws.com", "ecs.amazonaws.com"}:
                 fail("iam:PassRole must be limited to the ECS service principals")
         if "kms:ScheduleKeyDeletion" in statement_actions:
-            if resource != "reviewed-plan" or statement.get("resource_selector") != "aws_kms_key.arn":
-                fail("kms:ScheduleKeyDeletion must use exact KMS key ARNs from the reviewed plan")
+            if resource != "*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
+                fail("kms:ScheduleKeyDeletion must use an enforceable staging KMS tag condition")
             pending_window = (statement.get("conditions") or {}).get("kms:ScheduleKeyDeletionPendingWindowInDays")
             if str(pending_window) != "30":
                 fail("kms:ScheduleKeyDeletion must require a 30-day pending window")
         if "kms:GetKeyRotationStatus" in statement_actions:
-            if resource != "reviewed-plan" or statement.get("resource_selector") != "aws_kms_key.arn":
-                fail("kms:GetKeyRotationStatus must use exact KMS key ARNs from the reviewed plan")
+            if resource != "*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
+                fail("kms:GetKeyRotationStatus must use an enforceable staging KMS tag condition")
+        if "iam:CreateServiceLinkedRole" in statement_actions:
+            if (statement.get("conditions") or {}).get("iam:AWSServiceName") != "ecs.amazonaws.com":
+                fail("iam:CreateServiceLinkedRole must be restricted to ECS")
 
     expected_resources = {
         "s3:GetEncryptionConfiguration": "arn:aws:s3:::aether-staging-*",
         "s3:GetReplicationConfiguration": "arn:aws:s3:::aether-staging-*",
         "ec2:GetSecurityGroupsForVpc": "*",
-        "kms:GetKeyRotationStatus": "reviewed-plan",
-        "kms:ScheduleKeyDeletion": "reviewed-plan",
+        "kms:GetKeyRotationStatus": "*",
+        "kms:ScheduleKeyDeletion": "*",
         "sns:SetTopicAttributes": "arn:aws:sns:us-east-1:${account_id}:aether-staging-*",
         "elasticloadbalancing:ModifyTargetGroupAttributes": "arn:aws:elasticloadbalancing:us-east-1:${account_id}:targetgroup/aether-staging-*",
         "dynamodb:ListTagsOfResource": "arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*",

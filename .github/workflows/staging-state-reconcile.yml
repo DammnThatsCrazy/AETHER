@@ -37,7 +37,9 @@ jobs:
   import-backend-target-group:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: staging
+    # State ownership changes require the protected Terraform approval
+    # boundary, not the application rehearsal environment.
+    environment: staging-terraform
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3

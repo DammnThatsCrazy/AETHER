@@ -73,7 +73,10 @@ jobs:
       AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
       TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
       TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
-      TF_VAR_kms_key_admin_role_arns: '["${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}"]'
+      # The ARN is not a credential and must be available while producing the
+      # reviewed plan; the apply credential itself remains an environment
+      # secret and is resolved only by the protected apply job.
+      TF_VAR_kms_key_admin_role_arns: '["${{ vars.AWS_TERRAFORM_APPLY_ROLE_ARN }}"]'
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -91,7 +94,7 @@ jobs:
       - name: Require the complete remote-plan credential set
         env:
           AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
-          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ vars.AWS_TERRAFORM_APPLY_ROLE_ARN }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
           TF_ACM_CERTIFICATE_ARN: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}

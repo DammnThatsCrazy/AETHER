@@ -63,12 +63,38 @@ data "aws_iam_policy_document" "key" {
     content {
       sid       = "AllowKeyAdministrators"
       effect    = "Allow"
-      actions   = ["kms:CancelKeyDeletion", "kms:DescribeKey", "kms:DisableKey", "kms:EnableKey", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListResourceTags", "kms:PutKeyPolicy", "kms:ScheduleKeyDeletion", "kms:TagResource", "kms:UntagResource", "kms:UpdateKeyDescription", "kms:UpdateKeyRotationStatus"]
+      actions   = ["kms:CancelKeyDeletion", "kms:DescribeKey", "kms:DisableKey", "kms:EnableKey", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListResourceTags", "kms:PutKeyPolicy", "kms:TagResource", "kms:UntagResource", "kms:UpdateKeyDescription", "kms:UpdateKeyRotationStatus"]
       resources = ["*"]
 
       principals {
         type        = "AWS"
         identifiers = var.key_admin_role_arns
+      }
+
+    }
+  }
+
+  # Keep the destructive key-policy path aligned with Terraform's
+  # deletion-window contract. This condition is deliberately separate from
+  # read/rotation actions, which do not provide a deletion-window value.
+  dynamic "statement" {
+    for_each = length(var.key_admin_role_arns) > 0 ? [1] : []
+
+    content {
+      sid       = "AllowKeyAdministratorDeletion"
+      effect    = "Allow"
+      actions   = ["kms:ScheduleKeyDeletion"]
+      resources = ["*"]
+
+      principals {
+        type        = "AWS"
+        identifiers = var.key_admin_role_arns
+      }
+
+      condition {
+        test     = "StringEquals"
+        variable = "kms:ScheduleKeyDeletionPendingWindowInDays"
+        values   = [tostring(var.deletion_window_in_days)]
       }
     }
   }

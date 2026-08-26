@@ -23,16 +23,17 @@ statements:
   - sid: ReadStagingKeyRotation
     actions:
       - kms:GetKeyRotationStatus
-    resource: reviewed-plan
-    resource_selector: aws_kms_key.arn
-    scope: exact-staging-kms-key-arns-from-reviewed-plan
+    resource: '*'
+    scope: staging-kms-resource-tag
+    conditions:
+      aws:ResourceTag/Environment: staging
   - sid: ScheduleDeletionForReviewedStagingKeys
     actions:
       - kms:ScheduleKeyDeletion
-    resource: reviewed-plan
-    resource_selector: aws_kms_key.arn
-    scope: exact-staging-kms-key-arns-from-reviewed-plan
+    resource: '*'
+    scope: staging-kms-resource-tag
     conditions:
+      aws:ResourceTag/Environment: staging
       kms:ScheduleKeyDeletionPendingWindowInDays: "30"
   - sid: ModifyStagingTargetGroups
     actions:
@@ -74,11 +75,17 @@ external_provider_requirements:
     required_scopes:
       - create:resource_servers
       - read:resource_servers
+      - update:resource_servers
+      - delete:resource_servers
       - create:connections
       - create:clients
       - create:client_grants
       - read:client_grants
+      - update:client_grants
+      - delete:client_grants
       - read:clients
       - read:connections
       - update:connections
       - update:clients
+      - delete:clients
+      - delete:connections
