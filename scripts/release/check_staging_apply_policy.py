@@ -18,7 +18,9 @@ REQUIRED_ACTIONS = {
     "kms:GetKeyRotationStatus",
     "kms:ScheduleKeyDeletion",
     "sns:SetTopicAttributes",
+    "sns:DeleteTopic",
     "elasticloadbalancing:ModifyTargetGroupAttributes",
+    "elasticloadbalancing:ModifyLoadBalancerAttributes",
     "dynamodb:ListTagsOfResource",
     "iam:CreateServiceLinkedRole",
     "iam:PassRole",
@@ -96,8 +98,11 @@ def main() -> int:
             fail(f"unqualified global resource scope in {sid}")
         if "iam:PassRole" in statement_actions:
             passed_to = (statement.get("conditions") or {}).get("iam:PassedToService")
-            if set(passed_to or []) != {"ecs-tasks.amazonaws.com", "ecs.amazonaws.com"}:
-                fail("iam:PassRole must be limited to the ECS service principals")
+            if set(passed_to or []) not in (
+                {"ecs-tasks.amazonaws.com", "ecs.amazonaws.com"},
+                {"vpc-flow-logs.amazonaws.com"},
+            ):
+                fail("iam:PassRole must be limited to the approved ECS or VPC flow-logs service principals")
         if "kms:ScheduleKeyDeletion" in statement_actions:
             if resource != "*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                 fail("kms:ScheduleKeyDeletion must use an enforceable staging KMS tag condition")
@@ -117,15 +122,24 @@ def main() -> int:
         "ec2:GetSecurityGroupsForVpc": "*",
         "kms:GetKeyRotationStatus": "*",
         "kms:ScheduleKeyDeletion": "*",
-        "sns:SetTopicAttributes": "arn:aws:sns:us-east-1:${account_id}:aether-staging-*",
+        "sns:SetTopicAttributes": "arn:aws:sns:us-east-1:${account_id}:AETHER-staging-*",
+        "sns:DeleteTopic": "arn:aws:sns:us-east-1:${account_id}:AETHER-staging-*",
         "elasticloadbalancing:ModifyTargetGroupAttributes": "arn:aws:elasticloadbalancing:us-east-1:${account_id}:targetgroup/aether-staging-*",
+        "elasticloadbalancing:ModifyLoadBalancerAttributes": "arn:aws:elasticloadbalancing:us-east-1:${account_id}:loadbalancer/app/aether-staging-*",
         "dynamodb:ListTagsOfResource": "arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*",
         "iam:CreateServiceLinkedRole": "*",
         "iam:PassRole": "arn:aws:iam::${account_id}:role/AETHER-staging-*",
     }
     for action, expected in expected_resources.items():
         matching = [s for s in statements if action in (s.get("actions") or [])]
-        if len(matching) != 1 or matching[0].get("resource") != expected:
+        if action == "iam:PassRole":
+            expected_scopes = {
+                "arn:aws:iam::${account_id}:role/AETHER-staging-*",
+                "arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role",
+            }
+            if {s.get("resource") for s in matching} != expected_scopes:
+                fail("iam:PassRole has an unexpected resource scope")
+        elif len(matching) != 1 or matching[0].get("resource") != expected:
             fail(f"{action} has an unexpected resource scope")
 
     missing = REQUIRED_ACTIONS - actions

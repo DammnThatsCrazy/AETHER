@@ -801,9 +801,10 @@ resource "aws_cloudwatch_log_metric_filter" "runtime_role_unhealthy" {
     namespace = "Aether/Runtime"
     value     = "1"
     unit      = "Count"
-    dimensions = {
-      Service = "$.service"
-    }
+    # The supervisor marker is an unstructured text line, not a JSON log
+    # event. CloudWatch rejects dimensions on filters whose pattern cannot
+    # extract JSON fields, so keep this metric aggregate and let the log-group
+    # name identify the affected runtime service.
   }
 }
 

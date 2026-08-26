@@ -40,6 +40,11 @@ statements:
       - elasticloadbalancing:ModifyTargetGroupAttributes
     resource: arn:aws:elasticloadbalancing:us-east-1:${account_id}:targetgroup/aether-staging-*
     scope: staging-name-prefix
+  - sid: ModifyStagingLoadBalancers
+    actions:
+      - elasticloadbalancing:ModifyLoadBalancerAttributes
+    resource: arn:aws:elasticloadbalancing:us-east-1:${account_id}:loadbalancer/app/aether-staging-*
+    scope: staging-name-prefix
   - sid: ReadStagingDynamoTags
     actions:
       - dynamodb:ListTagsOfResource
@@ -48,8 +53,9 @@ statements:
   - sid: ConfigureStagingNotifications
     actions:
       - sns:SetTopicAttributes
-    resource: arn:aws:sns:us-east-1:${account_id}:aether-staging-*
-    scope: lowercase-staging-name-prefix
+      - sns:DeleteTopic
+    resource: arn:aws:sns:us-east-1:${account_id}:AETHER-staging-*
+    scope: project-staging-name-prefix
   - sid: EnsureEcsServiceLinkedRole
     actions:
       - iam:CreateServiceLinkedRole
@@ -66,6 +72,14 @@ statements:
         - ecs-tasks.amazonaws.com
         - ecs.amazonaws.com
     scope: staging-name-prefix
+  - sid: PassOnlyStagingFlowLogsRole
+    actions:
+      - iam:PassRole
+    resource: arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role
+    conditions:
+      iam:PassedToService:
+        - vpc-flow-logs.amazonaws.com
+    scope: staging-flow-logs-role
 
 # The provider errors below are deliberately not represented as AWS IAM
 # actions: Auth0 permissions are governed by the Auth0 management API and must

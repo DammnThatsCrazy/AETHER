@@ -73,10 +73,11 @@ jobs:
       AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
       TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
       TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
-      # The ARN is not a credential and must be available while producing the
-      # reviewed plan; the apply credential itself remains an environment
-      # secret and is resolved only by the protected apply job.
-      TF_VAR_kms_key_admin_role_arns: '["${{ vars.AWS_TERRAFORM_APPLY_ROLE_ARN }}"]'
+      # Do not inject the apply role as a KMS key-policy principal during plan.
+      # Repository variables are not guaranteed to exist (and an empty
+      # interpolation becomes an invalid principal). The KMS module's account
+      # root statement plus the protected apply-role identity policy are the
+      # lockout-safe authority; no plan-time role principal is needed.
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -491,6 +492,25 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
           aws-region: us-east-1
+      - name: Ensure the ECS service-linked role exists before capacity providers
+        if: inputs.profile == 'staging'
+        run: |
+          set -euo pipefail
+          # ECS creates this service-linked role lazily, but capacity-provider
+          # updates can race that creation and fail mid-apply. Create it
+          # idempotently before Terraform starts; an existing role is fine.
+          if ! aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com >/tmp/ecs-slr.out 2>/tmp/ecs-slr.err; then
+            if ! grep -q 'InvalidInput.*already exists\|EntityAlreadyExists' /tmp/ecs-slr.err; then
+              cat /tmp/ecs-slr.err >&2
+              exit 1
+            fi
+          fi
+          for attempt in 1 2 3 4 5 6; do
+            aws iam get-role --role-name AWSServiceRoleForECS >/dev/null 2>&1 && exit 0
+            sleep 5
+          done
+          echo '::error::AWSServiceRoleForECS was not visible after idempotent creation'
+          exit 1
       - name: Stage the reviewed plan into the reviewed working tree
         working-directory: AWS Deployment/aether-aws/terraform
         run: |
@@ -505,7 +525,8 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/release/check_provider_apply_inputs.py \
-            --inventory "${TF_DIR}/reviewed.resources.json"
+            --inventory "${TF_DIR}/reviewed.resources.json" \
+            --verify-auth0-scopes
       # Re-run at the reviewed commit: the reports in the artifact are evidence,
       # not proof. The policy and cost rules that ship with the reviewed code
       # must still pass against the reviewed plan at apply time.
@@ -552,6 +573,20 @@ jobs:
             -backend-config="key=profiles/${PROFILE}/terraform.tfstate" \
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true"
+          if [ "$PROFILE" = staging ]; then
+            # A partially completed rehearsal can leave the deterministic
+            # target group in AWS while its state entry is absent. Refuse
+            # before any mutation and route recovery through the reviewed
+            # import-only workflow instead of allowing a mid-apply collision.
+            existing_tg="$(aws elbv2 describe-target-groups \
+              --names aether-staging-backend \
+              --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || true)"
+            if [ -n "$existing_tg" ] && [ "$existing_tg" != None ] \
+              && ! terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend'; then
+              echo '::error::aether-staging-backend already exists outside Terraform state; run the import-only staging-state-reconcile workflow and create a fresh plan before applying'
+              exit 1
+            fi
+          fi
           terraform apply -input=false reviewed.tfplan | tee reviewed.apply.txt
           sha256sum reviewed.apply.txt > reviewed.apply.sha256
       - uses: actions/upload-artifact@v4

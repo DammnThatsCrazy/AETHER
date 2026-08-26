@@ -49,7 +49,10 @@ resource "aws_lb" "this" {
 # --------------------------------------------------------------------------
 
 resource "aws_lb_target_group" "backend" {
-  name        = "${lower(var.project)}-${var.environment}-backend"
+  # Keep the deterministic name across profiles. If a staging rehearsal is
+  # interrupted after AWS creates this target group but before state persists,
+  # reconcile it through the reviewed import-only workflow before reapplying.
+  name = "${lower(var.project)}-${var.environment}-backend"
   port        = 8000
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
