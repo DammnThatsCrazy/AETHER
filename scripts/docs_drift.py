@@ -187,7 +187,11 @@ def commit_touches_paths(sha: str, paths: list[str]) -> bool:
     if not paths:
         return False
     result = subprocess.run(
-        ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", sha, "--", *paths],
+        # `-m` makes this work for GitHub's synthetic PR merge commit too.
+        # Without it, diff-tree reports no paths for a merge commit and the
+        # squash/merge-safe boundary is treated as unverifiable even when the
+        # final merge contains both the source and its reviewed document.
+        ["git", "diff-tree", "-m", "--no-commit-id", "--name-only", "-r", sha, "--", *paths],
         capture_output=True,
         text=True,
         cwd=ROOT,

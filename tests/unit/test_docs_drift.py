@@ -180,6 +180,23 @@ def test_check_doc_accepts_unresolvable_stamp_when_squash_tip_reviews_source_and
     assert r["stale"] is False
 
 
+def test_commit_touches_paths_supports_merge_commit_boundaries(dd, tmp_path, monkeypatch):
+    """The final PR merge commit must be inspectable as a review boundary."""
+    calls = []
+
+    class Result:
+        returncode = 0
+        stdout = "docs/CICD.md\n.github/workflows/repo-health.yml\n"
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        return Result()
+
+    monkeypatch.setattr(dd.subprocess, "run", fake_run)
+    assert dd.commit_touches_paths("merge-sha", [".github/workflows/repo-health.yml"])
+    assert "-m" in calls[0]
+
+
 def test_commits_touching_after_returns_empty_for_no_paths(dd):
     assert dd.commits_touching_after("abc1234", []) == []
 
