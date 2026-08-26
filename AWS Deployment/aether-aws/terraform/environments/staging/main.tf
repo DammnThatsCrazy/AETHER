@@ -8,10 +8,7 @@ terraform {
   required_version = ">= 1.7.0"
 
   required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.40"
-    }
+    aws = { source = "hashicorp/aws"; version = "~> 5.40" }
   }
 
   backend "s3" {
@@ -36,25 +33,13 @@ provider "aws" {
 
 # ── Variables ──────────────────────────────────────────────────────────
 
-variable "environment" {
-  default = "staging"
-}
-variable "aws_region" {
-  default = "us-east-1"
-}
-variable "image_tag" {
-  default = "latest"
-}
-variable "ecr_registry" { type = string }
-variable "acm_cert_arn" {
-  default = ""
-}
-variable "hosted_zone_id" {
-  default = ""
-}
-variable "monthly_budget_usd" {
-  default = 3000
-}
+variable "environment"      { type = string; default = "staging" }
+variable "aws_region"       { type = string; default = "us-east-1" }
+variable "image_tag"        { type = string; default = "latest" }
+variable "ecr_registry"     { type = string }
+variable "acm_cert_arn"     { type = string; default = "" }
+variable "hosted_zone_id"   { type = string; default = "" }
+variable "monthly_budget_usd" { type = number; default = 3000 }
 
 # ═══════════════════════════════════════════════════════════════════════
 # LAYER 1: NETWORK (single NAT for cost savings)
@@ -74,11 +59,11 @@ module "waf" {
 }
 
 module "vpc_endpoints" {
-  source             = "../../modules/vpc_endpoints"
-  environment        = var.environment
-  vpc_id             = module.vpc.vpc_id
-  private_subnet_ids = module.vpc.private_subnet_ids
-  route_table_ids    = module.vpc.private_route_table_ids
+  source              = "../../modules/vpc_endpoints"
+  environment         = var.environment
+  vpc_id              = module.vpc.vpc_id
+  private_subnet_ids  = module.vpc.private_subnet_ids
+  route_table_ids     = module.vpc.private_route_table_ids
 }
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -191,7 +176,7 @@ module "iam" {
 # OUTPUTS
 # ═══════════════════════════════════════════════════════════════════════
 
-output "api_endpoint" { value = module.ecs.alb_dns_name }
-output "ecs_cluster" { value = module.ecs.cluster_name }
-output "rds_endpoint" { value = module.rds.cluster_endpoint }
-output "vpc_id" { value = module.vpc.vpc_id }
+output "api_endpoint"        { value = module.ecs.alb_dns_name }
+output "ecs_cluster"         { value = module.ecs.cluster_name }
+output "rds_endpoint"        { value = module.rds.cluster_endpoint }
+output "vpc_id"              { value = module.vpc.vpc_id }

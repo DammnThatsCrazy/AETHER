@@ -31,6 +31,11 @@ REQUIRED_AUTH0_SCOPES = {
     "create:resource_servers",
     "create:connections",
     "create:clients",
+    "create:client_grants",
+    "read:clients",
+    "read:connections",
+    "update:connections",
+    "update:clients",
 }
 
 
@@ -81,6 +86,8 @@ def main() -> int:
             if set(passed_to or []) != {"ecs-tasks.amazonaws.com", "ecs.amazonaws.com"}:
                 fail("iam:PassRole must be limited to the ECS service principals")
         if "kms:ScheduleKeyDeletion" in statement_actions:
+            if resource != "reviewed-plan" or statement.get("resource_selector") != "aws_kms_key.arn":
+                fail("kms:ScheduleKeyDeletion must use exact KMS key ARNs from the reviewed plan")
             pending_window = (statement.get("conditions") or {}).get("kms:ScheduleKeyDeletionPendingWindowInDays")
             if str(pending_window) != "30":
                 fail("kms:ScheduleKeyDeletion must require a 30-day pending window")
@@ -88,6 +95,9 @@ def main() -> int:
     missing = REQUIRED_ACTIONS - actions
     if missing:
         fail(f"staging apply IAM contract is missing: {', '.join(sorted(missing))}")
+    unexpected = actions - REQUIRED_ACTIONS
+    if unexpected:
+        fail(f"staging apply IAM contract contains unreviewed actions: {', '.join(sorted(unexpected))}")
 
     scopes = manifest.get("external_provider_requirements") or []
     auth0_scopes = {

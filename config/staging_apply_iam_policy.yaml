@@ -23,9 +23,14 @@ statements:
   - sid: ReadStagingKeyRotation
     actions:
       - kms:GetKeyRotationStatus
-      - kms:ScheduleKeyDeletion
     resource: arn:aws:kms:us-east-1:${account_id}:key/*
     scope: staging-kms-key-arns-from-reviewed-plan
+  - sid: ScheduleDeletionForReviewedStagingKeys
+    actions:
+      - kms:ScheduleKeyDeletion
+    resource: reviewed-plan
+    resource_selector: aws_kms_key.arn
+    scope: exact-staging-kms-key-arns-from-reviewed-plan
     conditions:
       kms:ScheduleKeyDeletionPendingWindowInDays: "30"
   - sid: ModifyStagingTargetGroups
@@ -41,8 +46,8 @@ statements:
   - sid: ConfigureStagingNotifications
     actions:
       - sns:SetTopicAttributes
-    resource: arn:aws:sns:us-east-1:${account_id}:AETHER-staging-*
-    scope: staging-name-prefix
+    resource: arn:aws:sns:us-east-1:${account_id}:aether-staging-*
+    scope: lowercase-staging-name-prefix
   - sid: EnsureEcsServiceLinkedRole
     actions:
       - iam:CreateServiceLinkedRole
@@ -69,3 +74,8 @@ external_provider_requirements:
       - create:resource_servers
       - create:connections
       - create:clients
+      - create:client_grants
+      - read:clients
+      - read:connections
+      - update:connections
+      - update:clients
