@@ -246,7 +246,13 @@ def _commit_is_restamp_only(sha: str, doc_rel: str) -> bool:
         if (line.startswith("+") or line.startswith("-"))
         and not line.startswith(("+++", "---"))
     ]
-    return bool(changed) and all("last_synced_commit" in line for line in changed)
+    # Do not use substring matching: authored prose or tables commonly mention
+    # ``last_synced_commit`` while making a real documentation change. Only an
+    # actual frontmatter assignment is a mechanical restamp.
+    import re
+
+    stamp_line = re.compile(r'^[+-]\s*last_synced_commit:\s*["\']?[0-9a-f]+["\']?\s*$')
+    return bool(changed) and all(stamp_line.match(line) for line in changed)
 
 
 def doc_reviewed_after_sources(declared: str, doc_path: Path, source_paths: list[str]) -> bool:

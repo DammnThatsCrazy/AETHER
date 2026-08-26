@@ -362,6 +362,33 @@ def test_restamp_only_commit_is_not_review(dd, tmp_path, monkeypatch):
     assert dd._commit_is_restamp_only(content_sha, "doc.md") is False
 
 
+def test_doc_content_mentioning_stamp_field_is_not_restamp_only(dd, tmp_path, monkeypatch):
+    """A prose/table edit mentioning the stamp field is still a review."""
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    env = {
+        "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+        "PATH": os.environ["PATH"],
+    }
+    def git(*args):
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, env=env)
+    git("init", "-q")
+    doc = repo / "doc.md"
+    doc.write_text("---\nlast_synced_commit: \"aaa\"\n---\nold\n")
+    git("add", "doc.md"); git("commit", "-qm", "initial")
+    doc.write_text("---\nlast_synced_commit: \"aaa\"\n---\nTable mentions last_synced_commit: as metadata.\n")
+    git("commit", "-aqm", "document stamp behavior")
+    monkeypatch.setattr(dd, "ROOT", repo)
+    sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True,
+        capture_output=True, text=True, env=env,
+    ).stdout.strip()
+    assert dd._commit_is_restamp_only(sha, "doc.md") is False
+
+
 def test_backlog_loader_rejects_anonymous_entries(dd, tmp_path):
     bad = tmp_path / "backlog.yaml"
     bad.write_text("docs:\n  - path: docs/X.md\n", encoding="utf-8")
