@@ -23,8 +23,9 @@ statements:
   - sid: ReadStagingKeyRotation
     actions:
       - kms:GetKeyRotationStatus
-    resource: arn:aws:kms:us-east-1:${account_id}:key/*
-    scope: staging-kms-key-arns-from-reviewed-plan
+    resource: reviewed-plan
+    resource_selector: aws_kms_key.arn
+    scope: exact-staging-kms-key-arns-from-reviewed-plan
   - sid: ScheduleDeletionForReviewedStagingKeys
     actions:
       - kms:ScheduleKeyDeletion
@@ -41,8 +42,8 @@ statements:
   - sid: ReadStagingDynamoTags
     actions:
       - dynamodb:ListTagsOfResource
-    resource: arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*
-    scope: staging-name-prefix
+    resource: arn:aws:dynamodb:us-east-1:${account_id}:table/aether-staging-*
+    scope: lowercase-staging-name-prefix
   - sid: ConfigureStagingNotifications
     actions:
       - sns:SetTopicAttributes
@@ -75,6 +76,7 @@ external_provider_requirements:
       - create:connections
       - create:clients
       - create:client_grants
+      - read:client_grants
       - read:clients
       - read:connections
       - update:connections

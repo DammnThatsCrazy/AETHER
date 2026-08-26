@@ -162,7 +162,7 @@ jobs:
             *) echo '::error::AWS_STAGING_LIFECYCLE_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
           esac
           case "$ACTION" in
-            apply-wake|full-rehearsal)
+            apply-wake|apply-sleep|full-rehearsal)
               test -n "${AWS_TERRAFORM_APPLY_ROLE_ARN:-}" \
                 || { echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN is required before a staging apply path'; exit 1; }
               case "$AWS_TERRAFORM_APPLY_ROLE_ARN" in

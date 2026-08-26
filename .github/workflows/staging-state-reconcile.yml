@@ -16,6 +16,10 @@ on:
         description: "Type IMPORT-STAGING to authorize this import-only action"
         required: true
         type: string
+      backend_image_digest:
+        description: "Approved immutable backend digest (sha256:...) for module validation"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -98,9 +102,16 @@ jobs:
         working-directory: ${{ env.TF_DIR }}
         env:
           TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
+          BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
         run: |
           set -euo pipefail
+          test -n "$BACKEND_IMAGE_DIGEST" || { echo '::error::backend_image_digest is required'; exit 1; }
+          printf '%s' "$BACKEND_IMAGE_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
+            echo '::error::backend_image_digest must be an immutable sha256 digest'; exit 1;
+          }
           terraform import -input=false \
+            -var-file=profiles/staging.tfvars \
+            -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
             'module.alb.aws_lb_target_group.backend' "$TARGET_GROUP_ARN"
 
       - name: Emit reconciled state checksum

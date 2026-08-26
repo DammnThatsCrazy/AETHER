@@ -32,6 +32,7 @@ REQUIRED_AUTH0_SCOPES = {
     "create:connections",
     "create:clients",
     "create:client_grants",
+    "read:client_grants",
     "read:clients",
     "read:connections",
     "update:connections",
@@ -91,6 +92,26 @@ def main() -> int:
             pending_window = (statement.get("conditions") or {}).get("kms:ScheduleKeyDeletionPendingWindowInDays")
             if str(pending_window) != "30":
                 fail("kms:ScheduleKeyDeletion must require a 30-day pending window")
+        if "kms:GetKeyRotationStatus" in statement_actions:
+            if resource != "reviewed-plan" or statement.get("resource_selector") != "aws_kms_key.arn":
+                fail("kms:GetKeyRotationStatus must use exact KMS key ARNs from the reviewed plan")
+
+    expected_resources = {
+        "s3:GetEncryptionConfiguration": "arn:aws:s3:::aether-staging-*",
+        "s3:GetReplicationConfiguration": "arn:aws:s3:::aether-staging-*",
+        "ec2:GetSecurityGroupsForVpc": "*",
+        "kms:GetKeyRotationStatus": "reviewed-plan",
+        "kms:ScheduleKeyDeletion": "reviewed-plan",
+        "sns:SetTopicAttributes": "arn:aws:sns:us-east-1:${account_id}:aether-staging-*",
+        "elasticloadbalancing:ModifyTargetGroupAttributes": "arn:aws:elasticloadbalancing:us-east-1:${account_id}:targetgroup/aether-staging-*",
+        "dynamodb:ListTagsOfResource": "arn:aws:dynamodb:us-east-1:${account_id}:table/aether-staging-*",
+        "iam:CreateServiceLinkedRole": "*",
+        "iam:PassRole": "arn:aws:iam::${account_id}:role/AETHER-staging-*",
+    }
+    for action, expected in expected_resources.items():
+        matching = [s for s in statements if action in (s.get("actions") or [])]
+        if len(matching) != 1 or matching[0].get("resource") != expected:
+            fail(f"{action} has an unexpected resource scope")
 
     missing = REQUIRED_ACTIONS - actions
     if missing:
