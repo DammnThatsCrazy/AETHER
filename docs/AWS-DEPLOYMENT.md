@@ -89,6 +89,11 @@ production-scale and enterprise-isolated profiles; lean, staging, demo, and
 preview profiles may leave it empty when `remote_ml` is disabled. Every digest
 that is supplied is still pinned to the exact release-manifest value.
 
+The apply preflight verifies the selected profile's exact Terraform state key
+(`profiles/<profile>/terraform.tfstate`) against the assumed role. It does not
+probe a synthetic object path or broaden access beyond the reviewed state
+prefix.
+
 ### Account and environment topology
 
 **One AWS account and one region per workspace.** `var.aws_region` defaults to
