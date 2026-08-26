@@ -1,0 +1,37 @@
+# Least-privilege backend access shared by the reviewed Terraform apply and
+# confirmation-gated state migration roles. The account-specific names are
+# resolved by the bootstrap; this manifest is the reviewable action contract.
+version: 1
+scope: terraform-state-backend
+state_bucket: aether-terraform-state
+state_lock_table: aether-terraform-locks
+statements:
+  - sid: ListProfileStatePrefix
+    actions:
+      - s3:ListBucket
+    resource: arn:aws:s3:::aether-terraform-state
+    conditions:
+      StringLike:
+        s3:prefix:
+          - profiles/*
+    scope: profile-state-prefix-only
+  - sid: ReadWriteProfileStateObjects
+    actions:
+      - s3:GetObject
+      - s3:PutObject
+      - s3:DeleteObject
+    resource: arn:aws:s3:::aether-terraform-state/profiles/*
+    scope: profile-state-prefix-only
+  - sid: ReadStateBucketMetadata
+    actions:
+      - s3:GetBucketVersioning
+      - s3:GetBucketLocation
+    resource: arn:aws:s3:::aether-terraform-state
+    scope: state-bucket-metadata
+  - sid: LockProfileState
+    actions:
+      - dynamodb:GetItem
+      - dynamodb:PutItem
+      - dynamodb:DeleteItem
+    resource: arn:aws:dynamodb:us-east-1:${account_id}:table/aether-terraform-locks
+    scope: state-lock-table-only

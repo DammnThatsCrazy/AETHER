@@ -18,14 +18,25 @@ REQUIRED_ACTIONS = {
     "kms:GetKeyRotationStatus",
     "kms:ScheduleKeyDeletion",
     "sns:SetTopicAttributes",
+    "sns:DeleteTopic",
     "elasticloadbalancing:ModifyTargetGroupAttributes",
+    "elasticloadbalancing:ModifyLoadBalancerAttributes",
     "dynamodb:ListTagsOfResource",
     "iam:CreateServiceLinkedRole",
+    "iam:GetRole",
     "iam:PassRole",
+    "elasticloadbalancing:DescribeTargetGroups",
+    "elasticloadbalancing:DescribeLoadBalancers",
+    "elasticloadbalancing:DescribeListeners",
+    "iam:SimulatePrincipalPolicy",
 }
 ALLOWED_GLOBAL_ACTIONS = {
     "ec2:GetSecurityGroupsForVpc",
     "iam:CreateServiceLinkedRole",
+    "elasticloadbalancing:DescribeTargetGroups",
+    "elasticloadbalancing:DescribeLoadBalancers",
+    "elasticloadbalancing:DescribeListeners",
+    "iam:SimulatePrincipalPolicy",
     "kms:GetKeyRotationStatus",
     "kms:ScheduleKeyDeletion",
 }
@@ -91,13 +102,13 @@ def main() -> int:
                 fail(f"global resource scope is not allowed for {action}")
         if resource == "*" and not (
             statement.get("scope", "").endswith("required-by-api")
-            or sid in {"EnsureEcsServiceLinkedRole", "ReadStagingKeyRotation", "ScheduleDeletionForReviewedStagingKeys"}
+            or sid in {"EnsureEcsServiceLinkedRole", "ReadEcsServiceLinkedRole", "ReadStagingKeyRotation", "ScheduleDeletionForReviewedStagingKeys", "DiscoverStagingTargetGroups", "VerifyTerraformStateAccess"}
         ):
             fail(f"unqualified global resource scope in {sid}")
         if "iam:PassRole" in statement_actions:
             passed_to = (statement.get("conditions") or {}).get("iam:PassedToService")
-            if set(passed_to or []) != {"ecs-tasks.amazonaws.com", "ecs.amazonaws.com"}:
-                fail("iam:PassRole must be limited to the ECS service principals")
+            if passed_to not in (["ecs-tasks.amazonaws.com"], ["vpc-flow-logs.amazonaws.com"]):
+                fail("iam:PassRole must be limited to the approved ECS or VPC flow-logs service principals")
         if "kms:ScheduleKeyDeletion" in statement_actions:
             if resource != "*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                 fail("kms:ScheduleKeyDeletion must use an enforceable staging KMS tag condition")
@@ -118,14 +129,39 @@ def main() -> int:
         "kms:GetKeyRotationStatus": "*",
         "kms:ScheduleKeyDeletion": "*",
         "sns:SetTopicAttributes": "arn:aws:sns:us-east-1:${account_id}:aether-staging-*",
+        "sns:DeleteTopic": "arn:aws:sns:us-east-1:${account_id}:aether-staging-*",
         "elasticloadbalancing:ModifyTargetGroupAttributes": "arn:aws:elasticloadbalancing:us-east-1:${account_id}:targetgroup/aether-staging-*",
+        "elasticloadbalancing:ModifyLoadBalancerAttributes": "arn:aws:elasticloadbalancing:us-east-1:${account_id}:loadbalancer/app/aether-staging-*",
         "dynamodb:ListTagsOfResource": "arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*",
         "iam:CreateServiceLinkedRole": "*",
-        "iam:PassRole": "arn:aws:iam::${account_id}:role/AETHER-staging-*",
+        "iam:GetRole": "arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
+        "iam:PassRole": "exact-staging-role-bindings",
+        "elasticloadbalancing:DescribeTargetGroups": "*",
+        "elasticloadbalancing:DescribeLoadBalancers": "*",
+        "elasticloadbalancing:DescribeListeners": "*",
+        "iam:SimulatePrincipalPolicy": "*",
     }
     for action, expected in expected_resources.items():
         matching = [s for s in statements if action in (s.get("actions") or [])]
-        if len(matching) != 1 or matching[0].get("resource") != expected:
+        if action == "iam:PassRole":
+            expected_scopes = {
+                "arn:aws:iam::${account_id}:role/AETHER-staging-ecs-task-role",
+                "arn:aws:iam::${account_id}:role/AETHER-staging-ecs-execution-role",
+                "arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role",
+            }
+            if {s.get("resource") for s in matching} != expected_scopes:
+                fail("iam:PassRole has an unexpected resource scope")
+            expected_principals = {
+                s.get("resource"): (s.get("conditions") or {}).get("iam:PassedToService")
+                for s in matching
+            }
+            if expected_principals != {
+                "arn:aws:iam::${account_id}:role/AETHER-staging-ecs-task-role": ["ecs-tasks.amazonaws.com"],
+                "arn:aws:iam::${account_id}:role/AETHER-staging-ecs-execution-role": ["ecs-tasks.amazonaws.com"],
+                "arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role": ["vpc-flow-logs.amazonaws.com"],
+            }:
+                fail("iam:PassRole resource and service-principal bindings do not match")
+        elif len(matching) != 1 or matching[0].get("resource") != expected:
             fail(f"{action} has an unexpected resource scope")
 
     missing = REQUIRED_ACTIONS - actions

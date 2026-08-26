@@ -333,7 +333,8 @@ module "alb" {
   # modules/ecs, so they need the same gate as the service that registers with
   # them. Without it a lean plan still creates a forbidden, permanently empty
   # dedicated-ML target group.
-  enable_dedicated_ml = local.enable_dedicated_ml
+  enable_dedicated_ml               = local.enable_dedicated_ml
+  staging_listener_target_group_arn = var.staging_listener_target_group_arn
 }
 
 # ---------------------------------------------------------------------------

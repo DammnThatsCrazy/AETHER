@@ -14,7 +14,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "afc0cf1"
+last_synced_commit: "87963c8a"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -252,7 +252,7 @@ Seventeen module directories exist under `terraform/modules/`. Modules marked
 | `vpc` | VPC, three subnet tiers, security groups, flow logs, NAT per `nat_mode` | always; NAT and the redis/msk/neptune SGs gated |
 | `ecr` | 4 private ECR repositories with lifecycle policies | always |
 | `secrets` | Secrets Manager stubs (KMS-encrypted), rotation Lambda | always |
-| `kms_credentials` | Customer-managed KMS CMK + alias for provider-credential envelope encryption (surfaced as `CREDENTIAL_KMS_KEY_ID`); least-privilege `Encrypt`/`Decrypt`/`GenerateDataKey` grant bound to the five-key encryption context, attached to the ECS task role. The reviewed staging apply role is an explicit CMK administrator for read/rotation and key-policy operations; key deletion is a separate resource-policy statement requiring the configured 30-day pending window. | always; disabled only by `enable_credential_kms = false`, which the throwaway `terraform test` apply run passes so its teardown can delete every created resource (the key carries `prevent_destroy`) |
+| `kms_credentials` | Customer-managed KMS CMK + alias for provider-credential envelope encryption (surfaced as `CREDENTIAL_KMS_KEY_ID`); least-privilege `Encrypt`/`Decrypt`/`GenerateDataKey` grant bound to the five-key encryption context, attached to the ECS task role. The apply role is **not** injected into the CMK key policy by default; the account-root statement remains the lockout-safe administrator. The reviewed staging identity policy permits key-rotation status and a separate 30-day key-deletion request, both constrained to staging-tagged keys. Supplying `kms_key_admin_role_arns` is an explicit, separately reviewed administrative grant; removing the role from the plan-time principal list therefore does not remove root authority or task-role cryptographic access. | always; disabled only by `enable_credential_kms = false`, which the throwaway `terraform test` apply run passes so its teardown can delete every created resource (the key carries `prevent_destroy`) |
 | `aurora` | Aurora Serverless v2 cluster + writer, KMS | always |
 | `dynamodb_cache` | DynamoDB cache table with read/write autoscaling | always |
 | `sqs` | SNS fanout topic, shared + per-role SQS queues, DLQs | always |
@@ -342,6 +342,65 @@ the reviewed commit.
 
 Operator procedure: [Deployment Runbook](DEPLOYMENT-RUNBOOK.md). Staging's
 wake/validate/sleep cycle: [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md).
+
+### Staging apply prerequisites and collision safety
+
+The staging apply role is deliberately narrower than a general administrator.
+Its checked-in contract is `config/staging_apply_iam_policy.yaml`; the apply
+workflow validates that manifest before assuming the role and re-validates the
+resolved plan immediately before mutation. The staging promotion workflow also creates (or
+waits for) the ECS service-linked role before capacity-provider operations and
+verifies the Auth0 management token has every scope required by the reviewed
+Auth0 resources. These checks fail closed; a missing external-provider scope
+or service prerequisite is a blocked apply, not a partial deployment.
+
+Terraform backend access is a separate reviewed contract in
+`config/terraform_state_access_policy.yaml`. The confirmation-gated state
+migration workflow and the apply role may read/write only profile state objects,
+read the state-bucket metadata it needs, and lock the dedicated Terraform lock
+table; the policy checker rejects wildcard actions or resources and derives the
+bucket/table names from the canonical backend configuration. Before any apply
+or state migration, the workflow also runs
+`scripts/release/verify_terraform_state_role.py` through IAM policy simulation
+against the assumed role, so a checked-in manifest cannot be mistaken for an
+attached/effective permission. Plan-only runs do not use this write policy.
+
+Every selectable apply profile also bootstraps the account-level ECS
+service-linked role before Terraform creates capacity providers. Each protected
+profile apply role must therefore carry the reviewed, least-privilege
+`CreateServiceLinkedRole` (restricted to `ecs.amazonaws.com`) and `GetRole`
+permissions; a missing grant fails before any profile resource is changed.
+
+The backend target group keeps the stable
+`aether-staging-backend` identity used by the import-only reconciliation
+workflow and remains at the stable state address
+`module.alb.aws_lb_target_group.backend[0]`. If a workspace still has the
+unindexed legacy address, the promotion plan fails closed; run the explicit,
+confirmation-gated `terraform-state-migrate.yml` state-only workflow first.
+Staging migrates to the indexed staging address, while production-class
+profiles migrate to
+`module.alb.aws_lb_target_group.backend_replacement[0]`. Staging intentionally disables
+`create_before_destroy`: AWS cannot create a replacement with that deterministic
+name while the old group exists, and the listener still points at the existing
+group. A ForceNew staging change must
+therefore use a separately reviewed listener-detach/replacement/reattach
+transition; an ordinary apply fails closed instead of risking a listener
+cutover or an in-use target-group deletion.
+
+For an intentional ForceNew change, use three reviewed plans: first set
+`staging_listener_target_group_arn` to an existing maintenance target group and
+apply so the HTTPS listener is detached from the backend; then replace the
+backend while that ARN remains selected; finally clear the variable and apply
+again to reattach the listener. Before the destructive middle step, the
+promotion workflow verifies the live HTTPS listener already points at that
+validated maintenance target; otherwise it fails closed and asks for the
+detach-only apply first. The normal promotion workflow never invents a
+maintenance target group or performs this transition implicitly.
+An interrupted run must use `staging-state-reconcile.yml` to import the
+existing group and produce a fresh reviewed plan; the apply workflow refuses
+to adopt an unmanaged group. The uncapped production profiles retain
+replacement-before-destroy behavior for availability and use separate
+accounts when their names would otherwise collide.
 
 ## Post-deploy steps
 

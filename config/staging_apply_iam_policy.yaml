@@ -40,6 +40,31 @@ statements:
       - elasticloadbalancing:ModifyTargetGroupAttributes
     resource: arn:aws:elasticloadbalancing:us-east-1:${account_id}:targetgroup/aether-staging-*
     scope: staging-name-prefix
+  - sid: DiscoverStagingTargetGroups
+    actions:
+      - elasticloadbalancing:DescribeTargetGroups
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: DiscoverStagingLoadBalancers
+    actions:
+      - elasticloadbalancing:DescribeLoadBalancers
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: DiscoverStagingListeners
+    actions:
+      - elasticloadbalancing:DescribeListeners
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: VerifyTerraformStateAccess
+    actions:
+      - iam:SimulatePrincipalPolicy
+    resource: '*'
+    scope: policy-verification-only
+  - sid: ModifyStagingLoadBalancers
+    actions:
+      - elasticloadbalancing:ModifyLoadBalancerAttributes
+    resource: arn:aws:elasticloadbalancing:us-east-1:${account_id}:loadbalancer/app/aether-staging-*
+    scope: staging-name-prefix
   - sid: ReadStagingDynamoTags
     actions:
       - dynamodb:ListTagsOfResource
@@ -48,8 +73,9 @@ statements:
   - sid: ConfigureStagingNotifications
     actions:
       - sns:SetTopicAttributes
+      - sns:DeleteTopic
     resource: arn:aws:sns:us-east-1:${account_id}:aether-staging-*
-    scope: lowercase-staging-name-prefix
+    scope: project-staging-name-prefix
   - sid: EnsureEcsServiceLinkedRole
     actions:
       - iam:CreateServiceLinkedRole
@@ -57,15 +83,35 @@ statements:
     conditions:
       iam:AWSServiceName: ecs.amazonaws.com
     scope: ecs-service-linked-role-only
-  - sid: PassOnlyStagingTaskRoles
+  - sid: ReadEcsServiceLinkedRole
+    actions:
+      - iam:GetRole
+    resource: arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS
+    scope: ecs-service-linked-role-only
+  - sid: PassOnlyStagingEcsTaskRole
     actions:
       - iam:PassRole
-    resource: arn:aws:iam::${account_id}:role/AETHER-staging-*
+    resource: arn:aws:iam::${account_id}:role/AETHER-staging-ecs-task-role
     conditions:
       iam:PassedToService:
         - ecs-tasks.amazonaws.com
-        - ecs.amazonaws.com
     scope: staging-name-prefix
+  - sid: PassOnlyStagingEcsExecutionRole
+    actions:
+      - iam:PassRole
+    resource: arn:aws:iam::${account_id}:role/AETHER-staging-ecs-execution-role
+    conditions:
+      iam:PassedToService:
+        - ecs-tasks.amazonaws.com
+    scope: staging-name-prefix
+  - sid: PassOnlyStagingFlowLogsRole
+    actions:
+      - iam:PassRole
+    resource: arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role
+    conditions:
+      iam:PassedToService:
+        - vpc-flow-logs.amazonaws.com
+    scope: staging-flow-logs-role
 
 # The provider errors below are deliberately not represented as AWS IAM
 # actions: Auth0 permissions are governed by the Auth0 management API and must

@@ -11,12 +11,14 @@ source_files:
   - config/terraform_resource_contracts.yaml
   - AWS Deployment/aether-aws/terraform/profiles.tf
   - AWS Deployment/aether-aws/terraform/main.tf
+  - AWS Deployment/aether-aws/terraform/modules/alb/main.tf
   - AWS Deployment/aether-aws/terraform/variables.tf
   - scripts/release/check_profile_config.py
   - scripts/release/check_profile_parity.py
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
+last_synced_commit: "87963c8a"
 ---
 
 # Deployment Profiles
@@ -593,9 +595,20 @@ If a staging resource exists in AWS but is absent from the reviewed Terraform
 state, reconcile state before generating a replacement plan. The guarded
 `Reconcile staging Terraform state` workflow accepts only the exact
 `aether-staging-backend` target-group ARN, imports only
-`module.alb.aws_lb_target_group.backend`, and refuses deletes or replacements.
+`module.alb.aws_lb_target_group.backend[0]`, and refuses deletes or replacements.
 After an import, discard the old binary plan and produce a fresh staging plan
 and checksum before any apply.
+
+If state still contains the pre-split, unindexed address
+`module.alb.aws_lb_target_group.backend`, do not use the reconciliation workflow
+first. Dispatch the confirmation-gated
+`.github/workflows/terraform-state-migrate.yml` workflow with the affected
+profile and `MIGRATE-TARGET-GROUP`. That workflow performs only the reviewed
+state-address move (staging to `backend[0]`, production-class profiles to
+`backend_replacement[0]`) and shares the promotion concurrency group so it
+cannot race a plan or apply. Once it succeeds, discard any prior plan and run a
+new plan-only promotion to regenerate the reviewed plan, inventory, checksum,
+and expiry before applying.
 
 - [AWS Lean Production](AWS-LEAN-PRODUCTION.md) — the `production-lean` profile in depth
 - [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md) — the staging lifecycle procedure

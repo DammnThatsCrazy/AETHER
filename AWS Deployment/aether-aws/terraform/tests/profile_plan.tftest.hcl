@@ -249,6 +249,19 @@ run "staging_profile_plan" {
     error_message = "The staging plan provisions NAT egress."
   }
 
+  # The staging target group keeps its deterministic import identity and must
+  # replace in place; the module exposes the literal lifecycle choice so this
+  # profile contract cannot silently regress to same-name create-before-destroy.
+  assert {
+    condition     = module.alb.backend_target_group_replacement_strategy == "destroy-before-create"
+    error_message = "The staging plan does not use the collision-safe target-group replacement strategy."
+  }
+
+  assert {
+    condition     = module.alb.backend_target_group_name == "aether-staging-backend"
+    error_message = "The staging target-group transition must preserve the deterministic backend identity."
+  }
+
   assert {
     condition = alltrue([
       length(module.ecs.dedicated_ml_service_arns) == 0,
@@ -308,6 +321,28 @@ run "staging_profile_plan" {
       module.ecs.backend_autoscaling_bounds.max == 2,
     ])
     error_message = "An awake staging plan no longer runs the reviewed baseline capacity."
+  }
+
+}
+
+run "staging_listener_maintenance_transition" {
+  command = plan
+
+  variables {
+    deployment_profile                = "staging"
+    environment                       = "staging"
+    network_egress_mode               = null
+    staging_listener_target_group_arn = "arn:aws:elasticloadbalancing:us-east-1:111122223333:targetgroup/aether-staging-maintenance/0000000000000000"
+  }
+
+  assert {
+    condition     = module.alb.https_listener_target_group_arn == "arn:aws:elasticloadbalancing:us-east-1:111122223333:targetgroup/aether-staging-maintenance/0000000000000000"
+    error_message = "The maintenance transition must detach the staging listener from the backend target group."
+  }
+
+  assert {
+    condition     = module.alb.backend_target_group_name == "aether-staging-backend"
+    error_message = "The maintenance transition must preserve the deterministic backend target-group name."
   }
 }
 
@@ -831,6 +866,7 @@ run "production_lean_profile_plan" {
     condition = alltrue([
       module.alb.alb_name == "aether-production-alb",
       module.alb.backend_target_group_name == "aether-production-backend",
+      module.alb.backend_target_group_replacement_strategy == "create-before-destroy",
     ])
     error_message = "The production-lean plan does not provision the ALB and its backend target group."
   }
