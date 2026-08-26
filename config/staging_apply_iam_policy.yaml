@@ -12,6 +12,7 @@ statements:
   - sid: ReadStagingBucketEncryption
     actions:
       - s3:GetEncryptionConfiguration
+      - s3:GetReplicationConfiguration
     resource: arn:aws:s3:::aether-staging-*
     scope: staging-name-prefix
   - sid: DiscoverVpcSecurityGroupsForStagingAlb
@@ -22,8 +23,21 @@ statements:
   - sid: ReadStagingKeyRotation
     actions:
       - kms:GetKeyRotationStatus
+      - kms:ScheduleKeyDeletion
     resource: arn:aws:kms:us-east-1:${account_id}:key/*
     scope: staging-kms-key-arns-from-reviewed-plan
+    conditions:
+      kms:ScheduleKeyDeletionPendingWindowInDays: "30"
+  - sid: ModifyStagingTargetGroups
+    actions:
+      - elasticloadbalancing:ModifyTargetGroupAttributes
+    resource: arn:aws:elasticloadbalancing:us-east-1:${account_id}:targetgroup/aether-staging-*
+    scope: staging-name-prefix
+  - sid: ReadStagingDynamoTags
+    actions:
+      - dynamodb:ListTagsOfResource
+    resource: arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*
+    scope: staging-name-prefix
   - sid: ConfigureStagingNotifications
     actions:
       - sns:SetTopicAttributes
@@ -36,6 +50,15 @@ statements:
     conditions:
       iam:AWSServiceName: ecs.amazonaws.com
     scope: ecs-service-linked-role-only
+  - sid: PassOnlyStagingTaskRoles
+    actions:
+      - iam:PassRole
+    resource: arn:aws:iam::${account_id}:role/AETHER-staging-*
+    conditions:
+      iam:PassedToService:
+        - ecs-tasks.amazonaws.com
+        - ecs.amazonaws.com
+    scope: staging-name-prefix
 
 # The provider errors below are deliberately not represented as AWS IAM
 # actions: Auth0 permissions are governed by the Auth0 management API and must

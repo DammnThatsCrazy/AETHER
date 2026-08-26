@@ -12,10 +12,15 @@ import yaml
 
 REQUIRED_ACTIONS = {
     "s3:GetEncryptionConfiguration",
+    "s3:GetReplicationConfiguration",
     "ec2:GetSecurityGroupsForVpc",
     "kms:GetKeyRotationStatus",
+    "kms:ScheduleKeyDeletion",
     "sns:SetTopicAttributes",
+    "elasticloadbalancing:ModifyTargetGroupAttributes",
+    "dynamodb:ListTagsOfResource",
     "iam:CreateServiceLinkedRole",
+    "iam:PassRole",
 }
 ALLOWED_GLOBAL_ACTIONS = {
     "ec2:GetSecurityGroupsForVpc",
@@ -70,6 +75,14 @@ def main() -> int:
                 fail(f"global resource scope is not allowed for {action}")
         if resource == "*" and not statement.get("scope", "").endswith("required-by-api") and sid != "EnsureEcsServiceLinkedRole":
             fail(f"unqualified global resource scope in {sid}")
+        if "iam:PassRole" in statement_actions:
+            passed_to = (statement.get("conditions") or {}).get("iam:PassedToService")
+            if set(passed_to or []) != {"ecs-tasks.amazonaws.com", "ecs.amazonaws.com"}:
+                fail("iam:PassRole must be limited to the ECS service principals")
+        if "kms:ScheduleKeyDeletion" in statement_actions:
+            pending_window = (statement.get("conditions") or {}).get("kms:ScheduleKeyDeletionPendingWindowInDays")
+            if str(pending_window) != "30":
+                fail("kms:ScheduleKeyDeletion must require a 30-day pending window")
 
     missing = REQUIRED_ACTIONS - actions
     if missing:
