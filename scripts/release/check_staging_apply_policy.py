@@ -105,7 +105,7 @@ def main() -> int:
         "kms:ScheduleKeyDeletion": "reviewed-plan",
         "sns:SetTopicAttributes": "arn:aws:sns:us-east-1:${account_id}:aether-staging-*",
         "elasticloadbalancing:ModifyTargetGroupAttributes": "arn:aws:elasticloadbalancing:us-east-1:${account_id}:targetgroup/aether-staging-*",
-        "dynamodb:ListTagsOfResource": "arn:aws:dynamodb:us-east-1:${account_id}:table/aether-staging-*",
+        "dynamodb:ListTagsOfResource": "arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*",
         "iam:CreateServiceLinkedRole": "*",
         "iam:PassRole": "arn:aws:iam::${account_id}:role/AETHER-staging-*",
     }
