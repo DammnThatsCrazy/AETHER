@@ -91,9 +91,10 @@ jobs:
     name: Select the staging profile
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Validate cleanup credentials before any wake/apply path can dispatch.
-    # The always-run sleep phase uses this same role to prove zero and stop
-    # cost; an absent role must fail before infrastructure is touched.
+    # Validate cleanup credentials before any lifecycle path that inspects or
+    # mutates staging can dispatch. plan-wake is plan-only and delegates to the
+    # reviewed Terraform plan workflow, so it intentionally needs no lifecycle
+    # role and remains usable with only plan credentials.
     permissions:
       contents: read
       id-token: write

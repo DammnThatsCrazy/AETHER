@@ -103,12 +103,27 @@ jobs:
         env:
           TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
+          TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
+          TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
+          TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
+          TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
+          TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
         run: |
           set -euo pipefail
           test -n "$BACKEND_IMAGE_DIGEST" || { echo '::error::backend_image_digest is required'; exit 1; }
           printf '%s' "$BACKEND_IMAGE_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
             echo '::error::backend_image_digest must be an immutable sha256 digest'; exit 1;
           }
+          for required in \
+            TF_VAR_acm_certificate_arn \
+            TF_VAR_domain_name \
+            TF_VAR_alert_email \
+            TF_VAR_aether_app_url \
+            TF_VAR_kyber_app_url; do
+            test -n "${!required:-}" || {
+              echo "::error::${required} is required for the root module during import"; exit 1;
+            }
+          done
           terraform import -input=false \
             -var-file=profiles/staging.tfvars \
             -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \

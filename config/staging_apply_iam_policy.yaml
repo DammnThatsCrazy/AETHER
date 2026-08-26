@@ -43,7 +43,7 @@ statements:
     actions:
       - dynamodb:ListTagsOfResource
     resource: arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*
-    scope: staging-name-prefix-matches-terraform-project
+    scope: staging-name-prefix
   - sid: ConfigureStagingNotifications
     actions:
       - sns:SetTopicAttributes
