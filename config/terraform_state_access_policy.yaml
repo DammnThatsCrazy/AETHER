@@ -3,7 +3,18 @@
 # resolved by the bootstrap; this manifest is the reviewable action contract.
 version: 1
 scope: terraform-state-backend
+state_bucket: aether-terraform-state
+state_lock_table: aether-terraform-locks
 statements:
+  - sid: ListProfileStatePrefix
+    actions:
+      - s3:ListBucket
+    resource: arn:aws:s3:::aether-terraform-state
+    conditions:
+      StringLike:
+        s3:prefix:
+          - profiles/*
+    scope: profile-state-prefix-only
   - sid: ReadWriteProfileStateObjects
     actions:
       - s3:GetObject
@@ -22,5 +33,5 @@ statements:
       - dynamodb:GetItem
       - dynamodb:PutItem
       - dynamodb:DeleteItem
-    resource: arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-TerraformLock
+    resource: arn:aws:dynamodb:us-east-1:${account_id}:table/aether-terraform-locks
     scope: state-lock-table-only

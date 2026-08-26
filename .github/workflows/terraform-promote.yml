@@ -102,6 +102,12 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check pyyaml
+      - name: Validate the reviewed Terraform state access contract
+        run: |
+          set -euo pipefail
+          python scripts/release/check_terraform_state_access_policy.py \
+            --manifest config/terraform_state_access_policy.yaml \
+            --terraform-root "${TF_DIR}"
       # Fail closed when the plan credential set is incomplete. The apply role
       # is deliberately not part of this check: a plan must be runnable without
       # mutation credentials. The protected apply job has its own complete
@@ -172,6 +178,11 @@ jobs:
             *)
               echo "::error::unsupported profile ${PROFILE}"; exit 1 ;;
           esac
+      - name: Record reviewed maintenance listener input
+        env:
+          STAGING_LISTENER_TARGET_GROUP_ARN: ${{ inputs.staging_listener_target_group_arn }}
+        working-directory: AWS Deployment/aether-aws/terraform
+        run: printf '%s\n' "$STAGING_LISTENER_TARGET_GROUP_ARN" > reviewed.staging-listener-target-group-arn
       - name: Create immutable reviewed plan
         working-directory: AWS Deployment/aether-aws/terraform
         env:
@@ -218,12 +229,22 @@ jobs:
             -var "staging_state=${STAGING_STATE}" \
             -var "staging_listener_target_group_arn=${STAGING_LISTENER_TARGET_GROUP_ARN}" \
             -out=reviewed.tfplan
+          terraform show -json reviewed.tfplan > plan-raw.json
+          if [ "$PROFILE" = staging ] && jq -e '
+            any(.resource_changes[]?;
+              .address == "module.alb.aws_lb_target_group.backend[0]" and
+              ((.change.actions // []) | (index("delete") != null and index("create") != null)))
+          ' plan-raw.json >/dev/null; then
+            if [ -z "$STAGING_LISTENER_TARGET_GROUP_ARN" ]; then
+              echo '::error::staging target-group replacement requires staging_listener_target_group_arn so the listener is detached before deletion'
+              exit 1
+            fi
+          fi
           # SECRET HYGIENE: `terraform show -json` does NOT redact `sensitive = true`
           # ROOT VARIABLES -- TF_VAR_auth0_management_client_secret would appear
           # verbatim in the top-level `variables` block of an uploaded artifact.
           # The raw document is written to a name outside the uploaded
           # `reviewed.*` glob, sanitised into reviewed.tfplan.json, and deleted.
-          terraform show -json reviewed.tfplan > plan-raw.json
           python "${GITHUB_WORKSPACE}/scripts/release/sanitize_terraform_plan_json.py" \
             plan-raw.json reviewed.tfplan.json
           rm -f plan-raw.json
@@ -384,6 +405,7 @@ jobs:
         id: reviewed
         env:
           PROFILE: ${{ inputs.profile }}
+          STAGING_LISTENER_TARGET_GROUP_ARN: ${{ inputs.staging_listener_target_group_arn }}
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}/reviewed-plan"
@@ -399,6 +421,10 @@ jobs:
               exit 1
             fi
           done
+          if [ ! -f reviewed.staging-listener-target-group-arn ]; then
+            echo '::error::reviewed plan is missing maintenance listener input evidence'
+            exit 1
+          fi
 
           # The recorded wake/sleep shape must be one of the two legal tokens.
           # A plan whose staging_state cannot be named is a plan nobody reviewed
@@ -412,6 +438,21 @@ jobs:
           reviewed_profile="$(cat reviewed.profile)"
           if [ "$reviewed_profile" != "$PROFILE" ]; then
             echo "::error::plan was reviewed for ${reviewed_profile}, dispatched for ${PROFILE}"
+            exit 1
+          fi
+
+          reviewed_listener_arn="$(cat reviewed.staging-listener-target-group-arn)"
+          if [ "$PROFILE" = staging ]; then
+            if [ "$reviewed_listener_arn" != "${STAGING_LISTENER_TARGET_GROUP_ARN:-}" ]; then
+              echo '::error::maintenance listener ARN differs between reviewed plan and apply dispatch'
+              exit 1
+            fi
+            if [ -n "$reviewed_listener_arn" ] && ! grep -Fq "$reviewed_listener_arn" reviewed.tfplan.json; then
+              echo '::error::reviewed plan does not select the dispatched maintenance target group ARN'
+              exit 1
+            fi
+          elif [ -n "$reviewed_listener_arn" ]; then
+            echo '::error::maintenance listener ARN is only valid for staging'
             exit 1
           fi
 
@@ -511,7 +552,8 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/release/check_terraform_state_access_policy.py \
-            --manifest config/terraform_state_access_policy.yaml
+            --manifest config/terraform_state_access_policy.yaml \
+            --terraform-root "${TF_DIR}"
       - name: Validate the reviewed staging apply IAM contract
         if: inputs.profile == 'staging'
         run: |
@@ -523,12 +565,64 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
           aws-region: us-east-1
-      - name: Ensure the ECS service-linked role exists before capacity providers
-        # Only staging has the reviewed AetherStagingDeploy contract granting
-        # CreateServiceLinkedRole and GetRole. Other profiles must receive an
-        # explicit, separately reviewed role contract before this bootstrap is
-        # enabled for them.
+      - name: Verify effective Terraform state permissions
+        env:
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          python scripts/release/verify_terraform_state_role.py \
+            --role-arn "$AWS_TERRAFORM_APPLY_ROLE_ARN" \
+            --bucket "$TF_STATE_BUCKET" \
+            --lock-table "$TF_LOCK_TABLE" \
+            --account-id "$account_id"
+      - name: Validate reviewed staging maintenance target group
         if: inputs.profile == 'staging'
+        env:
+          MAINTENANCE_TG_ARN: ${{ inputs.staging_listener_target_group_arn }}
+        run: |
+          set -euo pipefail
+          if [ -z "$MAINTENANCE_TG_ARN" ]; then
+            exit 0
+          fi
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          case "$MAINTENANCE_TG_ARN" in
+            arn:aws:elasticloadbalancing:us-east-1:${account_id}:targetgroup/aether-staging-maintenance*) ;;
+            *)
+              echo '::error::maintenance target group must be an existing us-east-1 target group in this account named aether-staging-maintenance*'
+              exit 1
+              ;;
+          esac
+          tg_json="$(aws elbv2 describe-target-groups --target-group-arns "$MAINTENANCE_TG_ARN" --output json)" || {
+            echo '::error::maintenance target group ARN does not exist or is not readable'
+            exit 1
+          }
+          tg_name="$(jq -r '.TargetGroups[0].TargetGroupName // empty' <<<"$tg_json")"
+          tg_vpc="$(jq -r '.TargetGroups[0].VpcId // empty' <<<"$tg_json")"
+          tg_type="$(jq -r '.TargetGroups[0].TargetType // empty' <<<"$tg_json")"
+          [ -n "$tg_name" ] && [ "$tg_name" = aether-staging-maintenance ] || [[ "$tg_name" == aether-staging-maintenance-* ]] || {
+            echo '::error::maintenance target group has an unexpected name'
+            exit 1
+          }
+          [[ "$tg_type" = ip || "$tg_type" = instance ]] || {
+            echo '::error::maintenance target group is not ALB-compatible (expected ip or instance target type)'
+            exit 1
+          }
+          alb_vpc="$(aws elbv2 describe-load-balancers --names aether-staging-alb --query 'LoadBalancers[0].VpcId' --output text)"
+          [ -n "$alb_vpc" ] && [ "$alb_vpc" != None ] && [ "$tg_vpc" = "$alb_vpc" ] || {
+            echo '::error::maintenance target group is not in the staging ALB VPC'
+            exit 1
+          }
+          echo "Validated reviewed maintenance target group $MAINTENANCE_TG_ARN in VPC $tg_vpc"
+      - name: Ensure the ECS service-linked role exists before capacity providers
+        # Every selectable profile provisions the ECS capacity-provider
+        # resource. Bootstrap the account-level service-linked role before
+        # Terraform touches that resource; each profile's protected apply role
+        # must carry the same narrowly scoped CreateServiceLinkedRole/GetRole
+        # contract. If it does not, fail here before any profile resource is
+        # mutated rather than discovering the gap mid-apply.
         run: |
           set -euo pipefail
           # ECS creates this service-linked role lazily, but capacity-provider
@@ -590,6 +684,16 @@ jobs:
           test "$(cat reviewed.lock.sha256)" = "$(sha256sum .terraform.lock.hcl | cut -d' ' -f1)"
           test "$(cat reviewed.terraform-version)" = "$(terraform version -json | jq -r '.terraform_version')"
           test "$(date -u +%s)" -lt "$(date -u -d "$(cat reviewed.expires-utc)" +%s)"
+          if [ "$PROFILE" = staging ] && jq -e '
+            any(.resource_changes[]?;
+              .address == "module.alb.aws_lb_target_group.backend[0]" and
+              ((.change.actions // []) | (index("delete") != null and index("create") != null)))
+          ' reviewed.tfplan.json >/dev/null; then
+            test -n "$(cat reviewed.staging-listener-target-group-arn)" || {
+              echo '::error::reviewed staging replacement has no maintenance listener transition target'
+              exit 1
+            }
+          fi
           bash "${GITHUB_WORKSPACE}/scripts/release/terraform_init_retry.sh" -input=false \
             -backend-config="bucket=${TF_STATE_BUCKET}" \
             -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \

@@ -25,10 +25,14 @@ REQUIRED_ACTIONS = {
     "iam:CreateServiceLinkedRole",
     "iam:GetRole",
     "iam:PassRole",
+    "elasticloadbalancing:DescribeTargetGroups",
+    "iam:SimulatePrincipalPolicy",
 }
 ALLOWED_GLOBAL_ACTIONS = {
     "ec2:GetSecurityGroupsForVpc",
     "iam:CreateServiceLinkedRole",
+    "elasticloadbalancing:DescribeTargetGroups",
+    "iam:SimulatePrincipalPolicy",
     "kms:GetKeyRotationStatus",
     "kms:ScheduleKeyDeletion",
 }
@@ -94,7 +98,7 @@ def main() -> int:
                 fail(f"global resource scope is not allowed for {action}")
         if resource == "*" and not (
             statement.get("scope", "").endswith("required-by-api")
-            or sid in {"EnsureEcsServiceLinkedRole", "ReadEcsServiceLinkedRole", "ReadStagingKeyRotation", "ScheduleDeletionForReviewedStagingKeys"}
+            or sid in {"EnsureEcsServiceLinkedRole", "ReadEcsServiceLinkedRole", "ReadStagingKeyRotation", "ScheduleDeletionForReviewedStagingKeys", "DiscoverStagingTargetGroups", "VerifyTerraformStateAccess"}
         ):
             fail(f"unqualified global resource scope in {sid}")
         if "iam:PassRole" in statement_actions:
@@ -128,6 +132,8 @@ def main() -> int:
         "iam:CreateServiceLinkedRole": "*",
         "iam:GetRole": "arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
         "iam:PassRole": "exact-staging-role-bindings",
+        "elasticloadbalancing:DescribeTargetGroups": "*",
+        "iam:SimulatePrincipalPolicy": "*",
     }
     for action, expected in expected_resources.items():
         matching = [s for s in statements if action in (s.get("actions") or [])]

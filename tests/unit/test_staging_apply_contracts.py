@@ -24,6 +24,7 @@ STATE_MIGRATION_WORKFLOW = ROOT / ".github/workflows/terraform-state-migrate.yml
 STATE_MIGRATION = ROOT / "scripts/release/migrate_alb_target_group_state.sh"
 STATE_POLICY = ROOT / "config/terraform_state_access_policy.yaml"
 STATE_POLICY_CHECKER = ROOT / "scripts/release/check_terraform_state_access_policy.py"
+STATE_ROLE_CHECKER = ROOT / "scripts/release/verify_terraform_state_role.py"
 POLICY = ROOT / "config/staging_apply_iam_policy.yaml"
 POLICY_CHECKER = ROOT / "scripts/release/check_staging_apply_policy.py"
 
@@ -55,7 +56,7 @@ def test_staging_target_group_replacement_is_name_safe() -> None:
     assert 'terraform state mv -lock-timeout=5m "$legacy" "$target"' in migration
     migration_workflow = STATE_MIGRATION_WORKFLOW.read_text(encoding="utf-8")
     assert "MIGRATE-TARGET-GROUP" in migration_workflow
-    assert "terraform-state-migrate-${{ inputs.profile }}" in migration_workflow
+    assert "group: terraform-${{ inputs.profile }}" in migration_workflow
     assert "terraform-promote.yml" not in migration
 
     promote = PROMOTE.read_text(encoding="utf-8")
@@ -65,6 +66,9 @@ def test_staging_target_group_replacement_is_name_safe() -> None:
     plan_command = plan_job.index("terraform plan -input=false")
     assert init_end < legacy_check < plan_command
     assert "terraform-state-migrate workflow" in plan_job
+    assert "Validate reviewed staging maintenance target group" in PROMOTE.read_text(encoding="utf-8")
+    assert "aether-staging-maintenance" in PROMOTE.read_text(encoding="utf-8")
+    assert "describe-target-groups" in PROMOTE.read_text(encoding="utf-8")
 
 
 def test_unstructured_runtime_metric_filter_has_no_dimensions() -> None:
@@ -89,7 +93,8 @@ def test_ecs_service_linked_role_precedes_reviewed_apply() -> None:
     )
     assert "has been taken" in text
     role_step = text[text.index("Ensure the ECS service-linked role"):text.index("Apply the exact approved plan")]
-    assert "if: inputs.profile == 'staging'" in role_step
+    assert "Every selectable profile provisions the ECS capacity-provider" in role_step
+    assert "if: inputs.profile == 'staging'" not in role_step
 
 
 def test_external_provider_validation_precedes_service_linked_role() -> None:
@@ -102,7 +107,14 @@ def test_external_provider_validation_precedes_service_linked_role() -> None:
 
 def test_state_access_contract_is_explicit_and_checked() -> None:
     result = subprocess.run(
-        [sys.executable, str(STATE_POLICY_CHECKER), "--manifest", str(STATE_POLICY)],
+        [
+            sys.executable,
+            str(STATE_POLICY_CHECKER),
+            "--manifest",
+            str(STATE_POLICY),
+            "--terraform-root",
+            str(TF),
+        ],
         cwd=ROOT,
         text=True,
         capture_output=True,
@@ -111,7 +123,14 @@ def test_state_access_contract_is_explicit_and_checked() -> None:
     assert result.returncode == 0, result.stderr + result.stdout
     manifest = yaml.safe_load(STATE_POLICY.read_text(encoding="utf-8"))
     actions = {action for statement in manifest["statements"] for action in statement["actions"]}
-    assert {"s3:GetObject", "s3:PutObject", "dynamodb:DeleteItem"} <= actions
+    assert {"s3:ListBucket", "s3:GetObject", "s3:PutObject", "dynamodb:DeleteItem"} <= actions
+    assert manifest["state_lock_table"] == "aether-terraform-locks"
+    assert "aether-terraform-locks" in STATE_POLICY.read_text(encoding="utf-8")
+    list_bucket = next(s for s in manifest["statements"] if "s3:ListBucket" in s["actions"])
+    assert list_bucket["conditions"] == {"StringLike": {"s3:prefix": ["profiles/*"]}}
+    assert "--terraform-root" in PROMOTE.read_text(encoding="utf-8")
+    assert STATE_ROLE_CHECKER.exists()
+    assert "verify_terraform_state_role.py" in PROMOTE.read_text(encoding="utf-8")
 
 
 def test_target_group_lookup_fails_closed_on_non_not_found_errors() -> None:
@@ -141,6 +160,9 @@ def test_reviewed_iam_manifest_matches_checker() -> None:
     assert flow_logs["conditions"]["iam:PassedToService"] == ["vpc-flow-logs.amazonaws.com"]
     notifications = next(s for s in statements if s["sid"] == "ConfigureStagingNotifications")
     assert "sns:DeleteTopic" in notifications["actions"]
+    assert "elasticloadbalancing:DescribeTargetGroups" in {
+        action for statement in statements for action in statement["actions"]
+    }
 
 
 def test_passrole_resource_principal_pairs_are_not_swappable(tmp_path: Path) -> None:

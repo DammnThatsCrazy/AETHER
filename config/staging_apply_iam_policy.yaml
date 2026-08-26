@@ -40,6 +40,16 @@ statements:
       - elasticloadbalancing:ModifyTargetGroupAttributes
     resource: arn:aws:elasticloadbalancing:us-east-1:${account_id}:targetgroup/aether-staging-*
     scope: staging-name-prefix
+  - sid: DiscoverStagingTargetGroups
+    actions:
+      - elasticloadbalancing:DescribeTargetGroups
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: VerifyTerraformStateAccess
+    actions:
+      - iam:SimulatePrincipalPolicy
+    resource: '*'
+    scope: policy-verification-only
   - sid: ModifyStagingLoadBalancers
     actions:
       - elasticloadbalancing:ModifyLoadBalancerAttributes

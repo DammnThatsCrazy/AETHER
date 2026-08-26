@@ -358,8 +358,18 @@ Terraform backend access is a separate reviewed contract in
 `config/terraform_state_access_policy.yaml`. The confirmation-gated state
 migration workflow and the apply role may read/write only profile state objects,
 read the state-bucket metadata it needs, and lock the dedicated Terraform lock
-table; the policy checker rejects wildcard actions or resources. Plan-only runs
-do not use this write policy.
+table; the policy checker rejects wildcard actions or resources and derives the
+bucket/table names from the canonical backend configuration. Before any apply
+or state migration, the workflow also runs
+`scripts/release/verify_terraform_state_role.py` through IAM policy simulation
+against the assumed role, so a checked-in manifest cannot be mistaken for an
+attached/effective permission. Plan-only runs do not use this write policy.
+
+Every selectable apply profile also bootstraps the account-level ECS
+service-linked role before Terraform creates capacity providers. Each protected
+profile apply role must therefore carry the reviewed, least-privilege
+`CreateServiceLinkedRole` (restricted to `ecs.amazonaws.com`) and `GetRole`
+permissions; a missing grant fails before any profile resource is changed.
 
 The backend target group keeps the stable
 `aether-staging-backend` identity used by the import-only reconciliation

@@ -599,6 +599,17 @@ state, reconcile state before generating a replacement plan. The guarded
 After an import, discard the old binary plan and produce a fresh staging plan
 and checksum before any apply.
 
+If state still contains the pre-split, unindexed address
+`module.alb.aws_lb_target_group.backend`, do not use the reconciliation workflow
+first. Dispatch the confirmation-gated
+`.github/workflows/terraform-state-migrate.yml` workflow with the affected
+profile and `MIGRATE-TARGET-GROUP`. That workflow performs only the reviewed
+state-address move (staging to `backend[0]`, production-class profiles to
+`backend_replacement[0]`) and shares the promotion concurrency group so it
+cannot race a plan or apply. Once it succeeds, discard any prior plan and run a
+new plan-only promotion to regenerate the reviewed plan, inventory, checksum,
+and expiry before applying.
+
 - [AWS Lean Production](AWS-LEAN-PRODUCTION.md) — the `production-lean` profile in depth
 - [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md) — the staging lifecycle procedure
 - [Cost Optimization](COST-OPTIMIZATION.md) — cost model, budgets and the accepted deviation
