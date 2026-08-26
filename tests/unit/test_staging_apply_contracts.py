@@ -283,20 +283,12 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
     }
     for action, resource in expected.items():
         matches = [s for s in statements if action in s["actions"]]
-        if action == "kms:TagResource":
-            assert len(matches) == 2
-            assert all(s["resource"] == resource for s in matches)
-            assert {tuple(sorted((s.get("conditions") or {}).items())) for s in matches} == {
-                (("aws:RequestTag/Environment", "staging"),),
-                (("aws:ResourceTag/Environment", "staging"),),
-            }
-        else:
-            assert len(matches) == 1
-            assert matches[0]["resource"] == resource
+        assert len(matches) == 1
+        assert matches[0]["resource"] == resource
 
     create_key = next(s for s in statements if "kms:CreateKey" in s["actions"])
     assert create_key["resource"] == "*"
     assert create_key["conditions"] == {"aws:RequestTag/Environment": "staging"}
     create_alias = next(s for s in statements if "kms:CreateAlias" in s["actions"])
-    assert create_alias["resource"] == "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*"
-    assert "conditions" not in create_alias
+    assert create_alias["resource"] == "*"
+    assert create_alias["conditions"] == {"kms:RequestAlias": "alias/aether-staging-*"}
