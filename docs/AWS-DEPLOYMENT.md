@@ -11,6 +11,7 @@ source_files:
   - AWS Deployment/aether-aws/main.py
   - AWS Deployment/aether-aws/terraform/
   - AWS Deployment/aether-aws/config/
+  - scripts/release/verify_terraform_state_role.py
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
@@ -363,7 +364,10 @@ bucket/table names from the canonical backend configuration. Before any apply
 or state migration, the workflow also runs
 `scripts/release/verify_terraform_state_role.py` through IAM policy simulation
 against the assumed role, so a checked-in manifest cannot be mistaken for an
-attached/effective permission. Plan-only runs do not use this write policy.
+attached/effective permission. The verifier accepts the canonical backend pair
+and the explicitly reviewed, account-qualified staging pair already in use;
+both are still checked by IAM simulation against the assumed role. Plan-only
+runs do not use this write policy.
 
 Every selectable apply profile also bootstraps the account-level ECS
 service-linked role before Terraform creates capacity providers. Each protected
