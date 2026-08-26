@@ -80,6 +80,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
+
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-providers-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: terraform-providers-${{ runner.os }}-
+
+      - name: Configure Terraform provider cache
+        run: echo "TF_PLUGIN_CACHE_DIR=${HOME}/.terraform.d/plugin-cache" >> "$GITHUB_ENV"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -171,7 +181,7 @@ jobs:
           # commit without racing terraform's own lockfile maintenance.
           sha256sum .terraform.lock.hcl | cut -d' ' -f1 > reviewed.lock.sha256
           printf '%s\n' "profiles/${PROFILE}/terraform.tfstate" > reviewed.state-key
-          terraform init -input=false \
+          bash "${GITHUB_WORKSPACE}/scripts/release/terraform_init_retry.sh" -input=false \
             -backend-config="bucket=${TF_STATE_BUCKET}" \
             -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
             -backend-config="key=profiles/${PROFILE}/terraform.tfstate" \
@@ -450,6 +460,16 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ steps.reviewed.outputs.terraform_version }}
+
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-providers-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: terraform-providers-${{ runner.os }}-
+
+      - name: Configure Terraform provider cache
+        run: echo "TF_PLUGIN_CACHE_DIR=${HOME}/.terraform.d/plugin-cache" >> "$GITHUB_ENV"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -523,7 +543,7 @@ jobs:
           test "$(cat reviewed.lock.sha256)" = "$(sha256sum .terraform.lock.hcl | cut -d' ' -f1)"
           test "$(cat reviewed.terraform-version)" = "$(terraform version -json | jq -r '.terraform_version')"
           test "$(date -u +%s)" -lt "$(date -u -d "$(cat reviewed.expires-utc)" +%s)"
-          terraform init -input=false \
+          bash "${GITHUB_WORKSPACE}/scripts/release/terraform_init_retry.sh" -input=false \
             -backend-config="bucket=${TF_STATE_BUCKET}" \
             -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
             -backend-config="key=profiles/${PROFILE}/terraform.tfstate" \

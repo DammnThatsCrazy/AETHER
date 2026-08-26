@@ -43,6 +43,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
+
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-providers-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: terraform-providers-${{ runner.os }}-
+
+      - name: Configure Terraform provider cache
+        run: echo "TF_PLUGIN_CACHE_DIR=${HOME}/.terraform.d/plugin-cache" >> "$GITHUB_ENV"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
@@ -75,7 +85,7 @@ jobs:
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
         run: |
           set -euo pipefail
-          terraform init -input=false \
+          bash "${GITHUB_WORKSPACE}/scripts/release/terraform_init_retry.sh" -input=false \
             -backend-config="bucket=${TF_STATE_BUCKET}" \
             -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
             -backend-config="key=profiles/staging/terraform.tfstate" \

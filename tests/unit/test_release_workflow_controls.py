@@ -788,7 +788,12 @@ def test_promotion_plan_records_the_full_plan_provenance():
         assert statement in plan_script, f"the reviewed plan no longer records {field}"
     # The lockfile digest is taken from the checked-out tree, before init can
     # touch it, so apply can compare it against the same commit's git content.
-    assert plan_script.index("sha256sum .terraform.lock.hcl") < plan_script.index("terraform init")
+    # Provider installation is routed through the shared retry/lockfile guard;
+    # keep the provenance assertion tied to that wrapper rather than a raw init
+    # command so transient registry failures cannot bypass verification.
+    assert plan_script.index("sha256sum .terraform.lock.hcl") < plan_script.index(
+        "terraform_init_retry.sh"
+    )
     # Reports retained alongside the plan: the policy validator's canonical
     # inventory becomes the reviewed resource inventory.
     assert (
