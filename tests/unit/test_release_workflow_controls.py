@@ -27,6 +27,7 @@ STRICT_BASH_WORKFLOWS = (
     APPLY_WORKFLOW,
     "deploy.yml",
     "staging-state-reconcile.yml",
+    "terraform-state-migrate.yml",
 )
 # Held to the identical rule by tests/unit/test_staging_lifecycle_controls.py.
 STRICT_BASH_ELSEWHERE = ("staging-lifecycle.yml", "staging-ttl-guard.yml")

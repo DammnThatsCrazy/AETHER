@@ -20,6 +20,7 @@ TF = ROOT / "AWS Deployment/aether-aws/terraform"
 ALB = TF / "modules/alb/main.tf"
 MONITORING = TF / "modules/monitoring/main.tf"
 PROMOTE = ROOT / ".github/workflows/terraform-promote.yml"
+STATE_MIGRATION_WORKFLOW = ROOT / ".github/workflows/terraform-state-migrate.yml"
 STATE_MIGRATION = ROOT / "scripts/release/migrate_alb_target_group_state.sh"
 POLICY = ROOT / "config/staging_apply_iam_policy.yaml"
 POLICY_CHECKER = ROOT / "scripts/release/check_staging_apply_policy.py"
@@ -50,6 +51,10 @@ def test_staging_target_group_replacement_is_name_safe() -> None:
     assert "production-lean|production-scale|enterprise-isolated|demo|preview)" in migration
     assert "backend_replacement[0]" in migration
     assert 'terraform state mv -lock-timeout=5m "$legacy" "$target"' in migration
+    migration_workflow = STATE_MIGRATION_WORKFLOW.read_text(encoding="utf-8")
+    assert "MIGRATE-TARGET-GROUP" in migration_workflow
+    assert "terraform-state-migrate-${{ inputs.profile }}" in migration_workflow
+    assert "terraform-promote.yml" not in migration
 
 
 def test_unstructured_runtime_metric_filter_has_no_dimensions() -> None:
