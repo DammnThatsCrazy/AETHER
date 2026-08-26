@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+from urllib.error import URLError
 from pathlib import Path
 
 
@@ -80,3 +81,45 @@ def test_malformed_auth0_jwt_claims_fail_closed() -> None:
     assert module._decode_jwt_scope(token({"scope": "read:clients create:clients"})) == {
         "read:clients", "create:clients"
     }
+
+
+class _Response:
+    def __init__(self, payload: object):
+        self.payload = json.dumps(payload).encode()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self, *_args):
+        return self.payload
+
+
+def test_auth0_scope_preflight_rejects_malformed_json_and_missing_token(monkeypatch) -> None:
+    module = _module()
+    monkeypatch.setattr(module, "urlopen", lambda *_args, **_kwargs: _Response(["not", "an object"]))
+    assert module.verify_auth0_scopes("tenant.auth0.com", "client", "secret", {"read:clients"})
+    monkeypatch.setattr(module, "urlopen", lambda *_args, **_kwargs: _Response({}))
+    assert module.verify_auth0_scopes("tenant.auth0.com", "client", "secret", {"read:clients"})
+
+
+def test_auth0_scope_preflight_rejects_network_and_incomplete_scope(monkeypatch) -> None:
+    module = _module()
+    monkeypatch.setattr(module, "urlopen", lambda *_args, **_kwargs: (_ for _ in ()).throw(URLError("offline")))
+    assert "request failed" in module.verify_auth0_scopes("tenant.auth0.com", "client", "secret", {"read:clients"})[0]
+
+    def token(payload: object) -> str:
+        encoded = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+        return f"header.{encoded}.signature"
+
+    monkeypatch.setattr(
+        module,
+        "urlopen",
+        lambda *_args, **_kwargs: _Response({"access_token": token({"scope": "read:clients"})}),
+    )
+    errors = module.verify_auth0_scopes(
+        "tenant.auth0.com", "client", "secret", {"read:clients", "create:clients"}
+    )
+    assert "missing required scopes" in errors[0]

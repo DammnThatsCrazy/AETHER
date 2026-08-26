@@ -493,7 +493,6 @@ jobs:
           role-to-assume: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
           aws-region: us-east-1
       - name: Ensure the ECS service-linked role exists before capacity providers
-        if: inputs.profile == 'staging'
         run: |
           set -euo pipefail
           # ECS creates this service-linked role lazily, but capacity-provider
@@ -582,9 +581,21 @@ jobs:
             # target group in AWS while its state entry is absent. Refuse
             # before any mutation and route recovery through the reviewed
             # import-only workflow instead of allowing a mid-apply collision.
+            set +e
             existing_tg="$(aws elbv2 describe-target-groups \
               --names aether-staging-backend \
-              --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || true)"
+              --query 'TargetGroups[0].TargetGroupArn' --output text 2>/tmp/target-group.err)"
+            lookup_rc=$?
+            set -e
+            if [ "$lookup_rc" -ne 0 ]; then
+              if grep -Eiq 'TargetGroupNotFound|not found|does not exist' /tmp/target-group.err; then
+                existing_tg=""
+              else
+                cat /tmp/target-group.err >&2
+                echo '::error::unable to verify aether-staging-backend; refusing to apply on an inconclusive AWS response'
+                exit 1
+              fi
+            fi
             if [ -n "$existing_tg" ] && [ "$existing_tg" != None ] \
               && ! terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend'; then
               echo '::error::aether-staging-backend already exists outside Terraform state; run the import-only staging-state-reconcile workflow and create a fresh plan before applying'

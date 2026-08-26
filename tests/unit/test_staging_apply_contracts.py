@@ -45,7 +45,23 @@ def test_ecs_service_linked_role_precedes_reviewed_apply() -> None:
     apply = text.index("terraform apply", wait)
     assert create < wait < apply
     assert "iam:CreateServiceLinkedRole" in POLICY.read_text(encoding="utf-8")
+    manifest = yaml.safe_load(POLICY.read_text(encoding="utf-8"))
+    get_role = next(s for s in manifest["statements"] if "iam:GetRole" in s["actions"])
+    assert get_role["resource"].endswith(
+        "role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
+    )
     assert "has been taken" in text
+    assert "if: inputs.profile == 'staging'" not in text[text.index("Ensure the ECS service-linked role"):text.index("Stage the reviewed plan")]
+
+
+def test_target_group_lookup_fails_closed_on_non_not_found_errors() -> None:
+    text = PROMOTE.read_text(encoding="utf-8")
+    start = text.index("existing_tg=")
+    end = text.index("terraform apply", start)
+    block = text[start:end]
+    assert "TargetGroupNotFound" in block
+    assert "unable to verify aether-staging-backend" in block
+    assert "2>/dev/null || true" not in block
 
 
 def test_reviewed_iam_manifest_matches_checker() -> None:
@@ -65,6 +81,24 @@ def test_reviewed_iam_manifest_matches_checker() -> None:
     assert flow_logs["conditions"]["iam:PassedToService"] == ["vpc-flow-logs.amazonaws.com"]
     notifications = next(s for s in statements if s["sid"] == "ConfigureStagingNotifications")
     assert "sns:DeleteTopic" in notifications["actions"]
+
+
+def test_passrole_resource_principal_pairs_are_not_swappable(tmp_path: Path) -> None:
+    manifest = yaml.safe_load(POLICY.read_text(encoding="utf-8"))
+    task = next(s for s in manifest["statements"] if s["sid"] == "PassOnlyStagingEcsTaskRole")
+    flow = next(s for s in manifest["statements"] if s["sid"] == "PassOnlyStagingFlowLogsRole")
+    task["conditions"], flow["conditions"] = flow["conditions"], task["conditions"]
+    mutated = tmp_path / "policy.yaml"
+    mutated.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, str(POLICY_CHECKER), "--manifest", str(mutated), "--profile", "staging"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "resource and service-principal" in result.stderr
 
 
 def test_kms_permissions_remain_staging_constrained() -> None:

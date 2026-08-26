@@ -246,10 +246,11 @@ Approval is per profile: the apply job binds to `staging-terraform`,
 the plan so a reviewer sees which shape was approved; an apply cannot reshape
 the stored plan.
 
-The staging apply handoff has explicit preflight contracts. The workflow
-validates the reviewed IAM manifest, ensures the ECS service-linked role is
-visible before capacity-provider changes, checks Auth0 management credentials
-and required scopes when Auth0 resources are in the plan, and rejects an
+The apply handoff has explicit preflight contracts. For every profile that
+provisions ECS capacity providers, the workflow validates the reviewed IAM
+manifest and ensures the ECS service-linked role is visible before
+capacity-provider changes. It also checks Auth0 management credentials and
+required scopes when Auth0 resources are in the plan, and rejects an
 unmanaged deterministic staging target group instead of creating a same-name
 replacement. If reconciliation is needed, use the import-only
 `staging-state-reconcile.yml` workflow and produce a new reviewed plan. These

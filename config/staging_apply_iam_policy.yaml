@@ -54,7 +54,7 @@ statements:
     actions:
       - sns:SetTopicAttributes
       - sns:DeleteTopic
-    resource: arn:aws:sns:us-east-1:${account_id}:AETHER-staging-*
+    resource: arn:aws:sns:us-east-1:${account_id}:aether-staging-*
     scope: project-staging-name-prefix
   - sid: EnsureEcsServiceLinkedRole
     actions:
@@ -63,14 +63,26 @@ statements:
     conditions:
       iam:AWSServiceName: ecs.amazonaws.com
     scope: ecs-service-linked-role-only
-  - sid: PassOnlyStagingTaskRoles
+  - sid: ReadEcsServiceLinkedRole
+    actions:
+      - iam:GetRole
+    resource: arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS
+    scope: ecs-service-linked-role-only
+  - sid: PassOnlyStagingEcsTaskRole
     actions:
       - iam:PassRole
-    resource: arn:aws:iam::${account_id}:role/AETHER-staging-*
+    resource: arn:aws:iam::${account_id}:role/AETHER-staging-ecs-task-role
     conditions:
       iam:PassedToService:
         - ecs-tasks.amazonaws.com
-        - ecs.amazonaws.com
+    scope: staging-name-prefix
+  - sid: PassOnlyStagingEcsExecutionRole
+    actions:
+      - iam:PassRole
+    resource: arn:aws:iam::${account_id}:role/AETHER-staging-ecs-execution-role
+    conditions:
+      iam:PassedToService:
+        - ecs-tasks.amazonaws.com
     scope: staging-name-prefix
   - sid: PassOnlyStagingFlowLogsRole
     actions:
