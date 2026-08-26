@@ -56,6 +56,14 @@ def test_staging_target_group_replacement_is_name_safe() -> None:
     assert "terraform-state-migrate-${{ inputs.profile }}" in migration_workflow
     assert "terraform-promote.yml" not in migration
 
+    promote = PROMOTE.read_text(encoding="utf-8")
+    plan_job = promote[promote.index("  plan:"):promote.index("  apply:")]
+    init_end = plan_job.index('-backend-config="encrypt=true"')
+    legacy_check = plan_job.index("legacy backend target-group state address remains")
+    plan_command = plan_job.index("terraform plan -input=false")
+    assert init_end < legacy_check < plan_command
+    assert "terraform-state-migrate workflow" in plan_job
+
 
 def test_unstructured_runtime_metric_filter_has_no_dimensions() -> None:
     text = MONITORING.read_text(encoding="utf-8")

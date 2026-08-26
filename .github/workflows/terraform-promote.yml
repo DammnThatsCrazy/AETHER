@@ -191,6 +191,10 @@ jobs:
             -backend-config="key=profiles/${PROFILE}/terraform.tfstate" \
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true"
+          if terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend'; then
+            echo '::error::legacy backend target-group state address remains; run the confirmation-gated terraform-state-migrate workflow and regenerate the reviewed plan'
+            exit 1
+          fi
           terraform validate
           # staging_state is recorded alongside the plan so a reviewer can see
           # which shape was approved. It is load-bearing, not decorative: apply
