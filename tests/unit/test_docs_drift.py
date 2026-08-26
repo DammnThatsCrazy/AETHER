@@ -197,6 +197,24 @@ def test_commit_touches_paths_supports_merge_commit_boundaries(dd, tmp_path, mon
     assert "-m" in calls[0]
 
 
+def test_unresolvable_stamp_uses_latest_first_parent_source_boundary(dd, monkeypatch):
+    """A synthetic PR merge can point back to its squash merge ancestor."""
+    calls = []
+
+    class Result:
+        returncode = 0
+        stdout = "squash-boundary\n"
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        return Result()
+
+    monkeypatch.setattr(dd.subprocess, "run", fake_run)
+    monkeypatch.setattr(dd, "commit_touches_paths", lambda sha, paths: True)
+    assert dd.squash_merge_reviewed_at_tip("docs/CICD.md", [".github/workflows/"])
+    assert calls[0][:5] == ["git", "log", "--first-parent", "-1", "--format=%H"]
+
+
 def test_commits_touching_after_returns_empty_for_no_paths(dd):
     assert dd.commits_touching_after("abc1234", []) == []
 

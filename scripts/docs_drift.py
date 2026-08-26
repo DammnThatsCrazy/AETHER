@@ -207,13 +207,22 @@ def squash_merge_reviewed_at_tip(doc_rel: str, source_paths: list[str]) -> bool:
     changed both the source and the doc; otherwise an unknown stamp remains a
     strict failure.
     """
-    tip = subprocess.run(
-        ["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=ROOT
+    # A pull_request workflow commonly checks out a synthetic merge commit.
+    # That tip may contain only the PR's follow-up changes, while the actual
+    # squash merge that changed the source and authored doc is its first-parent
+    # ancestor. Find the newest source-changing first-parent boundary and prove
+    # that the same boundary changed this doc too. This avoids accepting an
+    # arbitrary old merge merely because it once touched the same paths.
+    source_tip = subprocess.run(
+        ["git", "log", "--first-parent", "-1", "--format=%H", "HEAD", "--", *source_paths],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
     )
-    if tip.returncode != 0:
+    if source_tip.returncode != 0:
         return False
-    sha = tip.stdout.strip()
-    return commit_touches_paths(sha, source_paths) and commit_touches_paths(sha, [doc_rel])
+    sha = source_tip.stdout.strip()
+    return bool(sha) and commit_touches_paths(sha, source_paths) and commit_touches_paths(sha, [doc_rel])
 
 
 def _commit_is_restamp_only(sha: str, doc_rel: str) -> bool:
