@@ -175,6 +175,17 @@ ML digest for profiles that declare dedicated remote ML.
 
 ## `staging`
 
+### Apply contract
+
+Staging applies consume the exact reviewed Terraform plan; they do not
+re-plan on the apply runner. The apply job must receive the dedicated staging
+AWS role and, when Auth0 resources are present, the three Auth0 provider
+credentials as process environment variables. Static SPA origins use
+S3-safe, lowercase hyphenated tag values, and runtime log metric filters with
+dimensions omit a CloudWatch default value. These details are part of the
+staging profile's apply contract and are covered by the provider-input and
+Terraform profile checks before a wake is authorized.
+
 | | |
 |---|---|
 | **Purpose** | Release rehearsal. Wakes for validation, proves a release, returns to zero. |
