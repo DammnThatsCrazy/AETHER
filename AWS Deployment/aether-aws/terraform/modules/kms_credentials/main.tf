@@ -58,6 +58,22 @@ data "aws_iam_policy_document" "key" {
   }
 
   dynamic "statement" {
+    for_each = length(var.key_admin_role_arns) > 0 ? [1] : []
+
+    content {
+      sid       = "AllowKeyAdministrators"
+      effect    = "Allow"
+      actions   = ["kms:CancelKeyDeletion", "kms:DescribeKey", "kms:DisableKey", "kms:EnableKey", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListResourceTags", "kms:PutKeyPolicy", "kms:ScheduleKeyDeletion", "kms:TagResource", "kms:UntagResource", "kms:UpdateKeyDescription", "kms:UpdateKeyRotationStatus"]
+      resources = ["*"]
+
+      principals {
+        type        = "AWS"
+        identifiers = var.key_admin_role_arns
+      }
+    }
+  }
+
+  dynamic "statement" {
     for_each = length(var.task_role_arns) > 0 ? [1] : []
 
     content {
