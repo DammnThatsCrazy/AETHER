@@ -51,7 +51,8 @@ def test_ecs_service_linked_role_precedes_reviewed_apply() -> None:
         "role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
     )
     assert "has been taken" in text
-    assert "if: inputs.profile == 'staging'" not in text[text.index("Ensure the ECS service-linked role"):text.index("Stage the reviewed plan")]
+    role_step = text[text.index("Ensure the ECS service-linked role"):text.index("Stage the reviewed plan")]
+    assert "if: inputs.profile == 'staging'" in role_step
 
 
 def test_target_group_lookup_fails_closed_on_non_not_found_errors() -> None:

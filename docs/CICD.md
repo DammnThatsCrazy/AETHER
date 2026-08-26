@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "843eb6a6"
+last_synced_commit: "c0e7971f"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -246,10 +246,11 @@ Approval is per profile: the apply job binds to `staging-terraform`,
 the plan so a reviewer sees which shape was approved; an apply cannot reshape
 the stored plan.
 
-The apply handoff has explicit preflight contracts. For every profile that
-provisions ECS capacity providers, the workflow validates the reviewed IAM
-manifest and ensures the ECS service-linked role is visible before
-capacity-provider changes. It also checks Auth0 management credentials and
+The staging apply handoff has explicit preflight contracts. The staging
+workflow validates its reviewed IAM manifest and ensures the ECS service-linked
+role is visible before capacity-provider changes. Other profiles remain
+blocked from this bootstrap until they have their own reviewed IAM contract.
+The apply path also checks Auth0 management credentials and
 required scopes when Auth0 resources are in the plan, and rejects an
 unmanaged deterministic staging target group instead of creating a same-name
 replacement. If reconciliation is needed, use the import-only

@@ -493,6 +493,11 @@ jobs:
           role-to-assume: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
           aws-region: us-east-1
       - name: Ensure the ECS service-linked role exists before capacity providers
+        # Only staging has the reviewed AetherStagingDeploy contract granting
+        # CreateServiceLinkedRole and GetRole. Other profiles must receive an
+        # explicit, separately reviewed role contract before this bootstrap is
+        # enabled for them.
+        if: inputs.profile == 'staging'
         run: |
           set -euo pipefail
           # ECS creates this service-linked role lazily, but capacity-provider
