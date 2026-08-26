@@ -95,7 +95,13 @@ jobs:
           # The address check above is not sufficient: a prior partial import
           # could have recorded the same remote object under another address.
           # Refuse that case rather than creating two state owners for one ARN.
-          if terraform state pull | grep -Fq -- "$TARGET_GROUP_ARN"; then
+          state_file="$(mktemp)"
+          trap 'rm -f "$state_file"' EXIT
+          if ! terraform state pull >"$state_file"; then
+            echo '::error::Refusing import: could not read staging state to verify remote-object ownership'
+            exit 1
+          fi
+          if grep -Fq -- "$TARGET_GROUP_ARN" "$state_file"; then
             echo '::error::Refusing import: target-group ARN already appears elsewhere in staging state'
             exit 1
           fi
