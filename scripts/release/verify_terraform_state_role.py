@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 
@@ -72,20 +73,31 @@ def validate_backend_names(bucket: str, lock_table: str) -> list[str]:
     return errors
 
 
+def validate_state_key(state_key: str) -> list[str]:
+    """Reject probes outside the selected profile's Terraform state path."""
+    if not re.fullmatch(r"profiles/[A-Za-z0-9_-]+/terraform\.tfstate", state_key):
+        return [
+            "Terraform state key must match profiles/<profile>/terraform.tfstate"
+        ]
+    return []
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--role-arn", required=True)
     parser.add_argument("--bucket", required=True)
     parser.add_argument("--lock-table", required=True)
+    parser.add_argument("--state-key", required=True)
     parser.add_argument("--account-id", required=True)
     args = parser.parse_args()
     errors = validate_backend_names(args.bucket, args.lock_table)
+    errors += validate_state_key(args.state_key)
     if errors:
         for error in errors:
             print(f"::error::{error}", file=sys.stderr)
         return 1
     bucket = f"arn:aws:s3:::{args.bucket}"
-    objects = f"{bucket}/profiles/access-probe"
+    objects = f"{bucket}/{args.state_key}"
     lock = f"arn:aws:dynamodb:us-east-1:{args.account_id}:table/{args.lock_table}"
     errors += _simulate(args.role_arn, ["s3:ListBucket"], bucket, "profiles/")
     errors += _simulate(

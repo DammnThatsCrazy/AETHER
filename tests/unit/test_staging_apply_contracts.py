@@ -149,6 +149,9 @@ def test_state_role_checker_accepts_the_reviewed_staging_backend_alias() -> None
         "aether-staging-terraform-state-olympus", "aether-staging-terraform-lock"
     ) == []
     assert module.validate_backend_names("unreviewed-state", "unreviewed-lock")
+    assert module.validate_state_key("profiles/staging/terraform.tfstate") == []
+    assert module.validate_state_key("profiles/access-probe")
+    assert "--state-key" in PROMOTE.read_text(encoding="utf-8")
 
 
 def test_apply_revalidates_before_service_linked_role_mutation() -> None:
