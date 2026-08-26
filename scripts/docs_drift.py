@@ -187,7 +187,11 @@ def commit_touches_paths(sha: str, paths: list[str]) -> bool:
     if not paths:
         return False
     result = subprocess.run(
-        ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", sha, "--", *paths],
+        # `-m` makes this work for GitHub's synthetic PR merge commit too.
+        # Without it, diff-tree reports no paths for a merge commit and the
+        # squash/merge-safe boundary is treated as unverifiable even when the
+        # final merge contains both the source and its reviewed document.
+        ["git", "diff-tree", "-m", "--no-commit-id", "--name-only", "-r", sha, "--", *paths],
         capture_output=True,
         text=True,
         cwd=ROOT,
@@ -203,13 +207,22 @@ def squash_merge_reviewed_at_tip(doc_rel: str, source_paths: list[str]) -> bool:
     changed both the source and the doc; otherwise an unknown stamp remains a
     strict failure.
     """
-    tip = subprocess.run(
-        ["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=ROOT
+    # A pull_request workflow commonly checks out a synthetic merge commit.
+    # That tip may contain only the PR's follow-up changes, while the actual
+    # squash merge that changed the source and authored doc is its first-parent
+    # ancestor. Find the newest source-changing first-parent boundary and prove
+    # that the same boundary changed this doc too. This avoids accepting an
+    # arbitrary old merge merely because it once touched the same paths.
+    source_tip = subprocess.run(
+        ["git", "log", "--first-parent", "-1", "--format=%H", "HEAD", "--", *source_paths],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
     )
-    if tip.returncode != 0:
+    if source_tip.returncode != 0:
         return False
-    sha = tip.stdout.strip()
-    return commit_touches_paths(sha, source_paths) and commit_touches_paths(sha, [doc_rel])
+    sha = source_tip.stdout.strip()
+    return bool(sha) and commit_touches_paths(sha, source_paths) and commit_touches_paths(sha, [doc_rel])
 
 
 def _commit_is_restamp_only(sha: str, doc_rel: str) -> bool:
@@ -233,7 +246,13 @@ def _commit_is_restamp_only(sha: str, doc_rel: str) -> bool:
         if (line.startswith("+") or line.startswith("-"))
         and not line.startswith(("+++", "---"))
     ]
-    return bool(changed) and all("last_synced_commit" in line for line in changed)
+    # Do not use substring matching: authored prose or tables commonly mention
+    # ``last_synced_commit`` while making a real documentation change. Only an
+    # actual frontmatter assignment is a mechanical restamp.
+    import re
+
+    stamp_line = re.compile(r'^[+-]\s*last_synced_commit:\s*["\']?[0-9a-f]+["\']?\s*$')
+    return bool(changed) and all(stamp_line.match(line) for line in changed)
 
 
 def doc_reviewed_after_sources(declared: str, doc_path: Path, source_paths: list[str]) -> bool:

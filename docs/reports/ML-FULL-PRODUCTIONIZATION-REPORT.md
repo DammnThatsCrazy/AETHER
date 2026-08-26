@@ -18,7 +18,7 @@ source_files:
   - AWS Deployment/aether-aws/terraform/modules/s3/main.tf
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "491a5a58"
+last_synced_commit: "74a6ddb"
 ---
 
 # Aether ML Full Productionization Report
@@ -180,6 +180,12 @@ docs consistency check (`make ml-docs-check`). The job carries
 `timeout-minutes: 60` — the highest bound in `repo-health.yml`, because the
 ML extras install (`[dev,security,backend,agent,ml]`) plus the training smoke
 is the heaviest job in the workflow.
+
+The docs-consistency step uses a full-history checkout and strict source-link
+validation. A final pull-request merge is treated as the review boundary only
+when that merge contains both the declared ML source change and its authored
+documentation update; a mechanical stamp by itself is never accepted as ML
+review evidence.
 
 **Docker Compose profiles:**
 - `integration`: Redis + LocalStack (S3 + SQS/SNS/DynamoDB) + MLflow tracking

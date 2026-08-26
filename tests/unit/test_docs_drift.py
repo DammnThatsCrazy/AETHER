@@ -180,6 +180,41 @@ def test_check_doc_accepts_unresolvable_stamp_when_squash_tip_reviews_source_and
     assert r["stale"] is False
 
 
+def test_commit_touches_paths_supports_merge_commit_boundaries(dd, tmp_path, monkeypatch):
+    """The final PR merge commit must be inspectable as a review boundary."""
+    calls = []
+
+    class Result:
+        returncode = 0
+        stdout = "docs/CICD.md\n.github/workflows/repo-health.yml\n"
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        return Result()
+
+    monkeypatch.setattr(dd.subprocess, "run", fake_run)
+    assert dd.commit_touches_paths("merge-sha", [".github/workflows/repo-health.yml"])
+    assert "-m" in calls[0]
+
+
+def test_unresolvable_stamp_uses_latest_first_parent_source_boundary(dd, monkeypatch):
+    """A synthetic PR merge can point back to its squash merge ancestor."""
+    calls = []
+
+    class Result:
+        returncode = 0
+        stdout = "squash-boundary\n"
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        return Result()
+
+    monkeypatch.setattr(dd.subprocess, "run", fake_run)
+    monkeypatch.setattr(dd, "commit_touches_paths", lambda sha, paths: True)
+    assert dd.squash_merge_reviewed_at_tip("docs/CICD.md", [".github/workflows/"])
+    assert calls[0][:5] == ["git", "log", "--first-parent", "-1", "--format=%H"]
+
+
 def test_commits_touching_after_returns_empty_for_no_paths(dd):
     assert dd.commits_touching_after("abc1234", []) == []
 
@@ -325,6 +360,34 @@ def test_restamp_only_commit_is_not_review(dd, tmp_path, monkeypatch):
     monkeypatch.setattr(dd, "ROOT", repo)
     assert dd._commit_is_restamp_only(restamp_sha, "doc.md") is True
     assert dd._commit_is_restamp_only(content_sha, "doc.md") is False
+
+
+def test_doc_content_mentioning_stamp_field_is_not_restamp_only(dd, tmp_path, monkeypatch):
+    """A prose/table edit mentioning the stamp field is still a review."""
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    env = {
+        "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+        "PATH": os.environ["PATH"],
+    }
+    def git(*args):
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, env=env)
+    git("init", "-q")
+    doc = repo / "doc.md"
+    doc.write_text("---\nlast_synced_commit: \"aaa\"\n---\nold\n")
+    git("add", "doc.md")
+    git("commit", "-qm", "initial")
+    doc.write_text("---\nlast_synced_commit: \"aaa\"\n---\nTable mentions last_synced_commit: as metadata.\n")
+    git("commit", "-aqm", "document stamp behavior")
+    monkeypatch.setattr(dd, "ROOT", repo)
+    sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True,
+        capture_output=True, text=True, env=env,
+    ).stdout.strip()
+    assert dd._commit_is_restamp_only(sha, "doc.md") is False
 
 
 def test_backlog_loader_rejects_anonymous_entries(dd, tmp_path):
