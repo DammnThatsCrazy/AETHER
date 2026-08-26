@@ -157,8 +157,11 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
   ok_actions        = [aws_sns_topic.alerts.arn]
 
   metric_query {
-    id          = "error_rate"
-    expression  = "100 * errors / MAX([errors, 1])"
+    id = "error_rate"
+    # CloudWatch metric math MAX() accepts scalar operands, not a mixed
+    # time-series/scalar array. Use IF to avoid a divide-by-zero result while
+    # retaining a real percentage when ALB request data exists.
+    expression  = "IF(requests > 0, 100 * errors / requests, 0)"
     label       = "5xx Error Rate (%)"
     return_data = true
   }
@@ -167,6 +170,19 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
     id = "errors"
     metric {
       metric_name = "HTTPCode_ELB_5XX_Count"
+      namespace   = "AWS/ApplicationELB"
+      period      = 60
+      stat        = "Sum"
+      dimensions = {
+        LoadBalancer = var.alb_arn_suffix
+      }
+    }
+  }
+
+  metric_query {
+    id = "requests"
+    metric {
+      metric_name = "RequestCount"
       namespace   = "AWS/ApplicationELB"
       period      = 60
       stat        = "Sum"

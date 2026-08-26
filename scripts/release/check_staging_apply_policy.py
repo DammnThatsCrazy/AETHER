@@ -12,8 +12,17 @@ import yaml
 
 
 REQUIRED_ACTIONS = {
+    "s3:PutEncryptionConfiguration",
+    "s3:PutLifecycleConfiguration",
     "s3:GetEncryptionConfiguration",
     "s3:GetReplicationConfiguration",
+    "ecr:TagResource",
+    "secretsmanager:TagResource",
+    "ssm:AddTagsToResource",
+    "kms:CreateKey",
+    "kms:TagResource",
+    "kms:CreateAlias",
+    "kms:PutKeyPolicy",
     "ec2:GetSecurityGroupsForVpc",
     "kms:GetKeyRotationStatus",
     "kms:ScheduleKeyDeletion",
@@ -39,6 +48,8 @@ ALLOWED_GLOBAL_ACTIONS = {
     "iam:SimulatePrincipalPolicy",
     "kms:GetKeyRotationStatus",
     "kms:ScheduleKeyDeletion",
+    "kms:CreateKey",
+    "kms:CreateAlias",
 }
 REQUIRED_AUTH0_SCOPES = {
     "create:resource_servers",
@@ -102,7 +113,7 @@ def main() -> int:
                 fail(f"global resource scope is not allowed for {action}")
         if resource == "*" and not (
             statement.get("scope", "").endswith("required-by-api")
-            or sid in {"EnsureEcsServiceLinkedRole", "ReadEcsServiceLinkedRole", "ReadStagingKeyRotation", "ScheduleDeletionForReviewedStagingKeys", "DiscoverStagingTargetGroups", "VerifyTerraformStateAccess"}
+            or sid in {"EnsureEcsServiceLinkedRole", "ReadEcsServiceLinkedRole", "ReadStagingKeyRotation", "ScheduleDeletionForReviewedStagingKeys", "DiscoverStagingTargetGroups", "VerifyTerraformStateAccess", "CreateStagingKmsKeys", "CreateStagingKmsAliases"}
         ):
             fail(f"unqualified global resource scope in {sid}")
         if "iam:PassRole" in statement_actions:
@@ -118,13 +129,34 @@ def main() -> int:
         if "kms:GetKeyRotationStatus" in statement_actions:
             if resource != "*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                 fail("kms:GetKeyRotationStatus must use an enforceable staging KMS tag condition")
+        if "kms:CreateKey" in statement_actions:
+            if resource != "*" or (statement.get("conditions") or {}).get("aws:RequestTag/Environment") != "staging":
+                fail("kms:CreateKey must require an Environment=staging request tag")
+        if "kms:TagResource" in statement_actions:
+            if resource != "arn:aws:kms:us-east-1:${account_id}:key/*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
+                fail("kms:TagResource must use a staging KMS key ARN and resource-tag condition")
+        if "kms:CreateAlias" in statement_actions:
+            if resource != "*" or (statement.get("conditions") or {}).get("kms:RequestAlias") != "alias/aether-staging-*":
+                fail("kms:CreateAlias must require the staging alias prefix")
+        if "kms:PutKeyPolicy" in statement_actions:
+            if resource != "arn:aws:kms:us-east-1:${account_id}:key/*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
+                fail("kms:PutKeyPolicy must use a staging KMS key ARN and resource-tag condition")
         if "iam:CreateServiceLinkedRole" in statement_actions:
             if (statement.get("conditions") or {}).get("iam:AWSServiceName") != "ecs.amazonaws.com":
                 fail("iam:CreateServiceLinkedRole must be restricted to ECS")
 
     expected_resources = {
+        "s3:PutEncryptionConfiguration": "arn:aws:s3:::aether-staging-*",
+        "s3:PutLifecycleConfiguration": "arn:aws:s3:::aether-staging-*",
         "s3:GetEncryptionConfiguration": "arn:aws:s3:::aether-staging-*",
         "s3:GetReplicationConfiguration": "arn:aws:s3:::aether-staging-*",
+        "ecr:TagResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "secretsmanager:TagResource": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+        "ssm:AddTagsToResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
+        "kms:CreateKey": "*",
+        "kms:TagResource": "arn:aws:kms:us-east-1:${account_id}:key/*",
+        "kms:CreateAlias": "*",
+        "kms:PutKeyPolicy": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "ec2:GetSecurityGroupsForVpc": "*",
         "kms:GetKeyRotationStatus": "*",
         "kms:ScheduleKeyDeletion": "*",
