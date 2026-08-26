@@ -616,6 +616,39 @@ jobs:
             exit 1
           }
           echo "Validated reviewed maintenance target group $MAINTENANCE_TG_ARN in VPC $tg_vpc"
+      - name: Require live listener detachment before target-group replacement
+        if: inputs.profile == 'staging'
+        env:
+          MAINTENANCE_TG_ARN: ${{ inputs.staging_listener_target_group_arn }}
+        run: |
+          set -euo pipefail
+          if ! jq -e '
+            any(.resource_changes[]?;
+              .address == "module.alb.aws_lb_target_group.backend[0]" and
+              ((.change.actions // []) | (index("delete") != null and index("create") != null)))
+          ' "${RUNNER_TEMP}/reviewed-plan/reviewed.tfplan.json" >/dev/null; then
+            exit 0
+          fi
+          [ -n "$MAINTENANCE_TG_ARN" ] || {
+            echo '::error::replacement plan has no maintenance target group'
+            exit 1
+          }
+          alb_arn="$(aws elbv2 describe-load-balancers --names aether-staging-alb --query 'LoadBalancers[0].LoadBalancerArn' --output text)"
+          [ -n "$alb_arn" ] && [ "$alb_arn" != None ] || {
+            echo '::error::cannot verify the staging ALB before a destructive target-group replacement'
+            exit 1
+          }
+          listener_arn="$(aws elbv2 describe-listeners --load-balancer-arn "$alb_arn" --query 'Listeners[?Port==`443`].ListenerArn | [0]' --output text)"
+          [ -n "$listener_arn" ] && [ "$listener_arn" != None ] || {
+            echo '::error::cannot verify the staging HTTPS listener before target-group replacement'
+            exit 1
+          }
+          current_tg="$(aws elbv2 describe-listeners --listener-arns "$listener_arn" --query 'Listeners[0].DefaultActions[0].TargetGroupArn' --output text)"
+          if [ "$current_tg" != "$MAINTENANCE_TG_ARN" ]; then
+            echo '::error::staging HTTPS listener is not already detached to the reviewed maintenance target group; apply a detach-only plan first'
+            exit 1
+          fi
+          echo 'Verified live staging HTTPS listener is detached to the reviewed maintenance target group.'
       - name: Ensure the ECS service-linked role exists before capacity providers
         # Every selectable profile provisions the ECS capacity-provider
         # resource. Bootstrap the account-level service-linked role before

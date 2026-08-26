@@ -69,6 +69,8 @@ def test_staging_target_group_replacement_is_name_safe() -> None:
     assert "Validate reviewed staging maintenance target group" in PROMOTE.read_text(encoding="utf-8")
     assert "aether-staging-maintenance" in PROMOTE.read_text(encoding="utf-8")
     assert "describe-target-groups" in PROMOTE.read_text(encoding="utf-8")
+    assert "Require live listener detachment before target-group replacement" in PROMOTE.read_text(encoding="utf-8")
+    assert "describe-listeners" in PROMOTE.read_text(encoding="utf-8")
 
 
 def test_unstructured_runtime_metric_filter_has_no_dimensions() -> None:

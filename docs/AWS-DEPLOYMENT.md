@@ -391,7 +391,10 @@ For an intentional ForceNew change, use three reviewed plans: first set
 `staging_listener_target_group_arn` to an existing maintenance target group and
 apply so the HTTPS listener is detached from the backend; then replace the
 backend while that ARN remains selected; finally clear the variable and apply
-again to reattach the listener. The normal promotion workflow never invents a
+again to reattach the listener. Before the destructive middle step, the
+promotion workflow verifies the live HTTPS listener already points at that
+validated maintenance target; otherwise it fails closed and asks for the
+detach-only apply first. The normal promotion workflow never invents a
 maintenance target group or performs this transition implicitly.
 An interrupted run must use `staging-state-reconcile.yml` to import the
 existing group and produce a fresh reviewed plan; the apply workflow refuses
