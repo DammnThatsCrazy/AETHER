@@ -33,7 +33,12 @@ def _decode_jwt_scope(token: str) -> set[str]:
         payload = json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
     except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
         return set()
-    return set(str(payload.get("scope", "")).split())
+    if not isinstance(payload, dict):
+        return set()
+    scope = payload.get("scope", "")
+    if not isinstance(scope, str):
+        return set()
+    return set(scope.split())
 
 
 def verify_auth0_scopes(domain: str, client_id: str, client_secret: str, required: set[str]) -> list[str]:
@@ -57,7 +62,11 @@ def verify_auth0_scopes(domain: str, client_id: str, client_secret: str, require
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
         return [f"Auth0 management token request failed ({type(exc).__name__}); verify the tenant, client, secret, and grant"]
 
-    access_token = str(token_response.get("access_token", ""))
+    if not isinstance(token_response, dict):
+        return ["Auth0 management token response was not a JSON object"]
+    access_token = token_response.get("access_token", "")
+    if not isinstance(access_token, str):
+        return ["Auth0 management token response contained an invalid access token"]
     if not access_token:
         return ["Auth0 management token response did not contain an access token"]
     granted = _decode_jwt_scope(access_token)

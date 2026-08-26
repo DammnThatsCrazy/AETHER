@@ -500,7 +500,11 @@ jobs:
           # updates can race that creation and fail mid-apply. Create it
           # idempotently before Terraform starts; an existing role is fine.
           if ! aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com >/tmp/ecs-slr.out 2>/tmp/ecs-slr.err; then
-            if ! grep -q 'InvalidInput.*already exists\|EntityAlreadyExists' /tmp/ecs-slr.err; then
+            # AWS has returned all of these variants across regions/provider
+            # versions for an already-present service-linked role. Treat only
+            # those explicit idempotency responses as success; fail closed on
+            # permission, throttling, or any other error.
+            if ! grep -Eiq 'InvalidInput.*already exists|EntityAlreadyExists|has been taken' /tmp/ecs-slr.err; then
               cat /tmp/ecs-slr.err >&2
               exit 1
             fi

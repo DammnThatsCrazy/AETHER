@@ -254,7 +254,11 @@ unmanaged deterministic staging target group instead of creating a same-name
 replacement. If reconciliation is needed, use the import-only
 `staging-state-reconcile.yml` workflow and produce a new reviewed plan. These
 checks are intentionally fail-closed and run before Terraform mutation; they
-do not grant broad IAM permissions or wake staging on their own.
+do not grant broad IAM permissions or wake staging on their own. Service-linked
+role creation is idempotent only for AWS's explicit already-present responses;
+permission and throttling errors remain failures. Auth0 tokens with malformed
+or non-string scope claims are likewise rejected rather than treated as a
+successful preflight.
 
 ### Deployment gates
 

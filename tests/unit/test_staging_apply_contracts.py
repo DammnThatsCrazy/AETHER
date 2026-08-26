@@ -45,6 +45,7 @@ def test_ecs_service_linked_role_precedes_reviewed_apply() -> None:
     apply = text.index("terraform apply", wait)
     assert create < wait < apply
     assert "iam:CreateServiceLinkedRole" in POLICY.read_text(encoding="utf-8")
+    assert "has been taken" in text
 
 
 def test_reviewed_iam_manifest_matches_checker() -> None:
