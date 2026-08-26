@@ -78,10 +78,19 @@ jobs:
 
       - name: Refuse if the target group is already managed
         working-directory: ${{ env.TF_DIR }}
+        env:
+          TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
         run: |
           set -euo pipefail
           if terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend'; then
             echo '::error::Refusing import: module.alb.aws_lb_target_group.backend is already in staging state'
+            exit 1
+          fi
+          # The address check above is not sufficient: a prior partial import
+          # could have recorded the same remote object under another address.
+          # Refuse that case rather than creating two state owners for one ARN.
+          if terraform state pull | grep -Fq -- "$TARGET_GROUP_ARN"; then
+            echo '::error::Refusing import: target-group ARN already appears elsewhere in staging state'
             exit 1
           fi
 
