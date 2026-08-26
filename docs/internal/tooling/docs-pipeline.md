@@ -20,7 +20,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "74a6ddb"
+last_synced_commit: "bdec91e"
 ---
 
 # Documentation Pipeline
@@ -214,3 +214,8 @@ cleared only by a genuine content review plus removal of its registry
 entry. This prevents the 60+ `last_synced_commit` conflicts that arise
 when both branches run a bulk-stamp pass and then rebase — conflicts
 only appear where sources genuinely diverged.
+
+The restamp-only check is deliberately narrow: only a changed frontmatter
+assignment consisting solely of `last_synced_commit:` and a hexadecimal commit
+ID counts as a restamp. A mention of that field in authored prose or a table is
+a real content change, so it still requires review and a fresh sync stamp.
