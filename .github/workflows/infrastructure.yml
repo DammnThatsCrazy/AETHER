@@ -116,6 +116,16 @@ jobs:
         with:
           terraform_version: '~1.15'
 
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-providers-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: terraform-providers-${{ runner.os }}-
+
+      - name: Configure Terraform provider cache
+        run: echo "TF_PLUGIN_CACHE_DIR=${HOME}/.terraform.d/plugin-cache" >> "$GITHUB_ENV"
+
       - name: Prepare checked-in profile and CI-only variables
         env:
           PROFILE: ${{ matrix.profile }}
@@ -138,7 +148,7 @@ jobs:
           JSON
 
       - name: Terraform Init (no remote state)
-        run: terraform init -backend=false -input=false
+        run: bash "${GITHUB_WORKSPACE}/scripts/release/terraform_init_retry.sh" -backend=false -input=false
 
       - name: Terraform Validate
         run: terraform validate
@@ -213,6 +223,16 @@ jobs:
         with:
           terraform_version: '~1.15'
 
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-providers-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: terraform-providers-${{ runner.os }}-
+
+      - name: Configure Terraform provider cache
+        run: echo "TF_PLUGIN_CACHE_DIR=${HOME}/.terraform.d/plugin-cache" >> "$GITHUB_ENV"
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -236,7 +256,7 @@ jobs:
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
         run: |
           set -euo pipefail
-          terraform init \
+          bash "${GITHUB_WORKSPACE}/scripts/release/terraform_init_retry.sh" \
             -input=false \
             -backend-config="bucket=${TF_STATE_BUCKET}" \
             -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
