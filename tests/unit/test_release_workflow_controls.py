@@ -22,7 +22,12 @@ SANITISER = "scripts/release/sanitize_terraform_plan_json.py"
 
 # Workflows held to `set -euo pipefail` by THIS file. deploy.yml belongs here
 # because it is the one workflow that mutates ECS on a push to main.
-STRICT_BASH_WORKFLOWS = ("infrastructure.yml", APPLY_WORKFLOW, "deploy.yml")
+STRICT_BASH_WORKFLOWS = (
+    "infrastructure.yml",
+    APPLY_WORKFLOW,
+    "deploy.yml",
+    "staging-state-reconcile.yml",
+)
 # Held to the identical rule by tests/unit/test_staging_lifecycle_controls.py.
 STRICT_BASH_ELSEWHERE = ("staging-lifecycle.yml", "staging-ttl-guard.yml")
 

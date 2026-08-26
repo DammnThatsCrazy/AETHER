@@ -329,6 +329,12 @@ variable "enable_credential_kms" {
   EOT
 }
 
+variable "kms_key_admin_role_arns" {
+  type        = list(string)
+  description = "Role ARNs that must retain explicit lockout-safe administrative control of the provider-credential CMK."
+  default     = []
+}
+
 # --------------------------------------------------------------------------
 # Neptune
 # --------------------------------------------------------------------------

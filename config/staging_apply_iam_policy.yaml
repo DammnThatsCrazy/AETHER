@@ -1,0 +1,91 @@
+# Reviewed contract for the staging Terraform apply role.
+#
+# This is intentionally a contract, not an automatically attached broad IAM
+# policy. The bootstrap/console attachment must resolve the account-specific
+# ARNs and preserve these scopes. Unknown actions fail validation rather than
+# being silently added to the role.
+version: 1
+profile: staging
+role: AetherStagingDeploy
+region: us-east-1
+statements:
+  - sid: ReadStagingBucketEncryption
+    actions:
+      - s3:GetEncryptionConfiguration
+      - s3:GetReplicationConfiguration
+    resource: arn:aws:s3:::aether-staging-*
+    scope: staging-name-prefix
+  - sid: DiscoverVpcSecurityGroupsForStagingAlb
+    actions:
+      - ec2:GetSecurityGroupsForVpc
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: ReadStagingKeyRotation
+    actions:
+      - kms:GetKeyRotationStatus
+    resource: '*'
+    scope: staging-kms-resource-tag
+    conditions:
+      aws:ResourceTag/Environment: staging
+  - sid: ScheduleDeletionForReviewedStagingKeys
+    actions:
+      - kms:ScheduleKeyDeletion
+    resource: '*'
+    scope: staging-kms-resource-tag
+    conditions:
+      aws:ResourceTag/Environment: staging
+      kms:ScheduleKeyDeletionPendingWindowInDays: "30"
+  - sid: ModifyStagingTargetGroups
+    actions:
+      - elasticloadbalancing:ModifyTargetGroupAttributes
+    resource: arn:aws:elasticloadbalancing:us-east-1:${account_id}:targetgroup/aether-staging-*
+    scope: staging-name-prefix
+  - sid: ReadStagingDynamoTags
+    actions:
+      - dynamodb:ListTagsOfResource
+    resource: arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*
+    scope: staging-name-prefix
+  - sid: ConfigureStagingNotifications
+    actions:
+      - sns:SetTopicAttributes
+    resource: arn:aws:sns:us-east-1:${account_id}:aether-staging-*
+    scope: lowercase-staging-name-prefix
+  - sid: EnsureEcsServiceLinkedRole
+    actions:
+      - iam:CreateServiceLinkedRole
+    resource: '*'
+    conditions:
+      iam:AWSServiceName: ecs.amazonaws.com
+    scope: ecs-service-linked-role-only
+  - sid: PassOnlyStagingTaskRoles
+    actions:
+      - iam:PassRole
+    resource: arn:aws:iam::${account_id}:role/AETHER-staging-*
+    conditions:
+      iam:PassedToService:
+        - ecs-tasks.amazonaws.com
+        - ecs.amazonaws.com
+    scope: staging-name-prefix
+
+# The provider errors below are deliberately not represented as AWS IAM
+# actions: Auth0 permissions are governed by the Auth0 management API and must
+# be supplied through the apply job's AUTH0_* environment variables.
+external_provider_requirements:
+  - provider: auth0
+    required_scopes:
+      - create:resource_servers
+      - read:resource_servers
+      - update:resource_servers
+      - delete:resource_servers
+      - create:connections
+      - create:clients
+      - create:client_grants
+      - read:client_grants
+      - update:client_grants
+      - delete:client_grants
+      - read:clients
+      - read:connections
+      - update:connections
+      - update:clients
+      - delete:clients
+      - delete:connections

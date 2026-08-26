@@ -14,7 +14,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "0ad79e48469762f3832e2d80bfa6ed34fc17a914"
+last_synced_commit: "afc0cf1"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -252,7 +252,7 @@ Seventeen module directories exist under `terraform/modules/`. Modules marked
 | `vpc` | VPC, three subnet tiers, security groups, flow logs, NAT per `nat_mode` | always; NAT and the redis/msk/neptune SGs gated |
 | `ecr` | 4 private ECR repositories with lifecycle policies | always |
 | `secrets` | Secrets Manager stubs (KMS-encrypted), rotation Lambda | always |
-| `kms_credentials` | Customer-managed KMS CMK + alias for provider-credential envelope encryption (surfaced as `CREDENTIAL_KMS_KEY_ID`); least-privilege `Encrypt`/`Decrypt`/`GenerateDataKey` grant bound to the five-key encryption context, attached to the ECS task role | always; disabled only by `enable_credential_kms = false`, which the throwaway `terraform test` apply run passes so its teardown can delete every created resource (the key carries `prevent_destroy`) |
+| `kms_credentials` | Customer-managed KMS CMK + alias for provider-credential envelope encryption (surfaced as `CREDENTIAL_KMS_KEY_ID`); least-privilege `Encrypt`/`Decrypt`/`GenerateDataKey` grant bound to the five-key encryption context, attached to the ECS task role. The reviewed staging apply role is an explicit CMK administrator for read/rotation and key-policy operations; key deletion is a separate resource-policy statement requiring the configured 30-day pending window. | always; disabled only by `enable_credential_kms = false`, which the throwaway `terraform test` apply run passes so its teardown can delete every created resource (the key carries `prevent_destroy`) |
 | `aurora` | Aurora Serverless v2 cluster + writer, KMS | always |
 | `dynamodb_cache` | DynamoDB cache table with read/write autoscaling | always |
 | `sqs` | SNS fanout topic, shared + per-role SQS queues, DLQs | always |

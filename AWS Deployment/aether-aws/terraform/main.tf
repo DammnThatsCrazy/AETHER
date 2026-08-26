@@ -111,8 +111,9 @@ module "kms_credentials" {
   source = "./modules/kms_credentials"
   count  = var.enable_credential_kms ? 1 : 0
 
-  environment = var.environment
-  project     = var.project
+  environment         = var.environment
+  project             = var.project
+  key_admin_role_arns = var.kms_key_admin_role_arns
 }
 
 # ---------------------------------------------------------------------------

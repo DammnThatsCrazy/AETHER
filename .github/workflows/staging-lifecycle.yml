@@ -91,6 +91,13 @@ jobs:
     name: Select the staging profile
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Validate cleanup credentials before any lifecycle path that inspects or
+    # mutates staging can dispatch. plan-wake is plan-only and delegates to the
+    # reviewed Terraform plan workflow, so it intentionally needs no lifecycle
+    # role and remains usable with only plan credentials.
+    permissions:
+      contents: read
+      id-token: write
     outputs:
       profile: ${{ steps.route.outputs.profile }}
       plan_wake: ${{ steps.route.outputs.plan_wake }}
@@ -137,6 +144,47 @@ jobs:
                   sys.exit(f"::error::runtime_deployment.yaml declares no staging_state.{required}")
           print(f"staging profile resolved: {profile}")
           PY
+
+      - name: Preflight lifecycle and apply credentials
+        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
+        env:
+          ACTION: ${{ inputs.action }}
+          AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          role="${AWS_STAGING_LIFECYCLE_ROLE_ARN:-}"
+          if [ -z "$role" ]; then
+            echo '::error::AWS_STAGING_LIFECYCLE_ROLE_ARN is required before any staging lifecycle action; without it cleanup cannot prove zero or stop cost.'
+            exit 1
+          fi
+          case "$role" in
+            arn:aws:iam::????????????:role/*) ;;
+            *) echo '::error::AWS_STAGING_LIFECYCLE_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
+          esac
+          case "$ACTION" in
+            apply-wake|apply-sleep|full-rehearsal)
+              test -n "${AWS_TERRAFORM_APPLY_ROLE_ARN:-}" \
+                || { echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN is required before a staging apply path'; exit 1; }
+              case "$AWS_TERRAFORM_APPLY_ROLE_ARN" in
+                arn:aws:iam::????????????:role/*) ;;
+                *) echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
+              esac
+              ;;
+          esac
+
+      - name: Verify lifecycle role assumption before dispatch
+        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
+        env:
+          AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Confirm lifecycle credentials are usable
+        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
+        run: aws sts get-caller-identity >/dev/null
 
       - name: Route the lifecycle action
         id: route

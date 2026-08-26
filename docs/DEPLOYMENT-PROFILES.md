@@ -587,6 +587,16 @@ make collect-deployment-evidence      # materialise release-evidence/ with its c
 
 ## See also
 
+### Staging state reconciliation
+
+If a staging resource exists in AWS but is absent from the reviewed Terraform
+state, reconcile state before generating a replacement plan. The guarded
+`Reconcile staging Terraform state` workflow accepts only the exact
+`aether-staging-backend` target-group ARN, imports only
+`module.alb.aws_lb_target_group.backend`, and refuses deletes or replacements.
+After an import, discard the old binary plan and produce a fresh staging plan
+and checksum before any apply.
+
 - [AWS Lean Production](AWS-LEAN-PRODUCTION.md) — the `production-lean` profile in depth
 - [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md) — the staging lifecycle procedure
 - [Cost Optimization](COST-OPTIMIZATION.md) — cost model, budgets and the accepted deviation
