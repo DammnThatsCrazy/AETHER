@@ -29,6 +29,7 @@ ALLOWED_GLOBAL_ACTIONS = {
 }
 REQUIRED_AUTH0_SCOPES = {
     "create:resource_servers",
+    "read:resource_servers",
     "create:connections",
     "create:clients",
     "create:client_grants",

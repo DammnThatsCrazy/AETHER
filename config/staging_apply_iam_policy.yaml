@@ -42,8 +42,8 @@ statements:
   - sid: ReadStagingDynamoTags
     actions:
       - dynamodb:ListTagsOfResource
-    resource: arn:aws:dynamodb:us-east-1:${account_id}:table/aether-staging-*
-    scope: lowercase-staging-name-prefix
+    resource: arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*
+    scope: staging-name-prefix-matches-terraform-project
   - sid: ConfigureStagingNotifications
     actions:
       - sns:SetTopicAttributes
@@ -73,6 +73,7 @@ external_provider_requirements:
   - provider: auth0
     required_scopes:
       - create:resource_servers
+      - read:resource_servers
       - create:connections
       - create:clients
       - create:client_grants

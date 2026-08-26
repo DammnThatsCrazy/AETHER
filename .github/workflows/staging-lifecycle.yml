@@ -145,7 +145,7 @@ jobs:
           PY
 
       - name: Preflight lifecycle and apply credentials
-        if: inputs.action != 'validate'
+        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
         env:
           ACTION: ${{ inputs.action }}
           AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
@@ -173,7 +173,7 @@ jobs:
           esac
 
       - name: Verify lifecycle role assumption before dispatch
-        if: inputs.action != 'validate'
+        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
         env:
           AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
         uses: aws-actions/configure-aws-credentials@v4
@@ -182,7 +182,7 @@ jobs:
           aws-region: us-east-1
 
       - name: Confirm lifecycle credentials are usable
-        if: inputs.action != 'validate'
+        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
         run: aws sts get-caller-identity >/dev/null
 
       - name: Route the lifecycle action
