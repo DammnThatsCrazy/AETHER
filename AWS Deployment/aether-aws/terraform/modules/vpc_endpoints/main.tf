@@ -4,10 +4,10 @@
 # Traffic to AWS services stays on the AWS backbone.
 # ═══════════════════════════════════════════════════════════════════════════
 
-variable "environment"       { type = string }
-variable "vpc_id"            { type = string }
+variable "environment" { type = string }
+variable "vpc_id" { type = string }
 variable "private_subnet_ids" { type = list(string) }
-variable "route_table_ids"   { type = list(string) }
+variable "route_table_ids" { type = list(string) }
 
 # ── Security Group for Interface Endpoints ─────────────────────────────
 
@@ -178,9 +178,9 @@ resource "aws_vpc_endpoint" "sts" {
 
 # ── Outputs ────────────────────────────────────────────────────────────
 
-output "s3_endpoint_id"        { value = aws_vpc_endpoint.s3.id }
-output "dynamodb_endpoint_id"  { value = aws_vpc_endpoint.dynamodb.id }
-output "vpce_security_group"   { value = aws_security_group.vpce.id }
+output "s3_endpoint_id" { value = aws_vpc_endpoint.s3.id }
+output "dynamodb_endpoint_id" { value = aws_vpc_endpoint.dynamodb.id }
+output "vpce_security_group" { value = aws_security_group.vpce.id }
 
 output "endpoint_ids" {
   value = {

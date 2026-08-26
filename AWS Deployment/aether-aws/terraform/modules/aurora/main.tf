@@ -115,10 +115,10 @@ resource "aws_rds_cluster" "this" {
   vpc_security_group_ids = [var.aurora_sg_id]
 
   # Backups
-  backup_retention_period = var.backup_retention_days
-  preferred_backup_window = "03:00-04:00"
-  copy_tags_to_snapshot   = true
-  skip_final_snapshot     = var.environment != "production"
+  backup_retention_period   = var.backup_retention_days
+  preferred_backup_window   = "03:00-04:00"
+  copy_tags_to_snapshot     = true
+  skip_final_snapshot       = var.environment != "production"
   final_snapshot_identifier = var.environment == "production" ? "${lower(var.project)}-${var.environment}-final-snapshot" : null
 
   # Parameter group
@@ -127,8 +127,8 @@ resource "aws_rds_cluster" "this" {
   # Logging
   enabled_cloudwatch_logs_exports = ["postgresql"]
 
-  deletion_protection    = var.deletion_protection
-  apply_immediately      = var.environment != "production"
+  deletion_protection = var.deletion_protection
+  apply_immediately   = var.environment != "production"
 
   tags = {
     Name = "${var.project}-${var.environment}-aurora"

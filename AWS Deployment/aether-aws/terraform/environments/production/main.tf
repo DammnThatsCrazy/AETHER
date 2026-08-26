@@ -9,7 +9,10 @@ terraform {
   required_version = ">= 1.7.0"
 
   required_providers {
-    aws = { source = "hashicorp/aws"; version = "~> 5.40" }
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.40"
+    }
   }
 
   backend "s3" {
@@ -34,13 +37,25 @@ provider "aws" {
 
 # ── Variables ──────────────────────────────────────────────────────────
 
-variable "environment"      { type = string; default = "production" }
-variable "aws_region"       { type = string; default = "us-east-1" }
-variable "image_tag"        { type = string; default = "latest" }
-variable "ecr_registry"     { type = string }
-variable "acm_cert_arn"     { type = string; default = "" }
-variable "hosted_zone_id"   { type = string; default = "" }
-variable "monthly_budget_usd" { type = number; default = 15000 }
+variable "environment" {
+  default = "production"
+}
+variable "aws_region" {
+  default = "us-east-1"
+}
+variable "image_tag" {
+  default = "latest"
+}
+variable "ecr_registry" { type = string }
+variable "acm_cert_arn" {
+  default = ""
+}
+variable "hosted_zone_id" {
+  default = ""
+}
+variable "monthly_budget_usd" {
+  default = 15000
+}
 
 # ═══════════════════════════════════════════════════════════════════════
 # LAYER 1: NETWORK
@@ -60,11 +75,11 @@ module "waf" {
 }
 
 module "vpc_endpoints" {
-  source              = "../../modules/vpc_endpoints"
-  environment         = var.environment
-  vpc_id              = module.vpc.vpc_id
-  private_subnet_ids  = module.vpc.private_subnet_ids
-  route_table_ids     = module.vpc.private_route_table_ids
+  source             = "../../modules/vpc_endpoints"
+  environment        = var.environment
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+  route_table_ids    = module.vpc.private_route_table_ids
 }
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -202,18 +217,18 @@ module "iam" {
 # OUTPUTS
 # ═══════════════════════════════════════════════════════════════════════
 
-output "api_endpoint"        { value = module.api_gateway.http_api_endpoint }
-output "ws_endpoint"         { value = module.api_gateway.ws_api_endpoint }
-output "cdn_domain"          { value = module.cloudfront.cdn_domain }
-output "dashboard_domain"    { value = module.cloudfront.dashboard_domain }
-output "alb_dns"             { value = module.ecs.alb_dns_name }
-output "ecs_cluster"         { value = module.ecs.cluster_name }
-output "rds_endpoint"        { value = module.rds.cluster_endpoint }
-output "neptune_endpoint"    { value = module.neptune.cluster_endpoint }
-output "redis_endpoint"      { value = module.elasticache.configuration_endpoint }
-output "kafka_brokers"       { value = module.msk.bootstrap_brokers_tls }
+output "api_endpoint" { value = module.api_gateway.http_api_endpoint }
+output "ws_endpoint" { value = module.api_gateway.ws_api_endpoint }
+output "cdn_domain" { value = module.cloudfront.cdn_domain }
+output "dashboard_domain" { value = module.cloudfront.dashboard_domain }
+output "alb_dns" { value = module.ecs.alb_dns_name }
+output "ecs_cluster" { value = module.ecs.cluster_name }
+output "rds_endpoint" { value = module.rds.cluster_endpoint }
+output "neptune_endpoint" { value = module.neptune.cluster_endpoint }
+output "redis_endpoint" { value = module.elasticache.configuration_endpoint }
+output "kafka_brokers" { value = module.msk.bootstrap_brokers_tls }
 output "opensearch_endpoint" { value = module.opensearch.endpoint }
-output "sagemaker_endpoint"  { value = module.sagemaker.endpoint_name }
-output "vpc_id"              { value = module.vpc.vpc_id }
-output "secrets_kms_key"     { value = module.secrets.kms_key_arn }
-output "vpc_endpoints"       { value = module.vpc_endpoints.endpoint_ids }
+output "sagemaker_endpoint" { value = module.sagemaker.endpoint_name }
+output "vpc_id" { value = module.vpc.vpc_id }
+output "secrets_kms_key" { value = module.secrets.kms_key_arn }
+output "vpc_endpoints" { value = module.vpc_endpoints.endpoint_ids }

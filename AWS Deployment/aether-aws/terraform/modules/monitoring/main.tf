@@ -797,10 +797,10 @@ resource "aws_cloudwatch_log_metric_filter" "runtime_role_unhealthy" {
   pattern = "\"[run_role]\" \"UNHEALTHY (restarts exhausted)\""
 
   metric_transformation {
-    name          = "RuntimeRoleUnhealthy"
-    namespace     = "Aether/Runtime"
-    value         = "1"
-    unit          = "Count"
+    name      = "RuntimeRoleUnhealthy"
+    namespace = "Aether/Runtime"
+    value     = "1"
+    unit      = "Count"
     dimensions = {
       Service = "$.service"
     }

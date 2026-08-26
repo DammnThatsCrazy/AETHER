@@ -99,9 +99,9 @@ resource "aws_lambda_function" "drift" {
 
   environment {
     variables = {
-      LOG_BUCKET     = var.log_bucket
-      MODEL_NAMES    = join(",", var.model_names)
-      PSI_THRESHOLD  = tostring(var.psi_threshold)
+      LOG_BUCKET    = var.log_bucket
+      MODEL_NAMES   = join(",", var.model_names)
+      PSI_THRESHOLD = tostring(var.psi_threshold)
     }
   }
 
