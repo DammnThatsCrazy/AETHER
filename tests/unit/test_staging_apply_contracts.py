@@ -133,6 +133,16 @@ def test_state_access_contract_is_explicit_and_checked() -> None:
     assert "--terraform-root" in PROMOTE.read_text(encoding="utf-8")
     assert STATE_ROLE_CHECKER.exists()
     assert "verify_terraform_state_role.py" in PROMOTE.read_text(encoding="utf-8")
+    verifier = STATE_ROLE_CHECKER.read_text(encoding="utf-8")
+    assert "s3:GetBucketVersioning" in verifier
+    assert "s3:GetBucketLocation" in verifier
+
+
+def test_apply_revalidates_before_service_linked_role_mutation() -> None:
+    text = PROMOTE.read_text(encoding="utf-8")
+    revalidate = text.index("Re-validate the reviewed plan against policy and cost model")
+    bootstrap = text.index("Ensure the ECS service-linked role exists before capacity providers")
+    assert revalidate < bootstrap
 
 
 def test_target_group_lookup_fails_closed_on_non_not_found_errors() -> None:

@@ -649,6 +649,24 @@ jobs:
             exit 1
           fi
           echo 'Verified live staging HTTPS listener is detached to the reviewed maintenance target group.'
+      # Re-run at the reviewed commit: the reports in the artifact are evidence,
+      # not proof. The policy and cost rules that ship with the reviewed code
+      # must pass before any AWS prerequisite mutation.
+      - name: Re-validate the reviewed plan against policy and cost model
+        env:
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python scripts/release/check_terraform_plan_policy.py \
+            --profile "$PROFILE" \
+            --plan-json "${TF_DIR}/reviewed.tfplan.json"
+          if python -c "import os, yaml; p = (yaml.safe_load(open('config/deployment_profiles.yaml')) or {}).get('profiles') or {}; raise SystemExit(0 if (p.get(os.environ['PROFILE']) or {}).get('budget') else 1)"; then
+            python scripts/release/check_cost_model.py \
+              --profile "$PROFILE" \
+              --inventory "${TF_DIR}/reviewed.resources.json" \
+              --out-dir "artifacts/cost-${PROFILE}"
+          fi
       - name: Ensure the ECS service-linked role exists before capacity providers
         # Every selectable profile provisions the ECS capacity-provider
         # resource. Bootstrap the account-level service-linked role before
@@ -680,21 +698,6 @@ jobs:
       # Re-run at the reviewed commit: the reports in the artifact are evidence,
       # not proof. The policy and cost rules that ship with the reviewed code
       # must still pass against the reviewed plan at apply time.
-      - name: Re-validate the reviewed plan against policy and cost model
-        env:
-          PROFILE: ${{ inputs.profile }}
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts
-          python scripts/release/check_terraform_plan_policy.py \
-            --profile "$PROFILE" \
-            --plan-json "${TF_DIR}/reviewed.tfplan.json"
-          if python -c "import os, yaml; p = (yaml.safe_load(open('config/deployment_profiles.yaml')) or {}).get('profiles') or {}; raise SystemExit(0 if (p.get(os.environ['PROFILE']) or {}).get('budget') else 1)"; then
-            python scripts/release/check_cost_model.py \
-              --profile "$PROFILE" \
-              --inventory "${TF_DIR}/reviewed.resources.json" \
-              --out-dir "artifacts/cost-${PROFILE}"
-          fi
       - name: Apply the exact approved plan (never re-plan)
         working-directory: AWS Deployment/aether-aws/terraform
         env:

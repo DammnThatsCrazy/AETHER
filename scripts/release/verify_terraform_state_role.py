@@ -66,6 +66,11 @@ def main() -> int:
     objects = f"{bucket}/profiles/access-probe"
     lock = f"arn:aws:dynamodb:us-east-1:{args.account_id}:table/{args.lock_table}"
     errors += _simulate(args.role_arn, ["s3:ListBucket"], bucket, "profiles/")
+    errors += _simulate(
+        args.role_arn,
+        ["s3:GetBucketVersioning", "s3:GetBucketLocation"],
+        bucket,
+    )
     errors += _simulate(args.role_arn, ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], objects)
     errors += _simulate(args.role_arn, ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"], lock)
     if errors:
