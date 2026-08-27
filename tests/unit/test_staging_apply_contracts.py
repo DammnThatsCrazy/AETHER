@@ -28,6 +28,7 @@ STATE_POLICY_CHECKER = ROOT / "scripts/release/check_terraform_state_access_poli
 STATE_ROLE_CHECKER = ROOT / "scripts/release/verify_terraform_state_role.py"
 POLICY = ROOT / "config/staging_apply_iam_policy.yaml"
 POLICY_CHECKER = ROOT / "scripts/release/check_staging_apply_policy.py"
+EFFECTIVE_POLICY_CHECKER = ROOT / "scripts/release/verify_effective_staging_apply_policy.py"
 
 
 def test_staging_target_group_replacement_is_name_safe() -> None:
@@ -97,7 +98,50 @@ def test_ecs_service_linked_role_precedes_reviewed_apply() -> None:
     assert "has been taken" in text
     role_step = text[text.index("Ensure the ECS service-linked role"):text.index("Apply the exact approved plan")]
     assert "Every selectable profile provisions the ECS capacity-provider" in role_step
-    assert "if: inputs.profile == 'staging'" not in role_step
+    assert "aws-service-name ecs.amazonaws.com" in role_step
+
+
+def test_role_name_assertions_are_profile_aware() -> None:
+    text = PROMOTE.read_text(encoding="utf-8")
+    plan = text[text.index("Verify the assumed plan role matches"):text.index("Require immutable image digests")]
+    apply = text[text.index("Verify the assumed apply role matches"):text.index("Verify effective Terraform state permissions")]
+    assert 'if [ "$PROFILE" = staging ]; then' in plan
+    assert 'if [ "$PROFILE" = staging ]; then' in apply
+    assert 'test "$caller_role_path" = AetherStagingPlan' in plan
+    assert 'test "$caller_role_path" = AetherStagingDeploy' in apply
+
+
+def test_effective_policy_checker_matches_resources_conditions_and_denies() -> None:
+    spec = importlib.util.spec_from_file_location(
+        "verify_effective_staging_apply_policy", EFFECTIVE_POLICY_CHECKER
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    reviewed = {
+        "Action": "kms:CreateGrant",
+        "Resource": "arn:aws:kms:us-east-1:544471417928:key/*",
+        "Condition": {"StringEquals": {"aws:ResourceTag/Environment": "staging"}},
+        "Effect": "Allow",
+    }
+    assert module._operation_is_covered(
+        reviewed,
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+        {"aws:ResourceTag/Environment": "staging"},
+    )
+    assert not module._operation_is_covered(
+        {**reviewed, "Resource": "arn:aws:kms:us-east-1:544471417928:key/only-this-key"},
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/different-key",
+        {"aws:ResourceTag/Environment": "staging"},
+    )
+    assert module._operation_is_denied(
+        {"Effect": "Deny", "Action": "kms:*", "Resource": "*"},
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+    )
 
 
 def test_external_provider_validation_precedes_service_linked_role() -> None:

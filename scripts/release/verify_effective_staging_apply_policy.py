@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Fail closed when the staging apply role does not realize its contract.
 
-The checked-in YAML is the reviewed intent.  This check reads the policies
-actually attached to the assumed role and verifies that every reviewed action
-is present in an Allow statement.  It deliberately does not print policy
-documents or secret values.
+The checked-in YAML is the reviewed intent. This check reads the policies
+actually attached to the assumed role and verifies every reviewed operation
+against Allow/Deny effects, resource coverage, and condition compatibility.
+Action-name presence alone is not sufficient: a wrong ARN, an unsatisfied
+condition, or an overriding Deny must fail before Terraform mutation.
+It deliberately does not print policy documents or secret values.
 """
 
 from __future__ import annotations
@@ -53,13 +55,19 @@ def role_name_from_arn(role_arn: str) -> str:
     return name
 
 
-def policy_actions(document: dict[str, Any]) -> set[str]:
-    allowed: set[str] = set()
+def policy_statements(document: dict[str, Any]) -> list[dict[str, Any]]:
+    statements: list[dict[str, Any]] = []
     statements = document.get("Statement", [])
     if isinstance(statements, dict):
         statements = [statements]
-    for statement in statements:
-        if not isinstance(statement, dict) or statement.get("Effect") != "Allow":
+    return [statement for statement in statements if isinstance(statement, dict)]
+
+
+def policy_actions(document: dict[str, Any]) -> set[str]:
+    """Return Allow actions for backwards-compatible diagnostics/tests."""
+    allowed: set[str] = set()
+    for statement in policy_statements(document):
+        if statement.get("Effect") != "Allow":
             continue
         actions = statement.get("Action", [])
         if isinstance(actions, str):
@@ -68,8 +76,8 @@ def policy_actions(document: dict[str, Any]) -> set[str]:
     return allowed
 
 
-def load_effective_actions(role_name: str) -> tuple[set[str], list[str]]:
-    actions: set[str] = set()
+def load_effective_statements(role_name: str) -> tuple[list[dict[str, Any]], list[str]]:
+    statements: list[dict[str, Any]] = []
     policy_names: list[str] = []
     inline = aws_json("iam", "list-role-policies", "--role-name", role_name)
     for name in inline.get("PolicyNames", []):
@@ -80,7 +88,7 @@ def load_effective_actions(role_name: str) -> tuple[set[str], list[str]]:
         raw = document.get("PolicyDocument", {})
         if isinstance(raw, str):
             raw = json.loads(urllib.parse.unquote(raw))
-        actions.update(policy_actions(raw))
+        statements.extend(policy_statements(raw))
 
     attached = aws_json("iam", "list-attached-role-policies", "--role-name", role_name)
     for policy in attached.get("AttachedPolicies", []):
@@ -99,8 +107,88 @@ def load_effective_actions(role_name: str) -> tuple[set[str], list[str]]:
         raw = (version_doc.get("PolicyVersion", {}) or {}).get("Document", {})
         if isinstance(raw, str):
             raw = json.loads(urllib.parse.unquote(raw))
-        actions.update(policy_actions(raw))
-    return actions, policy_names
+        statements.extend(policy_statements(raw))
+    return statements, policy_names
+
+
+def _as_list(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def _statement_actions(statement: dict[str, Any]) -> list[str]:
+    return [value for value in _as_list(statement.get("Action", [])) if isinstance(value, str)]
+
+
+def _statement_resources(statement: dict[str, Any]) -> list[str]:
+    return [value for value in _as_list(statement.get("Resource", "*")) if isinstance(value, str)]
+
+
+def _conditions_compatible(
+    actual: Any, required: dict[str, Any] | None,
+) -> bool:
+    """Return whether an attached Allow can satisfy the reviewed context.
+
+    An absent condition is broader and therefore compatible. If an attached
+    statement adds a condition, the manifest must provide a matching key/value
+    (including list-valued contexts). Unknown operators are rejected instead of
+    being treated as equivalent by accident.
+    """
+    if not actual:
+        return True
+    if not isinstance(actual, dict) or not isinstance(required, dict):
+        return False
+    for operator, entries in actual.items():
+        if operator not in {"StringEquals", "StringLike", "ArnEquals", "ArnLike", "ForAllValues:StringEquals", "ForAnyValue:StringEquals"}:
+            return False
+        if not isinstance(entries, dict):
+            return False
+        for key, actual_value in entries.items():
+            if key not in required:
+                return False
+            wanted = required[key]
+            actual_values = {str(v) for v in _as_list(actual_value)}
+            wanted_values = {str(v) for v in _as_list(wanted)}
+            if operator in {"StringLike", "ArnLike"}:
+                if not any(
+                    fnmatch.fnmatchcase(wanted_value, actual_pattern)
+                    for wanted_value in wanted_values
+                    for actual_pattern in actual_values
+                ):
+                    return False
+            elif not (wanted_values & actual_values):
+                return False
+    return True
+
+
+def _resource_sample(resource: str) -> str:
+    """Make a deterministic concrete value for a reviewed ARN pattern."""
+    if resource == "*":
+        return resource
+    return resource.replace("*", "contract-check")
+
+
+def _operation_is_covered(
+    statement: dict[str, Any], action: str, resource: str, conditions: dict[str, Any] | None,
+) -> bool:
+    if statement.get("Effect") != "Allow":
+        return False
+    if not any(fnmatch.fnmatchcase(action, pattern) for pattern in _statement_actions(statement)):
+        return False
+    sample = _resource_sample(resource)
+    if not any(fnmatch.fnmatchcase(sample, pattern) for pattern in _statement_resources(statement)):
+        return False
+    return _conditions_compatible(statement.get("Condition"), conditions)
+
+
+def _operation_is_denied(statement: dict[str, Any], action: str, resource: str) -> bool:
+    if statement.get("Effect") != "Deny":
+        return False
+    if not any(fnmatch.fnmatchcase(action, pattern) for pattern in _statement_actions(statement)):
+        return False
+    sample = _resource_sample(resource)
+    return any(fnmatch.fnmatchcase(sample, pattern) for pattern in _statement_resources(statement))
 
 
 def main() -> int:
@@ -116,30 +204,45 @@ def main() -> int:
     statements = manifest.get("statements")
     if manifest.get("profile") != "staging" or not isinstance(statements, list):
         fail("staging apply IAM manifest is malformed")
-    required = {
-        action
-        for statement in statements
-        if isinstance(statement, dict)
-        for action in (statement.get("actions") or [])
-        if isinstance(action, str)
-    }
-    if not required:
+    account_id = args.role_arn.split(":", 4)[4].split(":", 1)[0]
+    required_operations: list[tuple[str, str, dict[str, Any] | None]] = []
+    for statement in statements:
+        if not isinstance(statement, dict):
+            continue
+        resources = _as_list(statement.get("resource", "*"))
+        conditions = statement.get("conditions")
+        for action in statement.get("actions") or []:
+            if not isinstance(action, str):
+                continue
+            for resource in resources:
+                if isinstance(resource, str):
+                    required_operations.append(
+                        (action, resource.replace("${account_id}", account_id), conditions)
+                    )
+    if not required_operations:
         fail("staging apply IAM manifest declares no actions")
-    effective, policy_names = load_effective_actions(role_name)
+    effective, policy_names = load_effective_statements(role_name)
+    denied = sorted(
+        f"{action} on {resource}"
+        for action, resource, _ in required_operations
+        if any(_operation_is_denied(statement, action, resource) for statement in effective)
+    )
+    if denied:
+        fail("AetherStagingDeploy has an explicit Deny for reviewed operations: " + "; ".join(denied))
     missing = sorted(
-        action
-        for action in required
-        if not any(fnmatch.fnmatchcase(action, pattern) for pattern in effective)
+        f"{action} on {resource}"
+        for action, resource, conditions in required_operations
+        if not any(_operation_is_covered(statement, action, resource, conditions) for statement in effective)
     )
     if missing:
         fail(
-            "AetherStagingDeploy effective policy is missing reviewed actions: "
+            "AetherStagingDeploy effective policy does not cover reviewed operations: "
             + ", ".join(missing)
         )
     if not any(name.endswith("AetherStagingApplyMissingOps") for name in policy_names):
         fail("AetherStagingApplyMissingOps is not attached to AetherStagingDeploy")
     print(
-        f"Effective staging apply policy covers {len(required)} reviewed actions across {len(policy_names)} attached policies."
+        f"Effective staging apply policy covers {len(required_operations)} reviewed operations across {len(policy_names)} attached policies."
     )
     return 0
 
