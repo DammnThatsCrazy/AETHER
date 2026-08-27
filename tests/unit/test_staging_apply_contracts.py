@@ -196,6 +196,26 @@ def test_effective_policy_checker_matches_resources_conditions_and_denies() -> N
         "kms:CreateGrant",
         "arn:aws:kms:us-east-1:544471417928:key/contract-check",
     )
+    assert not module._operation_is_denied(
+        {
+            "Effect": "Deny",
+            "Action": "kms:*",
+            "Resource": "arn:aws:kms:us-east-1:544471417928:key/other-key",
+            "Condition": {"Bool": {"aws:SecureTransport": "false"}},
+        },
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+    )
+    assert not module._operation_is_covered(
+        {
+            "Effect": "Allow",
+            "Action": "kms:CreateKey",
+            "Resource": "*",
+        },
+        "kms:CreateKey",
+        "arn:aws:kms:us-east-1:544471417928:key/*",
+        {"aws:RequestTag/Environment": "staging"},
+    )
     assert module._operation_is_denied(
         {
             "Effect": "Deny",

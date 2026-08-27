@@ -203,7 +203,10 @@ def _has_unsupported_condition_operator(condition: Any) -> bool:
 
 
 def _conditions_compatible(
-    actual: Any, required: dict[str, Any] | None,
+    actual: Any,
+    required: dict[str, Any] | None,
+    *,
+    require_required: bool = False,
 ) -> bool:
     """Return whether an attached Allow can satisfy the reviewed context.
 
@@ -213,9 +216,13 @@ def _conditions_compatible(
     being treated as equivalent by accident.
     """
     if not actual:
-        return True
+        # An unconditional attached Allow is broader than the reviewed
+        # operation. It cannot satisfy a manifest that requires request or
+        # resource conditions to keep the role staging-scoped.
+        return not required or not require_required
     if not isinstance(actual, dict) or not isinstance(required, dict):
         return False
+    matched_keys: set[str] = set()
     for operator, entries in actual.items():
         if operator not in SUPPORTED_CONDITION_OPERATORS:
             return False
@@ -224,6 +231,7 @@ def _conditions_compatible(
         for key, actual_value in entries.items():
             if key not in required:
                 return False
+            matched_keys.add(key)
             wanted = required[key]
             actual_values = {str(v) for v in _as_list(actual_value)}
             wanted_values = {str(v) for v in _as_list(wanted)}
@@ -236,7 +244,9 @@ def _conditions_compatible(
                     return False
             elif not (wanted_values & actual_values):
                 return False
-    return True
+    # Every mandatory manifest condition must survive on the attached Allow;
+    # accepting only a subset would turn a scoped contract into a broad grant.
+    return not require_required or not required or matched_keys >= set(required)
 
 
 def _request_context(resource: str, required: dict[str, Any] | None) -> dict[str, Any]:
@@ -280,7 +290,13 @@ def _operation_is_covered(
         return False
     if not all(_statement_matches_resource(statement, sample) for sample in _resource_samples(resource)):
         return False
-    return _conditions_compatible(statement.get("Condition"), _request_context(resource, conditions))
+    # For an Allow, compare only the conditions explicitly required by the
+    # reviewed manifest. The derived request context is for Deny evaluation;
+    # requiring it here would reject valid scoped Allows that do not repeat
+    # provider-populated region/account keys.
+    return _conditions_compatible(
+        statement.get("Condition"), conditions, require_required=True
+    )
 
 
 def _operation_is_denied(
@@ -293,18 +309,21 @@ def _operation_is_denied(
         return False
     if not _statement_matches_action(statement, action):
         return False
+    # A wildcard reviewed resource is a set of independently managed objects:
+    # one explicit Deny on any concrete member makes the reviewed operation
+    # unsafe even when other representative members are allowed.
+    overlaps = any(
+        _statement_matches_resource(statement, sample)
+        for sample in _resource_samples(resource)
+    )
+    if not overlaps:
+        return False
     # An unsupported condition operator cannot be proven non-applicable. Treat
     # it as a matching deny rather than allowing the preflight to pass and
     # discovering the denial only after Terraform has mutated resources.
     if _has_unsupported_condition_operator(statement.get("Condition")):
         return True
-    # A wildcard reviewed resource is a set of independently managed objects:
-    # one explicit Deny on any concrete member makes the reviewed operation
-    # unsafe even when other representative members are allowed.
-    return any(
-        _statement_matches_resource(statement, sample)
-        for sample in _resource_samples(resource)
-    ) and _conditions_compatible(
+    return _conditions_compatible(
         statement.get("Condition"), _request_context(resource, conditions)
     )
 
