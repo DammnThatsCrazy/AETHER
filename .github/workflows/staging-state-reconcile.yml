@@ -34,7 +34,9 @@ permissions:
   id-token: write
 
 concurrency:
-  group: staging-state-reconcile
+  # Serialize with non-production Terraform promotions so the ownership
+  # inventory and import cannot race demo/preview repository creation.
+  group: terraform-nonprod-shared
   cancel-in-progress: false
 
 env:
@@ -142,6 +144,23 @@ jobs:
             -backend-config="key=profiles/staging/terraform.tfstate" \
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true"
+
+      - name: Verify imported repositories use the state-managed ECR key
+        if: inputs.ecr_repository_names != ''
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
+          STAGING_ECR_KMS_KEY_ARN: ${{ inputs.staging_ecr_kms_key_arn }}
+        run: |
+          set -euo pipefail
+          managed_key_arn="$(terraform state show -no-color 'module.ecr.aws_kms_key.ecr' \
+            | sed -n 's/^arn[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+          test -n "$managed_key_arn" || {
+            echo '::error::Refusing ECR import: the Terraform-managed staging ECR KMS key is not in state'; exit 1;
+          }
+          test "$managed_key_arn" = "$STAGING_ECR_KMS_KEY_ARN" || {
+            echo '::error::Refusing ECR import: supplied KMS key does not match module.ecr.aws_kms_key.ecr in staging state'; exit 1;
+          }
 
       - name: Refuse if an import target is already managed
         working-directory: ${{ env.TF_DIR }}

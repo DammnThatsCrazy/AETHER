@@ -12,6 +12,12 @@ source_files:
   - cicd/aether-cicd/stages/
   - cicd/aether-cicd/quality_gates/
   - .github/workflows/
+  - scripts/release/verify_effective_staging_apply_policy.py
+  - config/staging_apply_iam_policy.yaml
+  - AWS Deployment/aether-aws/terraform/modules/secrets/main.tf
+  - AWS Deployment/aether-aws/terraform/modules/ecr/main.tf
+  - AWS Deployment/aether-aws/terraform/modules/aurora/main.tf
+  - AWS Deployment/aether-aws/terraform/modules/kms_credentials/main.tf
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3

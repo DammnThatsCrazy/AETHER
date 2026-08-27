@@ -149,6 +149,18 @@ def _statement_actions(statement: dict[str, Any]) -> list[str]:
     return [value for value in _as_list(statement.get("Action", [])) if isinstance(value, str)]
 
 
+def _statement_matches_action(statement: dict[str, Any], action: str) -> bool:
+    actions = _statement_actions(statement)
+    if actions:
+        return any(fnmatch.fnmatchcase(action, pattern) for pattern in actions)
+    not_actions = [
+        value for value in _as_list(statement.get("NotAction", [])) if isinstance(value, str)
+    ]
+    return bool(not_actions) and not any(
+        fnmatch.fnmatchcase(action, pattern) for pattern in not_actions
+    )
+
+
 def _statement_resources(statement: dict[str, Any]) -> list[str]:
     return [value for value in _as_list(statement.get("Resource", "*")) if isinstance(value, str)]
 
@@ -190,6 +202,21 @@ def _conditions_compatible(
     return True
 
 
+def _request_context(resource: str, required: dict[str, Any] | None) -> dict[str, Any]:
+    """Build the reviewed request context used for policy-condition checks."""
+    context = dict(required or {})
+    parts = resource.split(":")
+    if len(parts) >= 6:
+        context.setdefault("aws:RequestedRegion", parts[3] or "us-east-1")
+        context.setdefault("aws:ResourceRegion", parts[3] or "us-east-1")
+        context.setdefault("aws:ResourceAccount", parts[4])
+    context.setdefault("aws:RequestedRegion", "us-east-1")
+    context.setdefault("aws:ResourceRegion", "us-east-1")
+    if ":alias/" in resource:
+        context.setdefault("kms:RequestAlias", resource.split(":alias/", 1)[1])
+    return context
+
+
 def _resource_samples(resource: str) -> list[str]:
     """Expand a reviewed pattern into representative concrete resources.
 
@@ -212,7 +239,7 @@ def _operation_is_covered(
 ) -> bool:
     if statement.get("Effect") != "Allow":
         return False
-    if not any(fnmatch.fnmatchcase(action, pattern) for pattern in _statement_actions(statement)):
+    if not _statement_matches_action(statement, action):
         return False
     actual_resources = _statement_resources(statement)
     if not all(
@@ -220,7 +247,7 @@ def _operation_is_covered(
         for sample in _resource_samples(resource)
     ):
         return False
-    return _conditions_compatible(statement.get("Condition"), conditions)
+    return _conditions_compatible(statement.get("Condition"), _request_context(resource, conditions))
 
 
 def _operation_is_denied(
@@ -231,7 +258,7 @@ def _operation_is_denied(
 ) -> bool:
     if statement.get("Effect") != "Deny":
         return False
-    if not any(fnmatch.fnmatchcase(action, pattern) for pattern in _statement_actions(statement)):
+    if not _statement_matches_action(statement, action):
         return False
     actual_resources = _statement_resources(statement)
     # A wildcard reviewed resource is a set of independently managed objects:
@@ -240,7 +267,9 @@ def _operation_is_denied(
     return any(
         any(fnmatch.fnmatchcase(sample, pattern) for pattern in actual_resources)
         for sample in _resource_samples(resource)
-    ) and _conditions_compatible(statement.get("Condition"), conditions)
+    ) and _conditions_compatible(
+        statement.get("Condition"), _request_context(resource, conditions)
+    )
 
 
 def main() -> int:

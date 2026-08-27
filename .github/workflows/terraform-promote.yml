@@ -53,7 +53,11 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: terraform-${{ inputs.profile }}
+  # Staging, demo, and preview share an account and globally named ECR
+  # repositories. Serialize those profiles with reconciliation to make the
+  # ownership check and import decision atomic; production profiles retain
+  # independent concurrency.
+  group: ${{ (inputs.profile == 'staging' || inputs.profile == 'demo' || inputs.profile == 'preview') && 'terraform-nonprod-shared' || format('terraform-{0}', inputs.profile) }}
   cancel-in-progress: false
 env:
   AWS_REGION: us-east-1

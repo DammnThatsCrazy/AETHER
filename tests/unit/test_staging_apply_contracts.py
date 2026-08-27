@@ -59,7 +59,8 @@ def test_staging_target_group_replacement_is_name_safe() -> None:
     assert 'terraform state mv -lock-timeout=5m "$legacy" "$target"' in migration
     migration_workflow = STATE_MIGRATION_WORKFLOW.read_text(encoding="utf-8")
     assert "MIGRATE-TARGET-GROUP" in migration_workflow
-    assert "group: terraform-${{ inputs.profile }}" in migration_workflow
+    assert "terraform-nonprod-shared" in migration_workflow
+    assert "format('terraform-{0}', inputs.profile)" in migration_workflow
     assert "terraform-promote.yml" not in migration
 
     promote = PROMOTE.read_text(encoding="utf-8")
@@ -168,6 +169,25 @@ def test_effective_policy_checker_matches_resources_conditions_and_denies() -> N
         },
         "ecr:TagResource",
         "arn:aws:ecr:us-east-1:544471417928:repository/aether-*",
+    )
+    assert module._operation_is_denied(
+        {
+            "Effect": "Deny",
+            "NotAction": ["kms:DescribeKey"],
+            "Resource": "*",
+        },
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+    )
+    assert module._operation_is_denied(
+        {
+            "Effect": "Deny",
+            "Action": "kms:*",
+            "Resource": "*",
+            "Condition": {"StringEquals": {"aws:RequestedRegion": "us-east-1"}},
+        },
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
     )
 
 
@@ -287,6 +307,9 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     assert "list-resource-tags" in text
     assert "for profile in staging demo preview" in text
     assert "profiles/${profile}/terraform.tfstate" in text
+    assert "state-managed ECR key" in text
+    assert "module.ecr.aws_kms_key.ecr" in text
+    assert "terraform-nonprod-shared" in text
 
 
 def test_staging_cmk_service_policy_and_environment_tags_are_present() -> None:
@@ -441,3 +464,7 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
             (("aws:ResourceTag/Environment", "staging"),),
         ),
     }
+    alias_statement = next(
+        s for s in create_alias if s["resource"].endswith("alias/aether-staging-*")
+    )
+    assert alias_statement["condition_operators"] == {"kms:RequestAlias": "StringLike"}

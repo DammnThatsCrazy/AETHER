@@ -152,6 +152,9 @@ def main() -> int:
             if resource == alias_arn:
                 if conditions != {"kms:RequestAlias": "alias/aether-staging-*"}:
                     fail("kms:CreateAlias alias authorization must require the staging alias name")
+                operators = statement.get("condition_operators") or {}
+                if operators.get("kms:RequestAlias") != "StringLike":
+                    fail("kms:CreateAlias alias authorization must use StringLike for the wildcard alias")
             elif resource == key_arn:
                 if conditions != {"aws:ResourceTag/Environment": "staging"}:
                     fail("kms:CreateAlias target-key authorization must require the staging key tag")

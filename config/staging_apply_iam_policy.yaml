@@ -69,6 +69,8 @@ statements:
     scope: staging-kms-alias-prefix
     conditions:
       kms:RequestAlias: alias/aether-staging-*
+    condition_operators:
+      kms:RequestAlias: StringLike
   - sid: CreateStagingKmsAliasTarget
     actions:
       - kms:CreateAlias
