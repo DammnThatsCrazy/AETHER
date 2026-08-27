@@ -209,7 +209,22 @@ jobs:
 
       - name: Confirm lifecycle credentials are usable
         if: inputs.action != 'validate' && inputs.action != 'plan-wake'
-        run: aws sts get-caller-identity >/dev/null
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::assumed lifecycle role account does not match AWS_STAGING_LIFECYCLE_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = "$expected_role_path" || { echo '::error::assumed role does not match AWS_STAGING_LIFECYCLE_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = AetherStagingLifecycle || { echo '::error::lifecycle job assumed an unexpected IAM role'; exit 1; }
+          echo 'Verified lifecycle credentials resolve to AetherStagingLifecycle in the expected account.'
 
       - name: Route the lifecycle action
         id: route

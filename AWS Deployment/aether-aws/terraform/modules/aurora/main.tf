@@ -102,8 +102,9 @@ resource "aws_rds_cluster" "this" {
 
   # Serverless v2 scaling — min=0 enables auto-pause (staging); min=0.5 keeps warm (prod).
   serverlessv2_scaling_configuration {
-    min_capacity = var.min_acu
-    max_capacity = var.max_acu
+    min_capacity             = var.min_acu
+    max_capacity             = var.max_acu
+    seconds_until_auto_pause = var.auto_pause_seconds
   }
 
   # Storage

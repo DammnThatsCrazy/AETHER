@@ -175,6 +175,9 @@ module "aurora" {
   db_name      = var.db_name
   min_acu      = var.aurora_min_acu
   max_acu      = var.aurora_max_acu
+  # Staging uses the provider-supported Serverless v2 auto-pause field. Warm
+  # production profiles leave this null and keep their configured floor.
+  auto_pause_seconds = var.environment == "staging" ? 300 : null
 
   backup_retention_days = var.aurora_backup_retention_days
   deletion_protection   = var.environment == "production"
