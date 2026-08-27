@@ -154,7 +154,7 @@ jobs:
         run: |
           set -euo pipefail
           managed_key_arn="$(terraform state show -no-color 'module.ecr.aws_kms_key.ecr' \
-            | sed -n 's/^arn[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+            | sed -n 's/^[[:space:]]*arn[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
           test -n "$managed_key_arn" || {
             echo '::error::Refusing ECR import: the Terraform-managed staging ECR KMS key is not in state'; exit 1;
           }

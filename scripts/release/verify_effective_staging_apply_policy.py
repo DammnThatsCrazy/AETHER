@@ -165,6 +165,22 @@ def _statement_resources(statement: dict[str, Any]) -> list[str]:
     return [value for value in _as_list(statement.get("Resource", "*")) if isinstance(value, str)]
 
 
+def _statement_matches_resource(statement: dict[str, Any], sample: str) -> bool:
+    if "Resource" in statement:
+        return any(
+            fnmatch.fnmatchcase(sample, pattern)
+            for pattern in _statement_resources(statement)
+        )
+    if "NotResource" in statement:
+        excluded = [
+            value for value in _as_list(statement.get("NotResource", [])) if isinstance(value, str)
+        ]
+        return bool(excluded) and not any(
+            fnmatch.fnmatchcase(sample, pattern) for pattern in excluded
+        )
+    return False
+
+
 def _conditions_compatible(
     actual: Any, required: dict[str, Any] | None,
 ) -> bool:
@@ -241,11 +257,7 @@ def _operation_is_covered(
         return False
     if not _statement_matches_action(statement, action):
         return False
-    actual_resources = _statement_resources(statement)
-    if not all(
-        any(fnmatch.fnmatchcase(sample, pattern) for pattern in actual_resources)
-        for sample in _resource_samples(resource)
-    ):
+    if not all(_statement_matches_resource(statement, sample) for sample in _resource_samples(resource)):
         return False
     return _conditions_compatible(statement.get("Condition"), _request_context(resource, conditions))
 
@@ -260,12 +272,11 @@ def _operation_is_denied(
         return False
     if not _statement_matches_action(statement, action):
         return False
-    actual_resources = _statement_resources(statement)
     # A wildcard reviewed resource is a set of independently managed objects:
     # one explicit Deny on any concrete member makes the reviewed operation
     # unsafe even when other representative members are allowed.
     return any(
-        any(fnmatch.fnmatchcase(sample, pattern) for pattern in actual_resources)
+        _statement_matches_resource(statement, sample)
         for sample in _resource_samples(resource)
     ) and _conditions_compatible(
         statement.get("Condition"), _request_context(resource, conditions)

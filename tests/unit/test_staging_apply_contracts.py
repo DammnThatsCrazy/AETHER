@@ -150,6 +150,23 @@ def test_effective_policy_checker_matches_resources_conditions_and_denies() -> N
         "kms:CreateGrant",
         "arn:aws:kms:us-east-1:544471417928:key/contract-check",
     )
+    not_resource_allow = {
+        "Effect": "Allow",
+        "Action": "kms:CreateGrant",
+        "NotResource": "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+    }
+    assert not module._operation_is_covered(
+        not_resource_allow,
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+        None,
+    )
+    assert module._operation_is_covered(
+        not_resource_allow,
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/other-key",
+        None,
+    )
     assert not module._operation_is_denied(
         {
             "Effect": "Deny",
@@ -310,6 +327,7 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     assert "state-managed ECR key" in text
     assert "module.ecr.aws_kms_key.ecr" in text
     assert "terraform-nonprod-shared" in text
+    assert "^[[:space:]]*arn" in text
 
 
 def test_staging_cmk_service_policy_and_environment_tags_are_present() -> None:
