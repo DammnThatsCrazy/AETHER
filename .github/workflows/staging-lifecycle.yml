@@ -749,7 +749,8 @@ jobs:
     name: Apply the exact reviewed wake plan
     needs: [select-profile, wake-plan, wake-validate, preflight-rehearsal-inputs]
     if: >-
-      !cancelled()
+      always()
+      && !cancelled()
       && needs.select-profile.outputs.apply_wake == 'true'
       && needs.wake-plan.result != 'failure'
       && needs.wake-validate.result == 'success'
