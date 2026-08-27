@@ -16,20 +16,24 @@ import subprocess
 import sys
 import urllib.parse
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import yaml
 
 
-def fail(message: str) -> "NoReturn":
+def fail(message: str) -> NoReturn:
     print(f"::error::{message}", file=sys.stderr)
     raise SystemExit(1)
 
 
 def aws_json(*args: str) -> dict[str, Any]:
-    result = subprocess.run(["aws", *args, "--output", "json"], text=True, capture_output=True, check=False)
+    result = subprocess.run(
+        ["aws", *args, "--output", "json"], text=True, capture_output=True, check=False
+    )
     if result.returncode:
-        fail(f"AWS policy inspection failed for {args[0]}: {result.stderr.strip() or result.stdout.strip()}")
+        fail(
+            f"AWS policy inspection failed for {args[0]}: {result.stderr.strip() or result.stdout.strip()}"
+        )
     try:
         value = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
@@ -70,7 +74,9 @@ def load_effective_actions(role_name: str) -> tuple[set[str], list[str]]:
     inline = aws_json("iam", "list-role-policies", "--role-name", role_name)
     for name in inline.get("PolicyNames", []):
         policy_names.append(f"inline:{name}")
-        document = aws_json("iam", "get-role-policy", "--role-name", role_name, "--policy-name", name)
+        document = aws_json(
+            "iam", "get-role-policy", "--role-name", role_name, "--policy-name", name
+        )
         raw = document.get("PolicyDocument", {})
         if isinstance(raw, str):
             raw = json.loads(urllib.parse.unquote(raw))
@@ -87,7 +93,9 @@ def load_effective_actions(role_name: str) -> tuple[set[str], list[str]]:
         version = (meta.get("Policy", {}) or {}).get("DefaultVersionId")
         if not version:
             fail(f"managed policy {name} has no default version")
-        version_doc = aws_json("iam", "get-policy-version", "--policy-arn", arn, "--version-id", version)
+        version_doc = aws_json(
+            "iam", "get-policy-version", "--policy-arn", arn, "--version-id", version
+        )
         raw = (version_doc.get("PolicyVersion", {}) or {}).get("Document", {})
         if isinstance(raw, str):
             raw = json.loads(urllib.parse.unquote(raw))
@@ -118,12 +126,21 @@ def main() -> int:
     if not required:
         fail("staging apply IAM manifest declares no actions")
     effective, policy_names = load_effective_actions(role_name)
-    missing = sorted(action for action in required if not any(fnmatch.fnmatchcase(action, pattern) for pattern in effective))
+    missing = sorted(
+        action
+        for action in required
+        if not any(fnmatch.fnmatchcase(action, pattern) for pattern in effective)
+    )
     if missing:
-        fail("AetherStagingDeploy effective policy is missing reviewed actions: " + ", ".join(missing))
+        fail(
+            "AetherStagingDeploy effective policy is missing reviewed actions: "
+            + ", ".join(missing)
+        )
     if not any(name.endswith("AetherStagingApplyMissingOps") for name in policy_names):
         fail("AetherStagingApplyMissingOps is not attached to AetherStagingDeploy")
-    print(f"Effective staging apply policy covers {len(required)} reviewed actions across {len(policy_names)} attached policies.")
+    print(
+        f"Effective staging apply policy covers {len(required)} reviewed actions across {len(policy_names)} attached policies."
+    )
     return 0
 
 
