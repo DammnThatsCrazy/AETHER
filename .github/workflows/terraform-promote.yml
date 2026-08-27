@@ -82,7 +82,7 @@ jobs:
       # store; the ARN is non-sensitive, but the repository variable was never
       # guaranteed to exist and produced a key policy that AWS rejected as
       # lockout-unsafe.
-      TF_VAR_kms_key_admin_role_arns: '["${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}"]'
+      TF_VAR_kms_key_admin_role_arns: '${{ inputs.profile == ''staging'' && format(''["{0}"]'', secrets.AWS_TERRAFORM_APPLY_ROLE_ARN) || ''[]'' }}'
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3

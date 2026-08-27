@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "d022eaf8"
+last_synced_commit: "3c1a2a47"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -170,11 +170,6 @@ with the same alarm guard. Automatic rollback on breach at any step.
 - Slack notification sent to `#deploys`
 
 ## Delivery workflows — what actually runs
-
-Staging runtime mutation is explicitly authorized: `apply-wake` and
-`full-rehearsal` require `confirm_runtime_wake=true`, and the apply job must
-carry the exact reviewed Lambda archives alongside the immutable plan. Inline
-ML profiles may omit an ML digest; remote-ML profiles may not.
 
 Two things get promoted, on two separate paths that must never be conflated: the
 **application** (an immutable release bound in `release.json`) and the
