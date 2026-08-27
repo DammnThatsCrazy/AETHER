@@ -10,7 +10,11 @@ on:
     inputs:
       target_group_arn:
         description: "Exact ARN of the existing aether-staging-backend target group"
-        required: true
+        required: false
+        type: string
+      ecr_repository_names:
+        description: "Comma-separated existing Terraform ECR names (aether-backend,aether-ml-serving,aether-kyber,aether-aether)"
+        required: false
         type: string
       confirm_staging_import:
         description: "Type IMPORT-STAGING to authorize this import-only action"
@@ -62,21 +66,42 @@ jobs:
         env:
           CONFIRM: ${{ inputs.confirm_staging_import }}
           TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
+          ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
         run: |
           set -euo pipefail
           test "$CONFIRM" = "IMPORT-STAGING" || {
             echo "::error::Refusing import: confirmation must be IMPORT-STAGING"; exit 1;
           }
-          case "$TARGET_GROUP_ARN" in
-            arn:aws:elasticloadbalancing:us-east-1:*:targetgroup/aether-staging-backend/*) ;;
-            *) echo "::error::Refusing import: ARN is not the us-east-1 aether-staging-backend target group"; exit 1 ;;
-          esac
-          name="$(aws elbv2 describe-target-groups \
-            --target-group-arns "$TARGET_GROUP_ARN" \
-            --query 'TargetGroups[0].TargetGroupName' --output text)"
-          test "$name" = "aether-staging-backend" || {
-            echo "::error::Refusing import: AWS target group name is '$name', expected aether-staging-backend"; exit 1;
+          test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES" || {
+            echo '::error::Refusing import: provide target_group_arn or ecr_repository_names'; exit 1;
           }
+          if [ -n "$TARGET_GROUP_ARN" ]; then
+            case "$TARGET_GROUP_ARN" in
+              arn:aws:elasticloadbalancing:us-east-1:*:targetgroup/aether-staging-backend/*) ;;
+              *) echo "::error::Refusing import: ARN is not the us-east-1 aether-staging-backend target group"; exit 1 ;;
+            esac
+            name="$(aws elbv2 describe-target-groups \
+              --target-group-arns "$TARGET_GROUP_ARN" \
+              --query 'TargetGroups[0].TargetGroupName' --output text)"
+            test "$name" = "aether-staging-backend" || {
+              echo "::error::Refusing import: AWS target group name is '$name', expected aether-staging-backend"; exit 1;
+            }
+          fi
+          if [ -n "$ECR_REPOSITORY_NAMES" ]; then
+            IFS=',' read -ra repositories <<< "$ECR_REPOSITORY_NAMES"
+            for raw in "${repositories[@]}"; do
+              repository="$(printf '%s' "$raw" | xargs)"
+              case "$repository" in
+                aether-backend|aether-ml-serving|aether-kyber|aether-aether) ;;
+                *) echo "::error::Refusing import: '$repository' is not a reviewed Terraform ECR repository"; exit 1 ;;
+              esac
+              found="$(aws ecr describe-repositories --repository-names "$repository" \
+                --query 'repositories[0].repositoryName' --output text)"
+              test "$found" = "$repository" || {
+                echo "::error::Refusing import: ECR repository '$repository' was not found"; exit 1;
+              }
+            done
+          fi
 
       - name: Initialize the staging state backend
         working-directory: ${{ env.TF_DIR }}
@@ -92,13 +117,14 @@ jobs:
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true"
 
-      - name: Refuse if the target group is already managed
+      - name: Refuse if an import target is already managed
         working-directory: ${{ env.TF_DIR }}
         env:
           TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
+          ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
         run: |
           set -euo pipefail
-          if terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend[0]'; then
+          if [ -n "$TARGET_GROUP_ARN" ] && terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend[0]'; then
             echo '::error::Refusing import: module.alb.aws_lb_target_group.backend[0] is already in staging state'
             exit 1
           fi
@@ -111,15 +137,29 @@ jobs:
             echo '::error::Refusing import: could not read staging state to verify remote-object ownership'
             exit 1
           fi
-          if grep -Fq -- "$TARGET_GROUP_ARN" "$state_file"; then
+          if [ -n "$TARGET_GROUP_ARN" ] && grep -Fq -- "$TARGET_GROUP_ARN" "$state_file"; then
             echo '::error::Refusing import: target-group ARN already appears elsewhere in staging state'
             exit 1
           fi
+          if [ -n "$ECR_REPOSITORY_NAMES" ]; then
+            IFS=',' read -ra repositories <<< "$ECR_REPOSITORY_NAMES"
+            for raw in "${repositories[@]}"; do
+              repository="$(printf '%s' "$raw" | xargs)"
+              address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
+              if terraform state list | grep -Fxq "$address"; then
+                echo "::error::Refusing import: $address is already in staging state"; exit 1
+              fi
+              if grep -Eq -- "\"name\"[[:space:]]*:[[:space:]]*\"${repository}\"" "$state_file"; then
+                echo "::error::Refusing import: ECR repository '$repository' already appears elsewhere in staging state"; exit 1
+              fi
+            done
+          fi
 
-      - name: Import only the known staging backend target group
+      - name: Import only the known staging resources
         working-directory: ${{ env.TF_DIR }}
         env:
           TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
+          ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
           TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
           TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
@@ -142,16 +182,40 @@ jobs:
               echo "::error::${required} is required for the root module during import"; exit 1;
             }
           done
-          terraform import -input=false \
-            -var-file=profiles/staging.tfvars \
-            -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
-            'module.alb.aws_lb_target_group.backend[0]' "$TARGET_GROUP_ARN"
+          if [ -n "$TARGET_GROUP_ARN" ]; then
+            terraform import -input=false \
+              -var-file=profiles/staging.tfvars \
+              -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
+              'module.alb.aws_lb_target_group.backend[0]' "$TARGET_GROUP_ARN"
+          fi
+          if [ -n "$ECR_REPOSITORY_NAMES" ]; then
+            IFS=',' read -ra repositories <<< "$ECR_REPOSITORY_NAMES"
+            for raw in "${repositories[@]}"; do
+              repository="$(printf '%s' "$raw" | xargs)"
+              terraform import -input=false \
+                -var-file=profiles/staging.tfvars \
+                -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
+                "module.ecr.aws_ecr_repository.this[\"${repository}\"]" "$repository"
+            done
+          fi
 
       - name: Emit reconciled state checksum
         working-directory: ${{ env.TF_DIR }}
+        env:
+          TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
+          ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
         run: |
           set -euo pipefail
-          terraform state list | grep -Fx 'module.alb.aws_lb_target_group.backend[0]'
+          if [ -n "${TARGET_GROUP_ARN:-}" ]; then
+            terraform state list | grep -Fx 'module.alb.aws_lb_target_group.backend[0]'
+          fi
+          if [ -n "${ECR_REPOSITORY_NAMES:-}" ]; then
+            IFS=',' read -ra repositories <<< "$ECR_REPOSITORY_NAMES"
+            for raw in "${repositories[@]}"; do
+              repository="$(printf '%s' "$raw" | xargs)"
+              terraform state list | grep -Fx "module.ecr.aws_ecr_repository.this[\"${repository}\"]"
+            done
+          fi
           terraform state pull > reconciled-staging-state.json
           sha256sum reconciled-staging-state.json | tee reconciled-staging-state.sha256
           rm -f reconciled-staging-state.json

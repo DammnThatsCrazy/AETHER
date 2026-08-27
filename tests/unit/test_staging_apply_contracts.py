@@ -22,6 +22,7 @@ ALB = TF / "modules/alb/main.tf"
 MONITORING = TF / "modules/monitoring/main.tf"
 PROMOTE = ROOT / ".github/workflows/terraform-promote.yml"
 STATE_MIGRATION_WORKFLOW = ROOT / ".github/workflows/terraform-state-migrate.yml"
+STATE_RECONCILE_WORKFLOW = ROOT / ".github/workflows/staging-state-reconcile.yml"
 STATE_MIGRATION = ROOT / "scripts/release/migrate_alb_target_group_state.sh"
 STATE_POLICY = ROOT / "config/terraform_state_access_policy.yaml"
 STATE_POLICY_CHECKER = ROOT / "scripts/release/check_terraform_state_access_policy.py"
@@ -132,6 +133,12 @@ def test_effective_policy_checker_matches_resources_conditions_and_denies() -> N
         {"aws:ResourceTag/Environment": "staging"},
     )
     assert not module._operation_is_covered(
+        {**reviewed, "Resource": "arn:aws:kms:us-east-1:544471417928:key/contract-check"},
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/*",
+        {"aws:ResourceTag/Environment": "staging"},
+    )
+    assert not module._operation_is_covered(
         {**reviewed, "Resource": "arn:aws:kms:us-east-1:544471417928:key/only-this-key"},
         "kms:CreateGrant",
         "arn:aws:kms:us-east-1:544471417928:key/different-key",
@@ -141,6 +148,17 @@ def test_effective_policy_checker_matches_resources_conditions_and_denies() -> N
         {"Effect": "Deny", "Action": "kms:*", "Resource": "*"},
         "kms:CreateGrant",
         "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+    )
+    assert not module._operation_is_denied(
+        {
+            "Effect": "Deny",
+            "Action": "kms:*",
+            "Resource": "*",
+            "Condition": {"StringEquals": {"aws:RequestedRegion": "eu-west-1"}},
+        },
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+        {"aws:RequestedRegion": "us-east-1"},
     )
 
 
@@ -245,6 +263,17 @@ def test_ecr_collision_lookup_precedes_any_apply_mutation() -> None:
     assert text.index("describe-repositories", start) < text.index("terraform apply", start)
 
 
+def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
+    """A pre-existing ECR repository must have a safe, exact import path."""
+    text = STATE_RECONCILE_WORKFLOW.read_text(encoding="utf-8")
+    assert "ecr_repository_names" in text
+    assert 'required: false' in text
+    assert 'test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES"' in text
+    assert "aether-backend|aether-ml-serving|aether-kyber|aether-aether" in text
+    assert "module.ecr.aws_ecr_repository.this[\\\"${repository}\\\"]" in text
+    assert "requires a fresh reviewed plan" in text or "fresh staging plan" in text
+
+
 def test_staging_cmk_service_policy_and_environment_tags_are_present() -> None:
     """Customer-managed keys must be usable by AWS services, not just Terraform."""
     secrets = (TF / "modules/secrets/main.tf").read_text(encoding="utf-8")
@@ -252,6 +281,8 @@ def test_staging_cmk_service_policy_and_environment_tags_are_present() -> None:
     assert 'identifiers = ["secretsmanager.amazonaws.com"]' in secrets
     assert 'identifiers = ["logs.${data.aws_region.current.name}.amazonaws.com"]' in secrets
     assert 'variable = "kms:EncryptionContext:aws:logs:arn"' in secrets
+    assert 'variable = "kms:EncryptionContext:SecretARN"' in secrets
+    assert 'secret:aether/*' in secrets
     assert 'Environment = var.environment' in secrets
     for module in ("ecr", "aurora"):
         source = (TF / "modules" / module / "main.tf").read_text(encoding="utf-8")
@@ -380,12 +411,17 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
     create_key = next(s for s in statements if "kms:CreateKey" in s["actions"])
     assert create_key["resource"] == "*"
     assert create_key["conditions"] == {"aws:RequestTag/Environment": "staging"}
-    create_alias = next(s for s in statements if "kms:CreateAlias" in s["actions"])
-    assert set(create_alias["resource"]) == {
-        "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*",
-        "arn:aws:kms:us-east-1:${account_id}:key/*",
-    }
-    assert create_alias["conditions"] == {
-        "kms:RequestAlias": "alias/aether-staging-*",
-        "aws:ResourceTag/Environment": "staging",
+    create_alias = [s for s in statements if "kms:CreateAlias" in s["actions"]]
+    assert len(create_alias) == 2
+    assert {
+        (s["resource"], tuple(sorted(s["conditions"].items()))) for s in create_alias
+    } == {
+        (
+            "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*",
+            (("kms:RequestAlias", "alias/aether-staging-*"),),
+        ),
+        (
+            "arn:aws:kms:us-east-1:${account_id}:key/*",
+            (("aws:ResourceTag/Environment", "staging"),),
+        ),
     }

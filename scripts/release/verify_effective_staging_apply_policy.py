@@ -111,6 +111,34 @@ def load_effective_statements(role_name: str) -> tuple[list[dict[str, Any]], lis
     return statements, policy_names
 
 
+def load_permissions_boundary_statements(
+    role_name: str,
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Load the role's permissions boundary, if one is attached.
+
+    Identity policies and a permissions boundary are an intersection: an
+    identity Allow is not effective unless the boundary also allows it. Keep
+    boundary statements separate so a boundary Allow can never accidentally
+    satisfy the identity-policy half of the check.
+    """
+    role = aws_json("iam", "get-role", "--role-name", role_name).get("Role", {}) or {}
+    boundary = role.get("PermissionsBoundary") or {}
+    arn = boundary.get("PermissionsBoundaryArn")
+    if not arn:
+        return [], None
+    meta = aws_json("iam", "get-policy", "--policy-arn", arn)
+    version = (meta.get("Policy", {}) or {}).get("DefaultVersionId")
+    if not version:
+        fail("permissions boundary has no default version")
+    version_doc = aws_json(
+        "iam", "get-policy-version", "--policy-arn", arn, "--version-id", version
+    )
+    raw = (version_doc.get("PolicyVersion", {}) or {}).get("Document", {})
+    if isinstance(raw, str):
+        raw = json.loads(urllib.parse.unquote(raw))
+    return policy_statements(raw), arn
+
+
 def _as_list(value: Any) -> list[Any]:
     if isinstance(value, list):
         return value
@@ -162,11 +190,21 @@ def _conditions_compatible(
     return True
 
 
-def _resource_sample(resource: str) -> str:
-    """Make a deterministic concrete value for a reviewed ARN pattern."""
+def _resource_samples(resource: str) -> list[str]:
+    """Expand a reviewed pattern into representative concrete resources.
+
+    Checking one synthetic value is insufficient for a wildcard contract: a
+    policy scoped to ``aether-contract-check`` would otherwise appear to cover
+    ``aether-*``. Multiple stable probes catch that narrowing while remaining
+    deterministic and offline. A credentialed plan still supplies the real
+    resolved resources to the hosted checker.
+    """
     if resource == "*":
-        return resource
-    return resource.replace("*", "contract-check")
+        return [resource]
+    if "*" not in resource and "?" not in resource:
+        return [resource]
+    probes = ("contract-check", "backend", "worker", "aether-backend", "aether-worker")
+    return [resource.replace("*", probe) for probe in probes]
 
 
 def _operation_is_covered(
@@ -176,19 +214,30 @@ def _operation_is_covered(
         return False
     if not any(fnmatch.fnmatchcase(action, pattern) for pattern in _statement_actions(statement)):
         return False
-    sample = _resource_sample(resource)
-    if not any(fnmatch.fnmatchcase(sample, pattern) for pattern in _statement_resources(statement)):
+    actual_resources = _statement_resources(statement)
+    if not all(
+        any(fnmatch.fnmatchcase(sample, pattern) for pattern in actual_resources)
+        for sample in _resource_samples(resource)
+    ):
         return False
     return _conditions_compatible(statement.get("Condition"), conditions)
 
 
-def _operation_is_denied(statement: dict[str, Any], action: str, resource: str) -> bool:
+def _operation_is_denied(
+    statement: dict[str, Any],
+    action: str,
+    resource: str,
+    conditions: dict[str, Any] | None = None,
+) -> bool:
     if statement.get("Effect") != "Deny":
         return False
     if not any(fnmatch.fnmatchcase(action, pattern) for pattern in _statement_actions(statement)):
         return False
-    sample = _resource_sample(resource)
-    return any(fnmatch.fnmatchcase(sample, pattern) for pattern in _statement_resources(statement))
+    actual_resources = _statement_resources(statement)
+    return all(
+        any(fnmatch.fnmatchcase(sample, pattern) for pattern in actual_resources)
+        for sample in _resource_samples(resource)
+    ) and _conditions_compatible(statement.get("Condition"), conditions)
 
 
 def main() -> int:
@@ -222,17 +271,34 @@ def main() -> int:
     if not required_operations:
         fail("staging apply IAM manifest declares no actions")
     effective, policy_names = load_effective_statements(role_name)
+    boundary, boundary_arn = load_permissions_boundary_statements(role_name)
+    if boundary_arn:
+        policy_names.append(f"boundary:{boundary_arn}")
+    all_statements = effective + boundary
     denied = sorted(
         f"{action} on {resource}"
-        for action, resource, _ in required_operations
-        if any(_operation_is_denied(statement, action, resource) for statement in effective)
+        for action, resource, conditions in required_operations
+        if any(
+            _operation_is_denied(statement, action, resource, conditions)
+            for statement in all_statements
+        )
     )
     if denied:
         fail("AetherStagingDeploy has an explicit Deny for reviewed operations: " + "; ".join(denied))
     missing = sorted(
         f"{action} on {resource}"
         for action, resource, conditions in required_operations
-        if not any(_operation_is_covered(statement, action, resource, conditions) for statement in effective)
+        if not any(
+            _operation_is_covered(statement, action, resource, conditions)
+            for statement in effective
+        )
+        or (
+            boundary
+            and not any(
+                _operation_is_covered(statement, action, resource, conditions)
+                for statement in boundary
+            )
+        )
     )
     if missing:
         fail(

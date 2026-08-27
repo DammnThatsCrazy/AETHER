@@ -82,6 +82,12 @@ data "aws_iam_policy_document" "secrets" {
       variable = "kms:CallerAccount"
       values   = [data.aws_caller_identity.current.account_id]
     }
+
+    condition {
+      test     = "ArnLike"
+      variable = "kms:EncryptionContext:SecretARN"
+      values   = ["arn:${data.aws_partition.current.partition}:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:aether/*"]
+    }
   }
 
   statement {

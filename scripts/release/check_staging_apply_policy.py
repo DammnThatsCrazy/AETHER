@@ -121,7 +121,7 @@ def main() -> int:
                 fail(f"global resource scope is not allowed for {action}")
         if resource == "*" and not (
             statement.get("scope", "").endswith("required-by-api")
-            or sid in {"EnsureEcsServiceLinkedRole", "ReadEcsServiceLinkedRole", "ReadStagingKeyRotation", "ScheduleDeletionForReviewedStagingKeys", "DiscoverStagingTargetGroups", "VerifyTerraformStateAccess", "CreateStagingKmsKeys", "CreateStagingKmsAliases"}
+            or sid in {"EnsureEcsServiceLinkedRole", "ReadEcsServiceLinkedRole", "ReadStagingKeyRotation", "ScheduleDeletionForReviewedStagingKeys", "DiscoverStagingTargetGroups", "VerifyTerraformStateAccess", "CreateStagingKmsKeys"}
         ):
             fail(f"unqualified global resource scope in {sid}")
         if "iam:PassRole" in statement_actions:
@@ -145,15 +145,17 @@ def main() -> int:
             if resource != "arn:aws:kms:us-east-1:${account_id}:key/*" or not (conditions.get("aws:ResourceTag/Environment") == "staging" or conditions.get("aws:RequestTag/Environment") == "staging"):
                 fail("kms:TagResource must use a staging KMS key ARN and resource/request-tag condition")
         if "kms:CreateAlias" in statement_actions:
-            expected = {
-                "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*",
-                "arn:aws:kms:us-east-1:${account_id}:key/*",
-            }
-            if set(resource if isinstance(resource, list) else [resource]) != expected:
-                fail("kms:CreateAlias must authorize the staging alias and target key ARN")
             conditions = statement.get("conditions") or {}
-            if conditions.get("kms:RequestAlias") != "alias/aether-staging-*" or conditions.get("aws:ResourceTag/Environment") != "staging":
-                fail("kms:CreateAlias must require a staging alias name and staging key tag")
+            alias_arn = "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*"
+            key_arn = "arn:aws:kms:us-east-1:${account_id}:key/*"
+            if resource == alias_arn:
+                if conditions != {"kms:RequestAlias": "alias/aether-staging-*"}:
+                    fail("kms:CreateAlias alias authorization must require the staging alias name")
+            elif resource == key_arn:
+                if conditions != {"aws:ResourceTag/Environment": "staging"}:
+                    fail("kms:CreateAlias target-key authorization must require the staging key tag")
+            else:
+                fail("kms:CreateAlias must split alias and target-key resource scopes")
         if "kms:PutKeyPolicy" in statement_actions:
             if resource != "arn:aws:kms:us-east-1:${account_id}:key/*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                 fail("kms:PutKeyPolicy must use a staging KMS key ARN and resource-tag condition")
@@ -242,6 +244,11 @@ def main() -> int:
                 (("aws:ResourceTag/Environment", "staging"),),
             }:
                 fail("kms:TagResource must cover request and resource staging tags")
+        elif action == "kms:CreateAlias":
+            if len(matching) != 2:
+                fail("kms:CreateAlias must have separate alias and target-key statements")
+            if {s.get("resource") for s in matching} != set(expected):
+                fail("kms:CreateAlias has an unexpected resource scope")
         elif len(matching) != 1 or matching[0].get("resource") != expected:
             fail(f"{action} has an unexpected resource scope")
 

@@ -28,6 +28,11 @@ remote-ML profiles must provide one before apply or wake.
 Before an apply, the promotion workflow parses the reviewed plan for ECR
 repositories and fails closed when a same-name repository exists outside the
 reviewed state; it never deletes or silently imports shared repositories. The
+confirmation-gated `Reconcile staging Terraform state` workflow provides the
+only recovery path: it accepts the exact reviewed ECR repository names (and/or
+the staging target-group ARN), validates that each exists, imports only those
+addresses, and requires a fresh reviewed plan before any apply. It cannot
+delete, replace, or adopt an unlisted resource.
 staging IAM contract is explicit about repository metadata, event targets,
 parameter tags, staging Lambda tags, and KMS grant/key-tag operations, while
 CMK policies constrain service use to the staging account and regional service
