@@ -187,6 +187,33 @@ def test_target_group_collision_lookup_only_runs_for_create_plans() -> None:
     assert "already exists outside Terraform state" in block
 
 
+def test_ecr_collision_lookup_precedes_any_apply_mutation() -> None:
+    """Immutable delivery must not discover shared ECR drift mid-apply."""
+    text = PROMOTE.read_text(encoding="utf-8")
+    start = text.index("# The immutable delivery build creates the shared ECR repositories")
+    end = text.index("terraform apply -input=false reviewed.tfplan", start)
+    block = text[start:end]
+    assert "describe-repositories" in block
+    assert "ECR repository" in block
+    assert "confirmation-gated staging state reconciliation" in block
+    assert 'split("[")[1]' in block
+    assert 'rtrimstr("]")' in block
+    assert text.index("describe-repositories", start) < text.index("terraform apply", start)
+
+
+def test_staging_cmk_service_policy_and_environment_tags_are_present() -> None:
+    """Customer-managed keys must be usable by AWS services, not just Terraform."""
+    secrets = (TF / "modules/secrets/main.tf").read_text(encoding="utf-8")
+    assert 'policy                  = data.aws_iam_policy_document.secrets.json' in secrets
+    assert 'identifiers = ["secretsmanager.amazonaws.com"]' in secrets
+    assert 'identifiers = ["logs.${data.aws_region.current.name}.amazonaws.com"]' in secrets
+    assert 'variable = "kms:EncryptionContext:aws:logs:arn"' in secrets
+    assert 'Environment = var.environment' in secrets
+    for module in ("ecr", "aurora"):
+        source = (TF / "modules" / module / "main.tf").read_text(encoding="utf-8")
+        assert "Environment = var.environment" in source
+
+
 def test_apply_uses_reviewed_listener_artifact_when_dispatch_input_is_omitted() -> None:
     """Lifecycle apply must not reject a valid plan because an optional input is blank."""
     text = PROMOTE.read_text(encoding="utf-8")
@@ -237,6 +264,12 @@ def test_reviewed_iam_manifest_matches_checker() -> None:
     assert "elasticloadbalancing:DescribeListeners" in {
         action for statement in statements for action in statement["actions"]
     }
+    assert "ecr:ListTagsForResource" in {
+        action for statement in statements for action in statement["actions"]
+    }
+    assert "events:ListTargetsByRule" in {
+        action for statement in statements for action in statement["actions"]
+    }
 
 
 def test_passrole_resource_principal_pairs_are_not_swappable(tmp_path: Path) -> None:
@@ -276,10 +309,16 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
         "s3:PutEncryptionConfiguration": "arn:aws:s3:::aether-staging-*",
         "s3:PutLifecycleConfiguration": "arn:aws:s3:::aether-staging-*",
         "ecr:TagResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:ListTagsForResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:DescribeRepositories": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "secretsmanager:TagResource": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
         "ssm:AddTagsToResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
         "kms:TagResource": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:PutKeyPolicy": "arn:aws:kms:us-east-1:${account_id}:key/*",
+        "kms:DescribeKey": "arn:aws:kms:us-east-1:${account_id}:key/*",
+        "kms:ListResourceTags": "arn:aws:kms:us-east-1:${account_id}:key/*",
+        "events:ListTargetsByRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
+        "logs:CreateLogGroup": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
     }
     for action, resource in expected.items():
         matches = [s for s in statements if action in s["actions"]]
@@ -298,5 +337,11 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
     assert create_key["resource"] == "*"
     assert create_key["conditions"] == {"aws:RequestTag/Environment": "staging"}
     create_alias = next(s for s in statements if "kms:CreateAlias" in s["actions"])
-    assert create_alias["resource"] == "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*"
-    assert "conditions" not in create_alias
+    assert set(create_alias["resource"]) == {
+        "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*",
+        "arn:aws:kms:us-east-1:${account_id}:key/*",
+    }
+    assert create_alias["conditions"] == {
+        "kms:RequestAlias": "alias/aether-staging-*",
+        "aws:ResourceTag/Environment": "staging",
+    }

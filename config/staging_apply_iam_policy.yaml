@@ -20,6 +20,16 @@ statements:
       - ecr:TagResource
     resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
     scope: staging-name-prefix
+  - sid: ReadStagingRepositoryTags
+    actions:
+      - ecr:ListTagsForResource
+    resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
+    scope: staging-name-prefix
+  - sid: InspectStagingRepositories
+    actions:
+      - ecr:DescribeRepositories
+    resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
+    scope: staging-name-prefix
   - sid: TagStagingSecrets
     actions:
       - secretsmanager:TagResource
@@ -55,8 +65,13 @@ statements:
   - sid: CreateStagingKmsAliases
     actions:
       - kms:CreateAlias
-    resource: arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*
+    resource:
+      - arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*
+      - arn:aws:kms:us-east-1:${account_id}:key/*
     scope: staging-kms-alias-prefix
+    conditions:
+      kms:RequestAlias: alias/aether-staging-*
+      aws:ResourceTag/Environment: staging
   - sid: CreateStagingKmsGrants
     actions:
       - kms:CreateGrant
@@ -86,6 +101,14 @@ statements:
     actions:
       - kms:GetKeyRotationStatus
     resource: '*'
+    scope: staging-kms-resource-tag
+    conditions:
+      aws:ResourceTag/Environment: staging
+  - sid: ReadStagingKeyMetadata
+    actions:
+      - kms:DescribeKey
+      - kms:ListResourceTags
+    resource: arn:aws:kms:us-east-1:${account_id}:key/*
     scope: staging-kms-resource-tag
     conditions:
       aws:ResourceTag/Environment: staging
@@ -190,6 +213,16 @@ statements:
       - arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation
     conditions:
       aws:RequestTag/Environment: staging
+    scope: staging-name-prefix
+  - sid: DiscoverStagingDriftRuleTargets
+    actions:
+      - events:ListTargetsByRule
+    resource: arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*
+    scope: staging-name-prefix
+  - sid: CreateStagingLogGroups
+    actions:
+      - logs:CreateLogGroup
+    resource: arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*
     scope: staging-name-prefix
 
 # The provider errors below are deliberately not represented as AWS IAM

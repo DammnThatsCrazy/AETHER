@@ -17,12 +17,16 @@ REQUIRED_ACTIONS = {
     "s3:GetEncryptionConfiguration",
     "s3:GetReplicationConfiguration",
     "ecr:TagResource",
+    "ecr:ListTagsForResource",
+    "ecr:DescribeRepositories",
     "secretsmanager:TagResource",
     "ssm:AddTagsToResource",
     "ssm:ListTagsForResource",
     "kms:CreateKey",
     "kms:TagResource",
     "kms:CreateAlias",
+    "kms:DescribeKey",
+    "kms:ListResourceTags",
     "kms:CreateGrant",
     "kms:PutKeyPolicy",
     "ec2:GetSecurityGroupsForVpc",
@@ -37,6 +41,8 @@ REQUIRED_ACTIONS = {
     "iam:GetRole",
     "iam:PassRole",
     "lambda:TagResource",
+    "events:ListTargetsByRule",
+    "logs:CreateLogGroup",
     "elasticloadbalancing:DescribeTargetGroups",
     "elasticloadbalancing:DescribeLoadBalancers",
     "elasticloadbalancing:DescribeListeners",
@@ -52,7 +58,6 @@ ALLOWED_GLOBAL_ACTIONS = {
     "kms:GetKeyRotationStatus",
     "kms:ScheduleKeyDeletion",
     "kms:CreateKey",
-    "kms:CreateAlias",
 }
 REQUIRED_AUTH0_SCOPES = {
     "create:resource_servers",
@@ -140,8 +145,15 @@ def main() -> int:
             if resource != "arn:aws:kms:us-east-1:${account_id}:key/*" or not (conditions.get("aws:ResourceTag/Environment") == "staging" or conditions.get("aws:RequestTag/Environment") == "staging"):
                 fail("kms:TagResource must use a staging KMS key ARN and resource/request-tag condition")
         if "kms:CreateAlias" in statement_actions:
-            if resource != "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*":
-                fail("kms:CreateAlias must use the staging alias ARN prefix")
+            expected = {
+                "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*",
+                "arn:aws:kms:us-east-1:${account_id}:key/*",
+            }
+            if set(resource if isinstance(resource, list) else [resource]) != expected:
+                fail("kms:CreateAlias must authorize the staging alias and target key ARN")
+            conditions = statement.get("conditions") or {}
+            if conditions.get("kms:RequestAlias") != "alias/aether-staging-*" or conditions.get("aws:ResourceTag/Environment") != "staging":
+                fail("kms:CreateAlias must require a staging alias name and staging key tag")
         if "kms:PutKeyPolicy" in statement_actions:
             if resource != "arn:aws:kms:us-east-1:${account_id}:key/*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                 fail("kms:PutKeyPolicy must use a staging KMS key ARN and resource-tag condition")
@@ -155,12 +167,19 @@ def main() -> int:
         "s3:GetEncryptionConfiguration": "arn:aws:s3:::aether-staging-*",
         "s3:GetReplicationConfiguration": "arn:aws:s3:::aether-staging-*",
         "ecr:TagResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:ListTagsForResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:DescribeRepositories": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "secretsmanager:TagResource": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
         "ssm:AddTagsToResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
         "ssm:ListTagsForResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
         "kms:CreateKey": "*",
         "kms:TagResource": "arn:aws:kms:us-east-1:${account_id}:key/*",
-        "kms:CreateAlias": "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*",
+        "kms:CreateAlias": [
+            "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*",
+            "arn:aws:kms:us-east-1:${account_id}:key/*",
+        ],
+        "kms:DescribeKey": "arn:aws:kms:us-east-1:${account_id}:key/*",
+        "kms:ListResourceTags": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:CreateGrant": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:PutKeyPolicy": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "ec2:GetSecurityGroupsForVpc": "*",
@@ -175,6 +194,8 @@ def main() -> int:
         "iam:GetRole": "arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
         "iam:PassRole": "exact-staging-role-bindings",
         "lambda:TagResource": "exact-staging-lambda-bindings",
+        "events:ListTargetsByRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
+        "logs:CreateLogGroup": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
         "elasticloadbalancing:DescribeTargetGroups": "*",
         "elasticloadbalancing:DescribeLoadBalancers": "*",
         "elasticloadbalancing:DescribeListeners": "*",

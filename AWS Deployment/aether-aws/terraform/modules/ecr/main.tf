@@ -23,7 +23,8 @@ resource "aws_kms_key" "ecr" {
   enable_key_rotation     = true
 
   tags = {
-    Name = "${var.project}-${var.environment}-ecr-kms"
+    Name        = "${var.project}-${var.environment}-ecr-kms"
+    Environment = var.environment
   }
 }
 

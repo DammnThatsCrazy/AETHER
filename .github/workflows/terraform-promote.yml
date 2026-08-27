@@ -869,6 +869,45 @@ jobs:
                 exit 1
               fi
             fi
+
+            # The immutable delivery build creates the shared ECR repositories
+            # before Terraform runs.  A repository that exists remotely but is
+            # absent from this profile's state would otherwise fail halfway
+            # through apply, after unrelated resources have already mutated.
+            # Refuse before any mutation and route the exact repository names
+            # through a separate, confirmation-gated state reconciliation.
+            ecr_creates="$(jq -r '
+              .resource_changes[]?
+              | select((.address // "") | startswith("module.ecr.aws_ecr_repository.this["))
+              | select((.change.actions // []) | index("create") != null)
+              | (.address | split("[")[1] | gsub("\\\""; "") | rtrimstr("]"))
+            ' reviewed.tfplan.json)"
+            while IFS= read -r repository; do
+              [ -n "$repository" ] || continue
+              state_address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
+              if terraform state list | grep -Fxq "$state_address"; then
+                continue
+              fi
+              set +e
+              existing_repository="$(aws ecr describe-repositories \
+                --repository-names "$repository" \
+                --query 'repositories[0].repositoryName' --output text 2>/tmp/ecr.err)"
+              lookup_rc=$?
+              set -e
+              if [ "$lookup_rc" -ne 0 ]; then
+                if grep -Eiq 'RepositoryNotFoundException|not found|does not exist' /tmp/ecr.err; then
+                  existing_repository=""
+                else
+                  cat /tmp/ecr.err >&2
+                  echo "::error::unable to verify ECR repository ${repository}; refusing to apply on an inconclusive AWS response"
+                  exit 1
+                fi
+              fi
+              if [ -n "$existing_repository" ] && [ "$existing_repository" != None ]; then
+                echo "::error::ECR repository ${repository} already exists outside Terraform state; run the confirmation-gated staging state reconciliation and create a fresh reviewed plan before applying"
+                exit 1
+              fi
+            done <<< "$ecr_creates"
           fi
           terraform apply -input=false reviewed.tfplan | tee reviewed.apply.txt
           sha256sum reviewed.apply.txt > reviewed.apply.sha256
