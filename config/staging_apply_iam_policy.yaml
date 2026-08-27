@@ -44,13 +44,18 @@ statements:
     scope: staging-kms-resource-tag
     conditions:
       aws:ResourceTag/Environment: staging
+  - sid: TagStagingKmsKeysOnCreate
+    actions:
+      - kms:TagResource
+    resource: arn:aws:kms:us-east-1:${account_id}:key/*
+    scope: staging-kms-request-tag
+    conditions:
+      aws:RequestTag/Environment: staging
   - sid: CreateStagingKmsAliases
     actions:
       - kms:CreateAlias
-    resource: '*'
+    resource: arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*
     scope: staging-kms-alias-prefix
-    conditions:
-      kms:RequestAlias: alias/aether-staging-*
   - sid: UpdateStagingKmsPolicies
     actions:
       - kms:PutKeyPolicy

@@ -22,3 +22,4 @@ aurora_backup_retention_days = 1
 
 # Logs — short retention; INFO/DEBUG ship to S3.
 log_retention_days = 3
+enable_social_connections = false

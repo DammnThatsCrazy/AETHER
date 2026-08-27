@@ -15,13 +15,17 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "87963c8a"
+last_synced_commit: "3c1a2a47"
 ---
 
 # AWS Deployment — Infrastructure Reference
 
 Internal reference for Aether's AWS infrastructure as the Terraform in this
 repository actually defines it.
+
+Staging applies use a dedicated least-privilege role covering state locking,
+staging-only tagging, KMS administration, and the explicit apply-role ARN;
+cleanup remains bounded by the staging lifecycle guard.
 
 ## Scope — three different things live under `AWS Deployment/`
 
