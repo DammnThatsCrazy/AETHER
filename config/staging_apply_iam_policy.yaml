@@ -177,7 +177,9 @@ statements:
   - sid: TagOnlyStagingDriftLambda
     actions:
       - lambda:TagResource
-    resource: arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift
+    resource:
+      - arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift
+      - arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation
     conditions:
       aws:RequestTag/Environment: staging
     scope: staging-name-prefix

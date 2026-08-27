@@ -174,7 +174,7 @@ def main() -> int:
         "iam:CreateServiceLinkedRole": "*",
         "iam:GetRole": "arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
         "iam:PassRole": "exact-staging-role-bindings",
-        "lambda:TagResource": "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift",
+        "lambda:TagResource": "exact-staging-lambda-bindings",
         "elasticloadbalancing:DescribeTargetGroups": "*",
         "elasticloadbalancing:DescribeLoadBalancers": "*",
         "elasticloadbalancing:DescribeListeners": "*",
@@ -200,6 +200,16 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role": ["vpc-flow-logs.amazonaws.com"],
             }:
                 fail("iam:PassRole resource and service-principal bindings do not match")
+        elif action == "lambda:TagResource":
+            expected = {
+                "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift",
+                "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation",
+            }
+            if len(matching) != 1 or set(matching[0].get("resource") or []) != expected:
+                fail("lambda:TagResource must cover exactly the staging drift and secret-rotation functions")
+        elif action == "kms:CreateGrant":
+            if len(matching) != 1 or matching[0].get("resource") != expected or (matching[0].get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
+                fail("kms:CreateGrant must be limited to staging-tagged keys")
         elif action == "kms:TagResource":
             if len(matching) != 2 or any(s.get("resource") != expected for s in matching):
                 fail(f"{action} has an unexpected resource scope")
