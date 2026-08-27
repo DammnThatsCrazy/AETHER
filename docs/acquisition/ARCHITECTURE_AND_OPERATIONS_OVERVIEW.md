@@ -15,6 +15,14 @@ last_synced_commit: "e9fc085"
 
 # Architecture & Operations Overview
 
+> **Readiness signal (2026-08).** The `scripts/production_status.py` scores
+> referenced below are now the **historical maturity index** — retained but
+> **non-authoritative** for release eligibility (they blend independent
+> conditions into one 0-5 scalar). The authoritative signal is the
+> multidimensional readiness model (`config/readiness_model.yaml`,
+> `make readiness-status`): per-dimension states plus a per-release-profile
+> hard-gate disposition. See `docs/readiness/READINESS-MODEL.md`.
+
 A technical reader's map of AETHER: the shape of the system, how data moves, how
 it is operated, and where the real seams and honest gaps are. This is the
 architecture companion to `docs/acquisition/PRODUCTIZATION_DOSSIER.md`. For full
