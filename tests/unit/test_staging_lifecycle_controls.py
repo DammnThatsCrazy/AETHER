@@ -547,6 +547,13 @@ def test_full_rehearsal_runs_every_declared_phase():
     assert "/v1/ready" in script, "the migration revision is never verified"
 
 
+def test_first_staging_revision_records_rollback_as_not_applicable():
+    script = _job_script(_workflow_yaml(LIFECYCLE), "rehearse")
+    assert "status=not_applicable" in script
+    assert "first approved staging revision" in script
+    assert "no earlier task revision exists to roll back to" not in script
+
+
 def test_the_rehearsal_verifies_the_running_image_is_the_approved_digest():
     script = _job_script(_workflow_yaml(LIFECYCLE), "rehearse")
     assert "not the approved ${image_uri}" in script, (
@@ -779,6 +786,9 @@ def test_ttl_guard_extension_hours_are_range_checked():
 
 def test_ttl_guard_treats_a_missing_or_unreadable_lease_as_expired():
     run = _guard_step("state")["run"]
+    assert "ParameterNotFound" in run
+    assert "state_known=false" in run
+    assert "|| echo ''" not in run
     script = _embedded_python(run)
     assert '"expired": True' in script, "the guard does not default to expired"
     assert script.count('out["expired"] = False') == 2, (
@@ -1107,7 +1117,7 @@ def test_the_ttl_guard_never_reports_asleep_on_an_unreadable_environment():
     state = _guard_step("state")["run"]
     assert 'if ! services_raw="$(aws ecs list-services' in state
     assert "state_known=false" in state
-    assert state.count("state_known=false") == 2, (
+    assert state.count("state_known=false") == 3, (
         "an unreadable-state path no longer publishes state_known=false"
     )
     assert "will not be reported as asleep" in state

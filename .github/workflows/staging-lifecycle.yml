@@ -1316,8 +1316,13 @@ jobs:
           family="${current%:*}"
           revision="${current##*:}"
           if [ "$revision" -le 1 ]; then
-            echo '::error::no earlier task revision exists to roll back to'
-            exit 1
+            # The first approved staging deployment has no prior revision.
+            # Record that rollback is not applicable rather than failing a
+            # healthy first run or pretending that a rollback occurred.
+            printf 'status=not_applicable\nreason=first approved staging revision; no earlier task definition exists\ncurrent=%s\n' \
+              "$current" > artifacts/rehearsal/rollback.txt
+            echo '::notice::rollback rehearsal not applicable for the first approved staging revision'
+            exit 0
           fi
           previous="${family}:$((revision - 1))"
           aws ecs update-service --cluster "$STAGING_CLUSTER" --service "$service" \

@@ -61,7 +61,11 @@ runtime inputs, but a full rehearsal fails before apply-wake rather than waking
 an environment that cannot be tested. Both the lifecycle and TTL cleanup paths
 also fail closed: an absent SSM lease is treated as already asleep, while an
 access, throttling, or other deletion error fails the run so unknown cleanup
-state cannot be reported as success.
+state cannot be reported as success. The TTL guard applies the same distinction
+when reading the lease. A missing lease is the only benign empty state; read
+errors are fatal. On the first approved ECS revision, rollback evidence is
+recorded as `not_applicable` because there is no prior revision; subsequent
+rehearsals must execute and verify rollback and roll-forward.
 
 ## Scope — two different things
 
