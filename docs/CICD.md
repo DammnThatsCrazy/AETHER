@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "264f03ea"
+last_synced_commit: "9d6caf65"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -25,6 +25,13 @@ Internal reference for Aether's delivery pipeline.
 Reviewed Terraform promotion pins immutable digests and injects the staging
 apply-role ARN only for staging. Inline-ML profiles leave the ML digest empty;
 remote-ML profiles must provide one before apply or wake.
+Before an apply, the promotion workflow parses the reviewed plan for ECR
+repositories and fails closed when a same-name repository exists outside the
+reviewed state; it never deletes or silently imports shared repositories. The
+staging IAM contract is explicit about repository metadata, event targets,
+parameter tags, staging Lambda tags, and KMS grant/key-tag operations, while
+CMK policies constrain service use to the staging account and regional service
+endpoints.
 
 ## Scope — two different things
 

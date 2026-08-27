@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "264f03ea"
+last_synced_commit: "9d6caf65"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -25,7 +25,13 @@ repository actually defines it.
 
 Staging applies use a dedicated least-privilege role covering state locking,
 staging-only tagging, KMS administration, and the explicit apply-role ARN;
-cleanup remains bounded by the staging lifecycle guard.
+cleanup remains bounded by the staging lifecycle guard. The apply contract also
+checks ECR ownership before mutation: an existing repository that is not in
+the reviewed Terraform state is a hard stop, so shared repositories are never
+silently adopted or replaced. Secrets, ECR, and Aurora CMKs carry the staging
+environment tag; the Secrets Manager and regional CloudWatch Logs service
+principals are constrained by ViaService, caller account, and encryption
+context rather than broad key access.
 
 ## Scope — three different things live under `AWS Deployment/`
 
