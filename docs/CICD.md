@@ -21,7 +21,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "fb13cc3b"
+last_synced_commit: "0c0ee837"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -54,7 +54,11 @@ resource patterns and conditions and rejects any overlapping explicit Deny;
 an action name appearing in an unrelated statement is not sufficient. If a
 policy uses a condition operator the checker cannot model, that Deny is
 treated as applicable and the preflight fails closed rather than allowing an
-unverified apply to proceed.
+unverified apply to proceed, but only after the Deny overlaps a reviewed
+resource. Attached Allows must also preserve every mandatory manifest
+condition; a broader unconditional Allow is not accepted as equivalent.
+The staging ECR collision check runs before any account-level service-linked
+role bootstrap, so a rejected repository cannot leave an IAM mutation behind.
 
 Before a full staging rehearsal can wake compute, the lifecycle workflow runs a
 staging-environment preflight. It requires a host-only `ALB_DNS_NAME` and the

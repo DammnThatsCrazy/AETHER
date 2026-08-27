@@ -331,6 +331,9 @@ def test_target_group_collision_lookup_only_runs_for_create_plans() -> None:
 def test_ecr_collision_lookup_precedes_any_apply_mutation() -> None:
     """Immutable delivery must not discover shared ECR drift mid-apply."""
     text = PROMOTE.read_text(encoding="utf-8")
+    collision_step = text.index("Check ECR collisions before account-level role bootstrap")
+    service_role_step = text.index("Ensure the ECS service-linked role exists before capacity providers")
+    assert collision_step < service_role_step
     start = text.index("# The immutable delivery build creates the shared ECR repositories")
     end = text.index("terraform apply -input=false reviewed.tfplan", start)
     block = text[start:end]
