@@ -1,0 +1,1030 @@
+{
+  "schema_version": 1,
+  "model_version": 1,
+  "generated_by": "scripts/readiness_status.py --emit-artifacts",
+  "features": [
+    {
+      "feature_id": "deployment-terraform-profiles",
+      "title": "Deployment Terraform Profiles",
+      "owning_system": "aether",
+      "scope": {
+        "id": "deployment-terraform-profiles-v1",
+        "version": 1,
+        "title": "V1 Per-Profile Terraform",
+        "target": "infrastructure-turnkey",
+        "included": [
+          "per-profile Terraform modules",
+          "cost-policy enforcement",
+          "plan-level profile policy validation",
+          "application profile bindings"
+        ],
+        "excluded": [
+          "applied cloud infrastructure (requires an AWS account)"
+        ],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "INFRASTRUCTURE_TURNKEY",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Apply the Terraform plan against a real AWS account",
+          "Capture a credentialed plan/apply artifact"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "TURNKEY",
+        "completion_percent": 100.0,
+        "denominator": "in-scope Terraform + binding controls",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "INFRASTRUCTURE_WAITING",
+        "blockers": [
+          {
+            "type": "INFRASTRUCTURE_WAITING",
+            "description": "The Terraform plan has not been applied (no AWS account).",
+            "owner": "platform-ops",
+            "required_action": "Apply the plan against a real AWS account for the target profile.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production",
+              "scale"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "production-lean",
+              "production-scale"
+            ],
+            "evidence_required": "credentialed apply artifact (real account id + region + captured_at)"
+          },
+          {
+            "type": "ACCOUNT_WAITING",
+            "description": "An AWS account/organization must be available.",
+            "owner": "platform-ops",
+            "required_action": "Provision an AWS account and bind credentials.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production",
+              "scale"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "production-lean",
+              "production-scale"
+            ],
+            "evidence_required": "account id bound to the deployment pipeline"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "NOT_APPLICABLE",
+          "credentialed": null,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "scale": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "platform",
+        "runbook": "docs/runbooks/deployment-profiles.md",
+        "dashboards": [
+          "grafana:infra-cost"
+        ],
+        "alerts": [
+          "pagerduty:platform-infra"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "plan validates + cost model prices in CI"
+        ],
+        "evidence_gaps": [
+          "never applied against a real account"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "disabled_intentionally",
+          "disposition": "DISABLED_INTENTIONALLY",
+          "intrinsic_disposition": "DISABLED_INTENTIONALLY",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "NOT_APPLICABLE",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "staging",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: The Terraform plan has not been applied (no AWS account). (owner: platform-ops)",
+            "ACCOUNT_WAITING: An AWS account/organization must be available. (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: The Terraform plan has not been applied (no AWS account). (owner: platform-ops)",
+            "ACCOUNT_WAITING: An AWS account/organization must be available. (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: The Terraform plan has not been applied (no AWS account). (owner: platform-ops)",
+            "ACCOUNT_WAITING: An AWS account/organization must be available. (owner: platform-ops)"
+          ],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 3,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false
+      }
+    },
+    {
+      "feature_id": "event-transport",
+      "title": "Event Transport (Outbox + SNS/SQS)",
+      "owning_system": "aether",
+      "scope": {
+        "id": "event-transport-v1",
+        "version": 1,
+        "title": "V1 Canonical Event Transport",
+        "target": "founding-tenant-production",
+        "included": [
+          "durable outbox relay",
+          "canonical event bus publish/consume",
+          "retry + idempotent delivery"
+        ],
+        "excluded": [
+          "cross-region replication"
+        ],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "INFRASTRUCTURE_TURNKEY",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Provision the cloud SNS/SQS backend"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "TURNKEY",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls for event transport",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "INFRASTRUCTURE_WAITING",
+        "blockers": [
+          {
+            "type": "INFRASTRUCTURE_WAITING",
+            "description": "Cloud SNS/SQS backend must be provisioned for cloud profiles.",
+            "owner": "platform-ops",
+            "required_action": "Apply the event-backend Terraform for the target profile.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production",
+              "scale"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot",
+              "production-lean",
+              "production-scale"
+            ],
+            "evidence_required": "applied topic/queue ARNs + a credentialed publish/consume run"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "scale": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "platform",
+        "runbook": "docs/runbooks/event-transport.md",
+        "dashboards": [
+          "grafana:eventing"
+        ],
+        "alerts": [
+          "pagerduty:eventing"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "offline + replay tests pass"
+        ],
+        "evidence_gaps": [
+          "cloud event backend not yet provisioned; no credentialed run"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "staging",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: Cloud SNS/SQS backend must be provisioned for cloud profiles. (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: Cloud SNS/SQS backend must be provisioned for cloud profiles. (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: Cloud SNS/SQS backend must be provisioned for cloud profiles. (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: Cloud SNS/SQS backend must be provisioned for cloud profiles. (owner: platform-ops)"
+          ],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false
+      }
+    },
+    {
+      "feature_id": "financial-observability",
+      "title": "Financial Observability",
+      "owning_system": "aether",
+      "scope": {
+        "id": "financial-observability-v1",
+        "version": 1,
+        "title": "V1 Credential-Ready Observe-Only Pilot",
+        "target": "credential-ready-observe-only-pilot",
+        "included": [
+          "credential authority",
+          "webhook verification",
+          "canonical event delivery",
+          "offline certification"
+        ],
+        "excluded": [
+          "transaction execution",
+          "settlement",
+          "custody",
+          "production-scale traffic"
+        ],
+        "deferred": [
+          "live payout reconciliation"
+        ]
+      },
+      "repository_ceiling": {
+        "type": "CREDENTIAL_TURNKEY",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Insert provider credentials into the credential platform",
+          "Attach a provider account"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "TURNKEY",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls for the V1 observe-only pilot",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls for observe-only pilot",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "CREDENTIAL_WAITING",
+        "blockers": [
+          {
+            "type": "CREDENTIAL_WAITING",
+            "description": "Provider API credentials must be issued and inserted.",
+            "owner": "tenant / platform-ops",
+            "required_action": "Insert provider secret into the credential platform; run credentials-preflight.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "pilot",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot"
+            ],
+            "evidence_required": "credentials-preflight parse + connection self-check"
+          },
+          {
+            "type": "ACCOUNT_WAITING",
+            "description": "A provider account must exist for the pilot tenant.",
+            "owner": "tenant",
+            "required_action": "Register a provider account and bind it to the tenant.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "pilot",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot"
+            ],
+            "evidence_required": "provider account id bound in the credential registry"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [
+          {
+            "feature_id": "identity-resolution",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          },
+          {
+            "feature_id": "event-transport",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          }
+        ],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "pilot": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_APPLICABLE",
+          "credentialed": null,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "platform",
+        "runbook": "docs/runbooks/financial-observation.md",
+        "dashboards": [
+          "grafana:financial-observability"
+        ],
+        "alerts": [
+          "pagerduty:platform-financial"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": true,
+        "completion_percent": 50.0,
+        "remaining_work": [
+          "pilot agreement signature"
+        ]
+      },
+      "confidence": {
+        "level": "HIGH",
+        "reasons": [
+          "unit + contract + offline certification pass",
+          "runtime wiring verified in CI"
+        ],
+        "evidence_gaps": [
+          "credentialed staging execution not yet performed"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "staging",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: Provider API credentials must be issued and inserted. (owner: tenant / platform-ops)",
+            "ACCOUNT_WAITING: A provider account must exist for the pilot tenant. (owner: tenant)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: Provider API credentials must be issued and inserted. (owner: tenant / platform-ops)",
+            "ACCOUNT_WAITING: A provider account must exist for the pilot tenant. (owner: tenant)"
+          ],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_APPLICABLE",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "note": "Legacy production_status.py scored the financial cohort as an area; retained for comparison only."
+      }
+    },
+    {
+      "feature_id": "identity-resolution",
+      "title": "Identity Resolution",
+      "owning_system": "aether",
+      "scope": {
+        "id": "identity-resolution-v1",
+        "version": 1,
+        "title": "V1 Founding-Tenant Identity Resolution",
+        "target": "founding-tenant-production",
+        "included": [
+          "four-anchor resolution",
+          "confidence scoring",
+          "merge endpoint + audit event",
+          "pending-review queue"
+        ],
+        "excluded": [
+          "cross-tenant graph federation"
+        ],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "VERIFIED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Capture credentialed staging + production environment evidence"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "TURNKEY",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls for founding-tenant identity",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "NO_EXTERNAL_BLOCKER",
+        "blockers": []
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "platform",
+        "runbook": "docs/runbooks/identity-resolution.md",
+        "dashboards": [
+          "grafana:identity"
+        ],
+        "alerts": [
+          "pagerduty:identity"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "unit + integration tests pass offline"
+        ],
+        "evidence_gaps": [
+          "not yet exercised in credentialed staging or production"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false
+      }
+    },
+    {
+      "feature_id": "push-notification-delivery",
+      "title": "Push Notification Delivery",
+      "owning_system": "aether",
+      "scope": {
+        "id": "push-notification-delivery-v1",
+        "version": 1,
+        "title": "V1 Multi-Provider Push Delivery",
+        "target": "credential-turnkey-delivery",
+        "included": [
+          "APNs adapter",
+          "FCM adapter",
+          "Web Push adapter",
+          "SES email adapter",
+          "provider-shaped local fakes",
+          "credential contracts"
+        ],
+        "excluded": [
+          "live provider rehearsal (requires accounts)"
+        ],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "CREDENTIAL_TURNKEY",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Insert provider credentials",
+          "Register provider/developer accounts"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "TURNKEY",
+        "completion_percent": 100.0,
+        "denominator": "in-scope delivery adapters + fakes + contracts",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "CREDENTIAL_WAITING",
+        "blockers": [
+          {
+            "type": "CREDENTIAL_WAITING",
+            "description": "APNs/.p8, FCM service account, VAPID keypair, SES creds needed.",
+            "owner": "tenant / platform-ops",
+            "required_action": "Insert provider secrets; run credentials-preflight.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot",
+              "production-lean",
+              "production-scale"
+            ],
+            "evidence_required": "live provider accept + delivery receipt in a rehearsal"
+          },
+          {
+            "type": "ACCOUNT_WAITING",
+            "description": "Apple Developer + Firebase/Google + SES verified domain required.",
+            "owner": "tenant",
+            "required_action": "Register provider accounts and verify sender domain.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot",
+              "production-lean",
+              "production-scale"
+            ],
+            "evidence_required": "provider account ids bound in the credential registry"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [
+          {
+            "feature_id": "identity-resolution",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          }
+        ],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "mobile-platform",
+        "runbook": "docs/runbooks/push-delivery.md",
+        "dashboards": [
+          "grafana:delivery"
+        ],
+        "alerts": [
+          "pagerduty:delivery"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "provider-shaped fakes exercise decode + mapping"
+        ],
+        "evidence_gaps": [
+          "no live provider rehearsal yet (accounts required)"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "staging",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: APNs/.p8, FCM service account, VAPID keypair, SES creds needed. (owner: tenant / platform-ops)",
+            "ACCOUNT_WAITING: Apple Developer + Firebase/Google + SES verified domain required. (owner: tenant)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: APNs/.p8, FCM service account, VAPID keypair, SES creds needed. (owner: tenant / platform-ops)",
+            "ACCOUNT_WAITING: Apple Developer + Firebase/Google + SES verified domain required. (owner: tenant)"
+          ],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: APNs/.p8, FCM service account, VAPID keypair, SES creds needed. (owner: tenant / platform-ops)",
+            "ACCOUNT_WAITING: Apple Developer + Firebase/Google + SES verified domain required. (owner: tenant)"
+          ],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "experimental",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: APNs/.p8, FCM service account, VAPID keypair, SES creds needed. (owner: tenant / platform-ops)",
+            "ACCOUNT_WAITING: Apple Developer + Firebase/Google + SES verified domain required. (owner: tenant)"
+          ],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 3,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false
+      }
+    }
+  ]
+}

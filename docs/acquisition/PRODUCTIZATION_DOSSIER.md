@@ -15,6 +15,14 @@ last_synced_commit: "e9fc085"
 
 # Acquisition Productization Dossier
 
+> **Readiness signal (2026-08).** The `scripts/production_status.py` scorecard
+> narrated below is now the **historical maturity index** — retained but
+> **non-authoritative** for release eligibility (it blends independent
+> conditions into one 0-5 scalar). The authoritative signal is the
+> multidimensional readiness model (`config/readiness_model.yaml`,
+> `make readiness-status`): per-dimension states plus a per-release-profile
+> hard-gate disposition. See `docs/readiness/READINESS-MODEL.md`.
+
 For a buyer or diligence team. The single most important thing to know about
 AETHER's self-presentation: **the scores are machine-checkable and the
 limitations are stated as plainly as the strengths.** `make production-status`

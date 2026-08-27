@@ -15,6 +15,14 @@ last_synced_commit: "e9fc085"
 
 # Before / After Productization Report
 
+> **Readiness signal (2026-08).** The `scripts/production_status.py` 0-5
+> scorecard this report measures against is now the **historical maturity
+> index** — retained but **non-authoritative** for release eligibility (it
+> blends independent conditions into one scalar). The authoritative signal is
+> the multidimensional readiness model (`config/readiness_model.yaml`,
+> `make readiness-status`): per-dimension states plus a per-release-profile
+> hard-gate disposition. See `docs/readiness/READINESS-MODEL.md`.
+
 What the four flag-gated waves on `claude/aether-kyber-production-if4m8m`
 changed, measured against the canonical 0–5 scorecard
 (`scripts/production_status.py`). The honest headline is the most important line
