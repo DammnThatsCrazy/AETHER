@@ -142,7 +142,9 @@ resource "aws_cloudwatch_log_group" "rotation_lambda" {
 data "archive_file" "rotation_lambda" {
   type        = "zip"
   source_file = "${path.module}/../../../../../lambda/rotate_secret.py"
-  output_path = "${path.module}/rotate_secret.zip"
+  # Keep the generated archive in the Terraform root so the reviewed-plan
+  # workflow can carry the exact bytes into its apply job.
+  output_path = "${path.root}/rotate_secret.zip"
 }
 
 resource "aws_lambda_function" "rotation" {
