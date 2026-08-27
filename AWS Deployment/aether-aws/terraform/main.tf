@@ -603,9 +603,10 @@ module "auth0" {
   aether_logout_urls   = [var.aether_app_url]
   aether_web_origins   = [var.aether_app_url]
 
-  kyber_callback_urls = ["${var.kyber_app_url}/callback"]
-  kyber_logout_urls   = [var.kyber_app_url]
-  kyber_web_origins   = [var.kyber_app_url]
+  kyber_callback_urls       = ["${var.kyber_app_url}/callback"]
+  kyber_logout_urls         = [var.kyber_app_url]
+  kyber_web_origins         = [var.kyber_app_url]
+  enable_social_connections = var.enable_social_connections
 }
 
 # ---------------------------------------------------------------------------

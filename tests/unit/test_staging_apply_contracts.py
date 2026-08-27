@@ -267,3 +267,36 @@ def test_kms_permissions_remain_staging_constrained() -> None:
         s for s in manifest["statements"] if s["sid"] == "ScheduleDeletionForReviewedStagingKeys"
     )
     assert deletion["conditions"]["kms:ScheduleKeyDeletionPendingWindowInDays"] == "30"
+
+
+def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources() -> None:
+    manifest = yaml.safe_load(POLICY.read_text(encoding="utf-8"))
+    statements = manifest["statements"]
+    expected = {
+        "s3:PutEncryptionConfiguration": "arn:aws:s3:::aether-staging-*",
+        "s3:PutLifecycleConfiguration": "arn:aws:s3:::aether-staging-*",
+        "ecr:TagResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "secretsmanager:TagResource": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+        "ssm:AddTagsToResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
+        "kms:TagResource": "arn:aws:kms:us-east-1:${account_id}:key/*",
+        "kms:PutKeyPolicy": "arn:aws:kms:us-east-1:${account_id}:key/*",
+    }
+    for action, resource in expected.items():
+        matches = [s for s in statements if action in s["actions"]]
+        if action == "kms:TagResource":
+            assert len(matches) == 2
+            assert all(s["resource"] == resource for s in matches)
+            assert {tuple(sorted((s.get("conditions") or {}).items())) for s in matches} == {
+                (("aws:RequestTag/Environment", "staging"),),
+                (("aws:ResourceTag/Environment", "staging"),),
+            }
+        else:
+            assert len(matches) == 1
+            assert matches[0]["resource"] == resource
+
+    create_key = next(s for s in statements if "kms:CreateKey" in s["actions"])
+    assert create_key["resource"] == "*"
+    assert create_key["conditions"] == {"aws:RequestTag/Environment": "staging"}
+    create_alias = next(s for s in statements if "kms:CreateAlias" in s["actions"])
+    assert create_alias["resource"] == "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*"
+    assert "conditions" not in create_alias

@@ -43,6 +43,12 @@ variable "kyber_web_origins" {
   description = "Allowed web origins (CORS) for the Kyber SPA"
 }
 
+variable "enable_social_connections" {
+  type        = bool
+  description = "Create optional Google, Apple, Twitter, Microsoft, and Slack connections only when their provider credentials are ready."
+  default     = false
+}
+
 # ── Social connection credentials ─────────────────────────────────────────
 # All social vars default to "" so the module can be applied without them;
 # the connections are created but remain unconfigured until credentials are

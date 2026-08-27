@@ -406,3 +406,9 @@ variable "kyber_app_url" {
   type        = string
   description = "Public URL of the Kyber operator console (e.g. https://kyber.aether.io)"
 }
+
+variable "enable_social_connections" {
+  type        = bool
+  description = "Enable optional social identity-provider connections. Keep false until provider credentials and Auth0 management scopes are approved."
+  default     = true
+}

@@ -16,9 +16,13 @@ data "aws_region" "current" {}
 # --------------------------------------------------------------------------
 
 data "archive_file" "lambda_zip" {
-  type        = "zip"
-  source_dir  = "${path.module}/lambda_src"
-  output_path = "${path.module}/.build/drift_lambda.zip"
+  type       = "zip"
+  source_dir = "${path.module}/lambda_src"
+  # The archive provider does not create parent directories. Keep the
+  # generated package in the initialized Terraform root, which exists in both
+  # plan and apply runners, rather than relying on an absent module-local
+  # `.build` directory.
+  output_path = "${path.root}/drift_lambda.zip"
 }
 
 # --------------------------------------------------------------------------

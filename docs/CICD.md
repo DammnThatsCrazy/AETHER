@@ -15,12 +15,16 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "2f28ad30"
+last_synced_commit: "3c1a2a47"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
 
 Internal reference for Aether's delivery pipeline.
+
+Reviewed Terraform promotion pins immutable digests and injects the staging
+apply-role ARN only for staging. Inline-ML profiles leave the ML digest empty;
+remote-ML profiles must provide one before apply or wake.
 
 ## Scope — two different things
 

@@ -12,8 +12,17 @@ import yaml
 
 
 REQUIRED_ACTIONS = {
+    "s3:PutEncryptionConfiguration",
+    "s3:PutLifecycleConfiguration",
     "s3:GetEncryptionConfiguration",
     "s3:GetReplicationConfiguration",
+    "ecr:TagResource",
+    "secretsmanager:TagResource",
+    "ssm:AddTagsToResource",
+    "kms:CreateKey",
+    "kms:TagResource",
+    "kms:CreateAlias",
+    "kms:PutKeyPolicy",
     "ec2:GetSecurityGroupsForVpc",
     "kms:GetKeyRotationStatus",
     "kms:ScheduleKeyDeletion",
@@ -39,6 +48,8 @@ ALLOWED_GLOBAL_ACTIONS = {
     "iam:SimulatePrincipalPolicy",
     "kms:GetKeyRotationStatus",
     "kms:ScheduleKeyDeletion",
+    "kms:CreateKey",
+    "kms:CreateAlias",
 }
 REQUIRED_AUTH0_SCOPES = {
     "create:resource_servers",
@@ -102,7 +113,7 @@ def main() -> int:
                 fail(f"global resource scope is not allowed for {action}")
         if resource == "*" and not (
             statement.get("scope", "").endswith("required-by-api")
-            or sid in {"EnsureEcsServiceLinkedRole", "ReadEcsServiceLinkedRole", "ReadStagingKeyRotation", "ScheduleDeletionForReviewedStagingKeys", "DiscoverStagingTargetGroups", "VerifyTerraformStateAccess"}
+            or sid in {"EnsureEcsServiceLinkedRole", "ReadEcsServiceLinkedRole", "ReadStagingKeyRotation", "ScheduleDeletionForReviewedStagingKeys", "DiscoverStagingTargetGroups", "VerifyTerraformStateAccess", "CreateStagingKmsKeys", "CreateStagingKmsAliases"}
         ):
             fail(f"unqualified global resource scope in {sid}")
         if "iam:PassRole" in statement_actions:
@@ -118,13 +129,35 @@ def main() -> int:
         if "kms:GetKeyRotationStatus" in statement_actions:
             if resource != "*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                 fail("kms:GetKeyRotationStatus must use an enforceable staging KMS tag condition")
+        if "kms:CreateKey" in statement_actions:
+            if resource != "*" or (statement.get("conditions") or {}).get("aws:RequestTag/Environment") != "staging":
+                fail("kms:CreateKey must require an Environment=staging request tag")
+        if "kms:TagResource" in statement_actions:
+            conditions = statement.get("conditions") or {}
+            if resource != "arn:aws:kms:us-east-1:${account_id}:key/*" or not (conditions.get("aws:ResourceTag/Environment") == "staging" or conditions.get("aws:RequestTag/Environment") == "staging"):
+                fail("kms:TagResource must use a staging KMS key ARN and resource/request-tag condition")
+        if "kms:CreateAlias" in statement_actions:
+            if resource != "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*":
+                fail("kms:CreateAlias must use the staging alias ARN prefix")
+        if "kms:PutKeyPolicy" in statement_actions:
+            if resource != "arn:aws:kms:us-east-1:${account_id}:key/*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
+                fail("kms:PutKeyPolicy must use a staging KMS key ARN and resource-tag condition")
         if "iam:CreateServiceLinkedRole" in statement_actions:
             if (statement.get("conditions") or {}).get("iam:AWSServiceName") != "ecs.amazonaws.com":
                 fail("iam:CreateServiceLinkedRole must be restricted to ECS")
 
     expected_resources = {
+        "s3:PutEncryptionConfiguration": "arn:aws:s3:::aether-staging-*",
+        "s3:PutLifecycleConfiguration": "arn:aws:s3:::aether-staging-*",
         "s3:GetEncryptionConfiguration": "arn:aws:s3:::aether-staging-*",
         "s3:GetReplicationConfiguration": "arn:aws:s3:::aether-staging-*",
+        "ecr:TagResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "secretsmanager:TagResource": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+        "ssm:AddTagsToResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
+        "kms:CreateKey": "*",
+        "kms:TagResource": "arn:aws:kms:us-east-1:${account_id}:key/*",
+        "kms:CreateAlias": "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*",
+        "kms:PutKeyPolicy": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "ec2:GetSecurityGroupsForVpc": "*",
         "kms:GetKeyRotationStatus": "*",
         "kms:ScheduleKeyDeletion": "*",
@@ -161,6 +194,15 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role": ["vpc-flow-logs.amazonaws.com"],
             }:
                 fail("iam:PassRole resource and service-principal bindings do not match")
+        elif action == "kms:TagResource":
+            if len(matching) != 2 or any(s.get("resource") != expected for s in matching):
+                fail(f"{action} has an unexpected resource scope")
+            conditions = [s.get("conditions") or {} for s in matching]
+            if {tuple(sorted(c.items())) for c in conditions} != {
+                (("aws:RequestTag/Environment", "staging"),),
+                (("aws:ResourceTag/Environment", "staging"),),
+            }:
+                fail("kms:TagResource must cover request and resource staging tags")
         elif len(matching) != 1 or matching[0].get("resource") != expected:
             fail(f"{action} has an unexpected resource scope")
 

@@ -18,10 +18,14 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
-last_synced_commit: "87963c8a"
+last_synced_commit: "3c1a2a47"
 ---
 
 # Deployment Profiles
+
+Staging uses inline ML and therefore does not require an ML image digest;
+remote-ML profiles do. Its apply role is scoped to staging and is the only
+profile-specific administrator named in staging KMS key policies.
 
 Aether declares eight deployment profiles, from a zero-backend local mock to a
 contractually isolated enterprise deployment. `config/deployment_profiles.yaml`
