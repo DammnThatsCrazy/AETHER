@@ -21,7 +21,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "3cce33d8"
+last_synced_commit: "fb13cc3b"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -51,7 +51,10 @@ Role-name assertions are staging-only: every other profile is checked against
 its encrypted role ARN without being forced to use a staging role name. The
 staging effective-policy check also evaluates each reviewed action against its
 resource patterns and conditions and rejects any overlapping explicit Deny;
-an action name appearing in an unrelated statement is not sufficient.
+an action name appearing in an unrelated statement is not sufficient. If a
+policy uses a condition operator the checker cannot model, that Deny is
+treated as applicable and the preflight fails closed rather than allowing an
+unverified apply to proceed.
 
 Before a full staging rehearsal can wake compute, the lifecycle workflow runs a
 staging-environment preflight. It requires a host-only `ALB_DNS_NAME` and the
