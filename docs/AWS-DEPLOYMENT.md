@@ -419,8 +419,11 @@ validated maintenance target; otherwise it fails closed and asks for the
 detach-only apply first. The normal promotion workflow never invents a
 maintenance target group or performs this transition implicitly.
 An interrupted run must use `staging-state-reconcile.yml` to import the
-existing group and produce a fresh reviewed plan; the apply workflow refuses
-to adopt an unmanaged group. The uncapped production profiles retain
+existing group or an exact reviewed ECR repository, and produce a fresh
+reviewed plan; ECR imports additionally require matching the reviewed staging
+KMS key and verifying that the repository is not owned by staging, demo, or
+preview state. The apply workflow refuses to adopt an unmanaged group or
+repository. The uncapped production profiles retain
 replacement-before-destroy behavior for availability and use separate
 accounts when their names would otherwise collide.
 

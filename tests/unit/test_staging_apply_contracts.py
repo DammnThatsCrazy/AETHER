@@ -160,6 +160,15 @@ def test_effective_policy_checker_matches_resources_conditions_and_denies() -> N
         "arn:aws:kms:us-east-1:544471417928:key/contract-check",
         {"aws:RequestedRegion": "us-east-1"},
     )
+    assert module._operation_is_denied(
+        {
+            "Effect": "Deny",
+            "Action": "ecr:*",
+            "Resource": "arn:aws:ecr:us-east-1:544471417928:repository/aether-backend",
+        },
+        "ecr:TagResource",
+        "arn:aws:ecr:us-east-1:544471417928:repository/aether-*",
+    )
 
 
 def test_external_provider_validation_precedes_service_linked_role() -> None:
@@ -272,6 +281,12 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     assert "aether-backend|aether-ml-serving|aether-kyber|aether-aether" in text
     assert "module.ecr.aws_ecr_repository.this[\\\"${repository}\\\"]" in text
     assert "requires a fresh reviewed plan" in text or "fresh staging plan" in text
+    assert "staging_ecr_kms_key_arn" in text
+    assert "encryptionConfiguration.encryptionType" in text
+    assert "encryptionConfiguration.kmsKey" in text
+    assert "list-resource-tags" in text
+    assert "for profile in staging demo preview" in text
+    assert "profiles/${profile}/terraform.tfstate" in text
 
 
 def test_staging_cmk_service_policy_and_environment_tags_are_present() -> None:
@@ -394,6 +409,7 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
         "kms:ListResourceTags": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "events:ListTargetsByRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
         "logs:CreateLogGroup": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
+        "logs:TagResource": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
     }
     for action, resource in expected.items():
         matches = [s for s in statements if action in s["actions"]]

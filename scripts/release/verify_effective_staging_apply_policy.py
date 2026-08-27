@@ -234,7 +234,10 @@ def _operation_is_denied(
     if not any(fnmatch.fnmatchcase(action, pattern) for pattern in _statement_actions(statement)):
         return False
     actual_resources = _statement_resources(statement)
-    return all(
+    # A wildcard reviewed resource is a set of independently managed objects:
+    # one explicit Deny on any concrete member makes the reviewed operation
+    # unsafe even when other representative members are allowed.
+    return any(
         any(fnmatch.fnmatchcase(sample, pattern) for pattern in actual_resources)
         for sample in _resource_samples(resource)
     ) and _conditions_compatible(statement.get("Condition"), conditions)

@@ -228,6 +228,11 @@ statements:
       - logs:CreateLogGroup
     resource: arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*
     scope: staging-name-prefix
+  - sid: TagStagingLogGroups
+    actions:
+      - logs:TagResource
+    resource: arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*
+    scope: staging-name-prefix
 
 # The provider errors below are deliberately not represented as AWS IAM
 # actions: Auth0 permissions are governed by the Auth0 management API and must
