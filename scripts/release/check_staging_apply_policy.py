@@ -121,8 +121,8 @@ def main() -> int:
             fail(f"unqualified global resource scope in {sid}")
         if "iam:PassRole" in statement_actions:
             passed_to = (statement.get("conditions") or {}).get("iam:PassedToService")
-            if passed_to not in (["ecs-tasks.amazonaws.com"], ["vpc-flow-logs.amazonaws.com"]):
-                fail("iam:PassRole must be limited to the approved ECS or VPC flow-logs service principals")
+            if passed_to not in (["ecs-tasks.amazonaws.com"], ["vpc-flow-logs.amazonaws.com"], ["lambda.amazonaws.com"]):
+                fail("iam:PassRole must be limited to the approved ECS, VPC flow-logs, or Lambda service principals")
         if "kms:ScheduleKeyDeletion" in statement_actions:
             if resource != "*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                 fail("kms:ScheduleKeyDeletion must use an enforceable staging KMS tag condition")
@@ -187,6 +187,7 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-ecs-task-role",
                 "arn:aws:iam::${account_id}:role/AETHER-staging-ecs-execution-role",
                 "arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role",
+                "arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda",
             }
             if {s.get("resource") for s in matching} != expected_scopes:
                 fail("iam:PassRole has an unexpected resource scope")
@@ -198,6 +199,7 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-ecs-task-role": ["ecs-tasks.amazonaws.com"],
                 "arn:aws:iam::${account_id}:role/AETHER-staging-ecs-execution-role": ["ecs-tasks.amazonaws.com"],
                 "arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role": ["vpc-flow-logs.amazonaws.com"],
+                "arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda": ["lambda.amazonaws.com"],
             }:
                 fail("iam:PassRole resource and service-principal bindings do not match")
         elif action == "lambda:TagResource":
