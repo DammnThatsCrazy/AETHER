@@ -9,5 +9,7 @@
 #     is removed (shrink-only — the backlog cannot rot into a bypass);
 #   - docs_drift --update refuses to stamp listed docs.
 # Clearing an entry requires reviewing the doc against its source_files,
-# updating content where contradicted, stamping, and deleting the entry.
+# updating content where contradicted, stamping, and deleting the entry. The
+# AWS deployment and CI/CD pages were re-reviewed in the current delivery
+# contract; no unresolved review backlog remains.
 docs: []
