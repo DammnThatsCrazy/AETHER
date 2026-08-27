@@ -150,14 +150,17 @@ def _statement_actions(statement: dict[str, Any]) -> list[str]:
 
 
 def _statement_matches_action(statement: dict[str, Any], action: str) -> bool:
+    normalized_action = action.lower()
     actions = _statement_actions(statement)
     if actions:
-        return any(fnmatch.fnmatchcase(action, pattern) for pattern in actions)
+        return any(
+            fnmatch.fnmatchcase(normalized_action, pattern.lower()) for pattern in actions
+        )
     not_actions = [
         value for value in _as_list(statement.get("NotAction", [])) if isinstance(value, str)
     ]
     return bool(not_actions) and not any(
-        fnmatch.fnmatchcase(action, pattern) for pattern in not_actions
+        fnmatch.fnmatchcase(normalized_action, pattern.lower()) for pattern in not_actions
     )
 
 
@@ -260,7 +263,26 @@ def _request_context(resource: str, required: dict[str, Any] | None) -> dict[str
     context.setdefault("aws:RequestedRegion", "us-east-1")
     context.setdefault("aws:ResourceRegion", "us-east-1")
     if ":alias/" in resource:
-        context.setdefault("kms:RequestAlias", resource.split(":alias/", 1)[1])
+        context.setdefault("kms:RequestAlias", "alias/" + resource.split(":alias/", 1)[1])
+    return context
+
+
+def _request_context_with_alias(
+    action: str,
+    resource: str,
+    required: dict[str, Any] | None,
+    paired_alias: str | None = None,
+) -> dict[str, Any]:
+    """Add request-only values for multi-resource KMS alias operations.
+
+    KMS evaluates ``CreateAlias`` once for the alias ARN and once for the
+    target-key ARN. The latter has no alias in its resource ARN, but the same
+    request still carries ``kms:RequestAlias``. Preserve that paired value so
+    a target-key Deny cannot be missed by the preflight check.
+    """
+    context = _request_context(resource, required)
+    if action.lower() == "kms:createalias" and paired_alias:
+        context.setdefault("kms:RequestAlias", paired_alias)
     return context
 
 
@@ -281,21 +303,55 @@ def _resource_samples(resource: str) -> list[str]:
     return [resource.replace("*", probe) for probe in probes]
 
 
+def _resource_pattern_covers(actual: str, reviewed: str) -> bool:
+    """Return whether an IAM resource pattern covers the reviewed pattern.
+
+    A literal policy ARN cannot satisfy a reviewed wildcard contract. For
+    wildcard ARNs, compare the stable prefix and suffix in addition to the
+    concrete probes; this prevents a one-name policy from passing a contract
+    that governs a family of Terraform-managed resources.
+    """
+    if reviewed == "*":
+        return actual == "*"
+    if "*" not in reviewed and "?" not in reviewed:
+        return fnmatch.fnmatchcase(reviewed, actual)
+    if actual == "*":
+        return True
+    if "*" not in actual and "?" not in actual:
+        return False
+    reviewed_prefix = reviewed.split("*", 1)[0]
+    reviewed_suffix = reviewed.rsplit("*", 1)[1]
+    actual_prefix = actual.split("*", 1)[0]
+    actual_suffix = actual.rsplit("*", 1)[1]
+    return reviewed_prefix.startswith(actual_prefix) and reviewed_suffix.endswith(actual_suffix)
+
+
 def _operation_is_covered(
-    statement: dict[str, Any], action: str, resource: str, conditions: dict[str, Any] | None,
+    statement: dict[str, Any],
+    action: str,
+    resource: str,
+    conditions: dict[str, Any] | None,
+    *,
+    require_required: bool = True,
 ) -> bool:
     if statement.get("Effect") != "Allow":
         return False
     if not _statement_matches_action(statement, action):
         return False
-    if not all(_statement_matches_resource(statement, sample) for sample in _resource_samples(resource)):
+    samples = _resource_samples(resource)
+    if not all(_statement_matches_resource(statement, sample) for sample in samples):
+        return False
+    if "Resource" in statement and not any(
+        _resource_pattern_covers(pattern, resource)
+        for pattern in _statement_resources(statement)
+    ):
         return False
     # For an Allow, compare only the conditions explicitly required by the
     # reviewed manifest. The derived request context is for Deny evaluation;
     # requiring it here would reject valid scoped Allows that do not repeat
     # provider-populated region/account keys.
     return _conditions_compatible(
-        statement.get("Condition"), conditions, require_required=True
+        statement.get("Condition"), conditions, require_required=require_required
     )
 
 
@@ -304,6 +360,8 @@ def _operation_is_denied(
     action: str,
     resource: str,
     conditions: dict[str, Any] | None = None,
+    *,
+    request_context: dict[str, Any] | None = None,
 ) -> bool:
     if statement.get("Effect") != "Deny":
         return False
@@ -324,7 +382,7 @@ def _operation_is_denied(
     if _has_unsupported_condition_operator(statement.get("Condition")):
         return True
     return _conditions_compatible(
-        statement.get("Condition"), _request_context(resource, conditions)
+        statement.get("Condition"), request_context or _request_context(resource, conditions)
     )
 
 
@@ -343,6 +401,7 @@ def main() -> int:
         fail("staging apply IAM manifest is malformed")
     account_id = args.role_arn.split(":", 4)[4].split(":", 1)[0]
     required_operations: list[tuple[str, str, dict[str, Any] | None]] = []
+    paired_alias: str | None = None
     for statement in statements:
         if not isinstance(statement, dict):
             continue
@@ -353,6 +412,9 @@ def main() -> int:
                 continue
             for resource in resources:
                 if isinstance(resource, str):
+                    if action.lower() == "kms:createalias" and ":alias/" in resource:
+                        alias_sample = _resource_samples(resource)[0]
+                        paired_alias = "alias/" + alias_sample.split(":alias/", 1)[1]
                     required_operations.append(
                         (action, resource.replace("${account_id}", account_id), conditions)
                     )
@@ -367,7 +429,15 @@ def main() -> int:
         f"{action} on {resource}"
         for action, resource, conditions in required_operations
         if any(
-            _operation_is_denied(statement, action, resource, conditions)
+            _operation_is_denied(
+                statement,
+                action,
+                resource,
+                conditions,
+                request_context=_request_context_with_alias(
+                    action, resource, conditions, paired_alias
+                ),
+            )
             for statement in all_statements
         )
     )
@@ -383,7 +453,13 @@ def main() -> int:
         or (
             boundary
             and not any(
-                _operation_is_covered(statement, action, resource, conditions)
+                _operation_is_covered(
+                    statement,
+                    action,
+                    resource,
+                    conditions,
+                    require_required=False,
+                )
                 for statement in boundary
             )
         )

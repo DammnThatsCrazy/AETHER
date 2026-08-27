@@ -196,6 +196,22 @@ def test_effective_policy_checker_matches_resources_conditions_and_denies() -> N
         "kms:CreateGrant",
         "arn:aws:kms:us-east-1:544471417928:key/contract-check",
     )
+    assert module._operation_is_denied(
+        {
+            "Effect": "Deny",
+            "Action": "KMS:CREATEALIAS",
+            "Resource": "arn:aws:kms:us-east-1:544471417928:key/*",
+            "Condition": {"StringLike": {"kms:RequestAlias": "alias/aether-staging-*"}},
+        },
+        "kms:CreateAlias",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+        request_context=module._request_context_with_alias(
+            "kms:CreateAlias",
+            "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+            None,
+            "alias/aether-staging-secrets",
+        ),
+    )
     assert not module._operation_is_denied(
         {
             "Effect": "Deny",
@@ -215,6 +231,13 @@ def test_effective_policy_checker_matches_resources_conditions_and_denies() -> N
         "kms:CreateKey",
         "arn:aws:kms:us-east-1:544471417928:key/*",
         {"aws:RequestTag/Environment": "staging"},
+    )
+    assert module._operation_is_covered(
+        {"Effect": "Allow", "Action": "kms:*", "Resource": "*"},
+        "kms:CreateKey",
+        "*",
+        {"aws:RequestTag/Environment": "staging"},
+        require_required=False,
     )
     assert module._operation_is_denied(
         {
@@ -343,6 +366,8 @@ def test_ecr_collision_lookup_precedes_any_apply_mutation() -> None:
     assert 'split("[")[1]' in block
     assert 'rtrimstr("]")' in block
     assert text.index("describe-repositories", start) < text.index("terraform apply", start)
+    assert "inputs.profile == 'staging' || inputs.profile == 'demo' || inputs.profile == 'preview'" in text
+    assert 'key=profiles/${PROFILE}/terraform.tfstate' in text
 
 
 def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:

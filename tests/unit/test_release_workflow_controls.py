@@ -417,7 +417,7 @@ def test_terraform_promote_uses_remote_backend_in_plan_and_apply():
     # The staging collision guard initializes the same remote backend before
     # the account-level ECS role bootstrap, in addition to plan and apply.
     assert workflow.count('-backend-config="bucket=${TF_STATE_BUCKET}"') == 3
-    assert workflow.count('-backend-config="key=profiles/${PROFILE}/terraform.tfstate"') == 2
+    assert workflow.count('-backend-config="key=profiles/${PROFILE}/terraform.tfstate"') == 3
     versions = (ROOT / "AWS Deployment/aether-aws/terraform/versions.tf").read_text(
         encoding="utf-8"
     )
