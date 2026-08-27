@@ -181,6 +181,27 @@ def _statement_matches_resource(statement: dict[str, Any], sample: str) -> bool:
     return False
 
 
+SUPPORTED_CONDITION_OPERATORS = frozenset(
+    {
+        "StringEquals",
+        "StringLike",
+        "ArnEquals",
+        "ArnLike",
+        "ForAllValues:StringEquals",
+        "ForAnyValue:StringEquals",
+    }
+)
+
+
+def _has_unsupported_condition_operator(condition: Any) -> bool:
+    """Return true when a condition cannot be evaluated by this checker."""
+    if not condition:
+        return False
+    if not isinstance(condition, dict):
+        return True
+    return any(operator not in SUPPORTED_CONDITION_OPERATORS for operator in condition)
+
+
 def _conditions_compatible(
     actual: Any, required: dict[str, Any] | None,
 ) -> bool:
@@ -196,7 +217,7 @@ def _conditions_compatible(
     if not isinstance(actual, dict) or not isinstance(required, dict):
         return False
     for operator, entries in actual.items():
-        if operator not in {"StringEquals", "StringLike", "ArnEquals", "ArnLike", "ForAllValues:StringEquals", "ForAnyValue:StringEquals"}:
+        if operator not in SUPPORTED_CONDITION_OPERATORS:
             return False
         if not isinstance(entries, dict):
             return False
@@ -272,6 +293,11 @@ def _operation_is_denied(
         return False
     if not _statement_matches_action(statement, action):
         return False
+    # An unsupported condition operator cannot be proven non-applicable. Treat
+    # it as a matching deny rather than allowing the preflight to pass and
+    # discovering the denial only after Terraform has mutated resources.
+    if _has_unsupported_condition_operator(statement.get("Condition")):
+        return True
     # A wildcard reviewed resource is a set of independently managed objects:
     # one explicit Deny on any concrete member makes the reviewed operation
     # unsafe even when other representative members are allowed.

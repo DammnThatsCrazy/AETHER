@@ -206,6 +206,19 @@ def test_effective_policy_checker_matches_resources_conditions_and_denies() -> N
         "kms:CreateGrant",
         "arn:aws:kms:us-east-1:544471417928:key/contract-check",
     )
+    # Unsupported deny operators must fail closed. Treating an unmodelled
+    # condition as non-matching would let preflight pass before AWS rejects a
+    # later Terraform operation.
+    assert module._operation_is_denied(
+        {
+            "Effect": "Deny",
+            "Action": "kms:*",
+            "Resource": "*",
+            "Condition": {"StringNotEquals": {"aws:RequestedRegion": "eu-west-1"}},
+        },
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+    )
 
 
 def test_external_provider_validation_precedes_service_linked_role() -> None:
