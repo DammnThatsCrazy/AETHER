@@ -18,7 +18,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
-last_synced_commit: "0aa9f6d9"
+last_synced_commit: "264f03ea"
 ---
 
 # Deployment Profiles
@@ -31,6 +31,11 @@ Aether declares eight deployment profiles, from a zero-backend local mock to a
 contractually isolated enterprise deployment. `config/deployment_profiles.yaml`
 is the canonical matrix — backend selectors, cost policy and numeric budgets —
 and `scripts/release/check_profile_config.py` validates it.
+
+Each Terraform environment entrypoint uses the same parse-safe provider and
+variable block shape. Changes to those entrypoints are treated as deployment
+profile changes: they must keep all profile plan tests and the cost/topology
+contracts green before promotion.
 
 Four of the eight are **cloud profiles**: `staging`, `production-lean`,
 `production-scale`, `enterprise-isolated`. Six of the eight are

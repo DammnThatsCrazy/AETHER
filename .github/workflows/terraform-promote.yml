@@ -162,6 +162,23 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
           aws-region: us-east-1
+      - name: Verify the assumed plan role matches the encrypted secret
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::assumed plan role account does not match AWS_TERRAFORM_PLAN_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = "$expected_role_path" || { echo '::error::assumed role does not match AWS_TERRAFORM_PLAN_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = AetherStagingPlan || { echo '::error::plan job assumed an unexpected IAM role'; exit 1; }
+          echo 'Verified plan credentials resolve to AetherStagingPlan in the expected account.'
       - name: Require immutable image digests
         env:
           PROFILE: ${{ inputs.profile }}
@@ -602,6 +619,23 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
           aws-region: us-east-1
+      - name: Verify the assumed apply role matches the encrypted secret
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::assumed apply role account does not match AWS_TERRAFORM_APPLY_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = "$expected_role_path" || { echo '::error::assumed role does not match AWS_TERRAFORM_APPLY_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = AetherStagingDeploy || { echo '::error::apply job assumed an unexpected IAM role'; exit 1; }
+          echo 'Verified apply credentials resolve to AetherStagingDeploy in the expected account.'
       - name: Verify effective Terraform state permissions
         env:
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
@@ -617,6 +651,15 @@ jobs:
             --lock-table "$TF_LOCK_TABLE" \
             --state-key "$TF_STATE_KEY" \
             --account-id "$account_id"
+      - name: Verify effective staging apply policy
+        if: inputs.profile == 'staging'
+        env:
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          python scripts/release/verify_effective_staging_apply_policy.py \
+            --role-arn "$AWS_TERRAFORM_APPLY_ROLE_ARN" \
+            --manifest config/staging_apply_iam_policy.yaml
       - name: Validate reviewed staging maintenance target group
         if: inputs.profile == 'staging'
         env:

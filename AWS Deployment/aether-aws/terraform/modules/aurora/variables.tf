@@ -41,6 +41,17 @@ variable "max_acu" {
   default     = 4
 }
 
+variable "auto_pause_seconds" {
+  type        = number
+  description = "Idle seconds before Aurora Serverless v2 auto-pauses; null disables auto-pause for warm profiles."
+  default     = null
+
+  validation {
+    condition     = var.auto_pause_seconds == null || (var.auto_pause_seconds >= 300 && var.auto_pause_seconds <= 86400)
+    error_message = "auto_pause_seconds must be null or between 300 and 86400 seconds."
+  }
+}
+
 variable "backup_retention_days" {
   type        = number
   description = "Automated backup retention in days"
