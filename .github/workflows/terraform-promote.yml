@@ -252,6 +252,12 @@ jobs:
           # The human-readable rendering redacts sensitive values itself and
           # never prints root variables at all.
           terraform show -no-color reviewed.tfplan > reviewed.tfplan.txt
+          # archive_file materializes the Lambda package while planning. Carry
+          # the exact bytes with the reviewed plan so apply never reconstructs
+          # a different ZIP (or fails because the apply runner lacks it).
+          if [ -f drift_lambda.zip ]; then
+            cp drift_lambda.zip reviewed.drift_lambda.zip
+          fi
           sha256sum reviewed.tfplan > reviewed.tfplan.sha256
           printf '%s\n' "$COMMIT_SHA" > reviewed.commit
           printf '%s\n' "$PROFILE" > reviewed.profile
@@ -546,6 +552,17 @@ jobs:
         run: |
           set -euo pipefail
           cp "${RUNNER_TEMP}/reviewed-plan"/reviewed.* .
+          # Preserve the archive_file output from the plan run verbatim. The
+          # binary plan records its checksum; recreating this ZIP at apply time
+          # would be nondeterministic and can invalidate the exact plan.
+          if [ -f reviewed.drift_lambda.zip ]; then
+            cp reviewed.drift_lambda.zip drift_lambda.zip
+          fi
+          if jq -e 'any(.resource_changes[]?; (.address // "") | contains("ml_drift_lambda"))' reviewed.tfplan.json >/dev/null \
+            && [ ! -s drift_lambda.zip ]; then
+            echo '::error::reviewed plan contains ml_drift_lambda but its exact package was not carried into apply'
+            exit 1
+          fi
       - name: Validate AWS and external-provider apply inputs
         env:
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
