@@ -388,6 +388,7 @@ def test_the_full_reviewed_evidence_set_is_verified_before_any_apply_dispatch():
         "select-profile",
         "wake-plan",
         "wake-validate",
+        "preflight-rehearsal-inputs",
     ]
     assert "needs.wake-validate.result == 'success'" in str(doc["jobs"]["wake-apply"]["if"]), (
         "wake-apply can run without a successful validation"
@@ -618,6 +619,7 @@ def test_sleep_never_suppresses_the_original_failure():
         "SELECT_RESULT",
         "WAKE_PLAN_RESULT",
         "WAKE_VALIDATE_RESULT",
+        "PREFLIGHT_RESULT",
         "WAKE_APPLY_RESULT",
         "REHEARSE_RESULT",
         "SLEEP_RESULT",

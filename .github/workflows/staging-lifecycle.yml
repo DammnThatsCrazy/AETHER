@@ -1928,7 +1928,7 @@ jobs:
   # ---------------------------------------------------------------------------
   outcome:
     name: Lifecycle outcome (never masks a failure)
-    needs: [select-profile, wake-plan, wake-validate, wake-apply, rehearse, sleep]
+    needs: [select-profile, wake-plan, wake-validate, preflight-rehearsal-inputs, wake-apply, rehearse, sleep]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -1938,6 +1938,7 @@ jobs:
           SELECT_RESULT: ${{ needs.select-profile.result }}
           WAKE_PLAN_RESULT: ${{ needs.wake-plan.result }}
           WAKE_VALIDATE_RESULT: ${{ needs.wake-validate.result }}
+          PREFLIGHT_RESULT: ${{ needs.preflight-rehearsal-inputs.result }}
           WAKE_APPLY_RESULT: ${{ needs.wake-apply.result }}
           REHEARSE_RESULT: ${{ needs.rehearse.result }}
           SLEEP_RESULT: ${{ needs.sleep.result }}
@@ -1949,7 +1950,8 @@ jobs:
           set -euo pipefail
           failed=()
           for phase in select-profile:"$SELECT_RESULT" wake-plan:"$WAKE_PLAN_RESULT" \
-                       wake-validate:"$WAKE_VALIDATE_RESULT" wake-apply:"$WAKE_APPLY_RESULT" \
+                       wake-validate:"$WAKE_VALIDATE_RESULT" preflight-rehearsal-inputs:"$PREFLIGHT_RESULT" \
+                       wake-apply:"$WAKE_APPLY_RESULT" \
                        rehearse:"$REHEARSE_RESULT" sleep:"$SLEEP_RESULT"
           do
             case "${phase##*:}" in
