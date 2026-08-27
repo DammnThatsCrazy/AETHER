@@ -28,6 +28,11 @@ on:
           - full-rehearsal
         default: validate
         required: true
+      confirm_runtime_wake:
+        description: "Explicitly authorize starting staging ECS services (required for apply-wake/full-rehearsal)"
+        type: boolean
+        default: false
+        required: false
       ml_image_digest:
         description: "Immutable ML serving image digest (sha256:...) — required only for profiles with remote_ml: true"
         type: string
@@ -120,6 +125,7 @@ jobs:
       - name: Resolve the staging profile from canonical configuration
         env:
           ACTION: ${{ inputs.action }}
+          CONFIRM_RUNTIME_WAKE: ${{ inputs.confirm_runtime_wake }}
         run: |
           set -euo pipefail
           test -f "${TF_DIR}/profiles/${STAGING_PROFILE}.tfvars" \
@@ -151,6 +157,7 @@ jobs:
           ACTION: ${{ inputs.action }}
           AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          CONFIRM_RUNTIME_WAKE: ${{ inputs.confirm_runtime_wake }}
         run: |
           set -euo pipefail
           role="${AWS_STAGING_LIFECYCLE_ROLE_ARN:-}"
@@ -172,6 +179,11 @@ jobs:
               esac
               ;;
           esac
+          if { [ "$ACTION" = apply-wake ] || [ "$ACTION" = full-rehearsal ]; } \
+            && [ "$CONFIRM_RUNTIME_WAKE" != true ]; then
+            echo '::error::runtime wake is disabled by default; set confirm_runtime_wake=true for an explicit staging wake authorization'
+            exit 1
+          fi
 
       - name: Verify lifecycle role assumption before dispatch
         if: inputs.action != 'validate' && inputs.action != 'plan-wake'
@@ -606,7 +618,11 @@ jobs:
           env = os.environ["STAGING_ENV"]
           runtime = (yaml.safe_load(open("config/runtime_deployment.yaml")) or {}).get("profiles") or {}
           pcfg = runtime.get(profile) or {}
-          services = pcfg.get("services") or {}
+          services = pcfg.get("services")
+          if not isinstance(services, dict) or not services:
+              sys.exit(f"::error::runtime_deployment.yaml profile {profile} has no services mapping")
+          if len(set(services)) != len(services):
+              sys.exit(f"::error::runtime_deployment.yaml profile {profile} has duplicate service keys")
           states = (pcfg.get("staging_state") or {}).get("states") or {}
           multiplier = (states.get(state) or {}).get("desired_count_multiplier")
           if multiplier is None:
@@ -1507,7 +1523,9 @@ jobs:
           env = os.environ["STAGING_ENV"]
           runtime = (yaml.safe_load(open("config/runtime_deployment.yaml")) or {}).get("profiles") or {}
           pcfg = runtime.get(profile) or {}
-          services = pcfg.get("services") or {}
+          services = pcfg.get("services")
+          if not isinstance(services, dict) or not services:
+              sys.exit(f"::error::runtime_deployment.yaml profile {profile} has no services mapping")
           states = (pcfg.get("staging_state") or {}).get("states") or {}
           multiplier = (states.get(state) or {}).get("desired_count_multiplier")
           if multiplier is None:
