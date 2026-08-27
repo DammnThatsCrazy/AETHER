@@ -19,9 +19,11 @@ REQUIRED_ACTIONS = {
     "ecr:TagResource",
     "secretsmanager:TagResource",
     "ssm:AddTagsToResource",
+    "ssm:ListTagsForResource",
     "kms:CreateKey",
     "kms:TagResource",
     "kms:CreateAlias",
+    "kms:CreateGrant",
     "kms:PutKeyPolicy",
     "ec2:GetSecurityGroupsForVpc",
     "kms:GetKeyRotationStatus",
@@ -34,6 +36,7 @@ REQUIRED_ACTIONS = {
     "iam:CreateServiceLinkedRole",
     "iam:GetRole",
     "iam:PassRole",
+    "lambda:TagResource",
     "elasticloadbalancing:DescribeTargetGroups",
     "elasticloadbalancing:DescribeLoadBalancers",
     "elasticloadbalancing:DescribeListeners",
@@ -154,9 +157,11 @@ def main() -> int:
         "ecr:TagResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "secretsmanager:TagResource": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
         "ssm:AddTagsToResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
+        "ssm:ListTagsForResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
         "kms:CreateKey": "*",
         "kms:TagResource": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:CreateAlias": "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*",
+        "kms:CreateGrant": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:PutKeyPolicy": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "ec2:GetSecurityGroupsForVpc": "*",
         "kms:GetKeyRotationStatus": "*",
@@ -169,6 +174,7 @@ def main() -> int:
         "iam:CreateServiceLinkedRole": "*",
         "iam:GetRole": "arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
         "iam:PassRole": "exact-staging-role-bindings",
+        "lambda:TagResource": "exact-staging-lambda-bindings",
         "elasticloadbalancing:DescribeTargetGroups": "*",
         "elasticloadbalancing:DescribeLoadBalancers": "*",
         "elasticloadbalancing:DescribeListeners": "*",
@@ -194,6 +200,16 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role": ["vpc-flow-logs.amazonaws.com"],
             }:
                 fail("iam:PassRole resource and service-principal bindings do not match")
+        elif action == "lambda:TagResource":
+            expected = {
+                "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift",
+                "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation",
+            }
+            if len(matching) != 1 or set(matching[0].get("resource") or []) != expected:
+                fail("lambda:TagResource must cover exactly the staging drift and secret-rotation functions")
+        elif action == "kms:CreateGrant":
+            if len(matching) != 1 or matching[0].get("resource") != expected or (matching[0].get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
+                fail("kms:CreateGrant must be limited to staging-tagged keys")
         elif action == "kms:TagResource":
             if len(matching) != 2 or any(s.get("resource") != expected for s in matching):
                 fail(f"{action} has an unexpected resource scope")
