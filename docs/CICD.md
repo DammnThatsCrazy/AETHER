@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "d022eaf8"
+last_synced_commit: "2ccd73c6"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -174,7 +174,10 @@ with the same alarm guard. Automatic rollback on breach at any step.
 Staging runtime mutation is explicitly authorized: `apply-wake` and
 `full-rehearsal` require `confirm_runtime_wake=true`, and the apply job must
 carry the exact reviewed Lambda archives alongside the immutable plan. Inline
-ML profiles may omit an ML digest; remote-ML profiles may not.
+ML profiles may omit an ML digest; remote-ML profiles may not. A full
+rehearsal also requires a live awake lease with sufficient remaining time;
+lease validity is rechecked immediately before mutating migration work so an
+expired lease cannot start another staging mutation.
 
 Two things get promoted, on two separate paths that must never be conflated: the
 **application** (an immutable release bound in `release.json`) and the
