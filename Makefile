@@ -563,8 +563,41 @@ exploration-readiness: ## Exploration fabric contract + registry + planner gates
 		tests/contracts/test_surface_capability_parity.py \
 		tests/unit/exploration -q -o addopts=""
 
-production-status: ## Readiness scorecard + blockers + live consistency checks (advisory)
+production-status: ## Historical maturity index (0-5, non-authoritative) + live consistency checks (advisory)
 	python scripts/production_status.py
+
+# ---------------------------------------------------------------------------
+# Multidimensional readiness (authoritative). Separates what is built, what is
+# runtime-integrated, what is verified, what is productionized, what is waiting
+# on external activation, and what has been proven per environment. The
+# per-profile hard-gate disposition — never a blended percentage — is the
+# authoritative release signal. See docs/readiness/READINESS-MODEL.md.
+# ---------------------------------------------------------------------------
+.PHONY: readiness-status readiness-validate readiness-validate-strict feature-readiness profile-readiness readiness-artifacts readiness-migrate
+
+readiness-status: ## Multidimensional readiness overview (text; --format json/markdown supported by the script)
+	python scripts/readiness_status.py
+
+readiness-validate: ## Fail-closed readiness-model validation (honesty rules + dependency graph + scope locks)
+	python scripts/validate_readiness_model.py
+
+readiness-validate-strict: ## Readiness-model validation; warnings fail too
+	python scripts/validate_readiness_model.py --strict
+
+feature-readiness: ## Status card for one feature: make feature-readiness FEATURE=<feature-id>
+	python scripts/readiness_status.py --feature $(FEATURE)
+
+profile-readiness: ## Release-profile report: make profile-readiness PROFILE=<profile-id>
+	python scripts/readiness_status.py --profile $(PROFILE)
+
+readiness-artifacts: ## Regenerate readiness artifacts (artifacts/readiness/*.json) + generated docs
+	python scripts/validate_readiness_model.py --update-locks
+	python scripts/readiness_status.py --emit-artifacts
+	python scripts/readiness_status.py --emit-docs
+	python scripts/migrate_readiness_data.py --write
+
+readiness-migrate: ## Legacy readiness migration report (production_status -> multidimensional model)
+	python scripts/migrate_readiness_data.py --write
 
 credentialless-certification: ## Provider certification matrix + honest CredentialReadiness states (report; exit 0)
 	python scripts/credentialless_certification.py

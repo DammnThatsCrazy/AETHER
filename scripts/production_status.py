@@ -7,7 +7,14 @@ area is, verifies the repo's own consistency gates, and lists release and
 scale blockers. Designed to run locally and in CI (no secrets, no external
 services required).
 
-The scorecard below is the canonical machine-readable readiness source.
+The 0-5 scorecard below is a HISTORICAL MATURITY INDEX. It blends independent
+conditions (built / integrated / verified / productionized / externally
+activated) into one scalar and is therefore NON-AUTHORITATIVE for release
+eligibility. It is preserved for continuity and comparison only. The
+authoritative readiness signal is the multidimensional model in
+config/readiness_model.yaml (per-dimension states + per-profile hard-gate
+disposition); see scripts/readiness_status.py and docs/readiness/READINESS-MODEL.md.
+
 docs/productization/aether_productization_audit.md is the dated narrative
 snapshot of the same data; when scores change, update BOTH (the audit doc
 review is enforced through its source_files link to this script).
@@ -969,14 +976,17 @@ def main() -> None:
         print(f"  [PASS]  all {len(REQUIRED_ARTIFACTS)} required artifacts present")
 
     # -- scorecard -----------------------------------------------------------
-    print("\nREADINESS SCORECARD  (0 absent .. 5 production+scale ready)")
+    print("\nHISTORICAL MATURITY INDEX  (0 absent .. 5 production+scale ready)")
+    print("  NON-AUTHORITATIVE for release eligibility — blends independent")
+    print("  conditions into one scalar. Authoritative signal: multidimensional")
+    print("  readiness model (make readiness-status / scripts/readiness_status.py).")
     print("-" * 74)
     width = max(len(a.name) for a in AREAS) + 2
     for area in AREAS:
         print(f"  {area.score}/5  {area.name:<{width}} {area.level}")
     overall = round(sum(a.score for a in AREAS) / len(AREAS), 2)
     print("-" * 74)
-    print(f"  Overall: {overall}/5 — pre-production: release-shaped, gated by the blockers below.")
+    print(f"  Historical maturity index: {overall}/5 — non-authoritative; see make readiness-status.")
 
     # -- blockers -------------------------------------------------------------
     print("\nBLOCKERS")
@@ -1006,7 +1016,15 @@ def main() -> None:
         payload = {
             "version": version,
             "generated_at": now,
+            # `overall_score` is retained for backward compatibility but is the
+            # non-authoritative historical maturity index. Do not use it to
+            # determine release eligibility — use the multidimensional model.
             "overall_score": overall,
+            "historical_maturity_index": overall,
+            "historical_maturity_index_scale": "0-5",
+            "authoritative_release_signal": False,
+            "canonical_readiness_model": "config/readiness_model.yaml",
+            "canonical_readiness_tooling": "scripts/readiness_status.py",
             "areas": [{**asdict(a), "level": a.level} for a in AREAS],
             "blockers": [asdict(b) for b in BLOCKERS],
             "live_checks": check_results,

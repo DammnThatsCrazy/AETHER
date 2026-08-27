@@ -1,0 +1,24 @@
+schema_version: 1
+note: 'Scope denominator locks. A denominator change at the same scope version fails
+  validation. Regenerate with: python scripts/validate_readiness_model.py --update-locks'
+scopes:
+- scope_id: deployment-terraform-profiles-v1
+  version: 1
+  denominator_signature: 18712ad860bedb1b
+  feature_id: deployment-terraform-profiles
+- scope_id: event-transport-v1
+  version: 1
+  denominator_signature: 85aff01562d2aa6f
+  feature_id: event-transport
+- scope_id: financial-observability-v1
+  version: 1
+  denominator_signature: 59b5942bfdc5b373
+  feature_id: financial-observability
+- scope_id: identity-resolution-v1
+  version: 1
+  denominator_signature: 0878db13d6774492
+  feature_id: identity-resolution
+- scope_id: push-notification-delivery-v1
+  version: 1
+  denominator_signature: 389ed76c71a395b0
+  feature_id: push-notification-delivery

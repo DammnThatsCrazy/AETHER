@@ -1,0 +1,327 @@
+{
+  "schema_version": 1,
+  "generated_by": "scripts/readiness_status.py --emit-artifacts",
+  "profiles": [
+    {
+      "profile": "local",
+      "title": "Local development",
+      "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+      "required_features": [
+        "event-transport",
+        "financial-observability",
+        "identity-resolution",
+        "push-notification-delivery"
+      ],
+      "experimental_features": [],
+      "coverage": {
+        "implementation": {
+          "ok": 4,
+          "of": 4,
+          "percent": 100.0
+        },
+        "productionization": {
+          "ok": 0,
+          "of": 0,
+          "percent": null
+        },
+        "activation": {
+          "ok": 1,
+          "of": 4,
+          "percent": 25.0
+        },
+        "environment_evidence": {
+          "ok": 4,
+          "of": 4,
+          "percent": 100.0
+        },
+        "dependency_satisfaction": {
+          "ok": 4,
+          "of": 4,
+          "percent": 100.0
+        },
+        "operational_ownership": {
+          "ok": 4,
+          "of": 4,
+          "percent": 100.0
+        },
+        "business_readiness": {
+          "ok": 0,
+          "of": 0,
+          "percent": null
+        }
+      },
+      "feature_dispositions": {
+        "deployment-terraform-profiles": "DISABLED_INTENTIONALLY",
+        "event-transport": "TECHNICALLY_RELEASE_ELIGIBLE",
+        "financial-observability": "TECHNICALLY_RELEASE_ELIGIBLE",
+        "identity-resolution": "TECHNICALLY_RELEASE_ELIGIBLE",
+        "push-notification-delivery": "TECHNICALLY_RELEASE_ELIGIBLE"
+      },
+      "hard_blockers": [],
+      "external_blockers": [],
+      "warnings": []
+    },
+    {
+      "profile": "staging",
+      "title": "Staging",
+      "disposition": "READY_TO_ACTIVATE",
+      "required_features": [
+        "deployment-terraform-profiles",
+        "event-transport",
+        "financial-observability",
+        "identity-resolution",
+        "push-notification-delivery"
+      ],
+      "experimental_features": [],
+      "coverage": {
+        "implementation": {
+          "ok": 5,
+          "of": 5,
+          "percent": 100.0
+        },
+        "productionization": {
+          "ok": 5,
+          "of": 5,
+          "percent": 100.0
+        },
+        "activation": {
+          "ok": 1,
+          "of": 5,
+          "percent": 20.0
+        },
+        "environment_evidence": {
+          "ok": 0,
+          "of": 5,
+          "percent": 0.0
+        },
+        "dependency_satisfaction": {
+          "ok": 5,
+          "of": 5,
+          "percent": 100.0
+        },
+        "operational_ownership": {
+          "ok": 5,
+          "of": 5,
+          "percent": 100.0
+        },
+        "business_readiness": {
+          "ok": 0,
+          "of": 0,
+          "percent": null
+        }
+      },
+      "feature_dispositions": {
+        "deployment-terraform-profiles": "READY_TO_ACTIVATE",
+        "event-transport": "READY_TO_ACTIVATE",
+        "financial-observability": "READY_TO_ACTIVATE",
+        "identity-resolution": "READY_TO_VALIDATE",
+        "push-notification-delivery": "READY_TO_ACTIVATE"
+      },
+      "hard_blockers": [],
+      "external_blockers": [
+        "deployment-terraform-profiles: ACCOUNT_WAITING: An AWS account/organization must be available. (owner: platform-ops)",
+        "deployment-terraform-profiles: INFRASTRUCTURE_WAITING: The Terraform plan has not been applied (no AWS account). (owner: platform-ops)",
+        "event-transport: INFRASTRUCTURE_WAITING: Cloud SNS/SQS backend must be provisioned for cloud profiles. (owner: platform-ops)",
+        "financial-observability: ACCOUNT_WAITING: A provider account must exist for the pilot tenant. (owner: tenant)",
+        "financial-observability: CREDENTIAL_WAITING: Provider API credentials must be issued and inserted. (owner: tenant / platform-ops)",
+        "push-notification-delivery: ACCOUNT_WAITING: Apple Developer + Firebase/Google + SES verified domain required. (owner: tenant)",
+        "push-notification-delivery: CREDENTIAL_WAITING: APNs/.p8, FCM service account, VAPID keypair, SES creds needed. (owner: tenant / platform-ops)"
+      ],
+      "warnings": []
+    },
+    {
+      "profile": "pilot",
+      "title": "Pilot",
+      "disposition": "READY_TO_ACTIVATE",
+      "required_features": [
+        "event-transport",
+        "financial-observability",
+        "identity-resolution"
+      ],
+      "experimental_features": [
+        "push-notification-delivery"
+      ],
+      "coverage": {
+        "implementation": {
+          "ok": 3,
+          "of": 3,
+          "percent": 100.0
+        },
+        "productionization": {
+          "ok": 3,
+          "of": 3,
+          "percent": 100.0
+        },
+        "activation": {
+          "ok": 1,
+          "of": 3,
+          "percent": 33.3
+        },
+        "environment_evidence": {
+          "ok": 0,
+          "of": 3,
+          "percent": 0.0
+        },
+        "dependency_satisfaction": {
+          "ok": 3,
+          "of": 3,
+          "percent": 100.0
+        },
+        "operational_ownership": {
+          "ok": 3,
+          "of": 3,
+          "percent": 100.0
+        },
+        "business_readiness": {
+          "ok": 0,
+          "of": 1,
+          "percent": 0.0
+        }
+      },
+      "feature_dispositions": {
+        "event-transport": "READY_TO_ACTIVATE",
+        "financial-observability": "READY_TO_ACTIVATE",
+        "identity-resolution": "READY_TO_VALIDATE",
+        "push-notification-delivery": "READY_TO_ACTIVATE"
+      },
+      "hard_blockers": [],
+      "external_blockers": [
+        "event-transport: INFRASTRUCTURE_WAITING: Cloud SNS/SQS backend must be provisioned for cloud profiles. (owner: platform-ops)",
+        "financial-observability: ACCOUNT_WAITING: A provider account must exist for the pilot tenant. (owner: tenant)",
+        "financial-observability: CREDENTIAL_WAITING: Provider API credentials must be issued and inserted. (owner: tenant / platform-ops)",
+        "push-notification-delivery: ACCOUNT_WAITING: Apple Developer + Firebase/Google + SES verified domain required. (owner: tenant)",
+        "push-notification-delivery: CREDENTIAL_WAITING: APNs/.p8, FCM service account, VAPID keypair, SES creds needed. (owner: tenant / platform-ops)"
+      ],
+      "warnings": []
+    },
+    {
+      "profile": "production-lean",
+      "title": "Production (lean)",
+      "disposition": "READY_TO_ACTIVATE",
+      "required_features": [
+        "deployment-terraform-profiles",
+        "event-transport",
+        "identity-resolution",
+        "push-notification-delivery"
+      ],
+      "experimental_features": [],
+      "coverage": {
+        "implementation": {
+          "ok": 4,
+          "of": 4,
+          "percent": 100.0
+        },
+        "productionization": {
+          "ok": 4,
+          "of": 4,
+          "percent": 100.0
+        },
+        "activation": {
+          "ok": 1,
+          "of": 4,
+          "percent": 25.0
+        },
+        "environment_evidence": {
+          "ok": 0,
+          "of": 4,
+          "percent": 0.0
+        },
+        "dependency_satisfaction": {
+          "ok": 4,
+          "of": 4,
+          "percent": 100.0
+        },
+        "operational_ownership": {
+          "ok": 4,
+          "of": 4,
+          "percent": 100.0
+        },
+        "business_readiness": {
+          "ok": 0,
+          "of": 0,
+          "percent": null
+        }
+      },
+      "feature_dispositions": {
+        "deployment-terraform-profiles": "READY_TO_ACTIVATE",
+        "event-transport": "READY_TO_ACTIVATE",
+        "identity-resolution": "READY_TO_VALIDATE",
+        "push-notification-delivery": "READY_TO_ACTIVATE"
+      },
+      "hard_blockers": [],
+      "external_blockers": [
+        "deployment-terraform-profiles: ACCOUNT_WAITING: An AWS account/organization must be available. (owner: platform-ops)",
+        "deployment-terraform-profiles: INFRASTRUCTURE_WAITING: The Terraform plan has not been applied (no AWS account). (owner: platform-ops)",
+        "event-transport: INFRASTRUCTURE_WAITING: Cloud SNS/SQS backend must be provisioned for cloud profiles. (owner: platform-ops)",
+        "push-notification-delivery: ACCOUNT_WAITING: Apple Developer + Firebase/Google + SES verified domain required. (owner: tenant)",
+        "push-notification-delivery: CREDENTIAL_WAITING: APNs/.p8, FCM service account, VAPID keypair, SES creds needed. (owner: tenant / platform-ops)"
+      ],
+      "warnings": []
+    },
+    {
+      "profile": "production-scale",
+      "title": "Production (scale)",
+      "disposition": "READY_TO_ACTIVATE",
+      "required_features": [
+        "deployment-terraform-profiles",
+        "event-transport",
+        "identity-resolution"
+      ],
+      "experimental_features": [
+        "push-notification-delivery"
+      ],
+      "coverage": {
+        "implementation": {
+          "ok": 3,
+          "of": 3,
+          "percent": 100.0
+        },
+        "productionization": {
+          "ok": 3,
+          "of": 3,
+          "percent": 100.0
+        },
+        "activation": {
+          "ok": 1,
+          "of": 3,
+          "percent": 33.3
+        },
+        "environment_evidence": {
+          "ok": 0,
+          "of": 3,
+          "percent": 0.0
+        },
+        "dependency_satisfaction": {
+          "ok": 3,
+          "of": 3,
+          "percent": 100.0
+        },
+        "operational_ownership": {
+          "ok": 3,
+          "of": 3,
+          "percent": 100.0
+        },
+        "business_readiness": {
+          "ok": 0,
+          "of": 0,
+          "percent": null
+        }
+      },
+      "feature_dispositions": {
+        "deployment-terraform-profiles": "READY_TO_ACTIVATE",
+        "event-transport": "READY_TO_ACTIVATE",
+        "identity-resolution": "READY_TO_VALIDATE",
+        "push-notification-delivery": "READY_TO_ACTIVATE"
+      },
+      "hard_blockers": [],
+      "external_blockers": [
+        "deployment-terraform-profiles: ACCOUNT_WAITING: An AWS account/organization must be available. (owner: platform-ops)",
+        "deployment-terraform-profiles: INFRASTRUCTURE_WAITING: The Terraform plan has not been applied (no AWS account). (owner: platform-ops)",
+        "event-transport: INFRASTRUCTURE_WAITING: Cloud SNS/SQS backend must be provisioned for cloud profiles. (owner: platform-ops)",
+        "push-notification-delivery: ACCOUNT_WAITING: Apple Developer + Firebase/Google + SES verified domain required. (owner: tenant)",
+        "push-notification-delivery: CREDENTIAL_WAITING: APNs/.p8, FCM service account, VAPID keypair, SES creds needed. (owner: tenant / platform-ops)"
+      ],
+      "warnings": []
+    }
+  ]
+}

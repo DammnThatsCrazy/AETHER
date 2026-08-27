@@ -5894,6 +5894,23 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/readiness/READINESS-MODEL.md",
+      "title": "Multidimensional Readiness Model",
+      "slug": "readiness/readiness-model",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect",
+        "exec",
+        "security"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/readiness/STAGING_READINESS_DOSSIER.md",
       "title": "Staging Readiness Dossier",
       "slug": "readiness/staging-readiness-dossier",

@@ -1,0 +1,215 @@
+# Feature readiness record — see config/readiness/schema.json and
+# config/readiness_model.yaml. Multidimensional: repository-controlled state is
+# tracked independently from external activation and environment evidence.
+feature_id: financial-observability
+title: Financial Observability
+owning_system: aether
+summary: >-
+  Credential-authority + webhook verification + canonical event delivery for the
+  observe-only financial pilot. Fully built and runtime-wired; activation needs
+  only provider credentials and a provider account. Missing credentials do NOT
+  reduce implementation completion.
+
+scope:
+  id: financial-observability-v1
+  version: 1
+  title: V1 Credential-Ready Observe-Only Pilot
+  target: credential-ready-observe-only-pilot
+  included:
+    - credential authority
+    - webhook verification
+    - canonical event delivery
+    - offline certification
+  excluded:
+    - transaction execution
+    - settlement
+    - custody
+    - production-scale traffic
+  deferred:
+    - live payout reconciliation
+  release_profile_applicability: [local, staging, pilot]
+
+repository_ceiling:
+  type: CREDENTIAL_TURNKEY
+  achieved: true
+  achieved_at: null
+  remaining_after_ceiling:
+    - Insert provider credentials into the credential platform
+    - Attach a provider account
+  remaining_is_repository_controlled: false
+  evidence:
+    - scripts/financial_credential_readiness.py
+    - config/pilot/examples/financial-observation.yaml
+
+implementation:
+  state: TURNKEY
+  denominator: in-scope repository controls for the V1 observe-only pilot
+  controls:
+    - id: credential-authority
+      description: BYOK credential authority + reference resolution wired
+      weight: 20
+      satisfied: true
+      rationale: credential_service.byok_ref resolves provider secrets at runtime
+      evidence: ["Backend Architecture/aether-backend/shared/credentials/"]
+    - id: webhook-verification
+      description: Provider webhook signature verification
+      weight: 20
+      satisfied: true
+      rationale: signature self-check on inbound provider webhooks
+      evidence: ["scripts/financial_credential_readiness.py"]
+    - id: canonical-event-delivery
+      description: Canonical event emission onto the platform event bus
+      weight: 20
+      satisfied: true
+      evidence: ["Backend Architecture/aether-backend/services/ingestion/batch.py"]
+    - id: offline-certification
+      description: Credentialless offline certification harness
+      weight: 20
+      satisfied: true
+      evidence: ["scripts/credentialless_certification.py"]
+    - id: runtime-wiring
+      description: Real runtime path reaches the observer
+      weight: 20
+      satisfied: true
+      rationale: registered on the ingestion runtime path, not a stub
+  remaining_work: []
+
+productionization:
+  denominator: in-scope productionization controls for observe-only pilot
+  controls:
+    - id: security-review
+      description: Security review of credential handling + webhook verification
+      weight: 25
+      satisfied: true
+    - id: observability
+      description: Metrics + structured logs + tracing on the observer path
+      weight: 25
+      satisfied: true
+    - id: idempotency
+      description: Idempotent event delivery (dedupe on provider event id)
+      weight: 25
+      satisfied: true
+    - id: release-gates
+      description: Canonical CI + credential-readiness gate wired
+      weight: 25
+      satisfied: true
+      evidence: ["Makefile: financial-credential-readiness-strict"]
+  remaining_work: []
+
+activation:
+  state: CREDENTIAL_WAITING
+  blockers:
+    - type: CREDENTIAL_WAITING
+      description: Provider API credentials must be issued and inserted.
+      owner: tenant / platform-ops
+      required_action: Insert provider secret into the credential platform; run credentials-preflight.
+      source_code_change_expected: false
+      affected_environments: [staging, pilot, production]
+      affected_release_profiles: [staging, pilot]
+      evidence_required: credentials-preflight parse + connection self-check
+    - type: ACCOUNT_WAITING
+      description: A provider account must exist for the pilot tenant.
+      owner: tenant
+      required_action: Register a provider account and bind it to the tenant.
+      source_code_change_expected: false
+      affected_environments: [staging, pilot, production]
+      affected_release_profiles: [staging, pilot]
+      evidence_required: provider account id bound in the credential registry
+
+dependencies:
+  hard:
+    - feature_id: identity-resolution
+      state: SATISFIED
+      prevents: [release]
+      note: Observer attributes events to resolved identities.
+    - feature_id: event-transport
+      state: SATISFIED
+      prevents: [release]
+      note: Canonical events ride the platform event bus.
+  soft: []
+
+environment_evidence:
+  local:
+    state: VERIFIED
+    credentialed: false
+    suite: tests/payment_rails
+    verification_method: offline unit + contract tests
+  ci:
+    state: VERIFIED
+    credentialed: false
+    verification_method: canonical CI gate (financial-credential-readiness-strict)
+  staging:
+    state: BLOCKED_EXTERNAL
+    credentialed: true
+    failure_summary: null
+    revalidation_policy: revalidate on credential rotation
+  pilot:
+    state: NOT_ATTEMPTED
+    credentialed: true
+  production:
+    state: NOT_APPLICABLE
+
+operational_ownership:
+  team: platform
+  technical_owner: platform-financial
+  operational_owner: platform-ops
+  escalation: pagerduty:platform
+  runbook: docs/runbooks/financial-observation.md
+  dashboards: [grafana:financial-observability]
+  alerts: [pagerduty:platform-financial]
+  service_level_target: 99.5% event delivery
+  recovery_objective: RTO 30m / RPO 5m
+
+business_readiness:
+  applicable: true
+  denominator: commercial controls for pilot launch
+  controls:
+    - id: pilot-agreement
+      description: Signed pilot agreement with the tenant
+      weight: 50
+      satisfied: false
+    - id: support-runbook
+      description: Support + incident runbook approved
+      weight: 50
+      satisfied: true
+  remaining_work: [pilot agreement signature]
+
+confidence:
+  level: HIGH
+  reasons:
+    - unit + contract + offline certification pass
+    - runtime wiring verified in CI
+  evidence_gaps:
+    - credentialed staging execution not yet performed
+
+release_profiles:
+  local:
+    participation: required
+    implementation_floor: VERIFIED
+    productionization_required: false
+    environment_gate: local
+    business_gate: false
+  staging:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: staging
+    business_gate: false
+  pilot:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: pilot
+    business_gate: true
+  production-lean:
+    participation: not_in_release
+    note: Out of scope for the V1 observe-only pilot.
+  production-scale:
+    participation: not_in_release
+    note: Out of scope for the V1 observe-only pilot.
+
+historical:
+  historical_maturity_index: 4
+  historical_maturity_index_scale: "0-5"
+  historical_maturity_index_authoritative: false
+  note: Legacy production_status.py scored the financial cohort as an area; retained for comparison only.
