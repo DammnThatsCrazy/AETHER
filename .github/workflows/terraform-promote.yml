@@ -258,6 +258,9 @@ jobs:
           if [ -f drift_lambda.zip ]; then
             cp drift_lambda.zip reviewed.drift_lambda.zip
           fi
+          if [ -f rotate_secret.zip ]; then
+            cp rotate_secret.zip reviewed.rotate_secret.zip
+          fi
           sha256sum reviewed.tfplan > reviewed.tfplan.sha256
           printf '%s\n' "$COMMIT_SHA" > reviewed.commit
           printf '%s\n' "$PROFILE" > reviewed.profile
@@ -558,9 +561,17 @@ jobs:
           if [ -f reviewed.drift_lambda.zip ]; then
             cp reviewed.drift_lambda.zip drift_lambda.zip
           fi
+          if [ -f reviewed.rotate_secret.zip ]; then
+            cp reviewed.rotate_secret.zip rotate_secret.zip
+          fi
           if jq -e 'any(.resource_changes[]?; (.address // "") | contains("ml_drift_lambda"))' reviewed.tfplan.json >/dev/null \
             && [ ! -s drift_lambda.zip ]; then
             echo '::error::reviewed plan contains ml_drift_lambda but its exact package was not carried into apply'
+            exit 1
+          fi
+          if jq -e 'any(.resource_changes[]?; (.address // "") | contains("secrets") and contains("rotation"))' reviewed.tfplan.json >/dev/null \
+            && [ ! -s rotate_secret.zip ]; then
+            echo '::error::reviewed plan contains secret rotation resources but its exact package was not carried into apply'
             exit 1
           fi
       - name: Validate AWS and external-provider apply inputs

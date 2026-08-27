@@ -125,6 +125,7 @@ jobs:
       - name: Resolve the staging profile from canonical configuration
         env:
           ACTION: ${{ inputs.action }}
+          CONFIRM_RUNTIME_WAKE: ${{ inputs.confirm_runtime_wake }}
         run: |
           set -euo pipefail
           test -f "${TF_DIR}/profiles/${STAGING_PROFILE}.tfvars" \
@@ -178,7 +179,7 @@ jobs:
               esac
               ;;
           esac
-          if { [ "$apply_wake" = true ] || [ "$rehearse" = true ]; } \
+          if { [ "$ACTION" = apply-wake ] || [ "$ACTION" = full-rehearsal ]; } \
             && [ "$CONFIRM_RUNTIME_WAKE" != true ]; then
             echo '::error::runtime wake is disabled by default; set confirm_runtime_wake=true for an explicit staging wake authorization'
             exit 1
