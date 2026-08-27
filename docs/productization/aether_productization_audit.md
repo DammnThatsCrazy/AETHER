@@ -22,6 +22,18 @@ machine-checkable version of this audit. This document is the dated narrative
 snapshot; the script is the routine. If they disagree, re-run the routine and
 update both.
 
+> **Readiness signal (2026-08 update).** The 0-5 scorecard in
+> `scripts/production_status.py` is now labelled a **historical maturity index**
+> and is **non-authoritative** for release eligibility — it blends independent
+> conditions (built / integrated / verified / productionized / externally
+> activated) into one scalar. The authoritative readiness signal is the
+> multidimensional model in `config/readiness_model.yaml` (per-dimension states
+> plus a per-release-profile hard-gate disposition). See
+> `docs/readiness/READINESS-MODEL.md`, `make readiness-status`, and
+> `make readiness-validate`. Missing credentials or unprovisioned infrastructure
+> no longer reduce implementation completion; they are recorded as external
+> activation blockers and environment-evidence gaps instead.
+
 ---
 
 ## 1. Executive Summary

@@ -1,0 +1,331 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.network/schemas/readiness-feature.schema.json",
+  "title": "Aether Feature Readiness Record",
+  "description": "Canonical multidimensional readiness record for a single feature/capability. One file per feature under config/readiness/features/. Validated structurally here and semantically by scripts/validate_readiness_model.py. Closed vocabularies are defined in config/readiness_model.yaml.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "feature_id",
+    "title",
+    "scope",
+    "repository_ceiling",
+    "implementation",
+    "productionization",
+    "activation",
+    "environment_evidence",
+    "confidence",
+    "release_profiles"
+  ],
+  "properties": {
+    "feature_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "description": "Stable, unique, URL-safe identifier."
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string" },
+    "owning_system": {
+      "type": "string",
+      "description": "e.g. aether | olympus-labs | shared."
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "target"],
+      "description": "Versioned, explicit measurement scope. Any material denominator change requires a version bump.",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string" },
+        "target": { "type": "string", "minLength": 1 },
+        "included": { "type": "array", "items": { "type": "string" } },
+        "excluded": { "type": "array", "items": { "type": "string" } },
+        "deferred": { "type": "array", "items": { "type": "string" } },
+        "release_profile_applicability": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "repository_ceiling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "achieved"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "CODE_COMPLETE",
+            "RUNTIME_INTEGRATED",
+            "VERIFIED",
+            "CREDENTIAL_TURNKEY",
+            "INFRASTRUCTURE_TURNKEY",
+            "RELEASE_TURNKEY",
+            "LIVE_VERIFIED",
+            "SCALE_VERIFIED"
+          ]
+        },
+        "achieved": { "type": "boolean" },
+        "achieved_at": { "type": ["string", "null"] },
+        "remaining_after_ceiling": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Actions that remain after the ceiling is reached (external, unless flagged repository_controlled)."
+        },
+        "remaining_is_repository_controlled": { "type": "boolean" },
+        "evidence": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "implementation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "controls"],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "NOT_STARTED",
+            "SCAFFOLDED",
+            "IMPLEMENTED",
+            "RUNTIME_INTEGRATED",
+            "VERIFIED",
+            "TURNKEY"
+          ]
+        },
+        "denominator": {
+          "type": "string",
+          "description": "What the completion percent is a percentage OF (the in-scope control set)."
+        },
+        "controls": { "$ref": "#/$defs/controlList" },
+        "remaining_work": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Open repository-controlled work. Must be empty for TURNKEY / 100%."
+        }
+      }
+    },
+    "productionization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["controls"],
+      "properties": {
+        "denominator": { "type": "string" },
+        "controls": { "$ref": "#/$defs/controlList" },
+        "remaining_work": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "activation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "blockers"],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "NO_EXTERNAL_BLOCKER",
+            "CREDENTIAL_WAITING",
+            "INFRASTRUCTURE_WAITING",
+            "ACCOUNT_WAITING",
+            "REGISTRATION_WAITING",
+            "DNS_WAITING",
+            "EXTERNAL_APPROVAL_WAITING",
+            "AUDIT_WAITING",
+            "LIVE_DATA_WAITING",
+            "ENVIRONMENT_ACCESS_WAITING",
+            "ENVIRONMENT_VALIDATION_PENDING"
+          ]
+        },
+        "blockers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/blocker" }
+        }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hard": { "type": "array", "items": { "$ref": "#/$defs/dependency" } },
+        "soft": { "type": "array", "items": { "$ref": "#/$defs/dependency" } },
+        "optional": { "type": "array", "items": { "$ref": "#/$defs/dependency" } }
+      }
+    },
+    "environment_evidence": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/environmentRecord"
+      }
+    },
+    "operational_ownership": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "team": { "type": ["string", "null"] },
+        "technical_owner": { "type": ["string", "null"] },
+        "operational_owner": { "type": ["string", "null"] },
+        "escalation": { "type": ["string", "null"] },
+        "runbook": { "type": ["string", "null"] },
+        "dashboards": { "type": "array", "items": { "type": "string" } },
+        "alerts": { "type": "array", "items": { "type": "string" } },
+        "service_level_target": { "type": ["string", "null"] },
+        "recovery_objective": { "type": ["string", "null"] },
+        "manual_procedures": { "type": "array", "items": { "type": "string" } },
+        "on_call": { "type": ["string", "boolean", "null"] }
+      }
+    },
+    "business_readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicable"],
+      "properties": {
+        "applicable": { "type": "boolean" },
+        "controls": { "$ref": "#/$defs/controlList" },
+        "remaining_work": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level"],
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": ["UNPROVEN", "LOW", "MODERATE", "HIGH", "VERY_HIGH"]
+        },
+        "reasons": { "type": "array", "items": { "type": "string" } },
+        "evidence_gaps": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "release_profiles": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/profileParticipation" }
+    },
+    "historical": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Non-authoritative legacy fields preserved for comparison (e.g. historical_maturity_index)."
+    }
+  },
+  "$defs": {
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "weight", "satisfied"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "weight": { "type": "number", "exclusiveMinimum": 0 },
+        "satisfied": { "type": "boolean" },
+        "rationale": { "type": "string" },
+        "evidence": { "type": "array", "items": { "type": "string" } },
+        "in_scope": { "type": "boolean", "default": true }
+      }
+    },
+    "controlList": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/control" }
+    },
+    "blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "description", "owner", "required_action", "source_code_change_expected"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "CREDENTIAL_WAITING",
+            "INFRASTRUCTURE_WAITING",
+            "ACCOUNT_WAITING",
+            "REGISTRATION_WAITING",
+            "DNS_WAITING",
+            "EXTERNAL_APPROVAL_WAITING",
+            "AUDIT_WAITING",
+            "LIVE_DATA_WAITING",
+            "ENVIRONMENT_ACCESS_WAITING",
+            "ENVIRONMENT_VALIDATION_PENDING"
+          ]
+        },
+        "description": { "type": "string", "minLength": 1 },
+        "owner": { "type": "string", "minLength": 1 },
+        "required_action": { "type": "string", "minLength": 1 },
+        "source_code_change_expected": { "type": "boolean" },
+        "affected_environments": { "type": "array", "items": { "type": "string" } },
+        "affected_release_profiles": { "type": "array", "items": { "type": "string" } },
+        "evidence_required": { "type": "string" }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feature_id", "state"],
+      "properties": {
+        "feature_id": { "type": "string", "minLength": 1 },
+        "state": {
+          "type": "string",
+          "enum": ["SATISFIED", "WAITING", "BLOCKED", "UNKNOWN"]
+        },
+        "version_constraint": { "type": "string" },
+        "required_profile": { "type": "string" },
+        "prevents": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["activation", "validation", "release"] }
+        },
+        "note": { "type": "string" }
+      }
+    },
+    "environmentRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state"],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "NOT_APPLICABLE",
+            "NOT_ATTEMPTED",
+            "BLOCKED_EXTERNAL",
+            "FAILED",
+            "VERIFIED",
+            "EXPIRED"
+          ]
+        },
+        "evidence": { "type": "array", "items": { "type": "string" } },
+        "verified_at": { "type": ["string", "null"] },
+        "verification_method": { "type": ["string", "null"] },
+        "environment_identifier": { "type": ["string", "null"] },
+        "credentialed": { "type": ["boolean", "null"] },
+        "suite": { "type": ["string", "null"] },
+        "revalidation_policy": { "type": ["string", "null"] },
+        "expires_at": { "type": ["string", "null"] },
+        "failure_summary": { "type": ["string", "null"] }
+      }
+    },
+    "profileParticipation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["participation"],
+      "properties": {
+        "participation": {
+          "type": "string",
+          "enum": ["required", "experimental", "disabled_intentionally", "not_in_release"]
+        },
+        "implementation_floor": {
+          "type": "string",
+          "enum": [
+            "NOT_STARTED",
+            "SCAFFOLDED",
+            "IMPLEMENTED",
+            "RUNTIME_INTEGRATED",
+            "VERIFIED",
+            "TURNKEY"
+          ]
+        },
+        "productionization_required": { "type": "boolean" },
+        "environment_gate": { "type": ["string", "null"] },
+        "business_gate": { "type": "boolean" },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}

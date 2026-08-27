@@ -15,6 +15,14 @@ last_synced_commit: "e9fc085"
 
 # AETHER × Kyber Release State
 
+> **Readiness signal (2026-08).** The `scripts/production_status.py` 0-5 scores
+> and the `~3.77 / 5` headline below are now the **historical maturity index** —
+> retained but **non-authoritative** for release eligibility (they blend
+> independent conditions into one scalar). The authoritative signal is the
+> multidimensional readiness model (`config/readiness_model.yaml`,
+> `make readiness-status`): per-dimension states plus a per-release-profile
+> hard-gate disposition. See `docs/readiness/READINESS-MODEL.md`.
+
 Single-page truth for where the platform stands at the head of
 `claude/aether-kyber-production-if4m8m`. This document narrates; the machine
 truth is `make production-status` (`scripts/production_status.py`). If the two

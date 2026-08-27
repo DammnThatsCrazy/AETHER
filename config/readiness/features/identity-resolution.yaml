@@ -1,0 +1,154 @@
+# Feature readiness record — see config/readiness/schema.json.
+feature_id: identity-resolution
+title: Identity Resolution
+owning_system: aether
+summary: >-
+  Four-anchor identity resolution (wallet > anonymous+fingerprint > email hash >
+  user id) with confidence scoring, merge endpoint + audit event, and a
+  pending-review queue. Runtime-integrated and verified; no external blocker.
+
+scope:
+  id: identity-resolution-v1
+  version: 1
+  title: V1 Founding-Tenant Identity Resolution
+  target: founding-tenant-production
+  included:
+    - four-anchor resolution
+    - confidence scoring
+    - merge endpoint + audit event
+    - pending-review queue
+  excluded:
+    - cross-tenant graph federation
+  deferred: []
+  release_profile_applicability: [local, staging, production-lean]
+
+repository_ceiling:
+  type: VERIFIED
+  achieved: true
+  remaining_after_ceiling:
+    - Capture credentialed staging + production environment evidence
+  remaining_is_repository_controlled: false
+  evidence:
+    - "Backend Architecture/aether-backend/services/identity/routes.py"
+    - "Backend Architecture/aether-backend/services/resolution/routes.py"
+
+implementation:
+  state: TURNKEY
+  denominator: in-scope repository controls for founding-tenant identity
+  controls:
+    - id: anchors
+      description: Four-anchor resolution implemented
+      weight: 30
+      satisfied: true
+    - id: merge-audit
+      description: Merge endpoint emits reason + audit event
+      weight: 25
+      satisfied: true
+    - id: review-queue
+      description: Low-confidence pending-review queue with approve/reject
+      weight: 25
+      satisfied: true
+    - id: tenant-isolation
+      description: Tenant-scoped repositories + authorization
+      weight: 20
+      satisfied: true
+  remaining_work: []
+
+productionization:
+  denominator: in-scope productionization controls
+  controls:
+    - id: observability
+      description: Metrics + logs + tracing on resolution + merge paths
+      weight: 34
+      satisfied: true
+    - id: rollback
+      description: Merge is reversible; documented rollback procedure
+      weight: 33
+      satisfied: true
+    - id: authz
+      description: Authorization + tenant isolation enforced
+      weight: 33
+      satisfied: true
+  remaining_work: []
+
+activation:
+  state: NO_EXTERNAL_BLOCKER
+  blockers: []
+
+dependencies:
+  hard: []
+  soft: []
+
+environment_evidence:
+  local:
+    state: VERIFIED
+    credentialed: false
+    suite: tests/unit
+  ci:
+    state: VERIFIED
+    credentialed: false
+  staging:
+    state: NOT_ATTEMPTED
+    credentialed: true
+  production:
+    state: NOT_ATTEMPTED
+    credentialed: true
+
+operational_ownership:
+  team: platform
+  technical_owner: identity
+  operational_owner: platform-ops
+  escalation: pagerduty:platform
+  runbook: docs/runbooks/identity-resolution.md
+  dashboards: [grafana:identity]
+  alerts: [pagerduty:identity]
+  service_level_target: 99.9% resolution availability
+  recovery_objective: RTO 15m / RPO 1m
+
+business_readiness:
+  applicable: false
+  controls: []
+
+confidence:
+  level: MODERATE
+  reasons:
+    - unit + integration tests pass offline
+  evidence_gaps:
+    - not yet exercised in credentialed staging or production
+
+release_profiles:
+  local:
+    participation: required
+    implementation_floor: VERIFIED
+    productionization_required: false
+    environment_gate: local
+    business_gate: false
+  staging:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: staging
+    business_gate: false
+  pilot:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: pilot
+    business_gate: false
+  production-lean:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: production
+    business_gate: false
+  production-scale:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: scale
+    business_gate: false
+
+historical:
+  historical_maturity_index: 4
+  historical_maturity_index_scale: "0-5"
+  historical_maturity_index_authoritative: false

@@ -20,13 +20,19 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "bdec91e"
+last_synced_commit: "a95942a4"
 ---
 
 # Documentation Pipeline
 
 > Internal reference for the tooling that keeps Aether's documentation
 > honest. Not customer-facing.
+
+The same drift-is-a-build-failure discipline governs the multidimensional
+readiness model: `make readiness-validate` (`scripts/validate_readiness_model.py`)
+is a sibling fail-closed gate, and `make readiness-artifacts` regenerates its
+committed outputs. Those readiness targets live in the root `Makefile` alongside
+the docs-pipeline targets described here.
 
 ## Why this exists
 

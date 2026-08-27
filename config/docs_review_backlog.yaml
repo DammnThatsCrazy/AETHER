@@ -10,4 +10,22 @@
 #   - docs_drift --update refuses to stamp listed docs.
 # Clearing an entry requires reviewing the doc against its source_files,
 # updating content where contradicted, stamping, and deleting the entry.
-docs: []
+docs:
+  - path: docs/AWS-DEPLOYMENT.md
+    reason: >-
+      Sources (AWS Deployment/**, terraform, verify_terraform_state_role.py)
+      were modified in a95942a4 after this doc's last content review
+      (last_synced_commit 264f03ea). Clean on main at a95942a4; flagged only on
+      this branch, which adds commits on top of a95942a4 and moves the
+      first-parent review boundary past it. Deployment/IAM content is unrelated
+      to the readiness-model change in this PR and was not reviewed here —
+      pending a genuine content re-review against the a95942a4 changes.
+    owner: platform@aether
+  - path: docs/CICD.md
+    reason: >-
+      Sources (cicd/**, .github/workflows/**) were modified in a95942a4 after
+      this doc's last content review (last_synced_commit 264f03ea). Clean on
+      main at a95942a4; flagged only on this branch, which adds commits on top
+      of a95942a4. CI/CD content is unrelated to the readiness-model change in
+      this PR and was not reviewed here — pending a genuine content re-review.
+    owner: platform@aether
