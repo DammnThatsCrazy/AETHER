@@ -21,7 +21,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "0c0ee837"
+last_synced_commit: "5e628ecf"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -32,8 +32,9 @@ Reviewed Terraform promotion pins immutable digests and injects the staging
 apply-role ARN only for staging. Inline-ML profiles leave the ML digest empty;
 remote-ML profiles must provide one before apply or wake.
 Before an apply, the promotion workflow parses the reviewed plan for ECR
-repositories and fails closed when a same-name repository exists outside the
-reviewed state; it never deletes or silently imports shared repositories. The
+repositories in every shared-account profile (staging, demo, and preview) and
+fails closed when a same-name repository exists outside the reviewed state; it
+never deletes or silently imports shared repositories. The
 confirmation-gated `Reconcile staging Terraform state` workflow provides the
 only recovery path: it accepts the exact reviewed ECR repository names (and/or
 the staging target-group ARN), validates that each exists, imports only those
@@ -59,6 +60,9 @@ resource. Attached Allows must also preserve every mandatory manifest
 condition; a broader unconditional Allow is not accepted as equivalent.
 The staging ECR collision check runs before any account-level service-linked
 role bootstrap, so a rejected repository cannot leave an IAM mutation behind.
+The checker also intersects identity policies with any permissions boundary,
+normalizes IAM action names case-insensitively, and carries the paired alias
+request context into both KMS `CreateAlias` resource checks.
 
 Before a full staging rehearsal can wake compute, the lifecycle workflow runs a
 staging-environment preflight. It requires a host-only `ALB_DNS_NAME` and the
