@@ -132,8 +132,21 @@ jobs:
             || { echo "::error::no tfvars for profile ${STAGING_PROFILE}"; exit 1; }
           python - <<'PY'
           import os, sys, yaml
+          class UniqueLoader(yaml.SafeLoader):
+              pass
+          def construct_mapping(loader, node, deep=False):
+              mapping = {}
+              for key_node, value_node in node.value:
+                  key = loader.construct_object(key_node, deep=deep)
+                  if key in mapping:
+                      raise yaml.constructor.ConstructorError(
+                          None, None, f"duplicate YAML key: {key}", key_node.start_mark)
+                  mapping[key] = loader.construct_object(value_node, deep=deep)
+              return mapping
+          UniqueLoader.add_constructor(
+              yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, construct_mapping)
           profile = os.environ["STAGING_PROFILE"]
-          deploy = (yaml.safe_load(open("config/deployment_profiles.yaml")) or {}).get("profiles") or {}
+          deploy = (yaml.load(open("config/deployment_profiles.yaml"), Loader=UniqueLoader) or {}).get("profiles") or {}
           cfg = deploy.get(profile)
           if not cfg:
               sys.exit(f"::error::config/deployment_profiles.yaml declares no {profile} profile")
@@ -143,7 +156,7 @@ jobs:
               sys.exit(f"::error::{profile} does not declare wake_sleep: true")
           if not (cfg.get("budget") or {}).get("hard_monthly_spend"):
               sys.exit(f"::error::{profile} declares no hard_monthly_spend budget ceiling")
-          runtime = (yaml.safe_load(open("config/runtime_deployment.yaml")) or {}).get("profiles") or {}
+          runtime = (yaml.load(open("config/runtime_deployment.yaml"), Loader=UniqueLoader) or {}).get("profiles") or {}
           state = ((runtime.get(profile) or {}).get("staging_state") or {}).get("states") or {}
           for required in ("awake", "asleep"):
               if required not in state:
@@ -883,6 +896,20 @@ jobs:
             fi
           done
           echo "staging runs the approved immutable release"
+
+      - name: Revalidate awake lease before migration mutation
+        # Revalidate immediately before the first mutating rehearsal action.
+        # The wake lease may have expired while image verification ran.
+        env:
+          MIN_LEASE_SECONDS: "300"
+        run: |
+          set -euo pipefail
+          lease="$(aws ssm get-parameter --name "$AWAKE_LEASE_PARAM" --query 'Parameter.Value' --output text)"
+          until="$(jq -r '.awake_until // empty' <<<"$lease")"
+          test -n "$until" || { echo '::error::awake lease is missing before migration mutation'; exit 1; }
+          now="$(date -u +%s)"; deadline="$(date -u -d "$until" +%s)"
+          test "$((deadline - now))" -ge "$MIN_LEASE_SECONDS" \
+            || { echo '::error::awake lease lacks five minutes for the next staging mutation'; exit 1; }
 
       - name: Run migrations and verify the resulting revision
         run: |
