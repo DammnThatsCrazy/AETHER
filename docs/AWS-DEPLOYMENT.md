@@ -31,7 +31,10 @@ the reviewed Terraform state is a hard stop, so shared repositories are never
 silently adopted or replaced. Secrets, ECR, and Aurora CMKs carry the staging
 environment tag; the Secrets Manager and regional CloudWatch Logs service
 principals are constrained by ViaService, caller account, and encryption
-context rather than broad key access.
+context rather than broad key access. The pre-apply verifier compares the
+attached policy statements with the reviewed staging manifest, including
+resource coverage, conditions, and explicit Deny statements, before any
+Terraform mutation.
 
 ## Scope — three different things live under `AWS Deployment/`
 

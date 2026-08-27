@@ -15,7 +15,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "9d6caf65"
+last_synced_commit: "4afb784b"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -32,6 +32,11 @@ staging IAM contract is explicit about repository metadata, event targets,
 parameter tags, staging Lambda tags, and KMS grant/key-tag operations, while
 CMK policies constrain service use to the staging account and regional service
 endpoints.
+Role-name assertions are staging-only: every other profile is checked against
+its encrypted role ARN without being forced to use a staging role name. The
+staging effective-policy check also evaluates each reviewed action against its
+resource patterns and conditions and rejects any overlapping explicit Deny;
+an action name appearing in an unrelated statement is not sufficient.
 
 ## Scope — two different things
 
