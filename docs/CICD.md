@@ -53,6 +53,16 @@ staging effective-policy check also evaluates each reviewed action against its
 resource patterns and conditions and rejects any overlapping explicit Deny;
 an action name appearing in an unrelated statement is not sufficient.
 
+Before a full staging rehearsal can wake compute, the lifecycle workflow runs a
+staging-environment preflight. It requires a host-only `ALB_DNS_NAME` and the
+tenant, isolation-peer, and admin API keys used by smoke, isolation, and cleanup
+checks. Plan-only and non-rehearsal actions remain available without those
+runtime inputs, but a full rehearsal fails before apply-wake rather than waking
+an environment that cannot be tested. Both the lifecycle and TTL cleanup paths
+also fail closed: an absent SSM lease is treated as already asleep, while an
+access, throttling, or other deletion error fails the run so unknown cleanup
+state cannot be reported as success.
+
 ## Scope — two different things
 
 `cicd/aether-cicd/` is a **Python demo runner**, not the pipeline. `main.py`

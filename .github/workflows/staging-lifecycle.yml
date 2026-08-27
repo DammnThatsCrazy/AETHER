@@ -312,6 +312,46 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
+  # Full-rehearsal smoke credentials are checked before any apply-wake
+  # dispatch. Plan-only runs remain usable without them, but a run that can
+  # start ECS must not discover an absent endpoint or test key after wake.
+  # ---------------------------------------------------------------------------
+  preflight-rehearsal-inputs:
+    name: Preflight full-rehearsal smoke inputs
+    needs: [select-profile]
+    if: needs.select-profile.outputs.rehearse == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    permissions:
+      contents: read
+    env:
+      ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME }}
+      STAGING_REHEARSAL_TENANT_API_KEY: ${{ secrets.STAGING_REHEARSAL_TENANT_API_KEY }}
+      STAGING_ISOLATION_PEER_API_KEY: ${{ secrets.STAGING_ISOLATION_PEER_API_KEY }}
+      STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
+    steps:
+      - name: Require the complete smoke and cleanup input set
+        run: |
+          set -euo pipefail
+          test -n "${ALB_DNS_NAME:-}" \
+            || { echo '::error::ALB_DNS_NAME is required in the staging environment or repository variables before a full rehearsal'; exit 1; }
+          case "$ALB_DNS_NAME" in
+            *://*|*/*|*' '*|*'"'*)
+              echo '::error::ALB_DNS_NAME must be a host name only (no scheme, path, or whitespace)'; exit 1 ;;
+          esac
+          for name in \
+            STAGING_REHEARSAL_TENANT_API_KEY \
+            STAGING_ISOLATION_PEER_API_KEY \
+            STAGING_ADMIN_API_KEY; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::${name} is required before a full rehearsal; add it as an encrypted repository or staging-environment secret"
+              exit 1
+            fi
+          done
+          echo 'Full-rehearsal endpoint, isolation, tenant, and cleanup inputs are present.'
+
+  # ---------------------------------------------------------------------------
   # Phase 2 — credentialed wake plan, produced by the reviewed promotion workflow.
   # ---------------------------------------------------------------------------
   wake-plan:
@@ -707,12 +747,14 @@ jobs:
   # ---------------------------------------------------------------------------
   wake-apply:
     name: Apply the exact reviewed wake plan
-    needs: [select-profile, wake-plan, wake-validate]
+    needs: [select-profile, wake-plan, wake-validate, preflight-rehearsal-inputs]
     if: >-
       !cancelled()
       && needs.select-profile.outputs.apply_wake == 'true'
       && needs.wake-plan.result != 'failure'
       && needs.wake-validate.result == 'success'
+      && (needs.select-profile.outputs.rehearse != 'true'
+          || needs.preflight-rehearsal-inputs.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 240
     permissions:
@@ -830,11 +872,12 @@ jobs:
   # ---------------------------------------------------------------------------
   rehearse:
     name: Full staging rehearsal
-    needs: [select-profile, wake-plan, wake-validate, wake-apply]
+    needs: [select-profile, wake-plan, wake-validate, wake-apply, preflight-rehearsal-inputs]
     if: >-
       !cancelled()
       && needs.select-profile.outputs.rehearse == 'true'
       && needs.wake-apply.result == 'success'
+      && needs.preflight-rehearsal-inputs.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 180
     environment: staging
@@ -1785,8 +1828,21 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          aws ssm delete-parameter --name "$AWAKE_LEASE_PARAM" >/dev/null 2>&1 \
-            || echo 'no awake lease to close'
+          # Only an explicit ParameterNotFound is a benign already-closed
+          # lease. AccessDenied, throttling, and other AWS failures must stay
+          # visible so cleanup cannot report success while state is unknown.
+          delete_output="$(mktemp)"
+          if aws ssm delete-parameter --name "$AWAKE_LEASE_PARAM" >"$delete_output" 2>&1; then
+            echo 'awake lease removed'
+          elif grep -q 'ParameterNotFound' "$delete_output"; then
+            echo 'no awake lease to close'
+          else
+            cat "$delete_output"
+            echo '::error::could not remove the staging awake lease; cleanup state is unknown'
+            rm -f "$delete_output"
+            exit 1
+          fi
+          rm -f "$delete_output"
 
       - name: Report cleanup outcome
         id: report

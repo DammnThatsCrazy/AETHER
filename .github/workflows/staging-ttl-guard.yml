@@ -428,8 +428,21 @@ jobs:
             printf 'autoscaling_floor_zeroed=%s at=%s\n' \
               "$target" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> artifacts/ttl-guard/actions.log
           done
-          aws ssm delete-parameter --name "$AWAKE_LEASE_PARAM" >/dev/null 2>&1 \
-            || echo 'no awake lease to close'
+          # Only an explicit ParameterNotFound is a benign already-closed
+          # lease. AccessDenied, throttling, and other AWS failures must stay
+          # visible so cleanup cannot report success while state is unknown.
+          delete_output="$(mktemp)"
+          if aws ssm delete-parameter --name "$AWAKE_LEASE_PARAM" >"$delete_output" 2>&1; then
+            echo 'awake lease removed'
+          elif grep -q 'ParameterNotFound' "$delete_output"; then
+            echo 'no awake lease to close'
+          else
+            cat "$delete_output"
+            echo '::error::could not remove the staging awake lease; cleanup state is unknown'
+            rm -f "$delete_output"
+            exit 1
+          fi
+          rm -f "$delete_output"
           printf 'scaled=%s\n' "$scaled" >> "$GITHUB_OUTPUT"
 
       - name: Verify staging is back at zero
