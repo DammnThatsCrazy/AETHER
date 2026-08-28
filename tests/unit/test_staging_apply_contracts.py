@@ -389,7 +389,6 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     assert "module.ecr.aws_kms_key.ecr" in text
     assert "terraform-nonprod-shared" in text
 
-
 def test_staging_reconciles_preexisting_immutable_aes256_backend_repository() -> None:
     """The release-built backend ECR repository must never be replaced."""
     module = (TF / "modules/ecr/main.tf").read_text(encoding="utf-8")
