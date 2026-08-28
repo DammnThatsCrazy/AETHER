@@ -28,6 +28,13 @@ The Unified On-Chain Intelligence Graph extends the Aether platform with an 8-la
 
 > **Infrastructure:** `GraphClient` auto-selects Neptune (via gremlinpython) when `NEPTUNE_ENDPOINT` is set, falling back to in-memory in `AETHER_ENV=local`. Non-local environments without Neptune will fail-closed with `RuntimeError`.
 
+Tenant-scoped erasure is a first-class graph operation. The cleanup path uses
+`GraphClient.delete_tenant_data(tenant_id)` and resolves both the canonical
+`tenantId` and legacy `tenant_id` spellings. It removes owned vertices plus
+tenant-tagged edges (including edges touching a shared endpoint) and fails
+closed when the configured graph backend cannot complete the operation; system
+vertices and unscoped edges are never selected.
+
 ## V1 Activation Guide
 
 To enable the Intelligence Graph in staging/production:

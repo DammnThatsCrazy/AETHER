@@ -53,6 +53,19 @@ metered per-service for billing (see `OverageCalculator`).
 **Feature gating** rejects requests for services outside the tenant's
 plan with HTTP 403 and a structured `required_plan` upgrade message.
 
+### Administrative tenant cleanup
+
+`DELETE /v1/admin/tenants/{tenant_id}` is a fail-closed destructive operation.
+It revokes durable API keys before deleting rows, verifies auth-cache eviction,
+revokes contained public-ingest identifiers, and removes tenant-scoped
+rehearsal data from consent/DSR, ingestion, analytics, profile, and graph
+projection stores before removing the tenant row. A successful response
+includes a `cleanup_complete` receipt; a partial cleanup raises an error so the
+caller can retry without mistaking an orphaned credential or projection for a
+completed deletion. Billing and immutable security-audit evidence are retained
+under policy. The deactivation endpoint uses the same credential invalidation
+order but retains data for recovery.
+
 ### Response Headers
 
 Every successful response carries:

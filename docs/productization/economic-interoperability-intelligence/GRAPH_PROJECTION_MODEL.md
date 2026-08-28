@@ -46,6 +46,12 @@ Cross-domain rules:
   vertex has no ownership history from another import, and no active edge still
   references it. Pre-existing or shared vertices are retained.
 
+Administrative rehearsal cleanup is separate from import rollback and is
+tenant-scoped: `GraphClient.delete_tenant_data` removes projection vertices and
+tenant-tagged edges for both `tenantId` and legacy `tenant_id`, including edges
+to shared endpoints. It fails closed on a backend error and never removes
+unscoped/system graph data.
+
 ## Tenant scoping on reads
 
 The tenant a vertex or edge belongs to is resolved through
