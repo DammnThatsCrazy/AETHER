@@ -20,7 +20,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "a95942a4"
+last_synced_commit: "187a458b8"
 ---
 
 # Documentation Pipeline
@@ -33,6 +33,10 @@ readiness model: `make readiness-validate` (`scripts/validate_readiness_model.py
 is a sibling fail-closed gate, and `make readiness-artifacts` regenerates its
 committed outputs. Those readiness targets live in the root `Makefile` alongside
 the docs-pipeline targets described here.
+
+Repo Health scopes its concurrency group by event type and branch. Push and
+pull-request runs therefore retain independent evidence instead of canceling
+one another before the required PR gate reports its result.
 
 ## Why this exists
 
