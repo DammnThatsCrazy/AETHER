@@ -468,7 +468,9 @@ entry cannot leave a partial repair. Both import and untaint mutations run under
 the protected `AWS_TERRAFORM_APPLY_ROLE_ARN` state-write role; the read-only
 plan role is never used to persist reconciliation changes. Comma-separated
 targets are normalized and deduplicated before the mutation loop. ECR imports additionally require
-matching the reviewed staging KMS key. The import runner carries the same Auth0 provider environment
+matching the reviewed staging KMS key. The workflow validates
+`config/terraform_state_access_policy.yaml` and simulates the assumed role's
+effective bucket/table permissions before any state mutation. The import runner carries the same Auth0 provider environment
 as a normal remote plan, because Terraform configures every root provider even
 when importing a single AWS address. Aurora alarms and dashboard widgets are
 likewise selected by a static profile flag rather than an unresolved cluster
