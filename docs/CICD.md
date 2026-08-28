@@ -39,7 +39,8 @@ mutation, and checks both the canonical staging address and the other shared
 profiles for duplicate ownership. It also verifies that each canonical staging
 address contains the requested repository identity before clearing a taint, so
 a stale, already-untainted, or manually moved state entry cannot be repaired
-under the wrong name.
+under the wrong name. Duplicate-owner matching is whitespace-tolerant because
+`terraform state show` is a human-oriented format.
 
 Reviewed Terraform promotion pins immutable digests and injects the staging
 apply-role ARN only for staging. Inline-ML profiles leave the ML digest empty;

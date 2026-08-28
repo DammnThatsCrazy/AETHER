@@ -50,7 +50,8 @@ three staging ECR repositories remain mutable and use the staging KMS key.
 Before clearing a taint, reconciliation also verifies that the canonical
 Terraform address stores the same repository name requested by the operator;
 an address that points at a different repository, or is no longer tainted, is
-refused before state is mutated.
+refused before state is mutated. Duplicate-owner inspection tolerates
+human-formatted Terraform state output spacing.
 
 The reviewed Terraform promotion writes a secret-free `reviewed.api-host`
 evidence file after an apply. This is the configured `domain_name` hostname

@@ -316,7 +316,7 @@ jobs:
                 [ -n "$candidate" ] || continue
                 [ "$candidate" = "$address" ] && continue
                 if terraform state show -no-color "$candidate" 2>/dev/null \
-                  | grep -Fq "name = \"${repository}\""; then
+                  | grep -Eq "^[[:space:]]*name[[:space:]]*=[[:space:]]*\"${repository}\"[[:space:]]*$"; then
                   echo "::error::Refusing ECR taint repair: repository '$repository' has another staging state owner at $candidate"; exit 1
                 fi
               done <<< "$staging_ecr_addresses"
