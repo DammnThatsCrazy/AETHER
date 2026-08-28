@@ -66,8 +66,10 @@ request context into both KMS `CreateAlias` resource checks.
 
 Before a full staging rehearsal can wake compute, the lifecycle workflow runs a
 staging-environment preflight. It requires one encrypted, pre-existing
-`STAGING_ADMIN_API_KEY` bootstrap credential. The ALB hostname is captured from
-the reviewed Terraform apply output after the load balancer exists, and the
+`STAGING_ADMIN_API_KEY` bootstrap credential. The certificate-covered API
+hostname is captured from the reviewed Terraform apply output after the load
+balancer exists; promotion verifies it resolves to the applied ALB before
+publishing it, and the
 primary rehearsal and isolation API keys are generated through the admin
 tenant/key routes as run-scoped tenants after wake; they are masked, never
 uploaded, and are deleted or deactivated by the always-run cleanup. This removes

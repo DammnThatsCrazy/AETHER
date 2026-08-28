@@ -573,7 +573,7 @@ def test_the_rehearsal_tenant_is_always_removed():
     run = step["run"]
     assert 'request("DELETE"' in run
     assert "/deactivate" in run, "there is no expiry fallback when delete is refused"
-    assert "was neither deleted nor expired" in run
+    assert "cleanup incomplete; all tenants were attempted" in run
 
 
 def test_rehearsal_bootstraps_run_scoped_credentials_and_cleans_only_marked_tenants():
@@ -597,6 +597,8 @@ def test_rehearsal_bootstraps_run_scoped_credentials_and_cleans_only_marked_tena
     assert "refusing unsafe cleanup" in cleanup
     assert 'request("DELETE"' in cleanup
     assert 'request("POST"' in cleanup
+    assert "failures = []" in cleanup
+    assert "all tenants were attempted" in cleanup
     assert "Bootstrap run-scoped rehearsal tenants and API keys" in names
     assert 'call("POST", "/v1/tenants", body=' in script
     assert '"contact_email":' in script
@@ -616,23 +618,26 @@ def test_full_rehearsal_inputs_are_derived_after_wake_not_precreated():
     assert "vars.ALB_DNS_NAME" not in workflow
     assert "secrets.STAGING_REHEARSAL_TENANT_API_KEY" not in workflow
     assert "secrets.STAGING_ISOLATION_PEER_API_KEY" not in workflow
-    assert "needs.wake-apply.outputs.alb_dns_name" in workflow
+    assert "needs.wake-apply.outputs.api_host" in workflow
     wake_apply = doc["jobs"]["wake-apply"]
-    assert wake_apply["outputs"]["alb_dns_name"] == "${{ steps.outputs.outputs.alb_dns_name }}"
+    assert wake_apply["outputs"]["api_host"] == "${{ steps.outputs.outputs.api_host }}"
     wake_script = _job_script(doc, "wake-apply")
     assert "gh run download" in wake_script
-    assert "reviewed.alb-dns" in wake_script
+    assert "reviewed.api-host" in wake_script
 
 
-def test_promotion_publishes_only_the_non_secret_alb_output():
+def test_promotion_publishes_certificate_covered_api_host_and_raw_alb_evidence():
     doc = _workflow_yaml(PROMOTE_WORKFLOW)
     apply_script = _job_script(doc, "apply")
     assert 'terraform output -raw alb_dns' in apply_script
+    assert 'terraform output -raw backend_url' in apply_script
+    assert 'reviewed.api-host' in apply_script
     assert 'reviewed.alb-dns' in apply_script
     upload = next(
         s for s in _steps(doc, "apply")
         if str(s.get("uses", "")).startswith("actions/upload-artifact")
     )
+    assert "reviewed.api-host" in upload["with"]["path"]
     assert "reviewed.alb-dns" in upload["with"]["path"]
 
 

@@ -946,20 +946,53 @@ jobs:
           fi
           terraform apply -input=false reviewed.tfplan | tee reviewed.apply.txt
           sha256sum reviewed.apply.txt > reviewed.apply.sha256
-          # The ALB hostname is assigned by AWS at apply time. Capture only
-          # that non-secret output so the lifecycle workflow can feed the
-          # endpoint into its smoke tests without a manually maintained
-          # repository variable (which cannot exist before the first apply).
+          # The ALB hostname is assigned by AWS at apply time, but it is not the
+          # HTTPS endpoint: the certificate is issued for var.domain_name. Keep
+          # the raw ALB name as evidence, then publish the configured backend
+          # hostname for the lifecycle smoke tests. The two are checked against
+          # the same resolved address so a TLS hostname mismatch cannot reach
+          # the rehearsal.
           alb_dns="$(terraform output -raw alb_dns)"
           case "$alb_dns" in
             ''|*://*|*/*|*' '*|*'"'*)
               echo '::error::terraform output alb_dns is empty or is not a host name'; exit 1 ;;
           esac
+          backend_url="$(terraform output -raw backend_url)"
+          backend_host="$(python - "$backend_url" "$alb_dns" <<'PY'
+          import socket
+          import sys
+          from urllib.parse import urlparse
+
+          url, alb = sys.argv[1:]
+          parsed = urlparse(url)
+          host = parsed.hostname or ""
+          if parsed.scheme != "https" or parsed.path not in ("", "/") or not host:
+              raise SystemExit("terraform output backend_url is not a certificate-covered HTTPS host")
+
+          def addresses(name: str) -> set[str]:
+              return {item[4][0] for item in socket.getaddrinfo(name, 443, type=socket.SOCK_STREAM)}
+
+          try:
+              host_addresses = addresses(host)
+              alb_addresses = addresses(alb)
+          except OSError as exc:
+              raise SystemExit(f"backend hostname does not resolve to the applied ALB: {exc}")
+          if not host_addresses or not alb_addresses or not (host_addresses & alb_addresses):
+              raise SystemExit("backend hostname does not resolve to the applied ALB")
+          print(host)
+          PY
+          )"
+          case "$backend_host" in
+            ''|*://*|*/*|*' '*|*'"'*)
+              echo '::error::terraform output backend_url produced an invalid host'; exit 1 ;;
+          esac
+          printf '%s\n' "$backend_host" > reviewed.api-host
           printf '%s\n' "$alb_dns" > reviewed.alb-dns
       - uses: actions/upload-artifact@v4
         with:
           name: terraform-apply-evidence-${{ github.run_id }}
           path: |
             AWS Deployment/aether-aws/terraform/reviewed.apply.*
+            AWS Deployment/aether-aws/terraform/reviewed.api-host
             AWS Deployment/aether-aws/terraform/reviewed.alb-dns
           if-no-files-found: error

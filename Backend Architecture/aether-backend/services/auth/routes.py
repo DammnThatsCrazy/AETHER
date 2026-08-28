@@ -190,11 +190,28 @@ async def _evict_tenant_api_keys(tenant_id: str) -> int:
 
 
 async def _cascade_delete_tenant(tenant_id: str) -> dict:
-    """Delete all data for a tenant across every table. Returns per-table counts."""
+    """Delete all data for a tenant across every table. Returns per-table counts.
+
+    Public ingest identifiers are revoked before the tenant row is removed so
+    contained registration credentials cannot outlive their owner.
+    """
     counts: dict = {}
 
     # 1. Evict Redis immediately so auth fails on the next request
     counts["keys_evicted"] = await _evict_tenant_api_keys(tenant_id)
+
+    # Public registration can issue a contained ingest identifier before the
+    # tenant is activated. Revoke those identifiers before deleting the tenant
+    # row so an otherwise successful GDPR/cleanup delete cannot leave a live
+    # credential pointing at an owner that no longer exists.
+    try:
+        from services.auth.sessions import public_ingest_service
+        counts["public_ingest_identifiers_revoked"] = (
+            await public_ingest_service.revoke_all_for_tenant(tenant_id)
+        )
+    except Exception as e:
+        logger.debug(f"Public ingest revocation skipped: tenant={tenant_id} error={e}")
+        counts["public_ingest_identifiers_revoked"] = 0
 
     # 2. Cancel Stripe subscription (best-effort — never blocks deletion)
     try:
@@ -739,19 +756,28 @@ async def delete_my_account(body: AccountDeletionRequest, request: Request):
 
 @admin_auth_router.post("/v1/admin/tenants/{tenant_id}/deactivate")
 async def deactivate_tenant(tenant_id: str, request: Request):
-    """Immediately deactivate a tenant: evict Redis auth entries + set status=inactive.
+    """Immediately deactivate a tenant and revoke all active credentials.
 
-    Does NOT delete any data. Existing API keys stop working on the next request.
-    Re-activation requires manually setting status=active.
+    Does NOT delete any data. Existing API keys and contained public ingest
+    identifiers stop working on the next request. Re-activation requires
+    manually setting status=active and issuing fresh credentials.
     """
     tenant_rec = await _repo.find_by_id(tenant_id)
     if not tenant_rec:
         raise NotFoundError("tenant")
 
+    try:
+        from services.auth.sessions import public_ingest_service
+        ingest_revoked = await public_ingest_service.revoke_all_for_tenant(tenant_id)
+    except Exception as e:
+        logger.debug(f"Public ingest revocation skipped: tenant={tenant_id} error={e}")
+        ingest_revoked = 0
+
     if tenant_rec.get("status") == "inactive":
         return APIResponse(data={
             "tenant_id": tenant_id,
             "status": "inactive",
+            "public_ingest_identifiers_revoked": ingest_revoked,
             "message": "Tenant is already inactive.",
         }).to_dict()
 
@@ -765,6 +791,7 @@ async def deactivate_tenant(tenant_id: str, request: Request):
         "tenant_id": tenant_id,
         "status": "inactive",
         "keys_evicted": evicted,
+        "public_ingest_identifiers_revoked": ingest_revoked,
         "message": "Tenant deactivated. All API keys have been invalidated immediately.",
     }).to_dict()
 

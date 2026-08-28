@@ -761,7 +761,7 @@ jobs:
       id-token: write
     outputs:
       apply_run_id: ${{ steps.dispatch.outputs.apply_run_id }}
-      alb_dns_name: ${{ steps.outputs.outputs.alb_dns_name }}
+      api_host: ${{ steps.outputs.outputs.api_host }}
     steps:
       - uses: actions/checkout@v4
       - name: Dispatch the reviewed apply for the verified wake plan
@@ -826,7 +826,7 @@ jobs:
           fi
           printf 'apply_run_id=%s\n' "$run_id" >> "$GITHUB_OUTPUT"
 
-      - name: Capture the applied ALB hostname
+      - name: Capture the applied certificate-covered API hostname
         id: outputs
         env:
           GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
@@ -839,15 +839,15 @@ jobs:
           gh run download "$APPLY_RUN_ID" \
             --name "terraform-apply-evidence-${APPLY_RUN_ID}" \
             --dir "$evidence_dir"
-          alb_file="$(find "$evidence_dir" -type f -name 'reviewed.alb-dns' -print -quit)"
-          test -n "$alb_file" || { echo '::error::reviewed apply did not publish reviewed.alb-dns'; exit 1; }
-          alb_dns="$(tr -d '\r\n' < "$alb_file")"
-          case "$alb_dns" in
+          api_file="$(find "$evidence_dir" -type f -name 'reviewed.api-host' -print -quit)"
+          test -n "$api_file" || { echo '::error::reviewed apply did not publish reviewed.api-host'; exit 1; }
+          api_host="$(tr -d '\r\n' < "$api_file")"
+          case "$api_host" in
             ''|*://*|*/*|*' '*|*'"'*)
-              echo '::error::applied ALB output is empty or is not a host name'; exit 1 ;;
+              echo '::error::applied API output is empty or is not a host name'; exit 1 ;;
           esac
-          printf 'alb_dns_name=%s\n' "$alb_dns" >> "$GITHUB_OUTPUT"
-          echo 'Applied ALB hostname captured for the rehearsal.'
+          printf 'api_host=%s\n' "$api_host" >> "$GITHUB_OUTPUT"
+          echo 'Certificate-covered API hostname captured for the rehearsal.'
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -912,7 +912,9 @@ jobs:
       actions: read
       id-token: write
     env:
-      ALB_DNS_NAME: ${{ needs.wake-apply.outputs.alb_dns_name }}
+      # Kept under the legacy variable name for the existing probe scripts;
+      # the value is the certificate-covered API hostname, not *.elb.amazonaws.com.
+      ALB_DNS_NAME: ${{ needs.wake-apply.outputs.api_host }}
       BACKEND_IMAGE_DIGEST: ${{ needs.wake-plan.outputs.backend_image_digest }}
     steps:
       - uses: actions/checkout@v4
@@ -1582,23 +1584,37 @@ jobs:
           if not unique:
               print("no validated run-scoped tenant ids were recorded; refusing to guess")
               raise SystemExit(0)
+          failures = []
+          base = f"https://{os.environ['ALB_DNS_NAME']}"
+          def request(method, path):
+              completed = subprocess.run([
+                  "curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "-X", method,
+                  "-H", f"X-API-Key: {os.environ['ADMIN_API_KEY']}", base + path,
+              ], check=False, capture_output=True, text=True)
+              if completed.returncode != 0:
+                  return None, f"curl exit {completed.returncode}"
+              return completed.stdout.strip(), None
+
           for tenant_id in unique:
-              base = f"https://{os.environ['ALB_DNS_NAME']}"
-              def request(method, path):
-                  completed = subprocess.run([
-                      "curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "-X", method,
-                      "-H", f"X-API-Key: {os.environ['ADMIN_API_KEY']}", base + path,
-                  ], check=True, capture_output=True, text=True)
-                  return completed.stdout.strip()
-              status = request("DELETE", f"/v1/admin/tenants/{tenant_id}")
+              status, error = request("DELETE", f"/v1/admin/tenants/{tenant_id}")
+              if error:
+                  failures.append(f"{tenant_id}: delete {error}")
+                  continue
               if status in {"200", "204"}:
                   print(f"run-scoped rehearsal tenant {tenant_id} deleted")
                   continue
-              print(f"delete returned {status}; falling back to deactivation")
-              status = request("POST", f"/v1/admin/tenants/{tenant_id}/deactivate")
+              delete_status = status
+              print(f"delete returned {delete_status}; falling back to deactivation")
+              status, error = request("POST", f"/v1/admin/tenants/{tenant_id}/deactivate")
+              if error:
+                  failures.append(f"{tenant_id}: deactivation {error}")
+                  continue
               if status not in {"200", "204"}:
-                  sys.exit(f"::error::run-scoped rehearsal tenant {tenant_id} was neither deleted nor expired ({status})")
+                  failures.append(f"{tenant_id}: delete returned {delete_status}, deactivation returned {status}")
+                  continue
               print(f"run-scoped rehearsal tenant {tenant_id} expired")
+          if failures:
+              sys.exit("::error::run-scoped rehearsal cleanup incomplete; all tenants were attempted: " + "; ".join(failures))
           PY
 
       - uses: actions/upload-artifact@v4
