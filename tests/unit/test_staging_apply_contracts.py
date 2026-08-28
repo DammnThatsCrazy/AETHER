@@ -388,6 +388,8 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     assert "state-managed ECR key" in text
     assert "module.ecr.aws_kms_key.ecr" in text
     assert "terraform-nonprod-shared" in text
+    assert "^[[:space:]]*arn" in text
+
 
 def test_staging_reconciles_preexisting_immutable_aes256_backend_repository() -> None:
     """The release-built backend ECR repository must never be replaced."""
@@ -408,7 +410,6 @@ def test_staging_reconciles_preexisting_immutable_aes256_backend_repository() ->
     assert "ECR repository '$repository' must use the reviewed staging KMS key" in workflow
     assert "staging backend must remain the reviewed AES256 repository" in workflow
     assert 'kms_repositories="$(printf' in workflow
-    assert "^[[:space:]]*arn" in text
 
 
 def test_staging_cmk_service_policy_and_environment_tags_are_present() -> None:
