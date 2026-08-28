@@ -464,7 +464,10 @@ owned by demo or preview state; staging is the intended owner for an untaint
 repair and its canonical address is checked for duplicate staging owners before
 any state mutation. Comma-separated targets are normalized and deduplicated,
 and every requested untaint target is validated up front so a later invalid
-entry cannot leave a partial repair. ECR imports additionally require
+entry cannot leave a partial repair. Both import and untaint mutations run under
+the protected `AWS_TERRAFORM_APPLY_ROLE_ARN` state-write role; the read-only
+plan role is never used to persist reconciliation changes. Comma-separated
+targets are normalized and deduplicated before the mutation loop. ECR imports additionally require
 matching the reviewed staging KMS key. The import runner carries the same Auth0 provider environment
 as a normal remote plan, because Terraform configures every root provider even
 when importing a single AWS address. Aurora alarms and dashboard widgets are

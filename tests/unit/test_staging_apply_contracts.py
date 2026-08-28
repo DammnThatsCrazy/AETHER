@@ -423,6 +423,9 @@ def test_tainted_staging_ecr_repair_is_explicit_and_requires_a_fresh_plan() -> N
     assert "staging_ecr_addresses=\"$(terraform state list | grep 'aws_ecr_repository' || true)\"" in text
     assert "case \",$normalized_imports,\" in" in text
     assert "sort -u" in text
+    assert "AWS_TERRAFORM_APPLY_ROLE_ARN" in text
+    assert "never the read-only planning role" in text
+    assert 'normalized_untaints="$(normalize_repositories "$UNTAINT_ECR_REPOSITORY_NAMES")"' in text
 
 
 def test_state_reconciliation_has_the_complete_provider_environment() -> None:

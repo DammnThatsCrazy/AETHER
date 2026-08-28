@@ -67,9 +67,25 @@ jobs:
 
       - name: Configure Terraform provider cache
         run: echo "TF_PLUGIN_CACHE_DIR=${HOME}/.terraform.d/plugin-cache" >> "$GITHUB_ENV"
+
+      - name: Require the protected state-write role
+        env:
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test -n "${AWS_TERRAFORM_APPLY_ROLE_ARN:-}" || {
+            echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN is required because reconciliation writes Terraform state'; exit 1;
+          }
+          case "$AWS_TERRAFORM_APPLY_ROLE_ARN" in
+            arn:aws:iam::*:role/*) ;;
+            *) echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
+          esac
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          # Imports and untaints persist state; use the protected write role,
+          # never the read-only planning role.
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Validate staging-only import request
@@ -414,7 +430,11 @@ jobs:
             done
           fi
           if [ -n "$UNTAINT_ECR_REPOSITORY_NAMES" ]; then
-            IFS=',' read -ra repositories <<< "$UNTAINT_ECR_REPOSITORY_NAMES"
+            normalize_repositories() {
+              printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
+            }
+            normalized_untaints="$(normalize_repositories "$UNTAINT_ECR_REPOSITORY_NAMES")"
+            IFS=',' read -ra repositories <<< "$normalized_untaints"
             for raw in "${repositories[@]}"; do
               repository="$(printf '%s' "$raw" | xargs)"
               address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
@@ -445,7 +465,11 @@ jobs:
             done
           fi
           if [ -n "${UNTAINT_ECR_REPOSITORY_NAMES:-}" ]; then
-            IFS=',' read -ra repositories <<< "$UNTAINT_ECR_REPOSITORY_NAMES"
+            normalize_repositories() {
+              printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
+            }
+            normalized_untaints="$(normalize_repositories "$UNTAINT_ECR_REPOSITORY_NAMES")"
+            IFS=',' read -ra repositories <<< "$normalized_untaints"
             for raw in "${repositories[@]}"; do
               repository="$(printf '%s' "$raw" | xargs)"
               terraform state list | grep -Fx "module.ecr.aws_ecr_repository.this[\"${repository}\"]"

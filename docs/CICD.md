@@ -33,7 +33,9 @@ push run therefore cannot cancel the pull request run that supplies the
 required PR checks; each result remains attributable to its exact event and
 head SHA.
 
-The state-reconciliation workflow normalizes and deduplicates comma-separated repository inputs,
+The state-reconciliation workflow uses the protected Terraform apply role because
+imports and untaints write the shared state backend. It normalizes and
+deduplicates comma-separated repository inputs,
 pre-validates every requested ECR untaint target before any import or state
 mutation, and checks both the canonical staging address and the other shared
 profiles for duplicate ownership. It also verifies that each canonical staging
