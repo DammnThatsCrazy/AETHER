@@ -49,6 +49,10 @@ on:
         description: Approved sha256 of release.json (required for full-rehearsal)
         type: string
         required: false
+      intended_release_sha:
+        description: "Merged-main SHA the approved delivery run must contain (defaults to this workflow revision)"
+        type: string
+        required: false
       plan_run_id:
         description: Reviewed-plan run ID (required for a standalone validate / apply-wake / apply-sleep)
         type: string
@@ -234,6 +238,7 @@ jobs:
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
           RELEASE_RUN_ID: ${{ inputs.release_run_id }}
           RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
+          INTENDED_RELEASE_SHA: ${{ inputs.intended_release_sha || github.sha }}
           PLAN_RUN_ID: ${{ inputs.plan_run_id }}
           PLAN_CHECKSUM: ${{ inputs.plan_checksum }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
@@ -391,6 +396,7 @@ jobs:
           RELEASE_RUN_ID: ${{ inputs.release_run_id }}
           RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
+          INTENDED_RELEASE_SHA: ${{ inputs.intended_release_sha || github.sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -403,6 +409,7 @@ jobs:
           run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RELEASE_RUN_ID}")"
           run_path="$(jq -r '.path' <<<"$run_json")"
           run_conclusion="$(jq -r '.conclusion' <<<"$run_json")"
+          run_head_sha="$(jq -r '.head_sha' <<<"$run_json")"
           if [ "$run_path" != "$DELIVERY_WORKFLOW_PATH" ]; then
             echo "::error::release run ${RELEASE_RUN_ID} belongs to ${run_path}, not the delivery workflow"
             exit 1
@@ -411,9 +418,13 @@ jobs:
             echo "::error::release run ${RELEASE_RUN_ID} concluded ${run_conclusion}, not success"
             exit 1
           fi
+          test "$run_head_sha" = "$INTENDED_RELEASE_SHA" \
+            || { echo "::error::release run ${RELEASE_RUN_ID} head ${run_head_sha} is not intended release ${INTENDED_RELEASE_SHA}"; exit 1; }
           cd "${RUNNER_TEMP}/release"
           test -s release.json || { echo '::error::release run produced no release.json'; exit 1; }
           sha="$(python -c "import json; print(json.load(open('release.json'))['commit_sha'])")"
+          test "$sha" = "$INTENDED_RELEASE_SHA" \
+            || { echo "::error::release manifest commit ${sha} is not intended release ${INTENDED_RELEASE_SHA}"; exit 1; }
           python "${GITHUB_WORKSPACE}/scripts/release/release_manifest.py" release.json \
             --expected-sha "$sha" --checksum "$RELEASE_MANIFEST_CHECKSUM"
           digest="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['digest'])")"
@@ -913,10 +924,13 @@ jobs:
       - name: Verify the exact immutable application artifact is what staging runs
         env:
           RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
+          INTENDED_RELEASE_SHA: ${{ inputs.intended_release_sha || github.sha }}
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}/release"
           sha="$(python -c "import json; print(json.load(open('release.json'))['commit_sha'])")"
+          test "$sha" = "$INTENDED_RELEASE_SHA" \
+            || { echo "::error::release manifest commit ${sha} is not intended release ${INTENDED_RELEASE_SHA}"; exit 1; }
           python "${GITHUB_WORKSPACE}/scripts/release/release_manifest.py" release.json \
             --expected-sha "$sha" --checksum "$RELEASE_MANIFEST_CHECKSUM"
           python - <<'PY'
@@ -955,6 +969,58 @@ jobs:
             fi
           done
           echo "staging runs the approved immutable release"
+
+      - name: Revalidate awake lease before static publication
+        # Static publication mutates the staging origins. Re-check the lease
+        # immediately before the first S3 write so an expired wake window cannot
+        # overwrite or delete staging content.
+        env:
+          MIN_LEASE_SECONDS: "300"
+        run: |
+          set -euo pipefail
+          lease="$(aws ssm get-parameter --name "$AWAKE_LEASE_PARAM" --query 'Parameter.Value' --output text)"
+          until="$(jq -r '.awake_until // empty' <<<"$lease")"
+          test -n "$until" || { echo '::error::awake lease is missing before static publication'; exit 1; }
+          now="$(date -u +%s)"; deadline="$(date -u -d "$until" +%s)"
+          test "$((deadline - now))" -ge "$MIN_LEASE_SECONDS" \
+            || { echo '::error::awake lease lacks five minutes for static publication'; exit 1; }
+
+      - name: Publish and verify the approved static SPA artifacts
+        # Static publication is part of the exact-release rehearsal, not an
+        # assumption about whatever happens to remain in the buckets.
+        env:
+          RELEASE_MANIFEST_SHA256: ${{ inputs.release_manifest_checksum }}
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/release"
+          mkdir -p "${GITHUB_WORKSPACE}/artifacts/rehearsal"
+          python - <<'PY'
+          import hashlib, json, pathlib, sys
+          m = json.load(open("release.json"))
+          for key in ("aether_spa", "kyber_spa"):
+              a = m["artifacts"][key]
+              got = "sha256:" + hashlib.sha256(pathlib.Path(a["file"]).read_bytes()).hexdigest()
+              if got != a["digest"]:
+                  sys.exit(f"::error::{key} digest mismatch before publication")
+          PY
+          for app in aether kyber; do
+            archive_key="${app}_spa"
+            archive="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['${archive_key}']['file'])")"
+            expected="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['${archive_key}']['digest'])")"
+            test -s "$archive"
+            dist="${GITHUB_WORKSPACE}/artifacts/rehearsal/dist-${app}"
+            rm -rf "$dist"; mkdir -p "$dist"
+            tar -xzf "$archive" -C "$dist"
+            bucket_var="$(echo "${app}_static_bucket" | tr '[:lower:]' '[:upper:]')"
+            bucket="$(aws ssm get-parameter --name "/aether/${STAGING_ENV}/${bucket_var}" --query 'Parameter.Value' --output text)"
+            aws s3 sync "$dist" "s3://${bucket}" --delete --cache-control 'public,max-age=31536000,immutable' --exclude index.html
+            aws s3 cp "$dist/index.html" "s3://${bucket}/index.html" --cache-control 'no-cache,no-store,must-revalidate'
+            verify="${RUNNER_TEMP}/verify-${app}"; rm -rf "$verify"; mkdir -p "$verify"
+            aws s3 sync "s3://${bucket}" "$verify" --delete
+            diff -qr "$dist" "$verify" >/dev/null || { echo "::error::published ${app} SPA differs from approved artifact"; exit 1; }
+            printf '%s=%s\n' "$app" "$expected" >> "${GITHUB_WORKSPACE}/artifacts/rehearsal/static-publication.txt"
+          done
+          printf 'manifest_sha256=%s\n' "$RELEASE_MANIFEST_SHA256" >> "${GITHUB_WORKSPACE}/artifacts/rehearsal/static-publication.txt"
 
       - name: Revalidate awake lease before migration mutation
         # Revalidate immediately before the first mutating rehearsal action.
@@ -1036,7 +1102,7 @@ jobs:
             || { echo '::error::STAGING_ISOLATION_PEER_API_KEY is required'; exit 1; }
           mkdir -p artifacts/rehearsal
           python - <<'PY'
-          import json, os, sys, urllib.error, urllib.request, uuid
+          import json, os, re, sys, urllib.error, urllib.request, uuid
 
           base = f"https://{os.environ['ALB_DNS_NAME']}"
 
@@ -1063,12 +1129,26 @@ jobs:
           # The registration path is exercised end to end; the tenant it creates is
           # only activated by an emailed OTP, so the data-plane tenant is the
           # dedicated rehearsal credential below.
-          call("POST", "/v1/auth/register", body={
+          _registration_status, registration = call("POST", "/v1/auth/register", body={
               "name": "Aether staging rehearsal",
               "email": f"rehearsal-{uuid.uuid4().hex}@staging.invalid",
               "password": uuid.uuid4().hex + "Aa1!",
               "plan_tier": "P1",
           }, expect={200, 201})
+          # Persist only a secret-free marker and a narrowly validated tenant ID.
+          # Never upload the registration response: it may contain user fields,
+          # tokens, or other provider-controlled data. Cleanup runs in a later
+          # always() step and must still be able to remove this temporary tenant
+          # when a subsequent isolation assertion fails.
+          registration_node = registration.get("data", registration)
+          registration_tenant_id = registration_node.get("tenant_id") or (registration_node.get("tenant") or {}).get("tenant_id")
+          registration_user = registration_node.get("user") or {}
+          registration_tenant_id = registration_tenant_id or registration_user.get("tenant_id") or (registration_user.get("tenant") or {}).get("tenant_id")
+          if registration_tenant_id is not None:
+              if not isinstance(registration_tenant_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", registration_tenant_id):
+                  sys.exit("::error::registration response exposed an invalid tenant_id; refusing unsafe cleanup")
+          json.dump({"registration_completed": True, "tenant_id": registration_tenant_id},
+                    open("artifacts/rehearsal/registration-marker.json", "w"))
 
           _, mine = call("GET", "/v1/me", key=os.environ["REHEARSAL_TENANT_API_KEY"], expect={200})
           _, peer = call("GET", "/v1/me", key=os.environ["ISOLATION_PEER_API_KEY"], expect={200})
@@ -1094,7 +1174,8 @@ jobs:
           # Unauthenticated access is refused (fail-closed).
           call("GET", "/v1/me", expect={401, 403})
 
-          json.dump({"tenant_id": mine_id, "peer_tenant_id": peer_id},
+          json.dump({"tenant_id": mine_id, "peer_tenant_id": peer_id,
+                     "registration_completed": True},
                     open("artifacts/rehearsal/tenant.json", "w"))
           print(f"isolated rehearsal tenant {mine_id}, peer {peer_id}")
           PY
@@ -1370,13 +1451,25 @@ jobs:
           ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
         run: |
           set -euo pipefail
-          if [ ! -s artifacts/rehearsal/tenant.json ]; then
+          if [ ! -s artifacts/rehearsal/registration-marker.json ]; then
             echo 'no rehearsal tenant was created; nothing to remove'
             exit 0
           fi
           test -n "${ADMIN_API_KEY:-}" \
             || { echo '::error::STAGING_ADMIN_API_KEY is required to remove the rehearsal tenant'; exit 1; }
-          tenant_id="$(python -c "import json; print(json.load(open('artifacts/rehearsal/tenant.json'))['tenant_id'])")"
+          tenant_id="$(python - <<'PY'
+          import json, os, sys
+          doc = json.load(open('artifacts/rehearsal/registration-marker.json'))
+          value = doc.get('tenant_id')
+          if not value:
+              sys.exit('registration response exposed no temporary tenant_id; refusing to delete the persistent rehearsal tenant')
+          if os.path.exists('artifacts/rehearsal/tenant.json'):
+              persistent = json.load(open('artifacts/rehearsal/tenant.json')).get('tenant_id')
+              if value == persistent:
+                  sys.exit('registration tenant_id matches the persistent rehearsal tenant; refusing deletion')
+          print(value)
+          PY
+          )"
           status="$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE \
             -H "X-API-Key: ${ADMIN_API_KEY}" \
             "https://${ALB_DNS_NAME}/v1/admin/tenants/${tenant_id}")"
