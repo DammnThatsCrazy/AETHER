@@ -297,6 +297,11 @@ jobs:
               printf '%s\n' "$staging_ecr_addresses" | grep -Fxq "$address" || {
                 echo "::error::Refusing ECR taint repair: $address is not in staging state"; exit 1;
               }
+              canonical_name="$(terraform state show -no-color "$address" \
+                | sed -n 's/^[[:space:]]*name[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+              test "$canonical_name" = "$repository" || {
+                echo "::error::Refusing ECR taint repair: canonical state address $address points to '$canonical_name', expected '$repository'"; exit 1;
+              }
               while IFS= read -r candidate; do
                 [ -n "$candidate" ] || continue
                 [ "$candidate" = "$address" ] && continue
