@@ -21,6 +21,7 @@ TF = ROOT / "AWS Deployment/aether-aws/terraform"
 ALB = TF / "modules/alb/main.tf"
 MONITORING = TF / "modules/monitoring/main.tf"
 PROMOTE = ROOT / ".github/workflows/terraform-promote.yml"
+REPO_HEALTH = ROOT / ".github/workflows/repo-health.yml"
 STATE_MIGRATION_WORKFLOW = ROOT / ".github/workflows/terraform-state-migrate.yml"
 STATE_RECONCILE_WORKFLOW = ROOT / ".github/workflows/staging-state-reconcile.yml"
 STATE_MIGRATION = ROOT / "scripts/release/migrate_alb_target_group_state.sh"
@@ -30,6 +31,12 @@ STATE_ROLE_CHECKER = ROOT / "scripts/release/verify_terraform_state_role.py"
 POLICY = ROOT / "config/staging_apply_iam_policy.yaml"
 POLICY_CHECKER = ROOT / "scripts/release/check_staging_apply_policy.py"
 EFFECTIVE_POLICY_CHECKER = ROOT / "scripts/release/verify_effective_staging_apply_policy.py"
+
+
+def test_repo_health_push_and_pr_runs_cannot_cancel_each_other() -> None:
+    """Required PR evidence must survive the matching branch push event."""
+    text = REPO_HEALTH.read_text(encoding="utf-8")
+    assert "repo-health-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}" in text
 
 
 def test_staging_target_group_replacement_is_name_safe() -> None:

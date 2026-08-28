@@ -28,6 +28,11 @@ last_synced_commit: "b672c476"
 
 Internal reference for Aether's delivery pipeline.
 
+Repo Health scopes its concurrency group by event type as well as branch. A
+push run therefore cannot cancel the pull request run that supplies the
+required PR checks; each result remains attributable to its exact event and
+head SHA.
+
 Reviewed Terraform promotion pins immutable digests and injects the staging
 apply-role ARN only for staging. Inline-ML profiles leave the ML digest empty;
 remote-ML profiles must provide one before apply or wake.
