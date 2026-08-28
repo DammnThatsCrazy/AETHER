@@ -420,7 +420,7 @@ def test_monitoring_observability_uses_static_profile_gates() -> None:
     assert "var.dynamodb_cache_table_name == \"\" ? 0 : 1" not in monitoring
     assert "} if var.aurora_cluster_id != \"\"" not in monitoring
     assert "enable_aurora_observability = true" in root
-    assert "enable_dynamodb_cache_observability   = local.enable_dynamodb_cache" in root
+    assert "enable_dynamodb_cache_observability = local.enable_dynamodb_cache" in root
 
 
 def test_state_reconciliation_cleans_every_state_snapshot() -> None:
