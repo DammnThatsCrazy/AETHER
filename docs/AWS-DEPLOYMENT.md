@@ -457,8 +457,9 @@ Terraform's top-level `untaint` command and never imports, deletes, or applies a
 repository. Both import and untaint paths verify that the repository is not
 owned by demo or preview state; staging is the intended owner for an untaint
 repair and its canonical address is checked for duplicate staging owners before
-any state mutation. Every requested untaint target is validated up front so a
-later invalid entry cannot leave a partial repair. ECR imports additionally require
+any state mutation. Comma-separated targets are normalized and deduplicated,
+and every requested untaint target is validated up front so a later invalid
+entry cannot leave a partial repair. ECR imports additionally require
 matching the reviewed staging KMS key. The import runner carries the same Auth0 provider environment
 as a normal remote plan, because Terraform configures every root provider even
 when importing a single AWS address. Aurora alarms and dashboard widgets are

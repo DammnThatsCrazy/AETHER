@@ -88,7 +88,7 @@ jobs:
             echo '::error::Refusing reconciliation: provide target_group_arn, ecr_repository_names, or untaint_ecr_repository_names'; exit 1;
           }
           normalize_repositories() {
-            printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | paste -sd, -
+            printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
           }
           normalized_imports="$(normalize_repositories "$ECR_REPOSITORY_NAMES")"
           if [ -n "$TARGET_GROUP_ARN" ]; then
@@ -261,7 +261,7 @@ jobs:
             exit 1
           fi
           normalize_repositories() {
-            printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | paste -sd, -
+            printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
           }
           normalized_imports="$(normalize_repositories "$ECR_REPOSITORY_NAMES")"
           normalized_untaints="$(normalize_repositories "$UNTAINT_ECR_REPOSITORY_NAMES")"
