@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "01ee3877"
+last_synced_commit: "6b74265b"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -204,6 +204,13 @@ mapping status.
 | `/v1/admin/kyber/revops/product-mappings` | GET | Product/price mapping catalog and mapping completeness without secrets |
 
 ### Admin tenant lifecycle (admin permission required)
+
+Deactivation and hard deletion revoke every active credential owned by the
+tenant, including contained `public_ingest_identifier` records created by the
+registration path. Hard deletion revokes those identifiers before removing the
+tenant row; deactivation performs the same revocation even when the tenant is
+already inactive. Both responses report the number of public-ingest
+identifiers revoked so operators can verify cleanup.
 
 | Endpoint | Method | Purpose |
 |---|---|---|
