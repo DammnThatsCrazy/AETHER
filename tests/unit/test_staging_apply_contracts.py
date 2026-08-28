@@ -375,7 +375,7 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     text = STATE_RECONCILE_WORKFLOW.read_text(encoding="utf-8")
     assert "ecr_repository_names" in text
     assert 'required: false' in text
-    assert 'test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES"' in text
+    assert 'test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES"' in text
     assert "aether-backend|aether-ml-serving|aether-kyber|aether-aether" in text
     assert "module.ecr.aws_ecr_repository.this[\\\"${repository}\\\"]" in text
     assert "requires a fresh reviewed plan" in text or "fresh staging plan" in text
@@ -386,6 +386,20 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     assert "for profile in staging demo preview" in text
     assert "profiles/${profile}/terraform.tfstate" in text
     assert "state-managed ECR key" in text
+
+
+def test_tainted_staging_ecr_repair_is_explicit_and_requires_a_fresh_plan() -> None:
+    """Interrupted ECR replacements have a narrow, state-only recovery path."""
+    text = STATE_RECONCILE_WORKFLOW.read_text(encoding="utf-8")
+    assert "untaint_ecr_repository_names" in text
+    assert 'test "$CONFIRM" = "IMPORT-STAGING"' in text
+    assert "terraform state untaint" in text
+    assert "Generate a fresh reviewed plan before any apply" in text
+    assert "does not match the reviewed staging KMS key" in text
+    assert "cannot be both imported and untainted" in text
+    # The repair path must not accept the pre-existing AES256 backend, which is
+    # handled by the import path and has a distinct reviewed exception.
+    assert "aether-backend is AES256 and is reconciled through import" in text
     assert "module.ecr.aws_kms_key.ecr" in text
     assert "terraform-nonprod-shared" in text
     assert "^[[:space:]]*arn" in text

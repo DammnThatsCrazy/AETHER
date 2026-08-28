@@ -448,7 +448,12 @@ detach-only apply first. The normal promotion workflow never invents a
 maintenance target group or performs this transition implicitly.
 An interrupted run must use `staging-state-reconcile.yml` to import the
 existing group or an exact reviewed ECR repository, and produce a fresh
-reviewed plan; ECR imports additionally require matching the reviewed staging
+reviewed plan; if an existing ECR repository is already in staging state but
+marked tainted after an interrupted replacement, use the workflow's explicit
+`untaint_ecr_repository_names` input instead. That input clears taint only after
+the repository's live encryption and KMS key match the reviewed staging
+configuration; it never imports, deletes, or applies a repository. ECR imports
+additionally require matching the reviewed staging
 KMS key and verifying that the repository is not owned by staging, demo, or
 preview state. The import runner carries the same Auth0 provider environment
 as a normal remote plan, because Terraform configures every root provider even

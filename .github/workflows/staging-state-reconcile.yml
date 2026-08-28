@@ -16,6 +16,10 @@ on:
         description: "Comma-separated existing Terraform ECR names (aether-backend,aether-ml-serving,aether-kyber,aether-aether)"
         required: false
         type: string
+      untaint_ecr_repository_names:
+        description: "Comma-separated staging ECR names already in state but marked tainted; clears taint only"
+        required: false
+        type: string
       staging_ecr_kms_key_arn:
         description: "Exact reviewed staging ECR KMS key ARN; required for KMS-encrypted repositories"
         required: false
@@ -73,14 +77,15 @@ jobs:
           CONFIRM: ${{ inputs.confirm_staging_import }}
           TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
           ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
+          UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
           STAGING_ECR_KMS_KEY_ARN: ${{ inputs.staging_ecr_kms_key_arn }}
         run: |
           set -euo pipefail
           test "$CONFIRM" = "IMPORT-STAGING" || {
             echo "::error::Refusing import: confirmation must be IMPORT-STAGING"; exit 1;
           }
-          test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES" || {
-            echo '::error::Refusing import: provide target_group_arn or ecr_repository_names'; exit 1;
+          test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES" || {
+            echo '::error::Refusing reconciliation: provide target_group_arn, ecr_repository_names, or untaint_ecr_repository_names'; exit 1;
           }
           if [ -n "$TARGET_GROUP_ARN" ]; then
             case "$TARGET_GROUP_ARN" in
@@ -142,6 +147,46 @@ jobs:
                 echo "::error::Refusing ECR import: KMS key Environment tag is '$key_environment', expected staging"; exit 1;
               }
             fi
+          fi
+          if [ -n "$UNTAINT_ECR_REPOSITORY_NAMES" ]; then
+            test -n "$STAGING_ECR_KMS_KEY_ARN" || {
+              echo '::error::Refusing ECR taint repair: staging_ecr_kms_key_arn is required'; exit 1;
+            }
+            account_id="$(aws sts get-caller-identity --query Account --output text)"
+            case "$STAGING_ECR_KMS_KEY_ARN" in
+              arn:aws:kms:us-east-1:${account_id}:key/*) ;;
+              *) echo '::error::Refusing ECR taint repair: KMS key must be a us-east-1 key in the staging account'; exit 1 ;;
+            esac
+            key_environment="$(aws kms list-resource-tags --key-id "$STAGING_ECR_KMS_KEY_ARN" \
+              --query 'Tags[?TagKey==`Environment`].TagValue | [0]' --output text)"
+            test "$key_environment" = staging || {
+              echo "::error::Refusing ECR taint repair: KMS key Environment tag is '$key_environment', expected staging"; exit 1;
+            }
+            IFS=',' read -ra repositories <<< "$UNTAINT_ECR_REPOSITORY_NAMES"
+            for raw in "${repositories[@]}"; do
+              repository="$(printf '%s' "$raw" | xargs)"
+              case ",${ECR_REPOSITORY_NAMES}," in
+                *,${repository},*) echo "::error::Refusing reconciliation: '$repository' cannot be both imported and untainted"; exit 1 ;;
+              esac
+              case "$repository" in
+                aether-ml-serving|aether-kyber|aether-aether) ;;
+                aether-backend)
+                  echo '::error::Refusing ECR taint repair: aether-backend is AES256 and is reconciled through import, not KMS taint repair'; exit 1 ;;
+                *) echo "::error::Refusing ECR taint repair: '$repository' is not a reviewed staging repository"; exit 1 ;;
+              esac
+              found="$(aws ecr describe-repositories --repository-names "$repository" \
+                --query 'repositories[0].repositoryName' --output text)"
+              test "$found" = "$repository" || {
+                echo "::error::Refusing ECR taint repair: ECR repository '$repository' was not found"; exit 1;
+              }
+              encryption_type="$(aws ecr describe-repositories --repository-names "$repository" \
+                --query 'repositories[0].encryptionConfiguration.encryptionType' --output text)"
+              encryption_key="$(aws ecr describe-repositories --repository-names "$repository" \
+                --query 'repositories[0].encryptionConfiguration.kmsKey' --output text)"
+              test "$encryption_type" = KMS && test "$encryption_key" = "$STAGING_ECR_KMS_KEY_ARN" || {
+                echo "::error::Refusing ECR taint repair: repository '$repository' does not match the reviewed staging KMS key"; exit 1;
+              }
+            done
           fi
 
       - name: Initialize the staging state backend
@@ -264,6 +309,7 @@ jobs:
         env:
           TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
           ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
+          UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
           TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
           TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
@@ -311,12 +357,25 @@ jobs:
                 "module.ecr.aws_ecr_repository.this[\"${repository}\"]" "$repository"
             done
           fi
+          if [ -n "$UNTAINT_ECR_REPOSITORY_NAMES" ]; then
+            IFS=',' read -ra repositories <<< "$UNTAINT_ECR_REPOSITORY_NAMES"
+            for raw in "${repositories[@]}"; do
+              repository="$(printf '%s' "$raw" | xargs)"
+              address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
+              terraform state list | grep -Fxq "$address" || {
+                echo "::error::Refusing ECR taint repair: $address is not in staging state"; exit 1;
+              }
+              terraform state untaint "$address"
+            done
+            echo "Cleared taint only for the explicitly reviewed staging ECR repositories. Generate a fresh reviewed plan before any apply."
+          fi
 
       - name: Emit reconciled state checksum
         working-directory: ${{ env.TF_DIR }}
         env:
           TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
           ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
+          UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
         run: |
           set -euo pipefail
           if [ -n "${TARGET_GROUP_ARN:-}" ]; then
@@ -324,6 +383,13 @@ jobs:
           fi
           if [ -n "${ECR_REPOSITORY_NAMES:-}" ]; then
             IFS=',' read -ra repositories <<< "$ECR_REPOSITORY_NAMES"
+            for raw in "${repositories[@]}"; do
+              repository="$(printf '%s' "$raw" | xargs)"
+              terraform state list | grep -Fx "module.ecr.aws_ecr_repository.this[\"${repository}\"]"
+            done
+          fi
+          if [ -n "${UNTAINT_ECR_REPOSITORY_NAMES:-}" ]; then
+            IFS=',' read -ra repositories <<< "$UNTAINT_ECR_REPOSITORY_NAMES"
             for raw in "${repositories[@]}"; do
               repository="$(printf '%s' "$raw" | xargs)"
               terraform state list | grep -Fx "module.ecr.aws_ecr_repository.this[\"${repository}\"]"
