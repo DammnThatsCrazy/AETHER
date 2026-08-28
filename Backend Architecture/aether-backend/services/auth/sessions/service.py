@@ -440,14 +440,29 @@ class PublicIngestService:
     async def revoke_all_for_tenant(self, tenant_id: str) -> int:
         """Revoke every public ingest identifier owned by a tenant."""
         revoked = 0
+        failures: list[str] = []
         identifiers = await self._repo.find_many(
             filters={"tenant_id": tenant_id}, limit=1000
         )
         for record in identifiers:
             identifier_id = record.get("id")
-            if identifier_id and record.get("status") == "active":
-                if await self.revoke_identifier(identifier_id):
-                    revoked += 1
+            if not identifier_id:
+                failures.append("record without an identifier id")
+                continue
+            if record.get("status") == "active" and not await self.revoke_identifier(identifier_id):
+                failures.append(identifier_id)
+                continue
+            if record.get("status") == "active":
+                revoked += 1
+        if failures:
+            # A caller that is about to remove the tenant must never treat a
+            # partial revocation as success: an active contained identifier can
+            # otherwise outlive its owner.  Raising also makes the durable DSR
+            # worker retry this idempotent operation.
+            raise RuntimeError(
+                "could not revoke all public ingest identifiers: "
+                + ", ".join(failures)
+            )
         return revoked
 
 

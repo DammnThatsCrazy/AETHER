@@ -1051,6 +1051,38 @@ class _InMemoryGraphBackend:
                 break
         return matched
 
+    async def delete_tenant_data(self, tenant_id: str) -> int:
+        """Hard-delete graph projection data owned by one tenant.
+
+        The admin rehearsal-cleanup path uses this after credential revocation
+        and before removing the tenant row.  Ownership is checked with
+        :func:`tenant_of` so both historical ``tenantId`` and legacy
+        ``tenant_id`` records are handled, while unscoped/system vertices are
+        never touched.  Dropping the owned vertices also removes their
+        incident edges, including edges whose endpoint itself is unscoped.
+        """
+        owned = {
+            vertex.vertex_id
+            for vertex in self._vertices.values()
+            if tenant_of(vertex.properties) == str(tenant_id)
+        }
+        if not owned:
+            return 0
+        self._vertices = {
+            vertex_id: vertex
+            for vertex_id, vertex in self._vertices.items()
+            if vertex_id not in owned
+        }
+        before = len(self._edges)
+        self._edges = [
+            edge
+            for edge in self._edges
+            if edge.from_vertex_id not in owned
+            and edge.to_vertex_id not in owned
+            and tenant_of(edge.properties) != str(tenant_id)
+        ]
+        return len(owned) + (before - len(self._edges))
+
     async def query(self, gremlin: str) -> list[dict]:
         logger.debug(f"In-memory graph QUERY (no-op): {gremlin[:80]}...")
         return []
@@ -1412,6 +1444,42 @@ class _NeptuneGraphBackend:
             logger.error(f"Neptune get_vertices_for_tenant error: {e}")
         return results
 
+    async def delete_tenant_data(self, tenant_id: str) -> int:
+        """Drop all Neptune vertices and edges owned by ``tenant_id``.
+
+        Neptune stores vertex and edge ownership under the canonical
+        ``tenantId`` key for new writes and ``tenant_id`` for legacy writes.
+        Explicit edge traversals handle records whose endpoints are shared or
+        unscoped; dropping an owned vertex alone would not remove such an edge
+        in every graph implementation.  The predicates also ensure an
+        unscoped/system record is never selected by a missing or empty tenant
+        value.
+        """
+        if not tenant_id:
+            return 0
+        g = await self._ensure_connected()
+        try:
+            canonical_edges = int(
+                g.E().has(TENANT_PROPERTY, str(tenant_id)).count().next()
+            )
+            legacy_edges = int(
+                g.E().has("tenant_id", str(tenant_id)).count().next()
+            )
+            canonical = int(
+                g.V().has(TENANT_PROPERTY, str(tenant_id)).count().next()
+            )
+            legacy = int(
+                g.V().has("tenant_id", str(tenant_id)).count().next()
+            )
+            g.E().has(TENANT_PROPERTY, str(tenant_id)).drop().iterate()
+            g.E().has("tenant_id", str(tenant_id)).drop().iterate()
+            g.V().has(TENANT_PROPERTY, str(tenant_id)).drop().iterate()
+            g.V().has("tenant_id", str(tenant_id)).drop().iterate()
+            return canonical + legacy + canonical_edges + legacy_edges
+        except Exception as exc:
+            logger.error("Neptune tenant erasure failed for %s: %s", tenant_id, exc)
+            raise RuntimeError(f"Neptune tenant erasure failed: {exc}") from exc
+
     async def query(self, gremlin: str) -> list[dict]:
         await self._ensure_connected()
         try:
@@ -1672,6 +1740,19 @@ class GraphClient:
         return await self._backend.get_vertices_for_tenant(  # type: ignore[union-attr]
             tenant_id, limit, vertex_type=vertex_type
         )
+
+    async def delete_tenant_data(self, tenant_id: str) -> int:
+        """Erase only graph projection data owned by one tenant.
+
+        This is intentionally a first-class backend operation rather than a
+        caller-issued raw Gremlin query, so local tests and Neptune enforce the
+        same tenant ownership and fail-closed behavior.
+        """
+        if not tenant_id:
+            raise ValueError("tenant_id is required for graph erasure")
+        if self._backend is None:
+            await self.connect()
+        return await self._backend.delete_tenant_data(tenant_id)  # type: ignore[union-attr]
 
     async def query(self, gremlin: str) -> list[dict]:
         if self._backend is None:

@@ -691,6 +691,46 @@ def test_deactivation_revokes_durable_api_keys_before_marking_inactive():
     assert '"api_keys_revoked": revoked' in source
 
 
+def test_diagnostics_use_an_explicit_admin_smoke_credential():
+    """Tenant data-plane keys must not be silently given admin diagnostics access."""
+    doc = _workflow_yaml(LIFECYCLE)
+    script = _job_script(doc, "rehearse")
+    assert "SMOKE_ADMIN_API_KEY" in script
+    assert "STAGING_ADMIN_API_KEY" in _referenced_text(doc)
+    assert '--admin-api-key "$SMOKE_ADMIN_API_KEY"' in script
+
+    smoke = (ROOT / "scripts" / "smoke_test.py").read_text(encoding="utf-8")
+    assert "--admin-api-key" in smoke
+    assert "diagnostics_api_key" in smoke
+    assert 'args.admin_api_key or args.api_key' in smoke
+
+
+def test_cleanup_requires_a_complete_erasure_receipt_and_declares_all_rehearsal_surfaces():
+    doc = _workflow_yaml(LIFECYCLE)
+    cleanup = next(
+        s for s in _steps(doc, "rehearse")
+        if s.get("name") == "Delete or expire the rehearsal tenant"
+    )["run"]
+    assert "cleanup_complete" in cleanup
+    for surface in (
+        "consent_records",
+        "dsr_propagation_records",
+        "bronze_feeds",
+        "bronze_sdk_events",
+        "silver_sdk_events",
+        "gold_sdk_events",
+        "analytics_events",
+        "analytics_sessions",
+        "profiles",
+        "tenant_graph",
+    ):
+        assert surface in (
+            (ROOT / "Backend Architecture" / "aether-backend" / "services" / "auth" / "routes.py")
+            .read_text(encoding="utf-8")
+        ), f"cleanup does not name the {surface} surface"
+    assert "cleanup_complete receipt" in cleanup
+
+
 # ---------------------------------------------------------------------------
 # Fail-safe sleep: runs always, and never hides the original failure
 # ---------------------------------------------------------------------------

@@ -1335,12 +1335,15 @@ jobs:
           PY
 
       - name: Capability checks (auth, consent, ingestion, queue, graph, analytics, ML)
+        env:
+          SMOKE_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
         run: |
           set -euo pipefail
           python scripts/staging_capability_matrix.py --json > artifacts/rehearsal/capability-matrix.json
           python scripts/smoke_test.py \
             --base-url "https://${ALB_DNS_NAME}" \
             --api-key "$REHEARSAL_TENANT_API_KEY" \
+            --admin-api-key "$SMOKE_ADMIN_API_KEY" \
             --timeout 20 \
             | tee artifacts/rehearsal/smoke.txt
           python - <<'PY'
@@ -1630,30 +1633,50 @@ jobs:
           failures = []
           base = f"https://{os.environ['ALB_DNS_NAME']}"
           def request(method, path):
+              response = os.path.join(
+                  "artifacts/rehearsal",
+                  "cleanup-" + path.rsplit("/", 1)[-1] + ".json",
+              )
               completed = subprocess.run([
-                  "curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "-X", method,
+                  "curl", "-sS", "-o", response, "-w", "%{http_code}", "-X", method,
                   "-H", f"X-API-Key: {os.environ['ADMIN_API_KEY']}", base + path,
               ], check=False, capture_output=True, text=True)
               if completed.returncode != 0:
-                  return None, f"curl exit {completed.returncode}"
-              return completed.stdout.strip(), None
+                  return None, None, f"curl exit {completed.returncode}"
+              try:
+                  body = json.load(open(response, encoding="utf-8"))
+              except (OSError, ValueError):
+                  body = None
+              return completed.stdout.strip(), body, None
 
           for tenant_id in unique:
-              status, error = request("DELETE", f"/v1/admin/tenants/{tenant_id}")
+              status, payload, error = request("DELETE", f"/v1/admin/tenants/{tenant_id}")
               if error:
                   failures.append(f"{tenant_id}: delete {error}")
                   continue
-              if status in {"200", "204"}:
+              deleted = ((payload or {}).get("data") or {}).get("deleted") or {}
+              if status == "200" and deleted.get("cleanup_complete") is True:
                   print(f"run-scoped rehearsal tenant {tenant_id} deleted")
+                  continue
+              if status in {"200", "204"}:
+                  failures.append(
+                      f"{tenant_id}: delete returned {status} without a verified cleanup_complete receipt"
+                  )
                   continue
               delete_status = status
               print(f"delete returned {delete_status}; falling back to deactivation")
-              status, error = request("POST", f"/v1/admin/tenants/{tenant_id}/deactivate")
+              status, payload, error = request("POST", f"/v1/admin/tenants/{tenant_id}/deactivate")
               if error:
                   failures.append(f"{tenant_id}: deactivation {error}")
                   continue
-              if status not in {"200", "204"}:
+              deactivated = (payload or {}).get("data") or {}
+              if status != "200" or deactivated.get("status") != "inactive":
                   failures.append(f"{tenant_id}: delete returned {delete_status}, deactivation returned {status}")
+                  continue
+              if "api_keys_revoked" not in deactivated or "keys_evicted" not in deactivated:
+                  failures.append(
+                      f"{tenant_id}: deactivation returned no credential-invalidation receipt"
+                  )
                   continue
               print(f"run-scoped rehearsal tenant {tenant_id} expired")
           if failures:

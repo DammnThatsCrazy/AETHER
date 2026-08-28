@@ -312,7 +312,9 @@ Steps, in order, with what each proves:
    200 is a breach and fails the run. An unauthenticated `/v1/me` must fail
    closed.
 6. **Capability checks.** `scripts/staging_capability_matrix.py --json`,
-   `scripts/smoke_test.py`, then explicit probes for auth, consent/privacy
+   `scripts/smoke_test.py` (the tenant key covers data-plane checks and the
+   encrypted `STAGING_ADMIN_API_KEY` is supplied only to the two admin
+   diagnostics probes), then explicit probes for auth, consent/privacy
    (records, retention manifest, DSR), ingestion, **queue-worker drain**
    (polls analytics for the ingested event for up to 300 s; failure to drain is
    reported as the `lean-worker` execution group not draining — this is the
@@ -338,12 +340,18 @@ Steps, in order, with what each proves:
     step never fails the rehearsal.
 12. **Tenant cleanup.** Every run-scoped tenant recorded by the bootstrap or
     registration marker is removed with `DELETE /v1/admin/tenants/{id}`, falling
-    back to `POST .../deactivate`. Both admin paths revoke contained public
-    ingest identifiers before deleting or deactivating the tenant. Marker IDs
-    are validated and cleanup refuses to guess when a marker is malformed or
-    absent. Cleanup attempts every recorded tenant even if one delete and its
-    deactivation fallback fail, then fails the step with the complete list of
-    failures; neither operation may silently succeed with an unknown state.
+    back to `POST .../deactivate`. Both admin paths revoke durable API keys,
+    invalidate and verify the Redis auth-cache entries, and revoke contained
+    public ingest identifiers before deleting or deactivating the tenant. A
+    successful DELETE must return a `cleanup_complete` receipt after erasing
+    every rehearsal surface (consent/DSR and propagation indexes, feed and SDK
+    Bronze/Silver/Gold records, analytics, profiles, and graph projection);
+    billing and security-audit evidence retained by policy is detached rather
+    than silently claimed erased. Marker IDs are validated and cleanup refuses
+    to guess when a marker is malformed or absent. Cleanup attempts every
+    recorded tenant even if one delete and its deactivation fallback fail, then
+    fails the step with the complete list of failures; neither operation may
+    silently succeed with an unknown state.
 
 ## Sleep
 

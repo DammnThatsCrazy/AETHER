@@ -42,13 +42,22 @@ class SmokeRunner:
     api_key: str
     timeout: int
     verbose: bool
+    diagnostics_api_key: str = ""
     results: list[CheckResult] = field(default_factory=list)
 
-    def _get(self, path: str, *, expect_status: int = 200, auth: bool = True) -> tuple[int, bytes]:
+    def _get(
+        self,
+        path: str,
+        *,
+        expect_status: int = 200,
+        auth: bool = True,
+        api_key: Optional[str] = None,
+    ) -> tuple[int, bytes]:
         url = self.base_url.rstrip("/") + path
         headers = {"Accept": "application/json"}
-        if auth and self.api_key:
-            headers["X-API-Key"] = self.api_key
+        credential = self.api_key if api_key is None else api_key
+        if auth and credential:
+            headers["X-API-Key"] = credential
         req = Request(url, headers=headers)
         try:
             with urlopen(req, timeout=self.timeout) as resp:
@@ -110,7 +119,9 @@ class SmokeRunner:
 
     def check_diagnostics_health(self) -> None:
         def run() -> tuple[bool, str]:
-            status, body = self._get("/v1/diagnostics/health")
+            status, body = self._get(
+                "/v1/diagnostics/health", api_key=self.diagnostics_api_key
+            )
             if status != 200:
                 return False, f"HTTP {status}"
             try:
@@ -126,7 +137,9 @@ class SmokeRunner:
 
     def check_circuit_breakers(self) -> None:
         def run() -> tuple[bool, str]:
-            status, body = self._get("/v1/diagnostics/circuit-breakers")
+            status, body = self._get(
+                "/v1/diagnostics/circuit-breakers", api_key=self.diagnostics_api_key
+            )
             if status != 200:
                 return False, f"HTTP {status}"
             try:
@@ -304,6 +317,11 @@ def main() -> None:
     )
     parser.add_argument("--base-url", default="http://localhost:8000", help="API base URL")
     parser.add_argument("--api-key", default="", help="X-API-Key value for authenticated endpoints")
+    parser.add_argument(
+        "--admin-api-key",
+        default="",
+        help="Optional admin X-API-Key used only for diagnostic endpoints",
+    )
     parser.add_argument("--timeout", type=int, default=TIMEOUT, help="Per-request timeout in seconds")
     parser.add_argument("--verbose", "-v", action="store_true", help="Print response details")
     parser.add_argument(
@@ -316,6 +334,7 @@ def main() -> None:
     runner = SmokeRunner(
         base_url=args.base_url,
         api_key=args.api_key,
+        diagnostics_api_key=args.admin_api_key or args.api_key,
         timeout=args.timeout,
         verbose=args.verbose,
     )

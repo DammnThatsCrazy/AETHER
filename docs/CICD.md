@@ -58,6 +58,16 @@ treated as applicable and the preflight fails closed rather than allowing an
 unverified apply to proceed, but only after the Deny overlaps a reviewed
 resource. Attached Allows must also preserve every mandatory manifest
 condition; a broader unconditional Allow is not accepted as equivalent.
+
+The full staging rehearsal also treats its credentials and cleanup as release
+gates: the tenant key is reserved for data-plane probes, while the encrypted
+admin key is used only for diagnostics and run-scoped tenant administration.
+Cleanup must revoke durable keys, verify auth-cache eviction, revoke contained
+ingest identifiers, erase all tenant-scoped rehearsal projections, and return a
+complete receipt before the workflow can report success. A failure at any of
+those boundaries stops before tenant deletion and leaves enough evidence for a
+safe retry; billing and immutable security-audit records remain retained by
+policy.
 The staging ECR collision check runs before any account-level service-linked
 role bootstrap, so a rejected repository cannot leave an IAM mutation behind.
 The checker also intersects identity policies with any permissions boundary,
