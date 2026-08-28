@@ -571,12 +571,12 @@ def test_the_rehearsal_tenant_is_always_removed():
         "the rehearsal tenant survives a failed rehearsal"
     )
     run = step["run"]
-    assert "-X DELETE" in run
+    assert 'request("DELETE"' in run
     assert "/deactivate" in run, "there is no expiry fallback when delete is refused"
     assert "was neither deleted nor expired" in run
 
 
-def test_rehearsal_binds_release_and_cleans_only_ephemeral_registration_tenant():
+def test_rehearsal_bootstraps_run_scoped_credentials_and_cleans_only_marked_tenants():
     doc = _workflow_yaml(LIFECYCLE)
     script = _job_script(doc, "rehearse")
     assert "intended_release_sha" in _referenced_text(doc)
@@ -591,12 +591,49 @@ def test_rehearsal_binds_release_and_cleans_only_ephemeral_registration_tenant()
         s for s in _steps(doc, "rehearse")
         if s.get("name") == "Delete or expire the rehearsal tenant"
     )["run"]
+    assert "bootstrap-marker.json" in cleanup
     assert "registration-marker.json" in cleanup
-    assert "registration.json" not in cleanup
-    assert "refusing to delete the persistent rehearsal tenant" in cleanup
-    assert "matches the persistent rehearsal tenant" in cleanup
+    assert "run_scoped" in cleanup
+    assert "refusing unsafe cleanup" in cleanup
+    assert 'request("DELETE"' in cleanup
+    assert 'request("POST"' in cleanup
+    assert "Bootstrap run-scoped rehearsal tenants and API keys" in names
+    assert 'call("POST", "/v1/tenants", body=' in script
+    assert '"contact_email":' in script
+    assert '"password":' not in script
+    assert '"/v1/auth/register"' not in script
+    assert "STAGING_REHEARSAL_TENANT_API_KEY" not in script
+    assert "STAGING_ISOLATION_PEER_API_KEY" not in script
     assert 'json.dump(registration' not in script
     assert 'json.dump({"registration_completed": True, "tenant_id": registration_tenant_id}' in script
+
+
+def test_full_rehearsal_inputs_are_derived_after_wake_not_precreated():
+    doc = _workflow_yaml(LIFECYCLE)
+    workflow = _workflow(LIFECYCLE)
+    preflight = doc["jobs"]["preflight-rehearsal-inputs"]
+    assert set(preflight.get("env", {})) == {"STAGING_ADMIN_API_KEY"}
+    assert "vars.ALB_DNS_NAME" not in workflow
+    assert "secrets.STAGING_REHEARSAL_TENANT_API_KEY" not in workflow
+    assert "secrets.STAGING_ISOLATION_PEER_API_KEY" not in workflow
+    assert "needs.wake-apply.outputs.alb_dns_name" in workflow
+    wake_apply = doc["jobs"]["wake-apply"]
+    assert wake_apply["outputs"]["alb_dns_name"] == "${{ steps.outputs.outputs.alb_dns_name }}"
+    wake_script = _job_script(doc, "wake-apply")
+    assert "gh run download" in wake_script
+    assert "reviewed.alb-dns" in wake_script
+
+
+def test_promotion_publishes_only_the_non_secret_alb_output():
+    doc = _workflow_yaml(PROMOTE_WORKFLOW)
+    apply_script = _job_script(doc, "apply")
+    assert 'terraform output -raw alb_dns' in apply_script
+    assert 'reviewed.alb-dns' in apply_script
+    upload = next(
+        s for s in _steps(doc, "apply")
+        if str(s.get("uses", "")).startswith("actions/upload-artifact")
+    )
+    assert "reviewed.alb-dns" in upload["with"]["path"]
 
 
 # ---------------------------------------------------------------------------

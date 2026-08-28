@@ -946,8 +946,20 @@ jobs:
           fi
           terraform apply -input=false reviewed.tfplan | tee reviewed.apply.txt
           sha256sum reviewed.apply.txt > reviewed.apply.sha256
+          # The ALB hostname is assigned by AWS at apply time. Capture only
+          # that non-secret output so the lifecycle workflow can feed the
+          # endpoint into its smoke tests without a manually maintained
+          # repository variable (which cannot exist before the first apply).
+          alb_dns="$(terraform output -raw alb_dns)"
+          case "$alb_dns" in
+            ''|*://*|*/*|*' '*|*'"'*)
+              echo '::error::terraform output alb_dns is empty or is not a host name'; exit 1 ;;
+          esac
+          printf '%s\n' "$alb_dns" > reviewed.alb-dns
       - uses: actions/upload-artifact@v4
         with:
           name: terraform-apply-evidence-${{ github.run_id }}
-          path: AWS Deployment/aether-aws/terraform/reviewed.apply.*
+          path: |
+            AWS Deployment/aether-aws/terraform/reviewed.apply.*
+            AWS Deployment/aether-aws/terraform/reviewed.alb-dns
           if-no-files-found: error

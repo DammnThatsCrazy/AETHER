@@ -65,18 +65,25 @@ normalizes IAM action names case-insensitively, and carries the paired alias
 request context into both KMS `CreateAlias` resource checks.
 
 Before a full staging rehearsal can wake compute, the lifecycle workflow runs a
-staging-environment preflight. It requires a host-only `ALB_DNS_NAME` and the
-tenant, isolation-peer, and admin API keys used by smoke, isolation, and cleanup
-checks. Plan-only and non-rehearsal actions remain available without those
-runtime inputs, but a full rehearsal fails before apply-wake rather than waking
-an environment that cannot be tested. Both the lifecycle and TTL cleanup paths
-also fail closed: an absent SSM lease is treated as already asleep, while an
-access, throttling, or other deletion error fails the run so unknown cleanup
-state cannot be reported as success. The TTL guard applies the same distinction
-when reading the lease. A missing lease is the only benign empty state; read
-errors are fatal. On the first approved ECS revision, rollback evidence is
-recorded as `not_applicable` because there is no prior revision; subsequent
-rehearsals must execute and verify rollback and roll-forward.
+staging-environment preflight. It requires one encrypted, pre-existing
+`STAGING_ADMIN_API_KEY` bootstrap credential. The ALB hostname is captured from
+the reviewed Terraform apply output after the load balancer exists, and the
+primary rehearsal and isolation API keys are generated through the admin
+tenant/key routes as run-scoped tenants after wake; they are masked, never
+uploaded, and are deleted or deactivated by the always-run cleanup. This removes
+the circular requirement for an ALB value
+and long-lived test keys before the first apply while keeping the admin
+bootstrap credential fail-closed. Plan-only and non-rehearsal actions remain
+available without that runtime input, but a full rehearsal fails before
+apply-wake rather than waking an environment that cannot be tested. Both the
+lifecycle and TTL cleanup paths also fail closed: an absent SSM lease is treated
+as already asleep, while an access, throttling, or other deletion error fails
+the run so unknown cleanup state cannot be reported as success. The TTL guard
+applies the same distinction when reading the lease. A missing lease is the
+only benign empty state; read errors are fatal. On the first approved ECS
+revision, rollback evidence is recorded as `not_applicable` because there is no
+prior revision; subsequent rehearsals must execute and verify rollback and
+roll-forward.
 
 ## Scope — two different things
 

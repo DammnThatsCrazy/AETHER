@@ -317,9 +317,11 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
-  # Full-rehearsal smoke credentials are checked before any apply-wake
-  # dispatch. Plan-only runs remain usable without them, but a run that can
-  # start ECS must not discover an absent endpoint or test key after wake.
+  # Full-rehearsal bootstrap credentials are checked before any apply-wake
+  # dispatch. Plan-only runs remain usable without them. The ALB hostname is
+  # captured from the reviewed apply output after wake, and the rehearsal and
+  # isolation keys are generated per run; only the bootstrap admin key is a
+  # durable external input.
   # ---------------------------------------------------------------------------
   preflight-rehearsal-inputs:
     name: Preflight full-rehearsal smoke inputs
@@ -331,30 +333,14 @@ jobs:
     permissions:
       contents: read
     env:
-      ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME }}
-      STAGING_REHEARSAL_TENANT_API_KEY: ${{ secrets.STAGING_REHEARSAL_TENANT_API_KEY }}
-      STAGING_ISOLATION_PEER_API_KEY: ${{ secrets.STAGING_ISOLATION_PEER_API_KEY }}
       STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
     steps:
-      - name: Require the complete smoke and cleanup input set
+      - name: Require the bootstrap admin key
         run: |
           set -euo pipefail
-          test -n "${ALB_DNS_NAME:-}" \
-            || { echo '::error::ALB_DNS_NAME is required in the staging environment or repository variables before a full rehearsal'; exit 1; }
-          case "$ALB_DNS_NAME" in
-            *://*|*/*|*' '*|*'"'*)
-              echo '::error::ALB_DNS_NAME must be a host name only (no scheme, path, or whitespace)'; exit 1 ;;
-          esac
-          for name in \
-            STAGING_REHEARSAL_TENANT_API_KEY \
-            STAGING_ISOLATION_PEER_API_KEY \
-            STAGING_ADMIN_API_KEY; do
-            if [ -z "${!name:-}" ]; then
-              echo "::error::${name} is required before a full rehearsal; add it as an encrypted repository or staging-environment secret"
-              exit 1
-            fi
-          done
-          echo 'Full-rehearsal endpoint, isolation, tenant, and cleanup inputs are present.'
+          test -n "${STAGING_ADMIN_API_KEY:-}" \
+            || { echo '::error::STAGING_ADMIN_API_KEY is required as the one-time staging bootstrap credential before a full rehearsal'; exit 1; }
+          echo 'Staging bootstrap credential is present; ALB and test keys are created or resolved after the reviewed wake.'
 
   # ---------------------------------------------------------------------------
   # Phase 2 — credentialed wake plan, produced by the reviewed promotion workflow.
@@ -773,9 +759,13 @@ jobs:
       contents: read
       actions: write
       id-token: write
+    outputs:
+      apply_run_id: ${{ steps.dispatch.outputs.apply_run_id }}
+      alb_dns_name: ${{ steps.outputs.outputs.alb_dns_name }}
     steps:
       - uses: actions/checkout@v4
       - name: Dispatch the reviewed apply for the verified wake plan
+        id: dispatch
         env:
           GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
           PLAN_RUN_ID: ${{ needs.wake-validate.outputs.plan_run_id }}
@@ -834,6 +824,30 @@ jobs:
             echo "::error::reviewed apply run ${run_id} concluded ${conclusion}"
             exit 1
           fi
+          printf 'apply_run_id=%s\n' "$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Capture the applied ALB hostname
+        id: outputs
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
+          APPLY_RUN_ID: ${{ steps.dispatch.outputs.apply_run_id }}
+        run: |
+          set -euo pipefail
+          test -n "$APPLY_RUN_ID" || { echo '::error::reviewed apply run id was not recorded'; exit 1; }
+          evidence_dir="${RUNNER_TEMP}/terraform-apply-evidence"
+          rm -rf "$evidence_dir"
+          gh run download "$APPLY_RUN_ID" \
+            --name "terraform-apply-evidence-${APPLY_RUN_ID}" \
+            --dir "$evidence_dir"
+          alb_file="$(find "$evidence_dir" -type f -name 'reviewed.alb-dns' -print -quit)"
+          test -n "$alb_file" || { echo '::error::reviewed apply did not publish reviewed.alb-dns'; exit 1; }
+          alb_dns="$(tr -d '\r\n' < "$alb_file")"
+          case "$alb_dns" in
+            ''|*://*|*/*|*' '*|*'"'*)
+              echo '::error::applied ALB output is empty or is not a host name'; exit 1 ;;
+          esac
+          printf 'alb_dns_name=%s\n' "$alb_dns" >> "$GITHUB_OUTPUT"
+          echo 'Applied ALB hostname captured for the rehearsal.'
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -898,7 +912,7 @@ jobs:
       actions: read
       id-token: write
     env:
-      ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME }}
+      ALB_DNS_NAME: ${{ needs.wake-apply.outputs.alb_dns_name }}
       BACKEND_IMAGE_DIGEST: ${{ needs.wake-plan.outputs.backend_image_digest }}
     steps:
       - uses: actions/checkout@v4
@@ -1090,16 +1104,110 @@ jobs:
               || { echo "::error::${app} SPA origin has no index.html"; exit 1; }
           done
 
-      - name: Create the isolated rehearsal tenant and verify tenant isolation
+      - name: Bootstrap run-scoped rehearsal tenants and API keys
         env:
-          REHEARSAL_TENANT_API_KEY: ${{ secrets.STAGING_REHEARSAL_TENANT_API_KEY }}
-          ISOLATION_PEER_API_KEY: ${{ secrets.STAGING_ISOLATION_PEER_API_KEY }}
+          ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${ALB_DNS_NAME:-}" || { echo '::error::wake apply did not expose an ALB hostname'; exit 1; }
+          test -n "${ADMIN_API_KEY:-}" || { echo '::error::STAGING_ADMIN_API_KEY is required to bootstrap rehearsal tenants'; exit 1; }
+          mkdir -p artifacts/rehearsal
+          python - <<'PY'
+          import json, os, re, sys, urllib.error, urllib.request, uuid
+
+          base = f"https://{os.environ['ALB_DNS_NAME']}"
+          tenant_pattern = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
+          marker_path = "artifacts/rehearsal/bootstrap-marker.json"
+          marker = {"run_scoped": True, "tenant_ids": []}
+
+          def save_marker():
+              with open(marker_path, "w", encoding="utf-8") as handle:
+                  json.dump(marker, handle, indent=2)
+
+          def call(method, path, body=None, expect=None):
+              data = json.dumps(body).encode() if body is not None else None
+              request = urllib.request.Request(base + path, data=data, method=method)
+              request.add_header("Accept", "application/json")
+              request.add_header("X-API-Key", os.environ["ADMIN_API_KEY"])
+              if data:
+                  request.add_header("Content-Type", "application/json")
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      status, payload = response.status, response.read()
+              except urllib.error.HTTPError as error:
+                  status, payload = error.code, error.read()
+              if expect is not None and status not in expect:
+                  sys.exit(f"::error::{method} {path} returned {status}; expected {sorted(expect)}")
+              try:
+                  return status, json.loads(payload or b"{}")
+              except ValueError:
+                  return status, {}
+
+          def extract(node, *names):
+              if not isinstance(node, dict):
+                  return None
+              for name in names:
+                  value = node.get(name)
+                  if value:
+                      return value
+              for nested_name in ("data", "tenant"):
+                  nested = node.get(nested_name)
+                  value = extract(nested, *names)
+                  if value:
+                      return value
+              return None
+
+          def create_tenant(label):
+              _, payload = call("POST", "/v1/admin/tenants", body={
+                  "name": f"Aether staging {label} {os.environ['GITHUB_RUN_ID']}",
+                  "plan": "free",
+                  "contact_email": f"aether-staging-{label.lower()}-{uuid.uuid4().hex}@staging.invalid",
+                  "settings": {"lifecycle": "run-scoped-rehearsal"},
+              }, expect={200, 201})
+              tenant_id = extract(payload, "tenant_id", "id")
+              if not isinstance(tenant_id, str) or not tenant_pattern.fullmatch(tenant_id):
+                  sys.exit(f"::error::admin tenant bootstrap returned no valid tenant id for {label}")
+              marker["tenant_ids"].append(tenant_id)
+              save_marker()
+              return tenant_id
+
+          def create_key(tenant_id, label, permissions):
+              _, payload = call("POST", f"/v1/admin/tenants/{tenant_id}/api-keys", body={
+                  "name": f"staging-rehearsal-{label.lower()}-{os.environ['GITHUB_RUN_ID']}",
+                  "tier": "free",
+                  "permissions": permissions,
+              }, expect={200, 201})
+              key = extract(payload, "api_key")
+              if not isinstance(key, str) or not re.fullmatch(r"ak_[A-Za-z0-9]{24}", key):
+                  sys.exit(f"::error::admin key bootstrap returned no valid key for {label}")
+              print(f"::add-mask::{key}")
+              return key
+
+          save_marker()
+          mine_id = create_tenant("Primary")
+          mine_key = create_key(mine_id, "Primary", [
+              "read", "write", "ingest", "analytics", "analytics:export",
+              "consent:manage", "billing",
+          ])
+          peer_id = create_tenant("Isolation")
+          peer_key = create_key(peer_id, "Isolation", ["read"])
+          if mine_id == peer_id:
+              sys.exit("::error::run-scoped rehearsal tenants must be distinct")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"REHEARSAL_TENANT_API_KEY={mine_key}\n")
+              env.write(f"ISOLATION_PEER_API_KEY={peer_key}\n")
+              env.write(f"REHEARSAL_TENANT_ID={mine_id}\n")
+              env.write(f"ISOLATION_PEER_TENANT_ID={peer_id}\n")
+          print(f"bootstrapped run-scoped tenants {mine_id} and {peer_id}")
+          PY
+
+      - name: Create the isolated rehearsal tenant and verify tenant isolation
         run: |
           set -euo pipefail
           test -n "${REHEARSAL_TENANT_API_KEY:-}" \
-            || { echo '::error::STAGING_REHEARSAL_TENANT_API_KEY is required'; exit 1; }
+            || { echo '::error::run-scoped rehearsal API key was not bootstrapped'; exit 1; }
           test -n "${ISOLATION_PEER_API_KEY:-}" \
-            || { echo '::error::STAGING_ISOLATION_PEER_API_KEY is required'; exit 1; }
+            || { echo '::error::run-scoped isolation API key was not bootstrapped'; exit 1; }
           mkdir -p artifacts/rehearsal
           python - <<'PY'
           import json, os, re, sys, urllib.error, urllib.request, uuid
@@ -1126,14 +1234,15 @@ jobs:
               except ValueError:
                   return status, {}
 
-          # The registration path is exercised end to end; the tenant it creates is
-          # only activated by an emailed OTP, so the data-plane tenant is the
-          # dedicated rehearsal credential below.
-          _registration_status, registration = call("POST", "/v1/auth/register", body={
+          # The public registration path is exercised end to end. In the current
+          # backend contract it is POST /v1/tenants and may return a pending,
+          # contained tenant; the data-plane tenant is the dedicated rehearsal
+          # credential below, so no registration response is trusted as a key.
+          _registration_status, registration = call("POST", "/v1/tenants", body={
               "name": "Aether staging rehearsal",
-              "email": f"rehearsal-{uuid.uuid4().hex}@staging.invalid",
-              "password": uuid.uuid4().hex + "Aa1!",
+              "contact_email": f"rehearsal-{uuid.uuid4().hex}@staging.invalid",
               "plan_tier": "P1",
+              "settings": {"lifecycle": "run-scoped-rehearsal"},
           }, expect={200, 201})
           # Persist only a secret-free marker and a narrowly validated tenant ID.
           # Never upload the registration response: it may contain user fields,
@@ -1181,8 +1290,6 @@ jobs:
           PY
 
       - name: Capability checks (auth, consent, ingestion, queue, graph, analytics, ML)
-        env:
-          REHEARSAL_TENANT_API_KEY: ${{ secrets.STAGING_REHEARSAL_TENANT_API_KEY }}
         run: |
           set -euo pipefail
           python scripts/staging_capability_matrix.py --json > artifacts/rehearsal/capability-matrix.json
@@ -1282,9 +1389,6 @@ jobs:
           PY
 
       - name: Synthetic-seed exclusion and empty-state checks
-        env:
-          REHEARSAL_TENANT_API_KEY: ${{ secrets.STAGING_REHEARSAL_TENANT_API_KEY }}
-          ISOLATION_PEER_API_KEY: ${{ secrets.STAGING_ISOLATION_PEER_API_KEY }}
         run: |
           set -euo pipefail
           # The staging profile must ship no compiled-in synthetic dataset.
@@ -1327,8 +1431,6 @@ jobs:
           PY
 
       - name: Baseline load test
-        env:
-          REHEARSAL_TENANT_API_KEY: ${{ secrets.STAGING_REHEARSAL_TENANT_API_KEY }}
         run: |
           set -euo pipefail
           python scripts/load_smoke.py \
@@ -1339,8 +1441,6 @@ jobs:
             | tee artifacts/rehearsal/load.txt
 
       - name: Failure and retry checks
-        env:
-          REHEARSAL_TENANT_API_KEY: ${{ secrets.STAGING_REHEARSAL_TENANT_API_KEY }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -1451,39 +1551,55 @@ jobs:
           ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
         run: |
           set -euo pipefail
-          if [ ! -s artifacts/rehearsal/registration-marker.json ]; then
-            echo 'no rehearsal tenant was created; nothing to remove'
+          if [ ! -s artifacts/rehearsal/bootstrap-marker.json ] && [ ! -s artifacts/rehearsal/registration-marker.json ]; then
+            echo 'no run-scoped tenant was created; nothing to remove'
             exit 0
           fi
           test -n "${ADMIN_API_KEY:-}" \
-            || { echo '::error::STAGING_ADMIN_API_KEY is required to remove the rehearsal tenant'; exit 1; }
-          tenant_id="$(python - <<'PY'
-          import json, os, sys
-          doc = json.load(open('artifacts/rehearsal/registration-marker.json'))
-          value = doc.get('tenant_id')
-          if not value:
-              sys.exit('registration response exposed no temporary tenant_id; refusing to delete the persistent rehearsal tenant')
-          if os.path.exists('artifacts/rehearsal/tenant.json'):
-              persistent = json.load(open('artifacts/rehearsal/tenant.json')).get('tenant_id')
-              if value == persistent:
-                  sys.exit('registration tenant_id matches the persistent rehearsal tenant; refusing deletion')
-          print(value)
+            || { echo '::error::STAGING_ADMIN_API_KEY is required to remove run-scoped rehearsal tenants'; exit 1; }
+          python - <<'PY'
+          import json, os, re, subprocess, sys
+
+          pattern = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
+          ids = []
+          bootstrap = "artifacts/rehearsal/bootstrap-marker.json"
+          if os.path.exists(bootstrap):
+              marker = json.load(open(bootstrap, encoding="utf-8"))
+              if marker.get("run_scoped") is not True or not isinstance(marker.get("tenant_ids"), list):
+                  sys.exit("::error::bootstrap marker is not a trusted run-scoped marker; refusing tenant cleanup")
+              ids.extend(marker["tenant_ids"])
+          registration = "artifacts/rehearsal/registration-marker.json"
+          if os.path.exists(registration):
+              value = json.load(open(registration, encoding="utf-8")).get("tenant_id")
+              if value:
+                  ids.append(value)
+          unique = []
+          for value in ids:
+              if not isinstance(value, str) or not pattern.fullmatch(value):
+                  sys.exit("::error::tenant marker contains an invalid id; refusing unsafe cleanup")
+              if value not in unique:
+                  unique.append(value)
+          if not unique:
+              print("no validated run-scoped tenant ids were recorded; refusing to guess")
+              raise SystemExit(0)
+          for tenant_id in unique:
+              base = f"https://{os.environ['ALB_DNS_NAME']}"
+              def request(method, path):
+                  completed = subprocess.run([
+                      "curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}", "-X", method,
+                      "-H", f"X-API-Key: {os.environ['ADMIN_API_KEY']}", base + path,
+                  ], check=True, capture_output=True, text=True)
+                  return completed.stdout.strip()
+              status = request("DELETE", f"/v1/admin/tenants/{tenant_id}")
+              if status in {"200", "204"}:
+                  print(f"run-scoped rehearsal tenant {tenant_id} deleted")
+                  continue
+              print(f"delete returned {status}; falling back to deactivation")
+              status = request("POST", f"/v1/admin/tenants/{tenant_id}/deactivate")
+              if status not in {"200", "204"}:
+                  sys.exit(f"::error::run-scoped rehearsal tenant {tenant_id} was neither deleted nor expired ({status})")
+              print(f"run-scoped rehearsal tenant {tenant_id} expired")
           PY
-          )"
-          status="$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE \
-            -H "X-API-Key: ${ADMIN_API_KEY}" \
-            "https://${ALB_DNS_NAME}/v1/admin/tenants/${tenant_id}")"
-          if [ "$status" = 200 ] || [ "$status" = 204 ]; then
-            echo "rehearsal tenant ${tenant_id} deleted"
-            exit 0
-          fi
-          echo "delete returned ${status}; falling back to deactivation"
-          status="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
-            -H "X-API-Key: ${ADMIN_API_KEY}" \
-            "https://${ALB_DNS_NAME}/v1/admin/tenants/${tenant_id}/deactivate")"
-          test "$status" = 200 || test "$status" = 204 \
-            || { echo "::error::rehearsal tenant ${tenant_id} was neither deleted nor expired (${status})"; exit 1; }
-          echo "rehearsal tenant ${tenant_id} expired"
 
       - uses: actions/upload-artifact@v4
         if: always()

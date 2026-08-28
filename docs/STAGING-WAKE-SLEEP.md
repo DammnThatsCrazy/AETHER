@@ -296,10 +296,13 @@ Steps, in order, with what each proves:
    both return 200. For each of `aether` and `kyber`, the static bucket name is
    read from SSM (`/aether/staging/AETHER_STATIC_BUCKET`,
    `/aether/staging/KYBER_STATIC_BUCKET`) and `index.html` must exist.
-4. **Tenant isolation.** A fresh rehearsal tenant is registered. Its
-   `tenant_id` must differ from the isolation peer's. A cross-tenant read of
-   the peer's consent records must return 401/403/404 — a 200 is a breach and
-   fails the run. An unauthenticated `/v1/me` must fail closed.
+4. **Tenant isolation.** The run uses the encrypted staging admin bootstrap
+   key to create two fresh, free, run-scoped tenants and one API key for each.
+   The raw keys are masked and held only in the runner environment; they are
+   never committed or uploaded. Their `tenant_id` values must differ. A
+   cross-tenant read of the peer's consent records must return 401/403/404 — a
+   200 is a breach and fails the run. An unauthenticated `/v1/me` must fail
+   closed.
 5. **Capability checks.** `scripts/staging_capability_matrix.py --json`,
    `scripts/smoke_test.py`, then explicit probes for auth, consent/privacy
    (records, retention manifest, DSR), ingestion, **queue-worker drain**
@@ -318,13 +321,18 @@ Steps, in order, with what each proves:
 9. **Rollback rehearsal.** Refuses to run outside the `AETHER-staging` cluster.
    Rolls `AETHER-staging-backend` back to the previous task-definition revision,
    waits for stability, asserts the rollback took effect and `/v1/health` is
-   200, then restores the current revision and waits again. Requires at least
-   revision 2 to exist.
+   200, then restores the current revision and waits again. On the first
+   approved revision there is no earlier task definition, so the step records
+   `not_applicable` instead of fabricating a rollback; every later revision must
+   execute and verify both rollback and roll-forward.
 10. **Evidence collection.** ECS service state, log groups, CloudWatch metrics,
     `release.json`, and a cost-model run. Every command is `|| true`, so this
     step never fails the rehearsal.
-11. **Tenant cleanup.** `DELETE /v1/admin/tenants/{id}`, falling back to
-    `POST .../deactivate`. Neither succeeding is an error.
+11. **Tenant cleanup.** Every run-scoped tenant recorded by the bootstrap or
+    registration marker is removed with `DELETE /v1/admin/tenants/{id}`, falling
+    back to `POST .../deactivate`. Marker IDs are validated and cleanup refuses
+    to guess when a marker is malformed or absent. Neither delete nor the
+    explicit deactivation fallback may silently succeed with an unknown state.
 
 ## Sleep
 
@@ -411,7 +419,7 @@ bundle.
 | Artifact | Contents | Retention |
 |---|---|---|
 | `staging-wake-plan-validation-<run_id>` | `artifacts/wake-plan-policy.txt`, `artifacts/wake-plan-cost.txt`, `artifacts/profile-resource-inventory.json` | 14 days |
-| `staging-rehearsal-<run_id>` | everything under `artifacts/rehearsal/` — `migrations.txt`, `ready.json`, `tenant.json`, `capability-matrix.json`, `capabilities.json`, `smoke.txt`, `data-truth.txt`, `load.json`, `load.txt`, `rollback.txt`, `ecs-services.json`, `log-groups.json`, `metrics.json`, `release.json`, `cost.txt` | 30 days |
+| `staging-rehearsal-<run_id>` | everything under `artifacts/rehearsal/` — `bootstrap-marker.json`, `registration-marker.json`, `static-publication.txt`, `migrations.txt`, `ready.json`, `tenant.json`, `capability-matrix.json`, `capabilities.json`, `smoke.txt`, `data-truth.txt`, `load.json`, `load.txt`, `rollback.txt`, `ecs-services.json`, `log-groups.json`, `metrics.json`, `release.json`, `cost.txt` | 30 days |
 | `staging-lifecycle-evidence-<run_id>` | `artifacts/sleep-plan-policy.txt`, `artifacts/sleep/desired-counts.json`, `artifacts/sleep/autoscaling.json`, `artifacts/evidence.sha256`, `artifacts/evidence.sha256.sha256` | 30 days |
 | `staging-ttl-guard-<run_id>` | `services.json`, `services-after.json`, `actions.log` | 30 days |
 
