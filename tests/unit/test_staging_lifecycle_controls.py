@@ -641,6 +641,56 @@ def test_promotion_publishes_certificate_covered_api_host_and_raw_alb_evidence()
     assert "reviewed.alb-dns" in upload["with"]["path"]
 
 
+def test_promotion_does_not_fail_after_apply_on_external_dns_propagation():
+    """Terraform must publish DNS evidence; lifecycle owns the fail-closed check."""
+    promote = _workflow_yaml(PROMOTE_WORKFLOW)
+    apply_script = _job_script(promote, "apply")
+    assert "terraform apply -input=false reviewed.tfplan" in apply_script
+    assert "reviewed.api-host" in apply_script
+    assert "reviewed.alb-dns" in apply_script
+    assert "backend hostname does not resolve to the applied ALB" not in apply_script
+
+    lifecycle = _workflow_yaml(LIFECYCLE)
+    wake_apply = lifecycle["jobs"]["wake-apply"]
+    assert wake_apply["outputs"]["alb_dns"] == "${{ steps.outputs.outputs.alb_dns }}"
+    steps = wake_apply["steps"]
+    names = [step.get("name", "") for step in steps]
+    dns_index = names.index("Verify API DNS points to the applied load balancer")
+    readiness_index = names.index("Wait for staging infrastructure readiness")
+    assert dns_index < readiness_index
+    dns_step = steps[dns_index]
+    assert dns_step["env"] == {
+        "API_HOST": "${{ steps.outputs.outputs.api_host }}",
+        "ALB_DNS": "${{ steps.outputs.outputs.alb_dns }}",
+    }
+    assert "socket.getaddrinfo" in dns_step["run"]
+    assert "external DNS must point at the applied load balancer" in dns_step["run"]
+
+
+def test_deactivation_revokes_durable_api_keys_before_marking_inactive():
+    source = (
+        ROOT
+        / "Backend Architecture"
+        / "aether-backend"
+        / "services"
+        / "auth"
+        / "routes.py"
+    ).read_text(encoding="utf-8")
+    revoke_start = source.index("async def _revoke_tenant_api_keys")
+    deactivate_start = source.index("async def deactivate_tenant")
+    inactive_start = source.index(
+        'if tenant_rec.get("status") == "inactive"', deactivate_start
+    )
+    update_start = source.index(
+        'await _repo.update(tenant_id, {"status": "inactive"})', deactivate_start
+    )
+    assert "await _key_repo.update" in source[revoke_start:inactive_start]
+    assert '"status": "revoked"' in source[revoke_start:inactive_start]
+    assert source.index("revoked = await _revoke_tenant_api_keys", deactivate_start) < inactive_start
+    assert revoke_start < update_start
+    assert '"api_keys_revoked": revoked' in source
+
+
 # ---------------------------------------------------------------------------
 # Fail-safe sleep: runs always, and never hides the original failure
 # ---------------------------------------------------------------------------

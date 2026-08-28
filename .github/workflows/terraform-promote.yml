@@ -949,36 +949,26 @@ jobs:
           # The ALB hostname is assigned by AWS at apply time, but it is not the
           # HTTPS endpoint: the certificate is issued for var.domain_name. Keep
           # the raw ALB name as evidence, then publish the configured backend
-          # hostname for the lifecycle smoke tests. The two are checked against
-          # the same resolved address so a TLS hostname mismatch cannot reach
-          # the rehearsal.
+          # hostname for the lifecycle smoke tests. DNS is managed outside this
+          # Terraform root, so do not fail a completed apply just because the
+          # operator-managed hostname has not propagated to the new ALB yet.
+          # The lifecycle workflow performs the fail-closed DNS check immediately
+          # before readiness, the lease, and any rehearsal requests.
           alb_dns="$(terraform output -raw alb_dns)"
           case "$alb_dns" in
             ''|*://*|*/*|*' '*|*'"'*)
               echo '::error::terraform output alb_dns is empty or is not a host name'; exit 1 ;;
           esac
           backend_url="$(terraform output -raw backend_url)"
-          backend_host="$(python - "$backend_url" "$alb_dns" <<'PY'
-          import socket
+          backend_host="$(python - "$backend_url" <<'PY'
           import sys
           from urllib.parse import urlparse
 
-          url, alb = sys.argv[1:]
+          url = sys.argv[1]
           parsed = urlparse(url)
           host = parsed.hostname or ""
           if parsed.scheme != "https" or parsed.path not in ("", "/") or not host:
               raise SystemExit("terraform output backend_url is not a certificate-covered HTTPS host")
-
-          def addresses(name: str) -> set[str]:
-              return {item[4][0] for item in socket.getaddrinfo(name, 443, type=socket.SOCK_STREAM)}
-
-          try:
-              host_addresses = addresses(host)
-              alb_addresses = addresses(alb)
-          except OSError as exc:
-              raise SystemExit(f"backend hostname does not resolve to the applied ALB: {exc}")
-          if not host_addresses or not alb_addresses or not (host_addresses & alb_addresses):
-              raise SystemExit("backend hostname does not resolve to the applied ALB")
           print(host)
           PY
           )"

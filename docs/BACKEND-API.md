@@ -206,11 +206,14 @@ mapping status.
 ### Admin tenant lifecycle (admin permission required)
 
 Deactivation and hard deletion revoke every active credential owned by the
-tenant, including contained `public_ingest_identifier` records created by the
-registration path. Hard deletion revokes those identifiers before removing the
-tenant row; deactivation performs the same revocation even when the tenant is
-already inactive. Both responses report the number of public-ingest
-identifiers revoked so operators can verify cleanup.
+tenant, including durable API-key rows and contained `public_ingest_identifier`
+records created by the registration path. Deactivation marks durable API keys
+revoked before evicting their Redis entries or marking the tenant inactive; the
+validator also refuses to rehydrate a revoked row after a cache miss. Hard
+deletion revokes those identifiers before removing the tenant row; deactivation
+performs the same revocation even when the tenant is already inactive. Both
+responses report the number of API keys and public-ingest identifiers revoked so
+operators can verify cleanup.
 
 | Endpoint | Method | Purpose |
 |---|---|---|

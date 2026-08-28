@@ -37,6 +37,7 @@ from shared.common.common import (
     ForbiddenError,
     NotFoundError,
     UnauthorizedError,
+    utc_now,
 )
 from shared.logger.logger import get_logger, metrics
 from repositories.repos import AdminRepository, APIKeyRepository
@@ -187,6 +188,30 @@ async def _evict_tenant_api_keys(tenant_id: str) -> int:
     except Exception as e:
         logger.debug(f"Redis eviction error: tenant={tenant_id} error={e}")
     return evicted
+
+
+async def _revoke_tenant_api_keys(tenant_id: str) -> int:
+    """Mark every durable tenant API key revoked before cleanup succeeds."""
+    records = await _key_repo.find_many(filters={"tenant_id": tenant_id}, limit=1000)
+    revoked = 0
+    failures: list[str] = []
+    for record in records:
+        key_id = record.get("id")
+        if not key_id or record.get("status") == "revoked" or record.get("revoked_at"):
+            continue
+        try:
+            await _key_repo.update(
+                key_id,
+                {"status": "revoked", "revoked_at": utc_now().isoformat()},
+            )
+            revoked += 1
+        except Exception as exc:
+            failures.append(f"{key_id}: {exc}")
+    if failures:
+        raise RuntimeError(
+            "could not revoke durable tenant API keys: " + "; ".join(failures)
+        )
+    return revoked
 
 
 async def _cascade_delete_tenant(tenant_id: str) -> dict:
@@ -773,15 +798,19 @@ async def deactivate_tenant(tenant_id: str, request: Request):
         logger.debug(f"Public ingest revocation skipped: tenant={tenant_id} error={e}")
         ingest_revoked = 0
 
+    revoked = await _revoke_tenant_api_keys(tenant_id)
+    evicted = await _evict_tenant_api_keys(tenant_id)
+
     if tenant_rec.get("status") == "inactive":
         return APIResponse(data={
             "tenant_id": tenant_id,
             "status": "inactive",
+            "api_keys_revoked": revoked,
+            "keys_evicted": evicted,
             "public_ingest_identifiers_revoked": ingest_revoked,
             "message": "Tenant is already inactive.",
         }).to_dict()
 
-    evicted = await _evict_tenant_api_keys(tenant_id)
     await _repo.update(tenant_id, {"status": "inactive"})
 
     metrics.increment("tenant_deactivations")
@@ -790,6 +819,7 @@ async def deactivate_tenant(tenant_id: str, request: Request):
     return APIResponse(data={
         "tenant_id": tenant_id,
         "status": "inactive",
+        "api_keys_revoked": revoked,
         "keys_evicted": evicted,
         "public_ingest_identifiers_revoked": ingest_revoked,
         "message": "Tenant deactivated. All API keys have been invalidated immediately.",

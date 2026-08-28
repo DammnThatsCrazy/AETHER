@@ -51,11 +51,14 @@ three staging ECR repositories remain mutable and use the staging KMS key.
 The reviewed Terraform promotion writes a secret-free `reviewed.api-host`
 evidence file after an apply. This is the configured `domain_name` hostname
 covered by the ACM certificate, not the raw `*.elb.amazonaws.com` ALB name.
-The promotion verifies that both names resolve to the same load balancer before
-publishing the evidence; the staging lifecycle consumes the certificate-covered
-host for HTTPS rehearsal requests. The raw ALB name is retained separately as
-diagnostic evidence, and neither value is a manually maintained GitHub variable
-that can be required before the first load balancer exists. The same lifecycle creates run-scoped rehearsal tenants and
+Because the DNS edge is managed outside this Terraform root, promotion publishes
+both values without making a completed apply fail while the operator-managed
+hostname propagates to a new ALB. The staging lifecycle consumes both evidence
+files and performs the fail-closed intersection check immediately before
+readiness, the awake lease, and HTTPS rehearsal requests. The raw ALB name is
+retained separately as diagnostic evidence, and neither value is a manually
+maintained GitHub variable that can be required before the first load balancer
+exists. The same lifecycle creates run-scoped rehearsal tenants and
 API keys after wake, masks those keys in the runner, and deletes or deactivates
 every marker-recorded tenant during its always-run cleanup. The only durable
 rehearsal credential is the encrypted staging admin bootstrap key, which is

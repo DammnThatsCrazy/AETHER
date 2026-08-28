@@ -762,6 +762,7 @@ jobs:
     outputs:
       apply_run_id: ${{ steps.dispatch.outputs.apply_run_id }}
       api_host: ${{ steps.outputs.outputs.api_host }}
+      alb_dns: ${{ steps.outputs.outputs.alb_dns }}
     steps:
       - uses: actions/checkout@v4
       - name: Dispatch the reviewed apply for the verified wake plan
@@ -841,18 +842,60 @@ jobs:
             --dir "$evidence_dir"
           api_file="$(find "$evidence_dir" -type f -name 'reviewed.api-host' -print -quit)"
           test -n "$api_file" || { echo '::error::reviewed apply did not publish reviewed.api-host'; exit 1; }
+          alb_file="$(find "$evidence_dir" -type f -name 'reviewed.alb-dns' -print -quit)"
+          test -n "$alb_file" || { echo '::error::reviewed apply did not publish reviewed.alb-dns'; exit 1; }
           api_host="$(tr -d '\r\n' < "$api_file")"
+          alb_dns="$(tr -d '\r\n' < "$alb_file")"
           case "$api_host" in
             ''|*://*|*/*|*' '*|*'"'*)
               echo '::error::applied API output is empty or is not a host name'; exit 1 ;;
           esac
+          case "$alb_dns" in
+            ''|*://*|*/*|*' '*|*'"'*)
+              echo '::error::applied ALB output is empty or is not a host name'; exit 1 ;;
+          esac
           printf 'api_host=%s\n' "$api_host" >> "$GITHUB_OUTPUT"
+          printf 'alb_dns=%s\n' "$alb_dns" >> "$GITHUB_OUTPUT"
           echo 'Certificate-covered API hostname captured for the rehearsal.'
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
           aws-region: us-east-1
+
+      - name: Verify API DNS points to the applied load balancer
+        env:
+          API_HOST: ${{ steps.outputs.outputs.api_host }}
+          ALB_DNS: ${{ steps.outputs.outputs.alb_dns }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import socket
+
+          api_host = os.environ["API_HOST"]
+          alb_dns = os.environ["ALB_DNS"]
+
+          def addresses(name: str) -> set[str]:
+              return {
+                  item[4][0]
+                  for item in socket.getaddrinfo(name, 443, type=socket.SOCK_STREAM)
+              }
+
+          try:
+              api_addresses = addresses(api_host)
+              alb_addresses = addresses(alb_dns)
+          except OSError as exc:
+              raise SystemExit(
+                  f"certificate-covered API hostname is not yet resolvable to the applied ALB: {exc}"
+              )
+          if not api_addresses or not alb_addresses or not (api_addresses & alb_addresses):
+              raise SystemExit(
+                  "certificate-covered API hostname does not resolve to the applied ALB; "
+                  "external DNS must point at the applied load balancer before rehearsal"
+              )
+          print(f"verified {api_host} resolves to the applied ALB {alb_dns}")
+          PY
 
       - name: Wait for staging infrastructure readiness
         run: |
