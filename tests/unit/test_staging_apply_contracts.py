@@ -21,6 +21,7 @@ TF = ROOT / "AWS Deployment/aether-aws/terraform"
 ALB = TF / "modules/alb/main.tf"
 MONITORING = TF / "modules/monitoring/main.tf"
 PROMOTE = ROOT / ".github/workflows/terraform-promote.yml"
+REPO_HEALTH = ROOT / ".github/workflows/repo-health.yml"
 STATE_MIGRATION_WORKFLOW = ROOT / ".github/workflows/terraform-state-migrate.yml"
 STATE_RECONCILE_WORKFLOW = ROOT / ".github/workflows/staging-state-reconcile.yml"
 STATE_MIGRATION = ROOT / "scripts/release/migrate_alb_target_group_state.sh"
@@ -30,6 +31,12 @@ STATE_ROLE_CHECKER = ROOT / "scripts/release/verify_terraform_state_role.py"
 POLICY = ROOT / "config/staging_apply_iam_policy.yaml"
 POLICY_CHECKER = ROOT / "scripts/release/check_staging_apply_policy.py"
 EFFECTIVE_POLICY_CHECKER = ROOT / "scripts/release/verify_effective_staging_apply_policy.py"
+
+
+def test_repo_health_push_and_pr_runs_cannot_cancel_each_other() -> None:
+    """Required PR evidence must survive the matching branch push event."""
+    text = REPO_HEALTH.read_text(encoding="utf-8")
+    assert "repo-health-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}" in text
 
 
 def test_staging_target_group_replacement_is_name_safe() -> None:
@@ -375,7 +382,7 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     text = STATE_RECONCILE_WORKFLOW.read_text(encoding="utf-8")
     assert "ecr_repository_names" in text
     assert 'required: false' in text
-    assert 'test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES"' in text
+    assert 'test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES"' in text
     assert "aether-backend|aether-ml-serving|aether-kyber|aether-aether" in text
     assert "module.ecr.aws_ecr_repository.this[\\\"${repository}\\\"]" in text
     assert "requires a fresh reviewed plan" in text or "fresh staging plan" in text
@@ -383,12 +390,44 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     assert "encryptionConfiguration.encryptionType" in text
     assert "encryptionConfiguration.kmsKey" in text
     assert "list-resource-tags" in text
-    assert "for profile in staging demo preview" in text
+    assert "for profile in demo preview" in text
     assert "profiles/${profile}/terraform.tfstate" in text
     assert "state-managed ECR key" in text
+
+
+def test_tainted_staging_ecr_repair_is_explicit_and_requires_a_fresh_plan() -> None:
+    """Interrupted ECR replacements have a narrow, state-only recovery path."""
+    text = STATE_RECONCILE_WORKFLOW.read_text(encoding="utf-8")
+    assert "untaint_ecr_repository_names" in text
+    assert 'test "$CONFIRM" = "IMPORT-STAGING"' in text
+    assert 'terraform untaint "$address"' in text
+    assert "Generate a fresh reviewed plan before any apply" in text
+    assert "does not match the reviewed staging KMS key" in text
+    assert "cannot be both imported and untainted" in text
+    # The repair path must not accept the pre-existing AES256 backend, which is
+    # handled by the import path and has a distinct reviewed exception.
+    assert "aether-backend is AES256 and is reconciled through import" in text
     assert "module.ecr.aws_kms_key.ecr" in text
     assert "terraform-nonprod-shared" in text
     assert "^[[:space:]]*arn" in text
+    assert "UNTAINT_ECR_REPOSITORY_NAMES" in text
+    assert "normalized_imports$normalized_untaints" in text
+    assert "normalize_repositories" in text
+    assert "terraform state show -no-color \"$candidate\"" in text
+    assert 'canonical_name=\"$(terraform state show -no-color \"$address\"' in text
+    assert 'expected \'$repository\'' in text
+    assert 'taint_status=\"$(jq -r --arg repository \"$repository\"' in text
+    assert 'status \'$taint_status\'' in text
+    assert 'grep -Eq "^[[:space:]]*name[[:space:]]*=[[:space:]]*\\"${repository}\\"' in text
+    assert "Validate every untaint target before any import or untaint mutation" in text
+    assert "staging_ecr_addresses=\"$(terraform state list | grep 'aws_ecr_repository' || true)\"" in text
+    assert "case \",$normalized_imports,\" in" in text
+    assert "sort -u" in text
+    assert "AWS_TERRAFORM_APPLY_ROLE_ARN" in text
+    assert "never the read-only planning role" in text
+    assert 'normalized_untaints="$(normalize_repositories "$UNTAINT_ECR_REPOSITORY_NAMES")"' in text
+    assert "check_terraform_state_access_policy.py" in text
+    assert "verify_terraform_state_role.py" in text
 
 
 def test_state_reconciliation_has_the_complete_provider_environment() -> None:

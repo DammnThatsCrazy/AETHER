@@ -19,7 +19,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "abc9da06"
+last_synced_commit: "68aa5e27"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -47,6 +47,11 @@ pipeline before Terraform state ownership. Its encryption cannot be changed
 after creation, so staging Terraform declares that exact shape and the
 import-only reconciliation workflow adopts it without replacement. The other
 three staging ECR repositories remain mutable and use the staging KMS key.
+Before clearing a taint, reconciliation also verifies that the canonical
+Terraform address stores the same repository name requested by the operator;
+an address that points at a different repository, or is no longer tainted, is
+refused before state is mutated. Duplicate-owner inspection tolerates
+human-formatted Terraform state output spacing.
 
 The reviewed Terraform promotion writes a secret-free `reviewed.api-host`
 evidence file after an apply. This is the configured `domain_name` hostname
@@ -448,9 +453,24 @@ detach-only apply first. The normal promotion workflow never invents a
 maintenance target group or performs this transition implicitly.
 An interrupted run must use `staging-state-reconcile.yml` to import the
 existing group or an exact reviewed ECR repository, and produce a fresh
-reviewed plan; ECR imports additionally require matching the reviewed staging
-KMS key and verifying that the repository is not owned by staging, demo, or
-preview state. The import runner carries the same Auth0 provider environment
+reviewed plan; if an existing ECR repository is already in staging state but
+marked tainted after an interrupted replacement, use the workflow's explicit
+`untaint_ecr_repository_names` input instead. That input clears taint only after
+the repository's live encryption and KMS key match both the reviewed staging
+configuration and the Terraform-managed ECR KMS key in state; it uses
+Terraform's top-level `untaint` command and never imports, deletes, or applies a
+repository. Both import and untaint paths verify that the repository is not
+owned by demo or preview state; staging is the intended owner for an untaint
+repair and its canonical address is checked for duplicate staging owners before
+any state mutation. Comma-separated targets are normalized and deduplicated,
+and every requested untaint target is validated up front so a later invalid
+entry cannot leave a partial repair. Both import and untaint mutations run under
+the protected `AWS_TERRAFORM_APPLY_ROLE_ARN` state-write role; the read-only
+plan role is never used to persist reconciliation changes. Comma-separated
+targets are normalized and deduplicated before the mutation loop. ECR imports additionally require
+matching the reviewed staging KMS key. The workflow validates
+`config/terraform_state_access_policy.yaml` and simulates the assumed role's
+effective bucket/table permissions before any state mutation. The import runner carries the same Auth0 provider environment
 as a normal remote plan, because Terraform configures every root provider even
 when importing a single AWS address. Aurora alarms and dashboard widgets are
 likewise selected by a static profile flag rather than an unresolved cluster
