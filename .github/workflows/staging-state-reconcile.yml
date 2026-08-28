@@ -17,7 +17,7 @@ on:
         required: false
         type: string
       staging_ecr_kms_key_arn:
-        description: "Exact reviewed staging ECR KMS key ARN; required when importing ECR repositories"
+        description: "Exact reviewed staging ECR KMS key ARN; required for KMS-encrypted repositories"
         required: false
         type: string
       confirm_staging_import:
@@ -95,20 +95,8 @@ jobs:
             }
           fi
           if [ -n "$ECR_REPOSITORY_NAMES" ]; then
-            test -n "$STAGING_ECR_KMS_KEY_ARN" || {
-              echo '::error::Refusing ECR import: staging_ecr_kms_key_arn is required'; exit 1;
-            }
             account_id="$(aws sts get-caller-identity --query Account --output text)"
-            expected_key_prefix="arn:aws:kms:us-east-1:${account_id}:key/"
-            case "$STAGING_ECR_KMS_KEY_ARN" in
-              "$expected_key_prefix"*) ;;
-              *) echo '::error::Refusing ECR import: KMS key must be a us-east-1 key in the staging account'; exit 1 ;;
-            esac
-            key_environment="$(aws kms list-resource-tags --key-id "$STAGING_ECR_KMS_KEY_ARN" \
-              --query 'Tags[?TagKey==`Environment`].TagValue | [0]' --output text)"
-            test "$key_environment" = staging || {
-              echo "::error::Refusing ECR import: KMS key Environment tag is '$key_environment', expected staging"; exit 1;
-            }
+            needs_kms_key=false
             IFS=',' read -ra repositories <<< "$ECR_REPOSITORY_NAMES"
             for raw in "${repositories[@]}"; do
               repository="$(printf '%s' "$raw" | xargs)"
@@ -125,10 +113,35 @@ jobs:
                 --query 'repositories[0].encryptionConfiguration.encryptionType' --output text)"
               encryption_key="$(aws ecr describe-repositories --repository-names "$repository" \
                 --query 'repositories[0].encryptionConfiguration.kmsKey' --output text)"
-              test "$encryption_type" = KMS && test "$encryption_key" = "$STAGING_ECR_KMS_KEY_ARN" || {
-                echo "::error::Refusing import: ECR repository '$repository' is not encrypted with the reviewed staging KMS key"; exit 1;
-              }
+              if [ "$repository" = "aether-backend" ]; then
+                test "$encryption_type" = AES256 || {
+                  echo "::error::Refusing import: staging backend must remain the reviewed AES256 repository; found '$encryption_type'"; exit 1;
+                }
+              else
+                needs_kms_key=true
+                test "$encryption_type" = KMS || {
+                  echo "::error::Refusing import: ECR repository '$repository' must use the reviewed staging KMS key"; exit 1;
+                }
+                test -n "$STAGING_ECR_KMS_KEY_ARN" || {
+                  echo '::error::Refusing ECR import: staging_ecr_kms_key_arn is required for KMS repositories'; exit 1;
+                }
+                test "$encryption_key" = "$STAGING_ECR_KMS_KEY_ARN" || {
+                  echo "::error::Refusing import: ECR repository '$repository' is not encrypted with the reviewed staging KMS key"; exit 1;
+                }
+              fi
             done
+            if [ "$needs_kms_key" = true ]; then
+              expected_key_prefix="arn:aws:kms:us-east-1:${account_id}:key/"
+              case "$STAGING_ECR_KMS_KEY_ARN" in
+                "$expected_key_prefix"*) ;;
+                *) echo '::error::Refusing ECR import: KMS key must be a us-east-1 key in the staging account'; exit 1 ;;
+              esac
+              key_environment="$(aws kms list-resource-tags --key-id "$STAGING_ECR_KMS_KEY_ARN" \
+                --query 'Tags[?TagKey==`Environment`].TagValue | [0]' --output text)"
+              test "$key_environment" = staging || {
+                echo "::error::Refusing ECR import: KMS key Environment tag is '$key_environment', expected staging"; exit 1;
+              }
+            fi
           fi
 
       - name: Initialize the staging state backend
@@ -153,6 +166,8 @@ jobs:
           STAGING_ECR_KMS_KEY_ARN: ${{ inputs.staging_ecr_kms_key_arn }}
         run: |
           set -euo pipefail
+          kms_repositories="$(printf '%s' "$ECR_REPOSITORY_NAMES" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -v '^aether-backend$' || true)"
+          [ -n "$kms_repositories" ] || exit 0
           managed_key_arn="$(terraform state show -no-color 'module.ecr.aws_kms_key.ecr' \
             | sed -n 's/^[[:space:]]*arn[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
           test -n "$managed_key_arn" || {

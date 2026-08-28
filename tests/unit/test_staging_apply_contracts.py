@@ -391,6 +391,27 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     assert "^[[:space:]]*arn" in text
 
 
+def test_staging_reconciles_preexisting_immutable_aes256_backend_repository() -> None:
+    """The release-built backend ECR repository must never be replaced."""
+    module = (TF / "modules/ecr/main.tf").read_text(encoding="utf-8")
+    variables = (TF / "modules/ecr/variables.tf").read_text(encoding="utf-8")
+    root_variables = (TF / "variables.tf").read_text(encoding="utf-8")
+    staging = (TF / "profiles/staging.tfvars").read_text(encoding="utf-8")
+    workflow = STATE_RECONCILE_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "repository_encryption_types" in variables
+    assert "repository_tag_mutabilities" in variables
+    assert 'lookup(var.repository_encryption_types, repository, "KMS")' in module
+    assert 'lookup(var.repository_tag_mutabilities, repository, "MUTABLE")' in module
+    assert 'local.encryption_types[each.value] == "KMS" ? aws_kms_key.ecr.arn : null' in module
+    assert 'aether-backend = "AES256"' in staging
+    assert 'aether-backend = "IMMUTABLE"' in staging
+    assert "ecr_repository_encryption_types" in root_variables
+    assert "ECR repository '$repository' must use the reviewed staging KMS key" in workflow
+    assert "staging backend must remain the reviewed AES256 repository" in workflow
+    assert 'kms_repositories="$(printf' in workflow
+
+
 def test_staging_cmk_service_policy_and_environment_tags_are_present() -> None:
     """Customer-managed keys must be usable by AWS services, not just Terraform."""
     secrets = (TF / "modules/secrets/main.tf").read_text(encoding="utf-8")

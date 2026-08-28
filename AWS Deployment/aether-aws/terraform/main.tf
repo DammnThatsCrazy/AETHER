@@ -69,8 +69,10 @@ module "vpc" {
 module "ecr" {
   source = "./modules/ecr"
 
-  environment = var.environment
-  project     = var.project
+  environment                 = var.environment
+  project                     = var.project
+  repository_encryption_types = var.ecr_repository_encryption_types
+  repository_tag_mutabilities = var.ecr_repository_tag_mutabilities
 }
 
 # ---------------------------------------------------------------------------
