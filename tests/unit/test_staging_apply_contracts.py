@@ -383,7 +383,7 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     assert "encryptionConfiguration.encryptionType" in text
     assert "encryptionConfiguration.kmsKey" in text
     assert "list-resource-tags" in text
-    assert "for profile in staging demo preview" in text
+    assert "for profile in demo preview" in text
     assert "profiles/${profile}/terraform.tfstate" in text
     assert "state-managed ECR key" in text
 

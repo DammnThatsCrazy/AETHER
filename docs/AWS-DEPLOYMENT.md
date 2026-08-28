@@ -455,7 +455,8 @@ the repository's live encryption and KMS key match both the reviewed staging
 configuration and the Terraform-managed ECR KMS key in state; it uses
 Terraform's top-level `untaint` command and never imports, deletes, or applies a
 repository. Both import and untaint paths verify that the repository is not
-owned by staging, demo, or preview state. ECR imports additionally require
+owned by demo or preview state; staging is the intended owner for an untaint
+repair and its state is checked separately. ECR imports additionally require
 matching the reviewed staging KMS key. The import runner carries the same Auth0 provider environment
 as a normal remote plan, because Terraform configures every root provider even
 when importing a single AWS address. Aurora alarms and dashboard widgets are

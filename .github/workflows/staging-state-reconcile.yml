@@ -281,7 +281,10 @@ jobs:
           # second Terraform owner that could later destroy another profile's
           # repository.
           state_dir="$(mktemp -d)"
-          for profile in staging demo preview; do
+          # Staging is the intended owner for an untaint repair and its local
+          # state was already checked above. Only inspect the other shared
+          # profiles here so a staging-owned repository is not rejected.
+          for profile in demo preview; do
             key="profiles/${profile}/terraform.tfstate"
             state_file="$state_dir/${profile}.json"
             error_file="$state_dir/${profile}.err"
