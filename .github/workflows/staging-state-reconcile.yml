@@ -259,6 +259,12 @@ jobs:
           TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
           TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
           TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
+          # The root includes Auth0 resources even when this workflow imports
+          # only an AWS address. The provider obtains these from the runner
+          # environment so they never enter Terraform variables or state.
+          AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+          AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
           TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
           TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
         run: |
@@ -271,6 +277,9 @@ jobs:
             TF_VAR_acm_certificate_arn \
             TF_VAR_domain_name \
             TF_VAR_alert_email \
+            AUTH0_DOMAIN \
+            AUTH0_CLIENT_ID \
+            AUTH0_CLIENT_SECRET \
             TF_VAR_aether_app_url \
             TF_VAR_kyber_app_url; do
             test -n "${!required:-}" || {

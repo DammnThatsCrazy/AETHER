@@ -539,9 +539,10 @@ module "monitoring" {
   # the monitoring module enables the Aurora ACU alarm and dashboard widget.
   # aurora_max_acu follows the profile so the max-ACU alarm threshold tracks
   # the capacity the cluster was actually given.
-  aurora_cluster_id = module.aurora.cluster_identifier
-  aurora_max_acu    = var.aurora_max_acu
-  alb_arn_suffix    = module.alb.alb_arn_suffix
+  aurora_cluster_id           = module.aurora.cluster_identifier
+  aurora_max_acu              = var.aurora_max_acu
+  enable_aurora_observability = true
+  alb_arn_suffix              = module.alb.alb_arn_suffix
 
   # Alarm gating: a profile that provisions no Redis/Kafka/Neptune/dedicated ML
   # must not create alarms whose dimensions point at nothing — they would sit

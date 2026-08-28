@@ -33,6 +33,12 @@ variable "aurora_cluster_id" {
   default     = ""
 }
 
+variable "enable_aurora_observability" {
+  type        = bool
+  description = "Whether Aurora alarms and dashboard widgets are present. This must be a static profile decision, not one inferred from a resource-derived cluster identifier."
+  default     = false
+}
+
 variable "aurora_max_acu" {
   type        = number
   description = "Aurora max ACU configured on the cluster (used to compute the max-ACU alarm threshold)"

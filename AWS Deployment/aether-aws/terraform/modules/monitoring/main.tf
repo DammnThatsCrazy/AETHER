@@ -204,7 +204,10 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
 # --------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "aurora_max_acu" {
-  count               = var.aurora_cluster_id == "" ? 0 : 1
+  # Resource-derived outputs are unknown while Terraform is importing an
+  # unrelated address, so they must never determine resource cardinality.
+  # The root chooses this static profile input whenever it provisions Aurora.
+  count               = var.enable_aurora_observability ? 1 : 0
   alarm_name          = "${var.project}-${var.environment}-aurora-max-acu"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = 2 # 2 × 5-min periods = 10 min sustained
@@ -536,7 +539,7 @@ locals {
           { stat = spec.stat }
         ]]
       }
-    } if var.aurora_cluster_id != ""
+    } if var.enable_aurora_observability
   ]
 
   # The dedicated aether-ml ECS service only exists when the profile enables

@@ -391,6 +391,34 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     assert "^[[:space:]]*arn" in text
 
 
+def test_state_reconciliation_has_the_complete_provider_environment() -> None:
+    """Importing one AWS address still configures every root provider."""
+    text = STATE_RECONCILE_WORKFLOW.read_text(encoding="utf-8")
+    start = text.index("      - name: Import only the known staging resources")
+    end = text.index("      - name: Emit reconciled state checksum", start)
+    block = text[start:end]
+
+    assert "AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}" in block
+    assert "AUTH0_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}" in block
+    assert "AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}" in block
+    for name in ("AUTH0_DOMAIN", "AUTH0_CLIENT_ID", "AUTH0_CLIENT_SECRET"):
+        assert name in block.split("for required in", 1)[1]
+
+
+def test_aurora_observability_uses_a_static_profile_gate() -> None:
+    """Imports must not derive Terraform cardinality from an Aurora output."""
+    monitoring = MONITORING.read_text(encoding="utf-8")
+    variables = (TF / "modules/monitoring/variables.tf").read_text(encoding="utf-8")
+    root = (TF / "main.tf").read_text(encoding="utf-8")
+
+    assert 'variable "enable_aurora_observability"' in variables
+    assert "count               = var.enable_aurora_observability ? 1 : 0" in monitoring
+    assert "} if var.enable_aurora_observability" in monitoring
+    assert "var.aurora_cluster_id == \"\" ? 0 : 1" not in monitoring
+    assert "} if var.aurora_cluster_id != \"\"" not in monitoring
+    assert "enable_aurora_observability = true" in root
+
+
 def test_staging_reconciles_preexisting_immutable_aes256_backend_repository() -> None:
     """The release-built backend ECR repository must never be replaced."""
     module = (TF / "modules/ecr/main.tf").read_text(encoding="utf-8")
