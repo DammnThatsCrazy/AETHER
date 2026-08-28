@@ -1,0 +1,148 @@
+# Feature readiness record — see config/readiness/schema.json.
+# Migration-derived from scripts/production_status.py (legacy area: 'agentic_x402_productization'). The 0-5 maturity score is decomposed across the model's
+# independent dimensions; an external blocker never reduces implementation.
+feature_id: agentic-x402
+title: Agentic x402
+owning_system: aether
+summary: 'Full x402 lifecycle (14 events + legacy normalization) and agent lifecycle (19 events + legacy
+  normalization) implemented end-to-end: SDK emitters, shared contracts, backend lifecycle mappers.'
+scope:
+  id: agentic-x402-v1
+  version: 1
+  title: Agentic x402 V1
+  target: observation-pilot
+  included:
+  - contracts-and-schemas
+  - core-behavior
+  - runtime-wiring
+  - persistence-and-migrations
+  - authorization-and-tenant-isolation
+  excluded: []
+  deferred: []
+repository_ceiling:
+  type: VERIFIED
+  achieved: true
+  remaining_after_ceiling:
+  - None — repository-controlled work complete
+  remaining_is_repository_controlled: false
+  evidence:
+  - packages/shared/events.ts
+  - packages/shared/agent.ts
+  - packages/shared/x402-lifecycle.ts
+implementation:
+  state: VERIFIED
+  denominator: in-scope repository controls (migration-derived)
+  controls:
+  - id: contracts-and-schemas
+    description: contracts and schemas
+    weight: 20
+    satisfied: true
+  - id: core-behavior
+    description: core behavior
+    weight: 20
+    satisfied: true
+  - id: runtime-wiring
+    description: runtime wiring
+    weight: 20
+    satisfied: true
+  - id: persistence-and-migrations
+    description: persistence and migrations
+    weight: 20
+    satisfied: true
+  - id: authorization-and-tenant-isolation
+    description: authorization and tenant isolation
+    weight: 20
+    satisfied: true
+  remaining_work: []
+productionization:
+  denominator: in-scope productionization controls (migration-derived)
+  controls:
+  - id: security-controls
+    description: security controls
+    weight: 25
+    satisfied: true
+  - id: observability-metrics-logs
+    description: observability metrics logs
+    weight: 25
+    satisfied: true
+  - id: reliability-idempotency-retry
+    description: reliability idempotency retry
+    weight: 25
+    satisfied: true
+  - id: ci-and-release-gates
+    description: ci and release gates
+    weight: 25
+    satisfied: true
+  remaining_work: []
+activation:
+  state: NO_EXTERNAL_BLOCKER
+  blockers: []
+dependencies:
+  hard: []
+  soft: []
+environment_evidence:
+  local:
+    state: VERIFIED
+    credentialed: false
+  ci:
+    state: VERIFIED
+    credentialed: false
+  staging:
+    state: NOT_ATTEMPTED
+    credentialed: true
+  production:
+    state: NOT_APPLICABLE
+operational_ownership:
+  team: agent-platform
+  technical_owner: agent-platform
+  operational_owner: platform-ops
+  escalation: pagerduty:agent-platform
+  runbook: docs/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md
+  dashboards:
+  - grafana:agent-platform
+  alerts:
+  - pagerduty:agent-platform
+  service_level_target: per founding-tenant SLO
+  recovery_objective: RTO 30m / RPO 5m
+business_readiness:
+  applicable: false
+  controls: []
+confidence:
+  level: MODERATE
+  reasons:
+  - 'repository evidence: packages/shared/events.ts'
+  evidence_gaps:
+  - not yet exercised in credentialed staging/production
+release_profiles:
+  local:
+    participation: required
+    implementation_floor: VERIFIED
+    productionization_required: false
+    environment_gate: local
+    business_gate: false
+  staging:
+    participation: experimental
+    implementation_floor: VERIFIED
+    productionization_required: true
+    environment_gate: staging
+    business_gate: false
+  pilot:
+    participation: experimental
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: pilot
+    business_gate: false
+  production-lean:
+    participation: not_in_release
+    note: Excluded from the founding-tenant release scope (see config/founding_tenant_release.yaml).
+  production-scale:
+    participation: not_in_release
+    note: Excluded from the founding-tenant release scope (see config/founding_tenant_release.yaml).
+historical:
+  historical_maturity_index: 4
+  historical_maturity_index_scale: 0-5
+  historical_maturity_index_authoritative: false
+  migration_derived: true
+  legacy_area: agentic_x402_productization
+  note: Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is
+    a proxy pending per-capability SME review.

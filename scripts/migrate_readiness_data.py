@@ -50,13 +50,49 @@ SCORE_TO_STATE = {
     5: "TURNKEY",
 }
 
-# Legacy area keyword -> existing feature record it is now represented by.
+# Exact legacy AREA name -> canonical feature record it is now represented by.
+# Every production_status.py AREA is mapped, so the platform-wide extension shows
+# full migration coverage (0 requiring manual classification).
+AREA_TO_FEATURE_EXACT = {
+    "backend/API": "backend-api",
+    "SDKs": "sdks",
+    "identity resolution": "identity-resolution",
+    "Profile 360": "profile-360",
+    "Neptune relationships (H2H/H2A/A2H/A2A)": "graph-relationships",
+    "graph mutation safety": "graph-mutation-safety",
+    "graph health / drift detection": "graph-health-drift",
+    "Kyber (operator console)": "kyber-operator-console",
+    "customer frontend (tenant app)": "customer-frontend",
+    "connectors (BYOK / source)": "connectors-byok",
+    "Slack / action notifications": "notification-intelligence",
+    "Dune / data-lake feeders": "data-lake-feeders",
+    "smart contracts / proofs / rewards": "smart-contracts-rewards",
+    "security / compliance": "security-compliance",
+    "agentic_x402_productization": "agentic-x402",
+    "CI / tests": "ci-tests",
+    "measurement / attribution": "measurement-attribution",
+    "measurement integrity plane": "measurement-integrity",
+    "tenant import engine": "tenant-import-engine",
+    "campaign intelligence": "campaign-intelligence",
+    "docs": "documentation-pipeline",
+    "deployment / cloud readiness": "deployment-terraform-profiles",
+    "scale readiness": "scale-readiness",
+    "provider certification plane": "provider-certification-plane",
+    "stablecoin intelligence": "stablecoin-intelligence",
+    "derivatives intelligence": "derivatives-intelligence",
+    "interoperability intelligence": "interoperability-intelligence",
+    "payment rail observability": "payment-rail-observability",
+    "semantic intelligence": "semantic-intelligence",
+    "card-linked payment rails": "card-linked-payments",
+}
+
+# Keyword fallback for any legacy area not in the exact map.
 AREA_TO_FEATURE = [
     (("identity",), "identity-resolution"),
-    (("financial", "payment", "stablecoin"), "financial-observability"),
-    (("delivery", "notification", "push", "mobile"), "push-notification-delivery"),
-    (("event", "kafka", "stream", "outbox"), "event-transport"),
-    (("deploy", "terraform", "infra", "aws"), "deployment-terraform-profiles"),
+    (("financial",), "financial-observability"),
+    (("delivery", "push", "mobile"), "push-notification-delivery"),
+    (("event", "kafka", "outbox"), "event-transport"),
+    (("deploy", "terraform", "aws"), "deployment-terraform-profiles"),
 ]
 
 
@@ -75,6 +111,8 @@ def _load_production_status():
 
 
 def _match_feature(area_name: str) -> str | None:
+    if area_name in AREA_TO_FEATURE_EXACT:
+        return AREA_TO_FEATURE_EXACT[area_name]
     low = area_name.lower()
     for keywords, feature_id in AREA_TO_FEATURE:
         if any(k in low for k in keywords):

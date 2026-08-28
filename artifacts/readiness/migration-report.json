@@ -6,10 +6,52 @@
   "note": "The legacy 0-5 average is retained as historical_maturity_index and is non-authoritative for release eligibility. The authoritative signal is the per-profile hard-gate disposition in the multidimensional model.",
   "counts": {
     "legacy_areas": 30,
-    "migrated_automatically": 6,
-    "requires_manual_classification": 24
+    "migrated_automatically": 30,
+    "requires_manual_classification": 0
   },
   "migrated": [
+    {
+      "legacy_area": "backend/API",
+      "historical_maturity_index": 4,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "backend-api",
+      "hypothesized_implementation_state": "VERIFIED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "VERIFIED",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "NO_EXTERNAL_BLOCKER",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "NOT_ATTEMPTED",
+        "production": "NOT_ATTEMPTED"
+      },
+      "scope": "backend-api-v1 v1"
+    },
+    {
+      "legacy_area": "SDKs",
+      "historical_maturity_index": 4,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "sdks",
+      "hypothesized_implementation_state": "VERIFIED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "VERIFIED",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "NO_EXTERNAL_BLOCKER",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "NOT_ATTEMPTED",
+        "production": "NOT_ATTEMPTED"
+      },
+      "scope": "sdks-v1 v1"
+    },
     {
       "legacy_area": "identity resolution",
       "historical_maturity_index": 4,
@@ -33,11 +75,138 @@
       "scope": "identity-resolution-v1 v1"
     },
     {
-      "legacy_area": "Slack / action notifications",
+      "legacy_area": "Profile 360",
+      "historical_maturity_index": 5,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "profile-360",
+      "hypothesized_implementation_state": "TURNKEY",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "TURNKEY",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "NO_EXTERNAL_BLOCKER",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "NOT_ATTEMPTED",
+        "production": "NOT_ATTEMPTED"
+      },
+      "scope": "profile-360-v1 v1"
+    },
+    {
+      "legacy_area": "Neptune relationships (H2H/H2A/A2H/A2A)",
       "historical_maturity_index": 4,
       "historical_maturity_index_scale": "0-5",
       "historical_maturity_index_authoritative": false,
-      "mapped_feature": "push-notification-delivery",
+      "mapped_feature": "graph-relationships",
+      "hypothesized_implementation_state": "VERIFIED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "VERIFIED",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "NO_EXTERNAL_BLOCKER",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "NOT_ATTEMPTED",
+        "production": "NOT_ATTEMPTED"
+      },
+      "scope": "graph-relationships-v1 v1"
+    },
+    {
+      "legacy_area": "graph mutation safety",
+      "historical_maturity_index": 4,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "graph-mutation-safety",
+      "hypothesized_implementation_state": "VERIFIED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement.",
+        "Legacy score suggested VERIFIED; the migrated record measures TURNKEY because external activation was separated out of implementation."
+      ],
+      "new_implementation_state": "TURNKEY",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "INFRASTRUCTURE_WAITING",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "BLOCKED_EXTERNAL",
+        "production": "NOT_APPLICABLE"
+      },
+      "scope": "graph-mutation-safety-v1 v1"
+    },
+    {
+      "legacy_area": "graph health / drift detection",
+      "historical_maturity_index": 4,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "graph-health-drift",
+      "hypothesized_implementation_state": "VERIFIED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "VERIFIED",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "NO_EXTERNAL_BLOCKER",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "NOT_ATTEMPTED",
+        "production": "NOT_ATTEMPTED"
+      },
+      "scope": "graph-health-drift-v1 v1"
+    },
+    {
+      "legacy_area": "Kyber (operator console)",
+      "historical_maturity_index": 4,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "kyber-operator-console",
+      "hypothesized_implementation_state": "VERIFIED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "VERIFIED",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "NO_EXTERNAL_BLOCKER",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "NOT_ATTEMPTED",
+        "production": "NOT_ATTEMPTED"
+      },
+      "scope": "kyber-operator-console-v1 v1"
+    },
+    {
+      "legacy_area": "customer frontend (tenant app)",
+      "historical_maturity_index": 5,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "customer-frontend",
+      "hypothesized_implementation_state": "TURNKEY",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "TURNKEY",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "NO_EXTERNAL_BLOCKER",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "NOT_ATTEMPTED",
+        "production": "NOT_ATTEMPTED"
+      },
+      "scope": "customer-frontend-v1 v1"
+    },
+    {
+      "legacy_area": "connectors (BYOK / source)",
+      "historical_maturity_index": 4,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "connectors-byok",
       "hypothesized_implementation_state": "VERIFIED",
       "assumptions": [
         "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement.",
@@ -52,7 +221,241 @@
         "staging": "BLOCKED_EXTERNAL",
         "production": "NOT_ATTEMPTED"
       },
-      "scope": "push-notification-delivery-v1 v1"
+      "scope": "connectors-byok-v1 v1"
+    },
+    {
+      "legacy_area": "Slack / action notifications",
+      "historical_maturity_index": 4,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "notification-intelligence",
+      "hypothesized_implementation_state": "VERIFIED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement.",
+        "Legacy score suggested VERIFIED; the migrated record measures TURNKEY because external activation was separated out of implementation."
+      ],
+      "new_implementation_state": "TURNKEY",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "CREDENTIAL_WAITING",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "BLOCKED_EXTERNAL",
+        "production": "NOT_ATTEMPTED"
+      },
+      "scope": "notification-intelligence-v1 v1"
+    },
+    {
+      "legacy_area": "Dune / data-lake feeders",
+      "historical_maturity_index": 4,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "data-lake-feeders",
+      "hypothesized_implementation_state": "VERIFIED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement.",
+        "Legacy score suggested VERIFIED; the migrated record measures TURNKEY because external activation was separated out of implementation."
+      ],
+      "new_implementation_state": "TURNKEY",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "INFRASTRUCTURE_WAITING",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "BLOCKED_EXTERNAL",
+        "production": "NOT_APPLICABLE"
+      },
+      "scope": "data-lake-feeders-v1 v1"
+    },
+    {
+      "legacy_area": "smart contracts / proofs / rewards",
+      "historical_maturity_index": 4,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "smart-contracts-rewards",
+      "hypothesized_implementation_state": "VERIFIED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement.",
+        "Legacy score suggested VERIFIED; the migrated record measures TURNKEY because external activation was separated out of implementation."
+      ],
+      "new_implementation_state": "TURNKEY",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "AUDIT_WAITING",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "BLOCKED_EXTERNAL",
+        "production": "NOT_APPLICABLE"
+      },
+      "scope": "smart-contracts-rewards-v1 v1"
+    },
+    {
+      "legacy_area": "security / compliance",
+      "historical_maturity_index": 4,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "security-compliance",
+      "hypothesized_implementation_state": "VERIFIED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "VERIFIED",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "NO_EXTERNAL_BLOCKER",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "NOT_ATTEMPTED",
+        "production": "NOT_ATTEMPTED"
+      },
+      "scope": "security-compliance-v1 v1"
+    },
+    {
+      "legacy_area": "agentic_x402_productization",
+      "historical_maturity_index": 4,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "agentic-x402",
+      "hypothesized_implementation_state": "VERIFIED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "VERIFIED",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "NO_EXTERNAL_BLOCKER",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "NOT_ATTEMPTED",
+        "production": "NOT_APPLICABLE"
+      },
+      "scope": "agentic-x402-v1 v1"
+    },
+    {
+      "legacy_area": "CI / tests",
+      "historical_maturity_index": 4,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "ci-tests",
+      "hypothesized_implementation_state": "VERIFIED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "VERIFIED",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "NO_EXTERNAL_BLOCKER",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "NOT_ATTEMPTED",
+        "production": "NOT_ATTEMPTED"
+      },
+      "scope": "ci-tests-v1 v1"
+    },
+    {
+      "legacy_area": "measurement / attribution",
+      "historical_maturity_index": 4,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "measurement-attribution",
+      "hypothesized_implementation_state": "VERIFIED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "VERIFIED",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "NO_EXTERNAL_BLOCKER",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "NOT_ATTEMPTED",
+        "production": "NOT_ATTEMPTED"
+      },
+      "scope": "measurement-attribution-v1 v1"
+    },
+    {
+      "legacy_area": "measurement integrity plane",
+      "historical_maturity_index": 4,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "measurement-integrity",
+      "hypothesized_implementation_state": "VERIFIED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "VERIFIED",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "NO_EXTERNAL_BLOCKER",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "NOT_ATTEMPTED",
+        "production": "NOT_ATTEMPTED"
+      },
+      "scope": "measurement-integrity-v1 v1"
+    },
+    {
+      "legacy_area": "tenant import engine",
+      "historical_maturity_index": 4,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "tenant-import-engine",
+      "hypothesized_implementation_state": "VERIFIED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "VERIFIED",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "NO_EXTERNAL_BLOCKER",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "NOT_ATTEMPTED",
+        "production": "NOT_ATTEMPTED"
+      },
+      "scope": "tenant-import-engine-v1 v1"
+    },
+    {
+      "legacy_area": "campaign intelligence",
+      "historical_maturity_index": 5,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "campaign-intelligence",
+      "hypothesized_implementation_state": "TURNKEY",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "TURNKEY",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "NO_EXTERNAL_BLOCKER",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "NOT_ATTEMPTED",
+        "production": "NOT_ATTEMPTED"
+      },
+      "scope": "campaign-intelligence-v1 v1"
+    },
+    {
+      "legacy_area": "docs",
+      "historical_maturity_index": 4,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "documentation-pipeline",
+      "hypothesized_implementation_state": "VERIFIED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "VERIFIED",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "NO_EXTERNAL_BLOCKER",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "NOT_ATTEMPTED",
+        "production": "NOT_ATTEMPTED"
+      },
+      "scope": "documentation-pipeline-v1 v1"
     },
     {
       "legacy_area": "deployment / cloud readiness",
@@ -78,373 +481,213 @@
       "scope": "deployment-terraform-profiles-v1 v1"
     },
     {
-      "legacy_area": "stablecoin intelligence",
-      "historical_maturity_index": 3,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": "financial-observability",
-      "hypothesized_implementation_state": "RUNTIME_INTEGRATED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement.",
-        "Legacy score suggested RUNTIME_INTEGRATED; the migrated record measures TURNKEY because external activation was separated out of implementation."
-      ],
-      "new_implementation_state": "TURNKEY",
-      "new_productionization_percent": 100.0,
-      "new_activation_state": "CREDENTIAL_WAITING",
-      "new_environment_evidence": {
-        "local": "VERIFIED",
-        "ci": "VERIFIED",
-        "staging": "BLOCKED_EXTERNAL",
-        "pilot": "NOT_ATTEMPTED",
-        "production": "NOT_APPLICABLE"
-      },
-      "scope": "financial-observability-v1 v1"
-    },
-    {
-      "legacy_area": "payment rail observability",
-      "historical_maturity_index": 3,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": "financial-observability",
-      "hypothesized_implementation_state": "RUNTIME_INTEGRATED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement.",
-        "Legacy score suggested RUNTIME_INTEGRATED; the migrated record measures TURNKEY because external activation was separated out of implementation."
-      ],
-      "new_implementation_state": "TURNKEY",
-      "new_productionization_percent": 100.0,
-      "new_activation_state": "CREDENTIAL_WAITING",
-      "new_environment_evidence": {
-        "local": "VERIFIED",
-        "ci": "VERIFIED",
-        "staging": "BLOCKED_EXTERNAL",
-        "pilot": "NOT_ATTEMPTED",
-        "production": "NOT_APPLICABLE"
-      },
-      "scope": "financial-observability-v1 v1"
-    },
-    {
-      "legacy_area": "card-linked payment rails",
-      "historical_maturity_index": 2,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": "financial-observability",
-      "hypothesized_implementation_state": "IMPLEMENTED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement.",
-        "Legacy score suggested IMPLEMENTED; the migrated record measures TURNKEY because external activation was separated out of implementation."
-      ],
-      "new_implementation_state": "TURNKEY",
-      "new_productionization_percent": 100.0,
-      "new_activation_state": "CREDENTIAL_WAITING",
-      "new_environment_evidence": {
-        "local": "VERIFIED",
-        "ci": "VERIFIED",
-        "staging": "BLOCKED_EXTERNAL",
-        "pilot": "NOT_ATTEMPTED",
-        "production": "NOT_APPLICABLE"
-      },
-      "scope": "financial-observability-v1 v1"
-    }
-  ],
-  "requires_manual_classification": [
-    {
-      "legacy_area": "backend/API",
-      "historical_maturity_index": 4,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "VERIFIED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "SDKs",
-      "historical_maturity_index": 4,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "VERIFIED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "Profile 360",
-      "historical_maturity_index": 5,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "TURNKEY",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "Neptune relationships (H2H/H2A/A2H/A2A)",
-      "historical_maturity_index": 4,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "VERIFIED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "graph mutation safety",
-      "historical_maturity_index": 4,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "VERIFIED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "graph health / drift detection",
-      "historical_maturity_index": 4,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "VERIFIED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "Kyber (operator console)",
-      "historical_maturity_index": 4,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "VERIFIED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "customer frontend (tenant app)",
-      "historical_maturity_index": 5,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "TURNKEY",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "connectors (BYOK / source)",
-      "historical_maturity_index": 4,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "VERIFIED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "Dune / data-lake feeders",
-      "historical_maturity_index": 4,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "VERIFIED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "smart contracts / proofs / rewards",
-      "historical_maturity_index": 4,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "VERIFIED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "security / compliance",
-      "historical_maturity_index": 4,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "VERIFIED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "agentic_x402_productization",
-      "historical_maturity_index": 4,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "VERIFIED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "CI / tests",
-      "historical_maturity_index": 4,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "VERIFIED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "measurement / attribution",
-      "historical_maturity_index": 4,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "VERIFIED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "measurement integrity plane",
-      "historical_maturity_index": 4,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "VERIFIED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "tenant import engine",
-      "historical_maturity_index": 4,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "VERIFIED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "campaign intelligence",
-      "historical_maturity_index": 5,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "TURNKEY",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
-      "legacy_area": "docs",
-      "historical_maturity_index": 4,
-      "historical_maturity_index_scale": "0-5",
-      "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
-      "hypothesized_implementation_state": "VERIFIED",
-      "assumptions": [
-        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
-      ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
-    },
-    {
       "legacy_area": "scale readiness",
       "historical_maturity_index": 3,
       "historical_maturity_index_scale": "0-5",
       "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
+      "mapped_feature": "scale-readiness",
       "hypothesized_implementation_state": "RUNTIME_INTEGRATED",
       "assumptions": [
         "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
       ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
+      "new_implementation_state": "RUNTIME_INTEGRATED",
+      "new_productionization_percent": 50.0,
+      "new_activation_state": "INFRASTRUCTURE_WAITING",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "NOT_ATTEMPTED",
+        "staging": "BLOCKED_EXTERNAL",
+        "production": "NOT_ATTEMPTED",
+        "scale": "NOT_ATTEMPTED"
+      },
+      "scope": "scale-readiness-v1 v1"
     },
     {
       "legacy_area": "provider certification plane",
       "historical_maturity_index": 4,
       "historical_maturity_index_scale": "0-5",
       "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
+      "mapped_feature": "provider-certification-plane",
       "hypothesized_implementation_state": "VERIFIED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement.",
+        "Legacy score suggested VERIFIED; the migrated record measures TURNKEY because external activation was separated out of implementation."
+      ],
+      "new_implementation_state": "TURNKEY",
+      "new_productionization_percent": 100.0,
+      "new_activation_state": "LIVE_DATA_WAITING",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "VERIFIED",
+        "staging": "BLOCKED_EXTERNAL",
+        "production": "NOT_ATTEMPTED"
+      },
+      "scope": "provider-certification-plane-v1 v1"
+    },
+    {
+      "legacy_area": "stablecoin intelligence",
+      "historical_maturity_index": 3,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "stablecoin-intelligence",
+      "hypothesized_implementation_state": "RUNTIME_INTEGRATED",
       "assumptions": [
         "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
       ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
+      "new_implementation_state": "RUNTIME_INTEGRATED",
+      "new_productionization_percent": 50.0,
+      "new_activation_state": "LIVE_DATA_WAITING",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "NOT_ATTEMPTED",
+        "staging": "BLOCKED_EXTERNAL",
+        "production": "NOT_APPLICABLE"
+      },
+      "scope": "stablecoin-intelligence-v1 v1"
     },
     {
       "legacy_area": "derivatives intelligence",
       "historical_maturity_index": 3,
       "historical_maturity_index_scale": "0-5",
       "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
+      "mapped_feature": "derivatives-intelligence",
       "hypothesized_implementation_state": "RUNTIME_INTEGRATED",
       "assumptions": [
         "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
       ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
+      "new_implementation_state": "RUNTIME_INTEGRATED",
+      "new_productionization_percent": 50.0,
+      "new_activation_state": "INFRASTRUCTURE_WAITING",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "NOT_ATTEMPTED",
+        "staging": "BLOCKED_EXTERNAL",
+        "production": "NOT_APPLICABLE"
+      },
+      "scope": "derivatives-intelligence-v1 v1"
     },
     {
       "legacy_area": "interoperability intelligence",
       "historical_maturity_index": 3,
       "historical_maturity_index_scale": "0-5",
       "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
+      "mapped_feature": "interoperability-intelligence",
       "hypothesized_implementation_state": "RUNTIME_INTEGRATED",
       "assumptions": [
         "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
       ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
+      "new_implementation_state": "RUNTIME_INTEGRATED",
+      "new_productionization_percent": 50.0,
+      "new_activation_state": "INFRASTRUCTURE_WAITING",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "NOT_ATTEMPTED",
+        "staging": "BLOCKED_EXTERNAL",
+        "production": "NOT_APPLICABLE"
+      },
+      "scope": "interoperability-intelligence-v1 v1"
+    },
+    {
+      "legacy_area": "payment rail observability",
+      "historical_maturity_index": 3,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "payment-rail-observability",
+      "hypothesized_implementation_state": "RUNTIME_INTEGRATED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "RUNTIME_INTEGRATED",
+      "new_productionization_percent": 50.0,
+      "new_activation_state": "LIVE_DATA_WAITING",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "NOT_ATTEMPTED",
+        "staging": "BLOCKED_EXTERNAL",
+        "production": "NOT_APPLICABLE"
+      },
+      "scope": "payment-rail-observability-v1 v1"
     },
     {
       "legacy_area": "semantic intelligence",
       "historical_maturity_index": 2,
       "historical_maturity_index_scale": "0-5",
       "historical_maturity_index_authoritative": false,
-      "mapped_feature": null,
+      "mapped_feature": "semantic-intelligence",
       "hypothesized_implementation_state": "IMPLEMENTED",
       "assumptions": [
         "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
       ],
-      "reason": "No canonical feature record yet. Needs manual classification: separate implementation completion from external activation and environment evidence before authoring a record."
+      "new_implementation_state": "IMPLEMENTED",
+      "new_productionization_percent": 25.0,
+      "new_activation_state": "CREDENTIAL_WAITING",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "NOT_ATTEMPTED",
+        "staging": "BLOCKED_EXTERNAL",
+        "production": "NOT_ATTEMPTED"
+      },
+      "scope": "semantic-intelligence-v1 v1"
+    },
+    {
+      "legacy_area": "card-linked payment rails",
+      "historical_maturity_index": 2,
+      "historical_maturity_index_scale": "0-5",
+      "historical_maturity_index_authoritative": false,
+      "mapped_feature": "card-linked-payments",
+      "hypothesized_implementation_state": "IMPLEMENTED",
+      "assumptions": [
+        "Legacy 0-5 score blended implementation, productionization, and external activation; the mapped state is a hypothesis, not a measurement."
+      ],
+      "new_implementation_state": "IMPLEMENTED",
+      "new_productionization_percent": 25.0,
+      "new_activation_state": "CREDENTIAL_WAITING",
+      "new_environment_evidence": {
+        "local": "VERIFIED",
+        "ci": "NOT_ATTEMPTED",
+        "staging": "BLOCKED_EXTERNAL",
+        "production": "NOT_APPLICABLE"
+      },
+      "scope": "card-linked-payments-v1 v1"
     }
   ],
+  "requires_manual_classification": [],
   "externally_blocked_capabilities_in_matrix": [
     "backup_restore"
   ],
   "canonical_feature_records": [
+    "agentic-x402",
+    "backend-api",
+    "campaign-intelligence",
+    "card-linked-payments",
+    "ci-tests",
+    "connectors-byok",
+    "customer-frontend",
+    "data-lake-feeders",
     "deployment-terraform-profiles",
+    "derivatives-intelligence",
+    "documentation-pipeline",
     "event-transport",
     "financial-observability",
+    "graph-health-drift",
+    "graph-mutation-safety",
+    "graph-relationships",
     "identity-resolution",
-    "push-notification-delivery"
+    "interoperability-intelligence",
+    "kyber-operator-console",
+    "measurement-attribution",
+    "measurement-integrity",
+    "notification-intelligence",
+    "payment-rail-observability",
+    "profile-360",
+    "provider-certification-plane",
+    "push-notification-delivery",
+    "scale-readiness",
+    "sdks",
+    "security-compliance",
+    "semantic-intelligence",
+    "smart-contracts-rewards",
+    "stablecoin-intelligence",
+    "tenant-import-engine"
   ]
 }

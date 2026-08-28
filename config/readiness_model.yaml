@@ -194,7 +194,11 @@ release_profiles:
   staging:
     title: Staging
     deployment_profile: staging
-    implementation_floor: TURNKEY
+    # Staging is the environment where a VERIFIED capability is validated toward
+    # turnkey/production — you enter staging at VERIFIED and use staging evidence
+    # to progress. Production profiles still require TURNKEY (no source change to
+    # activate). A record may tighten this floor but never loosen it.
+    implementation_floor: VERIFIED
     productionization_required: true
     environment_gate: staging
     business_gate: false
