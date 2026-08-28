@@ -19,7 +19,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "abc9da06"
+last_synced_commit: "68aa5e27"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -47,6 +47,10 @@ pipeline before Terraform state ownership. Its encryption cannot be changed
 after creation, so staging Terraform declares that exact shape and the
 import-only reconciliation workflow adopts it without replacement. The other
 three staging ECR repositories remain mutable and use the staging KMS key.
+Before clearing a taint, reconciliation also verifies that the canonical
+Terraform address stores the same repository name requested by the operator;
+an address that points at a different repository is refused before state is
+mutated.
 
 The reviewed Terraform promotion writes a secret-free `reviewed.api-host`
 evidence file after an apply. This is the configured `domain_name` hostname

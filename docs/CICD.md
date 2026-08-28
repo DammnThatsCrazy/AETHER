@@ -21,7 +21,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "b672c476"
+last_synced_commit: "68aa5e27"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -36,7 +36,9 @@ head SHA.
 The state-reconciliation workflow normalizes and deduplicates comma-separated repository inputs,
 pre-validates every requested ECR untaint target before any import or state
 mutation, and checks both the canonical staging address and the other shared
-profiles for duplicate ownership.
+profiles for duplicate ownership. It also verifies that each canonical staging
+address contains the requested repository identity before clearing a taint, so
+a stale or manually moved state entry cannot be repaired under the wrong name.
 
 Reviewed Terraform promotion pins immutable digests and injects the staging
 apply-role ARN only for staging. Inline-ML profiles leave the ML digest empty;
