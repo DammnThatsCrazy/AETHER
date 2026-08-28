@@ -149,6 +149,12 @@ variable "dynamodb_cache_table_name" {
   default     = ""
 }
 
+variable "enable_dynamodb_cache_observability" {
+  type        = bool
+  description = "Whether the DynamoDB cache alarm is present. This must be a static profile decision, not one inferred from a resource-derived table name."
+  default     = false
+}
+
 variable "sqs_queue_name" {
   type        = string
   description = "Primary SQS events queue NAME (not URL/ARN — CloudWatch uses the QueueName dimension). Empty string disables the queue depth and oldest-message-age alarms."

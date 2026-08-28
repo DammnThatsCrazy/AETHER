@@ -267,7 +267,9 @@ resource "aws_cloudwatch_metric_alarm" "ml_drift" {
 # --------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "dynamodb_cache_throttled" {
-  count               = var.dynamodb_cache_table_name == "" ? 0 : 1
+  # Imports must remain graph-resolvable before this module's DynamoDB table
+  # output is known. The root supplies this static profile decision.
+  count               = var.enable_dynamodb_cache_observability ? 1 : 0
   alarm_name          = "${var.project}-${var.environment}-dynamodb-cache-throttled"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
