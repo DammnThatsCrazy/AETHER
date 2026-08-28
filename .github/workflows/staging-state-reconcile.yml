@@ -192,13 +192,23 @@ jobs:
           # The address check above is not sufficient: a prior partial import
           # could have recorded the same remote object under another address.
           # Refuse that case rather than creating two state owners for one ARN.
-          state_file="$(mktemp)"
-          trap 'rm -f "$state_file"' EXIT
-          if ! terraform state pull >"$state_file"; then
+          state_snapshot_file=""
+          state_dir=""
+          cleanup_state_artifacts() {
+            if [ -n "${state_snapshot_file:-}" ]; then
+              rm -f "$state_snapshot_file"
+            fi
+            if [ -n "${state_dir:-}" ]; then
+              rm -rf "$state_dir"
+            fi
+          }
+          trap cleanup_state_artifacts EXIT
+          state_snapshot_file="$(mktemp)"
+          if ! terraform state pull >"$state_snapshot_file"; then
             echo '::error::Refusing import: could not read staging state to verify remote-object ownership'
             exit 1
           fi
-          if [ -n "$TARGET_GROUP_ARN" ] && grep -Fq -- "$TARGET_GROUP_ARN" "$state_file"; then
+          if [ -n "$TARGET_GROUP_ARN" ] && grep -Fq -- "$TARGET_GROUP_ARN" "$state_snapshot_file"; then
             echo '::error::Refusing import: target-group ARN already appears elsewhere in staging state'
             exit 1
           fi
@@ -210,7 +220,7 @@ jobs:
               if terraform state list | grep -Fxq "$address"; then
                 echo "::error::Refusing import: $address is already in staging state"; exit 1
               fi
-              if grep -Eq -- "\"name\"[[:space:]]*:[[:space:]]*\"${repository}\"" "$state_file"; then
+              if grep -Eq -- "\"name\"[[:space:]]*:[[:space:]]*\"${repository}\"" "$state_snapshot_file"; then
                 echo "::error::Refusing import: ECR repository '$repository' already appears elsewhere in staging state"; exit 1
               fi
             done
@@ -221,7 +231,6 @@ jobs:
           # second Terraform owner that could later destroy another profile's
           # repository.
           state_dir="$(mktemp -d)"
-          trap 'rm -rf "$state_dir"' EXIT
           for profile in staging demo preview; do
             key="profiles/${profile}/terraform.tfstate"
             state_file="$state_dir/${profile}.json"
@@ -259,6 +268,12 @@ jobs:
           TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
           TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
           TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
+          # The root includes Auth0 resources even when this workflow imports
+          # only an AWS address. The provider obtains these from the runner
+          # environment so they never enter Terraform variables or state.
+          AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+          AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
           TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
           TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
         run: |
@@ -271,6 +286,9 @@ jobs:
             TF_VAR_acm_certificate_arn \
             TF_VAR_domain_name \
             TF_VAR_alert_email \
+            AUTH0_DOMAIN \
+            AUTH0_CLIENT_ID \
+            AUTH0_CLIENT_SECRET \
             TF_VAR_aether_app_url \
             TF_VAR_kyber_app_url; do
             test -n "${!required:-}" || {

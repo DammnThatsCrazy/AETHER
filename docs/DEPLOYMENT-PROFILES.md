@@ -30,6 +30,11 @@ last_synced_commit: "3cce33d8"
 Staging uses inline ML and therefore does not require an ML image digest;
 remote-ML profiles do. Its apply role is scoped to staging and is the only
 profile-specific administrator named in staging KMS key policies.
+Aurora and the pay-per-use DynamoDB cache are present in every cloud Terraform
+profile, so their alarms and dashboard widgets are selected by static root
+profile flags. They never use resource-derived cluster or table IDs to decide
+Terraform cardinality, which keeps state-import and plan-only runs resolvable
+before those resources exist in state.
 
 Aether declares eight deployment profiles, from a zero-backend local mock to a
 contractually isolated enterprise deployment. `config/deployment_profiles.yaml`

@@ -204,7 +204,10 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
 # --------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "aurora_max_acu" {
-  count               = var.aurora_cluster_id == "" ? 0 : 1
+  # Resource-derived outputs are unknown while Terraform is importing an
+  # unrelated address, so they must never determine resource cardinality.
+  # The root chooses this static profile input whenever it provisions Aurora.
+  count               = var.enable_aurora_observability ? 1 : 0
   alarm_name          = "${var.project}-${var.environment}-aurora-max-acu"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = 2 # 2 × 5-min periods = 10 min sustained
@@ -264,7 +267,9 @@ resource "aws_cloudwatch_metric_alarm" "ml_drift" {
 # --------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "dynamodb_cache_throttled" {
-  count               = var.dynamodb_cache_table_name == "" ? 0 : 1
+  # Imports must remain graph-resolvable before this module's DynamoDB table
+  # output is known. The root supplies this static profile decision.
+  count               = var.enable_dynamodb_cache_observability ? 1 : 0
   alarm_name          = "${var.project}-${var.environment}-dynamodb-cache-throttled"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
@@ -536,7 +541,7 @@ locals {
           { stat = spec.stat }
         ]]
       }
-    } if var.aurora_cluster_id != ""
+    } if var.enable_aurora_observability
   ]
 
   # The dedicated aether-ml ECS service only exists when the profile enables

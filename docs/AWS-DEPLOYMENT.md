@@ -434,8 +434,15 @@ An interrupted run must use `staging-state-reconcile.yml` to import the
 existing group or an exact reviewed ECR repository, and produce a fresh
 reviewed plan; ECR imports additionally require matching the reviewed staging
 KMS key and verifying that the repository is not owned by staging, demo, or
-preview state. The apply workflow refuses to adopt an unmanaged group or
-repository. The uncapped production profiles retain
+preview state. The import runner carries the same Auth0 provider environment
+as a normal remote plan, because Terraform configures every root provider even
+when importing a single AWS address. Aurora alarms and dashboard widgets are
+likewise selected by a static profile flag rather than an unresolved cluster
+output, keeping state-only imports graph-resolvable. This applies to both
+Aurora and DynamoDB monitoring; table and cluster outputs are alarm dimensions,
+not cardinality gates. One exit cleanup removes every temporary state snapshot
+created by the import ownership checks. The apply workflow refuses to adopt an
+unmanaged group or repository. The uncapped production profiles retain
 replacement-before-destroy behavior for availability and use separate
 accounts when their names would otherwise collide.
 
