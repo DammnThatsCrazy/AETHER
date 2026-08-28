@@ -12,10 +12,14 @@ source_files:
   - AWS Deployment/aether-aws/terraform/
   - AWS Deployment/aether-aws/config/
   - scripts/release/verify_terraform_state_role.py
+  - .github/workflows/terraform-promote.yml
+  - .github/workflows/staging-state-reconcile.yml
+  - scripts/release/verify_effective_staging_apply_policy.py
+  - config/staging_apply_iam_policy.yaml
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "264f03ea"
+last_synced_commit: "5e628ecf"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -25,7 +29,17 @@ repository actually defines it.
 
 Staging applies use a dedicated least-privilege role covering state locking,
 staging-only tagging, KMS administration, and the explicit apply-role ARN;
-cleanup remains bounded by the staging lifecycle guard.
+cleanup remains bounded by the staging lifecycle guard. The apply contract also
+checks ECR ownership before mutation: an existing repository that is not in
+the reviewed Terraform state is a hard stop, so shared repositories are never
+silently adopted or replaced, and that collision check runs before the
+account-level ECS service-linked role bootstrap. Secrets, ECR, and Aurora CMKs carry the staging
+environment tag; the Secrets Manager and regional CloudWatch Logs service
+principals are constrained by ViaService, caller account, and encryption
+context rather than broad key access. The pre-apply verifier compares the
+attached policy statements with the reviewed staging manifest, including
+resource coverage, conditions, and explicit Deny statements, before any
+Terraform mutation.
 
 ## Scope — three different things live under `AWS Deployment/`
 
@@ -410,8 +424,11 @@ validated maintenance target; otherwise it fails closed and asks for the
 detach-only apply first. The normal promotion workflow never invents a
 maintenance target group or performs this transition implicitly.
 An interrupted run must use `staging-state-reconcile.yml` to import the
-existing group and produce a fresh reviewed plan; the apply workflow refuses
-to adopt an unmanaged group. The uncapped production profiles retain
+existing group or an exact reviewed ECR repository, and produce a fresh
+reviewed plan; ECR imports additionally require matching the reviewed staging
+KMS key and verifying that the repository is not owned by staging, demo, or
+preview state. The apply workflow refuses to adopt an unmanaged group or
+repository. The uncapped production profiles retain
 replacement-before-destroy behavior for availability and use separate
 accounts when their names would otherwise collide.
 

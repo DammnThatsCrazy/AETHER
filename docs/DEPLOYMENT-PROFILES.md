@@ -12,13 +12,17 @@ source_files:
   - AWS Deployment/aether-aws/terraform/profiles.tf
   - AWS Deployment/aether-aws/terraform/main.tf
   - AWS Deployment/aether-aws/terraform/modules/alb/main.tf
+  - AWS Deployment/aether-aws/terraform/modules/aurora/main.tf
+  - AWS Deployment/aether-aws/terraform/modules/ecr/main.tf
+  - AWS Deployment/aether-aws/terraform/modules/secrets/main.tf
+  - AWS Deployment/aether-aws/terraform/modules/secrets/rotation.tf
   - AWS Deployment/aether-aws/terraform/variables.tf
   - scripts/release/check_profile_config.py
   - scripts/release/check_profile_parity.py
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
-last_synced_commit: "264f03ea"
+last_synced_commit: "3cce33d8"
 ---
 
 # Deployment Profiles
@@ -196,6 +200,15 @@ S3-safe, lowercase hyphenated tag values, and runtime log metric filters with
 dimensions omit a CloudWatch default value. These details are part of the
 staging profile's apply contract and are covered by the provider-input and
 Terraform profile checks before a wake is authorized.
+
+The profile's customer-managed KMS keys are tagged with `Environment = staging`.
+The Secrets Manager key policy permits only same-account Secrets Manager use and
+regional CloudWatch Logs use, constrained by `kms:ViaService`, caller account,
+and the AETHER staging log namespace; it does not grant services unrestricted
+key access. ECR and Aurora keys carry the same environment tag so the reviewed
+staging apply policy can scope grants to staging resources. These tags and
+service conditions are part of the Terraform profile shape and must remain
+covered by the profile plan and cost/topology gates before promotion.
 
 | | |
 |---|---|

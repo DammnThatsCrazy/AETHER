@@ -12,10 +12,16 @@ source_files:
   - cicd/aether-cicd/stages/
   - cicd/aether-cicd/quality_gates/
   - .github/workflows/
+  - scripts/release/verify_effective_staging_apply_policy.py
+  - config/staging_apply_iam_policy.yaml
+  - AWS Deployment/aether-aws/terraform/modules/secrets/main.tf
+  - AWS Deployment/aether-aws/terraform/modules/ecr/main.tf
+  - AWS Deployment/aether-aws/terraform/modules/aurora/main.tf
+  - AWS Deployment/aether-aws/terraform/modules/kms_credentials/main.tf
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "264f03ea"
+last_synced_commit: "5e628ecf"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -25,6 +31,52 @@ Internal reference for Aether's delivery pipeline.
 Reviewed Terraform promotion pins immutable digests and injects the staging
 apply-role ARN only for staging. Inline-ML profiles leave the ML digest empty;
 remote-ML profiles must provide one before apply or wake.
+Before an apply, the promotion workflow parses the reviewed plan for ECR
+repositories in every shared-account profile (staging, demo, and preview) and
+fails closed when a same-name repository exists outside the reviewed state; it
+never deletes or silently imports shared repositories. The
+confirmation-gated `Reconcile staging Terraform state` workflow provides the
+only recovery path: it accepts the exact reviewed ECR repository names (and/or
+the staging target-group ARN), validates that each exists, imports only those
+addresses, and requires a fresh reviewed plan before any apply. It cannot
+delete, replace, or adopt an unlisted resource. ECR reconciliation also requires
+the exact reviewed staging KMS key and verifies that every repository is KMS
+encrypted with that key before import. Before assigning ownership, it reads the
+staging, demo, and preview state keys and refuses an import if any shared
+repository or target group is already owned by another profile.
+staging IAM contract is explicit about repository metadata, event targets,
+parameter tags, staging Lambda tags, and KMS grant/key-tag operations, while
+CMK policies constrain service use to the staging account and regional service
+endpoints.
+Role-name assertions are staging-only: every other profile is checked against
+its encrypted role ARN without being forced to use a staging role name. The
+staging effective-policy check also evaluates each reviewed action against its
+resource patterns and conditions and rejects any overlapping explicit Deny;
+an action name appearing in an unrelated statement is not sufficient. If a
+policy uses a condition operator the checker cannot model, that Deny is
+treated as applicable and the preflight fails closed rather than allowing an
+unverified apply to proceed, but only after the Deny overlaps a reviewed
+resource. Attached Allows must also preserve every mandatory manifest
+condition; a broader unconditional Allow is not accepted as equivalent.
+The staging ECR collision check runs before any account-level service-linked
+role bootstrap, so a rejected repository cannot leave an IAM mutation behind.
+The checker also intersects identity policies with any permissions boundary,
+normalizes IAM action names case-insensitively, and carries the paired alias
+request context into both KMS `CreateAlias` resource checks.
+
+Before a full staging rehearsal can wake compute, the lifecycle workflow runs a
+staging-environment preflight. It requires a host-only `ALB_DNS_NAME` and the
+tenant, isolation-peer, and admin API keys used by smoke, isolation, and cleanup
+checks. Plan-only and non-rehearsal actions remain available without those
+runtime inputs, but a full rehearsal fails before apply-wake rather than waking
+an environment that cannot be tested. Both the lifecycle and TTL cleanup paths
+also fail closed: an absent SSM lease is treated as already asleep, while an
+access, throttling, or other deletion error fails the run so unknown cleanup
+state cannot be reported as success. The TTL guard applies the same distinction
+when reading the lease. A missing lease is the only benign empty state; read
+errors are fatal. On the first approved ECS revision, rollback evidence is
+recorded as `not_applicable` because there is no prior revision; subsequent
+rehearsals must execute and verify rollback and roll-forward.
 
 ## Scope — two different things
 
@@ -189,7 +241,7 @@ Two things get promoted, on two separate paths that must never be conflated: the
 | `infrastructure.yml` | PR / push to `main` / dispatch on `AWS Deployment/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the full credential set exists (ephemeral-class is deliberately excluded from remote-plan); plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
 | `terraform-promote.yml` | `workflow_dispatch` only | Produces a reviewed, checksum-bound binary plan, and applies exactly that plan. Backend digests are always required; ML digests are required only for production-scale and enterprise-isolated, and are optional for staging, production-lean, demo, and preview when remote ML is disabled. | **yes — the only path** |
 | `staging-lifecycle.yml` | `workflow_dispatch` | Wake / validate / sleep / full rehearsal. Dispatches `terraform-promote.yml` for every mutation and independently re-verifies the reviewed plan first. Dispatching jobs retain `actions: write` and check out the workspace before invoking `gh`; read-only jobs cannot perform the handoff. `plan-wake` is plan-only and requires only the Terraform plan credentials; lifecycle credentials are required for inspection, wake, or sleep actions. | no (delegates) |
-| `staging-state-reconcile.yml` | `workflow_dispatch` with explicit staging import confirmation | Import-only reconciliation for an existing staging target group. Requires an approved immutable backend digest, `IMPORT-STAGING`, exact `aether-staging-backend` ARN validation, all required root-module URL/certificate/alert inputs, and a fresh reviewed plan after state changes. It refuses duplicate ownership and never deletes or applies infrastructure. | no (state import only) |
+| `staging-state-reconcile.yml` | `workflow_dispatch` with explicit staging import confirmation | Import-only reconciliation for an existing staging target group and/or the four reviewed Terraform ECR repositories. Requires an approved immutable backend digest, `IMPORT-STAGING`, exact target/repository validation, the reviewed staging ECR KMS key when repositories are supplied, all required root-module URL/certificate/alert inputs, and a fresh reviewed plan after state changes. It verifies KMS encryption, checks staging/demo/preview state ownership, refuses duplicate ownership, and never deletes or applies infrastructure. | no (state import only) |
 | `staging-ttl-guard.yml` | hourly schedule; dispatch | Enforces the staging awake lease. Runs no Terraform at all; its only action is an ECS scale-to-zero, which can only reduce running compute. **Not armed without `AWS_STAGING_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or enforce the TTL, reports it is a NO-OP and exits green — staging may still be running and will NOT be guarded; that is NOT a claim that staging is asleep. The moment the role is wired it enforces exactly as before, fail-closed in both directions. | no |
 | `ephemeral-ttl-guard.yml` | hourly schedule; dispatch | Fail-closed TTL guard for the demo/preview ephemeral profiles. Reads the SSM lease at `/aether/{profile}/{env}/lifecycle/expires-at` (written by `ephemeral_env.py provision`) and ends the run red when the lease is missing or expired; enforcement is the operator-run `ephemeral_env.py teardown` (scale-to-zero + floor-zeroing + lease removal). Runs no Terraform. **Not armed without `AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or trip the TTL, reports it is a NO-OP and exits green — demo/preview environments may still be running and will NOT be guarded; that is NOT a claim that demo/preview are asleep. The moment the role is wired it enforces exactly as before, fail-closed. | no |
 

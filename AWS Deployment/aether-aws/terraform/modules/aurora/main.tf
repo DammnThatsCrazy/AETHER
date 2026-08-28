@@ -21,7 +21,8 @@ resource "aws_kms_key" "aurora" {
   enable_key_rotation     = true
 
   tags = {
-    Name = "${var.project}-${var.environment}-aurora-kms"
+    Name        = "${var.project}-${var.environment}-aurora-kms"
+    Environment = var.environment
   }
 }
 

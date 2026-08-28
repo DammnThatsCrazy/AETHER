@@ -53,7 +53,11 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: terraform-${{ inputs.profile }}
+  # Staging, demo, and preview share an account and globally named ECR
+  # repositories. Serialize those profiles with reconciliation to make the
+  # ownership check and import decision atomic; production profiles retain
+  # independent concurrency.
+  group: ${{ (inputs.profile == 'staging' || inputs.profile == 'demo' || inputs.profile == 'preview') && 'terraform-nonprod-shared' || format('terraform-{0}', inputs.profile) }}
   cancel-in-progress: false
 env:
   AWS_REGION: us-east-1
@@ -165,6 +169,7 @@ jobs:
       - name: Verify the assumed plan role matches the encrypted secret
         env:
           EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          PROFILE: ${{ inputs.profile }}
         run: |
           set -euo pipefail
           caller_json="$(aws sts get-caller-identity --output json)"
@@ -177,8 +182,12 @@ jobs:
           caller_role_path="${caller_role_path%/*}"
           test "$caller_account" = "$expected_account" || { echo '::error::assumed plan role account does not match AWS_TERRAFORM_PLAN_ROLE_ARN'; exit 1; }
           test "$caller_role_path" = "$expected_role_path" || { echo '::error::assumed role does not match AWS_TERRAFORM_PLAN_ROLE_ARN'; exit 1; }
-          test "$caller_role_path" = AetherStagingPlan || { echo '::error::plan job assumed an unexpected IAM role'; exit 1; }
-          echo 'Verified plan credentials resolve to AetherStagingPlan in the expected account.'
+          if [ "$PROFILE" = staging ]; then
+            test "$caller_role_path" = AetherStagingPlan || { echo '::error::staging plan job assumed an unexpected IAM role'; exit 1; }
+            echo 'Verified staging plan credentials resolve to AetherStagingPlan in the expected account.'
+          else
+            echo "Verified ${PROFILE} plan credentials resolve to the encrypted role ARN in the expected account."
+          fi
       - name: Require immutable image digests
         env:
           PROFILE: ${{ inputs.profile }}
@@ -622,6 +631,7 @@ jobs:
       - name: Verify the assumed apply role matches the encrypted secret
         env:
           EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          PROFILE: ${{ inputs.profile }}
         run: |
           set -euo pipefail
           caller_json="$(aws sts get-caller-identity --output json)"
@@ -634,8 +644,12 @@ jobs:
           caller_role_path="${caller_role_path%/*}"
           test "$caller_account" = "$expected_account" || { echo '::error::assumed apply role account does not match AWS_TERRAFORM_APPLY_ROLE_ARN'; exit 1; }
           test "$caller_role_path" = "$expected_role_path" || { echo '::error::assumed role does not match AWS_TERRAFORM_APPLY_ROLE_ARN'; exit 1; }
-          test "$caller_role_path" = AetherStagingDeploy || { echo '::error::apply job assumed an unexpected IAM role'; exit 1; }
-          echo 'Verified apply credentials resolve to AetherStagingDeploy in the expected account.'
+          if [ "$PROFILE" = staging ]; then
+            test "$caller_role_path" = AetherStagingDeploy || { echo '::error::staging apply job assumed an unexpected IAM role'; exit 1; }
+            echo 'Verified staging apply credentials resolve to AetherStagingDeploy in the expected account.'
+          else
+            echo "Verified ${PROFILE} apply credentials resolve to the encrypted role ARN in the expected account."
+          fi
       - name: Verify effective Terraform state permissions
         env:
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
@@ -763,6 +777,65 @@ jobs:
               --inventory "${TF_DIR}/reviewed.resources.json" \
               --out-dir "artifacts/cost-${PROFILE}"
           fi
+      - name: Check ECR collisions before account-level role bootstrap
+        if: inputs.profile == 'staging' || inputs.profile == 'demo' || inputs.profile == 'preview'
+        working-directory: AWS Deployment/aether-aws/terraform
+        env:
+          PROFILE: ${{ inputs.profile }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+        run: |
+          set -euo pipefail
+          # The immutable delivery build creates the shared ECR repositories
+          # before Terraform runs. A repository that exists remotely but is
+          # absent from this profile's state would otherwise fail halfway
+          # through apply, after unrelated resources have already mutated.
+          # Refuse before any mutation and route the exact repository names
+          # through a separate, confirmation-gated state reconciliation.
+          # This is deliberately before the ECS service-linked-role step: a
+          # rejected collision must not leave an account-level IAM mutation.
+          bash "${GITHUB_WORKSPACE}/scripts/release/terraform_init_retry.sh" -input=false \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
+            -backend-config="key=profiles/${PROFILE}/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true"
+          ecr_creates="$(jq -r '
+            .resource_changes[]?
+            | select((.address // "") | startswith("module.ecr.aws_ecr_repository.this["))
+            | select((.change.actions // []) | index("create") != null)
+            | (.address | split("[")[1] | gsub("\\\""; "") | rtrimstr("]"))
+          ' reviewed.tfplan.json)"
+          while IFS= read -r repository; do
+            [ -n "$repository" ] || continue
+            state_address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
+            if terraform state list | grep -Fxq "$state_address"; then
+              continue
+            fi
+            set +e
+            existing_repository="$(aws ecr describe-repositories \
+              --repository-names "$repository" \
+              --query 'repositories[0].repositoryName' --output text 2>/tmp/ecr.err)"
+            lookup_rc=$?
+            set -e
+            if [ "$lookup_rc" -ne 0 ]; then
+              if grep -Eiq 'RepositoryNotFoundException|not found|does not exist' /tmp/ecr.err; then
+                existing_repository=""
+              else
+                cat /tmp/ecr.err >&2
+                echo "::error::unable to verify ECR repository ${repository}; refusing to apply on an inconclusive AWS response"
+                exit 1
+              fi
+            fi
+            if [ -n "$existing_repository" ] && [ "$existing_repository" != None ]; then
+              if [ "$PROFILE" = staging ]; then
+                echo "::error::ECR repository ${repository} already exists outside Terraform state; run the confirmation-gated staging state reconciliation and create a fresh reviewed plan before applying"
+              else
+                echo "::error::ECR repository ${repository} already exists outside ${PROFILE} Terraform state; resolve shared ECR ownership and create a fresh reviewed plan before applying"
+              fi
+              exit 1
+            fi
+          done <<< "$ecr_creates"
       - name: Ensure the ECS service-linked role exists before capacity providers
         # Every selectable profile provisions the ECS capacity-provider
         # resource. Bootstrap the account-level service-linked role before
@@ -869,6 +942,7 @@ jobs:
                 exit 1
               fi
             fi
+
           fi
           terraform apply -input=false reviewed.tfplan | tee reviewed.apply.txt
           sha256sum reviewed.apply.txt > reviewed.apply.sha256

@@ -74,8 +74,6 @@ resource "aws_iam_role" "rotation_lambda" {
   }
 }
 
-data "aws_caller_identity" "current" {}
-
 data "aws_iam_policy_document" "rotation_lambda_policy" {
   statement {
     sid = "SecretsManagerRotation"

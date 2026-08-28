@@ -22,12 +22,14 @@ ALB = TF / "modules/alb/main.tf"
 MONITORING = TF / "modules/monitoring/main.tf"
 PROMOTE = ROOT / ".github/workflows/terraform-promote.yml"
 STATE_MIGRATION_WORKFLOW = ROOT / ".github/workflows/terraform-state-migrate.yml"
+STATE_RECONCILE_WORKFLOW = ROOT / ".github/workflows/staging-state-reconcile.yml"
 STATE_MIGRATION = ROOT / "scripts/release/migrate_alb_target_group_state.sh"
 STATE_POLICY = ROOT / "config/terraform_state_access_policy.yaml"
 STATE_POLICY_CHECKER = ROOT / "scripts/release/check_terraform_state_access_policy.py"
 STATE_ROLE_CHECKER = ROOT / "scripts/release/verify_terraform_state_role.py"
 POLICY = ROOT / "config/staging_apply_iam_policy.yaml"
 POLICY_CHECKER = ROOT / "scripts/release/check_staging_apply_policy.py"
+EFFECTIVE_POLICY_CHECKER = ROOT / "scripts/release/verify_effective_staging_apply_policy.py"
 
 
 def test_staging_target_group_replacement_is_name_safe() -> None:
@@ -57,7 +59,8 @@ def test_staging_target_group_replacement_is_name_safe() -> None:
     assert 'terraform state mv -lock-timeout=5m "$legacy" "$target"' in migration
     migration_workflow = STATE_MIGRATION_WORKFLOW.read_text(encoding="utf-8")
     assert "MIGRATE-TARGET-GROUP" in migration_workflow
-    assert "group: terraform-${{ inputs.profile }}" in migration_workflow
+    assert "terraform-nonprod-shared" in migration_workflow
+    assert "format('terraform-{0}', inputs.profile)" in migration_workflow
     assert "terraform-promote.yml" not in migration
 
     promote = PROMOTE.read_text(encoding="utf-8")
@@ -97,7 +100,168 @@ def test_ecs_service_linked_role_precedes_reviewed_apply() -> None:
     assert "has been taken" in text
     role_step = text[text.index("Ensure the ECS service-linked role"):text.index("Apply the exact approved plan")]
     assert "Every selectable profile provisions the ECS capacity-provider" in role_step
-    assert "if: inputs.profile == 'staging'" not in role_step
+    assert "aws-service-name ecs.amazonaws.com" in role_step
+
+
+def test_role_name_assertions_are_profile_aware() -> None:
+    text = PROMOTE.read_text(encoding="utf-8")
+    plan = text[text.index("Verify the assumed plan role matches"):text.index("Require immutable image digests")]
+    apply = text[text.index("Verify the assumed apply role matches"):text.index("Verify effective Terraform state permissions")]
+    assert 'if [ "$PROFILE" = staging ]; then' in plan
+    assert 'if [ "$PROFILE" = staging ]; then' in apply
+    assert 'test "$caller_role_path" = AetherStagingPlan' in plan
+    assert 'test "$caller_role_path" = AetherStagingDeploy' in apply
+
+
+def test_effective_policy_checker_matches_resources_conditions_and_denies() -> None:
+    spec = importlib.util.spec_from_file_location(
+        "verify_effective_staging_apply_policy", EFFECTIVE_POLICY_CHECKER
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    reviewed = {
+        "Action": "kms:CreateGrant",
+        "Resource": "arn:aws:kms:us-east-1:544471417928:key/*",
+        "Condition": {"StringEquals": {"aws:ResourceTag/Environment": "staging"}},
+        "Effect": "Allow",
+    }
+    assert module._operation_is_covered(
+        reviewed,
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+        {"aws:ResourceTag/Environment": "staging"},
+    )
+    assert not module._operation_is_covered(
+        {**reviewed, "Resource": "arn:aws:kms:us-east-1:544471417928:key/contract-check"},
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/*",
+        {"aws:ResourceTag/Environment": "staging"},
+    )
+    assert not module._operation_is_covered(
+        {**reviewed, "Resource": "arn:aws:kms:us-east-1:544471417928:key/only-this-key"},
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/different-key",
+        {"aws:ResourceTag/Environment": "staging"},
+    )
+    assert module._operation_is_denied(
+        {"Effect": "Deny", "Action": "kms:*", "Resource": "*"},
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+    )
+    not_resource_allow = {
+        "Effect": "Allow",
+        "Action": "kms:CreateGrant",
+        "NotResource": "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+    }
+    assert not module._operation_is_covered(
+        not_resource_allow,
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+        None,
+    )
+    assert module._operation_is_covered(
+        not_resource_allow,
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/other-key",
+        None,
+    )
+    assert not module._operation_is_denied(
+        {
+            "Effect": "Deny",
+            "Action": "kms:*",
+            "Resource": "*",
+            "Condition": {"StringEquals": {"aws:RequestedRegion": "eu-west-1"}},
+        },
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+        {"aws:RequestedRegion": "us-east-1"},
+    )
+    assert module._operation_is_denied(
+        {
+            "Effect": "Deny",
+            "Action": "ecr:*",
+            "Resource": "arn:aws:ecr:us-east-1:544471417928:repository/aether-backend",
+        },
+        "ecr:TagResource",
+        "arn:aws:ecr:us-east-1:544471417928:repository/aether-*",
+    )
+    assert module._operation_is_denied(
+        {
+            "Effect": "Deny",
+            "NotAction": ["kms:DescribeKey"],
+            "Resource": "*",
+        },
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+    )
+    assert module._operation_is_denied(
+        {
+            "Effect": "Deny",
+            "Action": "KMS:CREATEALIAS",
+            "Resource": "arn:aws:kms:us-east-1:544471417928:key/*",
+            "Condition": {"StringLike": {"kms:RequestAlias": "alias/aether-staging-*"}},
+        },
+        "kms:CreateAlias",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+        request_context=module._request_context_with_alias(
+            "kms:CreateAlias",
+            "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+            None,
+            "alias/aether-staging-secrets",
+        ),
+    )
+    assert not module._operation_is_denied(
+        {
+            "Effect": "Deny",
+            "Action": "kms:*",
+            "Resource": "arn:aws:kms:us-east-1:544471417928:key/other-key",
+            "Condition": {"Bool": {"aws:SecureTransport": "false"}},
+        },
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+    )
+    assert not module._operation_is_covered(
+        {
+            "Effect": "Allow",
+            "Action": "kms:CreateKey",
+            "Resource": "*",
+        },
+        "kms:CreateKey",
+        "arn:aws:kms:us-east-1:544471417928:key/*",
+        {"aws:RequestTag/Environment": "staging"},
+    )
+    assert module._operation_is_covered(
+        {"Effect": "Allow", "Action": "kms:*", "Resource": "*"},
+        "kms:CreateKey",
+        "*",
+        {"aws:RequestTag/Environment": "staging"},
+        require_required=False,
+    )
+    assert module._operation_is_denied(
+        {
+            "Effect": "Deny",
+            "Action": "kms:*",
+            "Resource": "*",
+            "Condition": {"StringEquals": {"aws:RequestedRegion": "us-east-1"}},
+        },
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+    )
+    # Unsupported deny operators must fail closed. Treating an unmodelled
+    # condition as non-matching would let preflight pass before AWS rejects a
+    # later Terraform operation.
+    assert module._operation_is_denied(
+        {
+            "Effect": "Deny",
+            "Action": "kms:*",
+            "Resource": "*",
+            "Condition": {"StringNotEquals": {"aws:RequestedRegion": "eu-west-1"}},
+        },
+        "kms:CreateGrant",
+        "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+    )
 
 
 def test_external_provider_validation_precedes_service_linked_role() -> None:
@@ -187,6 +351,61 @@ def test_target_group_collision_lookup_only_runs_for_create_plans() -> None:
     assert "already exists outside Terraform state" in block
 
 
+def test_ecr_collision_lookup_precedes_any_apply_mutation() -> None:
+    """Immutable delivery must not discover shared ECR drift mid-apply."""
+    text = PROMOTE.read_text(encoding="utf-8")
+    collision_step = text.index("Check ECR collisions before account-level role bootstrap")
+    service_role_step = text.index("Ensure the ECS service-linked role exists before capacity providers")
+    assert collision_step < service_role_step
+    start = text.index("# The immutable delivery build creates the shared ECR repositories")
+    end = text.index("terraform apply -input=false reviewed.tfplan", start)
+    block = text[start:end]
+    assert "describe-repositories" in block
+    assert "ECR repository" in block
+    assert "confirmation-gated staging state reconciliation" in block
+    assert 'split("[")[1]' in block
+    assert 'rtrimstr("]")' in block
+    assert text.index("describe-repositories", start) < text.index("terraform apply", start)
+    assert "inputs.profile == 'staging' || inputs.profile == 'demo' || inputs.profile == 'preview'" in text
+    assert 'key=profiles/${PROFILE}/terraform.tfstate' in text
+
+
+def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
+    """A pre-existing ECR repository must have a safe, exact import path."""
+    text = STATE_RECONCILE_WORKFLOW.read_text(encoding="utf-8")
+    assert "ecr_repository_names" in text
+    assert 'required: false' in text
+    assert 'test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES"' in text
+    assert "aether-backend|aether-ml-serving|aether-kyber|aether-aether" in text
+    assert "module.ecr.aws_ecr_repository.this[\\\"${repository}\\\"]" in text
+    assert "requires a fresh reviewed plan" in text or "fresh staging plan" in text
+    assert "staging_ecr_kms_key_arn" in text
+    assert "encryptionConfiguration.encryptionType" in text
+    assert "encryptionConfiguration.kmsKey" in text
+    assert "list-resource-tags" in text
+    assert "for profile in staging demo preview" in text
+    assert "profiles/${profile}/terraform.tfstate" in text
+    assert "state-managed ECR key" in text
+    assert "module.ecr.aws_kms_key.ecr" in text
+    assert "terraform-nonprod-shared" in text
+    assert "^[[:space:]]*arn" in text
+
+
+def test_staging_cmk_service_policy_and_environment_tags_are_present() -> None:
+    """Customer-managed keys must be usable by AWS services, not just Terraform."""
+    secrets = (TF / "modules/secrets/main.tf").read_text(encoding="utf-8")
+    assert 'policy                  = data.aws_iam_policy_document.secrets.json' in secrets
+    assert 'identifiers = ["secretsmanager.amazonaws.com"]' in secrets
+    assert 'identifiers = ["logs.${data.aws_region.current.name}.amazonaws.com"]' in secrets
+    assert 'variable = "kms:EncryptionContext:aws:logs:arn"' in secrets
+    assert 'variable = "kms:EncryptionContext:SecretARN"' in secrets
+    assert 'secret:aether/*' in secrets
+    assert 'Environment = var.environment' in secrets
+    for module in ("ecr", "aurora"):
+        source = (TF / "modules" / module / "main.tf").read_text(encoding="utf-8")
+        assert "Environment = var.environment" in source
+
+
 def test_apply_uses_reviewed_listener_artifact_when_dispatch_input_is_omitted() -> None:
     """Lifecycle apply must not reject a valid plan because an optional input is blank."""
     text = PROMOTE.read_text(encoding="utf-8")
@@ -237,6 +456,12 @@ def test_reviewed_iam_manifest_matches_checker() -> None:
     assert "elasticloadbalancing:DescribeListeners" in {
         action for statement in statements for action in statement["actions"]
     }
+    assert "ecr:ListTagsForResource" in {
+        action for statement in statements for action in statement["actions"]
+    }
+    assert "events:ListTargetsByRule" in {
+        action for statement in statements for action in statement["actions"]
+    }
 
 
 def test_passrole_resource_principal_pairs_are_not_swappable(tmp_path: Path) -> None:
@@ -276,10 +501,17 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
         "s3:PutEncryptionConfiguration": "arn:aws:s3:::aether-staging-*",
         "s3:PutLifecycleConfiguration": "arn:aws:s3:::aether-staging-*",
         "ecr:TagResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:ListTagsForResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:DescribeRepositories": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "secretsmanager:TagResource": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
         "ssm:AddTagsToResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
         "kms:TagResource": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:PutKeyPolicy": "arn:aws:kms:us-east-1:${account_id}:key/*",
+        "kms:DescribeKey": "arn:aws:kms:us-east-1:${account_id}:key/*",
+        "kms:ListResourceTags": "arn:aws:kms:us-east-1:${account_id}:key/*",
+        "events:ListTargetsByRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
+        "logs:CreateLogGroup": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
+        "logs:TagResource": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
     }
     for action, resource in expected.items():
         matches = [s for s in statements if action in s["actions"]]
@@ -297,6 +529,21 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
     create_key = next(s for s in statements if "kms:CreateKey" in s["actions"])
     assert create_key["resource"] == "*"
     assert create_key["conditions"] == {"aws:RequestTag/Environment": "staging"}
-    create_alias = next(s for s in statements if "kms:CreateAlias" in s["actions"])
-    assert create_alias["resource"] == "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*"
-    assert "conditions" not in create_alias
+    create_alias = [s for s in statements if "kms:CreateAlias" in s["actions"]]
+    assert len(create_alias) == 2
+    assert {
+        (s["resource"], tuple(sorted(s["conditions"].items()))) for s in create_alias
+    } == {
+        (
+            "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*",
+            (("kms:RequestAlias", "alias/aether-staging-*"),),
+        ),
+        (
+            "arn:aws:kms:us-east-1:${account_id}:key/*",
+            (("aws:ResourceTag/Environment", "staging"),),
+        ),
+    }
+    alias_statement = next(
+        s for s in create_alias if s["resource"].endswith("alias/aether-staging-*")
+    )
+    assert alias_statement["condition_operators"] == {"kms:RequestAlias": "StringLike"}

@@ -24,7 +24,7 @@ permissions:
 concurrency:
   # Share the promotion namespace so migration cannot race a plan or apply
   # for the same profile. The workflow's DynamoDB lock remains defense in depth.
-  group: terraform-${{ inputs.profile }}
+  group: ${{ (inputs.profile == 'staging' || inputs.profile == 'demo' || inputs.profile == 'preview') && 'terraform-nonprod-shared' || format('terraform-{0}', inputs.profile) }}
   cancel-in-progress: false
 
 env:
