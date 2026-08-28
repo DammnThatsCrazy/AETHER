@@ -571,12 +571,12 @@ def test_the_rehearsal_tenant_is_always_removed():
         "the rehearsal tenant survives a failed rehearsal"
     )
     run = step["run"]
-    assert "-X DELETE" in run
+    assert 'request("DELETE"' in run
     assert "/deactivate" in run, "there is no expiry fallback when delete is refused"
-    assert "was neither deleted nor expired" in run
+    assert "cleanup incomplete; all tenants were attempted" in run
 
 
-def test_rehearsal_binds_release_and_cleans_only_ephemeral_registration_tenant():
+def test_rehearsal_bootstraps_run_scoped_credentials_and_cleans_only_marked_tenants():
     doc = _workflow_yaml(LIFECYCLE)
     script = _job_script(doc, "rehearse")
     assert "intended_release_sha" in _referenced_text(doc)
@@ -591,12 +591,144 @@ def test_rehearsal_binds_release_and_cleans_only_ephemeral_registration_tenant()
         s for s in _steps(doc, "rehearse")
         if s.get("name") == "Delete or expire the rehearsal tenant"
     )["run"]
+    assert "bootstrap-marker.json" in cleanup
     assert "registration-marker.json" in cleanup
-    assert "registration.json" not in cleanup
-    assert "refusing to delete the persistent rehearsal tenant" in cleanup
-    assert "matches the persistent rehearsal tenant" in cleanup
+    assert "run_scoped" in cleanup
+    assert "refusing unsafe cleanup" in cleanup
+    assert 'request("DELETE"' in cleanup
+    assert 'request("POST"' in cleanup
+    assert "failures = []" in cleanup
+    assert "all tenants were attempted" in cleanup
+    assert "Bootstrap run-scoped rehearsal tenants and API keys" in names
+    assert 'call("POST", "/v1/tenants", body=' in script
+    assert '"contact_email":' in script
+    assert '"password":' not in script
+    assert '"/v1/auth/register"' not in script
+    assert "STAGING_REHEARSAL_TENANT_API_KEY" not in script
+    assert "STAGING_ISOLATION_PEER_API_KEY" not in script
     assert 'json.dump(registration' not in script
     assert 'json.dump({"registration_completed": True, "tenant_id": registration_tenant_id}' in script
+
+
+def test_full_rehearsal_inputs_are_derived_after_wake_not_precreated():
+    doc = _workflow_yaml(LIFECYCLE)
+    workflow = _workflow(LIFECYCLE)
+    preflight = doc["jobs"]["preflight-rehearsal-inputs"]
+    assert set(preflight.get("env", {})) == {"STAGING_ADMIN_API_KEY"}
+    assert "vars.ALB_DNS_NAME" not in workflow
+    assert "secrets.STAGING_REHEARSAL_TENANT_API_KEY" not in workflow
+    assert "secrets.STAGING_ISOLATION_PEER_API_KEY" not in workflow
+    assert "needs.wake-apply.outputs.api_host" in workflow
+    wake_apply = doc["jobs"]["wake-apply"]
+    assert wake_apply["outputs"]["api_host"] == "${{ steps.outputs.outputs.api_host }}"
+    wake_script = _job_script(doc, "wake-apply")
+    assert "gh run download" in wake_script
+    assert "reviewed.api-host" in wake_script
+
+
+def test_promotion_publishes_certificate_covered_api_host_and_raw_alb_evidence():
+    doc = _workflow_yaml(PROMOTE_WORKFLOW)
+    apply_script = _job_script(doc, "apply")
+    assert 'terraform output -raw alb_dns' in apply_script
+    assert 'terraform output -raw backend_url' in apply_script
+    assert 'reviewed.api-host' in apply_script
+    assert 'reviewed.alb-dns' in apply_script
+    upload = next(
+        s for s in _steps(doc, "apply")
+        if str(s.get("uses", "")).startswith("actions/upload-artifact")
+    )
+    assert "reviewed.api-host" in upload["with"]["path"]
+    assert "reviewed.alb-dns" in upload["with"]["path"]
+
+
+def test_promotion_does_not_fail_after_apply_on_external_dns_propagation():
+    """Terraform must publish DNS evidence; lifecycle owns the fail-closed check."""
+    promote = _workflow_yaml(PROMOTE_WORKFLOW)
+    apply_script = _job_script(promote, "apply")
+    assert "terraform apply -input=false reviewed.tfplan" in apply_script
+    assert "reviewed.api-host" in apply_script
+    assert "reviewed.alb-dns" in apply_script
+    assert "backend hostname does not resolve to the applied ALB" not in apply_script
+
+    lifecycle = _workflow_yaml(LIFECYCLE)
+    wake_apply = lifecycle["jobs"]["wake-apply"]
+    assert wake_apply["outputs"]["alb_dns"] == "${{ steps.outputs.outputs.alb_dns }}"
+    steps = wake_apply["steps"]
+    names = [step.get("name", "") for step in steps]
+    dns_index = names.index("Verify API DNS points to the applied load balancer")
+    readiness_index = names.index("Wait for staging infrastructure readiness")
+    assert dns_index < readiness_index
+    dns_step = steps[dns_index]
+    assert dns_step["env"] == {
+        "API_HOST": "${{ steps.outputs.outputs.api_host }}",
+        "ALB_DNS": "${{ steps.outputs.outputs.alb_dns }}",
+    }
+    assert "socket.getaddrinfo" in dns_step["run"]
+    assert "external DNS must point at the applied load balancer" in dns_step["run"]
+
+
+def test_deactivation_revokes_durable_api_keys_before_marking_inactive():
+    source = (
+        ROOT
+        / "Backend Architecture"
+        / "aether-backend"
+        / "services"
+        / "auth"
+        / "routes.py"
+    ).read_text(encoding="utf-8")
+    revoke_start = source.index("async def _revoke_tenant_api_keys")
+    deactivate_start = source.index("async def deactivate_tenant")
+    inactive_start = source.index(
+        'if tenant_rec.get("status") == "inactive"', deactivate_start
+    )
+    update_start = source.index(
+        'await _repo.update(tenant_id, {"status": "inactive"})', deactivate_start
+    )
+    assert "await _key_repo.update" in source[revoke_start:inactive_start]
+    assert '"status": "revoked"' in source[revoke_start:inactive_start]
+    assert source.index("revoked = await _revoke_tenant_api_keys", deactivate_start) < inactive_start
+    assert revoke_start < update_start
+    assert '"api_keys_revoked": revoked' in source
+
+
+def test_diagnostics_use_an_explicit_admin_smoke_credential():
+    """Tenant data-plane keys must not be silently given admin diagnostics access."""
+    doc = _workflow_yaml(LIFECYCLE)
+    script = _job_script(doc, "rehearse")
+    assert "SMOKE_ADMIN_API_KEY" in script
+    assert "STAGING_ADMIN_API_KEY" in _referenced_text(doc)
+    assert '--admin-api-key "$SMOKE_ADMIN_API_KEY"' in script
+
+    smoke = (ROOT / "scripts" / "smoke_test.py").read_text(encoding="utf-8")
+    assert "--admin-api-key" in smoke
+    assert "diagnostics_api_key" in smoke
+    assert 'args.admin_api_key or args.api_key' in smoke
+
+
+def test_cleanup_requires_a_complete_erasure_receipt_and_declares_all_rehearsal_surfaces():
+    doc = _workflow_yaml(LIFECYCLE)
+    cleanup = next(
+        s for s in _steps(doc, "rehearse")
+        if s.get("name") == "Delete or expire the rehearsal tenant"
+    )["run"]
+    assert "cleanup_complete" in cleanup
+    for surface in (
+        "consent_records",
+        "dsr_propagation_records",
+        "bronze_feeds",
+        "bronze_sdk_events",
+        "silver_sdk_events",
+        "gold_sdk_events",
+        "analytics_events",
+        "analytics_sessions",
+        "profiles",
+        "tenant_graph",
+    ):
+        assert surface in (
+            (ROOT / "Backend Architecture" / "aether-backend" / "services" / "auth" / "routes.py")
+            .read_text(encoding="utf-8")
+        ), f"cleanup does not name the {surface} surface"
+    assert "cleanup_complete receipt" in cleanup
 
 
 # ---------------------------------------------------------------------------

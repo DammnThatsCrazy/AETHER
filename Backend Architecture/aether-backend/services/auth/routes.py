@@ -37,6 +37,7 @@ from shared.common.common import (
     ForbiddenError,
     NotFoundError,
     UnauthorizedError,
+    utc_now,
 )
 from shared.logger.logger import get_logger, metrics
 from repositories.repos import AdminRepository, APIKeyRepository
@@ -168,9 +169,18 @@ async def _send_otp_email(email: str, otp: str, name: str = "") -> None:
         logger.debug(f"OTP email skipped: {e}")
 
 
-async def _evict_tenant_api_keys(tenant_id: str) -> int:
-    """Delete all Redis auth-cache entries for a tenant. Returns count evicted."""
+async def _evict_tenant_api_keys(tenant_id: str, *, fail_closed: bool = False) -> int:
+    """Delete all Redis auth-cache entries for a tenant.
+
+    Destructive account operations use ``fail_closed=True``.  A durable key is
+    revoked before this helper runs, but the validator intentionally trusts a
+    cache hit; deleting the database row while a cache entry survives would
+    therefore leave a bearer credential usable until its TTL expires.  Any
+    enumeration, eviction, or post-eviction verification error must stop the
+    destructive operation instead of being reported as a successful cleanup.
+    """
     evicted = 0
+    failures: list[str] = []
     try:
         from shared.cache.cache import CacheKey
         from dependencies.providers import get_registry
@@ -180,23 +190,140 @@ async def _evict_tenant_api_keys(tenant_id: str) -> int:
             key_hash = rec.get("key_hash", "")
             if key_hash:
                 try:
-                    await cache.delete(CacheKey.api_key(key_hash))
+                    cache_key = CacheKey.api_key(key_hash)
+                    await cache.delete(cache_key)
+                    # Cache hits are trusted by APIKeyValidator, so prove the
+                    # value is gone rather than assuming delete succeeded.
+                    if fail_closed and await cache.get(cache_key) is not None:
+                        failures.append(f"{key_hash[:12]}: cache entry remains after delete")
+                        continue
                     evicted += 1
-                except Exception:
-                    pass
+                except Exception as exc:
+                    failures.append(f"{key_hash[:12]}: {exc}")
     except Exception as e:
-        logger.debug(f"Redis eviction error: tenant={tenant_id} error={e}")
+        failures.append(f"tenant cache enumeration: {e}")
+    if failures and fail_closed:
+        raise RuntimeError(
+            "could not invalidate all tenant API-key cache entries: "
+            + "; ".join(failures)
+        )
+    if failures:
+        logger.debug(
+            "Redis eviction errors tolerated for non-destructive operation: "
+            "tenant=%s failures=%s",
+            tenant_id,
+            failures,
+        )
     return evicted
 
 
+async def _revoke_tenant_api_keys(tenant_id: str) -> int:
+    """Mark every durable tenant API key revoked before cleanup succeeds."""
+    records = await _key_repo.find_many(filters={"tenant_id": tenant_id}, limit=1000)
+    revoked = 0
+    failures: list[str] = []
+    for record in records:
+        key_id = record.get("id")
+        if not key_id or record.get("status") == "revoked" or record.get("revoked_at"):
+            continue
+        try:
+            await _key_repo.update(
+                key_id,
+                {"status": "revoked", "revoked_at": utc_now().isoformat()},
+            )
+            revoked += 1
+        except Exception as exc:
+            failures.append(f"{key_id}: {exc}")
+    if failures:
+        raise RuntimeError(
+            "could not revoke durable tenant API keys: " + "; ".join(failures)
+        )
+    return revoked
+
+
+async def _erase_tenant_scoped_rehearsal_data(tenant_id: str) -> dict[str, int]:
+    """Erase every tenant-scoped surface exercised by the staging rehearsal.
+
+    The account-lifecycle worker is intentionally a recovery-window workflow;
+    the admin DELETE used by a short-lived rehearsal needs an immediate,
+    idempotent path.  Keep its surface list explicit so a new rehearsal write
+    cannot silently become an orphan: it must be added here (and covered by a
+    test) before the cleanup endpoint can report success.  Immutable billing
+    and security-audit evidence is retained by policy and is not included in
+    this operational-data erasure set.
+    """
+    from repositories.lake import BronzeRepository, GoldRepository, SilverRepository
+    from repositories.repos import BaseRepository, ConsentRepository
+
+    stores = (
+        ("consent_records", ConsentRepository()),
+        # DSR propagation/index rows are operational state for this tenant;
+        # the immutable security/audit ledgers remain retained separately.
+        ("dsr_propagation_records", BaseRepository("dsr_propagation_records")),
+        ("dsr_subject_index", BaseRepository("dsr_subject_index")),
+        ("dsr_artifact_index", BaseRepository("dsr_artifact_index")),
+        ("bronze_feeds", BronzeRepository("feeds")),
+        ("bronze_sdk_events", BronzeRepository("sdk_events")),
+        ("silver_sdk_events", SilverRepository("sdk_events")),
+        ("gold_sdk_events", GoldRepository("sdk_events")),
+        ("analytics_events", BaseRepository("events")),
+        ("analytics_sessions", BaseRepository("sessions")),
+        ("profiles", BaseRepository("profiles")),
+    )
+    counts: dict[str, int] = {}
+    failures: list[str] = []
+    for name, repository in stores:
+        try:
+            counts[name] = await repository.delete_by_entity("tenant_id", tenant_id)
+        except Exception as exc:
+            failures.append(f"{name}: {exc}")
+    if failures:
+        raise RuntimeError(
+            "tenant-scoped rehearsal erasure failed before tenant deletion: "
+            + "; ".join(failures)
+        )
+
+    # Graph observations are stored in the shared graph projection, not in a
+    # JSONB repository.  The graph client drops only vertices/edges carrying
+    # this tenant and fails closed if the configured backend cannot do so.
+    try:
+        from dependencies.providers import get_registry
+        counts["tenant_graph"] = await get_registry().graph.delete_tenant_data(tenant_id)
+    except Exception as exc:
+        raise RuntimeError(
+            f"tenant-scoped rehearsal graph erasure failed before tenant deletion: {exc}"
+        ) from exc
+    return counts
+
+
 async def _cascade_delete_tenant(tenant_id: str) -> dict:
-    """Delete all data for a tenant across every table. Returns per-table counts."""
+    """Delete all data for a tenant across every table. Returns per-table counts.
+
+    Public ingest identifiers are revoked before the tenant row is removed so
+    contained registration credentials cannot outlive their owner.
+    """
     counts: dict = {}
 
-    # 1. Evict Redis immediately so auth fails on the next request
-    counts["keys_evicted"] = await _evict_tenant_api_keys(tenant_id)
+    # 1. Revoke durable credentials, then fail closed while invalidating cache.
+    # APIKeyValidator trusts cache hits, so deleting rows first is unsafe.
+    counts["api_keys_revoked"] = await _revoke_tenant_api_keys(tenant_id)
+    counts["keys_evicted"] = await _evict_tenant_api_keys(tenant_id, fail_closed=True)
 
-    # 2. Cancel Stripe subscription (best-effort — never blocks deletion)
+    # Public registration can issue a contained ingest identifier before the
+    # tenant is activated. Revoke those identifiers before deleting the tenant
+    # row so an otherwise successful GDPR/cleanup delete cannot leave a live
+    # credential pointing at an owner that no longer exists.
+    from services.auth.sessions import public_ingest_service
+    counts["public_ingest_identifiers_revoked"] = (
+        await public_ingest_service.revoke_all_for_tenant(tenant_id)
+    )
+
+    # 2. Erase every non-retained data surface written by the rehearsal before
+    # removing the owning rows.  Any failure leaves the tenant present and the
+    # API keys revoked, making retry safe and observable.
+    counts["tenant_scoped_data"] = await _erase_tenant_scoped_rehearsal_data(tenant_id)
+
+    # 3. Cancel Stripe subscription (best-effort — never blocks deletion)
     try:
         from shared.billing import stripe_client, stripe_repository
         billing = await stripe_repository.get_billing_account(tenant_id)
@@ -206,34 +333,32 @@ async def _cascade_delete_tenant(tenant_id: str) -> dict:
     except Exception as e:
         logger.debug(f"Stripe subscription cancel skipped: tenant={tenant_id} error={e}")
 
-    # 3. Delete API key rows
+    # 4. Delete API key rows
     counts["api_keys"] = await _key_repo.delete_by_entity("tenant_id", tenant_id)
 
-    # 4. Delete user rows
-    try:
-        from repositories.repos import UserRepository
-        counts["users"] = await UserRepository().delete_by_entity("tenant_id", tenant_id)
-    except Exception:
-        counts["users"] = 0
+    # 5. Delete user rows.  Do not swallow errors: a 200 response must mean
+    # cleanup actually completed, not merely that one table was reachable.
+    from repositories.repos import UserRepository
+    counts["users"] = await UserRepository().delete_by_entity("tenant_id", tenant_id)
 
-    # 5. Delete billing account row
-    try:
-        from repositories.repos import get_pool
-        pool = await get_pool()
-        if pool is not None:
-            result = await pool.execute(
-                "DELETE FROM tenant_billing_accounts WHERE tenant_id = $1", tenant_id
-            )
-            counts["billing_accounts"] = int(result.split()[-1]) if result else 0
-        else:
-            from shared.billing.stripe_repository import _mem_accounts
-            counts["billing_accounts"] = 1 if _mem_accounts.pop(tenant_id, None) else 0
-    except Exception as e:
-        logger.debug(f"Billing account delete error: {e}")
-        counts["billing_accounts"] = 0
+    # 6. Delete billing account row
+    from repositories.repos import get_pool
+    pool = await get_pool()
+    if pool is not None:
+        result = await pool.execute(
+            "DELETE FROM tenant_billing_accounts WHERE tenant_id = $1", tenant_id
+        )
+        counts["billing_accounts"] = int(result.split()[-1]) if result else 0
+    else:
+        from shared.billing.stripe_repository import _mem_accounts
+        counts["billing_accounts"] = 1 if _mem_accounts.pop(tenant_id, None) else 0
 
-    # 6. Delete the tenant record itself
+    # 7. Delete the tenant record itself and fail closed if it vanished between
+    # the initial lookup and this point.
     counts["tenants"] = 1 if await _repo.delete(tenant_id) else 0
+    if counts["tenants"] != 1:
+        raise RuntimeError("tenant row was not deleted; cleanup is incomplete")
+    counts["cleanup_complete"] = True
     return counts
 
 
@@ -739,23 +864,32 @@ async def delete_my_account(body: AccountDeletionRequest, request: Request):
 
 @admin_auth_router.post("/v1/admin/tenants/{tenant_id}/deactivate")
 async def deactivate_tenant(tenant_id: str, request: Request):
-    """Immediately deactivate a tenant: evict Redis auth entries + set status=inactive.
+    """Immediately deactivate a tenant and revoke all active credentials.
 
-    Does NOT delete any data. Existing API keys stop working on the next request.
-    Re-activation requires manually setting status=active.
+    Does NOT delete any data. Existing API keys and contained public ingest
+    identifiers stop working on the next request. Re-activation requires
+    manually setting status=active and issuing fresh credentials.
     """
     tenant_rec = await _repo.find_by_id(tenant_id)
     if not tenant_rec:
         raise NotFoundError("tenant")
 
+    from services.auth.sessions import public_ingest_service
+    ingest_revoked = await public_ingest_service.revoke_all_for_tenant(tenant_id)
+
+    revoked = await _revoke_tenant_api_keys(tenant_id)
+    evicted = await _evict_tenant_api_keys(tenant_id, fail_closed=True)
+
     if tenant_rec.get("status") == "inactive":
         return APIResponse(data={
             "tenant_id": tenant_id,
             "status": "inactive",
+            "api_keys_revoked": revoked,
+            "keys_evicted": evicted,
+            "public_ingest_identifiers_revoked": ingest_revoked,
             "message": "Tenant is already inactive.",
         }).to_dict()
 
-    evicted = await _evict_tenant_api_keys(tenant_id)
     await _repo.update(tenant_id, {"status": "inactive"})
 
     metrics.increment("tenant_deactivations")
@@ -764,8 +898,10 @@ async def deactivate_tenant(tenant_id: str, request: Request):
     return APIResponse(data={
         "tenant_id": tenant_id,
         "status": "inactive",
+        "api_keys_revoked": revoked,
         "keys_evicted": evicted,
-        "message": "Tenant deactivated. All API keys have been invalidated immediately.",
+        "public_ingest_identifiers_revoked": ingest_revoked,
+        "message": "Tenant deactivated. All API keys and contained ingest identifiers have been invalidated immediately.",
     }).to_dict()
 
 
@@ -777,8 +913,10 @@ async def deactivate_tenant(tenant_id: str, request: Request):
 async def gdpr_delete_tenant(tenant_id: str, request: Request):
     """Permanently delete a tenant and all associated data (GDPR right to erasure).
 
-    Cascade order: Redis eviction → Stripe subscription cancel → api_keys →
-    users → tenant_billing_accounts → tenants. Irreversible.
+    Cascade order: durable credential revocation → cache invalidation →
+    contained-ingest revocation → tenant-scoped rehearsal data erasure →
+    Stripe cancellation → owner rows. Irreversible. Billing and security-audit
+    evidence retained under policy is detached rather than erased.
     """
     tenant_rec = await _repo.find_by_id(tenant_id)
     if not tenant_rec:

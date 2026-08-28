@@ -946,8 +946,43 @@ jobs:
           fi
           terraform apply -input=false reviewed.tfplan | tee reviewed.apply.txt
           sha256sum reviewed.apply.txt > reviewed.apply.sha256
+          # The ALB hostname is assigned by AWS at apply time, but it is not the
+          # HTTPS endpoint: the certificate is issued for var.domain_name. Keep
+          # the raw ALB name as evidence, then publish the configured backend
+          # hostname for the lifecycle smoke tests. DNS is managed outside this
+          # Terraform root, so do not fail a completed apply just because the
+          # operator-managed hostname has not propagated to the new ALB yet.
+          # The lifecycle workflow performs the fail-closed DNS check immediately
+          # before readiness, the lease, and any rehearsal requests.
+          alb_dns="$(terraform output -raw alb_dns)"
+          case "$alb_dns" in
+            ''|*://*|*/*|*' '*|*'"'*)
+              echo '::error::terraform output alb_dns is empty or is not a host name'; exit 1 ;;
+          esac
+          backend_url="$(terraform output -raw backend_url)"
+          backend_host="$(python - "$backend_url" <<'PY'
+          import sys
+          from urllib.parse import urlparse
+
+          url = sys.argv[1]
+          parsed = urlparse(url)
+          host = parsed.hostname or ""
+          if parsed.scheme != "https" or parsed.path not in ("", "/") or not host:
+              raise SystemExit("terraform output backend_url is not a certificate-covered HTTPS host")
+          print(host)
+          PY
+          )"
+          case "$backend_host" in
+            ''|*://*|*/*|*' '*|*'"'*)
+              echo '::error::terraform output backend_url produced an invalid host'; exit 1 ;;
+          esac
+          printf '%s\n' "$backend_host" > reviewed.api-host
+          printf '%s\n' "$alb_dns" > reviewed.alb-dns
       - uses: actions/upload-artifact@v4
         with:
           name: terraform-apply-evidence-${{ github.run_id }}
-          path: AWS Deployment/aether-aws/terraform/reviewed.apply.*
+          path: |
+            AWS Deployment/aether-aws/terraform/reviewed.apply.*
+            AWS Deployment/aether-aws/terraform/reviewed.api-host
+            AWS Deployment/aether-aws/terraform/reviewed.alb-dns
           if-no-files-found: error
