@@ -576,6 +576,29 @@ def test_the_rehearsal_tenant_is_always_removed():
     assert "was neither deleted nor expired" in run
 
 
+def test_rehearsal_binds_release_and_cleans_only_ephemeral_registration_tenant():
+    doc = _workflow_yaml(LIFECYCLE)
+    script = _job_script(doc, "rehearse")
+    assert "intended_release_sha" in _referenced_text(doc)
+    assert ".head_sha" in script or ".head_sha" in _job_script(doc, "wake-plan")
+    names = [s.get("name") for s in _steps(doc, "rehearse")]
+    assert names.index("Revalidate awake lease before static publication") < names.index(
+        "Publish and verify the approved static SPA artifacts"
+    )
+    assert "Publish and verify the approved static SPA artifacts" in names
+    assert "aws s3 sync" in script
+    cleanup = next(
+        s for s in _steps(doc, "rehearse")
+        if s.get("name") == "Delete or expire the rehearsal tenant"
+    )["run"]
+    assert "registration-marker.json" in cleanup
+    assert "registration.json" not in cleanup
+    assert "refusing to delete the persistent rehearsal tenant" in cleanup
+    assert "matches the persistent rehearsal tenant" in cleanup
+    assert 'json.dump(registration' not in script
+    assert 'json.dump({"registration_completed": True, "tenant_id": registration_tenant_id}' in script
+
+
 # ---------------------------------------------------------------------------
 # Fail-safe sleep: runs always, and never hides the original failure
 # ---------------------------------------------------------------------------
