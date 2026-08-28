@@ -416,6 +416,8 @@ def test_tainted_staging_ecr_repair_is_explicit_and_requires_a_fresh_plan() -> N
     assert "terraform state show -no-color \"$candidate\"" in text
     assert 'canonical_name=\"$(terraform state show -no-color \"$address\"' in text
     assert 'expected \'$repository\'' in text
+    assert 'taint_status=\"$(jq -r --arg repository \"$repository\"' in text
+    assert 'status \'$taint_status\'' in text
     assert "Validate every untaint target before any import or untaint mutation" in text
     assert "staging_ecr_addresses=\"$(terraform state list | grep 'aws_ecr_repository' || true)\"" in text
     assert "case \",$normalized_imports,\" in" in text

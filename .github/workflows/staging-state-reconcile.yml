@@ -302,6 +302,16 @@ jobs:
               test "$canonical_name" = "$repository" || {
                 echo "::error::Refusing ECR taint repair: canonical state address $address points to '$canonical_name', expected '$repository'"; exit 1;
               }
+              taint_status="$(jq -r --arg repository "$repository" '
+                .resources[]?
+                | select(.module == "module.ecr" and .type == "aws_ecr_repository" and .name == "this")
+                | .instances[]?
+                | select((.index_key? == $repository) or (.attributes.name? == $repository))
+                | .status // "managed"
+              ' "$state_snapshot_file" | head -n 1)"
+              test "$taint_status" = "tainted" || {
+                echo "::error::Refusing ECR taint repair: canonical state address $address is not tainted (status '$taint_status')"; exit 1;
+              }
               while IFS= read -r candidate; do
                 [ -n "$candidate" ] || continue
                 [ "$candidate" = "$address" ] && continue

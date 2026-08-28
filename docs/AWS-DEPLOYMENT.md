@@ -49,8 +49,8 @@ import-only reconciliation workflow adopts it without replacement. The other
 three staging ECR repositories remain mutable and use the staging KMS key.
 Before clearing a taint, reconciliation also verifies that the canonical
 Terraform address stores the same repository name requested by the operator;
-an address that points at a different repository is refused before state is
-mutated.
+an address that points at a different repository, or is no longer tainted, is
+refused before state is mutated.
 
 The reviewed Terraform promotion writes a secret-free `reviewed.api-host`
 evidence file after an apply. This is the configured `domain_name` hostname
