@@ -393,7 +393,7 @@ def test_tainted_staging_ecr_repair_is_explicit_and_requires_a_fresh_plan() -> N
     text = STATE_RECONCILE_WORKFLOW.read_text(encoding="utf-8")
     assert "untaint_ecr_repository_names" in text
     assert 'test "$CONFIRM" = "IMPORT-STAGING"' in text
-    assert "terraform state untaint" in text
+    assert 'terraform untaint "$address"' in text
     assert "Generate a fresh reviewed plan before any apply" in text
     assert "does not match the reviewed staging KMS key" in text
     assert "cannot be both imported and untainted" in text
@@ -403,6 +403,9 @@ def test_tainted_staging_ecr_repair_is_explicit_and_requires_a_fresh_plan() -> N
     assert "module.ecr.aws_kms_key.ecr" in text
     assert "terraform-nonprod-shared" in text
     assert "^[[:space:]]*arn" in text
+    assert "UNTAINT_ECR_REPOSITORY_NAMES" in text
+    assert "ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES" in text
+    assert "sort -u" in text
 
 
 def test_state_reconciliation_has_the_complete_provider_environment() -> None:

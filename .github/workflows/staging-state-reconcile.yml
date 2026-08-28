@@ -204,14 +204,15 @@ jobs:
             -backend-config="encrypt=true"
 
       - name: Verify imported repositories use the state-managed ECR key
-        if: inputs.ecr_repository_names != ''
+        if: inputs.ecr_repository_names != '' || inputs.untaint_ecr_repository_names != ''
         working-directory: ${{ env.TF_DIR }}
         env:
           ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
+          UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
           STAGING_ECR_KMS_KEY_ARN: ${{ inputs.staging_ecr_kms_key_arn }}
         run: |
           set -euo pipefail
-          kms_repositories="$(printf '%s' "$ECR_REPOSITORY_NAMES" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -v '^aether-backend$' || true)"
+          kms_repositories="$(printf '%s\n%s' "$ECR_REPOSITORY_NAMES" "$UNTAINT_ECR_REPOSITORY_NAMES" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -Ev '^(|aether-backend)$' | sort -u || true)"
           [ -n "$kms_repositories" ] || exit 0
           managed_key_arn="$(terraform state show -no-color 'module.ecr.aws_kms_key.ecr' \
             | sed -n 's/^[[:space:]]*arn[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
@@ -227,6 +228,7 @@ jobs:
         env:
           TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
           ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
+          UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
         run: |
           set -euo pipefail
@@ -257,16 +259,19 @@ jobs:
             echo '::error::Refusing import: target-group ARN already appears elsewhere in staging state'
             exit 1
           fi
-          if [ -n "$ECR_REPOSITORY_NAMES" ]; then
-            IFS=',' read -ra repositories <<< "$ECR_REPOSITORY_NAMES"
+          if [ -n "$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES" ]; then
+            IFS=',' read -ra repositories <<< "$ECR_REPOSITORY_NAMES,$UNTAINT_ECR_REPOSITORY_NAMES"
             for raw in "${repositories[@]}"; do
               repository="$(printf '%s' "$raw" | xargs)"
+              [ -n "$repository" ] || continue
               address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
-              if terraform state list | grep -Fxq "$address"; then
-                echo "::error::Refusing import: $address is already in staging state"; exit 1
-              fi
-              if grep -Eq -- "\"name\"[[:space:]]*:[[:space:]]*\"${repository}\"" "$state_snapshot_file"; then
-                echo "::error::Refusing import: ECR repository '$repository' already appears elsewhere in staging state"; exit 1
+              if [[ ",$ECR_REPOSITORY_NAMES," == *",$repository,"* ]]; then
+                if terraform state list | grep -Fxq "$address"; then
+                  echo "::error::Refusing import: $address is already in staging state"; exit 1
+                fi
+                if grep -Eq -- "\"name\"[[:space:]]*:[[:space:]]*\"${repository}\"" "$state_snapshot_file"; then
+                  echo "::error::Refusing import: ECR repository '$repository' already appears elsewhere in staging state"; exit 1
+                fi
               fi
             done
           fi
@@ -286,10 +291,11 @@ jobs:
                 'any(.resources[]?; any(.instances[]?.attributes.arn?; . == $arn))' "$state_file" >/dev/null; then
                 echo "::error::Refusing import: target-group ARN already appears in ${profile} state"; exit 1
               fi
-              if [ -n "$ECR_REPOSITORY_NAMES" ]; then
-                IFS=',' read -ra repositories <<< "$ECR_REPOSITORY_NAMES"
+              if [ -n "$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES" ]; then
+                IFS=',' read -ra repositories <<< "$ECR_REPOSITORY_NAMES,$UNTAINT_ECR_REPOSITORY_NAMES"
                 for raw in "${repositories[@]}"; do
                   repository="$(printf '%s' "$raw" | xargs)"
+                  [ -n "$repository" ] || continue
                   if jq -e --arg repository "$repository" \
                     'any(.resources[]?; .type == "aws_ecr_repository" and any(.instances[]?.attributes.name?; . == $repository))' \
                     "$state_file" >/dev/null; then
@@ -365,7 +371,7 @@ jobs:
               terraform state list | grep -Fxq "$address" || {
                 echo "::error::Refusing ECR taint repair: $address is not in staging state"; exit 1;
               }
-              terraform state untaint "$address"
+              terraform untaint "$address"
             done
             echo "Cleared taint only for the explicitly reviewed staging ECR repositories. Generate a fresh reviewed plan before any apply."
           fi
