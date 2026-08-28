@@ -2,10 +2,50 @@ schema_version: 1
 note: 'Scope denominator locks. A denominator change at the same scope version fails
   validation. Regenerate with: python scripts/validate_readiness_model.py --update-locks'
 scopes:
+- scope_id: agentic-x402-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: agentic-x402
+- scope_id: backend-api-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: backend-api
+- scope_id: campaign-intelligence-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: campaign-intelligence
+- scope_id: card-linked-payments-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: card-linked-payments
+- scope_id: ci-tests-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: ci-tests
+- scope_id: connectors-byok-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: connectors-byok
+- scope_id: customer-frontend-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: customer-frontend
+- scope_id: data-lake-feeders-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: data-lake-feeders
 - scope_id: deployment-terraform-profiles-v1
   version: 1
   denominator_signature: 18712ad860bedb1b
   feature_id: deployment-terraform-profiles
+- scope_id: derivatives-intelligence-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: derivatives-intelligence
+- scope_id: documentation-pipeline-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: documentation-pipeline
 - scope_id: event-transport-v1
   version: 1
   denominator_signature: 85aff01562d2aa6f
@@ -14,11 +54,83 @@ scopes:
   version: 1
   denominator_signature: 59b5942bfdc5b373
   feature_id: financial-observability
+- scope_id: graph-health-drift-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: graph-health-drift
+- scope_id: graph-mutation-safety-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: graph-mutation-safety
+- scope_id: graph-relationships-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: graph-relationships
 - scope_id: identity-resolution-v1
   version: 1
   denominator_signature: 0878db13d6774492
   feature_id: identity-resolution
+- scope_id: interoperability-intelligence-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: interoperability-intelligence
+- scope_id: kyber-operator-console-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: kyber-operator-console
+- scope_id: measurement-attribution-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: measurement-attribution
+- scope_id: measurement-integrity-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: measurement-integrity
+- scope_id: notification-intelligence-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: notification-intelligence
+- scope_id: payment-rail-observability-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: payment-rail-observability
+- scope_id: profile-360-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: profile-360
+- scope_id: provider-certification-plane-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: provider-certification-plane
 - scope_id: push-notification-delivery-v1
   version: 1
   denominator_signature: 389ed76c71a395b0
   feature_id: push-notification-delivery
+- scope_id: scale-readiness-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: scale-readiness
+- scope_id: sdks-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: sdks
+- scope_id: security-compliance-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: security-compliance
+- scope_id: semantic-intelligence-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: semantic-intelligence
+- scope_id: smart-contracts-rewards-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: smart-contracts-rewards
+- scope_id: stablecoin-intelligence-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: stablecoin-intelligence
+- scope_id: tenant-import-engine-v1
+  version: 1
+  denominator_signature: 101b51999f5fde26
+  feature_id: tenant-import-engine

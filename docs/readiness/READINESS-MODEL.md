@@ -36,6 +36,32 @@ Canonical sources:
 | `artifacts/readiness/{features,profiles,migration-report}.json` | Machine-readable outputs |
 | `docs/_generated/{FEATURE-READINESS,RELEASE-PROFILE-READINESS}.md` | Generated reports |
 
+## Platform coverage
+
+The model covers the **entire platform**: there is one feature record per
+capability on the legacy `scripts/production_status.py` scorecard (plus
+cross-cutting capabilities like event transport), so every legacy 0-5 area now
+has a decomposed, multidimensional record. `make readiness-migrate` reports the
+mapping (0 areas requiring manual classification), and
+`tests/readiness/test_readiness_coverage.py` fails if a scorecard area ever
+loses its record. Records generated from the legacy scorecard carry
+`historical.migration_derived: true` and a confidence gap noting that the 0-5
+score is a proxy pending per-capability SME review — it is decomposed across the
+dimensions below, never used as an authoritative number.
+
+Release-profile participation follows the real founding-tenant scope
+(`config/founding_tenant_release.yaml`): excluded domains (derivatives,
+economic, financial, payments, rewards, stablecoin, agent-execution) are
+`not_in_release` for the production profiles and appear only as experimental in
+staging/pilot, exactly as the platform ships them.
+
+**Staging floor.** Staging's implementation floor is `VERIFIED` (not `TURNKEY`):
+staging is where a verified capability is validated toward turnkey/production.
+The production profiles keep the `TURNKEY` floor, so a capability that is
+`VERIFIED` but not yet certified turnkey reads as `READY_TO_VALIDATE` in staging
+and `BLOCKED_BY_CODE` (turnkey work remains) for production — a true, useful
+gradient rather than one collapsed number.
+
 ## The dimensions
 
 Each is tracked **independently**. None may rewrite another.

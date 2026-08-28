@@ -4,6 +4,1450 @@
   "generated_by": "scripts/readiness_status.py --emit-artifacts",
   "features": [
     {
+      "feature_id": "agentic-x402",
+      "title": "Agentic x402",
+      "owning_system": "aether",
+      "scope": {
+        "id": "agentic-x402-v1",
+        "version": 1,
+        "title": "Agentic x402 V1",
+        "target": "observation-pilot",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "VERIFIED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "None \u2014 repository-controlled work complete"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "VERIFIED",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "NO_EXTERNAL_BLOCKER",
+        "blockers": []
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_APPLICABLE",
+          "credentialed": null,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "agent-platform",
+        "runbook": "docs/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",
+        "dashboards": [
+          "grafana:agent-platform"
+        ],
+        "alerts": [
+          "pagerduty:agent-platform"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: packages/shared/events.ts"
+        ],
+        "evidence_gaps": [
+          "not yet exercised in credentialed staging/production"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "experimental",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_APPLICABLE",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "agentic_x402_productization",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "backend-api",
+      "title": "Backend API",
+      "owning_system": "aether",
+      "scope": {
+        "id": "backend-api-v1",
+        "version": 1,
+        "title": "Backend API V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "VERIFIED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "None \u2014 repository-controlled work complete"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "VERIFIED",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "NO_EXTERNAL_BLOCKER",
+        "blockers": []
+      },
+      "dependencies": {
+        "hard": [
+          {
+            "feature_id": "identity-resolution",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          },
+          {
+            "feature_id": "event-transport",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          }
+        ],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "platform",
+        "runbook": "docs/runbooks/STAGING_PREFLIGHT.md",
+        "dashboards": [
+          "grafana:platform"
+        ],
+        "alerts": [
+          "pagerduty:platform"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/main.py"
+        ],
+        "evidence_gaps": [
+          "not yet exercised in credentialed staging/production"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "backend/API",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "campaign-intelligence",
+      "title": "Campaign Intelligence",
+      "owning_system": "aether",
+      "scope": {
+        "id": "campaign-intelligence-v1",
+        "version": 1,
+        "title": "Campaign Intelligence V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "VERIFIED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "None \u2014 repository-controlled work complete"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "TURNKEY",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "NO_EXTERNAL_BLOCKER",
+        "blockers": []
+      },
+      "dependencies": {
+        "hard": [
+          {
+            "feature_id": "measurement-attribution",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          },
+          {
+            "feature_id": "graph-relationships",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          }
+        ],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "campaign",
+        "runbook": "docs/runbooks/CAMPAIGN-360-MISSING-CONVERSIONS.md",
+        "dashboards": [
+          "grafana:campaign"
+        ],
+        "alerts": [
+          "pagerduty:campaign"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "HIGH",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/services/campaign/registry.py"
+        ],
+        "evidence_gaps": [
+          "not yet exercised in credentialed staging/production"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 5,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "campaign intelligence",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "card-linked-payments",
+      "title": "Card-Linked Payment Rails",
+      "owning_system": "aether",
+      "scope": {
+        "id": "card-linked-payments-v1",
+        "version": 1,
+        "title": "Card-Linked Payment Rails V1",
+        "target": "observation-pilot",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "CODE_COMPLETE",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Insert provider credentials into the credential platform; run credentials-preflight."
+        ],
+        "remaining_is_repository_controlled": true
+      },
+      "implementation": {
+        "state": "IMPLEMENTED",
+        "completion_percent": 60.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": [
+          "complete runtime integration",
+          "complete repository-controlled verification"
+        ]
+      },
+      "productionization": {
+        "completion_percent": 25.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": [
+          "observability metrics logs",
+          "reliability idempotency retry",
+          "ci and release gates"
+        ]
+      },
+      "activation": {
+        "state": "CREDENTIAL_WAITING",
+        "blockers": [
+          {
+            "type": "CREDENTIAL_WAITING",
+            "description": "Card-Linked Payment Rails activation waits on an external credential condition.",
+            "owner": "tenant / platform-ops",
+            "required_action": "Insert provider credentials into the credential platform; run credentials-preflight.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot"
+            ],
+            "evidence_required": "credentialed connection self-check"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_APPLICABLE",
+          "credentialed": null,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "financial-platform",
+        "runbook": "docs/runbooks/CARD_LINKED_RUNBOOK.md",
+        "dashboards": [
+          "grafana:financial-platform"
+        ],
+        "alerts": [
+          "pagerduty:financial-platform"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "LOW",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/services/card_linked_payments/"
+        ],
+        "evidence_gaps": [
+          "credentialed environment execution not yet performed"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [
+            "implementation state IMPLEMENTED is below the VERIFIED floor",
+            "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete runtime integration; complete repository-controlled verification"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [
+            "implementation state IMPLEMENTED is below the VERIFIED floor",
+            "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete runtime integration; complete repository-controlled verification"
+          ],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: Card-Linked Payment Rails activation waits on an external credential condition. (owner: tenant / platform-ops)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state IMPLEMENTED is below the TURNKEY floor",
+            "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete runtime integration; complete repository-controlled verification"
+          ],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: Card-Linked Payment Rails activation waits on an external credential condition. (owner: tenant / platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_APPLICABLE",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 2,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "card-linked payment rails",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "ci-tests",
+      "title": "CI & Test Gates",
+      "owning_system": "aether",
+      "scope": {
+        "id": "ci-tests-v1",
+        "version": 1,
+        "title": "CI & Test Gates V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "VERIFIED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "None \u2014 repository-controlled work complete"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "VERIFIED",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "NO_EXTERNAL_BLOCKER",
+        "blockers": []
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "platform",
+        "runbook": "docs/runbooks/STAGING_PREFLIGHT.md",
+        "dashboards": [
+          "grafana:platform"
+        ],
+        "alerts": [
+          "pagerduty:platform"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: .github/workflows/"
+        ],
+        "evidence_gaps": [
+          "not yet exercised in credentialed staging/production"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "CI / tests",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "connectors-byok",
+      "title": "BYOK Connectors",
+      "owning_system": "aether",
+      "scope": {
+        "id": "connectors-byok-v1",
+        "version": 1,
+        "title": "BYOK Connectors V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "CREDENTIAL_TURNKEY",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Insert provider credentials into the credential platform; run credentials-preflight."
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "TURNKEY",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "CREDENTIAL_WAITING",
+        "blockers": [
+          {
+            "type": "CREDENTIAL_WAITING",
+            "description": "BYOK Connectors activation waits on an external credential condition.",
+            "owner": "tenant / platform-ops",
+            "required_action": "Insert provider credentials into the credential platform; run credentials-preflight.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot",
+              "production-lean",
+              "production-scale"
+            ],
+            "evidence_required": "credentialed connection self-check"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [
+          {
+            "feature_id": "identity-resolution",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          }
+        ],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "integrations",
+        "runbook": "docs/runbooks/CREDENTIAL-ROTATION.md",
+        "dashboards": [
+          "grafana:integrations"
+        ],
+        "alerts": [
+          "pagerduty:integrations"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/services/integrations/connectors/"
+        ],
+        "evidence_gaps": [
+          "credentialed environment execution not yet performed"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: BYOK Connectors activation waits on an external credential condition. (owner: tenant / platform-ops)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: BYOK Connectors activation waits on an external credential condition. (owner: tenant / platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: BYOK Connectors activation waits on an external credential condition. (owner: tenant / platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: BYOK Connectors activation waits on an external credential condition. (owner: tenant / platform-ops)"
+          ],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "connectors (BYOK / source)",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "customer-frontend",
+      "title": "Customer Frontend",
+      "owning_system": "aether",
+      "scope": {
+        "id": "customer-frontend-v1",
+        "version": 1,
+        "title": "Customer Frontend V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "VERIFIED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "None \u2014 repository-controlled work complete"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "TURNKEY",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "NO_EXTERNAL_BLOCKER",
+        "blockers": []
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "frontend",
+        "runbook": "docs/runbooks/STAGING_PREFLIGHT.md",
+        "dashboards": [
+          "grafana:frontend"
+        ],
+        "alerts": [
+          "pagerduty:frontend"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "HIGH",
+        "reasons": [
+          "repository evidence: frontend/aether/"
+        ],
+        "evidence_gaps": [
+          "not yet exercised in credentialed staging/production"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 5,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "customer frontend (tenant app)",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "data-lake-feeders",
+      "title": "Data-Lake Feeders",
+      "owning_system": "aether",
+      "scope": {
+        "id": "data-lake-feeders-v1",
+        "version": 1,
+        "title": "Data-Lake Feeders V1",
+        "target": "observation-pilot",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "INFRASTRUCTURE_TURNKEY",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Provision the required cloud backend (apply Terraform for the target profile)."
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "TURNKEY",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "INFRASTRUCTURE_WAITING",
+        "blockers": [
+          {
+            "type": "INFRASTRUCTURE_WAITING",
+            "description": "Data-Lake Feeders activation waits on an external infra condition.",
+            "owner": "platform-ops",
+            "required_action": "Provision the required cloud backend (apply Terraform for the target profile).",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot"
+            ],
+            "evidence_required": "applied resource ids + a credentialed run"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_APPLICABLE",
+          "credentialed": null,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "data-platform",
+        "runbook": "docs/runbooks/RECONCILIATION.md",
+        "dashboards": [
+          "grafana:data-platform"
+        ],
+        "alerts": [
+          "pagerduty:data-platform"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/services/dune_feeder/service.py"
+        ],
+        "evidence_gaps": [
+          "credentialed environment execution not yet performed"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "experimental",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: Data-Lake Feeders activation waits on an external infra condition. (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: Data-Lake Feeders activation waits on an external infra condition. (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_APPLICABLE",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "Dune / data-lake feeders",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
       "feature_id": "deployment-terraform-profiles",
       "title": "Deployment Terraform Profiles",
       "owning_system": "aether",
@@ -215,6 +1659,376 @@
         "historical_maturity_index": 3,
         "historical_maturity_index_scale": "0-5",
         "historical_maturity_index_authoritative": false
+      }
+    },
+    {
+      "feature_id": "derivatives-intelligence",
+      "title": "Derivatives Intelligence",
+      "owning_system": "aether",
+      "scope": {
+        "id": "derivatives-intelligence-v1",
+        "version": 1,
+        "title": "Derivatives Intelligence V1",
+        "target": "observation-pilot",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "RUNTIME_INTEGRATED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Provision the required cloud backend (apply Terraform for the target profile)."
+        ],
+        "remaining_is_repository_controlled": true
+      },
+      "implementation": {
+        "state": "RUNTIME_INTEGRATED",
+        "completion_percent": 80.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": [
+          "complete repository-controlled verification + hardening"
+        ]
+      },
+      "productionization": {
+        "completion_percent": 50.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": [
+          "reliability idempotency retry",
+          "ci and release gates"
+        ]
+      },
+      "activation": {
+        "state": "INFRASTRUCTURE_WAITING",
+        "blockers": [
+          {
+            "type": "INFRASTRUCTURE_WAITING",
+            "description": "Derivatives Intelligence activation waits on an external infra condition.",
+            "owner": "platform-ops",
+            "required_action": "Provision the required cloud backend (apply Terraform for the target profile).",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot"
+            ],
+            "evidence_required": "applied resource ids + a credentialed run"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_APPLICABLE",
+          "credentialed": null,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "financial-platform",
+        "runbook": "docs/runbooks/DERIVATIVES_STREAM_RUNBOOK.md",
+        "dashboards": [
+          "grafana:financial-platform"
+        ],
+        "alerts": [
+          "pagerduty:financial-platform"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "LOW",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/services/derivatives/"
+        ],
+        "evidence_gaps": [
+          "credentialed environment execution not yet performed"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete repository-controlled verification + hardening"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete repository-controlled verification + hardening"
+          ],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: Derivatives Intelligence activation waits on an external infra condition. (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the TURNKEY floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete repository-controlled verification + hardening"
+          ],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: Derivatives Intelligence activation waits on an external infra condition. (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_APPLICABLE",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 3,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "derivatives intelligence",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "documentation-pipeline",
+      "title": "Documentation Pipeline",
+      "owning_system": "aether",
+      "scope": {
+        "id": "documentation-pipeline-v1",
+        "version": 1,
+        "title": "Documentation Pipeline V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "VERIFIED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "None \u2014 repository-controlled work complete"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "VERIFIED",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "NO_EXTERNAL_BLOCKER",
+        "blockers": []
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "platform",
+        "runbook": "docs/runbooks/STAGING_PREFLIGHT.md",
+        "dashboards": [
+          "grafana:platform"
+        ],
+        "alerts": [
+          "pagerduty:platform"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: docs/"
+        ],
+        "evidence_gaps": [
+          "not yet exercised in credentialed staging/production"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "docs",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
       }
     },
     {
@@ -645,6 +2459,544 @@
       }
     },
     {
+      "feature_id": "graph-health-drift",
+      "title": "Graph Health & Drift Detection",
+      "owning_system": "aether",
+      "scope": {
+        "id": "graph-health-drift-v1",
+        "version": 1,
+        "title": "Graph Health & Drift Detection V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "VERIFIED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "None \u2014 repository-controlled work complete"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "VERIFIED",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "NO_EXTERNAL_BLOCKER",
+        "blockers": []
+      },
+      "dependencies": {
+        "hard": [
+          {
+            "feature_id": "graph-relationships",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          }
+        ],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "graph",
+        "runbook": "docs/runbooks/RECONCILIATION.md",
+        "dashboards": [
+          "grafana:graph"
+        ],
+        "alerts": [
+          "pagerduty:graph"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/services/sdk_drift/routes.py"
+        ],
+        "evidence_gaps": [
+          "not yet exercised in credentialed staging/production"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "graph health / drift detection",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "graph-mutation-safety",
+      "title": "Graph Mutation Safety",
+      "owning_system": "aether",
+      "scope": {
+        "id": "graph-mutation-safety-v1",
+        "version": 1,
+        "title": "Graph Mutation Safety V1",
+        "target": "observation-pilot",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "INFRASTRUCTURE_TURNKEY",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Provision the required cloud backend (apply Terraform for the target profile)."
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "TURNKEY",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "INFRASTRUCTURE_WAITING",
+        "blockers": [
+          {
+            "type": "INFRASTRUCTURE_WAITING",
+            "description": "Graph Mutation Safety activation waits on an external infra condition.",
+            "owner": "platform-ops",
+            "required_action": "Provision the required cloud backend (apply Terraform for the target profile).",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot"
+            ],
+            "evidence_required": "applied resource ids + a credentialed run"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_APPLICABLE",
+          "credentialed": null,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "agent-platform",
+        "runbook": "docs/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",
+        "dashboards": [
+          "grafana:agent-platform"
+        ],
+        "alerts": [
+          "pagerduty:agent-platform"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: Agent Layer/README.md"
+        ],
+        "evidence_gaps": [
+          "credentialed environment execution not yet performed"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "experimental",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: Graph Mutation Safety activation waits on an external infra condition. (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: Graph Mutation Safety activation waits on an external infra condition. (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_APPLICABLE",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "graph mutation safety",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "graph-relationships",
+      "title": "Graph Relationships",
+      "owning_system": "aether",
+      "scope": {
+        "id": "graph-relationships-v1",
+        "version": 1,
+        "title": "Graph Relationships V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "VERIFIED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "None \u2014 repository-controlled work complete"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "VERIFIED",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "NO_EXTERNAL_BLOCKER",
+        "blockers": []
+      },
+      "dependencies": {
+        "hard": [
+          {
+            "feature_id": "identity-resolution",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          }
+        ],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "graph",
+        "runbook": "docs/runbooks/CAMPAIGN-360-GRAPH-DISAGREES-WITH-TOTALS.md",
+        "dashboards": [
+          "grafana:graph"
+        ],
+        "alerts": [
+          "pagerduty:graph"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/shared/graph/graph.py"
+        ],
+        "evidence_gaps": [
+          "not yet exercised in credentialed staging/production"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "Neptune relationships (H2H/H2A/A2H/A2A)",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
       "feature_id": "identity-resolution",
       "title": "Identity Resolution",
       "owning_system": "aether",
@@ -803,6 +3155,1512 @@
         "historical_maturity_index": 4,
         "historical_maturity_index_scale": "0-5",
         "historical_maturity_index_authoritative": false
+      }
+    },
+    {
+      "feature_id": "interoperability-intelligence",
+      "title": "Interoperability Intelligence",
+      "owning_system": "aether",
+      "scope": {
+        "id": "interoperability-intelligence-v1",
+        "version": 1,
+        "title": "Interoperability Intelligence V1",
+        "target": "observation-pilot",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "RUNTIME_INTEGRATED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Provision the required cloud backend (apply Terraform for the target profile)."
+        ],
+        "remaining_is_repository_controlled": true
+      },
+      "implementation": {
+        "state": "RUNTIME_INTEGRATED",
+        "completion_percent": 80.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": [
+          "complete repository-controlled verification + hardening"
+        ]
+      },
+      "productionization": {
+        "completion_percent": 50.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": [
+          "reliability idempotency retry",
+          "ci and release gates"
+        ]
+      },
+      "activation": {
+        "state": "INFRASTRUCTURE_WAITING",
+        "blockers": [
+          {
+            "type": "INFRASTRUCTURE_WAITING",
+            "description": "Interoperability Intelligence activation waits on an external infra condition.",
+            "owner": "platform-ops",
+            "required_action": "Provision the required cloud backend (apply Terraform for the target profile).",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot"
+            ],
+            "evidence_required": "applied resource ids + a credentialed run"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_APPLICABLE",
+          "credentialed": null,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "financial-platform",
+        "runbook": "docs/runbooks/INTEROP_OBSERVER_RUNBOOK.md",
+        "dashboards": [
+          "grafana:financial-platform"
+        ],
+        "alerts": [
+          "pagerduty:financial-platform"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "LOW",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/services/interop/"
+        ],
+        "evidence_gaps": [
+          "credentialed environment execution not yet performed"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete repository-controlled verification + hardening"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete repository-controlled verification + hardening"
+          ],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: Interoperability Intelligence activation waits on an external infra condition. (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the TURNKEY floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete repository-controlled verification + hardening"
+          ],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: Interoperability Intelligence activation waits on an external infra condition. (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_APPLICABLE",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 3,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "interoperability intelligence",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "kyber-operator-console",
+      "title": "Kyber Operator Console",
+      "owning_system": "aether",
+      "scope": {
+        "id": "kyber-operator-console-v1",
+        "version": 1,
+        "title": "Kyber Operator Console V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "VERIFIED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "None \u2014 repository-controlled work complete"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "VERIFIED",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "NO_EXTERNAL_BLOCKER",
+        "blockers": []
+      },
+      "dependencies": {
+        "hard": [
+          {
+            "feature_id": "identity-resolution",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          }
+        ],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "kyber",
+        "runbook": "docs/runbooks/KYBER_ACCOUNT_RECOVERY.md",
+        "dashboards": [
+          "grafana:kyber"
+        ],
+        "alerts": [
+          "pagerduty:kyber"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: frontend/kyber/"
+        ],
+        "evidence_gaps": [
+          "not yet exercised in credentialed staging/production"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "Kyber (operator console)",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "measurement-attribution",
+      "title": "Measurement & Attribution",
+      "owning_system": "aether",
+      "scope": {
+        "id": "measurement-attribution-v1",
+        "version": 1,
+        "title": "Measurement & Attribution V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "VERIFIED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "None \u2014 repository-controlled work complete"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "VERIFIED",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "NO_EXTERNAL_BLOCKER",
+        "blockers": []
+      },
+      "dependencies": {
+        "hard": [
+          {
+            "feature_id": "identity-resolution",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          },
+          {
+            "feature_id": "event-transport",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          }
+        ],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "measurement",
+        "runbook": "docs/runbooks/MEASUREMENT_RESTATEMENT.md",
+        "dashboards": [
+          "grafana:measurement"
+        ],
+        "alerts": [
+          "pagerduty:measurement"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/services/measurement/"
+        ],
+        "evidence_gaps": [
+          "not yet exercised in credentialed staging/production"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "measurement / attribution",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "measurement-integrity",
+      "title": "Measurement Integrity Plane",
+      "owning_system": "aether",
+      "scope": {
+        "id": "measurement-integrity-v1",
+        "version": 1,
+        "title": "Measurement Integrity Plane V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "VERIFIED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "None \u2014 repository-controlled work complete"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "VERIFIED",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "NO_EXTERNAL_BLOCKER",
+        "blockers": []
+      },
+      "dependencies": {
+        "hard": [
+          {
+            "feature_id": "measurement-attribution",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          }
+        ],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "measurement",
+        "runbook": "docs/runbooks/MEASUREMENT_RESTATEMENT.md",
+        "dashboards": [
+          "grafana:measurement"
+        ],
+        "alerts": [
+          "pagerduty:measurement"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/shared/measurement/"
+        ],
+        "evidence_gaps": [
+          "not yet exercised in credentialed staging/production"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "measurement integrity plane",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "notification-intelligence",
+      "title": "Action Notifications",
+      "owning_system": "aether",
+      "scope": {
+        "id": "notification-intelligence-v1",
+        "version": 1,
+        "title": "Action Notifications V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "CREDENTIAL_TURNKEY",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Insert provider credentials into the credential platform; run credentials-preflight."
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "TURNKEY",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "CREDENTIAL_WAITING",
+        "blockers": [
+          {
+            "type": "CREDENTIAL_WAITING",
+            "description": "Action Notifications activation waits on an external credential condition.",
+            "owner": "tenant / platform-ops",
+            "required_action": "Insert provider credentials into the credential platform; run credentials-preflight.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot",
+              "production-lean",
+              "production-scale"
+            ],
+            "evidence_required": "credentialed connection self-check"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [
+          {
+            "feature_id": "identity-resolution",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          }
+        ],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "integrations",
+        "runbook": "docs/runbooks/DELIVERY-FAILURES.md",
+        "dashboards": [
+          "grafana:integrations"
+        ],
+        "alerts": [
+          "pagerduty:integrations"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/services/integrations/connectors/adapters.py"
+        ],
+        "evidence_gaps": [
+          "credentialed environment execution not yet performed"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: Action Notifications activation waits on an external credential condition. (owner: tenant / platform-ops)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: Action Notifications activation waits on an external credential condition. (owner: tenant / platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: Action Notifications activation waits on an external credential condition. (owner: tenant / platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: Action Notifications activation waits on an external credential condition. (owner: tenant / platform-ops)"
+          ],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "Slack / action notifications",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "payment-rail-observability",
+      "title": "Payment Rail Observability",
+      "owning_system": "aether",
+      "scope": {
+        "id": "payment-rail-observability-v1",
+        "version": 1,
+        "title": "Payment Rail Observability V1",
+        "target": "observation-pilot",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "RUNTIME_INTEGRATED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Connect a live provider and open a validated live-data window."
+        ],
+        "remaining_is_repository_controlled": true
+      },
+      "implementation": {
+        "state": "RUNTIME_INTEGRATED",
+        "completion_percent": 80.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": [
+          "complete repository-controlled verification + hardening"
+        ]
+      },
+      "productionization": {
+        "completion_percent": 50.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": [
+          "reliability idempotency retry",
+          "ci and release gates"
+        ]
+      },
+      "activation": {
+        "state": "LIVE_DATA_WAITING",
+        "blockers": [
+          {
+            "type": "LIVE_DATA_WAITING",
+            "description": "Payment Rail Observability activation waits on an external live data condition.",
+            "owner": "tenant / provider",
+            "required_action": "Connect a live provider and open a validated live-data window.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot"
+            ],
+            "evidence_required": "captured live provider run"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_APPLICABLE",
+          "credentialed": null,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "financial-platform",
+        "runbook": "docs/runbooks/PAYMENT_RAILS_RUNBOOK.md",
+        "dashboards": [
+          "grafana:financial-platform"
+        ],
+        "alerts": [
+          "pagerduty:financial-platform"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "LOW",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/services/integrations/providers/payment_rails/"
+        ],
+        "evidence_gaps": [
+          "credentialed environment execution not yet performed"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete repository-controlled verification + hardening"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete repository-controlled verification + hardening"
+          ],
+          "external_blockers": [
+            "LIVE_DATA_WAITING: Payment Rail Observability activation waits on an external live data condition. (owner: tenant / provider)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the TURNKEY floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete repository-controlled verification + hardening"
+          ],
+          "external_blockers": [
+            "LIVE_DATA_WAITING: Payment Rail Observability activation waits on an external live data condition. (owner: tenant / provider)"
+          ],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_APPLICABLE",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 3,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "payment rail observability",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "profile-360",
+      "title": "Profile 360",
+      "owning_system": "aether",
+      "scope": {
+        "id": "profile-360-v1",
+        "version": 1,
+        "title": "Profile 360 V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "VERIFIED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "None \u2014 repository-controlled work complete"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "TURNKEY",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "NO_EXTERNAL_BLOCKER",
+        "blockers": []
+      },
+      "dependencies": {
+        "hard": [
+          {
+            "feature_id": "identity-resolution",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          },
+          {
+            "feature_id": "graph-relationships",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          }
+        ],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "platform",
+        "runbook": "docs/runbooks/GOLD-TENANT-BACKFILL.md",
+        "dashboards": [
+          "grafana:platform"
+        ],
+        "alerts": [
+          "pagerduty:platform"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "HIGH",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/services/profile/"
+        ],
+        "evidence_gaps": [
+          "not yet exercised in credentialed staging/production"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 5,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "Profile 360",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "provider-certification-plane",
+      "title": "Provider Certification Plane",
+      "owning_system": "aether",
+      "scope": {
+        "id": "provider-certification-plane-v1",
+        "version": 1,
+        "title": "Provider Certification Plane V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "CREDENTIAL_TURNKEY",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Connect a live provider and open a validated live-data window."
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "TURNKEY",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "LIVE_DATA_WAITING",
+        "blockers": [
+          {
+            "type": "LIVE_DATA_WAITING",
+            "description": "Provider Certification Plane activation waits on an external live data condition.",
+            "owner": "tenant / provider",
+            "required_action": "Connect a live provider and open a validated live-data window.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot",
+              "production-lean",
+              "production-scale"
+            ],
+            "evidence_required": "captured live provider run"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "integrations",
+        "runbook": "docs/runbooks/FINANCIAL_CREDENTIAL_READINESS_RUNBOOK.md",
+        "dashboards": [
+          "grafana:integrations"
+        ],
+        "alerts": [
+          "pagerduty:integrations"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/shared/certification/registry.py"
+        ],
+        "evidence_gaps": [
+          "credentialed environment execution not yet performed"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [],
+          "external_blockers": [
+            "LIVE_DATA_WAITING: Provider Certification Plane activation waits on an external live data condition. (owner: tenant / provider)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "LIVE_DATA_WAITING: Provider Certification Plane activation waits on an external live data condition. (owner: tenant / provider)"
+          ],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "LIVE_DATA_WAITING: Provider Certification Plane activation waits on an external live data condition. (owner: tenant / provider)"
+          ],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "LIVE_DATA_WAITING: Provider Certification Plane activation waits on an external live data condition. (owner: tenant / provider)"
+          ],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "provider certification plane",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
       }
     },
     {
@@ -1024,6 +4882,1352 @@
         "historical_maturity_index": 3,
         "historical_maturity_index_scale": "0-5",
         "historical_maturity_index_authoritative": false
+      }
+    },
+    {
+      "feature_id": "scale-readiness",
+      "title": "Scale Readiness",
+      "owning_system": "aether",
+      "scope": {
+        "id": "scale-readiness-v1",
+        "version": 1,
+        "title": "Scale Readiness V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "RUNTIME_INTEGRATED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Provision the required cloud backend (apply Terraform for the target profile)."
+        ],
+        "remaining_is_repository_controlled": true
+      },
+      "implementation": {
+        "state": "RUNTIME_INTEGRATED",
+        "completion_percent": 80.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": [
+          "complete repository-controlled verification + hardening"
+        ]
+      },
+      "productionization": {
+        "completion_percent": 50.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": [
+          "reliability idempotency retry",
+          "ci and release gates"
+        ]
+      },
+      "activation": {
+        "state": "INFRASTRUCTURE_WAITING",
+        "blockers": [
+          {
+            "type": "INFRASTRUCTURE_WAITING",
+            "description": "Scale Readiness activation waits on an external infra condition.",
+            "owner": "platform-ops",
+            "required_action": "Provision the required cloud backend (apply Terraform for the target profile).",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot",
+              "production-lean",
+              "production-scale"
+            ],
+            "evidence_required": "applied resource ids + a credentialed run"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "scale": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "platform",
+        "runbook": "docs/runbooks/STAGING_PREFLIGHT.md",
+        "dashboards": [
+          "grafana:platform"
+        ],
+        "alerts": [
+          "pagerduty:platform"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "LOW",
+        "reasons": [
+          "repository evidence: tests/load/"
+        ],
+        "evidence_gaps": [
+          "credentialed environment execution not yet performed"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete repository-controlled verification + hardening"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete repository-controlled verification + hardening"
+          ],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: Scale Readiness activation waits on an external infra condition. (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the TURNKEY floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete repository-controlled verification + hardening"
+          ],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: Scale Readiness activation waits on an external infra condition. (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the TURNKEY floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete repository-controlled verification + hardening"
+          ],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: Scale Readiness activation waits on an external infra condition. (owner: platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the TURNKEY floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete repository-controlled verification + hardening"
+          ],
+          "external_blockers": [
+            "INFRASTRUCTURE_WAITING: Scale Readiness activation waits on an external infra condition. (owner: platform-ops)"
+          ],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 3,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "scale readiness",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "sdks",
+      "title": "Client SDKs",
+      "owning_system": "aether",
+      "scope": {
+        "id": "sdks-v1",
+        "version": 1,
+        "title": "Client SDKs V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "VERIFIED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "None \u2014 repository-controlled work complete"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "VERIFIED",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "NO_EXTERNAL_BLOCKER",
+        "blockers": []
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "platform-sdk",
+        "runbook": "docs/runbooks/STAGING_PREFLIGHT.md",
+        "dashboards": [
+          "grafana:platform-sdk"
+        ],
+        "alerts": [
+          "pagerduty:platform-sdk"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: packages/web/"
+        ],
+        "evidence_gaps": [
+          "not yet exercised in credentialed staging/production"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "SDKs",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "security-compliance",
+      "title": "Security & Compliance",
+      "owning_system": "aether",
+      "scope": {
+        "id": "security-compliance-v1",
+        "version": 1,
+        "title": "Security & Compliance V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "VERIFIED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "None \u2014 repository-controlled work complete"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "VERIFIED",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "NO_EXTERNAL_BLOCKER",
+        "blockers": []
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "security",
+        "runbook": "docs/runbooks/CREDENTIAL-ROTATION.md",
+        "dashboards": [
+          "grafana:security"
+        ],
+        "alerts": [
+          "pagerduty:security"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/shared/auth/auth.py"
+        ],
+        "evidence_gaps": [
+          "not yet exercised in credentialed staging/production"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "security / compliance",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "semantic-intelligence",
+      "title": "Semantic Intelligence",
+      "owning_system": "aether",
+      "scope": {
+        "id": "semantic-intelligence-v1",
+        "version": 1,
+        "title": "Semantic Intelligence V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "CODE_COMPLETE",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Insert provider credentials into the credential platform; run credentials-preflight."
+        ],
+        "remaining_is_repository_controlled": true
+      },
+      "implementation": {
+        "state": "IMPLEMENTED",
+        "completion_percent": 60.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": [
+          "complete runtime integration",
+          "complete repository-controlled verification"
+        ]
+      },
+      "productionization": {
+        "completion_percent": 25.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": [
+          "observability metrics logs",
+          "reliability idempotency retry",
+          "ci and release gates"
+        ]
+      },
+      "activation": {
+        "state": "CREDENTIAL_WAITING",
+        "blockers": [
+          {
+            "type": "CREDENTIAL_WAITING",
+            "description": "Semantic Intelligence activation waits on an external credential condition.",
+            "owner": "tenant / platform-ops",
+            "required_action": "Insert provider credentials into the credential platform; run credentials-preflight.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot",
+              "production-lean",
+              "production-scale"
+            ],
+            "evidence_required": "credentialed connection self-check"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [
+          {
+            "feature_id": "event-transport",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          }
+        ],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "semantic",
+        "runbook": "docs/runbooks/semantic-sentiment/README.md",
+        "dashboards": [
+          "grafana:semantic"
+        ],
+        "alerts": [
+          "pagerduty:semantic"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "LOW",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/services/semantic_intelligence/"
+        ],
+        "evidence_gaps": [
+          "credentialed environment execution not yet performed"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [
+            "implementation state IMPLEMENTED is below the VERIFIED floor",
+            "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete runtime integration; complete repository-controlled verification"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [
+            "implementation state IMPLEMENTED is below the VERIFIED floor",
+            "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete runtime integration; complete repository-controlled verification"
+          ],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: Semantic Intelligence activation waits on an external credential condition. (owner: tenant / platform-ops)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state IMPLEMENTED is below the TURNKEY floor",
+            "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete runtime integration; complete repository-controlled verification"
+          ],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: Semantic Intelligence activation waits on an external credential condition. (owner: tenant / platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state IMPLEMENTED is below the TURNKEY floor",
+            "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete runtime integration; complete repository-controlled verification"
+          ],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: Semantic Intelligence activation waits on an external credential condition. (owner: tenant / platform-ops)"
+          ],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state IMPLEMENTED is below the TURNKEY floor",
+            "implementation completion 60% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete runtime integration; complete repository-controlled verification"
+          ],
+          "external_blockers": [
+            "CREDENTIAL_WAITING: Semantic Intelligence activation waits on an external credential condition. (owner: tenant / platform-ops)"
+          ],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 2,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "semantic intelligence",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "smart-contracts-rewards",
+      "title": "Smart Contracts & Rewards",
+      "owning_system": "aether",
+      "scope": {
+        "id": "smart-contracts-rewards-v1",
+        "version": 1,
+        "title": "Smart Contracts & Rewards V1",
+        "target": "observation-pilot",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "RELEASE_TURNKEY",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Complete the external security audit / certification."
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "TURNKEY",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "AUDIT_WAITING",
+        "blockers": [
+          {
+            "type": "AUDIT_WAITING",
+            "description": "Smart Contracts & Rewards activation waits on an external audit condition.",
+            "owner": "external-auditor",
+            "required_action": "Complete the external security audit / certification.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot"
+            ],
+            "evidence_required": "signed external audit report"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_APPLICABLE",
+          "credentialed": null,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "smart-contracts",
+        "runbook": "docs/runbooks/EVM_DEPLOY_EMERGENCY_RUNBOOK.md",
+        "dashboards": [
+          "grafana:smart-contracts"
+        ],
+        "alerts": [
+          "pagerduty:smart-contracts"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: Smart Contracts/contracts/AnalyticsRewards.sol"
+        ],
+        "evidence_gaps": [
+          "credentialed environment execution not yet performed"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "experimental",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [],
+          "external_blockers": [
+            "AUDIT_WAITING: Smart Contracts & Rewards activation waits on an external audit condition. (owner: external-auditor)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "READY_TO_ACTIVATE",
+          "intrinsic_disposition": "READY_TO_ACTIVATE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [
+            "AUDIT_WAITING: Smart Contracts & Rewards activation waits on an external audit condition. (owner: external-auditor)"
+          ],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_APPLICABLE",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "smart contracts / proofs / rewards",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "stablecoin-intelligence",
+      "title": "Stablecoin Intelligence",
+      "owning_system": "aether",
+      "scope": {
+        "id": "stablecoin-intelligence-v1",
+        "version": 1,
+        "title": "Stablecoin Intelligence V1",
+        "target": "observation-pilot",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "RUNTIME_INTEGRATED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "Connect a live provider and open a validated live-data window."
+        ],
+        "remaining_is_repository_controlled": true
+      },
+      "implementation": {
+        "state": "RUNTIME_INTEGRATED",
+        "completion_percent": 80.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": [
+          "complete repository-controlled verification + hardening"
+        ]
+      },
+      "productionization": {
+        "completion_percent": 50.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": [
+          "reliability idempotency retry",
+          "ci and release gates"
+        ]
+      },
+      "activation": {
+        "state": "LIVE_DATA_WAITING",
+        "blockers": [
+          {
+            "type": "LIVE_DATA_WAITING",
+            "description": "Stablecoin Intelligence activation waits on an external live data condition.",
+            "owner": "tenant / provider",
+            "required_action": "Connect a live provider and open a validated live-data window.",
+            "source_code_change_expected": false,
+            "affected_environments": [
+              "staging",
+              "production"
+            ],
+            "affected_release_profiles": [
+              "staging",
+              "pilot"
+            ],
+            "evidence_required": "captured live provider run"
+          }
+        ]
+      },
+      "dependencies": {
+        "hard": [],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "BLOCKED_EXTERNAL",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_APPLICABLE",
+          "credentialed": null,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "financial-platform",
+        "runbook": "docs/runbooks/STABLECOIN_OBSERVER_RUNBOOK.md",
+        "dashboards": [
+          "grafana:financial-platform"
+        ],
+        "alerts": [
+          "pagerduty:financial-platform"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "LOW",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/services/stablecoin/"
+        ],
+        "evidence_gaps": [
+          "credentialed environment execution not yet performed"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete repository-controlled verification + hardening"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "BLOCKED_EXTERNAL",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the VERIFIED floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete repository-controlled verification + hardening"
+          ],
+          "external_blockers": [
+            "LIVE_DATA_WAITING: Stablecoin Intelligence activation waits on an external live data condition. (owner: tenant / provider)"
+          ],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state RUNTIME_INTEGRATED is below the TURNKEY floor",
+            "implementation completion 80% (< 100% of in-scope repository controls (migration-derived))",
+            "open repository work: complete repository-controlled verification + hardening"
+          ],
+          "external_blockers": [
+            "LIVE_DATA_WAITING: Stablecoin Intelligence activation waits on an external live data condition. (owner: tenant / provider)"
+          ],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_APPLICABLE",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "not_in_release",
+          "disposition": "NOT_IN_PROFILE",
+          "intrinsic_disposition": "NOT_IN_PROFILE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 3,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "stablecoin intelligence",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
+      }
+    },
+    {
+      "feature_id": "tenant-import-engine",
+      "title": "Tenant Import Engine",
+      "owning_system": "aether",
+      "scope": {
+        "id": "tenant-import-engine-v1",
+        "version": 1,
+        "title": "Tenant Import Engine V1",
+        "target": "founding-tenant-production",
+        "included": [
+          "contracts-and-schemas",
+          "core-behavior",
+          "runtime-wiring",
+          "persistence-and-migrations",
+          "authorization-and-tenant-isolation"
+        ],
+        "excluded": [],
+        "deferred": []
+      },
+      "repository_ceiling": {
+        "type": "VERIFIED",
+        "achieved": true,
+        "remaining_after_ceiling": [
+          "None \u2014 repository-controlled work complete"
+        ],
+        "remaining_is_repository_controlled": false
+      },
+      "implementation": {
+        "state": "VERIFIED",
+        "completion_percent": 100.0,
+        "denominator": "in-scope repository controls (migration-derived)",
+        "remaining_work": []
+      },
+      "productionization": {
+        "completion_percent": 100.0,
+        "denominator": "in-scope productionization controls (migration-derived)",
+        "remaining_work": []
+      },
+      "activation": {
+        "state": "NO_EXTERNAL_BLOCKER",
+        "blockers": []
+      },
+      "dependencies": {
+        "hard": [
+          {
+            "feature_id": "identity-resolution",
+            "state": "SATISFIED",
+            "prevents": [
+              "release"
+            ]
+          }
+        ],
+        "soft": []
+      },
+      "environment_evidence": {
+        "local": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "ci": {
+          "state": "VERIFIED",
+          "credentialed": false,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "staging": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        },
+        "production": {
+          "state": "NOT_ATTEMPTED",
+          "credentialed": true,
+          "verified_at": null,
+          "failure_summary": null
+        }
+      },
+      "operational_ownership": {
+        "team": "platform",
+        "runbook": "docs/runbooks/IMPORT_FAILURES.md",
+        "dashboards": [
+          "grafana:platform"
+        ],
+        "alerts": [
+          "pagerduty:platform"
+        ],
+        "present": true
+      },
+      "business_readiness": {
+        "applicable": false,
+        "completion_percent": null,
+        "remaining_work": []
+      },
+      "confidence": {
+        "level": "MODERATE",
+        "reasons": [
+          "repository evidence: Backend Architecture/aether-backend/services/imports/"
+        ],
+        "evidence_gaps": [
+          "not yet exercised in credentialed staging/production"
+        ]
+      },
+      "release_profiles": {
+        "local": {
+          "participation": "required",
+          "disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "intrinsic_disposition": "TECHNICALLY_RELEASE_ELIGIBLE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "local",
+          "environment_state": "VERIFIED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "staging": {
+          "participation": "required",
+          "disposition": "READY_TO_VALIDATE",
+          "intrinsic_disposition": "READY_TO_VALIDATE",
+          "implementation_floor": "VERIFIED",
+          "environment_gate": "staging",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "pilot": {
+          "participation": "experimental",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "pilot",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-lean": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "production",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        },
+        "production-scale": {
+          "participation": "required",
+          "disposition": "BLOCKED_BY_CODE",
+          "intrinsic_disposition": "BLOCKED_BY_CODE",
+          "implementation_floor": "TURNKEY",
+          "environment_gate": "scale",
+          "environment_state": "NOT_ATTEMPTED",
+          "hard_blockers": [
+            "implementation state VERIFIED is below the TURNKEY floor"
+          ],
+          "external_blockers": [],
+          "warnings": []
+        }
+      },
+      "historical": {
+        "historical_maturity_index": 4,
+        "historical_maturity_index_scale": "0-5",
+        "historical_maturity_index_authoritative": false,
+        "migration_derived": true,
+        "legacy_area": "tenant import engine",
+        "note": "Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is a proxy pending per-capability SME review."
       }
     }
   ]
