@@ -33,6 +33,11 @@ push run therefore cannot cancel the pull request run that supplies the
 required PR checks; each result remains attributable to its exact event and
 head SHA.
 
+The state-reconciliation workflow normalizes comma-separated repository inputs,
+pre-validates every requested ECR untaint target before any import or state
+mutation, and checks both the canonical staging address and the other shared
+profiles for duplicate ownership.
+
 Reviewed Terraform promotion pins immutable digests and injects the staging
 apply-role ARN only for staging. Inline-ML profiles leave the ML digest empty;
 remote-ML profiles must provide one before apply or wake.

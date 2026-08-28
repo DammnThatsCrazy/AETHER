@@ -87,6 +87,10 @@ jobs:
           test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES" || {
             echo '::error::Refusing reconciliation: provide target_group_arn, ecr_repository_names, or untaint_ecr_repository_names'; exit 1;
           }
+          normalize_repositories() {
+            printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | paste -sd, -
+          }
+          normalized_imports="$(normalize_repositories "$ECR_REPOSITORY_NAMES")"
           if [ -n "$TARGET_GROUP_ARN" ]; then
             case "$TARGET_GROUP_ARN" in
               arn:aws:elasticloadbalancing:us-east-1:*:targetgroup/aether-staging-backend/*) ;;
@@ -102,7 +106,7 @@ jobs:
           if [ -n "$ECR_REPOSITORY_NAMES" ]; then
             account_id="$(aws sts get-caller-identity --query Account --output text)"
             needs_kms_key=false
-            IFS=',' read -ra repositories <<< "$ECR_REPOSITORY_NAMES"
+            IFS=',' read -ra repositories <<< "$normalized_imports"
             for raw in "${repositories[@]}"; do
               repository="$(printf '%s' "$raw" | xargs)"
               case "$repository" in
@@ -162,10 +166,11 @@ jobs:
             test "$key_environment" = staging || {
               echo "::error::Refusing ECR taint repair: KMS key Environment tag is '$key_environment', expected staging"; exit 1;
             }
-            IFS=',' read -ra repositories <<< "$UNTAINT_ECR_REPOSITORY_NAMES"
+            normalized_untaints="$(normalize_repositories "$UNTAINT_ECR_REPOSITORY_NAMES")"
+            IFS=',' read -ra repositories <<< "$normalized_untaints"
             for raw in "${repositories[@]}"; do
               repository="$(printf '%s' "$raw" | xargs)"
-              case ",${ECR_REPOSITORY_NAMES}," in
+              case ",$normalized_imports," in
                 *,${repository},*) echo "::error::Refusing reconciliation: '$repository' cannot be both imported and untainted"; exit 1 ;;
               esac
               case "$repository" in
@@ -255,17 +260,22 @@ jobs:
             echo '::error::Refusing import: could not read staging state to verify remote-object ownership'
             exit 1
           fi
+          normalize_repositories() {
+            printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | paste -sd, -
+          }
+          normalized_imports="$(normalize_repositories "$ECR_REPOSITORY_NAMES")"
+          normalized_untaints="$(normalize_repositories "$UNTAINT_ECR_REPOSITORY_NAMES")"
           if [ -n "$TARGET_GROUP_ARN" ] && grep -Fq -- "$TARGET_GROUP_ARN" "$state_snapshot_file"; then
             echo '::error::Refusing import: target-group ARN already appears elsewhere in staging state'
             exit 1
           fi
-          if [ -n "$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES" ]; then
-            IFS=',' read -ra repositories <<< "$ECR_REPOSITORY_NAMES,$UNTAINT_ECR_REPOSITORY_NAMES"
+          if [ -n "$normalized_imports$normalized_untaints" ]; then
+            IFS=',' read -ra repositories <<< "$normalized_imports,$normalized_untaints"
             for raw in "${repositories[@]}"; do
               repository="$(printf '%s' "$raw" | xargs)"
               [ -n "$repository" ] || continue
               address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
-              if [[ ",$ECR_REPOSITORY_NAMES," == *",$repository,"* ]]; then
+              if [[ ",$normalized_imports," == *",$repository,"* ]]; then
                 if terraform state list | grep -Fxq "$address"; then
                   echo "::error::Refusing import: $address is already in staging state"; exit 1
                 fi
@@ -273,6 +283,28 @@ jobs:
                   echo "::error::Refusing import: ECR repository '$repository' already appears elsewhere in staging state"; exit 1
                 fi
               fi
+            done
+          fi
+          # Validate every untaint target before any import or untaint mutation.
+          # An untaint request is allowed to be staging-owned at its canonical
+          # address, but must not have a second staging state owner for the
+          # same remote repository.
+          if [ -n "$normalized_untaints" ]; then
+            IFS=',' read -ra repositories <<< "$normalized_untaints"
+            staging_ecr_addresses="$(terraform state list | grep 'aws_ecr_repository' || true)"
+            for repository in "${repositories[@]}"; do
+              address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
+              printf '%s\n' "$staging_ecr_addresses" | grep -Fxq "$address" || {
+                echo "::error::Refusing ECR taint repair: $address is not in staging state"; exit 1;
+              }
+              while IFS= read -r candidate; do
+                [ -n "$candidate" ] || continue
+                [ "$candidate" = "$address" ] && continue
+                if terraform state show -no-color "$candidate" 2>/dev/null \
+                  | grep -Fq "name = \"${repository}\""; then
+                  echo "::error::Refusing ECR taint repair: repository '$repository' has another staging state owner at $candidate"; exit 1
+                fi
+              done <<< "$staging_ecr_addresses"
             done
           fi
           # Shared repository names can be referenced by the non-production
@@ -294,8 +326,8 @@ jobs:
                 'any(.resources[]?; any(.instances[]?.attributes.arn?; . == $arn))' "$state_file" >/dev/null; then
                 echo "::error::Refusing import: target-group ARN already appears in ${profile} state"; exit 1
               fi
-              if [ -n "$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES" ]; then
-                IFS=',' read -ra repositories <<< "$ECR_REPOSITORY_NAMES,$UNTAINT_ECR_REPOSITORY_NAMES"
+              if [ -n "$normalized_imports$normalized_untaints" ]; then
+                IFS=',' read -ra repositories <<< "$normalized_imports,$normalized_untaints"
                 for raw in "${repositories[@]}"; do
                   repository="$(printf '%s' "$raw" | xargs)"
                   [ -n "$repository" ] || continue
