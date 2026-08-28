@@ -41,6 +41,13 @@ attached policy statements with the reviewed staging manifest, including
 resource coverage, conditions, and explicit Deny statements, before any
 Terraform mutation.
 
+The staging ECR repositories have one deliberate pre-existing exception:
+`aether-backend` is an immutable AES-256 repository created by the release
+pipeline before Terraform state ownership. Its encryption cannot be changed
+after creation, so staging Terraform declares that exact shape and the
+import-only reconciliation workflow adopts it without replacement. The other
+three staging ECR repositories remain mutable and use the staging KMS key.
+
 ## Scope — three different things live under `AWS Deployment/`
 
 Read this section before anything else. Conflating these three is the single

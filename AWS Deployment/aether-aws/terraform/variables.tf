@@ -104,6 +104,34 @@ variable "project" {
   default     = "AETHER"
 }
 
+variable "ecr_repository_encryption_types" {
+  type        = map(string)
+  default     = {}
+  description = "Optional per-repository ECR encryption overrides. Defaults to KMS for every repository."
+
+  validation {
+    condition = alltrue([
+      for repository, encryption_type in var.ecr_repository_encryption_types :
+      contains(["aether-backend", "aether-ml-serving", "aether-kyber", "aether-aether"], repository) && contains(["KMS", "AES256"], encryption_type)
+    ])
+    error_message = "ECR encryption overrides must target a reviewed repository and use KMS or AES256."
+  }
+}
+
+variable "ecr_repository_tag_mutabilities" {
+  type        = map(string)
+  default     = {}
+  description = "Optional per-repository ECR tag mutability overrides. Defaults to MUTABLE."
+
+  validation {
+    condition = alltrue([
+      for repository, mutability in var.ecr_repository_tag_mutabilities :
+      contains(["aether-backend", "aether-ml-serving", "aether-kyber", "aether-aether"], repository) && contains(["MUTABLE", "IMMUTABLE"], mutability)
+    ])
+    error_message = "ECR mutability overrides must target a reviewed repository and use MUTABLE or IMMUTABLE."
+  }
+}
+
 # --------------------------------------------------------------------------
 # Network
 # --------------------------------------------------------------------------

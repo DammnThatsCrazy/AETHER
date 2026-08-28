@@ -210,6 +210,14 @@ staging apply policy can scope grants to staging resources. These tags and
 service conditions are part of the Terraform profile shape and must remain
 covered by the profile plan and cost/topology gates before promotion.
 
+The release pipeline creates `aether-backend` before Terraform can adopt the
+repository. It is therefore an intentional staging exception: that repository
+is immutable and AES-256 encrypted, while `aether-ml-serving`, `aether-kyber`,
+and `aether-aether` remain mutable and use the staging customer-managed KMS
+key. ECR encryption cannot be changed after creation, so the reconciliation
+workflow validates this split and imports the existing backend without a
+delete/recreate plan.
+
 | | |
 |---|---|
 | **Purpose** | Release rehearsal. Wakes for validation, proves a release, returns to zero. |

@@ -6,6 +6,16 @@
 
 deployment_profile = "staging"
 
+# The immutable backend registry was created by the release pipeline before
+# Terraform state ownership. Reconcile it without replacement: ECR encryption
+# cannot be changed after creation. Other staging repositories remain KMS.
+ecr_repository_encryption_types = {
+  aether-backend = "AES256"
+}
+ecr_repository_tag_mutabilities = {
+  aether-backend = "IMMUTABLE"
+}
+
 # Root default is production — staging must say so explicitly.
 environment = "staging"
 
