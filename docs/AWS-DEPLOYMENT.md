@@ -23,7 +23,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "f0049aa3"
+last_synced_commit: "b146889e"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -449,6 +449,11 @@ service-linked role before Terraform creates capacity providers. Each protected
 profile apply role must therefore carry the reviewed, least-privilege
 `CreateServiceLinkedRole` (restricted to `ecs.amazonaws.com`) and `GetRole`
 permissions; a missing grant fails before any profile resource is changed.
+
+The lifecycle role's migration-task grant is constrained twice: task-definition
+resources are limited to the staging prefix and the `ecs:cluster` condition
+must equal `AETHER-staging`. This prevents a staging task definition from being
+run on another cluster even if a caller supplies a different cluster name.
 
 The backend target group keeps the stable
 `aether-staging-backend` identity used by the import-only reconciliation
