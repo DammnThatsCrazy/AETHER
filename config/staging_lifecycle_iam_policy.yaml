@@ -49,6 +49,13 @@ statements:
       - ssm:DeleteParameter
     resource: arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/lifecycle/awake-until
     scope: staging-lease
+  - sid: ReadStagingStaticBucketParameters
+    actions:
+      - ssm:GetParameter
+    resource:
+      - arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/AETHER_STATIC_BUCKET
+      - arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/KYBER_STATIC_BUCKET
+    scope: staging-static-bucket-parameters
   - sid: PublishStagingStaticArtifacts
     actions:
       - s3:ListBucket

@@ -32,3 +32,14 @@ def test_lifecycle_manifest_uses_task_specific_scopes() -> None:
         "arn:aws:ecs:us-east-1:${account_id}:task-definition/AETHER-staging-*",
         "arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging",
     ]
+
+
+def test_lifecycle_manifest_covers_static_bucket_parameter_reads() -> None:
+    doc = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
+    by_sid = {statement["sid"]: statement for statement in doc["statements"]}
+    statement = by_sid["ReadStagingStaticBucketParameters"]
+    assert statement["actions"] == ["ssm:GetParameter"]
+    assert set(statement["resource"]) == {
+        "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/AETHER_STATIC_BUCKET",
+        "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/KYBER_STATIC_BUCKET",
+    }
