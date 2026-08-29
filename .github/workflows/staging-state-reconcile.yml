@@ -282,7 +282,13 @@ jobs:
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
         run: |
           set -euo pipefail
-          if [ -n "$TARGET_GROUP_ARN" ] && terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend[0]'; then
+          state_list_file="$(mktemp)"
+          # Capture the complete list before matching. Piping Terraform into
+          # grep -q under pipefail lets grep close early, which causes the
+          # Terraform output wrapper to receive EPIPE and falsely reports a
+          # present state address as absent.
+          terraform state list >"$state_list_file"
+          if [ -n "$TARGET_GROUP_ARN" ] && grep -Fxq 'module.alb.aws_lb_target_group.backend[0]' "$state_list_file"; then
             managed_target_group_arn="$(terraform state show -no-color 'module.alb.aws_lb_target_group.backend[0]' \
               | sed -n 's/^[[:space:]]*arn[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
             test "$managed_target_group_arn" = "$TARGET_GROUP_ARN" || {
@@ -296,6 +302,9 @@ jobs:
           state_snapshot_file=""
           state_dir=""
           cleanup_state_artifacts() {
+            if [ -n "${state_list_file:-}" ]; then
+              rm -f "$state_list_file"
+            fi
             if [ -n "${state_snapshot_file:-}" ]; then
               rm -f "$state_snapshot_file"
             fi
@@ -315,7 +324,7 @@ jobs:
           normalized_imports="$(normalize_repositories "$ECR_REPOSITORY_NAMES")"
           normalized_untaints="$(normalize_repositories "$UNTAINT_ECR_REPOSITORY_NAMES")"
           if [ -n "$TARGET_GROUP_ARN" ] \
-            && ! terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend[0]' \
+            && ! grep -Fxq 'module.alb.aws_lb_target_group.backend[0]' "$state_list_file" \
             && grep -Fq -- "$TARGET_GROUP_ARN" "$state_snapshot_file"; then
             echo '::error::Refusing import: target-group ARN already appears elsewhere in staging state'
             exit 1
@@ -327,7 +336,7 @@ jobs:
               [ -n "$repository" ] || continue
               address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
               if [[ ",$normalized_imports," == *",$repository,"* ]]; then
-                if terraform state list | grep -Fxq "$address"; then
+                if grep -Fxq "$address" "$state_list_file"; then
                   canonical_name="$(terraform state show -no-color "$address" \
                     | sed -n 's/^[[:space:]]*name[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
                   test "$canonical_name" = "$repository" || {
@@ -350,7 +359,7 @@ jobs:
                 # a legacy address. That is recoverable only when there is one
                 # unambiguous owner; the adoption step below moves that owner
                 # to the reviewed module address after all collision checks.
-                owners="$(terraform state list | while IFS= read -r candidate; do
+                owners="$(while IFS= read -r candidate; do
                   case "$candidate" in
                     *aws_ecr_repository.*)
                       if terraform state show -no-color "$candidate" 2>/dev/null \
@@ -359,7 +368,7 @@ jobs:
                       fi
                       ;;
                   esac
-                done)"
+                done < "$state_list_file")"
                 owner_count="$(printf '%s\n' "$owners" | awk 'NF' | wc -l | tr -d ' ')"
                 if [ "$owner_count" -gt 1 ]; then
                   echo "::error::Refusing import: ECR repository '$repository' has multiple staging state owners"; exit 1
@@ -376,7 +385,7 @@ jobs:
           # same remote repository.
           if [ -n "$normalized_untaints" ]; then
             IFS=',' read -ra repositories <<< "$normalized_untaints"
-            staging_ecr_addresses="$(terraform state list | grep 'aws_ecr_repository' || true)"
+            staging_ecr_addresses="$(grep 'aws_ecr_repository' "$state_list_file" || true)"
             for repository in "${repositories[@]}"; do
               address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
               printf '%s\n' "$staging_ecr_addresses" | grep -Fxq "$address" || {
@@ -497,16 +506,22 @@ jobs:
           }
           trap cleanup_state_snapshot EXIT
           terraform state pull >"$state_snapshot_file"
+          state_list_file="$(mktemp)"
+          terraform state list >"$state_list_file"
+          cleanup_state_snapshot() {
+            rm -f "$state_snapshot_file" "$adoptions_file" "$state_list_file"
+          }
+          trap cleanup_state_snapshot EXIT
           # First validate every candidate and record the complete adoption
           # set. No state move is allowed until all candidates are known to be
           # healthy and uniquely owned, preventing a later bad entry from
           # leaving an earlier repository partially migrated.
           for repository in "${repositories[@]}"; do
             address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
-            if terraform state list | grep -Fxq "$address"; then
+            if grep -Fxq "$address" "$state_list_file"; then
               continue
             fi
-            owners="$(terraform state list | while IFS= read -r candidate; do
+            owners="$(while IFS= read -r candidate; do
               case "$candidate" in
                 *aws_ecr_repository.*)
                   if terraform state show -no-color "$candidate" 2>/dev/null \
@@ -515,7 +530,7 @@ jobs:
                   fi
                   ;;
               esac
-            done)"
+            done < "$state_list_file")"
             owner_count="$(printf '%s\n' "$owners" | awk 'NF' | wc -l | tr -d ' ')"
             case "$owner_count" in
               0)
@@ -584,9 +599,12 @@ jobs:
               echo "::error::${required} is required for the root module during import"; exit 1;
             }
           done
+          state_list_file="$(mktemp)"
+          trap 'rm -f "$state_list_file"' EXIT
+          terraform state list >"$state_list_file"
           if [ -n "$TARGET_GROUP_ARN" ]; then
             target_group_address='module.alb.aws_lb_target_group.backend[0]'
-            if terraform state list | grep -Fxq "$target_group_address"; then
+            if grep -Fxq "$target_group_address" "$state_list_file"; then
               echo 'Staging target group is already at the canonical address; no import needed.'
             else
               terraform import -input=false \
@@ -604,7 +622,7 @@ jobs:
             for raw in "${repositories[@]}"; do
               repository="$(printf '%s' "$raw" | xargs)"
               address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
-              if terraform state list | grep -Fxq "$address"; then
+              if grep -Fxq "$address" "$state_list_file"; then
                 echo "ECR repository '$repository' is already at the canonical staging address; no import needed."
                 continue
               fi
@@ -623,7 +641,7 @@ jobs:
             for raw in "${repositories[@]}"; do
               repository="$(printf '%s' "$raw" | xargs)"
               address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
-              terraform state list | grep -Fxq "$address" || {
+              grep -Fxq "$address" "$state_list_file" || {
                 echo "::error::Refusing ECR taint repair: $address is not in staging state"; exit 1;
               }
               terraform untaint "$address"
@@ -639,8 +657,11 @@ jobs:
           UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
         run: |
           set -euo pipefail
+          state_list_file="$(mktemp)"
+          trap 'rm -f "$state_list_file"' EXIT
+          terraform state list >"$state_list_file"
           if [ -n "${TARGET_GROUP_ARN:-}" ]; then
-            terraform state list | grep -Fx 'module.alb.aws_lb_target_group.backend[0]'
+            grep -Fx 'module.alb.aws_lb_target_group.backend[0]' "$state_list_file"
           fi
           if [ -n "${ECR_REPOSITORY_NAMES:-}" ]; then
             normalize_repositories() {
@@ -650,7 +671,7 @@ jobs:
             IFS=',' read -ra repositories <<< "$normalized_imports"
             for raw in "${repositories[@]}"; do
               repository="$(printf '%s' "$raw" | xargs)"
-              terraform state list | grep -Fx "module.ecr.aws_ecr_repository.this[\"${repository}\"]"
+              grep -Fx "module.ecr.aws_ecr_repository.this[\"${repository}\"]" "$state_list_file"
             done
           fi
           if [ -n "${UNTAINT_ECR_REPOSITORY_NAMES:-}" ]; then
@@ -661,7 +682,7 @@ jobs:
             IFS=',' read -ra repositories <<< "$normalized_untaints"
             for raw in "${repositories[@]}"; do
               repository="$(printf '%s' "$raw" | xargs)"
-              terraform state list | grep -Fx "module.ecr.aws_ecr_repository.this[\"${repository}\"]"
+              grep -Fx "module.ecr.aws_ecr_repository.this[\"${repository}\"]" "$state_list_file"
             done
           fi
           terraform state pull > reconciled-staging-state.json
