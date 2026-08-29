@@ -283,8 +283,12 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "$TARGET_GROUP_ARN" ] && terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend[0]'; then
-            echo '::error::Refusing import: module.alb.aws_lb_target_group.backend[0] is already in staging state'
-            exit 1
+            managed_target_group_arn="$(terraform state show -no-color 'module.alb.aws_lb_target_group.backend[0]' \
+              | sed -n 's/^[[:space:]]*arn[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+            test "$managed_target_group_arn" = "$TARGET_GROUP_ARN" || {
+              echo '::error::Refusing import: canonical staging target-group state points to a different ARN'; exit 1;
+            }
+            echo '::notice::Staging target group is already at the canonical state address; retry is a verified no-op.'
           fi
           # The address check above is not sufficient: a prior partial import
           # could have recorded the same remote object under another address.
@@ -310,7 +314,9 @@ jobs:
           }
           normalized_imports="$(normalize_repositories "$ECR_REPOSITORY_NAMES")"
           normalized_untaints="$(normalize_repositories "$UNTAINT_ECR_REPOSITORY_NAMES")"
-          if [ -n "$TARGET_GROUP_ARN" ] && grep -Fq -- "$TARGET_GROUP_ARN" "$state_snapshot_file"; then
+          if [ -n "$TARGET_GROUP_ARN" ] \
+            && ! terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend[0]' \
+            && grep -Fq -- "$TARGET_GROUP_ARN" "$state_snapshot_file"; then
             echo '::error::Refusing import: target-group ARN already appears elsewhere in staging state'
             exit 1
           fi
@@ -322,10 +328,44 @@ jobs:
               address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
               if [[ ",$normalized_imports," == *",$repository,"* ]]; then
                 if terraform state list | grep -Fxq "$address"; then
-                  echo "::error::Refusing import: $address is already in staging state"; exit 1
+                  canonical_name="$(terraform state show -no-color "$address" \
+                    | sed -n 's/^[[:space:]]*name[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+                  test "$canonical_name" = "$repository" || {
+                    echo "::error::Refusing import: canonical state address $address points to '$canonical_name', expected '$repository'"; exit 1;
+                  }
+                  canonical_status="$(jq -r --arg repository "$repository" '
+                    .resources[]?
+                    | select(.type == "aws_ecr_repository")
+                    | .instances[]?
+                    | select(.attributes.name? == $repository)
+                    | .status // "managed"
+                  ' "$state_snapshot_file" | head -n 1)"
+                  test "${canonical_status:-managed}" = managed || {
+                    echo "::error::Refusing import: canonical ECR repository '$repository' has state status '${canonical_status}', use the explicit untaint path after review"; exit 1;
+                  }
+                  echo "::notice::ECR repository '$repository' is already at the canonical staging address; retry is a verified no-op."
+                  continue
                 fi
-                if grep -Eq -- "\"name\"[[:space:]]*:[[:space:]]*\"${repository}\"" "$state_snapshot_file"; then
-                  echo "::error::Refusing import: ECR repository '$repository' already appears elsewhere in staging state"; exit 1
+                # A prior interrupted run may have recorded the repository at
+                # a legacy address. That is recoverable only when there is one
+                # unambiguous owner; the adoption step below moves that owner
+                # to the reviewed module address after all collision checks.
+                owners="$(terraform state list | while IFS= read -r candidate; do
+                  case "$candidate" in
+                    *aws_ecr_repository.*)
+                      if terraform state show -no-color "$candidate" 2>/dev/null \
+                        | grep -Eq "^[[:space:]]*name[[:space:]]*=[[:space:]]*\"${repository}\"[[:space:]]*$"; then
+                        printf '%s\n' "$candidate"
+                      fi
+                      ;;
+                  esac
+                done)"
+                owner_count="$(printf '%s\n' "$owners" | awk 'NF' | wc -l | tr -d ' ')"
+                if [ "$owner_count" -gt 1 ]; then
+                  echo "::error::Refusing import: ECR repository '$repository' has multiple staging state owners"; exit 1
+                fi
+                if [ "$owner_count" -eq 1 ]; then
+                  echo "::notice::ECR repository '$repository' has one legacy staging owner; it will be adopted at $address"
                 fi
               fi
             done
@@ -405,6 +445,108 @@ jobs:
             fi
           done
 
+      - name: Validate import prerequisites before state adoption
+        if: inputs.ecr_repository_names != ''
+        env:
+          BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
+          TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
+          TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
+          TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
+          AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+          AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
+          TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
+          TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$BACKEND_IMAGE_DIGEST" || { echo '::error::backend_image_digest is required'; exit 1; }
+          printf '%s' "$BACKEND_IMAGE_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
+            echo '::error::backend_image_digest must be an immutable sha256 digest'; exit 1;
+          }
+          for required in \
+            TF_VAR_acm_certificate_arn \
+            TF_VAR_domain_name \
+            TF_VAR_alert_email \
+            AUTH0_DOMAIN \
+            AUTH0_CLIENT_ID \
+            AUTH0_CLIENT_SECRET \
+            TF_VAR_aether_app_url \
+            TF_VAR_kyber_app_url; do
+            test -n "${!required:-}" || {
+              echo "::error::${required} is required before state adoption"; exit 1;
+            }
+          done
+
+      - name: Adopt uniquely-owned legacy ECR state addresses
+        if: inputs.ecr_repository_names != ''
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
+        run: |
+          set -euo pipefail
+          normalize_repositories() {
+            printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
+          }
+          normalized_imports="$(normalize_repositories "$ECR_REPOSITORY_NAMES")"
+          [ -n "$normalized_imports" ] || exit 0
+          IFS=',' read -ra repositories <<< "$normalized_imports"
+          state_snapshot_file="$(mktemp)"
+          adoptions_file="$(mktemp)"
+          cleanup_state_snapshot() {
+            rm -f "$state_snapshot_file" "$adoptions_file"
+          }
+          trap cleanup_state_snapshot EXIT
+          terraform state pull >"$state_snapshot_file"
+          # First validate every candidate and record the complete adoption
+          # set. No state move is allowed until all candidates are known to be
+          # healthy and uniquely owned, preventing a later bad entry from
+          # leaving an earlier repository partially migrated.
+          for repository in "${repositories[@]}"; do
+            address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
+            if terraform state list | grep -Fxq "$address"; then
+              continue
+            fi
+            owners="$(terraform state list | while IFS= read -r candidate; do
+              case "$candidate" in
+                *aws_ecr_repository.*)
+                  if terraform state show -no-color "$candidate" 2>/dev/null \
+                    | grep -Eq "^[[:space:]]*name[[:space:]]*=[[:space:]]*\"${repository}\"[[:space:]]*$"; then
+                    printf '%s\n' "$candidate"
+                  fi
+                  ;;
+              esac
+            done)"
+            owner_count="$(printf '%s\n' "$owners" | awk 'NF' | wc -l | tr -d ' ')"
+            case "$owner_count" in
+              0)
+                echo "No existing staging state owner for '$repository'; import will create the canonical address."
+                ;;
+              1)
+                owner="$(printf '%s\n' "$owners" | awk 'NF { print; exit }')"
+                legacy_status="$(jq -r --arg repository "$repository" '
+                  .resources[]?
+                  | select(.type == "aws_ecr_repository")
+                  | .instances[]?
+                  | select(.attributes.name? == $repository)
+                  | .status // "managed"
+                ' "$state_snapshot_file" | head -n 1)"
+                if [ "${legacy_status:-managed}" != "managed" ]; then
+                  echo "::error::Refusing adoption: ECR repository '$repository' legacy owner $owner has state status '${legacy_status}', use the explicit untaint path after review"; exit 1
+                fi
+                printf '%s\t%s\n' "$owner" "$address" >> "$adoptions_file"
+                ;;
+              *)
+                echo "::error::Refusing adoption: ECR repository '$repository' has multiple staging state owners"; exit 1
+                ;;
+            esac
+          done
+          if [ -s "$adoptions_file" ]; then
+            while IFS=$'\t' read -r owner address; do
+              echo "Adopting the uniquely-owned legacy address $owner as $address"
+              terraform state mv -lock-timeout=5m "$owner" "$address"
+            done < "$adoptions_file"
+          fi
+
       - name: Import only the known staging resources
         working-directory: ${{ env.TF_DIR }}
         env:
@@ -443,15 +585,29 @@ jobs:
             }
           done
           if [ -n "$TARGET_GROUP_ARN" ]; then
-            terraform import -input=false \
-              -var-file=profiles/staging.tfvars \
-              -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
-              'module.alb.aws_lb_target_group.backend[0]' "$TARGET_GROUP_ARN"
+            target_group_address='module.alb.aws_lb_target_group.backend[0]'
+            if terraform state list | grep -Fxq "$target_group_address"; then
+              echo 'Staging target group is already at the canonical address; no import needed.'
+            else
+              terraform import -input=false \
+                -var-file=profiles/staging.tfvars \
+                -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
+                "$target_group_address" "$TARGET_GROUP_ARN"
+            fi
           fi
           if [ -n "$ECR_REPOSITORY_NAMES" ]; then
-            IFS=',' read -ra repositories <<< "$ECR_REPOSITORY_NAMES"
+            normalize_repositories() {
+              printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
+            }
+            normalized_imports="$(normalize_repositories "$ECR_REPOSITORY_NAMES")"
+            IFS=',' read -ra repositories <<< "$normalized_imports"
             for raw in "${repositories[@]}"; do
               repository="$(printf '%s' "$raw" | xargs)"
+              address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
+              if terraform state list | grep -Fxq "$address"; then
+                echo "ECR repository '$repository' is already at the canonical staging address; no import needed."
+                continue
+              fi
               terraform import -input=false \
                 -var-file=profiles/staging.tfvars \
                 -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
@@ -487,7 +643,11 @@ jobs:
             terraform state list | grep -Fx 'module.alb.aws_lb_target_group.backend[0]'
           fi
           if [ -n "${ECR_REPOSITORY_NAMES:-}" ]; then
-            IFS=',' read -ra repositories <<< "$ECR_REPOSITORY_NAMES"
+            normalize_repositories() {
+              printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
+            }
+            normalized_imports="$(normalize_repositories "$ECR_REPOSITORY_NAMES")"
+            IFS=',' read -ra repositories <<< "$normalized_imports"
             for raw in "${repositories[@]}"; do
               repository="$(printf '%s' "$raw" | xargs)"
               terraform state list | grep -Fx "module.ecr.aws_ecr_repository.this[\"${repository}\"]"

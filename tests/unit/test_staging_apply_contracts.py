@@ -393,6 +393,21 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     assert "for profile in demo preview" in text
     assert "profiles/${profile}/terraform.tfstate" in text
     assert "state-managed ECR key" in text
+    assert "Adopt uniquely-owned legacy ECR state addresses" in text
+    assert "terraform state mv -lock-timeout=5m \"$owner\" \"$address\"" in text
+    assert "multiple staging state owners" in text
+    prerequisites = text.index("Validate import prerequisites before state adoption")
+    adoption = text.index("Adopt uniquely-owned legacy ECR state addresses")
+    assert prerequisites < adoption
+    assert "Refusing adoption: ECR repository '$repository' legacy owner" in text
+    assert 'legacy_status="$(jq -r --arg repository "$repository"' in text
+    assert "use the explicit untaint path after review" in text
+    assert "First validate every candidate and record the complete adoption" in text
+    assert 'printf \'%s\\t%s\\n\' "$owner" "$address" >> "$adoptions_file"' in text
+    assert "if [ -s \"$adoptions_file\" ]; then" in text
+    assert "canonical staging target-group state points to a different ARN" in text
+    assert "retry is a verified no-op" in text
+    assert "canonical ECR repository '$repository' has state status" in text
 
 
 def test_tainted_staging_ecr_repair_is_explicit_and_requires_a_fresh_plan() -> None:
@@ -496,6 +511,10 @@ def test_staging_reconciles_preexisting_immutable_aes256_backend_repository() ->
     assert "ECR repository '$repository' must use the reviewed staging KMS key" in workflow
     assert "staging backend must remain the reviewed AES256 repository" in workflow
     assert 'kms_repositories="$(printf' in workflow
+    assert "normalized_imports" in workflow
+    assert "already at the canonical staging address" in workflow
+    checksum = workflow.index("      - name: Emit reconciled state checksum")
+    assert "normalized_imports=\"$(normalize_repositories \"$ECR_REPOSITORY_NAMES\")\"" in workflow[checksum:]
 
 
 def test_staging_cmk_service_policy_and_environment_tags_are_present() -> None:
