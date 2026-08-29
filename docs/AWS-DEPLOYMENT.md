@@ -19,7 +19,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "a7a24db1"
+last_synced_commit: "854e94ae"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -51,7 +51,12 @@ Before clearing a taint, reconciliation also verifies that the canonical
 Terraform address stores the same repository name requested by the operator;
 an address that points at a different repository, or is no longer tainted, is
 refused before state is mutated. Duplicate-owner inspection tolerates
-human-formatted Terraform state output spacing.
+human-formatted Terraform state output spacing. The reconciliation workflow
+snapshots the complete Terraform address list before performing membership
+checks. This avoids `EPIPE` races caused by piping Terraform through an
+early-exiting `grep -q` under `pipefail`, which could otherwise make an
+already-managed staging resource look absent and trigger a false import or
+taint-repair failure.
 
 The reviewed Terraform promotion writes a secret-free `reviewed.api-host`
 evidence file after an apply. This is the configured `domain_name` hostname
