@@ -21,7 +21,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "a7a24db1"
+last_synced_commit: "854e94ae"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -44,7 +44,11 @@ profiles for duplicate ownership. It also verifies that each canonical staging
 address contains the requested repository identity before clearing a taint, so
 a stale, already-untainted, or manually moved state entry cannot be repaired
 under the wrong name. Duplicate-owner matching is whitespace-tolerant because
-`terraform state show` is a human-oriented format.
+`terraform state show` is a human-oriented format. State-reconciliation
+membership checks capture the complete `terraform state list` output before
+matching addresses; they do not pipe Terraform into `grep -q`, because
+`pipefail` can otherwise send `EPIPE` to the Terraform output wrapper and
+falsely report an existing address as absent.
 
 Reviewed Terraform promotion pins immutable digests and injects the staging
 apply-role ARN only for staging. Inline-ML profiles leave the ML digest empty;
