@@ -1,0 +1,160 @@
+# Feature readiness record — see config/readiness/schema.json.
+# Migration-derived from scripts/production_status.py (legacy area: 'graph mutation safety'). The 0-5 maturity score is decomposed across the model's
+# independent dimensions; an external blocker never reduces implementation.
+feature_id: graph-mutation-safety
+title: Graph Mutation Safety
+owning_system: aether
+summary: Agent-originated mutations go through verify -> stage -> review batch -> human approval -> commit;
+  direct service mutations are tenant-scoped, idempotent upserts with audit trace.
+scope:
+  id: graph-mutation-safety-v1
+  version: 1
+  title: Graph Mutation Safety V1
+  target: observation-pilot
+  included:
+  - contracts-and-schemas
+  - core-behavior
+  - runtime-wiring
+  - persistence-and-migrations
+  - authorization-and-tenant-isolation
+  excluded: []
+  deferred: []
+repository_ceiling:
+  type: INFRASTRUCTURE_TURNKEY
+  achieved: true
+  remaining_after_ceiling:
+  - Provision the required cloud backend (apply Terraform for the target profile).
+  remaining_is_repository_controlled: false
+  evidence:
+  - Agent Layer/README.md
+  - Backend Architecture/aether-backend/services/agent/mutation_commit.py
+  - Backend Architecture/aether-backend/services/agent/runtime_repository.py
+implementation:
+  state: TURNKEY
+  denominator: in-scope repository controls (migration-derived)
+  controls:
+  - id: contracts-and-schemas
+    description: contracts and schemas
+    weight: 20
+    satisfied: true
+  - id: core-behavior
+    description: core behavior
+    weight: 20
+    satisfied: true
+  - id: runtime-wiring
+    description: runtime wiring
+    weight: 20
+    satisfied: true
+  - id: persistence-and-migrations
+    description: persistence and migrations
+    weight: 20
+    satisfied: true
+  - id: authorization-and-tenant-isolation
+    description: authorization and tenant isolation
+    weight: 20
+    satisfied: true
+  remaining_work: []
+productionization:
+  denominator: in-scope productionization controls (migration-derived)
+  controls:
+  - id: security-controls
+    description: security controls
+    weight: 25
+    satisfied: true
+  - id: observability-metrics-logs
+    description: observability metrics logs
+    weight: 25
+    satisfied: true
+  - id: reliability-idempotency-retry
+    description: reliability idempotency retry
+    weight: 25
+    satisfied: true
+  - id: ci-and-release-gates
+    description: ci and release gates
+    weight: 25
+    satisfied: true
+  remaining_work: []
+activation:
+  state: INFRASTRUCTURE_WAITING
+  blockers:
+  - type: INFRASTRUCTURE_WAITING
+    description: Graph Mutation Safety activation waits on an external infra condition.
+    owner: platform-ops
+    required_action: Provision the required cloud backend (apply Terraform for the target profile).
+    source_code_change_expected: false
+    affected_environments:
+    - staging
+    - production
+    affected_release_profiles:
+    - staging
+    - pilot
+    evidence_required: applied resource ids + a credentialed run
+dependencies:
+  hard: []
+  soft: []
+environment_evidence:
+  local:
+    state: VERIFIED
+    credentialed: false
+  ci:
+    state: VERIFIED
+    credentialed: false
+  staging:
+    state: BLOCKED_EXTERNAL
+    credentialed: true
+  production:
+    state: NOT_APPLICABLE
+operational_ownership:
+  team: agent-platform
+  technical_owner: agent-platform
+  operational_owner: platform-ops
+  escalation: pagerduty:agent-platform
+  runbook: docs/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md
+  dashboards:
+  - grafana:agent-platform
+  alerts:
+  - pagerduty:agent-platform
+  service_level_target: per founding-tenant SLO
+  recovery_objective: RTO 30m / RPO 5m
+business_readiness:
+  applicable: false
+  controls: []
+confidence:
+  level: MODERATE
+  reasons:
+  - 'repository evidence: Agent Layer/README.md'
+  evidence_gaps:
+  - credentialed environment execution not yet performed
+release_profiles:
+  local:
+    participation: required
+    implementation_floor: VERIFIED
+    productionization_required: false
+    environment_gate: local
+    business_gate: false
+  staging:
+    participation: experimental
+    implementation_floor: VERIFIED
+    productionization_required: true
+    environment_gate: staging
+    business_gate: false
+  pilot:
+    participation: experimental
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: pilot
+    business_gate: false
+  production-lean:
+    participation: not_in_release
+    note: Excluded from the founding-tenant release scope (see config/founding_tenant_release.yaml).
+  production-scale:
+    participation: not_in_release
+    note: Excluded from the founding-tenant release scope (see config/founding_tenant_release.yaml).
+historical:
+  historical_maturity_index: 4
+  historical_maturity_index_scale: 0-5
+  historical_maturity_index_authoritative: false
+  migration_derived: true
+  legacy_area: graph mutation safety
+  note: Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is
+    a proxy pending per-capability SME review.
