@@ -14,12 +14,16 @@ source_files:
   - scripts/release/verify_terraform_state_role.py
   - .github/workflows/terraform-promote.yml
   - .github/workflows/staging-state-reconcile.yml
+  - .github/workflows/staging-lifecycle.yml
+  - .github/workflows/staging-ttl-guard.yml
   - scripts/release/verify_effective_staging_apply_policy.py
   - config/staging_apply_iam_policy.yaml
+  - config/staging_lifecycle_iam_policy.yaml
+  - scripts/release/check_staging_lifecycle_policy.py
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "2b6a99e8"
+last_synced_commit: "f0049aa3"
 ---
 
 # AWS Deployment — Infrastructure Reference
