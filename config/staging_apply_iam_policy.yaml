@@ -35,6 +35,11 @@ statements:
       - secretsmanager:TagResource
     resource: arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*
     scope: staging-name-prefix
+  - sid: VerifyStagingSecretVersions
+    actions:
+      - secretsmanager:DescribeSecret
+    resource: arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*
+    scope: staging-name-prefix
   - sid: TagStagingParameters
     actions:
       - ssm:AddTagsToResource
@@ -167,7 +172,9 @@ statements:
       - sns:SetTopicAttributes
       - sns:DeleteTopic
       - sns:Subscribe
-    resource: arn:aws:sns:us-east-1:${account_id}:aether-staging-*
+    resource:
+      - arn:aws:sns:us-east-1:${account_id}:aether-staging-*
+      - arn:aws:sns:us-east-1:${account_id}:AETHER-staging-*
     scope: project-staging-name-prefix
   - sid: EnsureEcsServiceLinkedRole
     actions:

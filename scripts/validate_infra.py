@@ -29,9 +29,14 @@ import os
 import sys
 from pathlib import Path
 
-from scripts.lib.preflight_env import PLACEHOLDER_SUBSTRINGS, REQUIRED_SECRET_VARS
-
 ROOT = Path(__file__).resolve().parents[1]
+# ``python scripts/validate_infra.py`` puts ``scripts/`` (not the repository
+# root) on ``sys.path``.  Add the root before importing the shared helpers so
+# the documented invocation works in a clean runner as well as via ``-m``.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.lib.preflight_env import PLACEHOLDER_SUBSTRINGS, REQUIRED_SECRET_VARS
 
 # Backend dimension -> canonical backend value -> env vars that gate it.
 # A profile that uses redis for cache must set REDIS_HOST; one that uses

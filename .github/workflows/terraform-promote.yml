@@ -676,6 +676,52 @@ jobs:
           python scripts/release/verify_effective_staging_apply_policy.py \
             --role-arn "$AWS_TERRAFORM_APPLY_ROLE_ARN" \
             --manifest config/staging_apply_iam_policy.yaml
+      - name: Verify required staging secrets have current versions
+        if: inputs.profile == 'staging'
+        run: |
+          set -euo pipefail
+          # Terraform creates the named Secrets Manager resources, but never
+          # invents their values. ECS will reject a task definition that
+          # references a stub without an AWSCURRENT version, so fail before
+          # any apply mutation and direct the operator to the secure bootstrap
+          # procedure. Values are never read or printed here.
+          required_secrets=(
+            jwt-secret
+            byok-encryption-key
+            stripe-secret-key
+            stripe-webhook-secret
+            oracle-signer-private-key
+            watermark-secret-key
+            canary-secret-seed
+            extraction-canary-seed
+            sdk-config-secret
+          )
+          for name in "${required_secrets[@]}"; do
+            describe_file="$(mktemp)"
+            if ! aws secretsmanager describe-secret \
+              --secret-id "aether/${name}" \
+              --output json >"$describe_file" 2>/tmp/staging-secret.err; then
+              cat /tmp/staging-secret.err >&2
+              echo "::error::required staging secret aether/${name} is not present or is not readable"
+              exit 1
+            fi
+            if ! python - "$describe_file" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              payload = json.load(handle)
+          versions = payload.get("VersionIdsToStages") or {}
+          if not any("AWSCURRENT" in stages for stages in versions.values()):
+              raise SystemExit(1)
+          PY
+            then
+              echo "::error::required staging secret aether/${name} has no AWSCURRENT version; bootstrap/import its value before apply"
+              exit 1
+            fi
+            rm -f "$describe_file"
+          done
+          echo 'Verified all ECS-mounted staging secrets exist with an AWSCURRENT version; values were not read.'
       - name: Validate reviewed staging maintenance target group
         if: inputs.profile == 'staging'
         env:

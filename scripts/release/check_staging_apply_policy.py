@@ -20,6 +20,7 @@ REQUIRED_ACTIONS = {
     "ecr:ListTagsForResource",
     "ecr:DescribeRepositories",
     "secretsmanager:TagResource",
+    "secretsmanager:DescribeSecret",
     "ssm:AddTagsToResource",
     "ssm:ListTagsForResource",
     "kms:CreateKey",
@@ -178,6 +179,7 @@ def main() -> int:
         "ecr:ListTagsForResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "ecr:DescribeRepositories": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "secretsmanager:TagResource": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+        "secretsmanager:DescribeSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
         "ssm:AddTagsToResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
         "ssm:ListTagsForResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
         "kms:CreateKey": "*",
@@ -194,9 +196,18 @@ def main() -> int:
         "ec2:GetSecurityGroupsForVpc": "*",
         "kms:GetKeyRotationStatus": "*",
         "kms:ScheduleKeyDeletion": "*",
-        "sns:SetTopicAttributes": "arn:aws:sns:us-east-1:${account_id}:aether-staging-*",
-        "sns:DeleteTopic": "arn:aws:sns:us-east-1:${account_id}:aether-staging-*",
-        "sns:Subscribe": "arn:aws:sns:us-east-1:${account_id}:aether-staging-*",
+        "sns:SetTopicAttributes": [
+            "arn:aws:sns:us-east-1:${account_id}:aether-staging-*",
+            "arn:aws:sns:us-east-1:${account_id}:AETHER-staging-*",
+        ],
+        "sns:DeleteTopic": [
+            "arn:aws:sns:us-east-1:${account_id}:aether-staging-*",
+            "arn:aws:sns:us-east-1:${account_id}:AETHER-staging-*",
+        ],
+        "sns:Subscribe": [
+            "arn:aws:sns:us-east-1:${account_id}:aether-staging-*",
+            "arn:aws:sns:us-east-1:${account_id}:AETHER-staging-*",
+        ],
         "elasticloadbalancing:ModifyTargetGroupAttributes": "arn:aws:elasticloadbalancing:us-east-1:${account_id}:targetgroup/aether-staging-*",
         "elasticloadbalancing:ModifyLoadBalancerAttributes": "arn:aws:elasticloadbalancing:us-east-1:${account_id}:loadbalancer/app/aether-staging-*",
         "dynamodb:ListTagsOfResource": "arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*",
@@ -258,6 +269,9 @@ def main() -> int:
                 fail("kms:CreateAlias must have separate alias and target-key statements")
             if {s.get("resource") for s in matching} != set(expected):
                 fail("kms:CreateAlias has an unexpected resource scope")
+        elif action.startswith("sns:"):
+            if len(matching) != 1 or set(matching[0].get("resource") or []) != set(expected):
+                fail(f"{action} has an unexpected resource scope")
         elif len(matching) != 1 or matching[0].get("resource") != expected:
             fail(f"{action} has an unexpected resource scope")
 

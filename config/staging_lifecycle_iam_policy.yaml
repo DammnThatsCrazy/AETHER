@@ -7,14 +7,22 @@ profile: staging
 role: AetherStagingLifecycle
 region: us-east-1
 statements:
-  - sid: InspectStagingEcs
+  - sid: InspectStagingEcsCluster
     actions:
       - ecs:DescribeClusters
       - ecs:ListServices
-      - ecs:DescribeServices
-      - ecs:DescribeTasks
     resource: arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging
     scope: staging-cluster
+  - sid: InspectStagingServices
+    actions:
+      - ecs:DescribeServices
+    resource: arn:aws:ecs:us-east-1:${account_id}:service/AETHER-staging/AETHER-staging-*
+    scope: staging-service
+  - sid: InspectStagingTasks
+    actions:
+      - ecs:DescribeTasks
+    resource: arn:aws:ecs:us-east-1:${account_id}:task/AETHER-staging/*
+    scope: staging-task
   - sid: InspectStagingTaskDefinitions
     actions:
       - ecs:DescribeTaskDefinition

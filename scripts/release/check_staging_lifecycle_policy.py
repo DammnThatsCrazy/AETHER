@@ -9,6 +9,7 @@ by the operator or workflow without granting broad permissions.
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import sys
 from pathlib import Path
 
@@ -35,7 +36,12 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("lifecycle IAM manifest must target staging/AetherStagingLifecycle")
     actions = {a for statement in doc.get("statements", []) for a in statement.get("actions", [])}
     missing = sorted(EXPECTED - actions)
-    forbidden = sorted(actions & {a for a in doc.get("forbidden_actions", [])})
+    forbidden_patterns = doc.get("forbidden_actions", [])
+    forbidden = sorted(
+        action
+        for action in actions
+        if any(fnmatch.fnmatchcase(action, pattern) for pattern in forbidden_patterns)
+    )
     wildcard = sorted(a for a in actions if a.endswith(":*"))
     if missing:
         raise SystemExit("missing lifecycle actions: " + ", ".join(missing))

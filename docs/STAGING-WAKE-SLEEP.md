@@ -186,7 +186,7 @@ reviewed-plan machinery as a production apply.
 7. **Wait for readiness**: `aws ecs describe-clusters`, then
    `aws ecs wait services-stable` across every service in the cluster. Zero
    services after a wake is an error.
-8. **Open the awake lease.**
+8. **Arm the awake lease before apply, then refresh it after readiness.**
 
 ### Aurora resume
 
@@ -207,12 +207,14 @@ see the rejected lever in [Cost Optimization](COST-OPTIMIZATION.md#rejected-leve
 
 The lease is one SSM Parameter Store `String` at
 `/aether/staging/lifecycle/awake-until` holding an **absolute UTC deadline**
-(`%Y-%m-%dT%H:%M:%SZ`), written as `now + max_awake_hours` after a successful
-wake apply and stable services.
+(`%Y-%m-%dT%H:%M:%SZ`). `wake-apply` writes `now + max_awake_hours` before it
+dispatches the reviewed apply, so a failed or abandoned apply is still bounded.
+After the services become ready, the workflow refreshes the deadline from the
+same original `awake_since`; the refresh never resets the total-awake clock.
 
 | Actor | Effect on the lease |
 |---|---|
-| `staging-lifecycle.yml` → `wake-apply` | writes `now + max_awake_hours` (1–8 h, default 4) |
+| `staging-lifecycle.yml` → `wake-apply` | arms `now + max_awake_hours` before apply, then refreshes it after readiness (1–8 h, default 4) |
 | `staging-ttl-guard.yml` mode `extend` | **overwrites** with `now + extend_hours` (1–4 h); does not add to the existing deadline |
 | `staging-lifecycle.yml` → `sleep` | deletes it (`always()`) |
 | `staging-ttl-guard.yml` enforcement | deletes it after scaling to zero |
@@ -304,6 +306,11 @@ Steps, in order, with what each proves:
    both return 200. For each of `aether` and `kyber`, the static bucket name is
    read from SSM (`/aether/staging/AETHER_STATIC_BUCKET`,
    `/aether/staging/KYBER_STATIC_BUCKET`) and `index.html` must exist.
+   Before apply, the promotion workflow verifies that every ECS-mounted
+   Secrets Manager name has an `AWSCURRENT` version. Terraform creates the
+   encrypted secret stubs but never invents their values; bootstrap or import
+   those values through the secure operator procedure before a wake. The check
+   reads metadata only and never uploads or prints secret material.
 5. **Tenant isolation.** The run uses the encrypted staging admin bootstrap
    key to create two fresh, free, run-scoped tenants and one API key for each.
    The raw keys are masked and held only in the runner environment; they are
