@@ -405,6 +405,9 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     assert "First validate every candidate and record the complete adoption" in text
     assert 'printf \'%s\\t%s\\n\' "$owner" "$address" >> "$adoptions_file"' in text
     assert "if [ -s \"$adoptions_file\" ]; then" in text
+    assert "canonical staging target-group state points to a different ARN" in text
+    assert "retry is a verified no-op" in text
+    assert "canonical ECR repository '$repository' has state status" in text
 
 
 def test_tainted_staging_ecr_repair_is_explicit_and_requires_a_fresh_plan() -> None:
@@ -510,6 +513,8 @@ def test_staging_reconciles_preexisting_immutable_aes256_backend_repository() ->
     assert 'kms_repositories="$(printf' in workflow
     assert "normalized_imports" in workflow
     assert "already at the canonical staging address" in workflow
+    checksum = workflow.index("      - name: Emit reconciled state checksum")
+    assert "normalized_imports=\"$(normalize_repositories \"$ECR_REPOSITORY_NAMES\")\"" in workflow[checksum:]
 
 
 def test_staging_cmk_service_policy_and_environment_tags_are_present() -> None:
