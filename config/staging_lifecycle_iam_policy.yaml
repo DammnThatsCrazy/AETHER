@@ -77,7 +77,10 @@ statements:
   - sid: InspectStagingLogs
     actions:
       - logs:DescribeLogGroups
-    resource: arn:aws:logs:us-east-1:${account_id}:log-group:/ecs/AETHER-staging/*
+    resource:
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/aether/staging/*
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/aether/AETHER-staging/*
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/ecs/AETHER-staging/*
     scope: staging-logs
   - sid: InspectStagingMetrics
     actions:
@@ -90,6 +93,15 @@ statements:
       - application-autoscaling:RegisterScalableTarget
     resource: '*'
     scope: staging-ecs-scalable-targets
+    conditions:
+      StringEquals:
+        application-autoscaling:ServiceNamespace:
+          - ecs
+        application-autoscaling:ScalableDimension:
+          - ecs:service:DesiredCount
+      StringLike:
+        application-autoscaling:ResourceId:
+          - service/AETHER-staging/AETHER-staging-*
   - sid: ReadStagingBudgetLeaseEvidence
     actions:
       - sts:GetCallerIdentity
