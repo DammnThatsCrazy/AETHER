@@ -234,7 +234,9 @@ jobs:
             -backend-config="key=profiles/${PROFILE}/terraform.tfstate" \
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true"
-          if terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend'; then
+          state_list_file="$(mktemp)"
+          terraform state list >"$state_list_file"
+          if grep -Fxq 'module.alb.aws_lb_target_group.backend' "$state_list_file"; then
             echo '::error::legacy backend target-group state address remains; run the confirmation-gated terraform-state-migrate workflow and regenerate the reviewed plan'
             exit 1
           fi
@@ -674,6 +676,52 @@ jobs:
           python scripts/release/verify_effective_staging_apply_policy.py \
             --role-arn "$AWS_TERRAFORM_APPLY_ROLE_ARN" \
             --manifest config/staging_apply_iam_policy.yaml
+      - name: Verify required staging secrets have current versions
+        if: inputs.profile == 'staging'
+        run: |
+          set -euo pipefail
+          # Terraform creates the named Secrets Manager resources, but never
+          # invents their values. ECS will reject a task definition that
+          # references a stub without an AWSCURRENT version, so fail before
+          # any apply mutation and direct the operator to the secure bootstrap
+          # procedure. Values are never read or printed here.
+          required_secrets=(
+            jwt-secret
+            byok-encryption-key
+            stripe-secret-key
+            stripe-webhook-secret
+            oracle-signer-private-key
+            watermark-secret-key
+            canary-secret-seed
+            extraction-canary-seed
+            sdk-config-secret
+          )
+          for name in "${required_secrets[@]}"; do
+            describe_file="$(mktemp)"
+            if ! aws secretsmanager describe-secret \
+              --secret-id "aether/${name}" \
+              --output json >"$describe_file" 2>/tmp/staging-secret.err; then
+              cat /tmp/staging-secret.err >&2
+              echo "::error::required staging secret aether/${name} is not present or is not readable"
+              exit 1
+            fi
+            if ! python - "$describe_file" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              payload = json.load(handle)
+          versions = payload.get("VersionIdsToStages") or {}
+          if not any("AWSCURRENT" in stages for stages in versions.values()):
+              raise SystemExit(1)
+          PY
+            then
+              echo "::error::required staging secret aether/${name} has no AWSCURRENT version; bootstrap/import its value before apply"
+              exit 1
+            fi
+            rm -f "$describe_file"
+          done
+          echo 'Verified all ECS-mounted staging secrets exist with an AWSCURRENT version; values were not read.'
       - name: Validate reviewed staging maintenance target group
         if: inputs.profile == 'staging'
         env:
@@ -809,7 +857,9 @@ jobs:
           while IFS= read -r repository; do
             [ -n "$repository" ] || continue
             state_address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
-            if terraform state list | grep -Fxq "$state_address"; then
+            state_list_file="$(mktemp)"
+            terraform state list >"$state_list_file"
+            if grep -Fxq "$state_address" "$state_list_file"; then
               continue
             fi
             set +e
@@ -905,7 +955,9 @@ jobs:
             -backend-config="key=profiles/${PROFILE}/terraform.tfstate" \
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true"
-          if terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend'; then
+          state_list_file="$(mktemp)"
+          terraform state list >"$state_list_file"
+          if grep -Fxq 'module.alb.aws_lb_target_group.backend' "$state_list_file"; then
             echo '::error::legacy backend target-group state address remains; run the confirmation-gated terraform-state-migrate workflow and create a fresh plan'
             exit 1
           fi
@@ -937,7 +989,7 @@ jobs:
                 fi
               fi
               if [ -n "$existing_tg" ] && [ "$existing_tg" != None ] \
-                && ! terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend[0]'; then
+                && ! grep -Fxq 'module.alb.aws_lb_target_group.backend[0]' "$state_list_file"; then
                 echo '::error::aether-staging-backend already exists outside Terraform state; run the import-only staging-state-reconcile workflow and create a fresh plan before applying'
                 exit 1
               fi

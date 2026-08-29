@@ -316,6 +316,8 @@ locals {
       ORACLE_SIGNER_PRIVATE_KEY = var.secret_arns["oracle-signer-private-key"]
       WATERMARK_SECRET_KEY      = var.secret_arns["watermark-secret-key"]
       CANARY_SECRET_SEED        = var.secret_arns["canary-secret-seed"]
+      EXTRACTION_CANARY_SEED    = var.secret_arns["extraction-canary-seed"]
+      SDK_CONFIG_SECRET         = var.secret_arns["sdk-config-secret"]
     },
     # Redis AUTH token — read by shared/cache/cache.py as REDIS_PASSWORD.
     # Only mounted when ElastiCache exists; every task (API and workers)

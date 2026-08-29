@@ -296,3 +296,10 @@ def test_validate_infra_is_profile_aware(monkeypatch):
         "SQS_QUEUE_URL",
     ):
         assert var not in local, f"local must not require {var}"
+
+
+def test_validate_infra_rejects_known_insecure_extraction_seed():
+    mod = _load_script("validate_infra")
+    assert mod._is_placeholder_or_insecure_default("aether-mesh-canary-seed")
+    assert mod._is_placeholder_or_insecure_default(" AETHER-MESH-CANARY-SEED ")
+    assert not mod._is_placeholder_or_insecure_default("random-production-seed")

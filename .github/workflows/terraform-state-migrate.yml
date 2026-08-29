@@ -109,9 +109,13 @@ jobs:
         run: |
           set -euo pipefail
           bash "${GITHUB_WORKSPACE}/scripts/release/migrate_alb_target_group_state.sh" "$PROFILE"
-          if terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend'; then
+          state_list_file="$(mktemp)"
+          terraform state list >"$state_list_file"
+          if grep -Fxq 'module.alb.aws_lb_target_group.backend' "$state_list_file"; then
             echo '::error::legacy target-group state address remains after migration'
             exit 1
           fi
-          terraform state list | grep -E 'module\.alb\.aws_lb_target_group\.(backend\[0\]|backend_replacement\[0\])' || true
+          state_list_file="$(mktemp)"
+          terraform state list >"$state_list_file"
+          grep -E 'module\.alb\.aws_lb_target_group\.(backend\[0\]|backend_replacement\[0\])' "$state_list_file" || true
           echo 'State address migration complete; create and review a fresh plan before apply.'
