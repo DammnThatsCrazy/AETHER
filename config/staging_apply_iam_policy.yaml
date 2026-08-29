@@ -113,6 +113,7 @@ statements:
   - sid: ReadStagingKeyMetadata
     actions:
       - kms:DescribeKey
+      - kms:GetKeyPolicy
       - kms:ListResourceTags
     resource: arn:aws:kms:us-east-1:${account_id}:key/*
     scope: staging-kms-resource-tag
@@ -165,6 +166,7 @@ statements:
     actions:
       - sns:SetTopicAttributes
       - sns:DeleteTopic
+      - sns:Subscribe
     resource: arn:aws:sns:us-east-1:${account_id}:aether-staging-*
     scope: project-staging-name-prefix
   - sid: EnsureEcsServiceLinkedRole

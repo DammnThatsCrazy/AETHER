@@ -385,7 +385,7 @@ jobs:
             staging_ecr_addresses="$(grep 'aws_ecr_repository' "$state_list_file" || true)"
             for repository in "${repositories[@]}"; do
               address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
-              printf '%s\n' "$staging_ecr_addresses" | grep -Fxq "$address" || {
+              grep -Fxq "$address" <<<"$staging_ecr_addresses" || {
                 echo "::error::Refusing ECR taint repair: $address is not in staging state"; exit 1;
               }
               canonical_name="$(terraform state show -no-color "$address" \
@@ -609,6 +609,7 @@ jobs:
                 -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
                 "$target_group_address" "$TARGET_GROUP_ARN"
             fi
+            terraform state list >"$state_list_file"
           fi
           if [ -n "$ECR_REPOSITORY_NAMES" ]; then
             normalize_repositories() {
@@ -628,6 +629,7 @@ jobs:
                 -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
                 "module.ecr.aws_ecr_repository.this[\"${repository}\"]" "$repository"
             done
+            terraform state list >"$state_list_file"
           fi
           if [ -n "$UNTAINT_ECR_REPOSITORY_NAMES" ]; then
             normalize_repositories() {

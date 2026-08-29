@@ -125,6 +125,8 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check pyyaml
+      - name: Validate lifecycle IAM action contract
+        run: python3 scripts/release/check_staging_lifecycle_policy.py
 
       - name: Resolve the staging profile from canonical configuration
         env:
@@ -765,6 +767,25 @@ jobs:
       alb_dns: ${{ steps.outputs.outputs.alb_dns }}
     steps:
       - uses: actions/checkout@v4
+      # Establish the bounded lease before any apply dispatch. If the apply
+      # starts services but readiness later fails, the TTL guard is already
+      # armed and the fail-safe sleep job has a concrete deadline to enforce.
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Open the bounded awake lease before apply
+        env:
+          AWAKE_HOURS: ${{ needs.select-profile.outputs.awake_hours }}
+        run: |
+          set -euo pipefail
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          deadline="$(date -u -d "+${AWAKE_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ)"
+          lease="$(printf '{"awake_since":"%s","awake_until":"%s","extensions":0}' "$now" "$deadline")"
+          aws ssm put-parameter --name "$AWAKE_LEASE_PARAM" \
+            --type String --overwrite --value "$lease" \
+            --description "staging awake window (UTC); enforced by staging-ttl-guard"
+          echo "staging awake lease armed before apply: since ${now}, expires ${deadline}"
       - name: Dispatch the reviewed apply for the verified wake plan
         id: dispatch
         env:
@@ -858,44 +879,26 @@ jobs:
           printf 'alb_dns=%s\n' "$alb_dns" >> "$GITHUB_OUTPUT"
           echo 'Certificate-covered API hostname captured for the rehearsal.'
 
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
-          aws-region: us-east-1
-
       - name: Verify API DNS points to the applied load balancer
         env:
           API_HOST: ${{ steps.outputs.outputs.api_host }}
           ALB_DNS: ${{ steps.outputs.outputs.alb_dns }}
         run: |
           set -euo pipefail
-          python - <<'PY'
-          import os
-          import socket
-
-          api_host = os.environ["API_HOST"]
-          alb_dns = os.environ["ALB_DNS"]
-
-          def addresses(name: str) -> set[str]:
-              return {
-                  item[4][0]
-                  for item in socket.getaddrinfo(name, 443, type=socket.SOCK_STREAM)
-              }
-
-          try:
-              api_addresses = addresses(api_host)
-              alb_addresses = addresses(alb_dns)
-          except OSError as exc:
-              raise SystemExit(
-                  f"certificate-covered API hostname is not yet resolvable to the applied ALB: {exc}"
-              )
-          if not api_addresses or not alb_addresses or not (api_addresses & alb_addresses):
-              raise SystemExit(
-                  "certificate-covered API hostname does not resolve to the applied ALB; "
-                  "external DNS must point at the applied load balancer before rehearsal"
-              )
-          print(f"verified {api_host} resolves to the applied ALB {alb_dns}")
-          PY
+          # ALB A records are elastic and can rotate between two resolver
+          # calls. Verify the stable operator-managed CNAME target instead of
+          # comparing transient IP intersections, then let the HTTPS probe
+          # below validate that the endpoint is actually serving.
+          normalize_name() { printf '%s' "$1" | sed 's/\\.$//'; }
+          api_cname="$(dig +short CNAME "$API_HOST" | sed -n '1p' | sed 's/\\.$//')"
+          alb_name="$(normalize_name "$ALB_DNS")"
+          test -n "$api_cname" || {
+            echo "::error::certificate-covered API hostname ${API_HOST} has no CNAME record"; exit 1;
+          }
+          test "$api_cname" = "$alb_name" || {
+            echo "::error::${API_HOST} CNAME is ${api_cname}, not the applied ALB ${alb_name}"; exit 1;
+          }
+          echo "verified ${API_HOST} CNAME targets the applied ALB ${ALB_DNS}"
 
       - name: Wait for staging infrastructure readiness
         run: |
@@ -915,15 +918,15 @@ jobs:
           aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
             --query 'services[].[serviceName,desiredCount,runningCount]' --output text
 
-      # The awake lease is what staging-ttl-guard.yml enforces. It is written only
-      # after a successful wake, and it always carries absolute UTC timestamps.
+      # Refresh the bounded lease after a successful wake so the deadline is
+      # measured from actual readiness while preserving the pre-apply guard.
       #
       # `awake_since` is the ORIGINAL wake. Extensions granted by the TTL guard
       # move `awake_until` but never `awake_since`, so the guard's total awake
       # ceiling is measured from the moment staging actually came up rather than
       # from the most recent extension. Without it, N sequential extensions buy
       # unbounded awake time.
-      - name: Open the awake lease
+      - name: Refresh the awake lease after readiness
         env:
           AWAKE_HOURS: ${{ needs.select-profile.outputs.awake_hours }}
         run: |
@@ -1579,13 +1582,21 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts/rehearsal
-          aws ecs describe-services --cluster "$STAGING_CLUSTER" \
-            --services $(aws ecs list-services --cluster "$STAGING_CLUSTER" --query 'serviceArns[]' --output text) \
-            > artifacts/rehearsal/ecs-services.json 2>/dev/null || true
+          if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
+            --query 'serviceArns[]' --output text)"; then
+            echo '::error::unable to enumerate staging ECS services; evidence is incomplete'
+            exit 1
+          fi
+          mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
+          test "${#services[@]}" -gt 0 || {
+            echo '::error::staging ECS service enumeration returned no services; evidence is incomplete'; exit 1;
+          }
+          aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
+            > artifacts/rehearsal/ecs-services.json
           aws logs describe-log-groups --log-group-name-prefix "/aether/${STAGING_ENV}" \
-            > artifacts/rehearsal/log-groups.json 2>/dev/null || true
+            > artifacts/rehearsal/log-groups.json
           aws cloudwatch list-metrics --namespace AETHER \
-            > artifacts/rehearsal/metrics.json 2>/dev/null || true
+            > artifacts/rehearsal/metrics.json
           cp -f "${RUNNER_TEMP}/release/release.json" artifacts/rehearsal/release.json 2>/dev/null || true
           python scripts/release/check_cost_model.py \
             --profile "$PROFILE" \

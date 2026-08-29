@@ -29,6 +29,8 @@ import os
 import sys
 from pathlib import Path
 
+from scripts.lib.preflight_env import PLACEHOLDER_SUBSTRINGS, REQUIRED_SECRET_VARS
+
 ROOT = Path(__file__).resolve().parents[1]
 
 # Backend dimension -> canonical backend value -> env vars that gate it.
@@ -206,6 +208,10 @@ def main() -> None:
         ("CANARY_SECRET_SEED", env != "local"),
         ("ML_SERVING_URL", False),
     ]
+    # Keep this list identical to the backend Settings() preflight.  A
+    # deployment must not pass infrastructure validation and then fail during
+    # application startup because a signing/canary secret was omitted here.
+    vars_to_check.extend((name, env != "local") for name in REQUIRED_SECRET_VARS)
     vars_to_check += _required_infra_vars()
     # DATABASE_URL can come from both the base list and the profile's database
     # dimension; report each var once (True wins over False).
@@ -221,7 +227,7 @@ def main() -> None:
     # 2. Secret validation
     print("\n2. Secret Validation")
     jwt = os.getenv("JWT_SECRET", "")
-    if jwt in ("", "change-me-in-production"):
+    if not jwt or any(marker in jwt.lower() for marker in PLACEHOLDER_SUBSTRINGS):
         print("  ✗ JWT_SECRET is default/empty — MUST be rotated")
         if env != "local":
             errors += 1
@@ -241,6 +247,14 @@ def main() -> None:
     elif env != "local":
         print("  ✗ BYOK_ENCRYPTION_KEY not set (required)")
         errors += 1
+
+    for name in REQUIRED_SECRET_VARS:
+        value = os.getenv(name, "")
+        if env != "local" and (not value or any(marker in value.lower() for marker in PLACEHOLDER_SUBSTRINGS)):
+            print(f"  ✗ {name} is missing or a placeholder — MUST be provisioned")
+            errors += 1
+        elif value:
+            print(f"  ✓ {name} is set and non-placeholder")
 
     # 3. Infrastructure connectivity — only for the backends the profile
     #    actually declares (each block is guarded on the var being set).

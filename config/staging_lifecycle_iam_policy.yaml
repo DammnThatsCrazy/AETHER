@@ -1,0 +1,92 @@
+# Reviewed contract for the role used by staging-lifecycle.yml and
+# staging-ttl-guard.yml. This is deliberately separate from the Terraform
+# apply role: lifecycle may observe, wake, and sleep staging, but may not
+# provision infrastructure or read application secrets.
+version: 1
+profile: staging
+role: AetherStagingLifecycle
+region: us-east-1
+statements:
+  - sid: InspectStagingEcs
+    actions:
+      - ecs:DescribeClusters
+      - ecs:ListServices
+      - ecs:DescribeServices
+      - ecs:DescribeTasks
+    resource: arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging
+    scope: staging-cluster
+  - sid: InspectStagingTaskDefinitions
+    actions:
+      - ecs:DescribeTaskDefinition
+    resource: arn:aws:ecs:us-east-1:${account_id}:task-definition/AETHER-staging-*
+    scope: staging-task-definition
+  - sid: MutateStagingEcs
+    actions:
+      - ecs:UpdateService
+    resource: arn:aws:ecs:us-east-1:${account_id}:service/AETHER-staging/AETHER-staging-*
+    scope: staging-service
+  - sid: RunStagingMigrationTasks
+    actions:
+      - ecs:RunTask
+    resource:
+      - arn:aws:ecs:us-east-1:${account_id}:task-definition/AETHER-staging-*
+      - arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging
+    scope: staging-migration
+  - sid: PassOnlyStagingTaskRoles
+    actions:
+      - iam:PassRole
+    resource:
+      - arn:aws:iam::${account_id}:role/AETHER-staging-ecs-task-role
+      - arn:aws:iam::${account_id}:role/AETHER-staging-ecs-execution-role
+    scope: staging-task-roles
+    conditions:
+      iam:PassedToService:
+        - ecs-tasks.amazonaws.com
+  - sid: ManageStagingAwakeLease
+    actions:
+      - ssm:GetParameter
+      - ssm:PutParameter
+      - ssm:DeleteParameter
+    resource: arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/lifecycle/awake-until
+    scope: staging-lease
+  - sid: PublishStagingStaticArtifacts
+    actions:
+      - s3:ListBucket
+      - s3:GetObject
+      - s3:PutObject
+      - s3:DeleteObject
+    resource:
+      - arn:aws:s3:::aether-staging-*
+      - arn:aws:s3:::aether-staging-*/*
+    scope: staging-static-assets
+  - sid: InspectStagingLogs
+    actions:
+      - logs:DescribeLogGroups
+    resource: arn:aws:logs:us-east-1:${account_id}:log-group:/ecs/AETHER-staging/*
+    scope: staging-logs
+  - sid: InspectStagingMetrics
+    actions:
+      - cloudwatch:ListMetrics
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: PreventAutoscalingRevival
+    actions:
+      - application-autoscaling:DescribeScalableTargets
+      - application-autoscaling:RegisterScalableTarget
+    resource: '*'
+    scope: staging-ecs-scalable-targets
+  - sid: ReadStagingBudgetLeaseEvidence
+    actions:
+      - sts:GetCallerIdentity
+    resource: '*'
+    scope: identity-verification
+
+forbidden_actions:
+  - terraform:*
+  - secretsmanager:GetSecretValue
+  - iam:CreateRole
+  - iam:PutRolePolicy
+  - iam:AttachRolePolicy
+  - ec2:*
+  - rds:*
+  - kms:Decrypt

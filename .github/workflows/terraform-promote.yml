@@ -234,7 +234,9 @@ jobs:
             -backend-config="key=profiles/${PROFILE}/terraform.tfstate" \
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true"
-          if terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend'; then
+          state_list_file="$(mktemp)"
+          terraform state list >"$state_list_file"
+          if grep -Fxq 'module.alb.aws_lb_target_group.backend' "$state_list_file"; then
             echo '::error::legacy backend target-group state address remains; run the confirmation-gated terraform-state-migrate workflow and regenerate the reviewed plan'
             exit 1
           fi
@@ -809,7 +811,9 @@ jobs:
           while IFS= read -r repository; do
             [ -n "$repository" ] || continue
             state_address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
-            if terraform state list | grep -Fxq "$state_address"; then
+            state_list_file="$(mktemp)"
+            terraform state list >"$state_list_file"
+            if grep -Fxq "$state_address" "$state_list_file"; then
               continue
             fi
             set +e
@@ -905,7 +909,9 @@ jobs:
             -backend-config="key=profiles/${PROFILE}/terraform.tfstate" \
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true"
-          if terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend'; then
+          state_list_file="$(mktemp)"
+          terraform state list >"$state_list_file"
+          if grep -Fxq 'module.alb.aws_lb_target_group.backend' "$state_list_file"; then
             echo '::error::legacy backend target-group state address remains; run the confirmation-gated terraform-state-migrate workflow and create a fresh plan'
             exit 1
           fi
@@ -937,7 +943,7 @@ jobs:
                 fi
               fi
               if [ -n "$existing_tg" ] && [ "$existing_tg" != None ] \
-                && ! terraform state list | grep -Fxq 'module.alb.aws_lb_target_group.backend[0]'; then
+                && ! grep -Fxq 'module.alb.aws_lb_target_group.backend[0]' "$state_list_file"; then
                 echo '::error::aether-staging-backend already exists outside Terraform state; run the import-only staging-state-reconcile workflow and create a fresh plan before applying'
                 exit 1
               fi
