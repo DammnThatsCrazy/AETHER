@@ -201,9 +201,21 @@ class GraphMutationGateway:
 
     # ── Public API ──────────────────────────────────────────────────────────
 
-    async def apply(self, intent: MutationIntent) -> MutationOutcome:
-        """Apply one graph mutation through the gateway pipeline."""
-        mode = _gateway_mode()
+    async def apply(
+        self, intent: MutationIntent, *, mode_override: Optional[str] = None
+    ) -> MutationOutcome:
+        """Apply one graph mutation through the gateway pipeline.
+
+        ``mode_override`` forces the mode ladder for this one call, ignoring the
+        global ``settings.temporal_observatory.mutation_gateway_mode``. A writer
+        that must ledger its mutations regardless of the global rollout stage
+        (e.g. the semantic graph projector governing its own writes) passes an
+        explicit ``"shadow"`` / ``"enforce"``. Anything not in ``_MODES``
+        (including the default ``None``) falls back to the global mode, so the
+        off-mode byte-identical / digest-parity invariant is preserved unchanged
+        for every caller that does not opt in.
+        """
+        mode = mode_override if mode_override in _MODES else _gateway_mode()
         if mode == "off":
             # Zero behavior change: exactly what a direct writer does today.
             result = await self._project(intent)

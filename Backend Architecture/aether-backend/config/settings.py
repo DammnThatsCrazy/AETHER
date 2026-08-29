@@ -798,6 +798,20 @@ class SemanticIntelligenceConfig:
     reconciler_enabled: bool = _env_bool("SEMANTIC_RECONCILER_ENABLED", False)
     retention_enabled: bool = _env_bool("SEMANTIC_RETENTION_ENABLED", False)
     graph_projector_enabled: bool = _env_bool("SEMANTIC_GRAPH_PROJECTOR_ENABLED", False)
+    # Force the mutation-gateway mode ladder for the graph projector's own writes
+    # ('' = inherit the global temporal_observatory.mutation_gateway_mode). Lets
+    # the projector ledger its projections regardless of the global rollout stage.
+    graph_projector_gateway_mode: str = _env("SEMANTIC_GRAPH_PROJECTOR_GATEWAY_MODE", "")
+    # Also project entity Gold as governed graph VERTICES (edges-only when off).
+    graph_vertex_projection_enabled: bool = _env_bool(
+        "SEMANTIC_GRAPH_VERTEX_PROJECTION_ENABLED", False
+    )
+    # Gate auto-projection on a consent/quality policy: an edge failing the
+    # auto-project predicate is deferred to the review queue instead of projected
+    # (off = auto-project every edge, the existing behavior).
+    graph_promotion_review_enabled: bool = _env_bool(
+        "SEMANTIC_GRAPH_PROMOTION_REVIEW_ENABLED", False
+    )
     classifier_provider: str = _env("SEMANTIC_CLASSIFIER_PROVIDER", "deterministic")
     shadow_provider: str = _env("SEMANTIC_SHADOW_PROVIDER", "")
     canary_tenants: list[str] = field(

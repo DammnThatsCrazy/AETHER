@@ -574,22 +574,16 @@ class SemanticIntelligenceService:
             "insufficient_data": not sem_rows,
         }
 
-    async def list_relationship_edges(self, tenant_id: str) -> list[dict[str, Any]]:
-        """Every directed relationship edge from a tenant's Gold state.
+    async def _gold_relationship_rows(self, tenant_id: str) -> list[dict[str, Any]]:
+        """The COMPLETE Gold relationship set for a tenant (paged, un-truncated).
 
-        Reads ``gold_relationship_semantic_state`` (the durable directed-pair
-        projections the reducers maintain) and shapes each into an overlay edge
-        (``source_ref -> target_ref`` with stance/trust/confidence/validity).
-        This is the honest source for the graph-overlay ``edge_overlays`` —
-        available whether or not the graph projector has run, since it reads
-        Gold directly rather than the projected graph.
+        ``list_by_tenant`` defaults to a 500-row limit; page through every page so
+        a tenant with more than one page of relationships is never silently
+        truncated (every edge is served, and a requested subject beyond the first
+        page is found).
         """
         from .repositories.base_fact_repo import SemanticFactRepository
 
-        # ``list_by_tenant`` defaults to a 500-row limit; page through the
-        # COMPLETE Gold set so a tenant with more than one page of relationships
-        # is never silently truncated (every edge is served, and a requested
-        # subject beyond the first page is found).
         repo = SemanticFactRepository("gold_relationship_semantic_state")
         rows: list[dict[str, Any]] = []
         offset = 0
@@ -601,29 +595,131 @@ class SemanticIntelligenceService:
             if len(page) < _RELATIONSHIP_PAGE:
                 break
             offset += _RELATIONSHIP_PAGE
+        return rows
+
+    async def _projected_relationship_edges(
+        self,
+        tenant_id: str,
+        gold_by_pair: dict[tuple[str, str], dict[str, Any]],
+        restricted_pairs: set[tuple[str, str]],
+        graph_client: Optional[Any],
+    ) -> list[dict[str, Any]]:
+        """Overlay edges sourced from the ACTUALLY-PROJECTED graph, tenant-scoped.
+
+        Reads the live ``SEMANTIC_RELATES_TO`` edges back through the GraphClient
+        via the projector's ``_list_projected_edges_for_tenant`` helper — the flat
+        backend edge store locally, or a tenant-scoped ``get_vertices_for_tenant``
+        scan (never the unscoped ``get_all_vertices``, which the scoped-read gate
+        forbids). Each returned edge already carries the tenant's projected
+        stance/trust/confidence, so the overlay reflects real graph state.
+
+        Consent is preserved fail-closed: a pair whose Gold row is
+        consent-restricted (``restricted_pairs``) is dropped even if a stale
+        projection outlived the DSR revocation. Gold enriches any signal a
+        projected edge is missing. Returns ``[]`` on any read failure so the
+        caller falls back to Gold rather than surfacing a partial/erroring overlay.
+        """
+        from shared.graph.graph import get_graph_client
+
+        from .graph_projector import _list_projected_edges_for_tenant
+
+        client = graph_client or get_graph_client()
+        try:
+            projected = await _list_projected_edges_for_tenant(client, tenant_id)
+        except Exception:
+            logger.exception(
+                "semantic overlay: projected-edge read-back failed for tenant %s",
+                tenant_id,
+            )
+            return []
         edges: list[dict[str, Any]] = []
+        for edge in projected:
+            props = edge.properties or {}
+            source = edge.from_vertex_id
+            target = edge.to_vertex_id
+            if not source or not target:
+                continue
+            # Fail-closed: never serve an edge for a consent-restricted pair.
+            if (source, target) in restricted_pairs:
+                continue
+            overlay = {
+                "source_ref": source,
+                "target_ref": target,
+                "relationship_ref": props.get("relationship_ref"),
+                "relationship_layer": props.get("relationship_layer"),
+                "stance_alignment": props.get("stance_alignment"),
+                "trust_signal": props.get("trust_signal"),
+                "interaction_quality": props.get("interaction_quality"),
+                "influence_direction": props.get("influence_direction"),
+                "confidence": props.get("confidence"),
+                "valid_from": props.get("valid_from"),
+                "live_in_graph": True,
+            }
+            # Enrich any signal the projected edge is missing from Gold.
+            base = gold_by_pair.get((source, target))
+            if base:
+                for key, value in base.items():
+                    if overlay.get(key) is None and value is not None:
+                        overlay[key] = value
+            edges.append(overlay)
+        return edges
+
+    async def list_relationship_edges(
+        self, tenant_id: str, *, graph_client: Optional[Any] = None
+    ) -> list[dict[str, Any]]:
+        """Every directed relationship edge for a tenant's graph overlay.
+
+        Graph-primary with a Gold fallback: the overlay's ``edge_overlays`` come
+        from the ACTUALLY-PROJECTED ``SEMANTIC_RELATES_TO`` edges read back through
+        the GraphClient (each flagged ``live_in_graph=True``), so it reflects real,
+        governed graph state — the edges a graph consumer would traverse — not just
+        the Gold that may or may not have reached the graph. When the projector has
+        not run yet (the graph holds no edge for the tenant) it falls back to the
+        durable ``gold_relationship_semantic_state`` projections (each flagged
+        ``live_in_graph=False``), so the overlay is still populated before the
+        first projector pass.
+
+        Tenant isolation and consent filtering hold on both paths: the graph
+        read-back is tenant-scoped and every consent-restricted pair is dropped
+        fail-closed regardless of which path serves it. ``graph_client`` is
+        injectable for tests (production reads the process-wide client).
+        """
+        rows = await self._gold_relationship_rows(tenant_id)
+        gold_by_pair: dict[tuple[str, str], dict[str, Any]] = {}
+        restricted_pairs: set[tuple[str, str]] = set()
+        gold_edges: list[dict[str, Any]] = []
         for data in rows:
             source = data.get("source_ref")
             target = data.get("target_ref")
             if not source or not target:
                 continue
             if _is_consent_restricted(data):
+                restricted_pairs.add((source, target))
                 continue
-            edges.append(
-                {
-                    "source_ref": source,
-                    "target_ref": target,
-                    "relationship_ref": data.get("relationship_ref"),
-                    "relationship_layer": data.get("relationship_layer"),
-                    "stance_alignment": data.get("stance_alignment"),
-                    "trust_signal": data.get("trust_signal"),
-                    "interaction_quality": data.get("interaction_quality"),
-                    "influence_direction": data.get("influence_direction"),
-                    "confidence": data.get("confidence"),
-                    "valid_from": data.get("valid_from"),
-                }
-            )
-        return edges
+            overlay = {
+                "source_ref": source,
+                "target_ref": target,
+                "relationship_ref": data.get("relationship_ref"),
+                "relationship_layer": data.get("relationship_layer"),
+                "stance_alignment": data.get("stance_alignment"),
+                "trust_signal": data.get("trust_signal"),
+                "interaction_quality": data.get("interaction_quality"),
+                "influence_direction": data.get("influence_direction"),
+                "confidence": data.get("confidence"),
+                "valid_from": data.get("valid_from"),
+            }
+            gold_by_pair[(source, target)] = overlay
+            gold_edges.append(overlay)
+        # Prefer the real projected graph state; fall back to Gold when the
+        # projector has not yet written an edge for this tenant.
+        projected = await self._projected_relationship_edges(
+            tenant_id, gold_by_pair, restricted_pairs, graph_client
+        )
+        if projected:
+            return projected
+        for overlay in gold_edges:
+            overlay["live_in_graph"] = False
+        return gold_edges
 
     async def recompute_episodes(self, tenant_id: str, subject_ref: str):
         """Recompute and durably persist a subject's Gold episodes."""
@@ -724,6 +820,92 @@ class SemanticIntelligenceService:
         )
         _record_review_queue_gauge(await self._review_queue.counts(tenant_id))
         return item
+
+    async def resolve_promotion_candidate(
+        self,
+        tenant_id: str,
+        item_id: str,
+        disposition: str,
+        *,
+        gateway: Optional[Any] = None,
+        graph_client: Optional[Any] = None,
+    ) -> Optional[dict[str, Any]]:
+        """Dispose of one ``graph_promotion_candidate`` review item.
+
+        ``approve`` re-reads the open item (tenant-scoped), re-derives the
+        ``source_ref``/``target_ref`` the projector enqueued, re-checks consent on
+        the pair's current Gold row (fail-closed), then promotes exactly that
+        canonical edge through :func:`graph_projector.project_pair` — the governed
+        gateway write path, never a direct graph write — before resolving the item
+        ``approved``. ``reject`` resolves the item ``rejected`` WITHOUT projecting.
+
+        Returns ``None`` when no OPEN ``graph_promotion_candidate`` item with that
+        id exists for the tenant. Raises :class:`ForbiddenError` when an approved
+        pair is consent-restricted, so a revoked-consent relationship can never be
+        promoted into the graph. ``gateway`` / ``graph_client`` are injectable for
+        tests (production uses the process-wide client + gateway).
+        """
+        from shared.common.common import ForbiddenError
+
+        items = await self._review_queue.list_open(
+            tenant_id, "graph_promotion_candidate"
+        )
+        item = next((row for row in items if row.get("id") == item_id), None)
+        if item is None:
+            return None
+
+        if disposition == "reject":
+            resolved = await self._review_queue.resolve(tenant_id, item_id, "rejected")
+            _record_review_queue_gauge(await self._review_queue.counts(tenant_id))
+            return {
+                "item_id": item_id,
+                "disposition": "rejected",
+                "projected": False,
+                "resolved": resolved,
+            }
+
+        # Approve: re-derive the endpoints the projector recorded on enqueue.
+        payload = item.get("payload") or {}
+        source_ref = payload.get("source_ref")
+        target_ref = payload.get("target_ref")
+        if not source_ref or not target_ref:
+            raise ForbiddenError(
+                "Promotion candidate is missing source/target endpoints"
+            )
+
+        # Fail-closed consent re-check on the CURRENT Gold row for the pair.
+        from .reducers import relationship_ref
+        from .repositories.base_fact_repo import SemanticFactRepository
+
+        rel = relationship_ref(str(source_ref), str(target_ref))
+        sem_rows = await SemanticFactRepository(
+            "gold_relationship_semantic_state"
+        ).list_by_tenant(tenant_id, rel, limit=1)
+        if sem_rows and _is_consent_restricted(sem_rows[0]):
+            raise ForbiddenError(
+                "Promotion candidate pair is consent-restricted; refusing to project"
+            )
+
+        from . import graph_projector
+
+        report = await graph_projector.project_pair(
+            tenant_id,
+            str(source_ref),
+            str(target_ref),
+            gateway=gateway,
+            graph_client=graph_client,
+        )
+        resolved = await self._review_queue.resolve(tenant_id, item_id, "approved")
+        _record_review_queue_gauge(await self._review_queue.counts(tenant_id))
+        return {
+            "item_id": item_id,
+            "disposition": "approved",
+            "source_ref": source_ref,
+            "target_ref": target_ref,
+            "projected": report.projected > 0,
+            "projection": report.to_dict(),
+            "resolved": resolved,
+        }
 
     async def review_queue(
         self, tenant_id: str, queue_type: Optional[str] = None
