@@ -123,6 +123,16 @@ because those profiles run inline ML and do not start a dedicated ML service.
 The Terraform promotion workflow enforces this distinction and rejects an empty
 ML digest for profiles that declare dedicated remote ML.
 
+Staging is not considered runnable merely because its Terraform plan is green.
+The lifecycle rehearsal also requires a verified `AetherStagingLifecycle` role,
+an awake lease written before apply, and an effective apply-policy simulation
+for every mutating AWS action. ECR repository ownership is classified before
+planning: a canonical-but-tainted repository is repaired with the explicit
+untaint path, a remote repository absent from state uses the confirmation-gated
+import path, and ambiguous or cross-profile ownership stops the run. Any state
+change invalidates the previous plan and requires a new reviewed plan for the
+same immutable release digest.
+
 ---
 
 ## `local`

@@ -74,6 +74,18 @@ every marker-recorded tenant during its always-run cleanup. The only durable
 rehearsal credential is the encrypted staging admin bootstrap key, which is
 supplied out of band and never generated or echoed by CI.
 
+The lifecycle and apply contracts are intentionally separate. `AetherStagingPlan`
+owns remote plan and state-lock access, while `AetherStagingDeploy` owns only the
+reviewed staging apply actions and must be verified by the effective-policy
+simulator before a mutation. `AetherStagingLifecycle` owns the bounded awake
+lease, ECS inspection/update, migration-task execution, static publication,
+autoscaling-floor cleanup, and evidence collection; it cannot create IAM roles,
+read application secret values, or mutate non-staging resources. The checked-in
+IAM manifests are validated against the workflow action inventory so adding a
+new lifecycle AWS call without its least-privilege grant fails CI before a
+rehearsal can start. State reconciliation is always followed by a fresh plan;
+no plan generated before an import or untaint may be reused.
+
 ## Scope — three different things live under `AWS Deployment/`
 
 Read this section before anything else. Conflating these three is the single
