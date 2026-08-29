@@ -15,6 +15,7 @@
 #   aether/canary-secret-seed        — Canary token seed
 #   aether/extraction-canary-seed    — Extraction mesh canary seed
 #   aether/sdk-config-secret         — SDK manifest signing secret
+#   aether/first-admin-bootstrap-token — one-time staging admin bootstrap token
 #
 # DB credentials: managed by the RDS module via manage_master_user_password.
 # Redis AUTH token: managed by the ElastiCache module. Both ARNs are passed
@@ -160,6 +161,9 @@ locals {
     }
     "sdk-config-secret" = {
       description = "HMAC signing secret for SDK configuration manifests"
+    }
+    "first-admin-bootstrap-token" = {
+      description = "One-time staging first-admin bootstrap token"
     }
   }
 }

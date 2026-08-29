@@ -318,6 +318,7 @@ locals {
       CANARY_SECRET_SEED        = var.secret_arns["canary-secret-seed"]
       EXTRACTION_CANARY_SEED    = var.secret_arns["extraction-canary-seed"]
       SDK_CONFIG_SECRET         = var.secret_arns["sdk-config-secret"]
+      FIRST_ADMIN_BOOTSTRAP_TOKEN = var.secret_arns["first-admin-bootstrap-token"]
     },
     # Redis AUTH token — read by shared/cache/cache.py as REDIS_PASSWORD.
     # Only mounted when ElastiCache exists; every task (API and workers)
