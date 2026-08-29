@@ -393,6 +393,9 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     assert "for profile in demo preview" in text
     assert "profiles/${profile}/terraform.tfstate" in text
     assert "state-managed ECR key" in text
+    assert "Adopt uniquely-owned legacy ECR state addresses" in text
+    assert "terraform state mv -lock-timeout=5m \"$owner\" \"$address\"" in text
+    assert "multiple staging state owners" in text
 
 
 def test_tainted_staging_ecr_repair_is_explicit_and_requires_a_fresh_plan() -> None:
@@ -496,6 +499,8 @@ def test_staging_reconciles_preexisting_immutable_aes256_backend_repository() ->
     assert "ECR repository '$repository' must use the reviewed staging KMS key" in workflow
     assert "staging backend must remain the reviewed AES256 repository" in workflow
     assert 'kms_repositories="$(printf' in workflow
+    assert "normalized_imports" in workflow
+    assert "already at the canonical staging address" in workflow
 
 
 def test_staging_cmk_service_policy_and_environment_tags_are_present() -> None:
