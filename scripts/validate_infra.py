@@ -38,6 +38,20 @@ if str(ROOT) not in sys.path:
 
 from scripts.lib.preflight_env import PLACEHOLDER_SUBSTRINGS, REQUIRED_SECRET_VARS
 
+# Values that are syntactically non-empty but are explicitly rejected by the
+# backend outside local mode. Keep these here as well so infrastructure
+# preflight cannot report a false green immediately before task startup.
+KNOWN_INSECURE_DEFAULTS = frozenset({"aether-mesh-canary-seed"})
+
+
+def _is_placeholder_or_insecure_default(value: str) -> bool:
+    normalized = value.strip().lower()
+    return (
+        not normalized
+        or normalized in KNOWN_INSECURE_DEFAULTS
+        or any(marker in normalized for marker in PLACEHOLDER_SUBSTRINGS)
+    )
+
 # Backend dimension -> canonical backend value -> env vars that gate it.
 # A profile that uses redis for cache must set REDIS_HOST; one that uses
 # dynamodb must not (DynamoDB is reached through AWS SDK credentials, no host
@@ -232,7 +246,7 @@ def main() -> None:
     # 2. Secret validation
     print("\n2. Secret Validation")
     jwt = os.getenv("JWT_SECRET", "")
-    if not jwt or any(marker in jwt.lower() for marker in PLACEHOLDER_SUBSTRINGS):
+    if _is_placeholder_or_insecure_default(jwt):
         print("  ✗ JWT_SECRET is default/empty — MUST be rotated")
         if env != "local":
             errors += 1
@@ -255,7 +269,7 @@ def main() -> None:
 
     for name in REQUIRED_SECRET_VARS:
         value = os.getenv(name, "")
-        if env != "local" and (not value or any(marker in value.lower() for marker in PLACEHOLDER_SUBSTRINGS)):
+        if env != "local" and _is_placeholder_or_insecure_default(value):
             print(f"  ✗ {name} is missing or a placeholder — MUST be provisioned")
             errors += 1
         elif value:

@@ -1036,6 +1036,28 @@ def test_the_wake_lease_records_the_original_wake_time():
     assert _run_lease_script(_lease(0, 4))["expired"] is False
 
 
+def test_wake_apply_refresh_preserves_lease_anchor_and_reassumes_credentials():
+    """A long protected promotion cannot reset the TTL ceiling or expire creds."""
+    doc = _workflow_yaml(LIFECYCLE)
+    steps = _steps(doc, "wake-apply")
+    names = [step.get("name", "") for step in steps]
+    dispatch_index = names.index("Dispatch the reviewed apply for the verified wake plan")
+    capture_index = names.index("Capture the applied certificate-covered API hostname")
+    credential_steps = [
+        i for i, step in enumerate(steps)
+        if str(step.get("uses", "")).startswith("aws-actions/configure-aws-credentials")
+    ]
+    assert len(credential_steps) >= 2, "wake-apply must re-assume credentials after promotion wait"
+    assert any(dispatch_index < i < capture_index for i in credential_steps)
+    refresh = next(s for s in steps if s.get("name") == "Refresh the awake lease after readiness")
+    run = refresh["run"]
+    assert "ssm get-parameter" in run
+    assert '"$lease_since" "$deadline" "$lease_extensions"' in run
+    assert '"$refreshed_lease"' in run
+    assert '"${lease_since} +${MAX_AWAKE_HOURS_CAP} hours"' in run
+    assert '"extensions":0' not in run
+
+
 def test_an_unexpired_lease_is_not_killed_mid_rehearsal():
     """The whole point of the extension: enforcement is gated on expiry."""
     doc = _workflow_yaml(TTL_GUARD)

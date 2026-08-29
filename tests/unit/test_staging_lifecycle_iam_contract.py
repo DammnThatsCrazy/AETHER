@@ -32,6 +32,11 @@ def test_lifecycle_manifest_uses_task_specific_scopes() -> None:
         "arn:aws:ecs:us-east-1:${account_id}:task-definition/AETHER-staging-*",
         "arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging",
     ]
+    assert by_sid["RunStagingMigrationTasks"]["conditions"] == {
+        "ArnEquals": {
+            "ecs:cluster": "arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging",
+        }
+    }
 
 
 def test_lifecycle_manifest_covers_static_bucket_parameter_reads() -> None:

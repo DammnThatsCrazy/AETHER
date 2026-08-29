@@ -40,6 +40,9 @@ statements:
       - arn:aws:ecs:us-east-1:${account_id}:task-definition/AETHER-staging-*
       - arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging
     scope: staging-migration
+    conditions:
+      ArnEquals:
+        ecs:cluster: arn:aws:ecs:us-east-1:${account_id}:cluster/AETHER-staging
   - sid: PassOnlyStagingTaskRoles
     actions:
       - iam:PassRole

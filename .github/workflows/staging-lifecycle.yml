@@ -848,6 +848,15 @@ jobs:
           fi
           printf 'apply_run_id=%s\n' "$run_id" >> "$GITHUB_OUTPUT"
 
+      # The promotion wait may include a protected-environment approval and
+      # can exceed the default one-hour OIDC session. Re-assume the lifecycle
+      # role before any follow-up AWS reads or lease writes so a successful
+      # promotion cannot be reported as a failed rehearsal on expired creds.
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          aws-region: us-east-1
+
       - name: Capture the applied certificate-covered API hostname
         id: outputs
         env:
@@ -931,13 +940,25 @@ jobs:
           AWAKE_HOURS: ${{ needs.select-profile.outputs.awake_hours }}
         run: |
           set -euo pipefail
-          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          lease="$(aws ssm get-parameter --name "$AWAKE_LEASE_PARAM" \
+            --query 'Parameter.Value' --output text)"
+          lease_since="$(jq -er '.awake_since // empty' <<<"$lease")"
+          lease_extensions="$(jq -er '.extensions // 0' <<<"$lease")"
+          test -n "$lease_since" || { echo '::error::pre-apply lease has no awake_since anchor'; exit 1; }
+          case "$lease_extensions" in
+            ''|*[!0-9]*) echo '::error::pre-apply lease has invalid extensions'; exit 1 ;;
+          esac
           deadline="$(date -u -d "+${AWAKE_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ)"
-          lease="$(printf '{"awake_since":"%s","awake_until":"%s","extensions":0}' "$now" "$deadline")"
+          ceiling="$(date -u -d "${lease_since} +${MAX_AWAKE_HOURS_CAP} hours" +%Y-%m-%dT%H:%M:%SZ)"
+          if [ "$(date -u -d "$deadline" +%s)" -gt "$(date -u -d "$ceiling" +%s)" ]; then
+            deadline="$ceiling"
+          fi
+          refreshed_lease="$(printf '{"awake_since":"%s","awake_until":"%s","extensions":%s}' \
+            "$lease_since" "$deadline" "$lease_extensions")"
           aws ssm put-parameter --name "$AWAKE_LEASE_PARAM" \
-            --type String --overwrite --value "$lease" \
+            --type String --overwrite --value "$refreshed_lease" \
             --description "staging awake window (UTC); enforced by staging-ttl-guard"
-          echo "staging awake lease: since ${now}, expires ${deadline}"
+          echo "staging awake lease refreshed: since ${lease_since}, expires ${deadline}, extensions ${lease_extensions}"
 
   # ---------------------------------------------------------------------------
   # Phase 5 — the rehearsal itself.
