@@ -2599,6 +2599,26 @@ policies:
     requires_consent_invalidation: false
     requires_permission_hash: false
 
+  # One-time staging first-admin bootstrap claim. The row stores only the
+  # environment, email, tenant id, and a hash of the minted key; preserving it
+  # prevents a replay from silently minting a second first-admin credential.
+  - resource_type: first_admin_bootstrap
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: legal
+    delete_behavior: preserve
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: true
+
   - resource_type: assets
     authoritative_store: postgres
     metadata_store: postgres
