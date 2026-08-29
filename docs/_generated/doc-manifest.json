@@ -1312,6 +1312,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/FIRST-ADMIN-BOOTSTRAP.md",
+      "title": "AETHER First-Admin Bootstrap",
+      "slug": "operations/first-admin-bootstrap",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/FLOW-OF-FUNDS-TRACE.md",
       "title": "Flow of Funds Trace",
       "slug": "flow-of-funds-trace",
