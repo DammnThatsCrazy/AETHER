@@ -4,7 +4,7 @@ slug: operations/first-admin-bootstrap
 section: operations
 visibility: I
 audience: [ops, dev-senior, architect]
-status: draft
+status: experimental
 since_version: "8.12.0"
 estimated_read_minutes: 5
 canonical_owner: platform@aether
