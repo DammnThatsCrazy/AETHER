@@ -333,12 +333,12 @@ jobs:
                     *aws_ecr_repository.*)
                       if terraform state show -no-color "$candidate" 2>/dev/null \
                         | grep -Eq "^[[:space:]]*name[[:space:]]*=[[:space:]]*\"${repository}\"[[:space:]]*$"; then
-                        printf '%s\\n' "$candidate"
+                        printf '%s\n' "$candidate"
                       fi
                       ;;
                   esac
                 done)"
-                owner_count="$(printf '%s\\n' "$owners" | awk 'NF' | wc -l | tr -d ' ')"
+                owner_count="$(printf '%s\n' "$owners" | awk 'NF' | wc -l | tr -d ' ')"
                 if [ "$owner_count" -gt 1 ]; then
                   echo "::error::Refusing import: ECR repository '$repository' has multiple staging state owners"; exit 1
                 fi
