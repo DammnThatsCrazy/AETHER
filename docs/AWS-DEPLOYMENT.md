@@ -456,9 +456,11 @@ existing group or an exact reviewed ECR repository, and produce a fresh
 reviewed plan. If a repository already exists in staging state at a legacy
 Terraform address, the workflow adopts it only when exactly one staging owner
 is found, moving that state entry to the reviewed canonical module address;
-ambiguous or cross-profile ownership still fails closed. If an existing ECR
-repository is already at the canonical address but marked tainted after an
-interrupted replacement, use the workflow's explicit
+the complete digest, provider, and root-module input contract is validated
+before that move, and tainted or otherwise non-managed legacy instances fail
+closed instead of being carried forward. Ambiguous or cross-profile ownership
+still fails closed. If an existing ECR repository is already at the canonical
+address but marked tainted after an interrupted replacement, use the workflow's explicit
 `untaint_ecr_repository_names` input instead. That input clears taint only after
 the repository's live encryption and KMS key match both the reviewed staging
 configuration and the Terraform-managed ECR KMS key in state; it uses

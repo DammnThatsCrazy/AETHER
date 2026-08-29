@@ -396,6 +396,15 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     assert "Adopt uniquely-owned legacy ECR state addresses" in text
     assert "terraform state mv -lock-timeout=5m \"$owner\" \"$address\"" in text
     assert "multiple staging state owners" in text
+    prerequisites = text.index("Validate import prerequisites before state adoption")
+    adoption = text.index("Adopt uniquely-owned legacy ECR state addresses")
+    assert prerequisites < adoption
+    assert "Refusing adoption: ECR repository '$repository' legacy owner" in text
+    assert 'legacy_status="$(jq -r --arg repository "$repository"' in text
+    assert "use the explicit untaint path after review" in text
+    assert "First validate every candidate and record the complete adoption" in text
+    assert 'printf \'%s\\t%s\\n\' "$owner" "$address" >> "$adoptions_file"' in text
+    assert "if [ -s \"$adoptions_file\" ]; then" in text
 
 
 def test_tainted_staging_ecr_repair_is_explicit_and_requires_a_fresh_plan() -> None:
