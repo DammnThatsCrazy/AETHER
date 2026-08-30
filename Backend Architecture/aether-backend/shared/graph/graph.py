@@ -11,6 +11,7 @@ Backend selection:
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import uuid
@@ -888,6 +889,17 @@ def _neptune_endpoint() -> str:
     return os.getenv("NEPTUNE_ENDPOINT", "")
 
 
+def _graph_backend() -> str:
+    """The declared graph backend for non-local, non-Neptune profiles.
+
+    Mirrors ``config.settings.RuntimeConfig.graph_backend`` (default
+    ``postgres``); read from the environment here so ``shared.graph`` stays free
+    of a settings import. Only consulted by ``GraphClient.connect`` when no
+    Neptune endpoint is configured and the process is not local.
+    """
+    return os.getenv("GRAPH_BACKEND", "postgres").strip().lower()
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # IN-MEMORY BACKEND (local/dev)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1101,6 +1113,492 @@ class _InMemoryGraphBackend:
     async def close(self) -> None:
         self._vertices.clear()
         self._edges.clear()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# POSTGRES BACKEND (non-local profiles that declare graph: postgres, no Neptune)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Idempotent DDL mirroring the ``20260902_graph_pg_backend`` Alembic migration
+# (the canonical, production schema owner). ``ensure_schema`` uses it so a test
+# or a bootstrap can materialise the two tables on a database whose migrations
+# have not been applied; production always applies the migration. Keep the two
+# in exact agreement — a column added here must be added to the migration too.
+_PG_GRAPH_SCHEMA_DDL: tuple[str, ...] = (
+    """
+    CREATE TABLE IF NOT EXISTS graph_vertices (
+        vertex_id   TEXT PRIMARY KEY,
+        vertex_type TEXT NOT NULL,
+        tenant_id   TEXT,
+        properties  JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at  TEXT NOT NULL,
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_graph_vertices_tenant ON graph_vertices (tenant_id)",
+    "CREATE INDEX IF NOT EXISTS ix_graph_vertices_tenant_type "
+    "ON graph_vertices (tenant_id, vertex_type)",
+    """
+    CREATE TABLE IF NOT EXISTS graph_edges (
+        edge_id         BIGSERIAL PRIMARY KEY,
+        edge_type       TEXT NOT NULL,
+        from_vertex_id  TEXT NOT NULL,
+        to_vertex_id    TEXT NOT NULL,
+        tenant_id       TEXT,
+        properties      JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at      TEXT NOT NULL,
+        revoked         BOOLEAN NOT NULL DEFAULT FALSE,
+        revoked_at      TEXT,
+        revoke_reason   TEXT,
+        idempotency_key TEXT
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_graph_edges_from "
+    "ON graph_edges (from_vertex_id, edge_type)",
+    "CREATE INDEX IF NOT EXISTS ix_graph_edges_to "
+    "ON graph_edges (to_vertex_id, edge_type)",
+    "CREATE INDEX IF NOT EXISTS ix_graph_edges_tenant ON graph_edges (tenant_id)",
+)
+
+
+def _delete_rowcount(status_tag: str) -> int:
+    """Parse the row count out of an asyncpg ``DELETE <n>`` command tag."""
+    try:
+        return int(str(status_tag).split()[-1])
+    except (ValueError, IndexError):
+        return 0
+
+
+class _PostgresGraphBackend:
+    """Durable graph over Postgres for profiles that declare ``graph: postgres``.
+
+    The staging and production-lean deployment profiles declare ``graph:
+    postgres`` but run no Neptune cluster. Before this backend existed,
+    :meth:`GraphClient.connect` fail-closed with a ``RuntimeError`` in exactly
+    those profiles — the declared backend was never implemented. This backend
+    closes that gap over two JSONB tables (``graph_vertices`` / ``graph_edges``,
+    owned by the ``20260902_graph_pg_backend`` migration) and implements the same
+    narrow async protocol as the in-memory and Neptune backends.
+
+    Its observable semantics are byte-for-byte those of
+    :class:`_InMemoryGraphBackend` — the parity reference the contract tests pin
+    both backends against:
+
+    * **Append-only edges.** Edges are rows, not keyed by ``(from, to, type)``;
+      the same pair may carry several edges (a replica race), exactly as the
+      in-memory list allows, and the projector's reconciliation collapses the
+      duplicates. There are deliberately no foreign keys to ``graph_vertices`` —
+      an edge may exist before/without its endpoint vertices, mirroring the flat
+      in-memory edge store the projector relies on.
+    * **Soft revoke.** :meth:`revoke_edge` marks the ``revoked`` COLUMN (never a
+      hard delete) and is idempotent (already-revoked rows keep their original
+      ``revoked_at`` and are still counted). Every read folds the revoke columns
+      back into the returned edge's ``properties`` so callers that inspect
+      ``properties['revoked']`` behave identically to the in-memory path.
+    * **Indexed tenant scoping.** Ownership is resolved with :func:`tenant_of`
+      (either spelling) and persisted in a ``tenant_id`` column, so tenant-scoped
+      reads and erasure are index lookups — never a global scan filtered
+      afterwards (which ``validate_graph_scoped_reads`` forbids for callers).
+
+    The pool is the process-wide asyncpg pool owned by ``repositories.repos``;
+    this backend never closes it (that would break every other repository).
+    """
+
+    def __init__(self, pool: Any) -> None:
+        self._pool = pool
+
+    # ── (de)serialisation ────────────────────────────────────────────────────
+    @staticmethod
+    def _dump(properties: Optional[dict[str, Any]]) -> str:
+        return json.dumps(properties or {}, default=str)
+
+    @staticmethod
+    def _load(raw: Any) -> dict[str, Any]:
+        if not raw:
+            return {}
+        return json.loads(raw) if isinstance(raw, (str, bytes)) else dict(raw)
+
+    @classmethod
+    def _vertex_from_row(cls, row: Any) -> Vertex:
+        return Vertex(
+            vertex_type=row["vertex_type"],
+            vertex_id=row["vertex_id"],
+            properties=cls._load(row["properties"]),
+            created_at=row["created_at"],
+        )
+
+    @classmethod
+    def _edge_from_row(cls, row: Any) -> Edge:
+        props = cls._load(row["properties"])
+        # Fold the soft-revoke columns back into ``properties`` so downstream
+        # readers (overlay, projector reconciliation) see the same shape the
+        # in-memory backend writes in place on revoke.
+        if row["revoked"]:
+            props["revoked"] = True
+            if row["revoked_at"] is not None:
+                props["revoked_at"] = row["revoked_at"]
+            if row["revoke_reason"] is not None:
+                props["revoke_reason"] = row["revoke_reason"]
+        return Edge(
+            edge_type=row["edge_type"],
+            from_vertex_id=row["from_vertex_id"],
+            to_vertex_id=row["to_vertex_id"],
+            properties=props,
+            created_at=row["created_at"],
+        )
+
+    async def ensure_schema(self) -> None:
+        """Idempotently create the two tables (test/bootstrap convenience).
+
+        Production applies the ``20260902_graph_pg_backend`` migration; this
+        mirrors it with ``CREATE TABLE IF NOT EXISTS`` so a DATABASE_URL-gated
+        test can run against a database whose migrations were not applied.
+        """
+        async with self._pool.acquire() as conn:
+            for ddl in _PG_GRAPH_SCHEMA_DDL:
+                await conn.execute(ddl)
+
+    # ── writes ───────────────────────────────────────────────────────────────
+    async def add_vertex(self, vertex: Vertex) -> str:
+        # Last-write-wins overwrite (in-memory: ``self._vertices[id] = vertex``).
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO graph_vertices
+                    (vertex_id, vertex_type, tenant_id, properties, created_at)
+                VALUES ($1, $2, $3, $4::jsonb, $5)
+                ON CONFLICT (vertex_id) DO UPDATE SET
+                    vertex_type = EXCLUDED.vertex_type,
+                    tenant_id   = EXCLUDED.tenant_id,
+                    properties  = EXCLUDED.properties,
+                    created_at  = EXCLUDED.created_at,
+                    updated_at  = NOW()
+                """,
+                vertex.vertex_id,
+                vertex.vertex_type,
+                tenant_of(vertex.properties),
+                self._dump(vertex.properties),
+                vertex.created_at,
+            )
+        return vertex.vertex_id
+
+    async def add_edge(self, edge: Edge) -> None:
+        props = edge.properties or {}
+        idem = props.get("idempotency_key")
+        async with self._pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO graph_edges
+                    (edge_type, from_vertex_id, to_vertex_id, tenant_id,
+                     properties, created_at, revoked, revoked_at, revoke_reason,
+                     idempotency_key)
+                VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10)
+                """,
+                edge.edge_type,
+                edge.from_vertex_id,
+                edge.to_vertex_id,
+                tenant_of(props),
+                self._dump(props),
+                edge.created_at,
+                bool(props.get("revoked")),
+                props.get("revoked_at"),
+                props.get("revoke_reason"),
+                str(idem) if idem is not None else None,
+            )
+
+    async def revoke_edge(
+        self,
+        from_vertex_id: str,
+        to_vertex_id: str,
+        edge_type: str,
+        reason: str,
+        tenant_id: Optional[str] = None,
+    ) -> int:
+        """Soft-revoke matching edge(s); return the count of matching edges.
+
+        Marks the ``revoked`` column on every not-yet-revoked edge matching
+        ``(from, to, edge_type[, tenant_id])`` and returns the count of ALL
+        matching edges (already-revoked included, whose ``revoked_at`` is
+        preserved) — identical to the in-memory backend. ``tenant_id`` matches
+        the ``tenant_id`` column (``tenant_of`` of the edge's properties).
+        """
+        revoked_at = datetime.now(timezone.utc).isoformat()
+        conditions = ["from_vertex_id = $1", "to_vertex_id = $2", "edge_type = $3"]
+        params: list[Any] = [from_vertex_id, to_vertex_id, edge_type]
+        if tenant_id is not None:
+            params.append(str(tenant_id))
+            conditions.append(f"tenant_id = ${len(params)}")
+        where = " AND ".join(conditions)
+        async with self._pool.acquire() as conn:
+            count = await conn.fetchval(
+                f"SELECT COUNT(*) FROM graph_edges WHERE {where}", *params
+            )
+            if count:
+                await conn.execute(
+                    f"""
+                    UPDATE graph_edges
+                    SET revoked = TRUE,
+                        revoked_at = ${len(params) + 1},
+                        revoke_reason = ${len(params) + 2}
+                    WHERE {where} AND revoked = FALSE
+                    """,
+                    *params,
+                    revoked_at,
+                    reason,
+                )
+        return int(count or 0)
+
+    async def upsert_vertex(self, vertex: Vertex) -> str:
+        """Merge new properties over an existing vertex, or insert it.
+
+        Mirrors ``existing.properties.update(vertex.properties)`` (new values
+        win, ``vertex_type``/``created_at`` unchanged) under ``FOR UPDATE`` so a
+        concurrent upsert of the same id cannot lose a write.
+        """
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    "SELECT properties FROM graph_vertices WHERE vertex_id = $1 "
+                    "FOR UPDATE",
+                    vertex.vertex_id,
+                )
+                if row is not None:
+                    merged = {**self._load(row["properties"]), **(vertex.properties or {})}
+                    await conn.execute(
+                        "UPDATE graph_vertices SET properties = $2::jsonb, "
+                        "tenant_id = $3, updated_at = NOW() WHERE vertex_id = $1",
+                        vertex.vertex_id,
+                        self._dump(merged),
+                        tenant_of(merged),
+                    )
+                else:
+                    await conn.execute(
+                        """
+                        INSERT INTO graph_vertices
+                            (vertex_id, vertex_type, tenant_id, properties, created_at)
+                        VALUES ($1, $2, $3, $4::jsonb, $5)
+                        """,
+                        vertex.vertex_id,
+                        vertex.vertex_type,
+                        tenant_of(vertex.properties),
+                        self._dump(vertex.properties),
+                        vertex.created_at,
+                    )
+        return vertex.vertex_id
+
+    # ── reads ────────────────────────────────────────────────────────────────
+    async def get_vertex(self, vertex_id: str) -> Optional[Vertex]:
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM graph_vertices WHERE vertex_id = $1", vertex_id
+            )
+        return self._vertex_from_row(row) if row else None
+
+    async def _neighbors_one_direction(
+        self,
+        conn: Any,
+        vertex_id: str,
+        edge_type: Optional[str],
+        include_revoked: bool,
+        direction: str,
+    ) -> list[Vertex]:
+        if direction == "out":
+            edge_col, join_col = "from_vertex_id", "to_vertex_id"
+        else:
+            edge_col, join_col = "to_vertex_id", "from_vertex_id"
+        conds = [f"e.{edge_col} = $1"]
+        params: list[Any] = [vertex_id]
+        if edge_type is not None:
+            params.append(edge_type)
+            conds.append(f"e.edge_type = ${len(params)}")
+        if not include_revoked:
+            conds.append("e.revoked = FALSE")
+        rows = await conn.fetch(
+            f"SELECT v.* FROM graph_edges e "
+            f"JOIN graph_vertices v ON v.vertex_id = e.{join_col} "
+            f"WHERE {' AND '.join(conds)} ORDER BY e.edge_id",
+            *params,
+        )
+        return [self._vertex_from_row(r) for r in rows]
+
+    async def get_neighbors(
+        self,
+        vertex_id: str,
+        edge_type: Optional[str] = None,
+        direction: str = "out",
+        include_revoked: bool = False,
+    ) -> list[Vertex]:
+        # A neighbour is only returned when its vertex exists (the JOIN), exactly
+        # like the in-memory backend which appends only a target present in
+        # ``self._vertices``.
+        results: list[Vertex] = []
+        async with self._pool.acquire() as conn:
+            if direction in ("out", "both"):
+                results += await self._neighbors_one_direction(
+                    conn, vertex_id, edge_type, include_revoked, "out"
+                )
+            if direction in ("in", "both"):
+                results += await self._neighbors_one_direction(
+                    conn, vertex_id, edge_type, include_revoked, "in"
+                )
+        return results
+
+    async def get_edges(
+        self,
+        vertex_id: str,
+        edge_type: Optional[str] = None,
+        direction: str = "out",
+        include_revoked: bool = False,
+    ) -> list[Edge]:
+        if direction == "out":
+            conds = ["from_vertex_id = $1"]
+        elif direction == "in":
+            conds = ["to_vertex_id = $1"]
+        else:
+            conds = ["(from_vertex_id = $1 OR to_vertex_id = $1)"]
+        params: list[Any] = [vertex_id]
+        if edge_type is not None:
+            params.append(edge_type)
+            conds.append(f"edge_type = ${len(params)}")
+        if not include_revoked:
+            conds.append("revoked = FALSE")
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                f"SELECT * FROM graph_edges WHERE {' AND '.join(conds)} "
+                f"ORDER BY edge_id",
+                *params,
+            )
+        return [self._edge_from_row(r) for r in rows]
+
+    async def get_all_vertices(self, limit: int = 1000) -> list[Vertex]:
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT * FROM graph_vertices ORDER BY vertex_id LIMIT $1", limit
+            )
+        return [self._vertex_from_row(r) for r in rows]
+
+    async def get_vertices_for_tenant(
+        self, tenant_id: str, limit: int = 1000, *, vertex_type: Optional[str] = None
+    ) -> list[Vertex]:
+        """Vertices for one tenant, the cap applied to that tenant's own rows.
+
+        The tenant predicate is pushed into the WHERE clause (index
+        ``ix_graph_vertices_tenant``), never a global page filtered afterwards.
+        """
+        conds = ["tenant_id = $1"]
+        params: list[Any] = [str(tenant_id)]
+        if vertex_type is not None:
+            params.append(vertex_type)
+            conds.append(f"vertex_type = ${len(params)}")
+        params.append(limit)
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                f"SELECT * FROM graph_vertices WHERE {' AND '.join(conds)} "
+                f"ORDER BY vertex_id LIMIT ${len(params)}",
+                *params,
+            )
+        return [self._vertex_from_row(r) for r in rows]
+
+    async def delete_tenant_data(self, tenant_id: str) -> int:
+        """Hard-delete graph projection data owned by one tenant.
+
+        Removes the tenant's own vertices and every edge that either touches one
+        of those vertices or is itself tenant-owned, and returns
+        ``len(owned_vertices) + edges_removed`` — the same total the in-memory
+        backend reports. Unscoped/system records (no tenant) are never selected.
+        """
+        if not tenant_id:
+            return 0
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                owned = await conn.fetch(
+                    "SELECT vertex_id FROM graph_vertices WHERE tenant_id = $1",
+                    str(tenant_id),
+                )
+                owned_ids = [r["vertex_id"] for r in owned]
+                edge_tag = await conn.execute(
+                    """
+                    DELETE FROM graph_edges
+                    WHERE from_vertex_id = ANY($1::text[])
+                       OR to_vertex_id = ANY($1::text[])
+                       OR tenant_id = $2
+                    """,
+                    owned_ids,
+                    str(tenant_id),
+                )
+                await conn.execute(
+                    "DELETE FROM graph_vertices WHERE tenant_id = $1", str(tenant_id)
+                )
+        return len(owned_ids) + _delete_rowcount(edge_tag)
+
+    async def delete_vertex_if_orphaned(
+        self,
+        vertex_id: str,
+        tenant_id: str,
+        import_commit_id: str,
+    ) -> tuple[bool, str]:
+        """Delete only a vertex exclusively owned by the rolled-back import.
+
+        The ownership / active-reference / shared-history checks are the
+        in-memory backend's, evaluated over the fetched rows inside one
+        transaction so the verify-then-delete is atomic.
+        """
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                vrow = await conn.fetchrow(
+                    "SELECT properties FROM graph_vertices WHERE vertex_id = $1 "
+                    "FOR UPDATE",
+                    vertex_id,
+                )
+                if vrow is None:
+                    return False, "not_found"
+                props = self._load(vrow["properties"])
+                if str(props.get("tenant_id")) != str(tenant_id):
+                    return False, "tenant_mismatch"
+                if str(props.get("import_commit_id")) != str(import_commit_id):
+                    return False, "ownership_changed"
+                owners = {str(value) for value in (props.get("import_commit_ids") or [])}
+                if owners - {str(import_commit_id)}:
+                    return False, "shared_history"
+                incident = await conn.fetch(
+                    "SELECT properties, revoked FROM graph_edges "
+                    "WHERE from_vertex_id = $1 OR to_vertex_id = $1",
+                    vertex_id,
+                )
+                for e in incident:
+                    eprops = self._load(e["properties"])
+                    if not (e["revoked"] or eprops.get("revoked")):
+                        return False, "active_reference"
+                for e in incident:
+                    eprops = self._load(e["properties"])
+                    if str(eprops.get("import_commit_id")) != str(import_commit_id):
+                        return False, "shared_history"
+                await conn.execute(
+                    "DELETE FROM graph_edges WHERE from_vertex_id = $1 "
+                    "OR to_vertex_id = $1",
+                    vertex_id,
+                )
+                await conn.execute(
+                    "DELETE FROM graph_vertices WHERE vertex_id = $1", vertex_id
+                )
+        return True, "deleted"
+
+    async def query(self, gremlin: str) -> list[dict]:
+        logger.debug("Postgres graph QUERY (no-op, not a gremlin backend): %s...", gremlin[:80])
+        return []
+
+    async def ping(self) -> bool:
+        try:
+            async with self._pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+            return True
+        except Exception:
+            return False
+
+    async def close(self) -> None:
+        # The asyncpg pool is process-wide and owned by ``repositories.repos``;
+        # closing it here would break every other repository. Nothing to do.
+        return None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1533,11 +2031,14 @@ class GraphClient:
 
     - AETHER_ENV=local → in-memory graph
     - AETHER_ENV=staging/production + NEPTUNE_ENDPOINT → Neptune via gremlinpython
-    - Non-local without Neptune → RuntimeError (fail-closed)
+    - Non-local, no Neptune, GRAPH_BACKEND=postgres + a database pool → Postgres
+    - Non-local without any usable backend → RuntimeError (fail-closed)
     """
 
     def __init__(self) -> None:
-        self._backend: Optional[_InMemoryGraphBackend | _NeptuneGraphBackend] = None
+        self._backend: Optional[
+            _InMemoryGraphBackend | _NeptuneGraphBackend | _PostgresGraphBackend
+        ] = None
         self._connected = False
         self._mode = "uninitialized"
 
@@ -1562,9 +2063,28 @@ class GraphClient:
             self._backend = _InMemoryGraphBackend()
             self._mode = "in-memory"
             logger.info("GraphClient connected (in-memory, local mode)")
+        elif _graph_backend() == "postgres":
+            # Non-local profiles that declare ``graph: postgres`` (staging /
+            # production-lean) and run no Neptune cluster. ``get_pool`` itself
+            # fail-closes with a RuntimeError when DATABASE_URL is unset in a
+            # non-local environment, so a misconfigured deployment never boots a
+            # graph client silently.
+            from repositories.repos import get_pool
+
+            pool = await get_pool()
+            if pool is None:
+                raise RuntimeError(
+                    "GRAPH_BACKEND=postgres but no database pool is available. "
+                    "Configure DATABASE_URL, or set AETHER_ENV=local for the "
+                    "in-memory fallback."
+                )
+            self._backend = _PostgresGraphBackend(pool)
+            self._mode = "postgres"
+            logger.info("GraphClient connected (Postgres backend)")
         else:
             raise RuntimeError(
-                "NEPTUNE_ENDPOINT not configured. Required in non-local environments. "
+                f"No usable graph backend: NEPTUNE_ENDPOINT unset and "
+                f"GRAPH_BACKEND={_graph_backend()!r} (expected 'postgres'). "
                 "Set AETHER_ENV=local for in-memory fallback."
             )
         self._connected = True
