@@ -1072,14 +1072,19 @@ class _InMemoryGraphBackend:
         ``tenant_id`` records are handled, while unscoped/system vertices are
         never touched.  Dropping the owned vertices also removes their
         incident edges, including edges whose endpoint itself is unscoped.
+
+        Tenant-tagged edges are swept even when the tenant owns NO vertices —
+        the semantic projector writes ``SEMANTIC_RELATES_TO`` edges without
+        projecting vertices by default, so an early "no owned vertices → nothing
+        to erase" return would leak those edges past a tenant erasure. This
+        matches the Postgres and Neptune backends, which delete tenant-tagged
+        edges unconditionally.
         """
         owned = {
             vertex.vertex_id
             for vertex in self._vertices.values()
             if tenant_of(vertex.properties) == str(tenant_id)
         }
-        if not owned:
-            return 0
         self._vertices = {
             vertex_id: vertex
             for vertex_id, vertex in self._vertices.items()
@@ -1169,6 +1174,14 @@ def _delete_rowcount(status_tag: str) -> int:
         return 0
 
 
+# Fixed advisory-lock key that serialises concurrent ``ensure_schema`` callers.
+# Postgres ``CREATE TABLE / INDEX IF NOT EXISTS`` is NOT safe under concurrency
+# (it can raise a duplicate-key / tuple-concurrently-updated error when two
+# sessions run it at once), so the idempotent bootstrap DDL runs under a
+# transaction-scoped ``pg_advisory_xact_lock``.
+_PG_GRAPH_SCHEMA_LOCK_KEY = 0x67726170  # "grap"
+
+
 class _PostgresGraphBackend:
     """Durable graph over Postgres for profiles that declare ``graph: postgres``.
 
@@ -1252,11 +1265,18 @@ class _PostgresGraphBackend:
 
         Production applies the ``20260902_graph_pg_backend`` migration; this
         mirrors it with ``CREATE TABLE IF NOT EXISTS`` so a DATABASE_URL-gated
-        test can run against a database whose migrations were not applied.
+        test can run against a database whose migrations were not applied. The
+        DDL runs under a transaction-scoped advisory lock so concurrent callers
+        (e.g. parallel test workers) serialise rather than racing PG's
+        not-concurrency-safe ``IF NOT EXISTS`` DDL.
         """
         async with self._pool.acquire() as conn:
-            for ddl in _PG_GRAPH_SCHEMA_DDL:
-                await conn.execute(ddl)
+            async with conn.transaction():
+                await conn.execute(
+                    "SELECT pg_advisory_xact_lock($1)", _PG_GRAPH_SCHEMA_LOCK_KEY
+                )
+                for ddl in _PG_GRAPH_SCHEMA_DDL:
+                    await conn.execute(ddl)
 
     # ── writes ───────────────────────────────────────────────────────────────
     async def add_vertex(self, vertex: Vertex) -> str:

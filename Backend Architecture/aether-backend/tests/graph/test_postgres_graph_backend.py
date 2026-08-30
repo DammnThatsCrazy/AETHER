@@ -45,25 +45,53 @@ except ImportError:  # pragma: no cover - asyncpg always installed in CI
 PG_URL = os.getenv("GRAPH_TEST_DATABASE_URL") or os.getenv("DATABASE_URL")
 BACKENDS = ["inmem", "pg"]
 
+# A session-level advisory-lock key that serialises the postgres-backed tests
+# across parallel xdist workers. Namespacing keeps each test's DATA disjoint, but
+# concurrent DDL (`ensure_schema`) and multi-table DML on the shared
+# `graph_vertices`/`graph_edges` tables can still deadlock at the table/lock
+# level; holding this lock for each test's duration means only one pg test's DB
+# work runs at a time, which removes the deadlock without depending on how xdist
+# happens to distribute the tests.
+_TEST_SERIALIZE_KEY = 0x67726170_74657374  # "graptest"
+
 
 async def _open(kind: str):
-    """Return ``(backend, pool)``; ``pool`` is None for in-memory.
+    """Return ``(backend, cleanup)``; ``cleanup`` is an async teardown callable.
 
     Never truncates — isolation is by per-test namespace (see :class:`_NS`) so
-    the shared postgres database is safe under parallel xdist workers. Skips
-    (never fails) when no database is reachable.
+    the shared postgres database is safe under parallel xdist workers, and the
+    per-test session advisory lock serialises the DB work so shared-table locks
+    cannot deadlock. Skips (never fails) when no database is reachable.
     """
     if kind == "pg":
         if asyncpg is None or not PG_URL:
             pytest.skip("no asyncpg / GRAPH_TEST_DATABASE_URL / DATABASE_URL")
         try:
-            pool = await asyncpg.create_pool(PG_URL, min_size=1, max_size=4)
+            pool = await asyncpg.create_pool(PG_URL, min_size=1, max_size=2)
         except Exception as exc:  # pragma: no cover - environment-dependent
             pytest.skip(f"postgres unavailable: {exc}")
+        # Hold a session-level advisory lock on a dedicated connection for the
+        # whole test so pg tests run one at a time across workers.
+        lock_conn = await pool.acquire()
+        await lock_conn.execute("SELECT pg_advisory_lock($1)", _TEST_SERIALIZE_KEY)
         backend = _PostgresGraphBackend(pool)
         await backend.ensure_schema()
-        return backend, pool
-    return _InMemoryGraphBackend(), None
+
+        async def _cleanup() -> None:
+            try:
+                await lock_conn.execute(
+                    "SELECT pg_advisory_unlock($1)", _TEST_SERIALIZE_KEY
+                )
+            finally:
+                await pool.release(lock_conn)
+                await pool.close()
+
+        return backend, _cleanup
+
+    async def _noop() -> None:
+        return None
+
+    return _InMemoryGraphBackend(), _noop
 
 
 class _NS:
@@ -102,7 +130,7 @@ class _NS:
 
 @pytest.mark.parametrize("kind", BACKENDS)
 async def test_add_and_get_vertex_roundtrips(kind):
-    backend, pool = await _open(kind)
+    backend, cleanup = await _open(kind)
     ns = _NS()
     try:
         vid = await backend.add_vertex(ns.vertex("v1", summary="hi"))
@@ -116,13 +144,12 @@ async def test_add_and_get_vertex_roundtrips(kind):
         # Missing vertex is None on both backends.
         assert await backend.get_vertex(ns.vid("nope")) is None
     finally:
-        if pool is not None:
-            await pool.close()
+        await cleanup()
 
 
 @pytest.mark.parametrize("kind", BACKENDS)
 async def test_add_vertex_is_last_write_wins(kind):
-    backend, pool = await _open(kind)
+    backend, cleanup = await _open(kind)
     ns = _NS()
     try:
         await backend.add_vertex(ns.vertex("v1", summary="first", extra="keep_me"))
@@ -132,13 +159,12 @@ async def test_add_vertex_is_last_write_wins(kind):
         assert got.properties.get("summary") == "second"
         assert "extra" not in got.properties  # fully replaced, not merged
     finally:
-        if pool is not None:
-            await pool.close()
+        await cleanup()
 
 
 @pytest.mark.parametrize("kind", BACKENDS)
 async def test_upsert_vertex_merges_properties(kind):
-    backend, pool = await _open(kind)
+    backend, cleanup = await _open(kind)
     ns = _NS()
     try:
         await backend.add_vertex(ns.vertex("v1", a="1", b="2"))
@@ -152,13 +178,12 @@ async def test_upsert_vertex_merges_properties(kind):
         await backend.upsert_vertex(ns.vertex("v2", z="z"))
         assert (await backend.get_vertex(ns.vid("v2"))).properties.get("z") == "z"
     finally:
-        if pool is not None:
-            await pool.close()
+        await cleanup()
 
 
 @pytest.mark.parametrize("kind", BACKENDS)
 async def test_get_vertices_for_tenant_is_scoped_and_capped(kind):
-    backend, pool = await _open(kind)
+    backend, cleanup = await _open(kind)
     ns = _NS()
     try:
         await backend.add_vertex(ns.vertex("a"))
@@ -174,8 +199,7 @@ async def test_get_vertices_for_tenant_is_scoped_and_capped(kind):
         # The cap applies to THIS tenant's rows.
         assert len(await backend.get_vertices_for_tenant(ns.tenant, limit=1)) == 1
     finally:
-        if pool is not None:
-            await pool.close()
+        await cleanup()
 
 
 # ── edges ────────────────────────────────────────────────────────────────────
@@ -183,7 +207,7 @@ async def test_get_vertices_for_tenant_is_scoped_and_capped(kind):
 
 @pytest.mark.parametrize("kind", BACKENDS)
 async def test_add_and_get_edges_directional(kind):
-    backend, pool = await _open(kind)
+    backend, cleanup = await _open(kind)
     ns = _NS()
     try:
         await backend.add_edge(ns.edge("s", "t"))
@@ -200,13 +224,12 @@ async def test_add_and_get_edges_directional(kind):
         # An unrelated edge_type filter excludes it.
         assert await backend.get_edges(ns.vid("s"), edge_type=EdgeType.OWNS) == []
     finally:
-        if pool is not None:
-            await pool.close()
+        await cleanup()
 
 
 @pytest.mark.parametrize("kind", BACKENDS)
 async def test_edges_are_append_only(kind):
-    backend, pool = await _open(kind)
+    backend, cleanup = await _open(kind)
     ns = _NS()
     try:
         # The same (from, to, type) pair may carry several edges (replica race);
@@ -216,13 +239,12 @@ async def test_edges_are_append_only(kind):
         out = await backend.get_edges(ns.vid("s"))
         assert len(out) == 2
     finally:
-        if pool is not None:
-            await pool.close()
+        await cleanup()
 
 
 @pytest.mark.parametrize("kind", BACKENDS)
 async def test_revoke_edge_soft_marks_and_is_idempotent(kind):
-    backend, pool = await _open(kind)
+    backend, cleanup = await _open(kind)
     ns = _NS()
     try:
         await backend.add_edge(ns.edge("s", "t"))
@@ -245,13 +267,12 @@ async def test_revoke_edge_soft_marks_and_is_idempotent(kind):
         # Revoking a non-existent edge is a safe no-op.
         assert await backend.revoke_edge(ns.vid("x"), ns.vid("y"), EdgeType.SEMANTIC_RELATES_TO, "n") == 0
     finally:
-        if pool is not None:
-            await pool.close()
+        await cleanup()
 
 
 @pytest.mark.parametrize("kind", BACKENDS)
 async def test_revoke_edge_is_tenant_scoped(kind):
-    backend, pool = await _open(kind)
+    backend, cleanup = await _open(kind)
     ns = _NS()
     try:
         await backend.add_edge(ns.edge("s", "t"))
@@ -267,13 +288,12 @@ async def test_revoke_edge_is_tenant_scoped(kind):
         ) == 1
         assert await backend.get_edges(s) == []
     finally:
-        if pool is not None:
-            await pool.close()
+        await cleanup()
 
 
 @pytest.mark.parametrize("kind", BACKENDS)
 async def test_get_neighbors_requires_neighbor_vertex(kind):
-    backend, pool = await _open(kind)
+    backend, cleanup = await _open(kind)
     ns = _NS()
     try:
         await backend.add_edge(ns.edge("s", "t"))
@@ -286,8 +306,7 @@ async def test_get_neighbors_requires_neighbor_vertex(kind):
         await backend.revoke_edge(ns.vid("s"), ns.vid("t"), EdgeType.SEMANTIC_RELATES_TO, "gone")
         assert await backend.get_neighbors(ns.vid("s")) == []
     finally:
-        if pool is not None:
-            await pool.close()
+        await cleanup()
 
 
 # ── tenant erasure / orphan deletion ─────────────────────────────────────────
@@ -295,7 +314,7 @@ async def test_get_neighbors_requires_neighbor_vertex(kind):
 
 @pytest.mark.parametrize("kind", BACKENDS)
 async def test_delete_tenant_data_scoped(kind):
-    backend, pool = await _open(kind)
+    backend, cleanup = await _open(kind)
     ns = _NS()
     try:
         await backend.add_vertex(ns.vertex("a"))
@@ -312,13 +331,29 @@ async def test_delete_tenant_data_scoped(kind):
         assert await backend.get_vertex(ns.vid("c")) is not None
         assert len(await backend.get_edges(ns.vid("c"), include_revoked=True)) == 1
     finally:
-        if pool is not None:
-            await pool.close()
+        await cleanup()
+
+
+@pytest.mark.parametrize("kind", BACKENDS)
+async def test_delete_tenant_data_sweeps_edges_without_vertices(kind):
+    # The semantic projector writes edges but no vertices by default, so tenant
+    # erasure must sweep tenant-tagged edges even when the tenant owns zero
+    # vertices — otherwise the edges leak past the erasure.
+    backend, cleanup = await _open(kind)
+    ns = _NS()
+    try:
+        await backend.add_edge(ns.edge("s", "t"))  # tenant-tagged edge, no vertices
+        assert await backend.get_vertices_for_tenant(ns.tenant, limit=10) == []
+        removed = await backend.delete_tenant_data(ns.tenant)
+        assert removed == 1
+        assert await backend.get_edges(ns.vid("s"), include_revoked=True) == []
+    finally:
+        await cleanup()
 
 
 @pytest.mark.parametrize("kind", BACKENDS)
 async def test_delete_vertex_if_orphaned_guards(kind):
-    backend, pool = await _open(kind)
+    backend, cleanup = await _open(kind)
     ns = _NS()
     try:
         v = ns.vid("v")
@@ -360,8 +395,7 @@ async def test_delete_vertex_if_orphaned_guards(kind):
         assert await backend.delete_vertex_if_orphaned(v, ns.tenant, "c1") == (True, "deleted")
         assert await backend.get_vertex(v) is None
     finally:
-        if pool is not None:
-            await pool.close()
+        await cleanup()
 
 
 # ── health / query ───────────────────────────────────────────────────────────
@@ -369,11 +403,10 @@ async def test_delete_vertex_if_orphaned_guards(kind):
 
 @pytest.mark.parametrize("kind", BACKENDS)
 async def test_ping_and_query(kind):
-    backend, pool = await _open(kind)
+    backend, cleanup = await _open(kind)
     try:
         assert await backend.ping() is True
         # ``query`` is a no-op on non-gremlin backends (Neptune error-path parity).
         assert await backend.query("g.V().count()") == []
     finally:
-        if pool is not None:
-            await pool.close()
+        await cleanup()
