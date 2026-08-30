@@ -706,6 +706,58 @@ class APIKeyRepository(BaseRepository):
         super().__init__("api_keys")
 
 
+class FirstAdminBootstrapRepository(BaseRepository):
+    """Durable single-use claim for the staging first-admin bootstrap.
+
+    The claim is keyed by environment and inserted with ``DO NOTHING`` so
+    concurrent requests cannot mint two first-admin credentials.  The marker
+    is intentionally fail-closed: an interrupted bootstrap must be reviewed
+    and repaired by an operator rather than silently replayed.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("first_admin_bootstrap")
+
+    async def claim(
+        self,
+        environment: str,
+        *,
+        email: str,
+        tenant_id: str,
+        key_hash: str,
+    ) -> bool:
+        record_id = environment.strip().lower()
+        data = {
+            "environment": record_id,
+            "email": email.lower(),
+            "tenant_id": tenant_id,
+            "key_hash": key_hash,
+        }
+        pool = await self._ensure_pool()
+        if pool is None:
+            if record_id in self._store:
+                return False
+            await self.insert(record_id, data)
+            return True
+
+        await self._ensure_table()
+        now = utc_now().isoformat()
+        data["id"] = record_id
+        data["created_at"] = now
+        data["updated_at"] = now
+        row = await pool.fetchrow(
+            f"""INSERT INTO {self.table_name}
+                (id, data, tenant_id, created_at, updated_at)
+                VALUES ($1, $2::jsonb, $3, NOW(), NOW())
+                ON CONFLICT (id) DO NOTHING
+                RETURNING id""",
+            record_id,
+            json.dumps(data, default=str),
+            tenant_id,
+        )
+        return row is not None
+
+
 class UserRepository(BaseRepository):
     """User records for email+password and SSO sign-ups.
 

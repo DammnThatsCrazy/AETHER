@@ -30,6 +30,27 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# ``python scripts/validate_infra.py`` puts ``scripts/`` (not the repository
+# root) on ``sys.path``.  Add the root before importing the shared helpers so
+# the documented invocation works in a clean runner as well as via ``-m``.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.lib.preflight_env import PLACEHOLDER_SUBSTRINGS, REQUIRED_SECRET_VARS
+
+# Values that are syntactically non-empty but are explicitly rejected by the
+# backend outside local mode. Keep these here as well so infrastructure
+# preflight cannot report a false green immediately before task startup.
+KNOWN_INSECURE_DEFAULTS = frozenset({"aether-mesh-canary-seed"})
+
+
+def _is_placeholder_or_insecure_default(value: str) -> bool:
+    normalized = value.strip().lower()
+    return (
+        not normalized
+        or normalized in KNOWN_INSECURE_DEFAULTS
+        or any(marker in normalized for marker in PLACEHOLDER_SUBSTRINGS)
+    )
 
 # Backend dimension -> canonical backend value -> env vars that gate it.
 # A profile that uses redis for cache must set REDIS_HOST; one that uses
@@ -206,6 +227,10 @@ def main() -> None:
         ("CANARY_SECRET_SEED", env != "local"),
         ("ML_SERVING_URL", False),
     ]
+    # Keep this list identical to the backend Settings() preflight.  A
+    # deployment must not pass infrastructure validation and then fail during
+    # application startup because a signing/canary secret was omitted here.
+    vars_to_check.extend((name, env != "local") for name in REQUIRED_SECRET_VARS)
     vars_to_check += _required_infra_vars()
     # DATABASE_URL can come from both the base list and the profile's database
     # dimension; report each var once (True wins over False).
@@ -221,7 +246,7 @@ def main() -> None:
     # 2. Secret validation
     print("\n2. Secret Validation")
     jwt = os.getenv("JWT_SECRET", "")
-    if jwt in ("", "change-me-in-production"):
+    if _is_placeholder_or_insecure_default(jwt):
         print("  ✗ JWT_SECRET is default/empty — MUST be rotated")
         if env != "local":
             errors += 1
@@ -241,6 +266,14 @@ def main() -> None:
     elif env != "local":
         print("  ✗ BYOK_ENCRYPTION_KEY not set (required)")
         errors += 1
+
+    for name in REQUIRED_SECRET_VARS:
+        value = os.getenv(name, "")
+        if env != "local" and _is_placeholder_or_insecure_default(value):
+            print(f"  ✗ {name} is missing or a placeholder — MUST be provisioned")
+            errors += 1
+        elif value:
+            print(f"  ✓ {name} is set and non-placeholder")
 
     # 3. Infrastructure connectivity — only for the backends the profile
     #    actually declares (each block is guarded on the var being set).

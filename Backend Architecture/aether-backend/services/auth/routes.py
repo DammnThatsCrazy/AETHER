@@ -23,6 +23,7 @@ Admin endpoints (require auth):
 from __future__ import annotations
 
 import hashlib
+import hmac
 import uuid
 from typing import Optional
 
@@ -34,13 +35,19 @@ from shared.auth.auth import PlanTier
 from shared.common.common import (
     APIResponse,
     BadRequestError,
+    ConflictError,
     ForbiddenError,
     NotFoundError,
     UnauthorizedError,
     utc_now,
 )
 from shared.logger.logger import get_logger, metrics
-from repositories.repos import AdminRepository, APIKeyRepository
+from repositories.repos import (
+    AdminRepository,
+    APIKeyRepository,
+    FirstAdminBootstrapRepository,
+    UserRepository,
+)
 
 logger = get_logger("aether.service.auth")
 
@@ -49,6 +56,11 @@ admin_auth_router = APIRouter(tags=["Admin — Auth"])
 
 _repo = AdminRepository()
 _key_repo = APIKeyRepository()
+_first_admin_bootstrap_repo = FirstAdminBootstrapRepository()
+
+_FIRST_ADMIN_PERMISSIONS = [
+    "read", "write", "ingest", "analytics", "billing", "admin",
+]
 
 
 class AccountDeletionRequest(BaseModel):
@@ -56,6 +68,17 @@ class AccountDeletionRequest(BaseModel):
 
     idempotency_key: str = Field(min_length=1, max_length=256)
     reauth_evidence: dict = Field(default_factory=dict)
+
+
+class FirstAdminBootstrapRequest(BaseModel):
+    """Inputs for the one-time staging first-admin bootstrap.
+
+    The email is not caller-selectable; it is compared to the server-side
+    allowlist.  The response contains the raw key exactly once.
+    """
+
+    name: str = Field(..., min_length=1, max_length=200)
+    plan_tier: str = Field(default="P1", pattern="^(P1|P2|P3|P4)$")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -96,6 +119,107 @@ async def _issue_api_key(tenant_id: str, plan_tier_value: str, label: str) -> st
     except Exception as e:
         logger.warning(f"Auth cache registration failed: tenant={tenant_id} error={e}")
     return raw_key
+
+
+def _legacy_plan_for_tier(plan_tier: str) -> str:
+    return {"P1": "free", "P2": "pro", "P3": "pro", "P4": "enterprise"}.get(
+        plan_tier, "free"
+    )
+
+
+@router.post("/v1/auth/bootstrap/first-admin")
+async def bootstrap_first_admin(body: FirstAdminBootstrapRequest, request: Request):
+    """Create the single staging admin API key after the first apply.
+
+    This route is intentionally public only at the middleware layer so it can
+    be reached before an Aether API key exists. It remains protected by a
+    high-entropy Secrets Manager token, an allowlisted email, staging-only
+    configuration, and a durable single-use claim. The plaintext key is
+    returned once and is never logged or persisted.
+    """
+    cfg = settings.trust_plane
+    if settings.env.value != "staging" or not cfg.first_admin_bootstrap_enabled:
+        raise ForbiddenError("First-admin bootstrap is disabled")
+
+    supplied_token = request.headers.get("x-aether-first-admin-bootstrap-token", "")
+    if not supplied_token or not cfg.first_admin_bootstrap_token or not hmac.compare_digest(
+        supplied_token, cfg.first_admin_bootstrap_token
+    ):
+        raise UnauthorizedError("Invalid first-admin bootstrap token")
+
+    allowlisted_email = cfg.first_admin_bootstrap_email.strip().lower()
+    if not allowlisted_email:
+        raise ForbiddenError("First-admin bootstrap is not configured")
+
+    tenant_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+    raw_key = f"ak_{uuid.uuid4().hex[:24]}"
+    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+    plan_tier = body.plan_tier
+
+    # Claim before writes so a retry cannot create a second tenant/key. A
+    # failed request leaves a durable marker and therefore requires explicit
+    # operator review instead of allowing an unsafe replay.
+    claimed = await _first_admin_bootstrap_repo.claim(
+        "staging",
+        email=allowlisted_email,
+        tenant_id=tenant_id,
+        key_hash=key_hash,
+    )
+    if not claimed:
+        raise ConflictError("The staging first-admin bootstrap has already been used")
+
+    await _repo.insert(tenant_id, {
+        "name": body.name,
+        "contact_email": allowlisted_email,
+        "plan": _legacy_plan_for_tier(plan_tier),
+        "plan_tier": plan_tier,
+        "status": "active",
+        "auth_method": "first_admin_bootstrap",
+        "settings": {},
+    })
+    await UserRepository().insert(user_id, {
+        "user_id": user_id,
+        "tenant_id": tenant_id,
+        "email": allowlisted_email,
+        "name": body.name,
+        "status": "active",
+        "email_verified": True,
+        "auth_method": "first_admin_bootstrap",
+        "role": "admin",
+        "permissions": list(_FIRST_ADMIN_PERMISSIONS),
+        "membership_status": "active",
+    })
+    await _key_repo.insert(key_hash[:12], {
+        "tenant_id": tenant_id,
+        "name": "Staging first admin",
+        "tier": _legacy_plan_for_tier(plan_tier),
+        "permissions": list(_FIRST_ADMIN_PERMISSIONS),
+        "key_hash": key_hash,
+        "last_used_at": None,
+    })
+
+    try:
+        registry = __import__("dependencies.providers", fromlist=["get_registry"]).get_registry()
+        await registry.api_key_validator.register_api_key(
+            api_key=raw_key,
+            tenant_id=tenant_id,
+            role="admin",
+            tier=_legacy_plan_for_tier(plan_tier),
+            permissions=list(_FIRST_ADMIN_PERMISSIONS),
+        )
+    except Exception as exc:
+        # Durable storage remains authoritative; the cache will be populated
+        # on the first request after a normal cache miss.
+        logger.warning("First-admin key cache registration failed: %s", exc)
+
+    logger.info("First-admin bootstrap completed: tenant=%s", tenant_id)
+    return APIResponse(data={
+        "tenant_id": tenant_id,
+        "api_key": raw_key,
+        "permissions": list(_FIRST_ADMIN_PERMISSIONS),
+        "message": "Store this key securely — it will not be shown again.",
+    }).to_dict()
 
 
 def _set_session_cookie(response: Optional[Response], issue) -> None:

@@ -110,6 +110,33 @@ def test_ecs_service_linked_role_precedes_reviewed_apply() -> None:
     assert "aws-service-name ecs.amazonaws.com" in role_step
 
 
+def test_staging_apply_fails_closed_on_unpopulated_secret_stubs() -> None:
+    """ECS must not be applied while a mounted secret is only a stub."""
+    text = PROMOTE.read_text(encoding="utf-8")
+    start = text.index("      - name: Verify required staging secrets have current versions")
+    end = text.index("      - name: Validate reviewed staging maintenance target group", start)
+    guard = text[start:end]
+    assert "if: inputs.profile == 'staging'" in guard
+    for name in (
+        "jwt-secret",
+        "byok-encryption-key",
+        "stripe-secret-key",
+        "stripe-webhook-secret",
+        "oracle-signer-private-key",
+        "watermark-secret-key",
+        "canary-secret-seed",
+        "extraction-canary-seed",
+        "sdk-config-secret",
+    ):
+        assert name in guard
+    assert "secretsmanager describe-secret" in guard
+    assert "AWSCURRENT" in guard
+    assert "terraform apply" not in guard
+    manifest = yaml.safe_load(POLICY.read_text(encoding="utf-8"))
+    secret_read = next(s for s in manifest["statements"] if "secretsmanager:DescribeSecret" in s["actions"])
+    assert secret_read["resource"] == "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*"
+
+
 def test_role_name_assertions_are_profile_aware() -> None:
     text = PROMOTE.read_text(encoding="utf-8")
     plan = text[text.index("Verify the assumed plan role matches"):text.index("Require immutable image digests")]
@@ -444,6 +471,27 @@ def test_tainted_staging_ecr_repair_is_explicit_and_requires_a_fresh_plan() -> N
     assert 'normalized_untaints="$(normalize_repositories "$UNTAINT_ECR_REPOSITORY_NAMES")"' in text
     assert "check_terraform_state_access_policy.py" in text
     assert "verify_terraform_state_role.py" in text
+
+
+def test_all_state_membership_checks_are_pipe_safe() -> None:
+    """Never pipe Terraform state output into an early-closing grep.
+
+    With ``set -o pipefail``, grep -q can close the pipe while Terraform is
+    still writing. Terraform then receives EPIPE and a true membership check
+    is reported as absent. Every workflow must capture the complete listing
+    before doing exact membership checks.
+    """
+    workflow_text = "\n".join(
+        (ROOT / path).read_text(encoding="utf-8")
+        for path in (
+            ".github/workflows/staging-state-reconcile.yml",
+            ".github/workflows/terraform-promote.yml",
+            ".github/workflows/terraform-state-migrate.yml",
+        )
+    )
+    assert "terraform state list | grep -q" not in workflow_text
+    assert "terraform state list | grep -Fq" not in workflow_text
+    assert "printf '%s\\n' \"$staging_ecr_addresses\" | grep" not in workflow_text
 
 
 def test_state_reconciliation_has_the_complete_provider_environment() -> None:

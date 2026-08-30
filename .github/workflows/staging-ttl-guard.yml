@@ -98,6 +98,8 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check pyyaml
+      - name: Validate lifecycle IAM action contract
+        run: python3 scripts/release/check_staging_lifecycle_policy.py
 
       # NOT ARMED WITHOUT THE LIFECYCLE ROLE. When the role is absent the guard
       # has no credential to read the lease or enforce the TTL, so it is a NO-OP

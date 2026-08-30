@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/config/settings.py
   - .env.example
 canonical_owner: platform@aether
-last_synced_commit: "487ccae1"
+last_synced_commit: "c148176e"
 ---
 
 # Deployment Profile Matrix

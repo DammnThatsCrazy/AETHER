@@ -14,12 +14,16 @@ source_files:
   - scripts/release/verify_terraform_state_role.py
   - .github/workflows/terraform-promote.yml
   - .github/workflows/staging-state-reconcile.yml
+  - .github/workflows/staging-lifecycle.yml
+  - .github/workflows/staging-ttl-guard.yml
   - scripts/release/verify_effective_staging_apply_policy.py
   - config/staging_apply_iam_policy.yaml
+  - config/staging_lifecycle_iam_policy.yaml
+  - scripts/release/check_staging_lifecycle_policy.py
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "854e94ae"
+last_synced_commit: "c148176e"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -64,15 +68,30 @@ covered by the ACM certificate, not the raw `*.elb.amazonaws.com` ALB name.
 Because the DNS edge is managed outside this Terraform root, promotion publishes
 both values without making a completed apply fail while the operator-managed
 hostname propagates to a new ALB. The staging lifecycle consumes both evidence
-files and performs the fail-closed intersection check immediately before
-readiness, the awake lease, and HTTPS rehearsal requests. The raw ALB name is
-retained separately as diagnostic evidence, and neither value is a manually
-maintained GitHub variable that can be required before the first load balancer
-exists. The same lifecycle creates run-scoped rehearsal tenants and
+files and performs a fail-closed DNS check immediately before readiness, the
+awake lease, and HTTPS rehearsal requests: the configured hostname must resolve
+to the exact operator-managed CNAME target recorded by the deployment contract.
+An address-intersection or raw-ALB-IP match is not sufficient and is intentionally
+rejected. The raw ALB name is retained separately as diagnostic evidence, and
+neither value is a manually maintained GitHub variable that can be required
+before the first load balancer exists. The same lifecycle creates run-scoped
+rehearsal tenants and
 API keys after wake, masks those keys in the runner, and deletes or deactivates
 every marker-recorded tenant during its always-run cleanup. The only durable
 rehearsal credential is the encrypted staging admin bootstrap key, which is
 supplied out of band and never generated or echoed by CI.
+
+The lifecycle and apply contracts are intentionally separate. `AetherStagingPlan`
+owns remote plan and state-lock access, while `AetherStagingDeploy` owns only the
+reviewed staging apply actions and must be verified by the effective-policy
+simulator before a mutation. `AetherStagingLifecycle` owns the bounded awake
+lease, ECS inspection/update, migration-task execution, static publication,
+autoscaling-floor cleanup, and evidence collection; it cannot create IAM roles,
+read application secret values, or mutate non-staging resources. The checked-in
+IAM manifests are validated against the workflow action inventory so adding a
+new lifecycle AWS call without its least-privilege grant fails CI before a
+rehearsal can start. State reconciliation is always followed by a fresh plan;
+no plan generated before an import or untaint may be reused.
 
 ## Scope — three different things live under `AWS Deployment/`
 
@@ -430,6 +449,11 @@ service-linked role before Terraform creates capacity providers. Each protected
 profile apply role must therefore carry the reviewed, least-privilege
 `CreateServiceLinkedRole` (restricted to `ecs.amazonaws.com`) and `GetRole`
 permissions; a missing grant fails before any profile resource is changed.
+
+The lifecycle role's migration-task grant is constrained twice: task-definition
+resources are limited to the staging prefix and the `ecs:cluster` condition
+must equal `AETHER-staging`. This prevents a staging task definition from being
+run on another cluster even if a caller supplies a different cluster name.
 
 The backend target group keeps the stable
 `aether-staging-backend` identity used by the import-only reconciliation
