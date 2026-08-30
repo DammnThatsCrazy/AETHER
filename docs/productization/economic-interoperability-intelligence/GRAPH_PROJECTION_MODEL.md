@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/graph/relationship_layers.py
   - packages/shared/graph-contract.ts
 canonical_owner: platform@aether
-last_synced_commit: "15b8889"
+last_synced_commit: "487ccae1"
 ---
 
 # Graph Projection Model
@@ -66,8 +66,9 @@ tenant" rather than as a wildcard.
 
 Per-tenant reads use `GraphClient.get_vertices_for_tenant(tenant_id, limit)`,
 which puts the predicate **inside** the query — Neptune
-`.has(TENANT_PROPERTY, t).limit(n)`, in-memory filter-then-slice — so the cap
-bounds that tenant's rows. `get_all_vertices(limit)` remains for genuinely
+`.has(TENANT_PROPERTY, t).limit(n)`, Postgres `WHERE tenant_id = $1 ... LIMIT`
+(the tenant is denormalised to an indexed column via `tenant_of`), in-memory
+filter-then-slice — so the cap bounds that tenant's rows. `get_all_vertices(limit)` remains for genuinely
 global reads and applies its cap to the whole graph; using it to answer a
 per-tenant question truncates silently, because the tenant's rows may sort past
 the cap and never reach the filter. `scripts/validate_graph_scoped_reads.py` is
