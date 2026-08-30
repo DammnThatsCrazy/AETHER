@@ -522,6 +522,44 @@ policies:
     requires_consent_invalidation: false
     requires_permission_hash: false
 
+  # Postgres graph backend tables (_PostgresGraphBackend). A projection store:
+  # the authoritative relationship/entity state lives in the semantic Gold
+  # tables and is re-projected here; tenant erasure hard-deletes the rows via
+  # GraphClient.delete_tenant_data.
+  - resource_type: graph_edges
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  - resource_type: graph_vertices
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
   - resource_type: graph_fact_versions
     authoritative_store: postgres
     metadata_store: postgres

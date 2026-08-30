@@ -12,7 +12,7 @@ source_files:
 canonical_owner: graph@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "d7dc6d8"
+last_synced_commit: "c19b048f"
 ---
 # Unified On-Chain Intelligence Graph v8.12.0
 
@@ -26,7 +26,7 @@ The Unified On-Chain Intelligence Graph extends the Aether platform with an 8-la
 - **Graph-native** — 6 new node types, 19 new edge types layered onto the existing Identity Graph
 - **Lake-fueled** — graph mutations are driven by Silver/Gold lake tiers, not ad-hoc scripts
 
-> **Infrastructure:** `GraphClient` auto-selects Neptune (via gremlinpython) when `NEPTUNE_ENDPOINT` is set, falling back to in-memory in `AETHER_ENV=local`. Non-local environments without Neptune will fail-closed with `RuntimeError`.
+> **Infrastructure:** `GraphClient` auto-selects a backend at `connect()`: Neptune (via gremlinpython) when `NEPTUNE_ENDPOINT` is set; in-memory in `AETHER_ENV=local`; otherwise, in a non-local environment with no Neptune endpoint and `GRAPH_BACKEND=postgres` (the staging / production-lean default), the Postgres backend — `_PostgresGraphBackend` over the `graph_vertices` / `graph_edges` tables, whose observable semantics match the in-memory backend. A non-local environment with no usable backend (no Neptune, and no database pool for the declared Postgres backend) still fails closed with `RuntimeError`.
 
 Tenant-scoped erasure is a first-class graph operation. The cleanup path uses
 `GraphClient.delete_tenant_data(tenant_id)` and resolves both the canonical
@@ -95,7 +95,7 @@ graph write. See [Semantic relationship overlay](#semantic-relationship-overlay)
 | **L3b** | x402 Interceptor | HTTP 402-based micropayment capture | Payment headers, economic graph edges, per-call cost tracking |
 | **L3b+** | x402 Control Plane | Full commerce lifecycle — challenge → approval → settlement → entitlement | `ProtectedResourceRegistry`, `ApprovalService`, `SettlementTracker`, `EntitlementService` |
 | **L4** | ML Intelligence | Scoring and anomaly detection | 9 existing models + Trust Score composite + Bytecode Risk scorer |
-| **L5** | Unified Graph | Cross-layer relationship store | 18+ vertex types, 48+ edge types, Neptune (gremlinpython) with in-memory fallback for local dev |
+| **L5** | Unified Graph | Cross-layer relationship store | 18+ vertex types, 48+ edge types, Neptune (gremlinpython), Postgres (`graph_vertices`/`graph_edges`), or in-memory for local dev |
 
 ## Relationship Layers
 
@@ -237,7 +237,7 @@ New columns: `agent_task_frequency`, `avg_confidence_delta`, `hiring_depth`, `x4
 
 ### Operational Intelligence / Graph Traversal (v8.8.0)
 
-Full graph traversal, path-finding, and overlay services via `GraphTraversalEngine` in `shared/graph/traversal.py`. In-memory backend (local) and Neptune (staging/production) use identical interfaces.
+Full graph traversal, path-finding, and overlay services via `GraphTraversalEngine` in `shared/graph/traversal.py`. The in-memory (local), Postgres, and Neptune (staging/production) backends use identical interfaces.
 
 | Method | Path | Description |
 |--------|------|-------------|

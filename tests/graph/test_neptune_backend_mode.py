@@ -51,12 +51,45 @@ def test_local_env_uses_in_memory_backend() -> None:
 
 
 def test_non_local_without_neptune_raises_runtime_error() -> None:
-    """Non-local env without NEPTUNE_ENDPOINT must raise RuntimeError (fail-closed)."""
+    """Non-local env with no usable graph backend must fail closed (RuntimeError).
+
+    With no ``NEPTUNE_ENDPOINT`` and the default ``GRAPH_BACKEND=postgres``,
+    ``connect()`` selects the Postgres backend; with no ``DATABASE_URL`` there is
+    no pool, so it fails closed rather than silently degrading to in-memory.
+    """
     import asyncio
     with backend_path():
         from shared.graph.graph import GraphClient
         os.environ["AETHER_ENV"] = "production"
         os.environ.pop("NEPTUNE_ENDPOINT", None)
+        os.environ.pop("DATABASE_URL", None)
+        os.environ.pop("GRAPH_BACKEND", None)  # defaults to 'postgres'
+
+        async def run():
+            client = GraphClient()
+            try:
+                await client.connect()
+                assert False, "Expected RuntimeError"
+            except RuntimeError as e:
+                # Fail-closed on the Postgres backend's missing DATABASE_URL /
+                # pool prerequisite (never a silent in-memory fallback).
+                msg = str(e)
+                assert "DATABASE_URL" in msg or "pool" in msg, msg
+
+        try:
+            asyncio.run(run())
+        finally:
+            os.environ["AETHER_ENV"] = "local"
+
+
+def test_non_local_with_unknown_graph_backend_raises_runtime_error() -> None:
+    """A non-local env with no Neptune and a non-postgres GRAPH_BACKEND fails closed."""
+    import asyncio
+    with backend_path():
+        from shared.graph.graph import GraphClient
+        os.environ["AETHER_ENV"] = "production"
+        os.environ.pop("NEPTUNE_ENDPOINT", None)
+        os.environ["GRAPH_BACKEND"] = "neptune"  # not 'postgres' -> no usable backend
 
         async def run():
             client = GraphClient()
@@ -70,6 +103,7 @@ def test_non_local_without_neptune_raises_runtime_error() -> None:
             asyncio.run(run())
         finally:
             os.environ["AETHER_ENV"] = "local"
+            os.environ.pop("GRAPH_BACKEND", None)
 
 
 def test_graph_client_mode_is_in_memory_after_local_connect() -> None:
