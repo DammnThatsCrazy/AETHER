@@ -23,7 +23,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "fa9d9cb0"
+last_synced_commit: "bbeb91d"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -92,6 +92,14 @@ IAM manifests are validated against the workflow action inventory so adding a
 new lifecycle AWS call without its least-privilege grant fails CI before a
 rehearsal can start. State reconciliation is always followed by a fresh plan;
 no plan generated before an import or untaint may be reused.
+
+The apply manifest also covers ECR scan configuration and the account-plan
+probe used by the staging free-plan guard. On a free AWS account, the guard
+fails closed before any Terraform mutation because the reviewed VPC/KMS Aurora
+shape cannot use Aurora Express Configuration. Existing Secrets Manager
+objects are reconciled by metadata only: exact names, the staging CMK, and an
+`AWSCURRENT` version are checked before state import; no secret value is read
+or written by that workflow.
 
 ## Scope — three different things live under `AWS Deployment/`
 

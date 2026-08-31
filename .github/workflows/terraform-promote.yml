@@ -711,6 +711,8 @@ jobs:
 
           with open(sys.argv[1], encoding="utf-8") as handle:
               payload = json.load(handle)
+          if payload.get("DeletedDate") is not None:
+              raise SystemExit("secret is pending deletion")
           versions = payload.get("VersionIdsToStages") or {}
           if not any("AWSCURRENT" in stages for stages in versions.values()):
               raise SystemExit(1)
@@ -774,6 +776,34 @@ jobs:
             exit 1
           }
           echo "Validated reviewed maintenance target group $MAINTENANCE_TG_ARN in VPC $tg_vpc"
+      - name: Refuse unsupported free-plan Aurora topology before mutation
+        if: inputs.profile == 'staging'
+        run: |
+          set -euo pipefail
+          # AWS Free accounts can create Aurora only through Express
+          # Configuration. The reviewed staging topology intentionally uses a
+          # VPC, customer-managed KMS key, and explicit Serverless v2 settings,
+          # which the Express API does not represent. Fail closed before any
+          # service-linked-role or Terraform mutation instead of allowing a
+          # partial apply to fail after other resources have changed.
+          plan_type="$(aws freetier get-account-plan-state --query 'accountPlanType' --output text 2>/tmp/freetier.err)" || {
+            cat /tmp/freetier.err >&2
+            echo '::error::Unable to determine the AWS account plan; refusing staging apply until the Free Tier plan check succeeds.'
+            exit 1
+          }
+          case "$plan_type" in
+            PAID)
+              echo 'AWS account plan is PAID; the reviewed VPC/KMS Aurora staging topology is eligible to proceed.'
+              ;;
+            FREE)
+              echo '::error::AWS Free plan cannot apply the reviewed staging Aurora topology. Free-plan Aurora requires Express Configuration, while this topology uses VPC, customer-managed KMS, and explicit Serverless v2 settings. Upgrade the account plan or approve a separate Express-mode topology before applying.'
+              exit 1
+              ;;
+            *)
+              echo "::error::AWS account plan returned an unsupported value '$plan_type'; refusing staging apply."
+              exit 1
+              ;;
+          esac
       - name: Require live listener detachment before target-group replacement
         if: inputs.profile == 'staging'
         env:

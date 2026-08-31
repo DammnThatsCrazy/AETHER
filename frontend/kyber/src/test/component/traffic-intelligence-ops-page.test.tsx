@@ -97,7 +97,11 @@ function renderPage() {
 describe('Kyber Traffic Intelligence Operations page', () => {
   it('renders the operations scorecard from a mocked operations response', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByText('Traffic Intelligence Operations')).toBeInTheDocument());
+    // The page shell renders before the operations request resolves. Wait for
+    // a response-backed value rather than asserting against the transient
+    // loading state; this keeps the test deterministic under the full
+    // component-worker load used by ci-check.
+    await waitFor(() => expect(screen.getByText('4,820')).toBeInTheDocument());
 
     // Totals.
     expect(screen.getByText('4,820')).toBeInTheDocument();
@@ -135,7 +139,9 @@ describe('Kyber Traffic Intelligence Operations page', () => {
   it('renders zeroed/empty operations without crashing', async () => {
     server.use(http.get(OPS_PATH, () => ok(EMPTY_FIXTURE)));
     renderPage();
-    await waitFor(() => expect(screen.getByText('Traffic Intelligence Operations')).toBeInTheDocument());
+    // The heading is part of the shell and renders before the empty response
+    // arrives. Wait for the response-backed empty-state copy instead.
+    await waitFor(() => expect(screen.getByText('No classified touchpoints in this window.')).toBeInTheDocument());
 
     // Empty breakdowns fall back to honest copy, not fabricated rows.
     expect(screen.getByText('No classified touchpoints in this window.')).toBeInTheDocument();

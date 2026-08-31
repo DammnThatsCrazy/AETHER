@@ -110,6 +110,28 @@ def test_ecs_service_linked_role_precedes_reviewed_apply() -> None:
     assert "aws-service-name ecs.amazonaws.com" in role_step
 
 
+def test_staging_apply_rejects_free_plan_before_any_mutation() -> None:
+    """The Free account Aurora restriction must fail before IAM or Terraform writes."""
+    text = PROMOTE.read_text(encoding="utf-8")
+    guard = text.index("Refuse unsupported free-plan Aurora topology before mutation")
+    service_role = text.index("Ensure the ECS service-linked role exists before capacity providers")
+    apply = text.index("terraform apply -input=false reviewed.tfplan")
+    assert guard < service_role < apply
+    block = text[guard:service_role]
+    assert "aws freetier get-account-plan-state" in block
+    assert "accountPlanType" in block
+    assert "AWS Free plan cannot apply" in block
+    assert "Express Configuration" in block
+    assert "exit 1" in block
+    manifest = yaml.safe_load(POLICY.read_text(encoding="utf-8"))
+    free_tier = next(
+        statement for statement in manifest["statements"]
+        if "freetier:GetAccountPlanState" in statement["actions"]
+    )
+    assert free_tier["resource"] == "*"
+    assert free_tier["scope"] == "global-read-required-by-api"
+
+
 def test_staging_apply_fails_closed_on_unpopulated_secret_stubs() -> None:
     """ECS must not be applied while a mounted secret is only a stub."""
     text = PROMOTE.read_text(encoding="utf-8")
@@ -131,10 +153,28 @@ def test_staging_apply_fails_closed_on_unpopulated_secret_stubs() -> None:
         assert name in guard
     assert "secretsmanager describe-secret" in guard
     assert "AWSCURRENT" in guard
+    assert "DeletedDate" in guard
+    assert "pending deletion" in guard
     assert "terraform apply" not in guard
     manifest = yaml.safe_load(POLICY.read_text(encoding="utf-8"))
     secret_read = next(s for s in manifest["statements"] if "secretsmanager:DescribeSecret" in s["actions"])
     assert secret_read["resource"] == "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*"
+
+
+def test_staging_secret_reconciliation_handles_absent_kms_alias() -> None:
+    text = STATE_RECONCILE_WORKFLOW.read_text(encoding="utf-8")
+    metadata_start = text.index("Validate existing staging secret metadata before state mutation")
+    metadata_end = text.index("Initialize the staging state backend", metadata_start)
+    metadata = text[metadata_start:metadata_end]
+    imports_start = text.index('if [ -n "$STAGING_SECRET_NAMES" ]')
+    imports_end = text.index("Emit reconciled state checksum", imports_start)
+    imports = text[imports_start:imports_end]
+    for block in (metadata, imports):
+        assert "kms list-aliases" in block
+        assert "alias/aether-staging-secrets" in block
+        assert "different CMK" in block
+    assert "leave it for the fresh reviewed plan to create" in metadata
+    assert "leaving its Terraform address unmanaged" in imports
 
 
 def test_role_name_assertions_are_profile_aware() -> None:
@@ -273,6 +313,18 @@ def test_effective_policy_checker_matches_resources_conditions_and_denies() -> N
         {"aws:RequestTag/Environment": "staging"},
         require_required=False,
     )
+    assert module._operation_is_covered(
+        {"Effect": "Allow", "Action": "kms:ListAliases", "Resource": "*"},
+        "kms:ListAliases",
+        "*",
+        None,
+    )
+    assert not module._operation_is_covered(
+        {"Effect": "Allow", "Action": "kms:ListAliases", "Resource": "arn:aws:kms:*:*:alias/*"},
+        "kms:ListAliases",
+        "*",
+        None,
+    )
     assert module._operation_is_denied(
         {
             "Effect": "Deny",
@@ -409,7 +461,7 @@ def test_ecr_collision_has_a_confirmation_gated_reconciliation_path() -> None:
     text = STATE_RECONCILE_WORKFLOW.read_text(encoding="utf-8")
     assert "ecr_repository_names" in text
     assert 'required: false' in text
-    assert 'test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES"' in text
+    assert 'test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES$STAGING_SECRET_NAMES"' in text
     assert "aether-backend|aether-ml-serving|aether-kyber|aether-aether" in text
     assert "module.ecr.aws_ecr_repository.this[\\\"${repository}\\\"]" in text
     assert "requires a fresh reviewed plan" in text or "fresh staging plan" in text
@@ -634,6 +686,12 @@ def test_reviewed_iam_manifest_matches_checker() -> None:
     assert "ecr:ListTagsForResource" in {
         action for statement in statements for action in statement["actions"]
     }
+    assert "ecr:PutImageScanningConfiguration" in {
+        action for statement in statements for action in statement["actions"]
+    }
+    assert "freetier:GetAccountPlanState" in {
+        action for statement in statements for action in statement["actions"]
+    }
     assert "events:ListTargetsByRule" in {
         action for statement in statements for action in statement["actions"]
     }
@@ -678,15 +736,18 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
         "ecr:TagResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "ecr:ListTagsForResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "ecr:DescribeRepositories": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:PutImageScanningConfiguration": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "secretsmanager:TagResource": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
         "ssm:AddTagsToResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
         "kms:TagResource": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:PutKeyPolicy": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:DescribeKey": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:ListResourceTags": "arn:aws:kms:us-east-1:${account_id}:key/*",
+        "kms:ListAliases": "*",
         "events:ListTargetsByRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
         "logs:CreateLogGroup": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
         "logs:TagResource": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
+        "freetier:GetAccountPlanState": "*",
     }
     for action, resource in expected.items():
         matches = [s for s in statements if action in s["actions"]]
