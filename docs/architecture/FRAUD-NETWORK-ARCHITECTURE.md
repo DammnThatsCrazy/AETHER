@@ -12,7 +12,10 @@ source_files:
   - Backend Architecture/aether-backend/services/risk_overlay/
   - Backend Architecture/aether-backend/repositories/repos.py
   - packages/shared/graph-contract.ts
-last_synced_commit: "c148176e"
+last_synced_commit: "845b1c14"
+reviewed_source_commits:
+  - commit: "54eaac5d"
+    reason: "Reviewed the staging first-admin bootstrap change; fraud-network architecture remains unchanged."
 ---
 
 # Fraud Network Architecture

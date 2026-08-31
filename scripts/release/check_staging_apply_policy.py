@@ -19,6 +19,7 @@ REQUIRED_ACTIONS = {
     "ecr:TagResource",
     "ecr:ListTagsForResource",
     "ecr:DescribeRepositories",
+    "ecr:PutImageScanningConfiguration",
     "secretsmanager:TagResource",
     "secretsmanager:DescribeSecret",
     "ssm:AddTagsToResource",
@@ -32,6 +33,7 @@ REQUIRED_ACTIONS = {
     "kms:CreateGrant",
     "kms:PutKeyPolicy",
     "ec2:GetSecurityGroupsForVpc",
+    "freetier:GetAccountPlanState",
     "kms:GetKeyRotationStatus",
     "kms:ScheduleKeyDeletion",
     "sns:SetTopicAttributes",
@@ -54,6 +56,7 @@ REQUIRED_ACTIONS = {
 }
 ALLOWED_GLOBAL_ACTIONS = {
     "ec2:GetSecurityGroupsForVpc",
+    "freetier:GetAccountPlanState",
     "iam:CreateServiceLinkedRole",
     "elasticloadbalancing:DescribeTargetGroups",
     "elasticloadbalancing:DescribeLoadBalancers",
@@ -178,6 +181,7 @@ def main() -> int:
         "ecr:TagResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "ecr:ListTagsForResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "ecr:DescribeRepositories": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:PutImageScanningConfiguration": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "secretsmanager:TagResource": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
         "secretsmanager:DescribeSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
         "ssm:AddTagsToResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
@@ -194,6 +198,7 @@ def main() -> int:
         "kms:CreateGrant": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:PutKeyPolicy": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "ec2:GetSecurityGroupsForVpc": "*",
+        "freetier:GetAccountPlanState": "*",
         "kms:GetKeyRotationStatus": "*",
         "kms:ScheduleKeyDeletion": "*",
         "sns:SetTopicAttributes": [

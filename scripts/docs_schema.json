@@ -86,6 +86,29 @@
       "pattern": "^[0-9a-f]{7,40}$",
       "description": "Git SHA captured by sync_docs.py the last time source_files matched. Used by the drift detector."
     },
+    "reviewed_source_commits": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["commit", "reason"],
+        "properties": {
+          "commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{7,40}$",
+            "description": "Resolvable source commit reviewed without an authored-content change."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Short explanation of why the current page remains accurate."
+          }
+        },
+        "description": "Explicit review receipts for source commits that changed a declared source but not this page's authored content."
+      },
+      "description": "Auditable exceptions for reviewed source commits; each entry must resolve and touch a declared source."
+    },
     "source_files": {
       "type": "array",
       "uniqueItems": true,

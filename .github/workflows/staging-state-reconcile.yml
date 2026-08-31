@@ -24,6 +24,14 @@ on:
         description: "Exact reviewed staging ECR KMS key ARN; required for KMS-encrypted repositories"
         required: false
         type: string
+      staging_secret_names:
+        description: "Comma-separated existing aether/* Secrets Manager keys to import (approved staging allow-list only)"
+        required: false
+        type: string
+      staging_secrets_kms_key_arn:
+        description: "Exact reviewed staging Secrets Manager CMK ARN; required when importing staging secrets"
+        required: false
+        type: string
       confirm_staging_import:
         description: "Type IMPORT-STAGING to authorize this import-only action"
         required: true
@@ -124,13 +132,15 @@ jobs:
           ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
           UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
           STAGING_ECR_KMS_KEY_ARN: ${{ inputs.staging_ecr_kms_key_arn }}
+          STAGING_SECRET_NAMES: ${{ inputs.staging_secret_names }}
+          STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
         run: |
           set -euo pipefail
           test "$CONFIRM" = "IMPORT-STAGING" || {
             echo "::error::Refusing import: confirmation must be IMPORT-STAGING"; exit 1;
           }
-          test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES" || {
-            echo '::error::Refusing reconciliation: provide target_group_arn, ecr_repository_names, or untaint_ecr_repository_names'; exit 1;
+          test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES$STAGING_SECRET_NAMES" || {
+            echo '::error::Refusing reconciliation: provide target_group_arn, ecr_repository_names, untaint_ecr_repository_names, or staging_secret_names'; exit 1;
           }
           normalize_repositories() {
             printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
@@ -148,6 +158,7 @@ jobs:
               echo "::error::Refusing import: AWS target group name is '$name', expected aether-staging-backend"; exit 1;
             }
           fi
+
           if [ -n "$ECR_REPOSITORY_NAMES" ]; then
             account_id="$(aws sts get-caller-identity --query Account --output text)"
             needs_kms_key=false
@@ -238,6 +249,66 @@ jobs:
               }
             done
           fi
+
+      - name: Validate existing staging secret metadata before state mutation
+        if: inputs.staging_secret_names != ''
+        env:
+          STAGING_SECRET_NAMES: ${{ inputs.staging_secret_names }}
+          STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
+        run: |
+          set -euo pipefail
+          test -n "$STAGING_SECRETS_KMS_KEY_ARN" || {
+            echo '::error::staging_secrets_kms_key_arn is required when importing staging secrets'; exit 1;
+          }
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          case "$STAGING_SECRETS_KMS_KEY_ARN" in
+            arn:aws:kms:us-east-1:${account_id}:key/*) ;;
+            *) echo '::error::staging_secrets_kms_key_arn must be a us-east-1 CMK in the current staging account'; exit 1 ;;
+          esac
+          key_arn="$(aws kms describe-key --key-id "$STAGING_SECRETS_KMS_KEY_ARN" --query 'KeyMetadata.Arn' --output text)"
+          test "$key_arn" = "$STAGING_SECRETS_KMS_KEY_ARN" || {
+            echo '::error::staging secrets CMK could not be resolved to the supplied ARN'; exit 1;
+          }
+          key_environment="$(aws kms list-resource-tags --key-id "$STAGING_SECRETS_KMS_KEY_ARN" \
+            --query 'Tags[?TagKey==`Environment`].TagValue | [0]' --output text)"
+          test "$key_environment" = staging || {
+            echo "::error::staging secrets CMK Environment tag is '$key_environment', expected staging"; exit 1;
+          }
+          normalize_secret_names() {
+            printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//; s#^aether/##' | awk 'NF' | paste -sd, -
+          }
+          normalized_secrets="$(normalize_secret_names "$STAGING_SECRET_NAMES")"
+          test -n "$normalized_secrets" || {
+            echo '::error::staging_secret_names must contain at least one secret key'; exit 1;
+          }
+          IFS=',' read -ra secrets <<< "$normalized_secrets"
+          for name in "${secrets[@]}"; do
+            case "$name" in
+              jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token|jwt-secret-previous|byok-encryption-key-previous) ;;
+              *) echo "::error::Refusing secret import: '$name' is not a reviewed staging secret"; exit 1 ;;
+            esac
+            describe_file="$(mktemp)"
+            aws secretsmanager describe-secret --secret-id "aether/$name" --output json >"$describe_file" || {
+              rm -f "$describe_file"
+              echo "::error::required staging secret aether/$name was not found or is not readable"; exit 1;
+            }
+            actual_name="$(jq -r '.Name // empty' "$describe_file")"
+            test "$actual_name" = "aether/$name" || {
+              rm -f "$describe_file"
+              echo "::error::secret metadata name '$actual_name' does not match aether/$name"; exit 1;
+            }
+            actual_kms="$(jq -r '.KmsKeyId // empty' "$describe_file")"
+            test "$actual_kms" = "$STAGING_SECRETS_KMS_KEY_ARN" || {
+              rm -f "$describe_file"
+              echo "::error::secret aether/$name is encrypted with a different CMK; refusing silent re-encryption"; exit 1;
+            }
+            jq -e 'any((.VersionIdsToStages // {})[]; index("AWSCURRENT") != null)' "$describe_file" >/dev/null || {
+              rm -f "$describe_file"
+              echo "::error::secret aether/$name has no AWSCURRENT version; populate it through the secure secret bootstrap before import"; exit 1;
+            }
+            rm -f "$describe_file"
+          done
+          echo 'Validated staging secret names, CMK ownership, and AWSCURRENT metadata without reading plaintext values.'
 
       - name: Initialize the staging state backend
         working-directory: ${{ env.TF_DIR }}
@@ -498,10 +569,6 @@ jobs:
           IFS=',' read -ra repositories <<< "$normalized_imports"
           state_snapshot_file="$(mktemp)"
           adoptions_file="$(mktemp)"
-          cleanup_state_snapshot() {
-            rm -f "$state_snapshot_file" "$adoptions_file"
-          }
-          trap cleanup_state_snapshot EXIT
           terraform state pull >"$state_snapshot_file"
           state_list_file="$(mktemp)"
           terraform state list >"$state_list_file"
@@ -565,6 +632,8 @@ jobs:
           TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
           ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
           UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
+          STAGING_SECRET_NAMES: ${{ inputs.staging_secret_names }}
+          STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
           TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
           TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
@@ -647,6 +716,64 @@ jobs:
             done
             echo "Cleared taint only for the explicitly reviewed staging ECR repositories. Generate a fresh reviewed plan before any apply."
           fi
+          if [ -n "$STAGING_SECRET_NAMES" ]; then
+            normalize_secret_names() {
+              printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//; s#^aether/##' | awk 'NF' | paste -sd, -
+            }
+            normalized_secrets="$(normalize_secret_names "$STAGING_SECRET_NAMES")"
+            IFS=',' read -ra secrets <<< "$normalized_secrets"
+            kms_address='module.secrets.aws_kms_key.secrets'
+            alias_address='module.secrets.aws_kms_alias.secrets'
+            if grep -Fxq "$kms_address" "$state_list_file"; then
+              state_kms_arn="$(terraform state show -no-color "$kms_address" \
+                | sed -n 's/^[[:space:]]*arn[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+              test "$state_kms_arn" = "$STAGING_SECRETS_KMS_KEY_ARN" || {
+                echo '::error::canonical staging secrets KMS key state points to a different ARN'; exit 1;
+              }
+            else
+              terraform import -input=false \
+                -var-file=profiles/staging.tfvars \
+                -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
+                "$kms_address" "$STAGING_SECRETS_KMS_KEY_ARN"
+            fi
+            if grep -Fxq "$alias_address" "$state_list_file"; then
+              state_alias_name="$(terraform state show -no-color "$alias_address" \
+                | sed -n 's/^[[:space:]]*name[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+              test "$state_alias_name" = 'alias/aether-staging-secrets' || {
+                echo '::error::canonical staging secrets KMS alias points to an unexpected name'; exit 1;
+              }
+            else
+              terraform import -input=false \
+                -var-file=profiles/staging.tfvars \
+                -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
+                "$alias_address" 'alias/aether-staging-secrets'
+            fi
+            terraform state list >"$state_list_file"
+            for name in "${secrets[@]}"; do
+              case "$name" in
+                jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token)
+                  address="module.secrets.aws_secretsmanager_secret.this[\"${name}\"]" ;;
+                jwt-secret-previous) address='module.secrets.aws_secretsmanager_secret.jwt_secret_previous' ;;
+                byok-encryption-key-previous) address='module.secrets.aws_secretsmanager_secret.byok_key_previous' ;;
+                *) echo "::error::Refusing secret import: '$name' is not a reviewed staging secret"; exit 1 ;;
+              esac
+              if grep -Fxq "$address" "$state_list_file"; then
+                state_secret_name="$(terraform state show -no-color "$address" \
+                  | sed -n 's/^[[:space:]]*name[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+                test "$state_secret_name" = "aether/$name" || {
+                  echo "::error::canonical state address $address points to '$state_secret_name', expected aether/$name"; exit 1;
+                }
+                echo "Secret aether/$name is already at the canonical staging address; no import needed."
+              else
+                terraform import -input=false \
+                  -var-file=profiles/staging.tfvars \
+                  -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
+                  "$address" "aether/$name"
+              fi
+              terraform state list >"$state_list_file"
+            done
+            echo 'Imported only the reviewed staging secret metadata; no secret values were read or written.'
+          fi
 
       - name: Emit reconciled state checksum
         working-directory: ${{ env.TF_DIR }}
@@ -654,6 +781,7 @@ jobs:
           TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
           ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
           UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
+          STAGING_SECRET_NAMES: ${{ inputs.staging_secret_names }}
         run: |
           set -euo pipefail
           state_list_file="$(mktemp)"
@@ -682,6 +810,25 @@ jobs:
             for raw in "${repositories[@]}"; do
               repository="$(printf '%s' "$raw" | xargs)"
               grep -Fx "module.ecr.aws_ecr_repository.this[\"${repository}\"]" "$state_list_file"
+            done
+          fi
+          if [ -n "${STAGING_SECRET_NAMES:-}" ]; then
+            normalize_secret_names() {
+              printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//; s#^aether/##' | awk 'NF' | paste -sd, -
+            }
+            normalized_secrets="$(normalize_secret_names "$STAGING_SECRET_NAMES")"
+            grep -Fx 'module.secrets.aws_kms_key.secrets' "$state_list_file"
+            grep -Fx 'module.secrets.aws_kms_alias.secrets' "$state_list_file"
+            IFS=',' read -ra secrets <<< "$normalized_secrets"
+            for name in "${secrets[@]}"; do
+              case "$name" in
+                jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token)
+                  address="module.secrets.aws_secretsmanager_secret.this[\"${name}\"]" ;;
+                jwt-secret-previous) address='module.secrets.aws_secretsmanager_secret.jwt_secret_previous' ;;
+                byok-encryption-key-previous) address='module.secrets.aws_secretsmanager_secret.byok_key_previous' ;;
+                *) echo "::error::Refusing checksum: '$name' is not a reviewed staging secret"; exit 1 ;;
+              esac
+              grep -Fx "$address" "$state_list_file"
             done
           fi
           terraform state pull > reconciled-staging-state.json

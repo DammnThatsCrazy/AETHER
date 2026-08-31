@@ -32,6 +32,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -199,6 +200,65 @@ def commit_touches_paths(sha: str, paths: list[str]) -> bool:
     return result.returncode == 0 and bool(result.stdout.strip())
 
 
+def resolve_commit(sha: str) -> str | None:
+    """Resolve a frontmatter commit marker to a full commit SHA."""
+    if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{7,40}", sha):
+        return None
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", f"{sha}^{{commit}}"],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    if result.returncode != 0:
+        return None
+    resolved = result.stdout.strip()
+    return resolved if re.fullmatch(r"[0-9a-f]{40}", resolved) else None
+
+
+def reviewed_source_commits_cover(
+    declared: str,
+    receipts: Any,
+    source_paths: list[str],
+    newer: list[str],
+) -> bool:
+    """Return True when explicit review receipts cover every newer source commit.
+
+    A receipt is not a free-form exemption: its commit must resolve, be a
+    descendant of the declared stamp, touch a declared source, and be one of
+    the exact commits reported by the drift query. A non-empty reason makes the
+    review decision auditable in the document itself.
+    """
+    if not isinstance(receipts, list) or not newer:
+        return False
+    newer_full: set[str] = set()
+    for short_sha in newer:
+        resolved = resolve_commit(short_sha)
+        if resolved is None:
+            return False
+        newer_full.add(resolved)
+    declared_full = resolve_commit(declared)
+    if declared_full is None:
+        return False
+    covered: set[str] = set()
+    for receipt in receipts:
+        if not isinstance(receipt, dict):
+            return False
+        marker = receipt.get("commit")
+        reason = receipt.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            return False
+        resolved = resolve_commit(marker)
+        if resolved is None or resolved not in newer_full:
+            continue
+        if not is_ancestor(declared_full, resolved):
+            return False
+        if not commit_touches_paths(resolved, source_paths):
+            return False
+        covered.add(resolved)
+    return covered == newer_full
+
+
 def squash_merge_reviewed_at_tip(doc_rel: str, source_paths: list[str]) -> bool:
     """Recognize a reviewed source/doc pair collapsed by a squash merge.
 
@@ -255,6 +315,41 @@ def _commit_is_restamp_only(sha: str, doc_rel: str) -> bool:
     return bool(changed) and all(stamp_line.match(line) for line in changed)
 
 
+def _commit_is_receipt_only(sha: str, doc_rel: str) -> bool:
+    """True when a doc commit changes only its review-receipt metadata.
+
+    Receipt entries are evidence for a source review, not authored prose. They
+    must therefore be validated by ``reviewed_source_commits_cover`` rather
+    than silently counting as a normal content review. A commit that changes
+    the body (or any other frontmatter) remains a genuine doc review.
+    """
+    before = subprocess.run(
+        ["git", "show", f"{sha}^:{doc_rel}"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    after = subprocess.run(
+        ["git", "show", f"{sha}:{doc_rel}"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if before.returncode != 0 or after.returncode != 0:
+        return False
+    before_fm = extract_frontmatter(before.stdout)
+    after_fm = extract_frontmatter(after.stdout)
+    if before_fm is None or after_fm is None:
+        return False
+    before_body = before.stdout[before.stdout.find("\n---", 4) + 4 :]
+    after_body = after.stdout[after.stdout.find("\n---", 4) + 4 :]
+    if before_body != after_body:
+        return False
+    before_receipts = before_fm.pop("reviewed_source_commits", None)
+    after_receipts = after_fm.pop("reviewed_source_commits", None)
+    return before_fm == after_fm and before_receipts != after_receipts
+
+
 def doc_reviewed_after_sources(declared: str, doc_path: Path, source_paths: list[str]) -> bool:
     """Return True when the doc was REVIEWED in the same range at/after sources.
 
@@ -281,7 +376,12 @@ def doc_reviewed_after_sources(declared: str, doc_path: Path, source_paths: list
         return False
     doc_commits = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
     latest_doc = next(
-        (sha for sha in doc_commits if not _commit_is_restamp_only(sha, doc_rel)),
+        (
+            sha
+            for sha in doc_commits
+            if not _commit_is_restamp_only(sha, doc_rel)
+            and not _commit_is_receipt_only(sha, doc_rel)
+        ),
         None,
     )
     if not latest_doc:
@@ -334,6 +434,18 @@ def check_doc(path: Path) -> dict:
                     "exists on the branch."
                 )
         elif newer and not doc_reviewed_after_sources(declared, path, present_sources):
+            if reviewed_source_commits_cover(
+                declared,
+                fm.get("reviewed_source_commits"),
+                present_sources,
+                newer,
+            ):
+                return {
+                    "path": str(rel),
+                    "missing_paths": missing,
+                    "stale": False,
+                    "stale_detail": None,
+                }
             stale = True
             detail = (
                 f"last_synced_commit={declared}; sources have been modified "

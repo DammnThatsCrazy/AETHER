@@ -21,7 +21,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "c148176e"
+last_synced_commit: "845b1c14"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -49,6 +49,15 @@ membership checks capture the complete `terraform state list` output before
 matching addresses; they do not pipe Terraform into `grep -q`, because
 `pipefail` can otherwise send `EPIPE` to the Terraform output wrapper and
 falsely report an existing address as absent.
+
+When the operator supplies `staging_secret_names`, reconciliation first checks
+the exact Secrets Manager names, staging CMK, and `AWSCURRENT` metadata, then
+imports only the reviewed Terraform addresses. It never calls
+`get-secret-value`; secret materialization remains a separate secure bootstrap.
+The staging promotion also probes the account plan and fails closed before any
+mutation when a Free plan cannot support the reviewed Aurora topology. Its IAM
+manifest therefore includes the ECR scan and account-plan read actions that
+those preflight checks actually call.
 
 Reviewed Terraform promotion pins immutable digests and injects the staging
 apply-role ARN only for staging. Inline-ML profiles leave the ML digest empty;

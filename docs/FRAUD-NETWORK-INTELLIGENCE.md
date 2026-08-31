@@ -9,7 +9,10 @@ since_version: "9.0.0"
 source_files:
   - Backend Architecture/aether-backend/services/fraud_networks/
   - Backend Architecture/aether-backend/repositories/repos.py
-last_synced_commit: "c148176e"
+last_synced_commit: "845b1c14"
+reviewed_source_commits:
+  - commit: "54eaac5d"
+    reason: "Reviewed the staging first-admin bootstrap change; fraud-network behavior and contracts are unaffected."
 ---
 
 # Fraud Network Intelligence

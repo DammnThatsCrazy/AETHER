@@ -12,7 +12,10 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: "c148176e"
+last_synced_commit: "845b1c14"
+reviewed_source_commits:
+  - commit: "54eaac5d"
+    reason: "Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged."
 ---
 
 # PostgreSQL / Repository Subsystem
