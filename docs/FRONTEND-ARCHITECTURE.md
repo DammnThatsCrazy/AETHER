@@ -17,6 +17,8 @@ last_synced_commit: "71ebc958"
 reviewed_source_commits:
   - commit: "7ba83380"
     reason: "Reviewed the Kyber component-test synchronization change; frontend architecture and runtime contracts are unaffected."
+  - commit: "f4ba474e"
+    reason: "Reviewed the Kyber empty-state test timing correction; frontend architecture and runtime contracts are unaffected."
 ---
 
 # Aether Frontend Architecture & Designer Handoff
