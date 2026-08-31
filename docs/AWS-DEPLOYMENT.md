@@ -23,7 +23,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "c148176e"
+last_synced_commit: "fa9d9cb0"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -653,6 +653,7 @@ out of that tree. The live root is
 
 ## See also
 
+- [Setup From Zero](../AWS%20Deployment/aether-aws/SETUP.md) — the guided from-scratch procedure that provisions the state backend and drives the live root
 - [Deployment Profiles](DEPLOYMENT-PROFILES.md)
 - [AWS Lean Production](AWS-LEAN-PRODUCTION.md)
 - [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md)
