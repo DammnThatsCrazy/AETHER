@@ -88,6 +88,11 @@ statements:
     scope: staging-kms-resource-tag
     conditions:
       aws:ResourceTag/Environment: staging
+  - sid: DiscoverStagingKmsAliases
+    actions:
+      - kms:ListAliases
+    resource: '*'
+    scope: global-read-required-by-api
   - sid: CreateStagingKmsGrants
     actions:
       - kms:CreateGrant

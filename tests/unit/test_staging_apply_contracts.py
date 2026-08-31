@@ -153,10 +153,28 @@ def test_staging_apply_fails_closed_on_unpopulated_secret_stubs() -> None:
         assert name in guard
     assert "secretsmanager describe-secret" in guard
     assert "AWSCURRENT" in guard
+    assert "DeletedDate" in guard
+    assert "pending deletion" in guard
     assert "terraform apply" not in guard
     manifest = yaml.safe_load(POLICY.read_text(encoding="utf-8"))
     secret_read = next(s for s in manifest["statements"] if "secretsmanager:DescribeSecret" in s["actions"])
     assert secret_read["resource"] == "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*"
+
+
+def test_staging_secret_reconciliation_handles_absent_kms_alias() -> None:
+    text = STATE_RECONCILE_WORKFLOW.read_text(encoding="utf-8")
+    metadata_start = text.index("Validate existing staging secret metadata before state mutation")
+    metadata_end = text.index("Initialize the staging state backend", metadata_start)
+    metadata = text[metadata_start:metadata_end]
+    imports_start = text.index('if [ -n "$STAGING_SECRET_NAMES" ]')
+    imports_end = text.index("Emit reconciled state checksum", imports_start)
+    imports = text[imports_start:imports_end]
+    for block in (metadata, imports):
+        assert "kms list-aliases" in block
+        assert "alias/aether-staging-secrets" in block
+        assert "different CMK" in block
+    assert "leave it for the fresh reviewed plan to create" in metadata
+    assert "leaving its Terraform address unmanaged" in imports
 
 
 def test_role_name_assertions_are_profile_aware() -> None:
@@ -294,6 +312,18 @@ def test_effective_policy_checker_matches_resources_conditions_and_denies() -> N
         "*",
         {"aws:RequestTag/Environment": "staging"},
         require_required=False,
+    )
+    assert module._operation_is_covered(
+        {"Effect": "Allow", "Action": "kms:ListAliases", "Resource": "*"},
+        "kms:ListAliases",
+        "*",
+        None,
+    )
+    assert not module._operation_is_covered(
+        {"Effect": "Allow", "Action": "kms:ListAliases", "Resource": "arn:aws:kms:*:*:alias/*"},
+        "kms:ListAliases",
+        "*",
+        None,
     )
     assert module._operation_is_denied(
         {
@@ -713,6 +743,7 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
         "kms:PutKeyPolicy": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:DescribeKey": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:ListResourceTags": "arn:aws:kms:us-east-1:${account_id}:key/*",
+        "kms:ListAliases": "*",
         "events:ListTargetsByRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
         "logs:CreateLogGroup": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
         "logs:TagResource": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",

@@ -27,6 +27,7 @@ REQUIRED_ACTIONS = {
     "kms:CreateKey",
     "kms:TagResource",
     "kms:CreateAlias",
+    "kms:ListAliases",
     "kms:DescribeKey",
     "kms:GetKeyPolicy",
     "kms:ListResourceTags",
@@ -65,6 +66,7 @@ ALLOWED_GLOBAL_ACTIONS = {
     "kms:GetKeyRotationStatus",
     "kms:ScheduleKeyDeletion",
     "kms:CreateKey",
+    "kms:ListAliases",
 }
 REQUIRED_AUTH0_SCOPES = {
     "create:resource_servers",
@@ -192,6 +194,7 @@ def main() -> int:
             "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*",
             "arn:aws:kms:us-east-1:${account_id}:key/*",
         ],
+        "kms:ListAliases": "*",
         "kms:DescribeKey": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:GetKeyPolicy": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:ListResourceTags": "arn:aws:kms:us-east-1:${account_id}:key/*",

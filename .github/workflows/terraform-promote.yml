@@ -711,6 +711,8 @@ jobs:
 
           with open(sys.argv[1], encoding="utf-8") as handle:
               payload = json.load(handle)
+          if payload.get("DeletedDate") is not None:
+              raise SystemExit("secret is pending deletion")
           versions = payload.get("VersionIdsToStages") or {}
           if not any("AWSCURRENT" in stages for stages in versions.values()):
               raise SystemExit(1)

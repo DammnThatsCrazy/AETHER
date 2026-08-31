@@ -274,6 +274,29 @@ jobs:
           test "$key_environment" = staging || {
             echo "::error::staging secrets CMK Environment tag is '$key_environment', expected staging"; exit 1;
           }
+          alias_metadata_file="$(mktemp)"
+          aws kms list-aliases \
+            --query "Aliases[?AliasName=='alias/aether-staging-secrets'] | [0]" \
+            --output json >"$alias_metadata_file" || {
+              rm -f "$alias_metadata_file"
+              echo '::error::could not inspect the reviewed staging secrets KMS alias'; exit 1;
+            }
+          alias_target_key_id="$(jq -r '.TargetKeyId // empty' "$alias_metadata_file")"
+          alias_target_arn=""
+          if [ -n "$alias_target_key_id" ]; then
+            alias_target_arn="$(aws kms describe-key --key-id "$alias_target_key_id" \
+              --query 'KeyMetadata.Arn' --output text)"
+            test "$alias_target_arn" = "$STAGING_SECRETS_KMS_KEY_ARN" || {
+              rm -f "$alias_metadata_file"
+              echo '::error::existing staging secrets KMS alias targets a different CMK'; exit 1;
+            }
+          elif [ -n "$(jq -r '.AliasArn // empty' "$alias_metadata_file")" ]; then
+            rm -f "$alias_metadata_file"
+            echo '::error::staging secrets KMS alias metadata has no target key'; exit 1;
+          else
+            echo 'The staging secrets KMS alias is absent remotely; reconciliation will leave it for the fresh reviewed plan to create.'
+          fi
+          rm -f "$alias_metadata_file"
           normalize_secret_names() {
             printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//; s#^aether/##' | awk 'NF' | paste -sd, -
           }
@@ -305,6 +328,10 @@ jobs:
             jq -e 'any((.VersionIdsToStages // {})[]; index("AWSCURRENT") != null)' "$describe_file" >/dev/null || {
               rm -f "$describe_file"
               echo "::error::secret aether/$name has no AWSCURRENT version; populate it through the secure secret bootstrap before import"; exit 1;
+            }
+            jq -e '(.DeletedDate // null) == null' "$describe_file" >/dev/null || {
+              rm -f "$describe_file"
+              echo "::error::secret aether/$name is pending deletion; restore or replace it before import"; exit 1;
             }
             rm -f "$describe_file"
           done
@@ -736,18 +763,41 @@ jobs:
                 -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
                 "$kms_address" "$STAGING_SECRETS_KMS_KEY_ARN"
             fi
+            alias_metadata_file="$(mktemp)"
+            aws kms list-aliases \
+              --query "Aliases[?AliasName=='alias/aether-staging-secrets'] | [0]" \
+              --output json >"$alias_metadata_file" || {
+              rm -f "$alias_metadata_file"
+              echo '::error::could not inspect the reviewed staging secrets KMS alias'; exit 1;
+            }
+            alias_arn="$(jq -r '.AliasArn // empty' "$alias_metadata_file")"
+            alias_target_key_id="$(jq -r '.TargetKeyId // empty' "$alias_metadata_file")"
             if grep -Fxq "$alias_address" "$state_list_file"; then
               state_alias_name="$(terraform state show -no-color "$alias_address" \
                 | sed -n 's/^[[:space:]]*name[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
               test "$state_alias_name" = 'alias/aether-staging-secrets' || {
+                rm -f "$alias_metadata_file"
                 echo '::error::canonical staging secrets KMS alias points to an unexpected name'; exit 1;
               }
-            else
+            elif [ -n "$alias_arn" ]; then
+              test -n "$alias_target_key_id" || {
+                rm -f "$alias_metadata_file"
+                echo '::error::staging secrets KMS alias metadata has no target key'; exit 1;
+              }
+              alias_target_arn="$(aws kms describe-key --key-id "$alias_target_key_id" \
+                --query 'KeyMetadata.Arn' --output text)"
+              test "$alias_target_arn" = "$STAGING_SECRETS_KMS_KEY_ARN" || {
+                rm -f "$alias_metadata_file"
+                echo '::error::existing staging secrets KMS alias targets a different CMK'; exit 1;
+              }
               terraform import -input=false \
                 -var-file=profiles/staging.tfvars \
                 -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
                 "$alias_address" 'alias/aether-staging-secrets'
+            else
+              echo 'The staging secrets KMS alias is absent remotely; leaving its Terraform address unmanaged so the fresh reviewed plan can create it.'
             fi
+            rm -f "$alias_metadata_file"
             terraform state list >"$state_list_file"
             for name in "${secrets[@]}"; do
               case "$name" in
