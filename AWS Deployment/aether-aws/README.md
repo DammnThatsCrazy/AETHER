@@ -1,6 +1,30 @@
 # Aether AWS Deployment v8.12.0
 
-Multi-account AWS infrastructure for the Aether platform, provisioned with Terraform and operated via Python automation scripts. Spans six AWS accounts, five VPCs, nine ECS Fargate services, eight managed data stores, and a full security/compliance posture -- all orchestrated from a single configuration source.
+> ## ⚠️ This document is a REFERENCE / DEMO MODEL — not the live deployment path
+>
+> The six-account, five-VPC, nine-service architecture described below is a
+> **target design and demo surface**, printed by `main.py --stub-aws`. **None of
+> it is provisioned by the Terraform in this repository.** The account IDs
+> (`111111111111` … `666666666666`) are placeholders.
+>
+> **To actually deploy Aether, do not follow the Installation / Quick Start /
+> Terraform sections in this file** — they refer to a dead Terraform tree that no
+> longer initializes (see below). Instead:
+>
+> | I want to… | Go to |
+> |---|---|
+> | Understand what Aether *really* runs on AWS | [`docs/AWS-DEPLOYMENT.md`](../../docs/AWS-DEPLOYMENT.md) — **canonical** |
+> | Stand up the infrastructure from zero | [`SETUP.md`](SETUP.md) — the guided, from-scratch path |
+> | Read the live Terraform root's reference | [`terraform/README.md`](terraform/README.md) |
+> | Choose a deployment profile | [`docs/DEPLOYMENT-PROFILES.md`](../../docs/DEPLOYMENT-PROFILES.md) |
+>
+> The live infrastructure is **one AWS account, one region, one VPC**, driven by
+> a single `deployment_profile` variable in
+> [`terraform/`](terraform/). It has nothing to do with the six-account model on
+> this page. Do not quote this file's account topology, data-store inventory,
+> cost estimates, or DR posture as a description of Aether's infrastructure.
+
+Multi-account AWS infrastructure **design reference** for the Aether platform, expressed as Terraform module skeletons and a Python demo runner. This model spans six AWS accounts, five VPCs, nine ECS Fargate services, eight managed data stores, and a full security/compliance posture -- all described from a single configuration source. It is provisioned by nothing; the live root is [`terraform/`](terraform/).
 
 ---
 
@@ -240,11 +264,14 @@ aether-aws/
 
 ## Installation
 
+> These steps install the **demo runner and operational-script package** in this
+> directory. They do **not** deploy infrastructure. For a real deployment start
+> at [`SETUP.md`](SETUP.md).
+
 **Prerequisites:**
 
 - Python >= 3.9
-- Terraform >= 1.7
-- AWS CLI (configured with appropriate credentials, or use stub mode)
+- AWS CLI (only needed for the operational scripts in live mode; the demo runs in stub mode with no credentials)
 
 **Install dependencies:**
 
@@ -261,6 +288,10 @@ pip install -e ".[dev]"
 ---
 
 ## Quick Start
+
+> This runs the **reference-model demo**, not a deployment. It prints the target
+> architecture and exercises the operational scripts against illustrative data.
+> To provision real infrastructure, follow [`SETUP.md`](SETUP.md) instead.
 
 Run the full architecture demo with stub mode (no AWS credentials required):
 
@@ -328,6 +359,18 @@ All infrastructure parameters are defined in `config/aws_config.py`. This file i
 
 ## Terraform
 
+> **The `terraform/environments/{dev,staging,production,demo}/` layout described
+> in this section is the [dead second tree](terraform/README.md#dead-second-terraform-tree).**
+> `terraform init` fails there — between them those compositions reference seven
+> modules that do not exist in this repo (`cloudfront`, `opensearch`,
+> `dynamodb`, `sagemaker`, `api_gateway`, `iam`, `waf`). **Do not use it.**
+>
+> The live Terraform root is [`terraform/`](terraform/) and is
+> **profile-driven**: one account, one region, one VPC, selected by
+> `deployment_profile`. See [`terraform/README.md`](terraform/README.md) and
+> [`SETUP.md`](SETUP.md). The module inventory and environment layers below are
+> retained only as the design reference this file documents.
+
 ### Overview
 
 17 Terraform modules compose the full infrastructure across 4 environment layers (dev, staging, production, demo). State is stored in S3 with DynamoDB locking (per-environment keys).
@@ -363,38 +406,26 @@ All infrastructure parameters are defined in `config/aws_config.py`. This file i
 
 ### Usage
 
+> ⚠️ **The commands that once lived here (`cd terraform/environments/production
+> && terraform init`) targeted the dead tree and no longer work.** The real
+> usage is profile-driven from the live root. The canonical, working steps —
+> `terraform plan -var-file=profiles/<profile>.tfvars` plus the pinned image
+> digests and state-backend prerequisites — are in
+> [`terraform/README.md`](terraform/README.md) and [`SETUP.md`](SETUP.md):
+
 ```bash
-# Initialize (production example)
-cd terraform/environments/production
-terraform init
-
-# Plan
-terraform plan \
-  -var="ecr_registry=333333333333.dkr.ecr.us-east-1.amazonaws.com" \
-  -var="image_tag=v1.2.3" \
-  -var="acm_cert_arn=arn:aws:acm:us-east-1:333333333333:certificate/xxx" \
-  -var="hosted_zone_id=Z1234567890"
-
-# Apply
-terraform apply
+cd "AWS Deployment/aether-aws/terraform"
+cp terraform.tfvars.example terraform.tfvars   # then fill in your values
+terraform init                                 # remote state injected per profile
+terraform plan -var-file=profiles/production-lean.tfvars -out=tfplan
+terraform apply tfplan
 ```
 
-**Required variables:**
-
-| Variable            | Description                                            |
-|---------------------|--------------------------------------------------------|
-| `ecr_registry`      | ECR registry URL (`account_id.dkr.ecr.region.amazonaws.com`) |
-
-**Optional variables:**
-
-| Variable             | Default       | Description                                |
-|----------------------|---------------|--------------------------------------------|
-| `environment`        | `production`  | Environment name                           |
-| `aws_region`         | `us-east-1`   | Primary AWS region                         |
-| `image_tag`          | `latest`      | Docker image tag for ECS services          |
-| `acm_cert_arn`       | (empty)       | ACM certificate ARN for HTTPS              |
-| `hosted_zone_id`     | (empty)       | Route 53 hosted zone ID for DNS records    |
-| `monthly_budget_usd` | `15000`       | Monthly budget in USD for cost alerts      |
+The live variable surface is `terraform/variables.tf` plus
+`terraform/profiles/*.tfvars` — **not** the `ecr_registry` / `image_tag` /
+`hosted_zone_id` variables the dead tree used. See
+[`terraform/README.md`](terraform/README.md) for the authoritative required and
+optional variables.
 
 ---
 
