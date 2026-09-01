@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError
@@ -27,6 +27,7 @@ from services.integrations.data_rights.models import (
     PolicyCheckRequest,
 )
 from services.integrations.data_rights.service import data_rights_service
+from services.security.request_context import require_kyber_operator
 from shared.rights_authority.contracts import (
     ActorRef,
     AgreementRef,
@@ -50,6 +51,7 @@ router = APIRouter(
 admin_router = APIRouter(
     prefix="/v1/admin/kyber/data-rights",
     tags=["Admin — Kyber Data Rights"],
+    dependencies=[Depends(require_kyber_operator)],
 )
 
 
@@ -119,11 +121,6 @@ def _tenant_id(request: Request, permission: str = "read") -> str:
 def _actor(request: Request) -> str:
     t = getattr(request.state, "tenant", None)
     return getattr(t, "user_id", None) or getattr(t, "tenant_id", None) or "system"
-
-
-def _require_operator(request: Request):
-    from services.security.request_context import require_kyber_operator
-    return require_kyber_operator(request)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -374,8 +371,6 @@ async def admin_list_grants(
     status: Optional[str] = None,
 ):
     """Operator view: list all data rights grants across tenants."""
-    _require_operator(request)
-
     status_enum = None
     if status:
         try:
@@ -397,8 +392,6 @@ async def admin_list_grants(
 @admin_router.post("/grants/{grant_id}/revoke")
 async def admin_revoke_grant(grant_id: str, body: DataRightsGrantRevoke, request: Request):
     """Operator: force-revoke any grant (e.g., compliance enforcement)."""
-    _require_operator(request)
-
     grant = await data_rights_service.get_grant(grant_id)
     if not grant:
         raise NotFoundError("grant")
@@ -409,7 +402,6 @@ async def admin_revoke_grant(grant_id: str, body: DataRightsGrantRevoke, request
 
 @admin_router.get("/policies")
 async def admin_list_rights_policies(request: Request, tenant_id: Optional[str] = None):
-    _require_operator(request)
     rows = await rights_authority.repository.list_policies(tenant_id)
     return APIResponse(data={"items": rows, "count": len(rows)}).to_dict()
 
@@ -418,7 +410,6 @@ async def admin_list_rights_policies(request: Request, tenant_id: Optional[str] 
 async def admin_transition_rights_policy(
     policy_set_ref: str, body: RightsPolicyTransition, request: Request,
 ):
-    _require_operator(request)
     policy = await rights_authority.repository.get_policy(policy_set_ref)
     if not policy:
         raise NotFoundError("rights policy set")
@@ -433,7 +424,6 @@ async def admin_transition_rights_policy(
 
 @admin_router.get("/impacts")
 async def admin_list_rights_impacts(request: Request, tenant_id: Optional[str] = None):
-    _require_operator(request)
     rows = await rights_authority.repository.list_impacts(tenant_id)
     return APIResponse(data={"items": rows, "count": len(rows)}).to_dict()
 
@@ -445,7 +435,6 @@ async def admin_rights_reconciliation(
     limit_per_table: int = 10_000,
 ):
     """Kyber migration dashboard report; this endpoint never mutates rows."""
-    _require_operator(request)
     from shared.rights_authority.reconciliation import build_reconciliation_report
 
     if limit_per_table < 1 or limit_per_table > 100_000:
@@ -460,7 +449,6 @@ async def admin_rights_reconciliation(
 @admin_router.post("/impacts/{impact_graph_id}/execute")
 async def admin_execute_impact(impact_graph_id: str, request: Request):
     """Run remediation; absent adapters remain visibly blocked."""
-    _require_operator(request)
     from shared.rights_authority.remediation import execute_impact
 
     result = await execute_impact(impact_graph_id)

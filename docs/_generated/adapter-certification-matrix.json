@@ -251,62 +251,91 @@
       ]
     },
     "derivatives:drift": {
-      "adapter": "drift(unimplemented)",
+      "adapter": "drift",
       "adapter_version": "0.1.0",
-      "capabilities": [],
+      "capabilities": [
+        "fills",
+        "funding",
+        "markets",
+        "position",
+        "reference_data"
+      ],
       "domain": "derivatives",
       "first_release": true,
       "pagination_model": "none",
       "provider": "drift",
-      "required_credentials": [],
+      "required_credentials": [
+        "read_only_api_key"
+      ],
       "required_endpoints": [],
       "secret_ref_names": [],
-      "state": "scaffolded",
-      "state_rank": 10,
+      "state": "credential_waiting",
+      "state_rank": 20,
       "streaming_model": "none",
       "unsupported": []
     },
     "derivatives:dydx": {
-      "adapter": "dydx(unimplemented)",
+      "adapter": "dydx",
       "adapter_version": "0.1.0",
-      "capabilities": [],
+      "capabilities": [
+        "account_snapshot",
+        "fills",
+        "markets",
+        "orders",
+        "position",
+        "realtime_account_stream",
+        "reference_data"
+      ],
       "domain": "derivatives",
       "first_release": true,
       "pagination_model": "none",
       "provider": "dydx",
-      "required_credentials": [],
+      "required_credentials": [
+        "read_only_api_key"
+      ],
       "required_endpoints": [],
       "secret_ref_names": [],
-      "state": "scaffolded",
-      "state_rank": 10,
+      "state": "credential_waiting",
+      "state_rank": 20,
       "streaming_model": "none",
       "unsupported": []
     },
     "derivatives:gmx": {
-      "adapter": "gmx(unimplemented)",
+      "adapter": "gmx",
       "adapter_version": "0.1.0",
-      "capabilities": [],
+      "capabilities": [
+        "fills",
+        "funding",
+        "markets",
+        "position",
+        "reference_data"
+      ],
       "domain": "derivatives",
       "first_release": true,
       "pagination_model": "none",
       "provider": "gmx",
-      "required_credentials": [],
+      "required_credentials": [
+        "read_only_api_key"
+      ],
       "required_endpoints": [],
       "secret_ref_names": [],
-      "state": "scaffolded",
-      "state_rank": 10,
+      "state": "credential_waiting",
+      "state_rank": 20,
       "streaming_model": "none",
       "unsupported": []
     },
     "derivatives:hyperliquid": {
-      "adapter": "hyperliquid(unimplemented)",
+      "adapter": "hyperliquid",
       "adapter_version": "0.1.0",
       "capabilities": [
         "account_snapshot",
         "fills",
         "funding",
+        "margin_snapshot",
         "markets",
-        "realtime_account_stream"
+        "position",
+        "realtime_account_stream",
+        "reference_data"
       ],
       "domain": "derivatives",
       "first_release": true,
@@ -317,15 +346,24 @@
       ],
       "required_endpoints": [],
       "secret_ref_names": [],
-      "state": "scaffolded",
-      "state_rank": 10,
+      "state": "credential_waiting",
+      "state_rank": 20,
       "streaming_model": "websocket",
       "unsupported": []
     },
     "interop:axelar": {
       "adapter": "axelar",
       "adapter_version": "0.1.0",
-      "capabilities": [],
+      "capabilities": [
+        "asset_transfer",
+        "attestation_observation",
+        "delivery_observation",
+        "direct_rpc_observation",
+        "execution_observation",
+        "historical_backfill",
+        "message_observation",
+        "payload_decoding"
+      ],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
@@ -335,15 +373,24 @@
         "per_network_json_rpc"
       ],
       "secret_ref_names": [],
-      "state": "scaffolded",
-      "state_rank": 10,
+      "state": "credential_waiting",
+      "state_rank": 20,
       "streaming_model": "none",
       "unsupported": []
     },
     "interop:chainlink_ccip": {
       "adapter": "chainlink_ccip",
       "adapter_version": "0.1.0",
-      "capabilities": [],
+      "capabilities": [
+        "asset_transfer",
+        "attestation_observation",
+        "delivery_observation",
+        "direct_rpc_observation",
+        "historical_backfill",
+        "message_observation",
+        "payload_decoding",
+        "retry_tracking"
+      ],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
@@ -353,15 +400,23 @@
         "per_network_json_rpc"
       ],
       "secret_ref_names": [],
-      "state": "scaffolded",
-      "state_rank": 10,
+      "state": "credential_waiting",
+      "state_rank": 20,
       "streaming_model": "none",
       "unsupported": []
     },
     "interop:debridge": {
       "adapter": "debridge",
       "adapter_version": "0.1.0",
-      "capabilities": [],
+      "capabilities": [
+        "delivery_observation",
+        "direct_rpc_observation",
+        "historical_backfill",
+        "intent_observation",
+        "message_observation",
+        "reorg_recovery",
+        "settlement_observation"
+      ],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
@@ -371,15 +426,22 @@
         "per_network_json_rpc"
       ],
       "secret_ref_names": [],
-      "state": "scaffolded",
-      "state_rank": 10,
+      "state": "credential_waiting",
+      "state_rank": 20,
       "streaming_model": "none",
       "unsupported": []
     },
     "interop:hyperlane": {
       "adapter": "hyperlane",
       "adapter_version": "0.1.0",
-      "capabilities": [],
+      "capabilities": [
+        "delivery_observation",
+        "direct_rpc_observation",
+        "historical_backfill",
+        "message_observation",
+        "payload_decoding",
+        "reorg_recovery"
+      ],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
@@ -389,15 +451,23 @@
         "per_network_json_rpc"
       ],
       "secret_ref_names": [],
-      "state": "scaffolded",
-      "state_rank": 10,
+      "state": "credential_waiting",
+      "state_rank": 20,
       "streaming_model": "none",
       "unsupported": []
     },
     "interop:ibc": {
       "adapter": "ibc",
       "adapter_version": "0.1.0",
-      "capabilities": [],
+      "capabilities": [
+        "asset_transfer",
+        "attribute_event_observation",
+        "continuity_recovery",
+        "delivery_observation",
+        "historical_backfill",
+        "message_observation",
+        "settlement_observation"
+      ],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
@@ -407,15 +477,21 @@
         "per_network_json_rpc"
       ],
       "secret_ref_names": [],
-      "state": "scaffolded",
-      "state_rank": 10,
+      "state": "credential_waiting",
+      "state_rank": 20,
       "streaming_model": "none",
       "unsupported": []
     },
     "interop:layerzero": {
       "adapter": "layerzero_v2",
       "adapter_version": "1.0.0",
-      "capabilities": [],
+      "capabilities": [
+        "delivery_observation",
+        "direct_rpc_observation",
+        "historical_backfill",
+        "message_observation",
+        "payload_decoding"
+      ],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
@@ -425,15 +501,23 @@
         "per_network_json_rpc"
       ],
       "secret_ref_names": [],
-      "state": "scaffolded",
-      "state_rank": 10,
+      "state": "credential_waiting",
+      "state_rank": 20,
       "streaming_model": "none",
       "unsupported": []
     },
     "interop:wormhole": {
       "adapter": "wormhole",
       "adapter_version": "0.1.0",
-      "capabilities": [],
+      "capabilities": [
+        "asset_transfer",
+        "attestation_observation",
+        "delivery_observation",
+        "direct_rpc_observation",
+        "historical_backfill",
+        "message_observation",
+        "payload_decoding"
+      ],
       "domain": "interop",
       "first_release": true,
       "pagination_model": "none",
@@ -443,8 +527,8 @@
         "per_network_json_rpc"
       ],
       "secret_ref_names": [],
-      "state": "scaffolded",
-      "state_rank": 10,
+      "state": "credential_waiting",
+      "state_rank": 20,
       "streaming_model": "none",
       "unsupported": []
     },
@@ -624,15 +708,10 @@
       "stablecoin_chain": 2
     },
     "by_state": {
-      "credential_waiting": 15,
-      "scaffolded": 11
+      "credential_waiting": 26
     },
     "first_release": 26,
-    "import_errors": {
-      "services.derivatives.adapters:VENUE_ADAPTERS": "ImportError: cannot import name 'StrEnum' from 'enum' (/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/enum.py)",
-      "services.derivatives.connectors.hyperliquid:HyperliquidConnector": "ImportError: cannot import name 'StrEnum' from 'enum' (/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/enum.py)",
-      "services.interop.providers:INTEROP_PROVIDERS": "ModuleNotFoundError: No module named 'eth_utils'"
-    },
+    "import_errors": {},
     "total": 26
   },
   "version": "8.12.0"

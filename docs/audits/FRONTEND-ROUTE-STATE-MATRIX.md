@@ -171,10 +171,10 @@ The denominator is the 137 data-bearing route patterns above: 52 Aether and
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 18 / 135 (13.3%) | tracked for every route |
+| Explicit loading-state assertions | 18 / 137 (13.1%) | tracked for every route |
 | Empty-state assertions | 125 / 137 (91.2%) | at least 90% overall |
 | Error/unavailable assertions | 107 / 137 (78.1%) | 100% of critical routes |
-| Populated-state assertions | 33 / 135 (24.4%) | tracked for every route |
+| Populated-state assertions | 33 / 137 (24.1%) | tracked for every route |
 | Critical routes with both empty and error assertions | 64 / 64 (100%) | 64 / 64 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,
