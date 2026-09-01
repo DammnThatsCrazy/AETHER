@@ -73,7 +73,16 @@ services:
   # registry loaders.
   integration-tests:
     <<: *runtime
-    environment: {<<: *runtime-env, AETHER_ROLE: api, PYTHONDONTWRITEBYTECODE: "1"}
+    # This harness calls the ingestion validator directly with mocked cache
+    # and producer dependencies; it intentionally exercises the local/snapshot
+    # consent path rather than requiring seeded ConsentReceipt rows. Real
+    # server-authoritative consent is covered by the database-backed suites.
+    environment:
+      <<: *runtime-env
+      AETHER_ROLE: api
+      AUTHORITATIVE_CONSENT_ENFORCEMENT_ENABLED: "false"
+      TENANT_COMPLIANCE_POLICY_ENABLED: "false"
+      PYTHONDONTWRITEBYTECODE: "1"
     working_dir: /workspace
     entrypoint: []
     volumes:

@@ -469,6 +469,8 @@ def test_durable_integration_uses_read_only_repository_test_runner():
     assert "target: /workspace" in compose
     assert "working_dir: /workspace" in compose
     assert "entrypoint: []" in compose
+    assert "AUTHORITATIVE_CONSENT_ENFORCEMENT_ENABLED: \"false\"" in compose
+    assert "TENANT_COMPLIANCE_POLICY_ENABLED: \"false\"" in compose
     assert "tests/integration/test_batch_endpoint.py" in makefile
     assert "run --rm integration-tests" in makefile
 
