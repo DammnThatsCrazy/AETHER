@@ -41,6 +41,8 @@ from typing import Optional
 
 from dependencies.providers import get_cache, get_graph
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.routing import APIRoute
+from starlette.responses import JSONResponse
 from repositories.lake import gold_identity, gold_market, gold_onchain, gold_social
 from repositories.repos import (
     AgentConfigRepository,
@@ -56,6 +58,8 @@ from shared.cache.cache import CacheClient
 from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.graph.graph import GraphClient
 from shared.logger.logger import get_logger, metrics
+from shared.rights_authority.contracts import ActorRef
+from shared.rights_authority.pep import evaluate_rights
 from shared.privacy.consent_enforcement import ConsentDeniedError, require_consent
 
 from services.profile.aggregator import Profile360Aggregator
@@ -67,8 +71,72 @@ from services.profile.resolver import ProfileResolver
 from services.metering_evidence.families import meter_family_usage  # noqa: E402
 
 logger = get_logger("aether.service.profile")
-router = APIRouter(prefix="/v1/profile", tags=["Profile 360"])
-profile360_router = APIRouter(prefix="/v1/profile360", tags=["Profile360 Kyber"])
+
+
+class _RightsProfileRoute(APIRoute):
+    """Apply one rights read gate to every Profile360 sub-resource route."""
+
+    def get_route_handler(self):
+        original = super().get_route_handler()
+
+        async def handler(request: Request):
+            from shared.rights_authority.pep import rights_mode
+
+            if rights_mode() == "off":
+                return await original(request)
+            tenant = getattr(request.state, "tenant", None)
+            if tenant is None:
+                return await original(request)
+            entity_id = (
+                request.path_params.get("user_id")
+                or request.path_params.get("entity_id")
+                or request.path_params.get("entity_type")
+                or request.query_params.get("user_id")
+                or request.query_params.get("entity_id")
+            )
+            entity_id = str(entity_id or "profile")
+            envelope_refs = request.query_params.getlist("rights_envelope_ref")
+            policy_set_ref = request.query_params.get("rights_policy_set_ref")
+            result = await evaluate_rights(
+                action="read",
+                tenant_id=tenant.tenant_id,
+                actor=ActorRef(
+                    kind="tenant_user",
+                    id=getattr(tenant, "user_id", None) or tenant.tenant_id,
+                    tenant_id=tenant.tenant_id,
+                ),
+                purpose="profile360_read",
+                artifacts=[{
+                    "kind": "profile360",
+                    "id": entity_id,
+                    "tenant_id": tenant.tenant_id,
+                }],
+                envelope_refs=envelope_refs,
+                policy_set_ref=policy_set_ref,
+                metadata={"surface": request.url.path},
+            )
+            request.state.profile_rights_result = result
+            if not result.proceed:
+                return JSONResponse(status_code=403, content={
+                    "code": "rights_profile_read_blocked",
+                    "detail": "Profile360 read blocked by the rights authority",
+                    "rights": {
+                        "decision_id": result.decision.decision_id if result.decision else None,
+                        "outcome": result.decision.outcome if result.decision else "unavailable",
+                        "reasons": list(result.reason_codes),
+                    },
+                })
+            return await original(request)
+
+        return handler
+
+
+router = APIRouter(
+    prefix="/v1/profile", tags=["Profile 360"], route_class=_RightsProfileRoute,
+)
+profile360_router = APIRouter(
+    prefix="/v1/profile360", tags=["Profile360 Kyber"], route_class=_RightsProfileRoute,
+)
 
 # Lazy-initialized singleton
 _composer: Optional[ProfileComposer] = None
@@ -144,6 +212,44 @@ def _heuristic_completeness(limit: int, returned: int) -> dict:
     return {"limit": limit, "returned": returned, "truncated": truncated, "has_more": truncated}
 
 
+async def _profile_rights(
+    request: Request,
+    tenant_id: str,
+    entity_id: str,
+    envelope_refs: Optional[list[str]] = None,
+    policy_set_ref: Optional[str] = None,
+):
+    """Authorize Profile360 before composing graph, lake, or model sections."""
+    existing = getattr(getattr(request, "state", None), "profile_rights_result", None)
+    if existing is not None:
+        decision = existing
+    else:
+        decision = await evaluate_rights(
+            action="read",
+            tenant_id=tenant_id,
+            actor=ActorRef(
+                kind="tenant_user",
+                id=getattr(request.state.tenant, "user_id", None) or tenant_id,
+                tenant_id=tenant_id,
+            ),
+            purpose="profile360_read",
+            artifacts=[{"kind": "profile360", "id": entity_id, "tenant_id": tenant_id}],
+            envelope_refs=envelope_refs or (),
+            policy_set_ref=policy_set_ref,
+            metadata={"surface": "profile360"},
+        )
+    payload = {
+        "mode": decision.mode,
+        "proceed": decision.proceed,
+        "decision_id": decision.decision.decision_id if decision.decision else None,
+        "outcome": decision.decision.outcome if decision.decision else None,
+        "reasons": list(decision.reason_codes),
+        "envelope_refs": decision.decision.envelope_refs if decision.decision else list(envelope_refs or []),
+        "policy_set_ref": decision.decision.policy_set_ref if decision.decision else policy_set_ref,
+    }
+    return decision, payload
+
+
 # ── Full Profile ──────────────────────────────────────────────────────
 
 @router.get("/{user_id}")
@@ -156,6 +262,8 @@ async def get_full_profile(
     include_intelligence: bool = Query(True, description="Include risk/features/models"),
     include_lake: bool = Query(True, description="Include lake Gold data"),
     timeline_limit: int = Query(50, ge=1, le=500),
+    rights_envelope_ref: Optional[list[str]] = Query(default=None),
+    rights_policy_set_ref: Optional[str] = Query(default=None),
 ):
     """
     Full holistic profile view — everything Aether knows about this entity.
@@ -165,6 +273,16 @@ async def get_full_profile(
     """
     tenant = request.state.tenant
     tenant.require_permission("read")
+    rights, rights_payload = await _profile_rights(
+        request, tenant.tenant_id, user_id, rights_envelope_ref, rights_policy_set_ref,
+    )
+    if not rights.proceed:
+        return APIResponse(data={
+            "user_id": user_id,
+            "state": "suppressed",
+            "rights": rights_payload,
+            "sections": {},
+        }).to_dict()
 
     result = await composer.get_full_profile(
         user_id=user_id,
@@ -174,10 +292,11 @@ async def get_full_profile(
         include_intelligence=include_intelligence,
         include_lake=include_lake,
         timeline_limit=timeline_limit,
+        rights_decision_id=rights.decision.decision_id if rights.decision else None,
     )
 
     metrics.increment("profile_360_full_view")
-    return APIResponse(data=result).to_dict()
+    return APIResponse(data={**result, "rights": rights_payload}).to_dict()
 
 
 # ── Timeline ──────────────────────────────────────────────────────────
@@ -281,6 +400,8 @@ async def resolve_identifier(
     session: Optional[str] = Query(None),
     social: Optional[str] = Query(None),
     customer: Optional[str] = Query(None),
+    rights_envelope_ref: Optional[list[str]] = Query(default=None),
+    rights_policy_set_ref: Optional[str] = Query(default=None),
 ):
     """
     Resolve any identifier to a canonical profile ID.
@@ -299,6 +420,12 @@ async def resolve_identifier(
         session_id=session,
         social_handle=social,
         customer_id=customer,
+        rights_decision_id=(
+            request.state.profile_rights_result.decision.decision_id
+            if getattr(request.state, "profile_rights_result", None)
+            and request.state.profile_rights_result.decision
+            else None
+        ),
     )
 
     if not resolved:
@@ -331,6 +458,8 @@ async def get_profile360_surface(
     ),
     timeline_limit: int = Query(250, ge=1, le=1000),
     graph_limit: int = Query(750, ge=1, le=1000),
+    rights_envelope_ref: Optional[list[str]] = Query(default=None),
+    rights_policy_set_ref: Optional[str] = Query(default=None),
 ):
     """Normalized internal Profile360 payload for Kyber.
 
@@ -340,6 +469,16 @@ async def get_profile360_surface(
     """
     tenant = request.state.tenant
     tenant.require_permission("read")
+    rights, rights_payload = await _profile_rights(
+        request, tenant.tenant_id, entity_id, rights_envelope_ref, rights_policy_set_ref,
+    )
+    if not rights.proceed:
+        return APIResponse(data={
+            "entity_id": entity_id,
+            "entity_type": entity_type,
+            "state": "suppressed",
+            "rights": rights_payload,
+        }).to_dict()
     result = await composer.get_profile360_surface(
         entity_type=entity_type,
         entity_id=entity_id,
@@ -347,9 +486,10 @@ async def get_profile360_surface(
         include=_parse_include(include),
         timeline_limit=timeline_limit,
         graph_limit=graph_limit,
+        rights_decision_id=rights.decision.decision_id if rights.decision else None,
     )
     metrics.increment("profile360_kyber_surface_view")
-    return APIResponse(data=result).to_dict()
+    return APIResponse(data={**result, "rights": rights_payload}).to_dict()
 
 
 @profile360_router.get("/{entity_type}/{entity_id}/graph")

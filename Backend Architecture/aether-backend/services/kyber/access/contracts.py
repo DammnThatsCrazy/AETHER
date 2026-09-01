@@ -413,6 +413,7 @@ class AccessScope(BaseModel):
     exited_at: Optional[str] = None
     revoked_at: Optional[str] = None
     policy_decision_id: Optional[str] = None
+    rights_envelope_ref: Optional[str] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @property

@@ -123,6 +123,8 @@ export interface ExplorationContextV1 {
   presentation?: PresentationSpec | null;
   selection?: SelectionSet | null;
   truth?: TruthRequirements | null;
+  /** Opaque IRRL references; the server re-evaluates them at execution. */
+  rights?: Record<string, unknown> | null;
 }
 
 export interface FilterApplicabilityEntry {
@@ -175,6 +177,7 @@ export interface ExplorationResultEnvelope<T> {
   applicability: ApplicabilityReport;
   execution: ExplorationExecution;
   warnings: string[];
+  rights?: Record<string, unknown> | null;
 }
 
 /** A context-preserving navigation edge to another surface. */

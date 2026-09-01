@@ -10,6 +10,7 @@ from typing import Optional
 
 from shared.events.events import Event, EventProducer, Topic
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.mutation_helpers import apply_edge, apply_vertex
 from shared.logger.logger import get_logger, metrics
 from shared.scoring.bytecode_risk import BytecodeRiskScorer
 
@@ -52,6 +53,17 @@ class ActionRecorder:
         # Wrap graph operations in try/except so action is still recorded locally
         # even if graph mutations fail
         try:
+            tenant_id = action.tenant_id or str(
+                (action.metadata or {}).get("tenant_id") or ""
+            ) or None
+            rights = {
+                "rights_envelope_id": (
+                    action.rights_envelope_refs[0]
+                    if action.rights_envelope_refs else None
+                ),
+                "rights_policy_set_ref": action.rights_policy_set_ref,
+                "rights_source_grant_refs": action.rights_source_grant_refs,
+            }
             # Create ACTION_RECORD vertex
             action_vertex = Vertex(
                 vertex_type=VertexType.ACTION_RECORD,
@@ -64,17 +76,25 @@ class ActionRecorder:
                     "contract_address": action.contract_address or "",
                     "intent": action.intent_description,
                     "risk_score": str(action.risk_score),
+                    **rights,
                 },
             )
-            await self._graph.add_vertex(action_vertex)
+            await apply_vertex(
+                action_vertex,
+                graph=self._graph,
+                tenant_id=tenant_id,
+                operation="node_created",
+                actor_kind="agent",
+                actor_id=action.agent_id,
+            )
 
             # Create PERFORMED_ACTION edge: agent -> action_record
-            await self._graph.add_edge(Edge(
+            await apply_edge(Edge(
                 edge_type=EdgeType.PERFORMED_ACTION,
                 from_vertex_id=action.agent_id,
                 to_vertex_id=action.action_id,
-                properties={"confidence": "1.0"},
-            ))
+                properties={"confidence": "1.0", **rights},
+            ), graph=self._graph, tenant_id=tenant_id, actor_kind="agent", actor_id=action.agent_id)
 
             # For DEPLOY actions, create/update CONTRACT vertex + DEPLOYED edge
             if action.action_type == ActionType.DEPLOY and action.contract_address:
@@ -87,27 +107,35 @@ class ActionRecorder:
                         "deployer_agent_id": action.agent_id,
                         "bytecode_hash": action.bytecode_hash or "",
                         "risk_score": str(action.risk_score),
+                        **rights,
                     },
                 )
-                await self._graph.upsert_vertex(contract_vertex)
-                await self._graph.add_edge(Edge(
+                await apply_vertex(
+                    contract_vertex,
+                    graph=self._graph,
+                    tenant_id=tenant_id,
+                    actor_kind="agent",
+                    actor_id=action.agent_id,
+                )
+                await apply_edge(Edge(
                     edge_type=EdgeType.DEPLOYED,
                     from_vertex_id=action.agent_id,
                     to_vertex_id=action.contract_address,
-                    properties={"tx_hash": action.tx_hash or "", "chain_id": action.chain_id},
-                ))
+                    properties={"tx_hash": action.tx_hash or "", "chain_id": action.chain_id, **rights},
+                ), graph=self._graph, tenant_id=tenant_id, actor_kind="agent", actor_id=action.agent_id)
 
             # For CALL actions, create CALLED edge
             if action.action_type == ActionType.CALL and action.contract_address:
-                await self._graph.add_edge(Edge(
+                await apply_edge(Edge(
                     edge_type=EdgeType.CALLED,
                     from_vertex_id=action.agent_id,
                     to_vertex_id=action.contract_address,
                     properties={
                         "method": action.method_name or "",
                         "value": action.value_wei or "0",
+                        **rights,
                     },
-                ))
+                ), graph=self._graph, tenant_id=tenant_id, actor_kind="agent", actor_id=action.agent_id)
         except Exception as e:
             logger.error(f"Graph operation failed for action {action.action_id}: {e}")
             # Still continue -- record the action locally even if graph fails

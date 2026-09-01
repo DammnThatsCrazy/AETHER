@@ -26,7 +26,7 @@
         demo-seed demo-reset demo-status demo-verify dev-demo \
         clean-install-smoke demo-seed-smoke demo-reset-smoke \
         design-partner-demo-up design-partner-demo-seed design-partner-demo-check design-partner-demo-down \
-        temporal-integrity temporal-contract-parity mutation-gateway-check exploration-readiness \
+        temporal-integrity temporal-contract-parity mutation-gateway-check rights-authority-check rights-reconciliation exploration-readiness \
         production-status release-gate ops-readiness help \
         validate-profile-config validate-profile-parity validate-cost-policy validate-cost-policy-terraform validate-delivery-topology \
         validate-route-registry validate-implementation-ledger validate-reference-packs \
@@ -556,6 +556,12 @@ temporal-contract-parity: ## Temporal + platform contract generators clean, TS/P
 
 mutation-gateway-check: ## Graph write-path freeze (direct writers pending gateway migration)
 	python scripts/validate_graph_write_paths.py
+
+rights-authority-check: ## IRRL registry, durable migration chain, and protected PEP wiring
+	python scripts/validate_rights_authority.py
+
+rights-reconciliation: ## Emit a non-mutating legacy rights inventory/backfill plan
+	python scripts/rights_reconciliation.py
 
 exploration-readiness: ## Exploration fabric contract + registry + planner gates (grows per PR)
 	python -m pytest tests/contracts/test_exploration_contract_parity.py \

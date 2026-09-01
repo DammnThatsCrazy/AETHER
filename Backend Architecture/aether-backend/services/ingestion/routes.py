@@ -9,7 +9,7 @@ import hashlib
 import uuid
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, BadRequestError, utc_now
@@ -17,6 +17,7 @@ from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
 from dependencies.providers import get_producer
 from repositories.lake import BronzeRepository
+from services.ingestion.rights import authorize_ingestion
 
 logger = get_logger("aether.service.ingestion")
 router = APIRouter(prefix="/v1/ingest", tags=["Ingestion"])
@@ -64,6 +65,12 @@ async def ingest_single_event(
     """
     tenant = request.state.tenant
     validated = _validate_and_normalize(event, tenant.tenant_id, request)
+    rights = await authorize_ingestion(tenant.tenant_id, validated)
+    if not rights.allowed:
+        raise HTTPException(status_code=403, detail={
+            "code": "rights_ingestion_blocked", "reason": rights.reason,
+        })
+    validated["rights"] = rights.context
 
     await producer.publish(Event(
         topic=Topic.SDK_EVENTS_VALIDATED,
@@ -90,10 +97,16 @@ async def ingest_batch_events(
     """
     tenant = request.state.tenant
     event_ids = []
+    rejected = []
 
     events_to_publish = []
     for sdk_event in batch.events:
         validated = _validate_and_normalize(sdk_event, tenant.tenant_id, request)
+        rights = await authorize_ingestion(tenant.tenant_id, validated)
+        if not rights.allowed:
+            rejected.append({"event_id": validated["event_id"], "reason": rights.reason})
+            continue
+        validated["rights"] = rights.context
         event_ids.append(validated["event_id"])
         events_to_publish.append(Event(
             topic=Topic.SDK_EVENTS_VALIDATED,
@@ -102,11 +115,12 @@ async def ingest_batch_events(
             payload=validated,
         ))
 
-    await producer.publish_batch(events_to_publish)
+    if events_to_publish:
+        await producer.publish_batch(events_to_publish)
 
     metrics.increment("events_ingested", value=len(event_ids))
     return APIResponse(
-        data={"accepted": len(event_ids), "event_ids": event_ids}
+        data={"accepted": len(event_ids), "rejected": len(rejected), "event_ids": event_ids, "rejections": rejected}
     ).to_dict()
 
 
@@ -134,7 +148,19 @@ async def ingest_api_feed(
         "tenant_id": tenant.tenant_id,
         "received_at": received_at,
         "schema_version": "1.0",
+        "event_id": f"feed:{feed_event.source}:{feed_event.external_id}",
     }
+
+    rights = await authorize_ingestion(
+        tenant.tenant_id,
+        payload,
+        artifact_kind="feed_record",
+    )
+    if not rights.allowed:
+        raise HTTPException(status_code=403, detail={
+            "code": "rights_ingestion_blocked", "reason": rights.reason,
+        })
+    payload["rights"] = rights.context
 
     # Durable Bronze write for idempotency and recovery
     bronze = BronzeRepository("feeds")

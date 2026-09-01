@@ -597,6 +597,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from services.imports.commit import register_import_handlers
 
     register_import_handlers()  # import.commit / import.replay
+    from services.olympus.worker import register_olympus_promotion_handler
+    register_olympus_promotion_handler()
+    from services.rights_authority_worker import (
+        register_rights_audit_outbox_handler,
+        register_rights_remediation_handler,
+    )
+    register_rights_remediation_handler()
+    register_rights_audit_outbox_handler()
     register_source_classification_repair_handler()
     from services.consent.erasure_jobs import register_consent_erasure_handler
 

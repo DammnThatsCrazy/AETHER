@@ -19,6 +19,9 @@ from typing import Any, Optional
 
 from shared.common.common import BadRequestError, NotFoundError
 from shared.logger.logger import get_logger
+from shared.rights_authority.contracts import ActorRef, RevokeRightsAuthority
+from shared.rights_authority.pep import rights_mode
+from shared.rights_authority.service import rights_authority
 
 from repositories.repos import BaseRepository  # noqa: F401 (documents provenance of _ScopedRepo)
 from services.security.repositories import _ScopedRepo
@@ -108,6 +111,14 @@ class DSRPropagationService:
             DSRPropagationStep(component=component).model_dump()
             for component in DSR_COMPONENTS
         ]
+        rights_impact = None
+        if rights_mode() != "off":
+            rights_impact = await rights_authority.revoke(RevokeRightsAuthority(
+                root_refs=[subject_ref],
+                reason=f"dsr:{dsr_type}",
+                actor=ActorRef(kind="service", id="dsr_propagation", tenant_id=tenant_id),  # type: ignore[arg-type]
+                tenant_id=tenant_id,
+            ))
         record = {
             "request_id": request_id,
             "tenant_id": tenant_id,
@@ -115,6 +126,9 @@ class DSRPropagationService:
             "dsr_type": dsr_type,
             "steps": steps,
             "opened_at": now_iso(),
+            "rights_impact_graph_id": rights_impact.impact_graph_id if rights_impact else None,
+            "rights_impact_status": "open" if rights_impact else None,
+            "rights_root_refs": [subject_ref],
         }
         await self._repo.insert(request_id, record)
         logger.info(
@@ -301,13 +315,40 @@ class DSRPropagationService:
         """
         record = await self._load(request_id, tenant_id)
         steps: list[dict] = record.get("steps", [])
+        overall = overall_status(steps)
+        if record.get("rights_impact_graph_id") and record.get("rights_impact_status") != "completed":
+            if overall == "completed":
+                try:
+                    await rights_authority.update_impact_status(
+                        record["rights_impact_graph_id"],
+                        "completed",
+                        receipt_refs=[
+                            f"dsr:{request_id}",
+                            *[
+                                str(step.get("audit_event_id") or step.get("policy_decision_id"))
+                                for step in steps
+                                if step.get("audit_event_id") or step.get("policy_decision_id")
+                            ],
+                        ],
+                    )
+                    record["rights_impact_status"] = "completed"
+                    await self._repo.update(request_id, {"rights_impact_status": "completed"})
+                except Exception as exc:
+                    logger.error("rights impact completion unavailable for DSR %s: %s", request_id, exc)
+                if record.get("rights_impact_status") != "completed":
+                    overall = "blocked"
         return {
             "request_id": record.get("request_id", request_id),
             "tenant_id": record.get("tenant_id"),
             "dsr_type": record.get("dsr_type"),
             "subject_ref": record.get("subject_ref"),
             "components": steps,
-            "overall": overall_status(steps),
+            "overall": overall,
+            "rights_impact": {
+                "graph_id": record.get("rights_impact_graph_id"),
+                "status": record.get("rights_impact_status"),
+                "root_refs": record.get("rights_root_refs", []),
+            } if record.get("rights_impact_graph_id") else None,
         }
 
 

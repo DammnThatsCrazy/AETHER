@@ -24,6 +24,7 @@ from shared.events.events import Event, EventConsumer, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
 from repositories.lake import BronzeRepository, SilverRepository
 from services.ingestion.acquisition_privacy import sanitize_acquisition_payload
+from services.ingestion.rights import authorize_derivation, authorize_ingestion, rights_mode
 
 logger = get_logger("aether.service.ingestion.workers")
 
@@ -59,11 +60,20 @@ async def sdk_bronze_writer(event: Event) -> None:
     event_id = payload.get("event_id", event.event_id)
 
     try:
+        persisted_rights = payload.get("rights") or {}
+        if rights_mode() != "off" and not persisted_rights.get("rights_decision_refs"):
+            rights = await authorize_ingestion(
+                tenant_id,
+                {**payload, "event_id": event_id},
+            )
+            if not rights.allowed:
+                raise PermissionError(f"rights_ingestion_blocked:{rights.reason}")
+            persisted_rights = rights.context
         await _bronze.ingest(
             source="sdk",
             source_tag=payload.get("batch_id", ""),
             provider_record_id=event_id,
-            payload=sanitize_acquisition_payload(payload),
+            payload={**sanitize_acquisition_payload(payload), "rights": persisted_rights},
             schema_version=payload.get("schema_version", SCHEMA_VERSION),
             entity_id=(
                 payload.get("user_id")
@@ -97,6 +107,36 @@ async def silver_normalizer(event: Event) -> None:
     entity_id = payload.get("user_id") or payload.get("anonymous_id", "")
     entity_type = "user"
 
+    rights_context = payload.get("rights") or {}
+    if rights_mode() != "off":
+        envelope_refs = list(rights_context.get("envelope_refs") or [])
+        if rights_context.get("envelope_ref"):
+            envelope_refs.append(rights_context["envelope_ref"])
+        derivation = await authorize_derivation(
+            tenant_id,
+            artifact={"kind": "silver_record", "id": f"sdk:{event_id}", "tenant_id": tenant_id},
+            input_envelope_refs=sorted(set(envelope_refs)),
+            policy_set_ref=rights_context.get("policy_set_ref"),
+            transform="feature_extraction",
+            evidence={"lineage": rights_context.get("lineage_root_ref") or event_id},
+        )
+        if not derivation.proceed:
+            raise PermissionError(
+                "rights_silver_blocked:" + ",".join(derivation.reason_codes)
+            )
+        if derivation.decision:
+            rights_context = {
+                **rights_context,
+                "rights_decision_refs": sorted(set(
+                    (rights_context.get("rights_decision_refs") or [])
+                    + [derivation.decision.decision_id]
+                )),
+                "decision_outcomes": sorted(set(
+                    (rights_context.get("decision_outcomes") or [])
+                    + [derivation.decision.outcome]
+                )),
+            }
+
     # Normalize to a stable Silver shape (no raw PII)
     normalized = {
         "last_event_type": event_type,
@@ -117,7 +157,7 @@ async def silver_normalizer(event: Event) -> None:
             entity_type=entity_type,
             source="sdk",
             source_tag=payload.get("batch_id", ""),
-            normalized=normalized,
+            normalized={**normalized, "rights": rights_context},
             bronze_id=event_id,
             tenant_id=tenant_id,
         )
@@ -147,6 +187,7 @@ def _bus_payload_to_sdk_envelope(payload: dict) -> dict:
         "timestamp": payload.get("timestamp"),
         "receivedAt": payload.get("received_at"),
         "properties": payload.get("properties") or {},
+        "rights": payload.get("rights") or {},
         "context": context,
         "family": payload.get("event_family", ""),
     }
@@ -250,6 +291,7 @@ async def _ingest_card_linked_context(tenant_id: str, payload: dict) -> None:
             "canonical_entity_id": payload.get("canonical_entity_id"),
             "org_id": payload.get("org_id"),
             "properties": payload.get("properties") or {},
+            "rights": payload.get("rights") or {},
         }
         await get_ingestion_service().ingest_sdk_event(tenant_id, event)
     except Exception as exc:  # pragma: no cover — best-effort side channel

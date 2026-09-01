@@ -26,6 +26,8 @@ from services.model_governance.contracts import (
     TrainingDataGateResult,
 )
 from services.model_governance.repositories import TrainingDataDecisionRepository
+from shared.rights_authority.contracts import ActorRef
+from shared.rights_authority.pep import evaluate_rights
 
 
 class TrainingDataGate:
@@ -112,7 +114,62 @@ class TrainingDataGate:
             admitted=admitted,
             quarantine_reasons=sorted(set(reasons)),
             missing_training_opt_in=sorted(set(missing_opt_in)),
+            rights_envelope_refs=[
+                str(ref) for ref in (
+                    record.get("rights_envelope_refs")
+                    or record.get("envelope_refs")
+                    or ([record.get("rights_envelope_id")] if record.get("rights_envelope_id") else [])
+                ) if ref
+            ],
+            rights_policy_set_ref=record.get("rights_policy_set_ref"),
+            rights_source_grant_refs=[
+                str(ref) for ref in (record.get("rights_source_grant_refs") or record.get("source_grant_refs") or []) if ref
+            ],
+            rights_lineage_set_hash=record.get("rights_lineage_set_hash") or record.get("lineage_set_hash"),
+            retention_deadline=record.get("retention_deadline"),
+            revocation_strategy=record.get("revocation_strategy"),
+            training_basis_evidence=[
+                str(ref) for ref in (record.get("training_basis_evidence") or []) if ref
+            ],
         )
+
+    async def _apply_rights(
+        self, decision: TrainingDataDecision, record: dict,
+    ) -> TrainingDataDecision:
+        """Authorize model training and preserve the signed rights evidence."""
+        result = await evaluate_rights(
+            action="train",
+            tenant_id=decision.tenant_id,
+            actor=ActorRef(kind="service", id="model_training", tenant_id=decision.tenant_id),
+            purpose="model_training",
+            artifacts=[record.get("artifact_ref") or record.get("record_ref")],
+            envelope_refs=decision.rights_envelope_refs,
+            source_grant_refs=decision.rights_source_grant_refs,
+            policy_set_ref=decision.rights_policy_set_ref,
+            metadata={
+                "record_ref": decision.record_ref,
+                "training_basis_evidence": decision.training_basis_evidence,
+                "revocation_strategy": decision.revocation_strategy,
+            },
+        )
+        if result.decision is None:
+            return decision
+        signed = result.decision
+        reasons = list(decision.quarantine_reasons)
+        if not result.proceed:
+            reasons.extend(
+                f"rights_{signed.outcome}:{reason}" for reason in signed.reasons
+            )
+            if not signed.reasons:
+                reasons.append(f"rights_{signed.outcome}")
+        return decision.model_copy(update={
+            "admitted": decision.admitted and result.proceed,
+            "quarantine_reasons": sorted(set(reasons)),
+            "rights_decision_id": signed.decision_id,
+            "rights_outcome": signed.outcome,
+            "rights_envelope_refs": signed.envelope_refs or decision.rights_envelope_refs,
+            "rights_policy_set_ref": signed.policy_set_ref or decision.rights_policy_set_ref,
+        })
 
     async def partition(
         self,
@@ -133,6 +190,7 @@ class TrainingDataGate:
                 granted_training_opt_ins=granted_training_opt_ins,
                 model_allowed_purposes=model_allowed_purposes,
             )
+            decision = await self._apply_rights(decision, rec)
             if decision.admitted:
                 result.admitted.append(decision)
             else:

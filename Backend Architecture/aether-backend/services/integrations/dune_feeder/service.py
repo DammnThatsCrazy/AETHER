@@ -33,6 +33,8 @@ from typing import Any, Optional
 
 from repositories.repos import BaseRepository
 from shared.logger.logger import get_logger, metrics
+from shared.rights_authority.pep import rights_mode
+from services.ingestion.rights import authorize_derivation, rights_context_from_result
 
 logger = get_logger("aether.feeder.dune")
 
@@ -165,6 +167,47 @@ class PromotionService:
 
             if passed:
                 entity_id = str(row_data.get(entity_id_field) or bronze_row.get("provider_record_id", ""))
+                rights_context = payload.get("rights") or {}
+                if rights_mode() != "off":
+                    envelope_refs = list(rights_context.get("envelope_refs") or [])
+                    if rights_context.get("envelope_ref"):
+                        envelope_refs.append(rights_context["envelope_ref"])
+                    derivation = await authorize_derivation(
+                        tenant_id,
+                        artifact={"kind": "silver_record", "id": f"{source_tag}:{entity_id}", "tenant_id": tenant_id},
+                        input_envelope_refs=sorted(set(envelope_refs)),
+                        policy_set_ref=rights_context.get("policy_set_ref"),
+                        transform="feature_extraction",
+                        evidence={"lineage": rights_context.get("lineage_root_ref") or bronze_row.get("id")},
+                    )
+                    if not derivation.proceed:
+                        failed_checks = ["rights_derivation_blocked"]
+                        rejection_reasons.append({
+                            "bronze_id": bronze_row.get("id"),
+                            "provider_record_id": bronze_row.get("provider_record_id"),
+                            "failed_checks": failed_checks,
+                            "quality_score": score,
+                            "quality_checks": checks,
+                            "rights": rights_context_from_result(derivation),
+                        })
+                        rejected += 1
+                        metrics.increment("dune_feeder_rejected", labels={"reason": "rights_derivation_blocked"})
+                        continue
+                    if derivation.decision:
+                        rights_context = {
+                            **rights_context,
+                            "rights_decision_refs": sorted(set(
+                                (rights_context.get("rights_decision_refs") or [])
+                                + [derivation.decision.decision_id]
+                            )),
+                            "decision_outcomes": sorted(set(
+                                (rights_context.get("decision_outcomes") or [])
+                                + [derivation.decision.outcome]
+                            )),
+                            "envelope_refs": sorted(set(
+                                envelope_refs + derivation.decision.envelope_refs
+                            )),
+                        }
                 await silver_repo.upsert_record(
                     entity_id=entity_id,
                     entity_type=entity_type,
@@ -177,6 +220,7 @@ class PromotionService:
                         "quality_score": score,
                         "quality_checks": checks,
                         "freshness_status": "fresh",
+                        "rights": rights_context,
                     },
                     bronze_id=bronze_row.get("id", ""),
                     tenant_id=tenant_id,

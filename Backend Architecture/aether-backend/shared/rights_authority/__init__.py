@@ -21,11 +21,12 @@ from .contracts import (
     TransformEvidence,
 )
 from .service import RightsAuthority, RightsAuthorityUnavailable, rights_authority
+from .pep import RightsPEPResult, evaluate_rights, rights_mode
 
 __all__ = [
     "ActorRef", "ArtifactRef", "ArtifactRightsEnvelope", "AttachRightsEnvelope",
     "DerivationEdge", "DestinationRef", "IssueRightsPolicySet",
     "RevokeRightsAuthority", "RightsAuthority", "RightsAuthorityUnavailable",
     "RightsDecision", "RightsImpactGraph", "RightsPolicySet", "RightsUseRequest",
-    "TransformEvidence", "rights_authority",
+    "TransformEvidence", "RightsPEPResult", "evaluate_rights", "rights_mode", "rights_authority",
 ]

@@ -57,6 +57,8 @@ from shared.graph.graph import (
 from shared.graph.mutation_models import MutationRecord
 from shared.graph.write_validator import GraphWriteValidationError, GraphWriteValidator
 from shared.logger.logger import get_logger, metrics
+from shared.rights_authority.contracts import ActorRef, ArtifactRef
+from shared.rights_authority.pep import RightsPEPResult, evaluate_rights, rights_mode
 
 logger = get_logger("aether.graph.mutation_gateway")
 
@@ -151,6 +153,14 @@ class MutationIntent:
     policy_refs: Optional[list[str]] = None
     consent_refs: Optional[list[str]] = None
     change_set_id: Optional[str] = None
+    # IRRL references are authoritative server-side identifiers. A caller may
+    # omit them only while the rights rollout is off; enforce mode then denies
+    # the mutation because the gateway cannot prove its source rights.
+    rights_decision_id: Optional[str] = None
+    rights_envelope_id: Optional[str] = None
+    rights_policy_set_ref: Optional[str] = None
+    rights_lineage_set_hash: Optional[str] = None
+    rights_source_grant_refs: Optional[list[str]] = None
 
 
 @dataclass
@@ -168,6 +178,7 @@ class MutationOutcome:
     before_version_id: Optional[str] = None
     after_version_id: Optional[str] = None
     projection_result: Any = None
+    rights_decision_id: Optional[str] = None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -216,10 +227,27 @@ class GraphMutationGateway:
         for every caller that does not opt in.
         """
         mode = mode_override if mode_override in _MODES else _gateway_mode()
+        rights_result = await self._rights_stage(intent)
+        if rights_result is not None and not rights_result.proceed:
+            reasons = [f"rights:{reason}" for reason in rights_result.reason_codes]
+            self._meter(intent, mode, "blocked_rights", time.monotonic())
+            return MutationOutcome(
+                mode=mode,
+                applied=False,
+                blocked=True,
+                violations=reasons or ["rights:denied"],
+                rights_decision_id=(
+                    rights_result.decision.decision_id
+                    if rights_result.decision else None
+                ),
+            )
         if mode == "off":
             # Zero behavior change: exactly what a direct writer does today.
             result = await self._project(intent)
-            return MutationOutcome(mode="off", applied=True, projection_result=result)
+            return MutationOutcome(
+                mode="off", applied=True, projection_result=result,
+                rights_decision_id=intent.rights_decision_id,
+            )
 
         started = time.monotonic()
         self._check_shape(intent)
@@ -232,6 +260,7 @@ class GraphMutationGateway:
         # the caller's original Edge object is never mutated.
         if intent.edge is not None:
             intent.edge = self._canonical_edge(intent)
+        self._stamp_rights(intent)
 
         # 1. Shape/consent validation (delegated — never duplicated here).
         violations = self._validate(intent)
@@ -258,6 +287,68 @@ class GraphMutationGateway:
             intent, record, fact_payload, violations, started
         )
 
+    async def _rights_stage(self, intent: MutationIntent) -> Optional[RightsPEPResult]:
+        """Authorize graph mutation before even the gateway off-mode projection."""
+        if rights_mode() == "off":
+            return None
+        self._check_shape(intent)
+        if intent.vertex is not None:
+            aggregate_kind, aggregate_id = "graph_node", intent.vertex.vertex_id
+        elif intent.edge is not None:
+            aggregate_kind = "graph_edge"
+            aggregate_id = (
+                f"{intent.edge.edge_type}:{intent.edge.from_vertex_id}:"
+                f"{intent.edge.to_vertex_id}"
+            )
+        else:
+            assert intent.revocation is not None
+            aggregate_kind = "graph_edge"
+            aggregate_id = (
+                f"{intent.revocation.edge_type}:{intent.revocation.from_vertex_id}:"
+                f"{intent.revocation.to_vertex_id}"
+            )
+        actor_kind = intent.actor_kind or "system"
+        mapped_actor = {
+            "human": "tenant_user", "agent": "service", "provider": "service",
+            "import": "service", "service": "service", "system": "system",
+        }.get(actor_kind, "system")
+        result = await evaluate_rights(
+            action="graph_mutate",
+            tenant_id=intent.tenant_id,
+            actor=ActorRef(kind=mapped_actor, id=intent.actor_id or "graph_gateway", tenant_id=intent.tenant_id),  # type: ignore[arg-type]
+            purpose=intent.reason_code or "graph_mutation",
+            artifacts=[ArtifactRef(kind=aggregate_kind, id=aggregate_id, tenant_id=intent.tenant_id)],
+            envelope_refs=[intent.rights_envelope_id] if intent.rights_envelope_id else (),
+            source_grant_refs=intent.rights_source_grant_refs or (),
+            policy_set_ref=intent.rights_policy_set_ref,
+            metadata={
+                "operation": intent.operation,
+                "lineage_set_hash": intent.rights_lineage_set_hash,
+                "evidence_refs": intent.evidence_refs or [],
+            },
+        )
+        if result.decision is not None:
+            intent.rights_decision_id = result.decision.decision_id
+            if result.decision.envelope_refs and not intent.rights_envelope_id:
+                intent.rights_envelope_id = result.decision.envelope_refs[0]
+        return result
+
+    @staticmethod
+    def _stamp_rights(intent: MutationIntent) -> None:
+        """Make the signed decision and lineage visible on the projected fact."""
+        values = {
+            "rights_decision_id": intent.rights_decision_id,
+            "rights_envelope_id": intent.rights_envelope_id,
+            "rights_policy_set_ref": intent.rights_policy_set_ref,
+            "rights_lineage_set_hash": intent.rights_lineage_set_hash,
+            "rights_source_grant_refs": intent.rights_source_grant_refs,
+        }
+        values = {key: value for key, value in values.items() if value is not None}
+        if intent.edge is not None:
+            intent.edge.properties.update(values)
+        elif intent.vertex is not None:
+            intent.vertex.properties.update(values)
+
     # ── Mode paths ──────────────────────────────────────────────────────────
 
     async def _apply_shadow(
@@ -277,6 +368,7 @@ class GraphMutationGateway:
             violations=violations,
             record=record,
             projection_result=result,
+            rights_decision_id=intent.rights_decision_id,
         )
         try:
             append = await self._ledger_repo().append(record, fact_payload=fact_payload)
@@ -320,6 +412,7 @@ class GraphMutationGateway:
                 mutation_id=append.mutation_id,
                 violations=violations,
                 record=record,
+                rights_decision_id=intent.rights_decision_id,
             )
         result = await self._project(intent)
         await self._emit_event(record)
@@ -334,6 +427,7 @@ class GraphMutationGateway:
             before_version_id=append.before_version_id,
             after_version_id=append.after_version_id,
             projection_result=result,
+            rights_decision_id=intent.rights_decision_id,
         )
 
     # ── Pipeline stages ─────────────────────────────────────────────────────
@@ -506,6 +600,11 @@ class GraphMutationGateway:
             policy_refs=intent.policy_refs,
             consent_refs=intent.consent_refs,
             change_set_id=intent.change_set_id,
+            rights_decision_id=intent.rights_decision_id,
+            rights_envelope_id=intent.rights_envelope_id,
+            rights_policy_set_ref=intent.rights_policy_set_ref,
+            rights_lineage_set_hash=intent.rights_lineage_set_hash,
+            rights_source_grant_refs=intent.rights_source_grant_refs,
             schema_version=GATEWAY_SCHEMA_VERSION,
         )
         return record, self._fact_payload(intent)
@@ -651,8 +750,16 @@ class GraphMutationGateway:
 _shared_gateway: Optional[GraphMutationGateway] = None
 
 
-def get_mutation_gateway() -> GraphMutationGateway:
-    """Process-wide gateway bound to the shared GraphClient."""
+def get_mutation_gateway(graph_client: Optional[Any] = None) -> GraphMutationGateway:
+    """Process-wide gateway, optionally bound to a caller-owned graph client.
+
+    A caller-provided client is not stored in the process-wide singleton. This
+    keeps test and tenant-specific graph instances isolated while preserving a
+    cheap shared gateway for production callers that use the configured
+    client.
+    """
+    if graph_client is not None:
+        return GraphMutationGateway(graph_client=graph_client)
     global _shared_gateway
     if _shared_gateway is None:
         _shared_gateway = GraphMutationGateway()

@@ -102,6 +102,11 @@ export interface MutationRecord {
   before_version_id?: string | null;
   after_version_id?: string | null;
   change_set_id?: string | null;
+  rights_decision_id?: string | null;
+  rights_envelope_id?: string | null;
+  rights_policy_set_ref?: string | null;
+  rights_lineage_set_hash?: string | null;
+  rights_source_grant_refs?: string[] | null;
   schema_version?: string | null;
 }
 

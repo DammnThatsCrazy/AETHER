@@ -153,6 +153,7 @@ class ArtifactRightsEnvelope(RightsModel):
     effective_to: Optional[str] = None
     legal_hold_ref: Optional[str] = None
     policy_set_ref: str
+    evidence_manifest_refs: list[str] = Field(default_factory=list)
     lineage_set_hash: str = ""
     disclosure_ceiling: DisclosureLevel = "tenant_scoped"
     deletion_state: Literal["active", "suppressed", "quarantined", "deleted", "retained"] = "active"
@@ -175,6 +176,7 @@ class RightsUseRequest(RightsModel):
     tenant_id: Optional[str] = None
     policy_set_ref: Optional[str] = None
     source_grant_refs: list[str] = Field(default_factory=list)
+    evidence_manifest_refs: list[str] = Field(default_factory=list)
     at: str = Field(default_factory=_now)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -194,11 +196,15 @@ class RightsDecision(RightsModel):
     reasons: list[str] = Field(default_factory=list)
     obligations: list[Obligation] = Field(default_factory=list)
     envelope_refs: list[str] = Field(default_factory=list)
+    evidence_manifest_refs: list[str] = Field(default_factory=list)
+    lineage_root_refs: list[str] = Field(default_factory=list)
+    purpose: Optional[str] = None
     policy_set_ref: Optional[str] = None
     decision_version: str = "1"
     evaluated_at: str = Field(default_factory=_now)
     expires_at: Optional[str] = None
     signature: str = ""
+    signature_key_id: str = "rights-v1"
     request_id: Optional[str] = None
     tenant_id: Optional[str] = None
 
@@ -237,7 +243,50 @@ class RightsImpactGraph(RightsModel):
     edges: list[DerivationEdge] = Field(default_factory=list)
     status: Literal["open", "in_progress", "completed", "blocked"] = "open"
     reason: str
+    remediation_receipt_refs: list[str] = Field(default_factory=list)
     created_at: str = Field(default_factory=_now)
+
+
+class RightsEvidenceManifest(RightsModel):
+    """Signed, durable references supporting a rights decision."""
+
+    manifest_id: str = Field(default_factory=lambda: _id("rem"))
+    tenant_id: Optional[str] = None
+    subject_refs: list[str] = Field(default_factory=list)
+    evidence: dict[str, list[str]] = Field(default_factory=dict)
+    attested_by: ActorRef
+    attested_at: str = Field(default_factory=_now)
+    expires_at: Optional[str] = None
+    status: Literal["active", "expired", "revoked"] = "active"
+    signature: str = ""
+    signature_key_id: str = "rights-v1"
+
+
+class RightsRemediationStep(RightsModel):
+    """Append-only execution state for one impacted artifact."""
+
+    step_id: str = Field(default_factory=lambda: _id("rrs"))
+    impact_graph_id: str
+    artifact_ref: ArtifactRef
+    action: str
+    status: Literal["pending", "running", "completed", "failed", "blocked"] = "pending"
+    attempt: int = 1
+    receipt_refs: list[str] = Field(default_factory=list)
+    updated_at: str = Field(default_factory=_now)
+
+
+class RightsRemediationReceipt(RightsModel):
+    """Durable evidence of an attempted remediation side effect."""
+
+    receipt_id: str = Field(default_factory=lambda: _id("rrc"))
+    impact_graph_id: str
+    step_id: str
+    artifact_ref: ArtifactRef
+    action: str
+    outcome: Literal["completed", "failed", "blocked"]
+    evidence_refs: list[str] = Field(default_factory=list)
+    detail: Optional[str] = None
+    completed_at: str = Field(default_factory=_now)
 
 
 class IssueRightsPolicySet(RightsModel):
@@ -270,6 +319,7 @@ class AttachRightsEnvelope(RightsModel):
     effective_to: Optional[str] = None
     legal_hold_ref: Optional[str] = None
     disclosure_ceiling: DisclosureLevel = "tenant_scoped"
+    evidence_manifest_refs: list[str] = Field(default_factory=list)
 
 
 class RevokeRightsAuthority(RightsModel):
@@ -291,5 +341,6 @@ __all__ = [
     "DisclosureLevel", "IssueRightsPolicySet", "Obligation", "RevokeRightsAuthority",
     "RightsAction", "RightsClass", "RightsDecision", "RightsImpactGraph",
     "RightsPolicySet", "RightsProfile", "RightsSubject", "RightsUseRequest",
+    "RightsEvidenceManifest", "RightsRemediationReceipt", "RightsRemediationStep",
     "RetentionRule", "TransformEvidence", "UseGrant", "lineage_hash",
 ]

@@ -53,6 +53,11 @@ class MutationRecord(BaseModel):
     before_version_id: Optional[str] = None
     after_version_id: Optional[str] = None
     change_set_id: Optional[str] = None
+    rights_decision_id: Optional[str] = None
+    rights_envelope_id: Optional[str] = None
+    rights_policy_set_ref: Optional[str] = None
+    rights_lineage_set_hash: Optional[str] = None
+    rights_source_grant_refs: Optional[list[str]] = None
     schema_version: Optional[str] = None
 
 

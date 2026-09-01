@@ -25,13 +25,15 @@ import warnings
 from typing import Any, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, BadRequestError, ForbiddenError, ServiceUnavailableError
 from shared.cache.cache import CacheClient, CacheKey, TTL
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
+from shared.rights_authority.contracts import ActorRef, DestinationRef
+from shared.rights_authority.pep import evaluate_rights
 from dependencies.providers import get_cache, get_producer
 
 logger = get_logger("aether.service.ml_serving")
@@ -52,7 +54,8 @@ _model_version_cache: dict[str, str] = {}
 
 
 def _prediction_cache_hash(
-    tenant_id: str, features: dict, consent_purposes: list
+    tenant_id: str, features: dict, consent_purposes: list,
+    rights_envelope_refs: Optional[list[str]] = None,
 ) -> str:
     """A digest binding the cached prediction to its tenant, feature VALUES, and
     consent scope.
@@ -70,6 +73,7 @@ def _prediction_cache_hash(
             "tenant": tenant_id,
             "features": features or {},
             "consent": sorted(consent_purposes or []),
+            "rights_envelopes": sorted(rights_envelope_refs or []),
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -189,11 +193,17 @@ class PredictionRequest(BaseModel):
     # and additive: absent means "unknown", which records evidence and, under
     # enforcement, fails closed for consent-scoped models.
     consent_purposes: list[str] = Field(default_factory=list)
+    rights_envelope_refs: list[str] = Field(default_factory=list)
+    rights_policy_set_ref: Optional[str] = None
+    rights_source_grant_refs: list[str] = Field(default_factory=list)
 
 
 class BatchPredictionRequest(BaseModel):
     model_name: str
     entities: list[dict[str, Any]] = Field(..., min_length=1, max_length=100)
+    rights_envelope_refs: list[str] = Field(default_factory=list)
+    rights_policy_set_ref: Optional[str] = None
+    rights_source_grant_refs: list[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -270,6 +280,7 @@ def _prediction_envelope(
     tenant_id: str,
     features: dict[str, Any],
     consent_purposes: list,
+    rights: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Bind a prediction to the exact model + feature context that produced it.
 
@@ -297,6 +308,7 @@ def _prediction_envelope(
         "feature_digest": _prediction_cache_hash(tenant_id, features, consent_purposes),
         "calibration_segment": None,
         "drift_status": None,
+        "rights": rights or {},
     }
 
 
@@ -397,6 +409,39 @@ async def predict(
     # Resolve canonical model ID (handles deprecated aliases)
     canonical_id, was_deprecated_alias = _resolve_canonical(body.model_name)
 
+    rights = await evaluate_rights(
+        action="evaluate",
+        tenant_id=tenant.tenant_id,
+        actor=ActorRef(
+            kind="tenant_user",
+            id=getattr(tenant, "user_id", None) or tenant.tenant_id,
+            tenant_id=tenant.tenant_id,
+        ),
+        purpose="model_evaluation",
+        artifacts=[{
+            "kind": "model_evaluation",
+            "id": f"{canonical_id}:{body.entity_id}",
+            "tenant_id": tenant.tenant_id,
+        }],
+        envelope_refs=body.rights_envelope_refs,
+        source_grant_refs=body.rights_source_grant_refs,
+        policy_set_ref=body.rights_policy_set_ref,
+        destination=DestinationRef(kind="tenant", id=tenant.tenant_id),
+        transform="model_evaluation",
+        metadata={"training_rights": body.rights_source_grant_refs},
+    )
+    if not rights.proceed:
+        raise ForbiddenError(
+            "model evaluation blocked by rights authority: "
+            + ",".join(rights.reason_codes)
+        )
+    rights_payload = {
+        "decision_id": rights.decision.decision_id if rights.decision else None,
+        "outcome": rights.decision.outcome if rights.decision else None,
+        "envelope_refs": rights.decision.envelope_refs if rights.decision else body.rights_envelope_refs,
+        "policy_set_ref": rights.decision.policy_set_ref if rights.decision else body.rights_policy_set_ref,
+    }
+
     # 0. Model-governance inference policy gate (§3.9).
     #    Always records a serve_inference consent evidence decision; blocks only
     #    under enforcement (ML_INFERENCE_POLICY_ENFORCE or a fail-closed model).
@@ -459,7 +504,10 @@ async def predict(
     # 2. Cache lookup (versioned by artifact so promotions eventually invalidate via new key)
     if body.use_cache:
         _ver = _model_version_cache.get(canonical_id, "")
-        _fhash = _prediction_cache_hash(tenant.tenant_id, body.features, body.consent_purposes)
+        _fhash = _prediction_cache_hash(
+            tenant.tenant_id, body.features, body.consent_purposes,
+            body.rights_envelope_refs,
+        )
         cache_key = CacheKey.prediction(canonical_id, body.entity_id, artifact_version=_ver, contract_hash=_fhash)
         cached = await cache.get_json(cache_key)
         if cached:
@@ -468,6 +516,9 @@ async def predict(
                 **cached,
                 "cached": True,
                 "canonical_model_id": canonical_id,
+                # Re-evaluate on every request, and surface that current
+                # decision even when the model output came from a cache.
+                "rights": rights_payload,
             }
             if was_deprecated_alias:
                 response_data["deprecated_alias_used"] = body.model_name
@@ -525,7 +576,8 @@ async def predict(
             # existing consumers ignore the extra key. Stored in cache too so a
             # later cache hit carries the same binding.
             prediction["envelope"] = _prediction_envelope(
-                canonical_id, tenant.tenant_id, body.features, body.consent_purposes
+                canonical_id, tenant.tenant_id, body.features, body.consent_purposes,
+                rights_payload,
             )
 
             if was_deprecated_alias:
@@ -539,7 +591,10 @@ async def predict(
             _ver = ml_result.get("artifact_version", _model_version_cache.get(canonical_id, "")) if isinstance(ml_result, dict) else _model_version_cache.get(canonical_id, "")
             if _ver:
                 _model_version_cache[canonical_id] = _ver
-            _fhash = _prediction_cache_hash(tenant.tenant_id, body.features, body.consent_purposes)
+            _fhash = _prediction_cache_hash(
+                tenant.tenant_id, body.features, body.consent_purposes,
+                body.rights_envelope_refs,
+            )
             cache_key = CacheKey.prediction(canonical_id, body.entity_id, artifact_version=_ver, contract_hash=_fhash)
             await cache.set_json(cache_key, prediction, TTL.PREDICTION)
 
@@ -647,6 +702,32 @@ async def predict_batch(
 
     canonical_id, was_deprecated_alias = _resolve_canonical(body.model_name)
 
+    rights = await evaluate_rights(
+        action="evaluate",
+        tenant_id=tenant.tenant_id,
+        actor=ActorRef(
+            kind="service" if is_privileged else "tenant_user",
+            id=getattr(tenant, "user_id", None) or tenant.tenant_id,
+            tenant_id=tenant.tenant_id,
+        ),
+        purpose="model_evaluation_batch",
+        artifacts=[{
+            "kind": "model_evaluation_batch",
+            "id": f"{canonical_id}:{len(body.entities)}",
+            "tenant_id": tenant.tenant_id,
+        }],
+        envelope_refs=body.rights_envelope_refs,
+        source_grant_refs=body.rights_source_grant_refs,
+        policy_set_ref=body.rights_policy_set_ref,
+        destination=DestinationRef(kind="tenant", id=tenant.tenant_id),
+        metadata={"batch_size": len(body.entities)},
+    )
+    if not rights.proceed:
+        raise ForbiddenError(
+            "batch model evaluation blocked by rights authority: "
+            + ",".join(rights.reason_codes)
+        )
+
     # Enforce per-model batch policy from registry
     if _batch_requires_privileged(canonical_id) and not is_privileged:
         metrics.increment("ml_batch_denied", labels={"model": canonical_id})
@@ -696,6 +777,11 @@ async def predict_batch(
                 "predictions": ml_result.get("predictions", []),
                 "count": ml_result.get("count", len(body.entities)),
                 "deprecated_alias_used": body.model_name if was_deprecated_alias else None,
+                "rights": {
+                    "decision_id": rights.decision.decision_id if rights.decision else None,
+                    "outcome": rights.decision.outcome if rights.decision else None,
+                    "envelope_refs": rights.decision.envelope_refs if rights.decision else body.rights_envelope_refs,
+                },
             }).to_dict()
 
         if resp.status_code == 404:
@@ -725,6 +811,10 @@ async def get_features(
     request: Request,
     cache: CacheClient = Depends(get_cache),
     model_id: Optional[str] = None,
+    rights_envelope_refs: list[str] = Query(default=[]),
+    rights_source_grant_refs: list[str] = Query(default=[]),
+    rights_policy_set_ref: Optional[str] = None,
+    evidence_manifest_refs: list[str] = Query(default=[]),
 ):
     """Serve pre-computed features for an entity.
 
@@ -733,10 +823,46 @@ async def get_features(
     to return only the features relevant to that model's contract.
     """
     tenant = request.state.tenant
+    tenant.require_permission("ml:inference")
     tenant_id = getattr(tenant, "tenant_id", "unknown")
 
+    rights = await evaluate_rights(
+        action="read",
+        tenant_id=tenant_id,
+        actor=ActorRef(
+            kind="tenant_user",
+            id=getattr(tenant, "user_id", None) or tenant_id,
+            tenant_id=tenant_id,
+        ),
+        purpose="model_features",
+        artifacts=[{"kind": "feature_set", "id": entity_id, "tenant_id": tenant_id}],
+        envelope_refs=rights_envelope_refs,
+        source_grant_refs=rights_source_grant_refs,
+        evidence_manifest_refs=evidence_manifest_refs,
+        policy_set_ref=rights_policy_set_ref,
+        destination=DestinationRef(kind="tenant", id=tenant_id),
+    )
+    rights_payload = {
+        "decision_id": rights.decision.decision_id if rights.decision else None,
+        "outcome": rights.decision.outcome if rights.decision else None,
+        "envelope_refs": rights.decision.envelope_refs if rights.decision else rights_envelope_refs,
+        "evidence_manifest_refs": (
+            rights.decision.evidence_manifest_refs
+            if rights.decision else evidence_manifest_refs
+        ),
+    }
+    if not rights.proceed:
+        return APIResponse(data={
+            "entity_id": entity_id,
+            "tenant_id": tenant_id,
+            "features": {},
+            "state": "suppressed",
+            "rights": rights_payload,
+        }).to_dict()
+
     # Enforce tenant isolation — feature keys are tenant-scoped
-    cache_key = CacheKey.custom(f"features:{tenant_id}:{entity_id}")
+    cache_scope = rights_payload["decision_id"] or "unbound"
+    cache_key = CacheKey.custom(f"features:{tenant_id}:{entity_id}:rights:{cache_scope}")
     cached = await cache.get_json(cache_key)
 
     feature_schema_hash = None
@@ -768,6 +894,7 @@ async def get_features(
             "computed_at": cached.get("computed_at"),
             "feature_schema_hash": feature_schema_hash,
             "freshness_sla_seconds": freshness_sla,
+            "rights": rights_payload,
         }).to_dict()
 
     metrics.increment("feature_store_miss")
@@ -778,6 +905,7 @@ async def get_features(
         "computed_at": None,
         "feature_schema_hash": feature_schema_hash,
         "freshness_sla_seconds": freshness_sla,
+        "rights": rights_payload,
         "message": (
             "No pre-computed features available. "
             "Features are populated after the first prediction or via batch pipeline."

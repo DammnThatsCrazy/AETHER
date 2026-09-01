@@ -322,6 +322,12 @@ async def classify_event(
         source_ref=source_event_id,
         confidence=0.9,
     )
+    rights = payload.get("rights") if isinstance(payload.get("rights"), dict) else {}
+    rights_envelopes = [str(ref) for ref in rights.get("envelope_refs") or [] if ref]
+    rights_decisions = [str(ref) for ref in rights.get("rights_decision_refs") or [] if ref]
+    rights_grants = [str(ref) for ref in rights.get("source_grant_refs") or [] if ref]
+    rights_evidence = [str(ref) for ref in rights.get("evidence_manifest_refs") or [] if ref]
+    rights_lineage = [str(ref) for ref in rights.get("lineage_root_refs") or [] if ref]
     obs_kwargs: dict[str, Any] = dict(
         tenant_id=tenant_id,
         project_id=payload.get("project_id"),
@@ -355,6 +361,12 @@ async def classify_event(
         subject_resolution_confidence=float(payload.get("subject_resolution_confidence", 1.0)),
         consent_snapshot_id=payload.get("consent_snapshot_id"),
         purposes=payload.get("purposes", ["analytics"]),
+        rights_envelope_refs=rights_envelopes,
+        rights_decision_refs=rights_decisions,
+        rights_source_grant_refs=rights_grants,
+        rights_evidence_manifest_refs=rights_evidence,
+        rights_lineage_root_refs=rights_lineage,
+        rights_policy_set_ref=rights.get("policy_set_ref"),
         status=ObservationStatus.ABSTAINED if should_abstain else ObservationStatus.CLASSIFIED,
         abstention_reason=abstention_reason,
     )
@@ -407,6 +419,12 @@ async def classify_event(
                     uncertainty=round(1.0 - model_result.confidence, 4),
                     confidence=model_result.confidence,
                     consent_snapshot_id=payload.get("consent_snapshot_id"),
+                    rights_envelope_refs=rights_envelopes,
+                    rights_decision_refs=rights_decisions,
+                    rights_source_grant_refs=rights_grants,
+                    rights_evidence_manifest_refs=rights_evidence,
+                    rights_lineage_root_refs=rights_lineage,
+                    rights_policy_set_ref=rights.get("policy_set_ref"),
                     **sentiment_kwargs,
                 )
             ]
@@ -435,6 +453,12 @@ async def classify_event(
                     uncertainty=0.15,
                     confidence=0.82,
                     consent_snapshot_id=payload.get("consent_snapshot_id"),
+                    rights_envelope_refs=rights_envelopes,
+                    rights_decision_refs=rights_decisions,
+                    rights_source_grant_refs=rights_grants,
+                    rights_evidence_manifest_refs=rights_evidence,
+                    rights_lineage_root_refs=rights_lineage,
+                    rights_policy_set_ref=rights.get("policy_set_ref"),
                     **sentiment_kwargs,
                 )
             ]

@@ -29,6 +29,8 @@ from typing import Any, Awaitable, Callable, Optional
 
 from repositories.artifacts import get_artifact_repository
 from shared.common.common import BadRequestError
+from shared.rights_authority.contracts import ActorRef, DestinationRef
+from shared.rights_authority.pep import evaluate_rights
 from shared.logger.logger import get_logger, metrics
 
 logger = get_logger("aether.export")
@@ -55,6 +57,33 @@ Exporter = Callable[[str, dict], Awaitable[ExportPayload]]
 
 # Registered exporters keyed by export_type.
 EXPORTERS: dict[str, Exporter] = {}
+
+
+def _rights_params(params: dict[str, Any]) -> dict[str, Any]:
+    value = params.get("rights") or {}
+    return value if isinstance(value, dict) else {}
+
+
+async def _authorize_export(
+    tenant_id: str,
+    params: dict[str, Any],
+    *,
+    actor_id: Optional[str],
+) -> Any:
+    rights = _rights_params(params)
+    recipient = rights.get("recipient_id") or params.get("recipient_id")
+    destination_kind = "external_recipient" if recipient else "tenant"
+    return await evaluate_rights(
+        action="export",
+        tenant_id=tenant_id,
+        actor=ActorRef(kind="tenant_user", id=actor_id or tenant_id, tenant_id=tenant_id),
+        purpose="tenant_export",
+        envelope_refs=rights.get("envelope_refs") or rights.get("envelope_ids") or (),
+        source_grant_refs=rights.get("source_grant_refs") or (),
+        policy_set_ref=rights.get("policy_set_ref"),
+        destination=DestinationRef(kind=destination_kind, id=recipient),
+        metadata={"export_type": params.get("export_type"), "format": params.get("format", "json")},
+    )
 
 
 def register_exporter(export_type: str) -> Callable:
@@ -139,6 +168,28 @@ async def request_export(
         raise BadRequestError(
             f"Unsupported export format {fmt!r}. Valid: {list(SUPPORTED_FORMATS)}"
         )
+    rights = await _authorize_export(
+        tenant_id, {**(params or {}), "export_type": export_type}, actor_id=requested_by,
+    )
+    if not rights.proceed:
+        from shared.common.common import ForbiddenError
+
+        raise ForbiddenError(
+            "export blocked by rights authority",
+            details={
+                "decision_id": rights.decision.decision_id if rights.decision else None,
+                "reasons": list(rights.reason_codes),
+            },
+        )
+    params = {**(params or {})}
+    if rights.decision is not None:
+        params["rights"] = {
+            "decision_id": rights.decision.decision_id,
+            "outcome": rights.decision.outcome,
+            "envelope_refs": rights.decision.envelope_refs,
+            "policy_set_ref": rights.decision.policy_set_ref,
+            "source_grant_refs": _rights_params(params).get("source_grant_refs", []),
+        }
     from services.jobs.service import get_jobs_service
 
     # Same tenant+type+params within the hour replays the same job.
@@ -182,6 +233,16 @@ async def generate_export_artifact(payload: dict, ctx: Any) -> Any:
             error=f"no exporter registered for {export_type!r}",
         )
 
+    rights = await _authorize_export(
+        ctx.tenant_id, {**params, "export_type": export_type},
+        actor_id=getattr(ctx, "requested_by", None),
+    )
+    if not rights.proceed:
+        return JobOutcome(
+            status="failed",
+            result={"rights_decision_id": rights.decision.decision_id if rights.decision else None},
+            error="export blocked by rights authority",
+        )
     result = await exporter(ctx.tenant_id, params)
     await ctx.heartbeat()
 
@@ -196,6 +257,16 @@ async def generate_export_artifact(payload: dict, ctx: Any) -> Any:
         row_count=len(result.rows),
         columns=columns or None,
         per_source=result.per_source or None,
+        rights=(
+            {
+                "decision_id": rights.decision.decision_id,
+                "outcome": rights.decision.outcome,
+                "envelope_refs": rights.decision.envelope_refs,
+                "policy_set_ref": rights.decision.policy_set_ref,
+                "source_grant_refs": _rights_params(params).get("source_grant_refs", []),
+            }
+            if rights.decision else None
+        ),
     )
     expires_at = (
         datetime.now(timezone.utc) + timedelta(days=DEFAULT_ARTIFACT_TTL_DAYS)

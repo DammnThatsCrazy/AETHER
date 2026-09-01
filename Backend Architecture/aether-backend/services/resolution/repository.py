@@ -14,6 +14,7 @@ from typing import Any, Optional
 from shared.common.common import utc_now
 from shared.cache.cache import CacheClient
 from shared.graph.graph import GraphClient, Vertex, Edge, VertexType, EdgeType
+from shared.graph.mutation_helpers import apply_edge, apply_vertex
 from shared.logger.logger import get_logger
 from repositories.repos import BaseRepository
 
@@ -113,7 +114,9 @@ class ResolutionRepository:
 
     # ── Graph mutations (vertex upserts) ─────────────────────────────
 
-    async def upsert_fingerprint_vertex(self, data: dict) -> str:
+    async def upsert_fingerprint_vertex(
+        self, data: dict, tenant_id: Optional[str] = None,
+    ) -> str:
         """Create or update a DeviceFingerprint vertex."""
         fp_id = data.get("fingerprint_id", str(uuid.uuid4()))
         vertex = Vertex(
@@ -121,11 +124,13 @@ class ResolutionRepository:
             vertex_id=fp_id,
             properties={k: v for k, v in data.items() if k != "fingerprint_id"},
         )
-        await self.graph.upsert_vertex(vertex)
+        await apply_vertex(vertex, graph=self.graph, tenant_id=tenant_id)
         logger.info(f"Upserted fingerprint vertex {fp_id}")
         return fp_id
 
-    async def upsert_ip_vertex(self, data: dict) -> str:
+    async def upsert_ip_vertex(
+        self, data: dict, tenant_id: Optional[str] = None,
+    ) -> str:
         """Create or update an IPAddress vertex."""
         ip_id = data.get("ip_hash", str(uuid.uuid4()))
         vertex = Vertex(
@@ -133,11 +138,13 @@ class ResolutionRepository:
             vertex_id=ip_id,
             properties={k: v for k, v in data.items() if k != "ip_hash"},
         )
-        await self.graph.upsert_vertex(vertex)
+        await apply_vertex(vertex, graph=self.graph, tenant_id=tenant_id)
         logger.info(f"Upserted IP vertex {ip_id}")
         return ip_id
 
-    async def upsert_location_vertex(self, data: dict) -> str:
+    async def upsert_location_vertex(
+        self, data: dict, tenant_id: Optional[str] = None,
+    ) -> str:
         """Create or update a Location vertex."""
         loc_id = data.get("location_id") or f"{data.get('country_code', '')}:{data.get('region', '')}:{data.get('city', '')}"
         vertex = Vertex(
@@ -145,7 +152,7 @@ class ResolutionRepository:
             vertex_id=loc_id,
             properties=data,
         )
-        await self.graph.upsert_vertex(vertex)
+        await apply_vertex(vertex, graph=self.graph, tenant_id=tenant_id)
         logger.info(f"Upserted location vertex {loc_id}")
         return loc_id
 
@@ -153,6 +160,7 @@ class ResolutionRepository:
 
     async def link_user_to_fingerprint(
         self, user_id: str, fp_id: str, confidence: float = 1.0,
+        tenant_id: Optional[str] = None,
     ) -> None:
         """Create HAS_FINGERPRINT edge from user to fingerprint."""
         edge = Edge(
@@ -161,9 +169,11 @@ class ResolutionRepository:
             to_vertex_id=fp_id,
             properties={"confidence": confidence, "observed_at": utc_now().isoformat()},
         )
-        await self.graph.add_edge(edge)
+        await apply_edge(edge, graph=self.graph, tenant_id=tenant_id)
 
-    async def link_user_to_ip(self, user_id: str, ip_hash: str) -> None:
+    async def link_user_to_ip(
+        self, user_id: str, ip_hash: str, tenant_id: Optional[str] = None,
+    ) -> None:
         """Create SEEN_FROM_IP edge from user to IP."""
         edge = Edge(
             edge_type=EdgeType.SEEN_FROM_IP,
@@ -171,9 +181,11 @@ class ResolutionRepository:
             to_vertex_id=ip_hash,
             properties={"observed_at": utc_now().isoformat()},
         )
-        await self.graph.add_edge(edge)
+        await apply_edge(edge, graph=self.graph, tenant_id=tenant_id)
 
-    async def link_user_to_email(self, user_id: str, email_hash: str) -> None:
+    async def link_user_to_email(
+        self, user_id: str, email_hash: str, tenant_id: Optional[str] = None,
+    ) -> None:
         """Create HAS_EMAIL edge from user to email."""
         edge = Edge(
             edge_type=EdgeType.HAS_EMAIL,
@@ -181,9 +193,11 @@ class ResolutionRepository:
             to_vertex_id=email_hash,
             properties={"observed_at": utc_now().isoformat()},
         )
-        await self.graph.add_edge(edge)
+        await apply_edge(edge, graph=self.graph, tenant_id=tenant_id)
 
-    async def link_user_to_phone(self, user_id: str, phone_hash: str) -> None:
+    async def link_user_to_phone(
+        self, user_id: str, phone_hash: str, tenant_id: Optional[str] = None,
+    ) -> None:
         """Create HAS_PHONE edge from user to phone."""
         edge = Edge(
             edge_type=EdgeType.HAS_PHONE,
@@ -191,10 +205,11 @@ class ResolutionRepository:
             to_vertex_id=phone_hash,
             properties={"observed_at": utc_now().isoformat()},
         )
-        await self.graph.add_edge(edge)
+        await apply_edge(edge, graph=self.graph, tenant_id=tenant_id)
 
     async def link_user_to_wallet(
         self, user_id: str, address: str, vm: str,
+        tenant_id: Optional[str] = None,
     ) -> None:
         """Create OWNS_WALLET edge from user to wallet."""
         wallet_id = f"{vm.lower()}:{address.lower()}"
@@ -204,9 +219,11 @@ class ResolutionRepository:
             to_vertex_id=wallet_id,
             properties={"vm": vm, "observed_at": utc_now().isoformat()},
         )
-        await self.graph.add_edge(edge)
+        await apply_edge(edge, graph=self.graph, tenant_id=tenant_id)
 
-    async def link_ip_to_location(self, ip_hash: str, location_id: str) -> None:
+    async def link_ip_to_location(
+        self, ip_hash: str, location_id: str, tenant_id: Optional[str] = None,
+    ) -> None:
         """Create IP_MAPS_TO edge from IP to location."""
         edge = Edge(
             edge_type=EdgeType.IP_MAPS_TO,
@@ -214,7 +231,7 @@ class ResolutionRepository:
             to_vertex_id=location_id,
             properties={"observed_at": utc_now().isoformat()},
         )
-        await self.graph.add_edge(edge)
+        await apply_edge(edge, graph=self.graph, tenant_id=tenant_id)
 
     # ── Pending decisions ────────────────────────────────────────────
 

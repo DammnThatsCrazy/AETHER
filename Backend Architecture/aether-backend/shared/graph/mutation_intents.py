@@ -33,6 +33,27 @@ def _confidence(properties: dict) -> Optional[float]:
         return None
 
 
+def _rights_kwargs(properties: dict) -> dict:
+    """Carry reference-only IRRL context from a projected graph object."""
+    values = properties or {}
+    envelope_refs = values.get("rights_envelope_refs") or []
+    envelope_id = values.get("rights_envelope_id") or values.get("envelope_ref")
+    if not envelope_id and envelope_refs:
+        envelope_id = envelope_refs[0]
+    decision_refs = values.get("rights_decision_refs") or []
+    decision_id = values.get("rights_decision_id")
+    if not decision_id and decision_refs:
+        decision_id = decision_refs[0]
+    return {
+        "rights_decision_id": decision_id,
+        "rights_envelope_id": envelope_id,
+        "rights_policy_set_ref": values.get("rights_policy_set_ref"),
+        "rights_lineage_set_hash": values.get("rights_lineage_set_hash"),
+        "rights_source_grant_refs": values.get("rights_source_grant_refs")
+        or values.get("source_grant_refs"),
+    }
+
+
 def edge_intent(
     edge: Edge,
     *,
@@ -85,6 +106,7 @@ def edge_intent(
         correlation_id=correlation_id,
         valid_from=valid_from,
         valid_to=valid_to,
+        **_rights_kwargs(props),
     )
 
 
@@ -122,6 +144,7 @@ def vertex_intent(
         causality_class=causality_class,
         reason_code=reason_code,
         correlation_id=correlation_id,
+        **_rights_kwargs(props),
     )
 
 

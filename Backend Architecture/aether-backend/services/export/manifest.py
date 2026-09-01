@@ -43,6 +43,7 @@ def build_manifest(
     row_count: Optional[int] = None,
     columns: Optional[list[str]] = None,
     per_source: Optional[dict[str, int]] = None,
+    rights: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     manifest: dict[str, Any] = {
         "export_type": export_type,
@@ -61,4 +62,15 @@ def build_manifest(
         manifest["columns"] = columns
     if per_source:
         manifest["per_source"] = per_source
+    if rights:
+        # Manifests carry references and signed decision metadata only; never
+        # copy raw source rights or credential material into an export.
+        manifest["rights"] = {
+            key: rights[key]
+            for key in (
+                "decision_id", "outcome", "envelope_refs", "policy_set_ref",
+                "lineage_set_hash", "source_grant_refs",
+            )
+            if rights.get(key) is not None
+        }
     return manifest

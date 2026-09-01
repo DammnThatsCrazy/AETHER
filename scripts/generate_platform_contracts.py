@@ -887,6 +887,11 @@ _MUTATION_RECORD_FIELDS: tuple[tuple[str, str, bool], ...] = (
     ("before_version_id", "string", False),
     ("after_version_id", "string", False),
     ("change_set_id", "string", False),
+    ("rights_decision_id", "string", False),
+    ("rights_envelope_id", "string", False),
+    ("rights_policy_set_ref", "string", False),
+    ("rights_lineage_set_hash", "string", False),
+    ("rights_source_grant_refs", "string[]", False),
     ("schema_version", "string", False),
 )
 

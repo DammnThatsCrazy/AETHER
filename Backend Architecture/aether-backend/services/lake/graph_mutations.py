@@ -15,6 +15,7 @@ from __future__ import annotations
 
 
 from shared.graph.graph import GraphClient, Vertex, Edge, VertexType, EdgeType
+from shared.graph.mutation_helpers import apply_edge, apply_vertex
 from shared.logger.logger import get_logger, metrics
 from repositories.lake import (
     silver_onchain, silver_identity, silver_governance,
@@ -37,19 +38,19 @@ async def build_wallet_protocol_edges(
             continue
 
         # Ensure vertices exist
-        await graph.upsert_vertex(Vertex(
+        await apply_vertex(Vertex(
             vertex_type=VertexType.WALLET,
             vertex_id=wallet_address,
             properties={"entity_type": "wallet"},
-        ))
-        await graph.upsert_vertex(Vertex(
+        ), graph=graph)
+        await apply_vertex(Vertex(
             vertex_type=VertexType.PROTOCOL,
             vertex_id=protocol,
             properties={"entity_type": "protocol"},
-        ))
+        ), graph=graph)
 
         # Create edge
-        await graph.add_edge(Edge(
+        outcome = await apply_edge(Edge(
             edge_type=EdgeType.INTERACTS_WITH,
             from_vertex_id=wallet_address,
             to_vertex_id=protocol,
@@ -57,8 +58,8 @@ async def build_wallet_protocol_edges(
                 "source": rec.get("source", "onchain"),
                 "last_interaction": rec.get("updated_at", ""),
             },
-        ))
-        count += 1
+        ), graph=graph)
+        count += int(bool(outcome.applied))
 
     if count:
         metrics.increment("graph_edges_created", labels={"type": "wallet_protocol"})
@@ -78,23 +79,23 @@ async def build_wallet_social_edges(
         if not social_id or social_id == wallet_address:
             continue
 
-        await graph.upsert_vertex(Vertex(
+        await apply_vertex(Vertex(
             vertex_type=VertexType.WALLET,
             vertex_id=wallet_address,
             properties={"entity_type": "wallet"},
-        ))
-        await graph.upsert_vertex(Vertex(
+        ), graph=graph)
+        await apply_vertex(Vertex(
             vertex_type=VertexType.USER,
             vertex_id=social_id,
             properties={"entity_type": "social", "source": rec.get("source", "")},
-        ))
-        await graph.add_edge(Edge(
+        ), graph=graph)
+        outcome = await apply_edge(Edge(
             edge_type=EdgeType.RESOLVED_AS,
             from_vertex_id=wallet_address,
             to_vertex_id=social_id,
             properties={"source": rec.get("source", "identity"), "confidence": str(rec.get("confidence", 0.5))},
-        ))
-        count += 1
+        ), graph=graph)
+        count += int(bool(outcome.applied))
 
     if count:
         metrics.increment("graph_edges_created", labels={"type": "wallet_social"})
@@ -113,18 +114,18 @@ async def build_governance_edges(
         if not proposal_id:
             continue
 
-        await graph.upsert_vertex(Vertex(
+        await apply_vertex(Vertex(
             vertex_type=VertexType.USER,
             vertex_id=entity_id,
             properties={"entity_type": "voter"},
-        ))
-        await graph.add_edge(Edge(
+        ), graph=graph)
+        outcome = await apply_edge(Edge(
             edge_type=EdgeType.INTERACTS_WITH,
             from_vertex_id=entity_id,
             to_vertex_id=proposal_id,
             properties={"type": "governance_vote", "source": rec.get("source", "snapshot")},
-        ))
-        count += 1
+        ), graph=graph)
+        count += int(bool(outcome.applied))
 
     if count:
         metrics.increment("graph_edges_created", labels={"type": "governance"})

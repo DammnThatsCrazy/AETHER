@@ -135,6 +135,8 @@ class ExplorationContextV1(_Model):
     presentation: Optional[PresentationSpec] = None
     selection: Optional[SelectionSet] = None
     truth: Optional[TruthRequirements] = None
+    # IRRL references are opaque; the server re-evaluates them at execution.
+    rights: Optional[dict[str, Any]] = None
 
 
 class FilterApplicabilityEntry(_Model):
@@ -189,6 +191,7 @@ class ExplorationResultEnvelope(_Model):
     applicability: ApplicabilityReport
     execution: ExplorationExecution
     warnings: list[str] = Field(default_factory=list)
+    rights: Optional[dict[str, Any]] = None
 
 
 class ContextLink(_Model):

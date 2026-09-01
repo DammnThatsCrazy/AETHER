@@ -65,6 +65,11 @@ CREATE TABLE IF NOT EXISTS graph_mutation_ledger (
     before_version_id TEXT,
     after_version_id TEXT,
     change_set_id TEXT,
+    rights_decision_id TEXT,
+    rights_envelope_id TEXT,
+    rights_policy_set_ref TEXT,
+    rights_lineage_set_hash TEXT,
+    rights_source_grant_refs JSONB,
     schema_version TEXT
 )
 """

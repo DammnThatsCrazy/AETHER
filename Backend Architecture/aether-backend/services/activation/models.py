@@ -52,6 +52,9 @@ class ActivationRecord(BaseModel):
     first_event_batch_id: Optional[str] = None
     first_value_evidence: dict[str, Any] = Field(default_factory=dict)
     waiting_reason: Optional[str] = None
+    rights_policy_set_ref: Optional[str] = None
+    rights_activation_state: Optional[str] = None
+    rights_blocked_reason: Optional[str] = None
     manual_reason: Optional[str] = None
     blocked_reason: Optional[str] = None
     created_at: str

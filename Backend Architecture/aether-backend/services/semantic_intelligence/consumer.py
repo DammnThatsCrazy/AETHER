@@ -57,6 +57,10 @@ def _to_semantic_payload(event: Event) -> dict[str, Any]:
     campaign_id = payload.get("campaign_id") or props.get("campaign_id")
     if campaign_id is not None and not _CANONICAL_CAMPAIGN_RE.match(str(campaign_id)):
         campaign_id = None  # non-canonical → drop (avoids invalid linkage)
+    raw_rights = payload.get("rights")
+    rights = dict(raw_rights) if isinstance(raw_rights, dict) else {}
+    if not rights.get("envelope_refs") and rights.get("envelope_ref"):
+        rights["envelope_refs"] = [rights["envelope_ref"]]
     return {
         "source_event_id": payload.get("event_id") or event.event_id,
         "source_type": payload.get("event_type", "event"),
@@ -74,6 +78,7 @@ def _to_semantic_payload(event: Event) -> dict[str, Any]:
         "occurred_at": payload.get("timestamp"),
         "session_id": payload.get("session_id"),
         "narrative_frames": props.get("narrative_frames", []),
+        "rights": rights,
     }
 
 

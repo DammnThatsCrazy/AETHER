@@ -1,6 +1,1 @@
-[
-  "Backend Architecture/aether-backend/services/lake/graph_mutations.py",
-  "Backend Architecture/aether-backend/services/onchain/action_recorder.py",
-  "Backend Architecture/aether-backend/services/resolution/repository.py",
-  "Backend Architecture/aether-backend/services/web3/classifier.py"
-]
+[]

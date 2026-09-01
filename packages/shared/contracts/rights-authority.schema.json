@@ -5,14 +5,17 @@
   "type": "object",
   "required": ["recordType"],
   "properties": {
-    "recordType": {"enum": ["rights_policy_set", "artifact_rights_envelope", "rights_use_request", "rights_decision", "derivation_edge", "rights_impact_graph"]},
+    "recordType": {"enum": ["rights_policy_set", "artifact_rights_envelope", "rights_use_request", "rights_decision", "derivation_edge", "rights_impact_graph", "rights_evidence_manifest", "rights_remediation_step", "rights_remediation_receipt", "rights_audit_outbox"]},
     "tenantId": {"type": ["string", "null"]},
     "policySetRef": {"type": ["string", "null"]},
     "envelopeRefs": {"type": "array", "items": {"type": "string"}},
     "lineageSetHash": {"type": ["string", "null"]},
     "decisionId": {"type": ["string", "null"]},
     "outcome": {"enum": ["allow", "deny", "allow_with_obligations", "pending_review", "unavailable"]},
-    "signature": {"type": ["string", "null"]}
+    "signature": {"type": ["string", "null"]},
+    "signatureKeyId": {"type": ["string", "null"]},
+    "evidenceManifestRefs": {"type": "array", "items": {"type": "string"}},
+    "remediationReceiptRefs": {"type": "array", "items": {"type": "string"}}
   },
   "additionalProperties": true
 }

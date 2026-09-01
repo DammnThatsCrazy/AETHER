@@ -272,6 +272,14 @@ class SemanticObservation(BaseModel):
     consent_snapshot_id: str | None = None
     purposes: list[str] = Field(default_factory=lambda: ["analytics"])
     privacy_class: str = "behavioral"
+    # Reference-only IRRL provenance. These fields never contain source content
+    # or credentials; they make each representation independently auditable.
+    rights_envelope_refs: list[str] = Field(default_factory=list)
+    rights_decision_refs: list[str] = Field(default_factory=list)
+    rights_source_grant_refs: list[str] = Field(default_factory=list)
+    rights_evidence_manifest_refs: list[str] = Field(default_factory=list)
+    rights_lineage_root_refs: list[str] = Field(default_factory=list)
+    rights_policy_set_ref: str | None = None
     retention_class: str = "standard_90d"
     data_quality: dict[str, Any] = Field(default_factory=dict)
     stable_hash: str | None = None
@@ -339,6 +347,12 @@ class SentimentObservation(BaseModel):
     baseline_ref: str | None = None
     consent_snapshot_id: str | None = None
     privacy_class: str = "behavioral"
+    rights_envelope_refs: list[str] = Field(default_factory=list)
+    rights_decision_refs: list[str] = Field(default_factory=list)
+    rights_source_grant_refs: list[str] = Field(default_factory=list)
+    rights_evidence_manifest_refs: list[str] = Field(default_factory=list)
+    rights_lineage_root_refs: list[str] = Field(default_factory=list)
+    rights_policy_set_ref: str | None = None
     # Consent state — a consent restriction/erasure marks a subject's (or actor's)
     # rows so the Gold sentiment reducer drops them, mirroring
     # SemanticObservation.status. Defaults CLASSIFIED so existing/new rows are
@@ -382,6 +396,9 @@ class EntitySemanticState(BaseModel):
     confidence: float = 0
     freshness: str = "unknown"
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
+    rights_envelope_refs: list[str] = Field(default_factory=list)
+    rights_decision_refs: list[str] = Field(default_factory=list)
+    rights_policy_set_ref: str | None = None
     version: int = 1
     computed_at: datetime = Field(default_factory=utc_now)
 
@@ -407,6 +424,9 @@ class RelationshipSemanticState(BaseModel):
     propagation_role: PropagationRole = PropagationRole.STRUCTURAL_CONTEXT
     support_count: int = 0
     confidence: float = Field(default=0, ge=0, le=1)
+    rights_envelope_refs: list[str] = Field(default_factory=list)
+    rights_decision_refs: list[str] = Field(default_factory=list)
+    rights_policy_set_ref: str | None = None
     valid_from: datetime
     valid_to: datetime | None = None
     computed_at: datetime = Field(default_factory=utc_now)
@@ -427,6 +447,9 @@ class RelationshipSentimentState(BaseModel):
     behavioral_followthrough: float = Field(default=0, ge=0, le=1)
     confidence: float = Field(default=0, ge=0, le=1)
     support_count: int = 0
+    rights_envelope_refs: list[str] = Field(default_factory=list)
+    rights_decision_refs: list[str] = Field(default_factory=list)
+    rights_policy_set_ref: str | None = None
     valid_from: datetime
     valid_to: datetime | None = None
     computed_at: datetime = Field(default_factory=utc_now)
@@ -456,6 +479,9 @@ class SemanticEpisode(BaseModel):
     graph_outcomes: dict[str, Any] = Field(default_factory=dict)
     confidence: float = Field(default=0, ge=0, le=1)
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
+    rights_envelope_refs: list[str] = Field(default_factory=list)
+    rights_decision_refs: list[str] = Field(default_factory=list)
+    rights_policy_set_ref: str | None = None
     model_version: str = "1.0.0"
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -504,6 +530,9 @@ class SemanticCascade(BaseModel):
     graph_outcomes: dict[str, Any] = Field(default_factory=dict)
     confidence: float = Field(default=0, ge=0, le=1)
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
+    rights_envelope_refs: list[str] = Field(default_factory=list)
+    rights_decision_refs: list[str] = Field(default_factory=list)
+    rights_policy_set_ref: str | None = None
     model_version: str = "1.0.0"
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)

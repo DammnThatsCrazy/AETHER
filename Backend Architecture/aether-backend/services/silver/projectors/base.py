@@ -105,6 +105,9 @@ class BaseProjector:
             "sequence_key": self._sequence_key(ctx),
             "consent_snapshot_id": ctx.get("consentSnapshotId"),
             "privacy_class": self._privacy_class(event),
+            # Reference-only IRRL context is carried through every projector;
+            # SilverFactWriter revalidates the signed decision at persistence.
+            "rights": event.get("rights") or {},
             "idempotency_key": event.get("messageId"),
             "payload": event.get("properties") or {},
         }

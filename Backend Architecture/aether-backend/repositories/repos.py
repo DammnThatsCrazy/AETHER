@@ -501,8 +501,12 @@ class IdentityRepository:
         self.cache = cache
         self._profiles = _ProfileStore()
 
-    async def get_profile(self, tenant_id: str, user_id: str) -> Optional[dict]:
+    async def get_profile(
+        self, tenant_id: str, user_id: str, *, rights_decision_id: Optional[str] = None,
+    ) -> Optional[dict]:
         key = CacheKey.profile(tenant_id, user_id)
+        if rights_decision_id:
+            key = f"{key}:rights:{rights_decision_id}"
         cached = await self.cache.get_json(key)
         if cached:
             return cached
@@ -598,6 +602,8 @@ class AnalyticsRepository:
         tenant_id: str,
         query_params: dict,
         limit: int = 100,
+        *,
+        rights_decision_id: Optional[str] = None,
     ) -> list[dict]:
         # Cache key must include `limit` — without it, a /sessions?limit=1 call
         # would otherwise serve its 1-event result to /platforms, /protocols,
@@ -606,6 +612,8 @@ class AnalyticsRepository:
         cache_key = CacheKey.analytics_query(
             tenant_id, CacheKey.hash_query(f"{query_params}|limit={limit}")
         )
+        if rights_decision_id:
+            cache_key = f"{cache_key}:rights:{rights_decision_id}"
         cached = await self.cache.get_json(cache_key)
         if cached:
             return cached

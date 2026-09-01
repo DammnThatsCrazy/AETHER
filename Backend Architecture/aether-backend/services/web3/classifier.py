@@ -20,6 +20,7 @@ from typing import Optional
 
 from shared.common.common import utc_now
 from shared.graph.graph import GraphClient, Vertex, Edge, VertexType, EdgeType
+from shared.graph.mutation_helpers import apply_edge, apply_vertex
 from shared.logger.logger import get_logger
 
 from services.web3.registries import (
@@ -278,10 +279,43 @@ async def build_graph_from_observation(
     domain = observation.get("domain", "")
     provenance = observation.get("provenance", {})
     source = provenance.get("source", "unknown") if isinstance(provenance, dict) else "unknown"
+    tenant_id = observation.get("tenant_id") or (
+        provenance.get("tenant_id") if isinstance(provenance, dict) else None
+    )
+    rights = {
+        "rights_envelope_id": observation.get("rights_envelope_id"),
+        "rights_policy_set_ref": observation.get("rights_policy_set_ref"),
+        "rights_source_grant_refs": observation.get("rights_source_grant_refs") or [],
+        "rights_lineage_set_hash": observation.get("rights_lineage_set_hash"),
+    }
+
+    async def write_vertex(vertex: Vertex, operation: str = "node_versioned") -> object:
+        props = dict(vertex.properties or {})
+        props.update({key: value for key, value in rights.items() if value})
+        return await apply_vertex(
+            Vertex(vertex.vertex_type, vertex.vertex_id, props, vertex.created_at),
+            graph=graph,
+            tenant_id=tenant_id,
+            operation=operation,
+            actor_kind="provider",
+            actor_id=f"web3:{source}",
+        )
+
+    async def write_edge(edge: Edge, operation: str = "edge_created") -> object:
+        props = dict(edge.properties or {})
+        props.update({key: value for key, value in rights.items() if value})
+        return await apply_edge(
+            Edge(edge.edge_type, edge.from_vertex_id, edge.to_vertex_id, props, edge.created_at),
+            graph=graph,
+            tenant_id=tenant_id,
+            operation=operation,
+            actor_kind="provider",
+            actor_id=f"web3:{source}",
+        )
 
     # 1. Create/upsert WALLET vertex for from_address
     if from_address:
-        graph.upsert_vertex(Vertex(
+        await write_vertex(Vertex(
             vertex_type=VertexType.WALLET,
             vertex_id=f"wallet:{from_address.lower()}",
             properties={
@@ -302,7 +336,7 @@ async def build_graph_from_observation(
 
         if classification.get("completeness") == "raw_observed" and not protocol_id:
             # Unknown contract → create UNKNOWN_CONTRACT vertex
-            graph.upsert_vertex(Vertex(
+            await write_vertex(Vertex(
                 vertex_type=VertexType.UNKNOWN_CONTRACT,
                 vertex_id=f"contract:{chain_id}:{contract_address.lower()}",
                 properties={
@@ -315,7 +349,7 @@ async def build_graph_from_observation(
                 },
             ))
         else:
-            graph.upsert_vertex(Vertex(
+            await write_vertex(Vertex(
                 vertex_type=VertexType.CONTRACT,
                 vertex_id=f"contract:{chain_id}:{contract_address.lower()}",
                 properties={
@@ -331,10 +365,10 @@ async def build_graph_from_observation(
 
         # Edge: wallet → contract
         if from_address:
-            graph.add_edge(Edge(
+            await write_edge(Edge(
                 edge_type=EdgeType.CALLED,
-                source_id=f"wallet:{from_address.lower()}",
-                target_id=f"contract:{chain_id}:{contract_address.lower()}",
+                from_vertex_id=f"wallet:{from_address.lower()}",
+                to_vertex_id=f"contract:{chain_id}:{contract_address.lower()}",
                 properties={
                     "canonical_action": canonical_action,
                     "chain_id": chain_id,
@@ -346,17 +380,17 @@ async def build_graph_from_observation(
 
     # 3. Create protocol vertex + wallet→protocol edge
     if protocol_id and from_address:
-        graph.upsert_vertex(Vertex(
+        await write_vertex(Vertex(
             vertex_type=VertexType.PROTOCOL,
             vertex_id=f"protocol:{protocol_id}",
             properties={"protocol_id": protocol_id, "source": source},
         ))
         vertices += 1
 
-        graph.add_edge(Edge(
+        await write_edge(Edge(
             edge_type=EdgeType.USES_PROTOCOL,
-            source_id=f"wallet:{from_address.lower()}",
-            target_id=f"protocol:{protocol_id}",
+            from_vertex_id=f"wallet:{from_address.lower()}",
+            to_vertex_id=f"protocol:{protocol_id}",
             properties={
                 "canonical_action": canonical_action,
                 "chain_id": chain_id,
@@ -368,17 +402,17 @@ async def build_graph_from_observation(
 
     # 4. Create app vertex + wallet→app edge
     if app_id and from_address:
-        graph.upsert_vertex(Vertex(
+        await write_vertex(Vertex(
             vertex_type=VertexType.APP,
             vertex_id=f"app:{app_id}",
             properties={"app_id": app_id, "source": source},
         ))
         vertices += 1
 
-        graph.add_edge(Edge(
+        await write_edge(Edge(
             edge_type=EdgeType.USES_APP,
-            source_id=f"wallet:{from_address.lower()}",
-            target_id=f"app:{app_id}",
+            from_vertex_id=f"wallet:{from_address.lower()}",
+            to_vertex_id=f"app:{app_id}",
             properties={"observed_at": now, "source": source},
         ))
         edges += 1
@@ -387,7 +421,7 @@ async def build_graph_from_observation(
     if domain and from_address:
         attribution = await attribute_domain(domain, domain_reg, app_reg)
 
-        graph.upsert_vertex(Vertex(
+        await write_vertex(Vertex(
             vertex_type=VertexType.FRONTEND_DOMAIN,
             vertex_id=f"domain:{domain.lower()}",
             properties={
@@ -399,27 +433,27 @@ async def build_graph_from_observation(
         ))
         vertices += 1
 
-        graph.add_edge(Edge(
+        await write_edge(Edge(
             edge_type=EdgeType.TOUCHES_DOMAIN,
-            source_id=f"wallet:{from_address.lower()}",
-            target_id=f"domain:{domain.lower()}",
+            from_vertex_id=f"wallet:{from_address.lower()}",
+            to_vertex_id=f"domain:{domain.lower()}",
             properties={"observed_at": now, "source": source},
         ))
         edges += 1
 
         # Domain → Protocol edges
         for pid in attribution.get("protocol_ids", []):
-            graph.add_edge(Edge(
+            await write_edge(Edge(
                 edge_type=EdgeType.FRONTS_PROTOCOL,
-                source_id=f"domain:{domain.lower()}",
-                target_id=f"protocol:{pid}",
+                from_vertex_id=f"domain:{domain.lower()}",
+                to_vertex_id=f"protocol:{pid}",
                 properties={"source": source},
             ))
             edges += 1
 
     # 6. Chain vertex
     if chain_id:
-        graph.upsert_vertex(Vertex(
+        await write_vertex(Vertex(
             vertex_type=VertexType.CHAIN,
             vertex_id=f"chain:{chain_id}",
             properties={"chain_id": chain_id, "source": source},
@@ -441,6 +475,10 @@ async def detect_migration(
     contract_reg: ContractInstanceRegistry,
     protocol_reg: ProtocolRegistry,
     graph: GraphClient,
+    tenant_id: Optional[str] = None,
+    rights_envelope_id: Optional[str] = None,
+    rights_policy_set_ref: Optional[str] = None,
+    rights_source_grant_refs: Optional[list[str]] = None,
 ) -> Optional[dict]:
     """
     Detect if a new contract deployment is a migration of an existing protocol.
@@ -472,16 +510,19 @@ async def detect_migration(
         if old_deployer and new_deployer and old_deployer.lower() == new_deployer.lower():
             old_address = old.get("address", "")
             # Same deployer → potential migration
-            graph.add_edge(Edge(
+            await apply_edge(Edge(
                 edge_type=EdgeType.MIGRATED_TO,
-                source_id=f"contract:{chain_id}:{old_address}",
-                target_id=f"contract:{chain_id}:{new_contract_address.lower()}",
+                from_vertex_id=f"contract:{chain_id}:{old_address}",
+                to_vertex_id=f"contract:{chain_id}:{new_contract_address.lower()}",
                 properties={
                     "migration_type": "redeploy",
                     "detected_at": now,
                     "same_deployer": True,
+                    "rights_envelope_id": rights_envelope_id,
+                    "rights_policy_set_ref": rights_policy_set_ref,
+                    "rights_source_grant_refs": rights_source_grant_refs or [],
                 },
-            ))
+            ), graph=graph, tenant_id=tenant_id, actor_kind="provider", actor_id="web3:migration")
 
             return {
                 "protocol_id": protocol_id,

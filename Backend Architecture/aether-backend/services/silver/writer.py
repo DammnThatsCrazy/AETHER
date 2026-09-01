@@ -55,6 +55,17 @@ class SilverFactWriter:
         return written
 
     async def _persist_result(self, result: ProjectionResult) -> int:
+        # Projectors are callable outside the normal consumer path (imports,
+        # replay, and operator repair). Re-check every row here so a direct
+        # writer call cannot bypass the lake's last-mile rights boundary.
+        from repositories.lake import _require_rights_context
+
+        for row in result.rows:
+            await _require_rights_context(
+                row.get("rights"),
+                "silver_materialization",
+                tenant_id=row.get("tenant_id"),
+            )
         if result.table == "silver_comms_facts":
             from services.comms.repository import CommsFactsRepository
             repo = CommsFactsRepository()
