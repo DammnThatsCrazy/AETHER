@@ -63,7 +63,16 @@ services:
       retries: 30
   api:
     <<: *runtime
-    environment: {<<: *runtime-env, AETHER_ROLE: api}
+    environment: {<<: *runtime-env, AETHER_ROLE: api, AETHER_BACKEND_ROOT: /app}
+    # The production image intentionally contains application code, not the
+    # repository's test suite.  Mount the durable test harness only for this
+    # integration compose project; it imports the flattened image layout via
+    # AETHER_BACKEND_ROOT.
+    volumes:
+      - type: bind
+        source: ../../tests/integration
+        target: /app/tests/integration
+        read_only: true
     command: uvicorn main:app --host 0.0.0.0 --port 8000
     ports: ["8000:8000"]
   outbox-relay:
