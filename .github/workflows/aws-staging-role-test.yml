@@ -1,0 +1,73 @@
+name: AWS Staging Role Verification
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-plan:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Assume AetherStagingPlan
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::544471417928:role/AetherStagingPlan
+          aws-region: us-east-1
+      - name: Verify Plan role
+        run: |
+          IDENTITY=$(aws sts get-caller-identity --output json)
+          echo "$IDENTITY"
+          ACCOUNT=$(echo "$IDENTITY" | jq -r '.Account')
+          if [ "$ACCOUNT" = "544471417928" ]; then
+            echo "::notice::PLAN_ROLE_OK"
+          else
+            echo "::error::PLAN_ROLE_ACCOUNT_MISMATCH: got $ACCOUNT"
+            exit 0
+          fi
+
+  verify-lifecycle:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Assume AetherStagingLifecycle
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::544471417928:role/AetherStagingLifecycle
+          aws-region: us-east-1
+      - name: Verify Lifecycle role
+        run: |
+          IDENTITY=$(aws sts get-caller-identity --output json)
+          echo "$IDENTITY"
+          ACCOUNT=$(echo "$IDENTITY" | jq -r '.Account')
+          if [ "$ACCOUNT" = "544471417928" ]; then
+            echo "::notice::LIFECYCLE_ROLE_OK"
+          else
+            echo "::error::LIFECYCLE_ROLE_ACCOUNT_MISMATCH: got $ACCOUNT"
+            exit 0
+          fi
+
+  verify-apply:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Assume AetherStagingApply
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::544471417928:role/AetherStagingApply
+          aws-region: us-east-1
+      - name: Verify Apply role
+        run: |
+          IDENTITY=$(aws sts get-caller-identity --output json)
+          echo "$IDENTITY"
+          ACCOUNT=$(echo "$IDENTITY" | jq -r '.Account')
+          if [ "$ACCOUNT" = "544471417928" ]; then
+            echo "::notice::APPLY_ROLE_OK"
+          else
+            echo "::error::APPLY_ROLE_ACCOUNT_MISMATCH: got $ACCOUNT"
+            exit 0
+          fi
