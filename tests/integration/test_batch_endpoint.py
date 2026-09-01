@@ -13,7 +13,6 @@ Tests the full request path through the FastAPI app in local (in-memory) mode:
 
 from __future__ import annotations
 
-import os
 import sys
 import uuid
 from contextlib import contextmanager
@@ -23,12 +22,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = Path(
-    os.environ.get(
-        "AETHER_BACKEND_ROOT",
-        str(ROOT / "Backend Architecture" / "aether-backend"),
-    )
-)
+BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
 
 
 @contextmanager

@@ -63,18 +63,25 @@ services:
       retries: 30
   api:
     <<: *runtime
-    environment: {<<: *runtime-env, AETHER_ROLE: api, AETHER_BACKEND_ROOT: /app}
-    # The production image intentionally contains application code, not the
-    # repository's test suite.  Mount the durable test harness only for this
-    # integration compose project; it imports the flattened image layout via
-    # AETHER_BACKEND_ROOT.
-    volumes:
-      - type: bind
-        source: ../../tests/integration
-        target: /app/tests/integration
-        read_only: true
+    environment: {<<: *runtime-env, AETHER_ROLE: api}
     command: uvicorn main:app --host 0.0.0.0 --port 8000
     ports: ["8000:8000"]
+  # The production image intentionally contains application code, not the
+  # repository's test suite.  Run the durable harness in a separate container
+  # using the same production-shaped runtime image and dependencies, while
+  # preserving the repository source layout required by source-of-truth
+  # registry loaders.
+  integration-tests:
+    <<: *runtime
+    environment: {<<: *runtime-env, AETHER_ROLE: api, PYTHONDONTWRITEBYTECODE: "1"}
+    working_dir: /workspace
+    entrypoint: []
+    volumes:
+      - type: bind
+        source: ../..
+        target: /workspace
+        read_only: true
+    command: python -m pytest tests/integration/test_batch_endpoint.py -q -p no:cacheprovider
   outbox-relay:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: outbox-relay}

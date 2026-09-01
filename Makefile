@@ -943,7 +943,7 @@ runtime-readiness-gate: ## Validate durable backend, explicit runtime-role, and 
 
 integration-durable: ## Run the production-shaped durable integration suite (requires Docker)
 	docker compose -f deploy/integration/docker-compose.durable.yml config --quiet
-	docker compose -f deploy/integration/docker-compose.durable.yml run --rm api python -m pytest tests/integration/test_batch_endpoint.py -q
+	docker compose -f deploy/integration/docker-compose.durable.yml run --rm integration-tests python -m pytest tests/integration/test_batch_endpoint.py -q -p no:cacheprovider
 
 integration-faults: ## Run durable outbox/storage crash, replay, and lifecycle fault tests (requires Docker)
 	docker compose -f deploy/integration/docker-compose.durable.yml config --quiet
