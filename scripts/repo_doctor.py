@@ -673,6 +673,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="route graph writes through the canonical mutation gateway; shrink scripts/allowlists/graph_write_paths.json only",
     )
     run(
+        [sys.executable, "scripts/validate_rights_authority.py"],
+        name="IRRL rights authority (durable registry, migrations, evidence/remediation, protected PEPs)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="restore the canonical rights registry, migration chain, or protected PEP wiring before merging",
+    )
+    run(
         [sys.executable, "scripts/validate_graph_scoped_reads.py"],
         name="Graph scoped-read gate (no scan-then-filter-by-tenant global reads in services/)",
         results=results,

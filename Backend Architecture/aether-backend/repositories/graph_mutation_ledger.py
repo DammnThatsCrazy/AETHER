@@ -83,6 +83,11 @@ CREATE TABLE IF NOT EXISTS graph_mutation_ledger (
     before_version_id TEXT,
     after_version_id TEXT,
     change_set_id TEXT,
+    rights_decision_id TEXT,
+    rights_envelope_id TEXT,
+    rights_policy_set_ref TEXT,
+    rights_lineage_set_hash TEXT,
+    rights_source_grant_refs JSONB,
     schema_version TEXT
 )
 """
@@ -162,7 +167,10 @@ def reset_graph_ledger_memory() -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 _TS_FIELDS = ("valid_from", "valid_to", "recorded_at", "superseded_at")
-_REF_FIELDS = ("evidence_refs", "model_refs", "policy_refs", "consent_refs")
+_REF_FIELDS = (
+    "evidence_refs", "model_refs", "policy_refs", "consent_refs",
+    "rights_source_grant_refs",
+)
 
 
 def _to_dt(value: Any) -> Optional[datetime]:
@@ -242,10 +250,13 @@ INSERT INTO graph_mutation_ledger (
     correlation_id, causation_id, source_event_id, idempotency_key,
     reason_code, causality_class, confidence,
     evidence_refs, model_refs, policy_refs, consent_refs,
-    before_version_id, after_version_id, change_set_id, schema_version
+    before_version_id, after_version_id, change_set_id,
+    rights_decision_id, rights_envelope_id, rights_policy_set_ref,
+    rights_lineage_set_hash, rights_source_grant_refs, schema_version
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-    $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
+    $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27,
+    $28, $29, $30, $31, $32, $33
 )
 ON CONFLICT (tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL
 DO NOTHING
@@ -467,6 +478,12 @@ class GraphMutationLedgerRepository:
                         before_version_id,
                         after_version_id,
                         record.change_set_id,
+                        record.rights_decision_id,
+                        record.rights_envelope_id,
+                        record.rights_policy_set_ref,
+                        record.rights_lineage_set_hash,
+                        json.dumps(record.rights_source_grant_refs)
+                        if record.rights_source_grant_refs is not None else None,
                         record.schema_version,
                     )
                     if inserted is None:

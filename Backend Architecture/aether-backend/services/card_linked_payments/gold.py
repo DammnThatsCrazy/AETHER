@@ -12,6 +12,9 @@ from collections import defaultdict
 from typing import Any
 
 from shared.logger.logger import get_logger
+from shared.rights_authority.pep import rights_mode
+from services.ingestion.rights import authorize_derivation, rights_context_from_result
+from shared.rights_authority.contracts import lineage_hash
 
 from services.card_linked_payments.models import (
     CardActivityBasis,
@@ -180,6 +183,46 @@ async def materialize_gold(tenant_id: str) -> dict[str, int]:
     from repositories.lake import GoldRepository
 
     gold = GoldRepository()
+    flows = await get_card_linked_repositories().flows.list_for_tenant(tenant_id)
+    envelope_refs = sorted({
+        str(ref)
+        for row in flows
+        for ref in (
+            (row.get("rights") or {}).get("envelope_refs", [])
+            if isinstance(row.get("rights"), dict) else []
+        )
+    })
+    grant_refs = sorted({
+        str(ref)
+        for row in flows
+        for ref in (
+            (row.get("rights") or {}).get("source_grant_refs", [])
+            if isinstance(row.get("rights"), dict) else []
+        )
+    })
+    rights: dict[str, Any] = {}
+    if rights_mode() != "off":
+        if not envelope_refs:
+            raise ValueError("rights_card_gold_blocked: source lineage missing")
+        result = await authorize_derivation(
+            tenant_id,
+            artifact={"kind": "gold_feature", "id": f"card_linked:{tenant_id}", "tenant_id": tenant_id},
+            input_envelope_refs=envelope_refs,
+            source_grant_refs=grant_refs,
+            transform="feature_extraction",
+            evidence={"lineage": envelope_refs},
+        )
+        if not result.proceed and rights_mode() == "enforce":
+            raise ValueError(
+                "rights_card_gold_blocked: " + ",".join(result.reason_codes)
+            )
+        rights = rights_context_from_result(
+            result,
+            extra={
+                "source_grant_refs": grant_refs,
+                "lineage_set_hash": lineage_hash(envelope_refs),
+            },
+        )
     written = 0
     for feature in await cluster_features(tenant_id):
         await gold.materialize(
@@ -191,6 +234,7 @@ async def materialize_gold(tenant_id: str) -> dict[str, int]:
             source_tag="card_linked_payments",
             tenant_id=tenant_id,
             model_training_eligible=False,
+            rights=rights,
         )
         written += 1
     return {"cluster_feature_rows": written}

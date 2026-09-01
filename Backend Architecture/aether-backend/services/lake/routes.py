@@ -12,6 +12,7 @@ Exposes lake management endpoints:
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -19,6 +20,8 @@ from pydantic import BaseModel, Field
 
 from shared.common.common import APIResponse, BadRequestError
 from shared.logger.logger import get_logger, metrics
+from shared.rights_authority.contracts import ActorRef, DestinationRef
+from shared.rights_authority.pep import evaluate_rights
 from repositories.lake import (
     BronzeRepository, SilverRepository, GoldRepository,
     bronze_market, bronze_onchain, bronze_social, bronze_identity,
@@ -27,6 +30,7 @@ from repositories.lake import (
     gold_market, gold_onchain, gold_identity,
     run_quality_checks,
 )
+from services.ingestion.rights import authorize_ingestion, rights_context_from_result
 
 logger = get_logger("aether.service.lake")
 router = APIRouter(prefix="/v1/lake", tags=["Data Lake"])
@@ -113,6 +117,10 @@ class MaterializeRequest(BaseModel):
     value: Any
     dimensions: dict = Field(default_factory=dict)
     source_tag: str = ""
+    rights_envelope_refs: list[str] = Field(default_factory=list)
+    rights_policy_set_ref: str | None = None
+    transform: str = "feature_extraction"
+    transform_evidence: dict = Field(default_factory=dict)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────
@@ -126,11 +134,41 @@ async def ingest_to_bronze(body: IngestRequest, request: Request):
     if not repo:
         raise BadRequestError(f"Unknown domain: {body.domain}. Available: {list(_BRONZE_REPOS.keys())}")
 
+    tenant_id = request.state.tenant.tenant_id
+    authorized_records: list[dict] = []
+    blocked: list[dict] = []
+    for index, record in enumerate(body.records):
+        provider_id = str(record.get("id") or record.get("external_id") or f"{body.source}:{index}:{uuid.uuid4().hex}")
+        normalized = {
+            **record,
+            "id": provider_id,
+            "event_id": f"{body.domain}:{body.source}:{provider_id}",
+        }
+        try:
+            rights = await authorize_ingestion(
+                tenant_id,
+                normalized,
+                source_grant_ref=record.get("rights_source_grant_ref"),
+                artifact_kind="lake_record",
+            )
+        except Exception as exc:
+            rights = None
+            reason = f"rights_unavailable:{type(exc).__name__}"
+        else:
+            reason = rights.reason if rights else "rights_unavailable"
+        if rights is None or not rights.allowed:
+            blocked.append({"provider_record_id": provider_id, "reason": reason})
+            continue
+        normalized.pop("event_id", None)
+        normalized.pop("rights_source_grant_ref", None)
+        normalized["rights"] = rights.context
+        authorized_records.append(normalized)
+
     count = await repo.ingest_batch(
-        records=body.records,
+        records=authorized_records,
         source=body.source,
         source_tag=body.source_tag,
-        tenant_id=request.state.tenant.tenant_id,
+        tenant_id=tenant_id,
     )
 
     metrics.increment("lake_ingest_api", labels={"domain": body.domain, "source": body.source})
@@ -140,6 +178,8 @@ async def ingest_to_bronze(body: IngestRequest, request: Request):
         "source_tag": body.source_tag,
         "records_submitted": len(body.records),
         "records_ingested": count,
+        "rights_blocked": len(blocked),
+        "blocked_records": blocked[:50],
     }).to_dict()
 
 
@@ -200,6 +240,35 @@ async def materialize_gold(body: MaterializeRequest, request: Request):
     if not repo:
         raise BadRequestError(f"Unknown Gold domain: {body.domain}")
 
+    tenant_id = request.state.tenant.tenant_id
+    rights = await evaluate_rights(
+        action="derive",
+        tenant_id=tenant_id,
+        actor=ActorRef(
+            kind="tenant_user",
+            id=getattr(request.state.tenant, "user_id", None) or tenant_id,
+            tenant_id=tenant_id,
+        ),
+        purpose="gold_materialization",
+        artifacts=[{
+            "kind": "gold_metric",
+            "id": f"{body.domain}:{body.metric_name}:{body.entity_type}:{body.entity_id}",
+            "tenant_id": tenant_id,
+        }],
+        envelope_refs=body.rights_envelope_refs,
+        policy_set_ref=body.rights_policy_set_ref,
+        destination=DestinationRef(kind="tenant", id=tenant_id),
+        transform=body.transform,
+        metadata={"transform_evidence": body.transform_evidence},
+    )
+    if not rights.proceed:
+        return APIResponse(data={
+            "status": "suppressed",
+            "reason": "rights_denied",
+            "rights": rights_context_from_result(rights),
+        }).to_dict()
+    rights_context = rights_context_from_result(rights)
+
     result = await repo.materialize(
         metric_name=body.metric_name,
         entity_id=body.entity_id,
@@ -207,8 +276,10 @@ async def materialize_gold(body: MaterializeRequest, request: Request):
         value=body.value,
         dimensions=body.dimensions,
         source_tag=body.source_tag,
-        tenant_id=request.state.tenant.tenant_id,
+        tenant_id=tenant_id,
+        rights=rights_context,
     )
+    result["rights"] = rights_context
     return APIResponse(data=result).to_dict()
 
 

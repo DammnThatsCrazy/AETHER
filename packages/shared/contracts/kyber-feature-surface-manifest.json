@@ -275,6 +275,14 @@
       "minimum_disclosure": "D0"
     },
     {
+      "feature_id": "rights",
+      "aether_route": "/rights",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant Rights Center is a customer policy/evidence explanation surface; Kyber uses the separately authorized internal Rights Operations surface",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
       "feature_id": "notifications",
       "aether_route": "/notifications",
       "tenant_parity_required": false,

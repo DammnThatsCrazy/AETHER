@@ -61,6 +61,7 @@ from services.ingestion.validation import (
     get_event_family as _validated_event_family,
     validate_event,
 )
+from services.ingestion.rights import authorize_ingestion, rights_mode
 # Capability-family metering seam (§7): durable evidence + meter for
 # reconciliation at the canonical ingestion choke point.
 from services.metering_evidence.families import meter_family_usage  # noqa: E402
@@ -198,6 +199,9 @@ class EventContext(BaseModel):
     semanticInput: Optional[dict[str, Any]] = None
     semanticHints: Optional[dict[str, Any]] = None
     dataQuality: Optional[dict[str, Any]] = None
+    # Reference-only rights hint. The backend resolves and verifies the
+    # server-side source grant; this field is never trusted as authorization.
+    rights: Optional[dict[str, Any]] = None
 
     # Distributed tracing (flat legacy keys + nested canonical `correlation`)
     correlationId: Optional[str] = None
@@ -359,6 +363,49 @@ async def ingest_batch(
                 payload=normalized,
             ))
             accepted_raw.append(normalized)
+
+    # ── Rights PEP before durable Bronze write ─────────────────────────────
+    # A client may send a source-grant hint, but authorize_ingestion resolves
+    # the durable tenant grant and policy itself. Rejected/unavailable rights
+    # decisions never reach Bronze, the outbox, identity resolution, or the bus.
+    if accepted_raw and rights_mode() != "off":
+        event_id_to_result_idx = {result.id: idx for idx, result in enumerate(results)}
+        authorized_events: list[Event] = []
+        authorized_raw: list[dict] = []
+        for event, normalized in zip(accepted_events, accepted_raw):
+            hint = normalized.get("rights_hint") or {}
+            try:
+                rights = await authorize_ingestion(
+                    tenant.tenant_id,
+                    normalized,
+                    source_grant_ref=hint.get("source_grant_ref"),
+                )
+            except Exception as exc:
+                rights = None
+                reason = f"rights_unavailable:{type(exc).__name__}"
+            else:
+                reason = rights.reason if rights else "rights_unavailable"
+            normalized.pop("rights_hint", None)
+            if rights is None or not rights.allowed:
+                result_idx = event_id_to_result_idx.get(normalized.get("event_id", ""))
+                if result_idx is not None:
+                    results[result_idx] = EventResult(
+                        id=normalized["event_id"], status="rejected", reason=reason,
+                    )
+                metrics.increment(
+                    "ingestion_rights_blocked_total",
+                    labels={"reason": (reason or "unknown").split(":", 1)[0]},
+                )
+                continue
+            normalized["rights"] = rights.context
+            event.payload = normalized
+            authorized_events.append(event)
+            authorized_raw.append(normalized)
+        accepted_events = authorized_events
+        accepted_raw = authorized_raw
+    else:
+        for normalized in accepted_raw:
+            normalized.pop("rights_hint", None)
 
     # ── Durable Bronze write BEFORE bus publish ────────────────────────────
     # If Bronze write fails, we must not acknowledge the events.
@@ -571,6 +618,34 @@ async def _ingest_batch_v2(
             continue
         if server_context is not None:
             normalized["server_context"] = server_context
+
+        # V2 has a different transaction boundary from V1, so it needs its
+        # own pre-persistence PEP. Rights are resolved before either the
+        # Bronze candidate or its transactional outbox row is constructed.
+        hint = normalized.get("rights_hint") or {}
+        normalized.pop("rights_hint", None)
+        if rights_mode() != "off":
+            try:
+                rights = await authorize_ingestion(
+                    tenant.tenant_id,
+                    normalized,
+                    source_grant_ref=hint.get("source_grant_ref"),
+                )
+            except Exception as exc:
+                rights = None
+                rights_reason = f"rights_unavailable:{type(exc).__name__}"
+            else:
+                rights_reason = rights.reason if rights else "rights_unavailable"
+            if rights is None or not rights.allowed:
+                results[-1] = EventResult(
+                    id=sdk_event.id, status="rejected", reason=rights_reason,
+                )
+                metrics.increment(
+                    "ingestion_rights_blocked_total",
+                    labels={"reason": (rights_reason or "unknown").split(":", 1)[0]},
+                )
+                continue
+            normalized["rights"] = rights.context
 
         entity_id = normalized.get("user_id") or normalized.get("anonymous_id", "")
         candidates.append(BronzeSDKEvent(

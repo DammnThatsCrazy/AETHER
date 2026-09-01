@@ -7359,6 +7359,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/source-of-truth/RIGHTS_AUTHORITY.md",
+      "title": "IRRL Rights Authority",
+      "slug": "source-of-truth/rights-authority",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops",
+        "compliance"
+      ],
+      "status": "draft",
+      "estimated_read_minutes": 9,
+      "canonical_owner": "compliance@aether"
+    },
+    {
       "path": "docs/source-of-truth/SOURCE_TO_MODEL_MATRIX.md",
       "title": "Source to Model Matrix",
       "slug": "architecture/source-to-model-matrix",

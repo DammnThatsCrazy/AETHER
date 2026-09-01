@@ -1085,7 +1085,9 @@ class ProviderCorpusConfig:
     they are always active regardless of flag state.
     """
     # Connector taxonomy
-    connector_data_rights_enabled: bool = _env_bool("AETHER_CONNECTOR_DATA_RIGHTS_ENABLED", False)
+    # The rights control surface is mounted by default; material use remains
+    # governed by AETHER_RIGHTS_AUTHORITY_MODE (off/local, enforce/non-local).
+    connector_data_rights_enabled: bool = _env_bool("AETHER_CONNECTOR_DATA_RIGHTS_ENABLED", True)
     connector_byok_enabled: bool = _env_bool("AETHER_CONNECTOR_BYOK_ENABLED", True)
     connector_actions_enabled: bool = _env_bool("AETHER_CONNECTOR_ACTIONS_ENABLED", False)
     connector_olympus_providers_enabled: bool = _env_bool("AETHER_CONNECTOR_OLYMPUS_PROVIDERS_ENABLED", False)

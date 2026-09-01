@@ -17,9 +17,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from shared.logger.logger import get_logger
+from shared.rights_authority.repository import RightsLedgerRepository
 
 from services.integrations.data_rights.models import (
     DataRightsGrant,
@@ -112,14 +113,31 @@ def _is_not_expired(grant: DataRightsGrant) -> bool:
 
 
 class DataRightsService:
-    """In-memory data rights ledger with fail-closed policy checks.
+    """Compatibility facade over the durable IRRL source-grant ledger.
 
-    Production implementation should persist to DynamoDB/TimescaleDB
-    with event sourcing for audit trail completeness.
+    ``DataRightsGrant`` remains the stable connector-facing API. Grant changes
+    are stored as immutable revisions and revocation is represented by a new
+    revision, so callers retain the original public grant id without allowing
+    history to be rewritten.
     """
 
-    def __init__(self) -> None:
-        self._grants: Dict[str, DataRightsGrant] = {}
+    def __init__(self, repository: Optional[RightsLedgerRepository] = None) -> None:
+        self._repository = repository or RightsLedgerRepository()
+
+    async def _latest_grant(self, grant_id: str) -> Optional[DataRightsGrant]:
+        raw = await self._repository.get_latest_source_grant(grant_id)
+        return DataRightsGrant(**raw) if raw else None
+
+    async def _all_latest_grants(self) -> list[DataRightsGrant]:
+        rows = await self._repository.list_source_grants()
+        latest: dict[str, dict] = {}
+        for row in rows:
+            grant_id = row.get("data_rights_grant_id") or row.get("id")
+            if not grant_id:
+                continue
+            if int(row.get("grant_version", 1)) >= int(latest.get(grant_id, {}).get("grant_version", 0)):
+                latest[grant_id] = row
+        return [DataRightsGrant(**row) for row in latest.values()]
 
     async def create_grant(
         self,
@@ -182,7 +200,9 @@ class DataRightsService:
             audit_event_id=audit_id,
         )
 
-        self._grants[grant_id] = grant
+        payload = grant.model_dump(mode="json")
+        payload["grant_version"] = 1
+        await self._repository.append_source_grant(payload)
 
         logger.info(
             f"DataRightsGrant created: grant_id={grant_id} "
@@ -194,7 +214,7 @@ class DataRightsService:
         return grant
 
     async def get_grant(self, grant_id: str) -> Optional[DataRightsGrant]:
-        return self._grants.get(grant_id)
+        return await self._latest_grant(grant_id)
 
     async def list_grants(
         self,
@@ -203,7 +223,7 @@ class DataRightsService:
         status: Optional[GrantStatus] = None,
     ) -> List[DataRightsGrantSummary]:
         results = []
-        for grant in self._grants.values():
+        for grant in await self._all_latest_grants():
             if tenant_id and grant.tenant_id != tenant_id:
                 continue
             if connector_id and grant.connector_id != connector_id:
@@ -234,7 +254,7 @@ class DataRightsService:
         body: DataRightsGrantRevoke,
     ) -> Optional[DataRightsGrant]:
         """Revoke a grant. Fail-closed: revoked grants block all use immediately."""
-        grant = self._grants.get(grant_id)
+        grant = await self._latest_grant(grant_id)
         if not grant:
             return None
 
@@ -247,7 +267,12 @@ class DataRightsService:
             "revocation_reason": body.revocation_reason,
             "audit_event_id": audit_id,
         })
-        self._grants[grant_id] = updated
+        payload = updated.model_dump(mode="json")
+        raw = await self._repository.get_latest_source_grant(grant_id)
+        payload["grant_version"] = int((raw or {}).get("grant_version", 1)) + 1
+        # The revision id is private ledger identity; the public grant id stays stable.
+        payload["revision_id"] = f"{grant_id}:v{payload['grant_version']}"
+        await self._repository._append("source_grant", payload["revision_id"], payload)
 
         logger.warning(
             f"DataRightsGrant revoked: grant_id={grant_id} "
@@ -265,7 +290,7 @@ class DataRightsService:
     ) -> PolicyCheckResult:
         """Evaluate a specific policy check on a grant. Fail closed."""
         now = _utc_now()
-        grant = self._grants.get(grant_id)
+        grant = await self._latest_grant(grant_id)
 
         if not grant:
             return PolicyCheckResult(

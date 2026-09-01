@@ -213,6 +213,7 @@ async def test_resolver_health():
 def test_is_configured_env_gated(monkeypatch):
     resolver = _EnvGatedResolver()
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert resolver.is_configured("openai") is False
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")

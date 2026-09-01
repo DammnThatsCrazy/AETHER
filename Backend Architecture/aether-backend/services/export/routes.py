@@ -23,6 +23,8 @@ from services.export.service import (
 )
 from services.security.export_governance import audit_export_governance
 from shared.logger.logger import get_logger, metrics
+from shared.rights_authority.contracts import ActorRef, DestinationRef
+from shared.rights_authority.pep import evaluate_rights
 from shared.privacy.ip_hmac import audit_ip_token
 
 logger = get_logger("aether.export.routes")
@@ -96,6 +98,24 @@ async def download_artifact(artifact_id: str, request: Request):
     tenant = _tenant(request)
     repo = get_artifact_repository()
     meta = await repo.get_meta(tenant.tenant_id, artifact_id)
+    manifest_rights = meta.get("manifest", {}).get("rights", {}) if isinstance(meta.get("manifest"), dict) else {}
+    rights = await evaluate_rights(
+        action="export",
+        tenant_id=tenant.tenant_id,
+        actor=ActorRef(kind="tenant_user", id=getattr(tenant, "user_id", None) or tenant.tenant_id, tenant_id=tenant.tenant_id),
+        purpose="tenant_export_download",
+        envelope_refs=manifest_rights.get("envelope_refs") or (),
+        source_grant_refs=manifest_rights.get("source_grant_refs") or (),
+        policy_set_ref=manifest_rights.get("policy_set_ref"),
+        destination=DestinationRef(kind="tenant", id=tenant.tenant_id),
+        metadata={"artifact_id": artifact_id},
+    )
+    if not rights.proceed:
+        from shared.common.common import ForbiddenError
+        raise ForbiddenError(
+            "export download blocked by rights authority",
+            details={"decision_id": rights.decision.decision_id if rights.decision else None},
+        )
     # Re-check authorization at download time (permission may have changed
     # since generation) and refuse expired artifacts; the governance call
     # also writes the download audit record.

@@ -102,10 +102,63 @@ class SemanticFactRepository:
     async def _pool(self) -> Any:
         return await get_pool()
 
+    async def _require_rights_receipt(self, fact: dict[str, Any]) -> None:
+        """Re-verify semantic rights immediately before persistence.
+
+        Semantic reducers and replay workers can call this repository without
+        passing through ``SemanticIntelligenceService``. In enforce mode, a
+        semantic Silver/Gold row therefore needs its own reference-only
+        envelope and signed decision receipt. The decision is reloaded from
+        durable IRRL state so a caller cannot turn an old boolean or copied
+        reference into authorization.
+        """
+        from shared.rights_authority.contracts import RightsDecision
+        from shared.rights_authority.pep import rights_mode
+        from shared.rights_authority.service import rights_authority
+
+        if rights_mode() != "enforce" or not (
+            self.table_name.startswith("silver_semantic")
+            or self.table_name.startswith("silver_sentiment")
+            or self.table_name.startswith("gold_")
+        ):
+            return
+
+        data = fact.get("data") or {}
+        envelope_refs = data.get("rights_envelope_refs") or []
+        decision_refs = data.get("rights_decision_refs") or []
+        if not envelope_refs or not decision_refs:
+            raise ValueError(
+                f"rights_{self.table_name}_blocked: semantic receipt missing"
+            )
+        tenant_id = fact.get("tenant_id")
+        for decision_ref in decision_refs:
+            raw = await rights_authority.repository.get_decision(str(decision_ref))
+            if raw is None:
+                raise ValueError(
+                    f"rights_{self.table_name}_blocked: decision receipt unavailable"
+                )
+            decision = RightsDecision(**{
+                key: value for key, value in raw.items()
+                if key in RightsDecision.model_fields
+            })
+            if not rights_authority.verify_signature(decision):
+                raise ValueError(
+                    f"rights_{self.table_name}_blocked: decision signature invalid"
+                )
+            if decision.outcome not in {"allow", "allow_with_obligations"}:
+                raise ValueError(
+                    f"rights_{self.table_name}_blocked: decision not allowed"
+                )
+            if tenant_id and decision.tenant_id not in {None, tenant_id}:
+                raise ValueError(
+                    f"rights_{self.table_name}_blocked: decision tenant mismatch"
+                )
+
     # ── writes ────────────────────────────────────────────────────────────────
 
     async def upsert(self, fact: dict[str, Any]) -> dict[str, Any]:
         """Insert (or, for gold, refresh) one fact row, idempotent on idempotency_key."""
+        await self._require_rights_receipt(fact)
         record_id = str(fact.get("id") or "")
         tenant_id = fact.get("tenant_id")
         idem = _idem_key(fact)

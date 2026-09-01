@@ -59,6 +59,10 @@ NON_SURFACE: dict[str, str] = {
     "/billing": "tenant billing portal; operator view is /v1/kyber/revops",
     "/usage-plan": "tenant plan self-service; operator view is /v1/kyber/revops",
     "/security": "tenant's own security settings; operator plane is /security/*",
+    "/rights": (
+        "tenant Rights Center is a customer policy/evidence explanation surface; "
+        "Kyber uses the separately authorized internal Rights Operations surface"
+    ),
     "/audit-exports": (
         "tenant-initiated export UI; operator exports are capability-gated separately"
     ),

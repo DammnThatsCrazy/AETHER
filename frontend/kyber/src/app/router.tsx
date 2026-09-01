@@ -81,6 +81,7 @@ const TargetingIntelligencePage = lazy(() => import('@kyber/pages/targeting').th
 const ImportsOpsPage = lazy(() => import('@kyber/pages/imports-ops').then(m => ({ default: m.ImportsOpsPage })));
 const ImportOpsDetailPage = lazy(() => import('@kyber/pages/imports-ops').then(m => ({ default: m.ImportOpsDetailPage })));
 const KyberIntelligenceOSPage = lazy(() => import('@kyber/pages/intelligence-os').then(m => ({ default: m.KyberIntelligenceOSPage })));
+const RightsOperationsPage = lazy(() => import('@kyber/pages/rights').then(m => ({ default: m.RightsOperationsPage })));
 // Provider-connections (Universal Provider Runtime). The page renders an honest
 // disabled state when enableProviderRuntime is off, so mounting the route is not
 // a grant — the backend still gates /v1/admin/kyber/provider-connections/*.
@@ -152,6 +153,7 @@ export function AppRouter() {
                 <Route path="/tenant-mirror" element={<PageSuspense><TenantMirrorPage /></PageSuspense>} />
                 <Route path="/kyber-exceptions" element={<PageSuspense><KyberExceptionsPage /></PageSuspense>} />
                 <Route path="/kyber-commands" element={<PageSuspense><KyberCommandsPage /></PageSuspense>} />
+                <Route path="/rights-operations" element={<PageSuspense><RightsOperationsPage /></PageSuspense>} />
                 <Route path="/reliability" element={<PageSuspense><ReliabilityPage /></PageSuspense>} />
                 <Route path="/journey-health" element={<PageSuspense><JourneyHealthPage /></PageSuspense>} />
                 <Route path="/reliability/incidents/:incidentId" element={<PageSuspense><ReliabilityPage /></PageSuspense>} />

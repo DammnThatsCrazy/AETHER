@@ -110,7 +110,7 @@ def main() -> int:
             print(f"  - {e}", file=sys.stderr)
         return 1
 
-    print(f"graph write paths OK: {len(actual)} direct writers frozen (gateway migration pending)")
+    print(f"graph write paths OK: {len(actual)} direct writers outside the canonical gateway")
     return 0
 
 

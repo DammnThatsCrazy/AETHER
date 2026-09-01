@@ -2115,14 +2115,34 @@ class GraphClient:
         self._connected = False
         logger.info("GraphClient closed")
 
+    @staticmethod
+    def _require_rights_stamp(properties: Optional[dict[str, Any]]) -> None:
+        """Keep un-gated direct graph writers from bypassing the graph PEP."""
+        from shared.rights_authority.pep import rights_mode
+        from shared.graph.write_validator import GraphWriteValidationError
+
+        if rights_mode() != "enforce":
+            return
+        props = properties or {}
+        missing = [
+            key for key in ("rights_decision_id", "rights_envelope_id")
+            if not props.get(key)
+        ]
+        if missing:
+            raise GraphWriteValidationError([
+                "rights_graph_write_blocked: missing " + ",".join(missing)
+            ])
+
     async def add_vertex(self, vertex: Vertex) -> str:
         if self._backend is None:
             await self.connect()
+        self._require_rights_stamp(vertex.properties)
         return await self._backend.add_vertex(vertex)  # type: ignore[union-attr]
 
     async def add_edge(self, edge: Edge) -> None:
         if self._backend is None:
             await self.connect()
+        self._require_rights_stamp(edge.properties)
         # Pre-write validation: enforces required properties when writing to Neptune.
         # In local/in-memory mode the validator logs violations but does not raise.
         from shared.graph.write_validator import GraphWriteValidationError, GraphWriteValidator
@@ -2302,6 +2322,7 @@ class GraphClient:
     async def upsert_vertex(self, vertex: Vertex) -> str:
         if self._backend is None:
             await self.connect()
+        self._require_rights_stamp(vertex.properties)
         return await self._backend.upsert_vertex(vertex)  # type: ignore[union-attr]
 
     async def health_check(self) -> bool:

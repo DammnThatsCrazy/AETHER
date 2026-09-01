@@ -208,6 +208,7 @@ def build_normalized_payload(
         "batch_id": batch_id,
         "schema_version": SCHEMA_VERSION,
         "source": "sdk",
+        "rights_hint": sdk_event.context.rights,
     })
 
 

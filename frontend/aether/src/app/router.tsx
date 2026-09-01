@@ -24,6 +24,7 @@ const GraphPage = lazy(() => import('@aether-app/pages/graph').then(m => ({ defa
 const ComparisonPage = lazy(() => import('@aether-app/pages/comparison').then(m => ({ default: m.ComparisonPage })));
 const NoesisPage = lazy(() => import('@aether-app/pages/noesis').then(m => ({ default: m.NoesisPage })));
 const SettingsPage = lazy(() => import('@aether-app/pages/settings/settings-page').then(m => ({ default: m.SettingsPage })));
+const RightsCenterPage = lazy(() => import('@aether-app/pages/legal/rights-center-page').then(m => ({ default: m.RightsCenterPage })));
 const BillingPage = lazy(() => import('@aether-app/pages/billing/billing-page').then(m => ({ default: m.BillingPage })));
 const UsagePlanPage = lazy(() => import('@aether-app/pages/usage-plan').then(m => ({ default: m.UsagePlanPage })));
 const MePage = lazy(() => import('@aether-app/pages/me/me-page').then(m => ({ default: m.MePage })));
@@ -114,6 +115,7 @@ export function AppRouter() {
                 <Route path="/noesis" element={<PageSuspense><NoesisPage /></PageSuspense>} />
                 <Route path="/settings" element={<PageSuspense><SettingsPage /></PageSuspense>} />
                 <Route path="/settings/notifications" element={<PageSuspense><SettingsPage /></PageSuspense>} />
+                <Route path="/rights" element={<PageSuspense><RightsCenterPage /></PageSuspense>} />
                 <Route path="/notifications" element={<PageSuspense><NotificationCenterPage /></PageSuspense>} />
                 <Route path="/onboarding" element={<PageSuspense><OnboardingPage /></PageSuspense>} />
                 <Route path="/billing" element={<PageSuspense><BillingPage /></PageSuspense>} />

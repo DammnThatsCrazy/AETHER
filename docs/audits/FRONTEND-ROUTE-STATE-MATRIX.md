@@ -36,6 +36,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/noesis` | Noesis conversations and answers | no | I | A | A | A | I | `noesis-page.test.tsx`, `noesis-workspace.test.tsx` |
 | `/settings` | tenant profile, notifications, keys | yes | I | A | A | — | I | parameterized route-state family |
 | `/settings/notifications` | notification preferences | yes | I | A | A | — | I | parameterized route-state family |
+| `/rights` | tenant rights policies, evidence, decisions, impacts | yes | I | A | A | I | I | `rights-center-page.test.tsx` |
 | `/onboarding` | readiness and blockers | no | I | A | A | — | I | parameterized route-state family |
 | `/activation` | activation status, first value, plan/sdk/keys/test-event | yes | A | A | A | A | I | `activation-landing.test.tsx` (activation-page.tsx) |
 | `/billing` | account, subscription, invoices | yes | I | A | A | — | I | parameterized route-state family |
@@ -107,6 +108,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/tenant-mirror` | tenant mirror | yes | I | A | A | A | A | `tenant-mirror-page.test.tsx` |
 | `/kyber-exceptions` | exception queue | yes | A | A | A | A | A | `kyber-exceptions-page.test.tsx` |
 | `/kyber-commands` | governed commands | yes | A | A | A | A | A | `kyber-commands-page.test.tsx` |
+| `/rights-operations` | rights reconciliation and remediation | yes | I | A | A | I | I | `rights-operations-page.test.tsx` |
 | `/reliability` | services, queues, incidents, SLOs | yes | I | A | A | — | I | `kyber-route-state-family.test.tsx` |
 | `/journey-health` | journey pipeline health | no | I | A | — | — | I | `kyber-operations-empty-routes.test.tsx` |
 | `/reliability/incidents/:incidentId` | incident detail | yes | I | A | A | — | I | `kyber-route-state-family.test.tsx` |
@@ -164,16 +166,16 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 ## Coverage totals
 
-The denominator is the 135 data-bearing route patterns above: 51 Aether and
-84 Kyber routes.
+The denominator is the 137 data-bearing route patterns above: 52 Aether and
+85 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 18 / 135 (13.3%) | tracked for every route |
-| Empty-state assertions | 123 / 135 (91.1%) | at least 90% overall |
-| Error/unavailable assertions | 105 / 135 (77.8%) | 100% of critical routes |
-| Populated-state assertions | 33 / 135 (24.4%) | tracked for every route |
-| Critical routes with both empty and error assertions | 62 / 62 (100%) | 62 / 62 (100%) |
+| Explicit loading-state assertions | 18 / 137 (13.1%) | tracked for every route |
+| Empty-state assertions | 125 / 137 (91.2%) | at least 90% overall |
+| Error/unavailable assertions | 107 / 137 (78.1%) | 100% of critical routes |
+| Populated-state assertions | 33 / 137 (24.1%) | tracked for every route |
+| Critical routes with both empty and error assertions | 64 / 64 (100%) | 64 / 64 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,
 generic hook state, or a successful build does not count as coverage.

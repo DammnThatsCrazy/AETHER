@@ -70,6 +70,7 @@ class TenantEntryRequest(BaseModel):
         "security_investigation", "data_request", "diagnostics", "break_glass"
     ]
     duration_minutes: int = Field(default=60, ge=1, le=480)
+    rights_envelope_ref: Optional[str] = Field(default=None, max_length=256)
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
@@ -111,6 +112,7 @@ async def enter_tenant(body: TenantEntryRequest, request: Request) -> dict:
         purpose=body.purpose,
         reason=body.access_reason,
         ttl_minutes=body.duration_minutes,
+        rights_envelope_ref=body.rights_envelope_ref,
     )
 
     logger.info(
@@ -132,6 +134,7 @@ async def enter_tenant(body: TenantEntryRequest, request: Request) -> dict:
             "purpose": scope.purpose,
             "entered_at": scope.entered_at,
             "expires_at": scope.expires_at,
+            "rights_envelope_ref": scope.rights_envelope_ref,
             "message": f"Entering tenant {body.tenant_id} as operator — all actions audited",
         }
     ).to_dict()

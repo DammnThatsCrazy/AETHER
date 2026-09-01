@@ -67,6 +67,25 @@ EPISODE_GAP = timedelta(days=7)
 # Narrative momentum window: weighted count in the latest window vs the prior one.
 _NARRATIVE_WINDOW_DAYS = 7.0
 
+
+def _rights_fields(rows: list[Any]) -> dict[str, Any]:
+    """Union reference-only rights provenance from derived input rows."""
+    envelope_refs = sorted({
+        str(ref) for row in rows for ref in getattr(row, "rights_envelope_refs", []) if ref
+    })
+    decision_refs = sorted({
+        str(ref) for row in rows for ref in getattr(row, "rights_decision_refs", []) if ref
+    })
+    policies = sorted({
+        str(ref) for row in rows
+        if (ref := getattr(row, "rights_policy_set_ref", None))
+    })
+    return {
+        "rights_envelope_refs": envelope_refs,
+        "rights_decision_refs": decision_refs,
+        "rights_policy_set_ref": policies[0] if len(policies) == 1 else None,
+    }
+
 # Signed stance scores for alignment/momentum math (supportive > 0, opposed < 0;
 # neutral / uncertain / mixed / not_applicable / abstained carry no sign).
 _STANCE_SCORE: dict[StanceLabel, float] = {
@@ -134,6 +153,7 @@ def reduce_entity_state(
             freshness="insufficient_data",
             version=2,
             semantic_delta={"reducer_version": REDUCER_VERSION, "insufficient_data": True},
+            **_rights_fields(observations),
         )
 
     newest_at = max(o.occurred_at for o in active)
@@ -191,6 +211,7 @@ def reduce_entity_state(
         confidence=confidence,
         freshness="fresh",
         evidence_refs=[e for o in active[-5:] for e in o.evidence_refs],
+        **_rights_fields(active),
         version=2,
         semantic_delta={
             "reducer_version": REDUCER_VERSION,
@@ -346,6 +367,7 @@ def reduce_campaign_impact(
         # Exposure/association only — a causal claim needs a separate methodology.
         "causal_confidence": "observed_sequence",
         "semantic_mediated_revenue_estimate": None,
+        "rights": _rights_fields(observations),
     }
     if not active:
         return {**base, "insufficient_data": True, "stance_distribution": {}, "dominant_topics": []}
@@ -449,6 +471,7 @@ def reduce_relationship_state(
             support_count=0,
             confidence=0.0,
             valid_from=valid_from,
+            **_rights_fields(observations),
         )
 
     newest_at = max(o.occurred_at for o in active)
@@ -514,6 +537,7 @@ def reduce_relationship_state(
         support_count=len(active),
         confidence=round(max(_CONFIDENCE_FLOOR, weighted_confidence / total), 4),
         valid_from=valid_from,
+        **_rights_fields(active),
     )
 
 
@@ -577,6 +601,7 @@ def reduce_relationship_sentiment(
             relationship_ref=rel_ref,
             subject_ref=target_ref,
             valid_from=valid_from,
+            **_rights_fields(sentiments),
         )
 
     def _weighted(rows: list[Any]) -> tuple[float, float]:
@@ -620,6 +645,7 @@ def reduce_relationship_sentiment(
         confidence=round(max(_CONFIDENCE_FLOOR, source_conf), 4),
         support_count=len(sentiments) + len(reverse),
         valid_from=valid_from,
+        **_rights_fields(sentiments + reverse),
     )
 
 
@@ -725,6 +751,7 @@ def reduce_narrative_state(
                 "window_days": _NARRATIVE_WINDOW_DAYS,
                 "confidence": round(max(_CONFIDENCE_FLOOR, weighted_confidence / total), 4),
                 "reducer_version": REDUCER_VERSION,
+                "rights": _rights_fields(rows),
             }
         )
     return states
@@ -766,9 +793,19 @@ async def recompute_cascades(tenant_id: str) -> list[SemanticCascade]:
     its result durable. Cascade ids are content-derived (tenant|subject|topic|
     stance), so recomputation refreshes rows instead of duplicating them.
     """
-    from .engine import cascades_for_tenant
+    from .engine import cascades_for_tenant, get_store
 
     cascades = await cascades_for_tenant(tenant_id)
+    observations = await get_store().list_semantic(tenant_id)
+    by_observation = {o.observation_id: o for o in observations}
+    cascades = [
+        cascade.model_copy(update=_rights_fields([
+            by_observation[ref]
+            for ref in cascade.seed_observations
+            if ref in by_observation
+        ]))
+        for cascade in cascades
+    ]
     repo = SemanticFactRepository(_GOLD_CASCADE_TABLE, mode="gold")
     for cascade in cascades:
         idem = f"gold_cascade:{tenant_id}:{cascade.cascade_id}:{REDUCER_VERSION}"
@@ -905,6 +942,7 @@ def reduce_episodes(
                 sentiment_end_state=_boundary_snapshot(exit_rows),
                 confidence=round(max(_CONFIDENCE_FLOOR, weighted_confidence / total), 4),
                 evidence_refs=[e for o in segment[:5] for e in o.evidence_refs],
+                **_rights_fields(segment),
             )
         )
     return episodes

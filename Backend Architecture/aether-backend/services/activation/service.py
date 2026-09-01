@@ -32,6 +32,8 @@ from fastapi import Request
 from shared.common.common import ConflictError, utc_now
 from shared.billing import stripe_repository
 from shared.logger.logger import get_logger, metrics
+from shared.rights_authority.pep import rights_mode
+from shared.rights_authority.service import rights_authority
 from repositories.lake import BronzeRepository
 from repositories.repos import APIKeyRepository
 from dependencies.providers import get_producer, get_registry
@@ -147,6 +149,7 @@ class ActivationService:
 
     async def _status_view(self, record: dict[str, Any]) -> dict[str, Any]:
         billing = await self.derive_billing_state(record["tenant_id"])
+        rights = await self._rights_activation(record["tenant_id"])
         return {
             "state": record["state"],
             "selected_plan_tier": record.get("selected_plan_tier"),
@@ -156,6 +159,29 @@ class ActivationService:
             "first_value_evidence": record.get("first_value_evidence", {}),
             "waiting_reason": record.get("waiting_reason"),
             "history": record.get("history", []),
+            "rights": rights,
+        }
+
+    async def _rights_activation(self, tenant_id: str) -> dict[str, Any]:
+        """Resolve the policy state used by activation without trusting cache."""
+        if rights_mode() == "off":
+            return {"mode": "off", "state": "not_enforced"}
+        policies = await rights_authority.repository.list_policies(tenant_id)
+        active = [
+            policy for policy in policies
+            if policy.get("activation_state") in {"rights_active", "rights_restricted"}
+        ]
+        if len(active) != 1:
+            return {
+                "mode": rights_mode(),
+                "state": "blocked",
+                "reason": "rights_policy_missing_or_ambiguous",
+            }
+        policy = active[0]
+        return {
+            "mode": rights_mode(),
+            "state": policy.get("activation_state"),
+            "policy_set_ref": policy.get("policy_set_id"),
         }
 
     # ── Billing (read-only derivation) ───────────────────────────────────────
@@ -199,6 +225,13 @@ class ActivationService:
         self, tenant_id: str, count: int, label: str
     ) -> dict[str, Any]:
         record = await self._load_or_create(tenant_id)
+        rights = await self._rights_activation(tenant_id)
+        if rights.get("state") == "blocked":
+            record["rights_blocked_reason"] = rights.get("reason")
+            await self.repo.save_or_update(record)
+            raise ConflictError("activation is blocked until an active rights policy is available")
+        record["rights_policy_set_ref"] = rights.get("policy_set_ref")
+        record["rights_activation_state"] = rights.get("state")
         self.advance(record, S.keys_created, reason=f"count={count}")
         tier = record.get("selected_plan_tier") or "P1"
         keys = await self.provision_sdk_keys(tenant_id, count, label, tier=tier)

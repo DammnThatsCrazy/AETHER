@@ -79,11 +79,11 @@ class IdentityResolutionEngine:
         # ── 2. Upsert vertices ───────────────────────────────────────
         fp_id: Optional[str] = None
         if fingerprint:
-            fp_id = await self.repository.upsert_fingerprint_vertex(fingerprint)
+            fp_id = await self.repository.upsert_fingerprint_vertex(fingerprint, tenant_id)
 
         ip_hash: Optional[str] = None
         if ip_enrichment.get("ip_hash"):
-            ip_hash = await self.repository.upsert_ip_vertex(ip_enrichment)
+            ip_hash = await self.repository.upsert_ip_vertex(ip_enrichment, tenant_id)
 
         location_id: Optional[str] = None
         if ip_enrichment.get("city") or ip_enrichment.get("country_code"):
@@ -93,28 +93,30 @@ class IdentityResolutionEngine:
                 "city": ip_enrichment.get("city", ""),
                 "latitude": ip_enrichment.get("latitude", 0.0),
                 "longitude": ip_enrichment.get("longitude", 0.0),
-            })
+            }, tenant_id)
 
         # ── 3. Create edges ──────────────────────────────────────────
         if fp_id:
-            await self.repository.link_user_to_fingerprint(user_id, fp_id)
+            await self.repository.link_user_to_fingerprint(user_id, fp_id, tenant_id=tenant_id)
         if ip_hash:
-            await self.repository.link_user_to_ip(user_id, ip_hash)
+            await self.repository.link_user_to_ip(user_id, ip_hash, tenant_id=tenant_id)
         if ip_hash and location_id:
-            await self.repository.link_ip_to_location(ip_hash, location_id)
+            await self.repository.link_ip_to_location(ip_hash, location_id, tenant_id=tenant_id)
         if email:
             import hashlib
             email_hash = hashlib.sha256(email.lower().strip().encode()).hexdigest()
-            await self.repository.link_user_to_email(user_id, email_hash)
+            await self.repository.link_user_to_email(user_id, email_hash, tenant_id=tenant_id)
         if phone:
             import hashlib
             phone_hash = hashlib.sha256(phone.strip().encode()).hexdigest()
-            await self.repository.link_user_to_phone(user_id, phone_hash)
+            await self.repository.link_user_to_phone(user_id, phone_hash, tenant_id=tenant_id)
         for wallet in wallets:
             addr = wallet.get("address", "")
             vm = wallet.get("vm", "evm")
             if addr:
-                await self.repository.link_user_to_wallet(user_id, addr, vm)
+                await self.repository.link_user_to_wallet(
+                    user_id, addr, vm, tenant_id=tenant_id,
+                )
 
         # ── 4. Find candidate profiles ───────────────────────────────
         candidates: dict[str, dict] = {}

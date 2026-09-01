@@ -119,9 +119,33 @@ def plan_graph(tenant_id: str, records: list[dict]) -> tuple[list[dict], list[di
     pure, non-mutating (drives both the commit and the graph-preview)."""
     vertices: dict[str, dict] = {}
     edges: list[dict] = []
+
+    def rights_properties(record: dict) -> dict[str, Any]:
+        """Flatten only IRRL receipt references onto a graph projection."""
+        rights = record.get("rights")
+        if not isinstance(rights, dict):
+            return {}
+        envelope_refs = list(rights.get("envelope_refs") or [])
+        if rights.get("envelope_ref") and rights["envelope_ref"] not in envelope_refs:
+            envelope_refs.insert(0, rights["envelope_ref"])
+        decision_refs = list(rights.get("rights_decision_refs") or [])
+        return {
+            "rights_envelope_id": envelope_refs[0] if envelope_refs else None,
+            "rights_envelope_refs": envelope_refs,
+            "rights_decision_id": decision_refs[0] if decision_refs else None,
+            "rights_decision_refs": decision_refs,
+            "rights_policy_set_ref": rights.get("policy_set_ref"),
+            "rights_source_grant_refs": list(
+                rights.get("rights_source_grant_refs")
+                or ([rights["source_grant_ref"]] if rights.get("source_grant_ref") else [])
+            ),
+            "rights_lineage_set_hash": rights.get("lineage_set_hash"),
+        }
+
     for rec in records:
         primitive = rec["primitive"]
         f = rec["fields"]
+        rights = rights_properties(rec)
         if primitive == "entity":
             ext = f.get("external_id")
             if not ext:
@@ -130,7 +154,10 @@ def plan_graph(tenant_id: str, records: list[dict]) -> tuple[list[dict], list[di
             vertices[vid] = {
                 "vertex_id": vid,
                 "vertex_type": str(f.get("entity_type") or "Entity"),
-                "properties": {k: v for k, v in f.items() if k != "attributes"},
+                "properties": {
+                    **{k: v for k, v in f.items() if k != "attributes"},
+                    **{k: v for k, v in rights.items() if v is not None},
+                },
             }
         elif primitive == "resource":
             ext = f.get("external_id")
@@ -140,7 +167,10 @@ def plan_graph(tenant_id: str, records: list[dict]) -> tuple[list[dict], list[di
             vertices[vid] = {
                 "vertex_id": vid,
                 "vertex_type": str(f.get("resource_type") or "Resource"),
-                "properties": {k: v for k, v in f.items() if k != "attributes"},
+                "properties": {
+                    **{k: v for k, v in f.items() if k != "attributes"},
+                    **{k: v for k, v in rights.items() if v is not None},
+                },
             }
         elif primitive == "identifier":
             value = f.get("value")
@@ -151,24 +181,34 @@ def plan_graph(tenant_id: str, records: list[dict]) -> tuple[list[dict], list[di
             vertices[vid] = {
                 "vertex_id": vid,
                 "vertex_type": "Identifier",
-                "properties": {"identifier_type": str(itype), "value": str(value)},
+                "properties": {
+                    "identifier_type": str(itype),
+                    "value": str(value),
+                    **{k: v for k, v in rights.items() if v is not None},
+                },
             }
             entity_ref = f.get("entity_ref")
             if entity_ref:
-                edges.append({
+                edge = {
                     "from": _vid("entity", tenant_id, str(entity_ref)),
                     "to": vid,
                     "type": "HAS_IDENTIFIER",
-                })
+                }
+                if rights:
+                    edge["rights"] = rights
+                edges.append(edge)
         elif primitive == "relationship":
             from_ref, to_ref = f.get("from_ref"), f.get("to_ref")
             if not from_ref or not to_ref:
                 continue
-            edges.append({
+            edge = {
                 "from": _vid("entity", tenant_id, str(from_ref)),
                 "to": _vid("entity", tenant_id, str(to_ref)),
                 "type": str(f.get("relationship_type") or "RELATED_TO"),
-            })
+            }
+            if rights:
+                edge["rights"] = rights
+            edges.append(edge)
     return list(vertices.values()), edges
 
 
@@ -208,10 +248,9 @@ async def _stage_and_mutate(
         records, errors = build_primitive_records(fields, rows)
         for rec in records:
             rec["file_id"] = file_id  # lineage for the Silver projection
-        all_records.extend(records)
         row_errors.extend(errors)
         for idx, row in enumerate(rows):
-            _rec, is_new = await bronze.ingest(
+            bronze_record, is_new = await bronze.ingest(
                 source=BRONZE_DOMAIN,
                 source_tag=commit_id,
                 provider_record_id=f"{file_id}:{idx}",
@@ -222,6 +261,14 @@ async def _stage_and_mutate(
             )
             if is_new:
                 bronze_rows += 1
+            # Every primitive derived from this source row carries the same
+            # durable receipt, including a resumed import that reuses an
+            # existing Bronze row.
+            bronze_rights = bronze_record.get("rights") or {}
+            for rec in records:
+                if rec.get("row") == idx:
+                    rec["rights"] = bronze_rights
+        all_records.extend(records)
 
     vertices, edges = plan_graph(tenant_id, all_records)
     created_edges = await _apply_graph(tenant_id, commit_id, vertices, edges)
@@ -299,7 +346,20 @@ async def _apply_graph(
                 edge_type=e["type"],
                 from_vertex_id=e["from"],
                 to_vertex_id=e["to"],
-                properties={"tenant_id": tenant_id, "import_commit_id": commit_id},
+                properties={
+                    "tenant_id": tenant_id,
+                    "import_commit_id": commit_id,
+                    **{
+                        key: value
+                        for key, value in (e.get("rights") or {}).items()
+                        if key in {
+                            "rights_decision_id", "rights_decision_refs",
+                            "rights_envelope_id", "rights_envelope_refs",
+                            "rights_policy_set_ref", "rights_lineage_set_hash",
+                            "rights_source_grant_refs",
+                        } and value is not None
+                    },
+                },
             ),
             operation="edge_created", tenant_id=tenant_id,
             actor_kind="import", actor_id=commit_id,

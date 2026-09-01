@@ -15,6 +15,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, Union
 
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.routing import APIRoute
+from starlette.responses import JSONResponse
 
 from dependencies.providers import get_cache, get_graph
 from shared.cache.cache import CacheKey
@@ -24,6 +26,8 @@ from shared.graph.relationship_layers import RelationshipLayer, classify_edge_ty
 from shared.graph.traversal import GraphTraversalEngine, TraversalResult, _build_path_explanation
 from shared.graph.path_scoring import classify_path, compute_evidence_coverage, make_path_id, score_path
 from shared.logger.logger import metrics
+from shared.rights_authority.contracts import ActorRef
+from shared.rights_authority.pep import evaluate_rights, rights_mode
 from services.data_quality.service import drift_service, intelligence_quality_service
 from services.operational_intelligence.models import (
     DeepTraversalJob,
@@ -74,7 +78,81 @@ from services.operational_intelligence.models import (
 # reconciliation at the graph family's representative choke point.
 from services.metering_evidence.families import meter_family_usage  # noqa: E402
 
-router = APIRouter(prefix="/v1/graph", tags=["Operational Intelligence / Graph"])
+class _RightsGraphRoute(APIRoute):
+    """Gate graph reads/exports before touching graph or decision-aware cache."""
+
+    def get_route_handler(self):
+        original = super().get_route_handler()
+
+        async def handler(request: Request):
+            if rights_mode() == "off":
+                return await original(request)
+            tenant = getattr(request.state, "tenant", None)
+            if tenant is None:
+                return await original(request)
+            payload: dict[str, Any] = {}
+            if request.method in {"POST", "PUT", "PATCH"}:
+                try:
+                    body = await request.json()
+                    payload = body if isinstance(body, dict) else {}
+                except Exception:
+                    payload = {}
+            tenant_id = (
+                payload.get("tenant_id") or payload.get("tenantId")
+                or tenant.tenant_id
+            )
+            if tenant_id != tenant.tenant_id:
+                return JSONResponse(status_code=403, content={
+                    "code": "rights_graph_tenant_mismatch",
+                    "detail": "graph request tenant does not match authenticated tenant",
+                })
+            refs = (
+                payload.get("rights_envelope_refs")
+                or payload.get("rightsEnvelopeRefs")
+                or []
+            )
+            policy_ref = payload.get("rights_policy_set_ref") or payload.get("rightsPolicySetRef")
+            grant_refs = (
+                payload.get("rights_source_grant_refs")
+                or payload.get("rightsSourceGrantRefs")
+                or []
+            )
+            action = "export" if request.url.path.rstrip("/").endswith("/export") else "read"
+            result = await evaluate_rights(
+                action=action,
+                tenant_id=tenant_id,
+                actor=ActorRef(
+                    kind="tenant_user",
+                    id=getattr(tenant, "user_id", None) or tenant.tenant_id,
+                    tenant_id=tenant.tenant_id,
+                ),
+                purpose="graph_export" if action == "export" else "graph_read",
+                artifacts=[{"kind": "graph_query", "id": payload.get("query_id") or request.url.path, "tenant_id": tenant_id}],
+                envelope_refs=refs,
+                source_grant_refs=grant_refs,
+                policy_set_ref=policy_ref,
+                metadata={"surface": request.url.path},
+            )
+            request.state.graph_rights_result = result
+            if not result.proceed:
+                return JSONResponse(status_code=403, content={
+                    "code": "rights_graph_read_blocked",
+                    "detail": "graph operation blocked by the rights authority",
+                    "rights": {
+                        "decision_id": result.decision.decision_id if result.decision else None,
+                        "outcome": result.decision.outcome if result.decision else "unavailable",
+                        "reasons": list(result.reason_codes),
+                    },
+                })
+            return await original(request)
+
+        return handler
+
+
+router = APIRouter(
+    prefix="/v1/graph", tags=["Operational Intelligence / Graph"],
+    route_class=_RightsGraphRoute,
+)
 
 _GRAPH_CONTRACT_VERSION = "v1"
 _RELATIONSHIP_LAYERS = ["H2H", "H2A", "A2H", "A2A"]
@@ -1116,6 +1194,13 @@ async def universal_graph_query(
         tenant_id=body.tenant_id,
         query_hash=_q_hash,
         as_of=body.as_of or "",
+        permission_hash=getattr(
+            getattr(request, "state", None), "graph_rights_result", None
+        ).decision.decision_id if getattr(
+            getattr(request, "state", None), "graph_rights_result", None
+        ) and getattr(
+            getattr(request, "state", None), "graph_rights_result", None
+        ).decision else "",
     )
     try:
         _cached = await cache.get(_cache_key)

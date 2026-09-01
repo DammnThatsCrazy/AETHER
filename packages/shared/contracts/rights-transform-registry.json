@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contractVersion": "1.0.0",
+  "transforms": [
+    {"id": "feature_extraction", "inputClasses": ["tenant_contributed_data", "tenant_confidential_intelligence"], "outputClass": "aether_computational_artifact", "requiresApproval": false, "requiresEvidence": ["lineage"]},
+    {"id": "embedding", "inputClasses": ["tenant_contributed_data", "tenant_confidential_intelligence"], "outputClass": "aether_computational_artifact", "requiresApproval": false, "requiresEvidence": ["lineage", "retention"]},
+    {"id": "model_evaluation", "inputClasses": ["tenant_contributed_data", "tenant_confidential_intelligence", "aether_computational_artifact"], "outputClass": "aether_computational_artifact", "requiresApproval": true, "requiresEvidence": ["lineage", "training_rights"]},
+    {"id": "model_training", "inputClasses": ["tenant_contributed_data", "tenant_confidential_intelligence", "aether_computational_artifact"], "outputClass": "aether_computational_artifact", "requiresApproval": true, "requiresEvidence": ["lineage", "training_rights", "revocation_strategy"]},
+    {"id": "aggregation", "inputClasses": ["tenant_contributed_data", "tenant_confidential_intelligence"], "outputClass": "tenant_confidential_intelligence", "requiresApproval": false, "requiresEvidence": ["lineage", "aggregate_threshold"]},
+    {"id": "deidentification", "inputClasses": ["tenant_contributed_data", "tenant_confidential_intelligence"], "outputClass": "olympus_generalized_intelligence", "requiresApproval": true, "requiresEvidence": ["lineage", "privacy_test", "reidentification_test", "aggregate_threshold"]},
+    {"id": "promote_to_olympus_generalized_graph", "inputClasses": ["tenant_confidential_intelligence", "aether_computational_artifact"], "outputClass": "olympus_generalized_intelligence", "requiresApproval": true, "requiresEvidence": ["lineage", "privacy_test", "reidentification_test", "aggregate_threshold", "release_proof"]},
+    {"id": "export", "inputClasses": ["tenant_contributed_data", "tenant_confidential_intelligence", "aether_computational_artifact"], "outputClass": "tenant_confidential_intelligence", "requiresApproval": false, "requiresEvidence": ["lineage", "recipient"]},
+    {"id": "recomputation", "inputClasses": ["tenant_contributed_data", "tenant_confidential_intelligence", "aether_computational_artifact"], "outputClass": "aether_computational_artifact", "requiresApproval": false, "requiresEvidence": ["lineage", "revocation_strategy"]},
+    {"id": "deletion", "inputClasses": ["tenant_contributed_data", "tenant_confidential_intelligence", "aether_computational_artifact", "olympus_generalized_intelligence"], "outputClass": "retained_compliance_record", "requiresApproval": false, "requiresEvidence": ["lineage", "deletion_receipt"]}
+  ]
+}

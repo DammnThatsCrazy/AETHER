@@ -14,6 +14,12 @@ def test_sdk_package_boundaries_validate_cleanly() -> None:
     assert errors == []
 
 
+def test_shared_rights_contract_is_exported_from_package_root() -> None:
+    """Rights types must be consumable through @aether/shared, not a deep path."""
+    barrel = ts_exports.ROOT / "packages" / "shared" / "index.ts"
+    assert "export * from './rights-authority';" in barrel.read_text(encoding="utf-8")
+
+
 def _make_pkg(tmp: str, manifest: dict, *, dist_dts_only: bool = False, dist_full: bool = False) -> Path:
     pkg_dir = Path(tmp)
     (pkg_dir / "index.ts").write_text("export {};\n")

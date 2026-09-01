@@ -37,6 +37,17 @@ class TrainingDataDecision(BaseModel):
     quarantine_reasons: list[str] = Field(default_factory=list)
     # Purposes that required a separate model-training opt-in the caller lacked.
     missing_training_opt_in: list[str] = Field(default_factory=list)
+    # IRRL evidence. These are references only; the signed decision remains
+    # in the rights ledger and is re-evaluated for every training admission.
+    rights_decision_id: Optional[str] = None
+    rights_outcome: Optional[str] = None
+    rights_envelope_refs: list[str] = Field(default_factory=list)
+    rights_policy_set_ref: Optional[str] = None
+    rights_source_grant_refs: list[str] = Field(default_factory=list)
+    rights_lineage_set_hash: Optional[str] = None
+    retention_deadline: Optional[str] = None
+    revocation_strategy: Optional[str] = None
+    training_basis_evidence: list[str] = Field(default_factory=list)
     created_at: str = Field(default_factory=now_iso)
 
 

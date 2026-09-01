@@ -171,6 +171,7 @@ class ProfileComposer:
         include_agent_economic: bool = False,
         timeline_limit: int = 50,
         graph_depth: int = 1,
+        rights_decision_id: Optional[str] = None,
     ) -> dict:
         """Assemble a complete profile view from all subsystems.
 
@@ -182,7 +183,9 @@ class ProfileComposer:
         now = utc_now().isoformat()
 
         async def _core() -> dict:
-            profile = await self._identity.get_profile(tenant_id, user_id)
+            profile = await self._identity.get_profile(
+                tenant_id, user_id, rights_decision_id=rights_decision_id,
+            )
             return profile or {"user_id": user_id, "tenant_id": tenant_id, "status": "unknown"}
 
         unknown_core = {"user_id": user_id, "tenant_id": tenant_id, "status": "unknown"}
@@ -193,7 +196,10 @@ class ProfileComposer:
              lambda: self._resolver.get_all_identifiers(user_id, tenant_id=tenant_id), [], True),
             ("consent", lambda: self._consent.get_consent(tenant_id, user_id), None, True),
             ("timeline",
-             lambda: self._compose_timeline(tenant_id, user_id, limit=timeline_limit),
+             lambda: self._compose_timeline(
+                 tenant_id, user_id, limit=timeline_limit,
+                 rights_decision_id=rights_decision_id,
+             ),
              [], include_timeline),
             ("graph",
              lambda: self._compose_graph(user_id, tenant_id=tenant_id, depth=graph_depth),
@@ -274,11 +280,13 @@ class ProfileComposer:
         }
 
     async def _compose_timeline(
-        self, tenant_id: str, user_id: str, limit: int = 50
+        self, tenant_id: str, user_id: str, limit: int = 50,
+        rights_decision_id: Optional[str] = None,
     ) -> list[dict]:
         """Assemble time-ordered events from analytics."""
         events = await self._analytics.query_events(
-            tenant_id, {"user_id": user_id}, limit=limit
+            tenant_id, {"user_id": user_id}, limit=limit,
+            rights_decision_id=rights_decision_id,
         )
         return [
             {
@@ -423,6 +431,7 @@ class ProfileComposer:
         include: Optional[list[str]] = None,
         timeline_limit: int = 250,
         graph_limit: int = 750,
+        rights_decision_id: Optional[str] = None,
     ) -> dict:
         """Return the normalized internal Kyber Profile360 surface.
 
@@ -441,6 +450,7 @@ class ProfileComposer:
             include_intelligence="analytics" in include_set or "identity" in include_set,
             include_lake="financial" in include_set or "analytics" in include_set,
             timeline_limit=timeline_limit,
+            rights_decision_id=rights_decision_id,
         )
         graph = full.get("graph") if isinstance(full.get("graph"), dict) else {}
         if "graph" in include_set and graph_limit != 50:

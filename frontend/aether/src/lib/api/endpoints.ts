@@ -1802,6 +1802,20 @@ export const api = {
       restClient.delete(`/v1/me/api-keys/${id}`, wrap(unknownSchema)),
   },
 
+  // ── IRRL tenant rights center ─────────────────────────────────────────────
+  rights: {
+    policies: () =>
+      restClient.get('/v1/integrations/data-rights/policies', wrap(unknownSchema)).then(r => r.data),
+    envelopes: () =>
+      restClient.get('/v1/integrations/data-rights/envelopes', wrap(unknownSchema)).then(r => r.data),
+    decisions: (limit = 100) =>
+      restClient.get(`/v1/integrations/data-rights/decisions?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+    evidenceManifests: () =>
+      restClient.get('/v1/integrations/data-rights/evidence-manifests', wrap(unknownSchema)).then(r => r.data),
+    impacts: () =>
+      restClient.get('/v1/integrations/data-rights/impacts', wrap(unknownSchema)).then(r => r.data),
+  },
+
   // ── SDK fleet health & remote config (tenant-scoped) ────────────────────────
   sdk: {
     /** Fleet health summary for the caller's tenant. */

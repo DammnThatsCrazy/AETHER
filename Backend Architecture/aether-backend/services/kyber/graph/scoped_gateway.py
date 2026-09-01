@@ -53,6 +53,8 @@ from shared.common.common import ForbiddenError, utc_now
 from shared.graph.graph import tenant_of
 from shared.temporal.instant import try_parse_instant
 from shared.logger.logger import get_logger, metrics
+from shared.rights_authority.contracts import ActorRef, DestinationRef
+from shared.rights_authority.pep import evaluate_rights
 
 from ..access.disclosure import DisclosureLevel
 from .contracts import now_iso
@@ -294,6 +296,7 @@ class _Authorized:
     store: Any
     graph: Any
     evidence_allowed: bool
+    rights_decision_id: Optional[str] = None
 
     @property
     def scope_id(self) -> Optional[str]:
@@ -327,7 +330,7 @@ class ScopedTenantGraphGateway:
 
     # ── The ordered gate ─────────────────────────────────────────────────────
 
-    def _authorize(self, request: Any, tenant_id: str) -> _Authorized:
+    async def _authorize(self, request: Any, tenant_id: str) -> _Authorized:
         """Run steps 1-6. Raises ``ForbiddenError`` at the first failure."""
         # 1 ── The route dependency must have authorized this request. A handler
         # reaching the gateway without a context is a wiring mistake, and the
@@ -383,6 +386,37 @@ class ScopedTenantGraphGateway:
                 "The tenant named by the request disagrees with the active scope",
             )
 
+        # IRRL is the second, independent authority: the workforce scope says
+        # which tenant an operator may approach, while rights says whether the
+        # underlying tenant data may be read on Kyber. The envelope reference
+        # is carried on the scope and is never accepted from the request path.
+        rights_result = await evaluate_rights(
+            action="operate_kyber",
+            tenant_id=scope_tenant,
+            actor=ActorRef(
+                kind="operator",
+                id=str(getattr(context, "operator_id", "kyber")),
+            ),
+            purpose=str(getattr(scope, "purpose", "diagnostics")),
+            envelope_refs=(
+                [scope.rights_envelope_ref] if getattr(scope, "rights_envelope_ref", None)
+                else getattr(scope, "metadata", {}).get("rights_envelope_refs", [])
+            ),
+            policy_set_ref=getattr(scope, "metadata", {}).get("rights_policy_set_ref"),
+            destination=DestinationRef(kind="aether_internal", id="kyber"),
+            artifacts=[{"kind": "tenant_graph", "id": scope_tenant, "tenant_id": scope_tenant}],
+            metadata={
+                "scope_id": getattr(scope, "scope_id", None),
+                "ticket_reference": getattr(scope, "ticket_reference", None),
+            },
+        )
+        if not rights_result.proceed:
+            reason = ",".join(rights_result.reason_codes) or "rights_denied"
+            raise _deny(
+                "rights_authority",
+                f"Kyber tenant read blocked by rights authority: {reason}",
+            )
+
         # 5 ── Disclosure ceiling.
         disclosure = getattr(context, "granted_disclosure", DisclosureLevel.D0_PLATFORM_TOPOLOGY)
         disclosure = DisclosureLevel(int(disclosure))
@@ -410,6 +444,10 @@ class ScopedTenantGraphGateway:
             store=store,
             graph=graph,
             evidence_allowed=EVIDENCE_CAPABILITY in capabilities,
+            rights_decision_id=(
+                rights_result.decision.decision_id
+                if rights_result.decision else None
+            ),
         )
 
     # ── Reads ────────────────────────────────────────────────────────────────
@@ -438,7 +476,7 @@ class ScopedTenantGraphGateway:
         Raises:
             ForbiddenError: At the first failed step of the ordered gate.
         """
-        resolved = self._authorize(request, tenant_id)
+        resolved = await self._authorize(request, tenant_id)
         budget = min(max(1, int(limit)), self.max_results)
 
         # Ask for one more than the budget so truncation is *detected* rather
@@ -495,7 +533,7 @@ class ScopedTenantGraphGateway:
         return the same ``found: false`` shape on purpose — distinguishing them
         would turn this route into a cross-tenant existence oracle.
         """
-        resolved = self._authorize(request, tenant_id)
+        resolved = await self._authorize(request, tenant_id)
         walk_depth = min(max(1, int(depth)), self.max_depth)
 
         anchor = await resolved.graph.get_vertex(vertex_id)
@@ -666,6 +704,7 @@ class ScopedTenantGraphGateway:
             "missing_inputs": missing_inputs,
             "exposure_known": not truncated and not missing_inputs,
             "computed_at": now_iso(),
+            "rights_decision_id": resolved.rights_decision_id,
         }
 
 

@@ -136,6 +136,7 @@ class AccessScopeService:
         disclosure_level: "DisclosureLevel | int | str" = DisclosureLevel.D3_TENANT_VISIBLE,
         ttl_minutes: Optional[int] = None,
         policy_decision_id: Optional[str] = None,
+        rights_envelope_ref: Optional[str] = None,
     ) -> AccessScope:
         """Open a scope on exactly one tenant, closing any previous one.
 
@@ -146,6 +147,11 @@ class AccessScopeService:
         """
         if not tenant_id:
             raise BadRequestError("A tenant access scope must name a tenant")
+        from shared.rights_authority.pep import rights_mode
+        if rights_mode() != "off" and not (ticket_reference or "").strip():
+            raise BadRequestError(
+                "a rights-enforced Kyber scope requires a case/ticket reference"
+            )
 
         purpose = self._validate_purpose(purpose)
         reason = self._validate_reason(reason)
@@ -176,6 +182,7 @@ class AccessScopeService:
             entered_at=now.isoformat(),
             expires_at=(now + timedelta(minutes=ttl)).isoformat(),
             policy_decision_id=policy_decision_id,
+            rights_envelope_ref=rights_envelope_ref,
             metadata={"ttl_minutes": ttl, "superseded": previous.scope_id if previous else None},
         )
         await self._repo.insert(scope.scope_id, scope.model_dump())

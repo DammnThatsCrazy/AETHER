@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contractVersion": "1.0.0",
+  "profiles": [
+    {"id": "legacy_restricted", "label": "Legacy restricted", "requiresSignedSchedule": false, "allowsLearning": false, "allowsCrossTenantAggregate": false},
+    {"id": "secure_tenant", "label": "Secure tenant", "requiresSignedSchedule": true, "allowsLearning": false, "allowsCrossTenantAggregate": false},
+    {"id": "collaborative_learning", "label": "Collaborative learning", "requiresSignedSchedule": true, "allowsLearning": true, "allowsCrossTenantAggregate": true},
+    {"id": "strategic_data_exchange", "label": "Strategic data exchange", "requiresSignedSchedule": true, "allowsLearning": true, "allowsCrossTenantAggregate": true}
+  ],
+  "rightsActivationStates": ["rights_pending", "rights_review", "rights_active", "rights_restricted", "rights_revoked"]
+}

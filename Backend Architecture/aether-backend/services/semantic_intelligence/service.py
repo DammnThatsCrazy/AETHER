@@ -225,6 +225,53 @@ class SemanticIntelligenceService:
         """
         store = get_store()
 
+        # Semantic observations are representations derived from tenant data.
+        # Requiring the incoming Bronze rights context here closes the second
+        # write boundary: a caller cannot bypass the ingestion PEP by invoking
+        # the semantic route/consumer directly.
+        from services.ingestion.rights import (
+            authorize_derivation,
+            rights_context_from_result,
+        )
+        from shared.rights_authority.pep import rights_mode
+
+        if rights_mode() != "off":
+            raw_rights = payload.get("rights")
+            rights = dict(raw_rights) if isinstance(raw_rights, dict) else {}
+            input_envelopes = list(rights.get("envelope_refs") or [])
+            if not input_envelopes and rights.get("envelope_ref"):
+                input_envelopes = [str(rights["envelope_ref"])]
+            source_grants = [str(ref) for ref in rights.get("source_grant_refs") or [] if ref]
+            derivation = await authorize_derivation(
+                tenant_id,
+                artifact={
+                    "kind": "semantic_observation",
+                    "id": str(payload.get("source_event_id") or payload.get("event_id") or "unknown"),
+                    "tenant_id": tenant_id,
+                },
+                input_envelope_refs=input_envelopes,
+                policy_set_ref=rights.get("policy_set_ref"),
+                source_grant_refs=source_grants,
+                transform="embedding",
+                evidence={
+                    "lineage": rights.get("lineage_root_refs") or input_envelopes,
+                    "retention": rights.get("retention_class"),
+                },
+            )
+            if derivation.decision is not None:
+                payload["rights"] = rights_context_from_result(
+                    derivation,
+                    extra={"source_grant_refs": source_grants},
+                )
+            if not derivation.proceed:
+                blocked = self._status_observation(
+                    payload,
+                    tenant_id,
+                    ObservationStatus.QUARANTINED,
+                    "rights_deny:" + ",".join(derivation.reason_codes or ("rights_unavailable",)),
+                )
+                return await store.put_semantic(blocked), []
+
         # 1. Consent — fail closed when authoritative enforcement is enabled.
         blocked = await self._consent_block(payload, tenant_id)
         if blocked is not None:

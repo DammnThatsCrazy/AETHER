@@ -11,7 +11,7 @@ toc_depth: 2
 source_files:
   - Backend Architecture/aether-backend/repositories/lake.py
   - scripts/gold_tenant_backfill.py
-last_synced_commit: "8796e0d"
+last_synced_commit: "a4276ce1"
 ---
 
 # Runbook — Gold Tenant Backfill

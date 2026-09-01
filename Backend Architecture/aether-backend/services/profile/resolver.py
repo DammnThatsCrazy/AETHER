@@ -42,6 +42,7 @@ class ProfileResolver:
         session_id: Optional[str] = None,
         social_handle: Optional[str] = None,
         customer_id: Optional[str] = None,
+        rights_decision_id: Optional[str] = None,
     ) -> Optional[str]:
         """Resolve any identifier to a canonical user_id.
 
@@ -81,6 +82,8 @@ class ProfileResolver:
                 continue
 
             cache_key = f"aether:profile:resolve:{tenant_id}:{id_type}:{id_value}"
+            if rights_decision_id:
+                cache_key = f"{cache_key}:rights:{rights_decision_id}"
             cached = await self._cache.get(cache_key)
             if cached:
                 return cached

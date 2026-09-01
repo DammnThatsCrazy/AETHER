@@ -31,6 +31,62 @@ from shared.logger.logger import get_logger, metrics
 logger = get_logger("aether.lake")
 
 
+async def _require_rights_context(
+    context: Any, operation: str, *, tenant_id: Optional[str] = None,
+) -> None:
+    """Enforce the last-mile rights stamp at every lake materialization.
+
+    Route-level PEPs protect the normal request path, but repositories are also
+    called by workers, replay jobs, and provider adapters.  In enforce mode a
+    caller must carry the authority's decision references and successful
+    outcomes into the row being written.  This intentionally does not trust a
+    client-provided boolean: the authority has already signed the decisions and
+    the repository only accepts their stamped, reference-only context.
+    """
+    from shared.rights_authority.pep import rights_mode
+
+    if rights_mode() != "enforce":
+        return
+    if not isinstance(context, dict):
+        raise ValueError(f"rights_{operation}_blocked: rights context missing")
+    decision_refs = context.get("rights_decision_refs") or []
+    outcomes = context.get("decision_outcomes") or []
+    if not decision_refs and context.get("decision_id"):
+        decision_refs = [context["decision_id"]]
+    if not outcomes and context.get("outcome"):
+        outcomes = [context["outcome"]]
+    if not decision_refs or not outcomes or any(
+        outcome not in {"allow", "allow_with_obligations"} for outcome in outcomes
+    ):
+        raise ValueError(f"rights_{operation}_blocked: decision receipt missing or not allowed")
+    from shared.rights_authority.contracts import RightsDecision
+    from shared.rights_authority.service import rights_authority
+
+    # References are not authorization. Re-load the immutable signed decision
+    # and verify its signature immediately before materialization.
+    if len(decision_refs) != len(outcomes):
+        raise ValueError(f"rights_{operation}_blocked: decision receipt shape invalid")
+    for decision_ref, stamped_outcome in zip(decision_refs, outcomes):
+        raw = await rights_authority.repository.get_decision(str(decision_ref))
+        if raw is None:
+            raise ValueError(f"rights_{operation}_blocked: decision receipt unavailable")
+        decision = RightsDecision(**{
+            key: value for key, value in raw.items()
+            if key in RightsDecision.model_fields
+        })
+        if not rights_authority.verify_signature(decision):
+            raise ValueError(f"rights_{operation}_blocked: decision signature invalid")
+        if decision.outcome != stamped_outcome or decision.outcome not in {
+            "allow", "allow_with_obligations",
+        }:
+            raise ValueError(f"rights_{operation}_blocked: decision outcome mismatch")
+        if tenant_id and decision.tenant_id not in {None, tenant_id}:
+            raise ValueError(f"rights_{operation}_blocked: decision tenant mismatch")
+    from shared.rights_authority.obligations import enforce_obligations
+
+    enforce_obligations({**context, "tenant_id": context.get("tenant_id")}, operation)
+
+
 async def _tenant_scoped_find(
     repo: BaseRepository,
     base_filters: dict,
@@ -190,6 +246,10 @@ def make_raw_record(
         "raw_payload_hash": raw_payload_hash,
         "sensitivity_classification": sensitivity_classification,
         "quarantine_status": quarantine_status,
+        # Rights receipts are reference-only.  Keeping them at the row level
+        # lets downstream Silver/Gold workers carry the source decision without
+        # copying provider payloads or plaintext evidence.
+        "rights": payload.get("rights") if isinstance(payload.get("rights"), dict) else {},
     }
 
 
@@ -237,6 +297,31 @@ class BronzeRepository(BaseRepository):
         Returns (record, is_new) where is_new is True for fresh inserts and
         False when the record already existed (duplicate).
         """
+        rights = payload.get("rights") if isinstance(payload.get("rights"), dict) else None
+        if not rights:
+            # Bronze is also called by provider workers and replay/import
+            # paths, not only the HTTP ingestion route.  Resolve the same
+            # server-side grant and policy here so a bypass cannot persist a
+            # row merely by skipping the route PEP.
+            from shared.rights_authority.pep import rights_mode
+
+            if rights_mode() != "off":
+                from services.ingestion.rights import authorize_ingestion
+
+                authorized = await authorize_ingestion(
+                    tenant_id,
+                    {**payload, "event_id": provider_record_id},
+                )
+                if not authorized.allowed:
+                    raise ValueError(
+                        f"rights_bronze_store_blocked: {authorized.reason or 'not_allowed'}"
+                    )
+                payload = {**payload, "rights": authorized.context}
+        else:
+            payload = {**payload, "rights": rights}
+        await _require_rights_context(
+            payload.get("rights"), "bronze_store", tenant_id=tenant_id,
+        )
         record = make_raw_record(
             source=source,
             source_tag=source_tag,
@@ -368,6 +453,15 @@ class SilverRepository(BaseRepository):
         Silver promotion is blocked if the originating Bronze record is quarantined
         or has invalid provenance. Pass bronze_record to enforce this gate.
         """
+        rights = normalized.get("rights")
+        if not isinstance(rights, dict) or not rights:
+            bronze_rights = (bronze_record or {}).get("rights")
+            if not isinstance(bronze_rights, dict) or not bronze_rights:
+                bronze_payload = (bronze_record or {}).get("payload") or {}
+                bronze_rights = bronze_payload.get("rights") if isinstance(bronze_payload, dict) else None
+            rights = bronze_rights if isinstance(bronze_rights, dict) else {}
+        await _require_rights_context(rights, "silver_store", tenant_id=tenant_id)
+        normalized = {**normalized, "rights": rights}
         if bronze_record is not None:
             eligible, reason = self.check_promotion_eligibility(bronze_record)
             if not eligible:
@@ -453,12 +547,14 @@ class GoldRepository(BaseRepository):
         lineage_id: Optional[str] = None,
         source_manifest_ids: Optional[list] = None,
         model_training_eligible: bool = False,
+        rights: Optional[dict] = None,
     ) -> dict:
         """Materialize a metric/feature/highlight into Gold.
 
         lineage_id links this Gold record back to its Bronze source manifests
         and data rights grants for audit, revocation, and compliance.
         """
+        await _require_rights_context(rights, "gold_store", tenant_id=tenant_id)
         # tenant_id is part of the identity: without it, two tenants
         # materializing the same metric for the same entity collide on one
         # record_id and silently overwrite each other's Gold value. Mirrors the
@@ -483,6 +579,7 @@ class GoldRepository(BaseRepository):
             "lineage_id": lineage_id or "",
             "source_manifest_ids": source_manifest_ids or [],
             "model_training_eligible": model_training_eligible,
+            "rights": rights or {},
         }
 
         existing = await self.find_by_id(record_id)

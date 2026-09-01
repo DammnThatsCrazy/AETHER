@@ -27,6 +27,9 @@ from services.account_lifecycle.storage_registry import (
 from shared.cache.cache import CacheKey
 from shared.common.common import BadRequestError, ConflictError, NotFoundError
 from shared.logger.logger import get_logger
+from shared.rights_authority.contracts import ActorRef, RevokeRightsAuthority
+from shared.rights_authority.pep import rights_mode
+from shared.rights_authority.service import rights_authority
 from shared.temporal import SYSTEM_CLOCK, ensure_aware_utc, parse_instant_strict, to_iso_utc
 
 logger = get_logger("aether.account_lifecycle")
@@ -107,6 +110,14 @@ class AccountLifecycleService:
         request_id = f"adl_{uuid.uuid4().hex[:20]}"
         recovery_until = now + timedelta(days=RECOVERY_WINDOW_DAYS)
         domains = manifest_template()
+        rights_impact = None
+        if rights_mode() != "off":
+            rights_impact = await rights_authority.revoke(RevokeRightsAuthority(
+                root_refs=[f"tenant:{tenant_id}"],
+                reason="account_deletion",
+                actor=ActorRef(kind="tenant_user", id=actor_id, tenant_id=tenant_id),
+                tenant_id=tenant_id,
+            ))
         workflow = {
             "id": request_id,
             "tenant_id": tenant_id,
@@ -119,6 +130,9 @@ class AccountLifecycleService:
             "idempotency_key": idempotency_key,
             "storage_results": {"domains": domains, "registry_version": 1},
             "retry_count": 0,
+            "rights_impact_graph_id": rights_impact.impact_graph_id if rights_impact else None,
+            "rights_root_refs": [f"tenant:{tenant_id}"],
+            "rights_impact_status": "open" if rights_impact else None,
             "completed_at": None,
             "failed_at": None,
             "cancelled_at": None,
@@ -265,15 +279,25 @@ class AccountLifecycleService:
             item.get("status") == StorageResultStatus.FAILED.value
             for item in domains.values()
         )
-        next_status = DeletionStatus.FAILED.value if has_failed else DeletionStatus.COMPLETED.value
         manifest = dict(workflow.get("erasure_manifest") or {})
         manifest["domains"] = domains
         manifest["fully_erased"] = not any(
             item.get("status") in {
+                StorageResultStatus.PENDING.value,
+                StorageResultStatus.FAILED.value,
                 StorageResultStatus.UNAVAILABLE.value,
                 StorageResultStatus.DEFERRED.value,
             }
             for item in domains.values()
+        )
+        rights_incomplete = bool(
+            workflow.get("rights_impact_graph_id")
+            and not manifest["fully_erased"]
+        )
+        next_status = (
+            DeletionStatus.FAILED.value
+            if has_failed or rights_incomplete
+            else DeletionStatus.COMPLETED.value
         )
         manifest["completion"] = (
             "failed" if has_failed else
@@ -285,6 +309,21 @@ class AccountLifecycleService:
             "storage_results": {"domains": domains, "registry_version": 1},
             "erasure_manifest": manifest,
         }
+        if workflow.get("rights_impact_graph_id"):
+            changes["rights_impact_status"] = "blocked" if rights_incomplete else "completed"
+            if not rights_incomplete:
+                await rights_authority.update_impact_status(
+                    workflow["rights_impact_graph_id"],
+                    "completed",
+                    receipt_refs=[
+                        f"account-deletion:{workflow_id}",
+                        *[
+                            str(item.get("completed_at"))
+                            for item in domains.values()
+                            if item.get("completed_at")
+                        ],
+                    ],
+                )
         if next_status == DeletionStatus.COMPLETED.value:
             changes["completed_at"] = _iso(current)
         else:

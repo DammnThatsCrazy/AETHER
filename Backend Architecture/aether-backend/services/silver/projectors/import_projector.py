@@ -56,6 +56,10 @@ class ImportProjector:
                     "row_index": row_index,
                     "bronze_source_tag": commit_id,
                     "bronze_record_id": f"{file_id}:{row_index}",
+                    # Reference-only IRRL context inherited from the source
+                    # Bronze row. SilverFactWriter revalidates the signed
+                    # decisions immediately before persistence.
+                    "rights": rec.get("rights") or {},
                 }
             )
         return ProjectionResult(table=SILVER_IMPORT_TABLE, rows=rows)

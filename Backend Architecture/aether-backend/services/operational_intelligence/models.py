@@ -238,6 +238,9 @@ class ApiErrorBody(ContractModel):
 class TenantScopedRequest(ContractModel):
     tenantId: str
     orgId: Optional[str] = None
+    rightsEnvelopeRefs: list[str] = Field(default_factory=list)
+    rightsPolicySetRef: Optional[str] = None
+    rightsSourceGrantRefs: list[str] = Field(default_factory=list)
 
 
 class EntityRef(ContractModel):
@@ -613,6 +616,9 @@ class UniversalGraphQueryRequest(ContractModel):
     include_provenance: bool = False
     include_clusters: bool = False
     explain: bool = False
+    rights_envelope_refs: list[str] = Field(default_factory=list)
+    rights_policy_set_ref: Optional[str] = None
+    rights_source_grant_refs: list[str] = Field(default_factory=list)
 
 
 class GraphResultMeta(ContractModel):
@@ -655,6 +661,9 @@ class GraphFacetRequest(ContractModel):
     facet_fields: list[str] = Field(default_factory=list)
     limit: int = Field(default=100, ge=1, le=500)
     as_of: Optional[str] = None
+    rights_envelope_refs: list[str] = Field(default_factory=list)
+    rights_policy_set_ref: Optional[str] = None
+    rights_source_grant_refs: list[str] = Field(default_factory=list)
 
 
 class GraphFacetResponse(ContractModel):

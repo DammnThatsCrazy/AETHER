@@ -115,7 +115,7 @@ class LinkResolveRequest(_ContextRequest):
 async def validate_context(request: Request, payload: ValidateRequest) -> APIResponse:
     tenant = _tenant(request, "read")
     context = _bind_scope(payload.context, tenant)
-    result = exploration_service.validate(context)
+    result = await exploration_service.validate_with_rights(context, request=request)
     metrics.increment("exploration_validate_total")
     _count_dispositions(result["applicability"])
     return APIResponse(data=result)
@@ -218,6 +218,32 @@ async def get_view(request: Request, view_id: str) -> APIResponse:
     return APIResponse(data={"view": record})
 
 
+@router.post("/views/{view_id}/execute")
+async def execute_saved_view(
+    request: Request,
+    view_id: str,
+    graph=Depends(get_graph),
+    cache=Depends(get_cache),
+    limit: int = Query(default=100, ge=1, le=500),
+    cursor: Optional[str] = None,
+) -> APIResponse:
+    """Execute a saved view after re-evaluating its current rights."""
+    tenant = _tenant(request, "read")
+    record = await _views.get_scoped(tenant.tenant_id, view_id)
+    if record is None:
+        raise NotFoundError("exploration saved view")
+    context = _bind_scope(ExplorationContextV1(**record["context"]), tenant)
+    envelope = await exploration_service.execute_query(
+        context,
+        request=request,
+        graph=graph,
+        cache=cache,
+        limit=limit,
+        cursor=cursor,
+    )
+    return APIResponse(data={"view_id": view_id, "envelope": envelope.model_dump(mode="json")})
+
+
 @router.delete("/views/{view_id}")
 async def delete_view(request: Request, view_id: str) -> APIResponse:
     tenant = _tenant(request, "write")
@@ -249,7 +275,7 @@ async def resolve_link(request: Request, payload: LinkResolveRequest) -> APIResp
     retargeted = context.model_copy(
         update={"scope": context.scope.model_copy(update={"surface": payload.to})}
     )
-    result = exploration_service.validate(retargeted)
+    result = await exploration_service.validate_with_rights(retargeted, request=request)
     _count_dispositions(result["applicability"])
     return APIResponse(
         data={

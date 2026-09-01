@@ -28,6 +28,8 @@ from shared.exploration.models import (
 from services.exploration.adapters import AdapterContext, AdapterResult, get_adapter
 from services.exploration.facets import FacetResult, compute_facets
 from services.exploration.planner import ExplorationPlan, plan_context
+from shared.rights_authority.contracts import ActorRef
+from shared.rights_authority.pep import RightsPEPResult, evaluate_rights
 
 
 def _as_of(context: ExplorationContextV1) -> Optional[str]:
@@ -45,6 +47,40 @@ def _temporal_warnings(context: ExplorationContextV1) -> list[str]:
     if mode not in caps["supported_temporal_modes"]:
         return [f"temporal_mode_not_supported_by_surface:{mode}"]
     return []
+
+
+async def _authorize_read(
+    context: ExplorationContextV1, request: Any,
+) -> RightsPEPResult:
+    """Evaluate the tenant read before an adapter or cache is touched."""
+    tenant_id = context.scope.tenant_id
+    user_id = getattr(getattr(request, "state", None), "tenant", None)
+    actor_id = getattr(user_id, "user_id", None) or tenant_id or "exploration"
+    rights = context.rights or {}
+    return await evaluate_rights(
+        action="read",
+        tenant_id=tenant_id,
+        actor=ActorRef(kind="tenant_user", id=str(actor_id), tenant_id=tenant_id),
+        purpose="exploration_read",
+        artifacts=context.anchors or (),
+        envelope_refs=rights.get("envelope_refs") or rights.get("envelope_ids") or (),
+        source_grant_refs=rights.get("source_grant_refs") or (),
+        policy_set_ref=rights.get("policy_set_ref"),
+        metadata={"surface": context.scope.surface, "query_context": context.model_dump(mode="json", exclude={"rights"})},
+    )
+
+
+def _rights_payload(result: RightsPEPResult) -> Optional[dict[str, Any]]:
+    if result.decision is None:
+        return None
+    return {
+        "decision_id": result.decision.decision_id,
+        "outcome": result.decision.outcome,
+        "reasons": result.decision.reasons,
+        "envelope_refs": result.decision.envelope_refs,
+        "policy_set_ref": result.decision.policy_set_ref,
+        "obligations": [obligation.model_dump(mode="json") for obligation in result.decision.obligations],
+    }
 
 
 def build_plan(
@@ -74,6 +110,23 @@ def validate(
     }
 
 
+async def validate_with_rights(
+    context: ExplorationContextV1,
+    *,
+    request: Any = None,
+    redacted_fields: Optional[frozenset[str]] = None,
+) -> dict[str, Any]:
+    """Dry-run applicability plus the same rights decision used at execution."""
+    result = validate(context, redacted_fields=redacted_fields)
+    rights_result = await _authorize_read(context, request)
+    result["rights"] = _rights_payload(rights_result)
+    if not rights_result.proceed:
+        result["warnings"] = list(result["warnings"]) + [
+            "rights_decision_would_suppress_adapter_execution",
+        ]
+    return result
+
+
 def _truth_state(adapter_result: Optional[AdapterResult], adapter_available: bool) -> str:
     if not adapter_available:
         return "error"
@@ -91,6 +144,8 @@ def _envelope(
     adapter_available: bool,
     started: float,
     extra_warnings: list[str],
+    rights: Optional[dict[str, Any]] = None,
+    rights_blocked: bool = False,
 ) -> ExplorationResultEnvelope:
     truncated = bool(adapter_result and adapter_result.truncation.truncated)
     trunc_reason = adapter_result.truncation.reason if adapter_result else None
@@ -103,6 +158,8 @@ def _envelope(
         warnings += list(adapter_result.warnings)
     if not adapter_available:
         warnings.append("surface_backend_not_available_on_this_deployment")
+    if rights_blocked:
+        warnings.append("rights_decision_suppressed_adapter_execution")
 
     return ExplorationResultEnvelope(
         query_id=str(uuid.uuid4()),
@@ -120,7 +177,7 @@ def _envelope(
             truncation_reason=trunc_reason,
         ),
         truth=ExplorationTruth(
-            overall_state=_truth_state(adapter_result, adapter_available),
+            overall_state=("suppressed" if rights_blocked else _truth_state(adapter_result, adapter_available)),
             dimensions=[],
             freshness_watermark=utc_now().isoformat(),
         ),
@@ -131,6 +188,7 @@ def _envelope(
             adapters=[plan.surface] if adapter_available else [],
         ),
         warnings=warnings,
+        rights=rights,
     )
 
 
@@ -174,10 +232,14 @@ async def execute_query(
     started = time.monotonic()
     plan = build_plan(context, redacted_fields=redacted_fields)
     adapter_available = get_adapter(plan.surface) is not None
-    adapter_result = await _run_adapter(
-        plan, context, request=request, graph=graph, cache=cache,
-        limit=limit, cursor=cursor,
-    )
+    rights_result = await _authorize_read(context, request)
+    rights = _rights_payload(rights_result)
+    adapter_result = None
+    if rights_result.proceed:
+        adapter_result = await _run_adapter(
+            plan, context, request=request, graph=graph, cache=cache,
+            limit=limit, cursor=cursor,
+        )
     return _envelope(
         context, plan,
         data=(adapter_result.data if adapter_result else None),
@@ -185,6 +247,8 @@ async def execute_query(
         adapter_available=adapter_available,
         started=started,
         extra_warnings=[],
+        rights=rights,
+        rights_blocked=not rights_result.proceed,
     )
 
 
@@ -216,10 +280,14 @@ async def execute_facets(
     if caps is not None and not caps.get("supports_facets", False):
         extra_warnings.append("surface_does_not_support_facets")
 
-    adapter_result = await _run_adapter(
-        plan, context, request=request, graph=graph, cache=cache,
-        limit=limit, cursor=None,
-    )
+    rights_result = await _authorize_read(context, request)
+    rights = _rights_payload(rights_result)
+    adapter_result = None
+    if rights_result.proceed:
+        adapter_result = await _run_adapter(
+            plan, context, request=request, graph=graph, cache=cache,
+            limit=limit, cursor=None,
+        )
     records = _facet_records(adapter_result)
     facet_result: FacetResult = compute_facets(records, fields)
 
@@ -230,12 +298,15 @@ async def execute_facets(
         adapter_available=adapter_available,
         started=started,
         extra_warnings=extra_warnings + facet_result.warnings,
+        rights=rights,
+        rights_blocked=not rights_result.proceed,
     )
 
 
 __all__ = [
     "build_plan",
     "validate",
+    "validate_with_rights",
     "execute_query",
     "execute_facets",
     "ApplicabilityReport",

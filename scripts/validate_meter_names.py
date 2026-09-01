@@ -35,6 +35,9 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "ingestion_sensitive_scrub_total",
     "ingestion_request_privacy_blocked_total",
     "ingestion_data_policy_blocked_total",
+    # IRRL pre-persistence policy enforcement (batch.py and connector workers)
+    "ingestion_rights_blocked_total",
+    "dune_rights_blocked_total",
     # Temporal enforcement (temporal_enforcement.py hook in batch.py; mode ladder
     # off/shadow/warn/enforce — meters identical in every active mode)
     "ingestion_temporal_state_total",

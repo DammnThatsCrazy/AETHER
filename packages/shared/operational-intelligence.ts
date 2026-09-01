@@ -65,6 +65,9 @@ export interface ApiErrorBody {
 export interface TenantScopedRequest {
   tenantId: string;
   orgId?: string;
+  rightsEnvelopeRefs?: string[];
+  rightsPolicySetRef?: string;
+  rightsSourceGrantRefs?: string[];
 }
 
 export type ConsistencyMode = 'cache' | 'read_your_writes' | 'strong';

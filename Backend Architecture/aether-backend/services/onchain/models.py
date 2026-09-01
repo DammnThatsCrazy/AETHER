@@ -39,6 +39,10 @@ class ActionRecord(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
     metadata: dict[str, Any] = Field(default_factory=dict)
+    tenant_id: Optional[str] = None
+    rights_envelope_refs: list[str] = Field(default_factory=list)
+    rights_policy_set_ref: Optional[str] = None
+    rights_source_grant_refs: list[str] = Field(default_factory=list)
 
 
 class ChainListenerConfig(BaseModel):

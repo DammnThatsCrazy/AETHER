@@ -103,6 +103,11 @@ class ArtifactRepository:
         job_id: Optional[str] = None,
         expires_at: Optional[str] = None,
     ) -> dict:
+        from repositories.lake import _require_rights_context
+
+        await _require_rights_context(
+            (manifest or {}).get("rights"), "artifact_store", tenant_id=tenant_id,
+        )
         if not tenant_id:
             raise BadRequestError("tenant_id is required")
         if len(content) > MAX_ARTIFACT_BYTES:

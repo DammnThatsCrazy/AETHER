@@ -83,6 +83,7 @@ class AuditLedger:
     async def record(
         self,
         *,
+        audit_event_id: Optional[str] = None,
         actor_id: str,
         actor_type: ActorType,
         event_type: str,
@@ -96,19 +97,32 @@ class AuditLedger:
         user_agent: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
     ) -> SecurityAuditEvent:
+        # Rights-decision outbox delivery supplies a deterministic event id so
+        # a worker retry is idempotent even if it crashed after the audit row
+        # was written but before the outbox status was updated.
+        if audit_event_id:
+            existing = await self._repo.find_by_id(audit_event_id)
+            if existing is not None:
+                return SecurityAuditEvent(**existing)
+
+        event_kwargs: dict[str, Any] = {
+            "tenant_id": tenant_id,
+            "actor_id": actor_id,
+            "actor_type": actor_type,
+            "event_type": event_type,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "action": action,
+            "outcome": outcome,
+            "policy_decision_id": policy_decision_id,
+            "ip_address": ip_address,
+            "user_agent": user_agent,
+            "metadata": sanitize_metadata(metadata),
+        }
+        if audit_event_id:
+            event_kwargs["audit_event_id"] = audit_event_id
         event = SecurityAuditEvent(
-            tenant_id=tenant_id,
-            actor_id=actor_id,
-            actor_type=actor_type,
-            event_type=event_type,
-            resource_type=resource_type,
-            resource_id=resource_id,
-            action=action,
-            outcome=outcome,
-            policy_decision_id=policy_decision_id,
-            ip_address=ip_address,
-            user_agent=user_agent,
-            metadata=sanitize_metadata(metadata),
+            **event_kwargs,
         )
         chain_key = tenant_id or ""
         prev_hash = _TENANT_TAIL.get(chain_key, "")

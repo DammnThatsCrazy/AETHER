@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "contractVersion": "1.0.0",
+  "rightsClasses": [
+    {"id": "tenant_contributed_data", "label": "Tenant contributed data", "tenantScoped": true},
+    {"id": "tenant_confidential_intelligence", "label": "Tenant confidential intelligence", "tenantScoped": true},
+    {"id": "aether_computational_artifact", "label": "Aether computational artifact", "tenantScoped": true},
+    {"id": "olympus_sourced_data", "label": "Olympus sourced data", "tenantScoped": false},
+    {"id": "olympus_generalized_intelligence", "label": "Olympus generalized intelligence", "tenantScoped": false},
+    {"id": "platform_operational_data", "label": "Platform operational data", "tenantScoped": false},
+    {"id": "retained_compliance_record", "label": "Retained compliance record", "tenantScoped": true}
+  ],
+  "actions": [
+    {"id": "ingest", "label": "Ingest", "requiresEnvelope": false, "requiresSourceGrant": true},
+    {"id": "store", "label": "Store", "requiresEnvelope": true, "requiresSourceGrant": true},
+    {"id": "read", "label": "Read", "requiresEnvelope": true, "requiresSourceGrant": false},
+    {"id": "graph_mutate", "label": "Mutate graph", "requiresEnvelope": true, "requiresSourceGrant": false},
+    {"id": "derive", "label": "Derive", "requiresEnvelope": true, "requiresSourceGrant": false},
+    {"id": "train", "label": "Train", "requiresEnvelope": true, "requiresSourceGrant": true},
+    {"id": "evaluate", "label": "Evaluate", "requiresEnvelope": true, "requiresSourceGrant": true},
+    {"id": "aggregate", "label": "Aggregate", "requiresEnvelope": true, "requiresSourceGrant": true},
+    {"id": "disclose", "label": "Disclose", "requiresEnvelope": true, "requiresSourceGrant": false},
+    {"id": "export", "label": "Export", "requiresEnvelope": true, "requiresSourceGrant": false},
+    {"id": "retain", "label": "Retain", "requiresEnvelope": true, "requiresSourceGrant": false},
+    {"id": "delete", "label": "Delete", "requiresEnvelope": true, "requiresSourceGrant": false},
+    {"id": "operate_kyber", "label": "Operate Kyber", "requiresEnvelope": true, "requiresSourceGrant": false}
+  ],
+  "decisionOutcomes": ["allow", "deny", "allow_with_obligations", "pending_review", "unavailable"],
+  "rightsProfiles": [
+    {"id": "legacy_restricted", "allowedActions": ["read", "delete", "retain"], "reusable": false},
+    {"id": "secure_tenant", "allowedActions": ["ingest", "store", "read", "graph_mutate", "derive", "evaluate", "export", "retain", "delete"], "reusable": false},
+    {"id": "collaborative_learning", "allowedActions": ["ingest", "store", "read", "graph_mutate", "derive", "train", "evaluate", "aggregate", "export", "retain", "delete"], "reusable": true},
+    {"id": "strategic_data_exchange", "allowedActions": ["ingest", "store", "read", "graph_mutate", "derive", "train", "evaluate", "aggregate", "disclose", "export", "retain", "delete", "operate_kyber"], "reusable": true}
+  ],
+  "retentionClasses": [
+    {"id": "tenant_event_90d", "defaultDays": 90},
+    {"id": "tenant_intelligence_term", "defaultDays": null},
+    {"id": "derived_artifact_30d", "defaultDays": 30},
+    {"id": "compliance_record_7y", "defaultDays": 2555},
+    {"id": "olympus_generalized_indefinite", "defaultDays": null}
+  ],
+  "disclosureLevels": ["none", "masked", "tenant_scoped", "aggregate", "raw"],
+  "actorKinds": ["tenant_user", "service", "operator", "system"],
+  "destinations": ["tenant", "aether_internal", "olympus_plane", "external_recipient"]
+}

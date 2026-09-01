@@ -16,6 +16,7 @@ from services.integrations.dune_feeder.service import (
     record_feeder_run,
 )
 from repositories.lake import BronzeRepository, SilverRepository
+from services.ingestion.rights import authorize_ingestion
 
 logger = get_logger("aether.feeder.dune.worker")
 
@@ -58,11 +59,24 @@ async def run_dune_poll_cycle() -> dict[str, Any]:
             ingested = 0
             for i, row in enumerate(rows):
                 provider_id = f"{cfg.get('query_id', 'unknown')}:worker:{i}"
+                raw_payload = {**row, "tenant_id": tenant_id, "event_id": provider_id}
+                rights = await authorize_ingestion(
+                    tenant_id,
+                    raw_payload,
+                    source_grant_ref=cfg.get("rights_source_grant_ref"),
+                    artifact_kind="dune_record",
+                )
+                if not rights.allowed:
+                    metrics.increment(
+                        "dune_rights_blocked_total",
+                        labels={"tenant_id": tenant_id, "reason": rights.reason or "denied"},
+                    )
+                    continue
                 _, is_new = await _bronze.ingest(
                     source="dune",
                     source_tag=f"dune:{cfg.get('query_id', 'unknown')}",
                     provider_record_id=provider_id,
-                    payload={**row, "tenant_id": tenant_id},
+                    payload={**raw_payload, "rights": rights.context},
                     schema_version="1.0",
                     entity_id=row.get("entity_id", provider_id),
                     entity_type=row.get("entity_type", "dune_row"),
