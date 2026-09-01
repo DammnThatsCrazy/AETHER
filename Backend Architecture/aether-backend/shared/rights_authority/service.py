@@ -6,10 +6,12 @@ import hashlib
 import hmac
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Callable, Optional
 
 from shared.logger.logger import get_logger, metrics
+from shared.temporal import SYSTEM_CLOCK
+from shared.temporal.instant import coerce_utc_lenient
 from shared.rights_authority.generated_registry import (
     RIGHTS_ACTION_DEFINITIONS,
     RIGHTS_PROFILE_DEFINITIONS,
@@ -55,17 +57,11 @@ class RightsAuthorityUnavailable(RuntimeError):
 
 
 def _parse_time(value: Optional[str]) -> Optional[datetime]:
-    if not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except (TypeError, ValueError):
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return coerce_utc_lenient(value)
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return SYSTEM_CLOCK.now()
 
 
 def _is_effective(start: Optional[str], end: Optional[str], at: datetime) -> bool:

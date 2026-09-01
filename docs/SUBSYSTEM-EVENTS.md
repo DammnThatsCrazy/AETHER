@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: "ead4ba6c"
+last_synced_commit: "a4276ce1"
 ---
 
 # Events / Kafka Subsystem

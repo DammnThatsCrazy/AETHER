@@ -16,7 +16,7 @@ source_files:
   - Backend Architecture/aether-backend/services/ml_serving/routes.py
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "bb1aef2"
+last_synced_commit: "a4276ce1"
 ---
 
 # ML Security Threat Model
