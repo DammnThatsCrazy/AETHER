@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "aether-tfmcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/client",
+        "streamable-http",
+        "https://<ALB_DNS_NAME>/mcp"
+      ],
+      "env": {
+        "TFMCP_AUTH_TOKEN": "<TOKEN>"
+      },
+      "timeout": 120,
+      "transport": "streamable-http"
+    }
+  }
+}

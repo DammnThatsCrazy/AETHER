@@ -21,3 +21,23 @@ aurora_max_acu = 4
 
 # Logs — short CloudWatch retention; bulk logs to S3.
 log_retention_days = 3
+
+
+# ==============================================================================
+# tfmcp — Terraform MCP Server (opt-in)
+# ============================================================================
+# Set enable_tfmcp_in_lean = true to deploy the tfmcp MCP server on the
+# production-lean profile. Required before applying:
+#   1. Build and push the image: ./AWS\ Deployment/aether-aws/build-tfmcp.sh
+#   2. Pin the digest below (sha256:...)
+#   3. Run the reviewed promotion workflow (.github/workflows/terraform-promote.yml)
+#
+# Cost: one Fargate task at 512 CPU / 1024 MiB is ~$7-15/month. Re-run the
+# cost model before applying to confirm the total stays within the profile
+# budget (config/deployment_profiles.yaml).
+# ============================================================================
+
+enable_tfmcp_in_lean  = true
+tfmcp_image_digest    = ""  # set after build: "sha256:..."
+tfmcp_auth_token      = ""  # auto-generated if empty (32+ chars)
+tfmcp_github_pat      = ""  # set if Aether repo is private
