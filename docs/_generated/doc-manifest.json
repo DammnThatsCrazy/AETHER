@@ -7497,6 +7497,24 @@
       "canonical_owner": "graph@aether"
     },
     {
+      "path": "docs/source-of-truth/VERIFICATION_SPINE.md",
+      "title": "Verification and Release Spine",
+      "slug": "source-of-truth/verification-spine",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "dev",
+        "dev-senior",
+        "ops",
+        "architect"
+      ],
+      "status": "active",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/staging-activation-runbook.md",
       "title": "Staging Activation Runbook",
       "slug": "operations/staging-activation-runbook",

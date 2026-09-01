@@ -286,7 +286,7 @@ def is_pytest_suite(suite: TestSuite) -> bool:
     uses this same predicate so its notion of "invoked by repo_doctor" can
     never drift from what repo_doctor actually runs.
     """
-    return "pytest" in suite.runner
+    return "pytest" in suite.runner or "scripts/run_pytest_files.py" in suite.runner
 
 
 def suites_for(

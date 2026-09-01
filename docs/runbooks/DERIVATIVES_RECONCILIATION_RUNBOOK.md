@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/services/derivatives/admin_routes.py
   - Backend Architecture/aether-backend/services/derivatives/reconciliation.py
 canonical_owner: platform@aether
-last_synced_commit: "ac900d5f"
+last_synced_commit: "845b1c14"
 ---
 
 # Derivatives Reconciliation Runbook

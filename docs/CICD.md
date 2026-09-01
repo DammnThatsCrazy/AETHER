@@ -21,7 +21,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "c148176e"
+last_synced_commit: "2b7f4d95"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -288,7 +288,7 @@ Two things get promoted, on two separate paths that must never be conflated: the
 | `staging-ttl-guard.yml` | hourly schedule; dispatch | Enforces the staging awake lease. Runs no Terraform at all; it can scale ECS to zero and lower the ECS autoscaling floor, which can only reduce running compute. **Not armed without `AWS_STAGING_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or enforce the TTL, reports it is a NO-OP and exits green — staging may still be running and will NOT be guarded; that is NOT a claim that staging is asleep. The moment the role is wired it enforces exactly as before, fail-closed in both directions. | no |
 | `ephemeral-ttl-guard.yml` | hourly schedule; dispatch | Fail-closed TTL guard for the demo/preview ephemeral profiles. Reads the SSM lease at `/aether/{profile}/{env}/lifecycle/expires-at` (written by `ephemeral_env.py provision`) and ends the run red when the lease is missing or expired; enforcement is the operator-run `ephemeral_env.py teardown` (scale-to-zero + floor-zeroing + lease removal). Runs no Terraform. **Not armed without `AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or trip the TTL, reports it is a NO-OP and exits green — demo/preview environments may still be running and will NOT be guarded; that is NOT a claim that demo/preview are asleep. The moment the role is wired it enforces exactly as before, fail-closed. | no |
 
-| `repo-consistency.yml` | PR / push to `main` | `make ci-check`, including documentation consistency, contract checks, and the targeted frontend-brand guardrail. | no |
+| `repo-consistency.yml` | PR / push to `main` | Classifies changed paths with the verification router, uploads the JSON selection as PR evidence, then runs `make ci-check`, including documentation consistency, contract checks, and the targeted frontend-brand guardrail. The selection is advisory until the remaining verification-spine dependency and evidence work is complete; it does not weaken the canonical gate. | no |
 | `production-status.yml` | 12-hourly schedule; dispatch | `scripts/production_status.py --strict` + readiness scorecard artifact. | no |
 | `production-equivalent-ci.yml` | PR / push / dispatch | Boots Postgres + Redis service containers, applies the full Alembic graph to a **fresh** database (`alembic upgrade head` → single head), and runs real-pool ingestion tests against the real stack: a round-trip smoke test (M1) plus idempotency/concurrency tests (M2) that prove concurrent `ingest_many` of the same key is exactly-once via the real UNIQUE index + `ON CONFLICT`, plus measurement/attribution repo tests (M4) exercising `conversion_repo`/`spend_repo`/`attribution_run_repo` real ON CONFLICT, tenant-scope, FX-provenance round-trip, and the single-active-run invariant — properties the in-memory (`AETHER_ENV=local`) dict fallback gets "right" for free without proving (that path never runs Alembic). **Non-blocking** (not a required check); real-stack tests skip without `DATABASE_URL`. | no |
 

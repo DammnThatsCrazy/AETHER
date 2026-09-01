@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.olympuslabs.io/contracts/delivery/migration-evidence/v1",
+  "title": "Aether MigrationEvidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "migration_id", "owner", "from_version", "to_version", "compatibility", "expected_duration_seconds", "validation", "repair_strategy", "staging_rehearsal_required", "status"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "migration_id": {"type": ["string", "null"], "minLength": 1},
+    "owner": {"type": ["string", "null"], "minLength": 1},
+    "from_version": {"type": ["string", "null"], "minLength": 1},
+    "to_version": {"type": ["string", "null"], "minLength": 1},
+    "compatibility": {"enum": ["expand_contract", "backward_compatible", "breaking", null]},
+    "expected_duration_seconds": {"type": ["integer", "null"], "minimum": 1},
+    "actual_duration_seconds": {"type": "number", "minimum": 0},
+    "validation": {"type": ["string", "null"], "minLength": 1},
+    "repair_strategy": {"type": ["string", "null"], "minLength": 1},
+    "staging_rehearsal_required": {"type": ["boolean", "null"]},
+    "status": {"enum": ["PASS", "PASS_WITH_DEGRADATION", "BLOCKED", "FAILED", "NOT_APPLICABLE"]},
+    "evidence": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  },
+  "allOf": [{
+    "if": {"properties": {"status": {"enum": ["PASS", "PASS_WITH_DEGRADATION"]}}},
+    "then": {"properties": {
+      "migration_id": {"type": "string", "minLength": 1},
+      "owner": {"type": "string", "minLength": 1},
+      "from_version": {"type": "string", "minLength": 1},
+      "to_version": {"type": "string", "minLength": 1},
+      "compatibility": {"enum": ["expand_contract", "backward_compatible", "breaking"]},
+      "expected_duration_seconds": {"type": "integer", "minimum": 1},
+      "validation": {"type": "string", "minLength": 1},
+      "repair_strategy": {"type": "string", "minLength": 1},
+      "staging_rehearsal_required": {"type": "boolean"}
+    }}
+  }]
+}
