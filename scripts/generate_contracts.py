@@ -74,6 +74,12 @@ TRAFFIC_SOURCE_PY = (
     ROOT / "Backend Architecture" / "aether-backend" / "services" / "traffic" / "generated_registry.py"
 )
 TRAFFIC_SOURCE_TABLE_MD = ROOT / "docs" / "_generated" / "traffic-source-registry-table.md"
+RIGHTS_AUTHORITY_REGISTRY = ROOT / "packages" / "shared" / "contracts" / "rights-authority-registry.json"
+RIGHTS_TRANSFORM_REGISTRY = ROOT / "packages" / "shared" / "contracts" / "rights-transform-registry.json"
+RIGHTS_ACTIVATION_REGISTRY = ROOT / "packages" / "shared" / "contracts" / "rights-activation-profile-registry.json"
+RIGHTS_TS = ROOT / "packages" / "shared" / "rights-authority.ts"
+RIGHTS_PY = ROOT / "Backend Architecture" / "aether-backend" / "shared" / "rights_authority" / "generated_registry.py"
+RIGHTS_TABLE_MD = ROOT / "docs" / "_generated" / "rights-authority-registry-table.md"
 
 # Markers used in events.ts to delimit the generated section
 GENERATED_START = "// @generated-start"
@@ -89,13 +95,69 @@ GENERATED_PY_HEADER = """\
 # Registry loading and validation
 # ---------------------------------------------------------------------------
 
-def load_registries() -> tuple[dict, dict, dict, dict, dict]:
+def load_registries() -> tuple[dict, dict, dict, dict, dict, dict, dict, dict]:
     event_reg = json.loads(EVENT_REGISTRY.read_text())
     consent_reg = json.loads(CONSENT_REGISTRY.read_text())
     metric_reg = json.loads(METRIC_REGISTRY_JSON.read_text())
     integration_reg = json.loads(INTEGRATION_CONSENT_REGISTRY.read_text())
     traffic_reg = json.loads(TRAFFIC_SOURCE_REGISTRY.read_text())
-    return event_reg, consent_reg, metric_reg, integration_reg, traffic_reg
+    rights_reg = json.loads(RIGHTS_AUTHORITY_REGISTRY.read_text())
+    transform_reg = json.loads(RIGHTS_TRANSFORM_REGISTRY.read_text())
+    activation_reg = json.loads(RIGHTS_ACTIVATION_REGISTRY.read_text())
+    return (
+        event_reg, consent_reg, metric_reg, integration_reg, traffic_reg,
+        rights_reg, transform_reg, activation_reg,
+    )
+
+
+def validate_rights_registries(
+    rights_reg: dict, transform_reg: dict, activation_reg: dict,
+) -> None:
+    """Validate the IRRL vocabularies before emitting any language twin."""
+    def unique(entries: list[dict], field: str, label: str) -> set[str]:
+        values = [str(entry[field]) for entry in entries]
+        if len(values) != len(set(values)):
+            print(f"ERROR: duplicate {label} identifiers", file=sys.stderr)
+            sys.exit(1)
+        return set(values)
+
+    classes = unique(rights_reg["rightsClasses"], "id", "rights class")
+    actions = unique(rights_reg["actions"], "id", "rights action")
+    profiles = unique(rights_reg["rightsProfiles"], "id", "rights profile")
+    retention = unique(rights_reg["retentionClasses"], "id", "retention class")
+    transforms = unique(transform_reg["transforms"], "id", "rights transform")
+    activation_profiles = unique(activation_reg["profiles"], "id", "activation profile")
+    if profiles != activation_profiles:
+        print(
+            "ERROR: rights profile and activation profile registries drift "
+            f"missing={sorted(profiles - activation_profiles)} "
+            f"extra={sorted(activation_profiles - profiles)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    for action in rights_reg["actions"]:
+        if not action.get("id") or not action.get("label"):
+            print("ERROR: rights action requires id and label", file=sys.stderr)
+            sys.exit(1)
+    for profile in rights_reg["rightsProfiles"]:
+        unknown = set(profile.get("allowedActions", [])) - actions
+        if unknown:
+            print(f"ERROR: profile {profile['id']!r} has unknown actions {sorted(unknown)}", file=sys.stderr)
+            sys.exit(1)
+    for transform in transform_reg["transforms"]:
+        unknown_inputs = set(transform.get("inputClasses", [])) - classes
+        if transform.get("outputClass") not in classes:
+            unknown_inputs.add(str(transform.get("outputClass")))
+        if unknown_inputs:
+            print(f"ERROR: transform {transform['id']!r} has unknown classes {sorted(unknown_inputs)}", file=sys.stderr)
+            sys.exit(1)
+    for state in activation_reg.get("rightsActivationStates", []):
+        if not state.startswith("rights_"):
+            print(f"ERROR: invalid rights activation state {state!r}", file=sys.stderr)
+            sys.exit(1)
+    if not retention:
+        print("ERROR: rights registry must declare a retention class", file=sys.stderr)
+        sys.exit(1)
 
 
 def validate_metrics(metric_reg: dict) -> None:
@@ -1336,6 +1398,96 @@ def gen_integration_consent_table_md(reg: dict) -> str:
     )
 
 
+def gen_rights_ts(rights_reg: dict, transform_reg: dict, activation_reg: dict) -> str:
+    """Generate the public, reference-only IRRL vocabulary twin."""
+    def union(values: list[str]) -> str:
+        return "\n".join(f"  | {json.dumps(value)}" for value in values)
+
+    def quoted_array(values: list[str]) -> str:
+        return ", ".join(json.dumps(value) for value in values)
+
+    return (
+        "// DO NOT EDIT — generated from packages/shared/contracts/rights-authority-registry.json\n"
+        "// Run: python scripts/generate_contracts.py\n\n"
+        f"export const RIGHTS_AUTHORITY_CONTRACT_VERSION = {json.dumps(rights_reg['contractVersion'])};\n\n"
+        "export type RightsClass =\n"
+        f"{union([x['id'] for x in rights_reg['rightsClasses']])};\n\n"
+        "export type RightsAction =\n"
+        f"{union([x['id'] for x in rights_reg['actions']])};\n\n"
+        "export type RightsDecisionOutcome =\n"
+        f"{union(rights_reg['decisionOutcomes'])};\n\n"
+        "export type RightsProfile =\n"
+        f"{union([x['id'] for x in rights_reg['rightsProfiles']])};\n\n"
+        "export type RightsActivationState =\n"
+        f"{union(activation_reg['rightsActivationStates'])};\n\n"
+        "export type RightsTransform =\n"
+        f"{union([x['id'] for x in transform_reg['transforms']])};\n\n"
+        f"export const RIGHTS_CLASSES = [{quoted_array([x['id'] for x in rights_reg['rightsClasses']])}] as const;\n"
+        f"export const RIGHTS_ACTIONS = [{quoted_array([x['id'] for x in rights_reg['actions']])}] as const;\n"
+        f"export const RIGHTS_DECISION_OUTCOMES = [{quoted_array(rights_reg['decisionOutcomes'])}] as const;\n"
+        f"export const RIGHTS_PROFILES = [{quoted_array([x['id'] for x in rights_reg['rightsProfiles']])}] as const;\n"
+        f"export const RIGHTS_TRANSFORMS = [{quoted_array([x['id'] for x in transform_reg['transforms']])}] as const;\n"
+        f"export const RIGHTS_ACTIVATION_STATES = [{quoted_array(activation_reg['rightsActivationStates'])}] as const;\n\n"
+        "export interface RightsReference {\n"
+        "  policySetId?: string;\n"
+        "  envelopeId?: string;\n"
+        "  decisionId?: string;\n"
+        "  lineageSetHash?: string;\n"
+        "  retentionClass?: string;\n"
+        "}\n"
+    )
+
+
+def gen_rights_py(rights_reg: dict, transform_reg: dict, activation_reg: dict) -> str:
+    """Generate the backend vocabulary twin; policy logic remains hand-authored."""
+    rights_classes = [x["id"] for x in rights_reg["rightsClasses"]]
+    actions = [x["id"] for x in rights_reg["actions"]]
+    profiles = [x["id"] for x in rights_reg["rightsProfiles"]]
+    transforms = [x["id"] for x in transform_reg["transforms"]]
+    return (
+        "# DO NOT EDIT — generated from packages/shared/contracts/rights-authority-registry.json\n"
+        "# Run: python scripts/generate_contracts.py\n"
+        f"# Contract version: {rights_reg['contractVersion']}\n\n"
+        f"RIGHTS_AUTHORITY_CONTRACT_VERSION = {_py_value(rights_reg['contractVersion'])}\n"
+        f"RIGHTS_CLASSES: frozenset[str] = frozenset({rights_classes!r})\n"
+        f"RIGHTS_ACTIONS: frozenset[str] = frozenset({actions!r})\n"
+        f"RIGHTS_DECISION_OUTCOMES: frozenset[str] = frozenset({rights_reg['decisionOutcomes']!r})\n"
+        f"RIGHTS_PROFILES: frozenset[str] = frozenset({profiles!r})\n"
+        f"RIGHTS_TRANSFORMS: frozenset[str] = frozenset({transforms!r})\n"
+        f"RIGHTS_ACTIVATION_STATES: frozenset[str] = frozenset({activation_reg['rightsActivationStates']!r})\n\n"
+        f"RIGHTS_ACTION_DEFINITIONS: dict[str, dict] = {({x['id']: x for x in rights_reg['actions']})!r}\n"
+        f"RIGHTS_PROFILE_DEFINITIONS: dict[str, dict] = {({x['id']: x for x in rights_reg['rightsProfiles']})!r}\n"
+        f"RIGHTS_TRANSFORM_DEFINITIONS: dict[str, dict] = {({x['id']: x for x in transform_reg['transforms']})!r}\n"
+    )
+
+
+def gen_rights_table_md(rights_reg: dict, transform_reg: dict, activation_reg: dict) -> str:
+    action_rows = "\n".join(
+        f"| `{x['id']}` | {x['label']} | {'yes' if x['requiresEnvelope'] else 'no'} | {'yes' if x['requiresSourceGrant'] else 'no'} |"
+        for x in rights_reg["actions"]
+    )
+    transform_rows = "\n".join(
+        f"| `{x['id']}` | `{x['outputClass']}` | {', '.join(f'`{v}`' for v in x['requiresEvidence'])} | {'yes' if x['requiresApproval'] else 'no'} |"
+        for x in transform_reg["transforms"]
+    )
+    profile_names = ", ".join(f"`{x['id']}`" for x in rights_reg["rightsProfiles"])
+    activation_states = ", ".join(f"`{x}`" for x in activation_reg["rightsActivationStates"])
+    return (
+        "<!-- DO NOT EDIT — generated from the IRRL registries -->\n"
+        "<!-- Run: python scripts/generate_contracts.py -->\n\n"
+        f"# AETHER Rights Authority (contract v{rights_reg['contractVersion']})\n\n"
+        "## Actions\n\n"
+        "| Action | Label | Envelope required | Source grant required |\n|---|---|---:|---:|\n"
+        f"{action_rows}\n\n"
+        "## Registered transforms\n\n"
+        "| Transform | Output class | Evidence | Approval |\n|---|---|---|---:|\n"
+        f"{transform_rows}\n\n"
+        "## Profiles and activation states\n\n"
+        f"Profiles: {profile_names}.\n\n"
+        f"Activation states: {activation_states}.\n"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Write / check helpers
 # ---------------------------------------------------------------------------
@@ -1382,11 +1534,15 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    event_reg, consent_reg, metric_reg, integration_reg, traffic_reg = load_registries()
+    (
+        event_reg, consent_reg, metric_reg, integration_reg, traffic_reg,
+        rights_reg, transform_reg, activation_reg,
+    ) = load_registries()
     validate(event_reg, consent_reg)
     validate_metrics(metric_reg)
     validate_integration_consent(integration_reg, consent_reg)
     validate_traffic_source(traffic_reg)
+    validate_rights_registries(rights_reg, transform_reg, activation_reg)
 
     diffs: list[str] = []
 
@@ -1412,6 +1568,9 @@ def main() -> int:
     _apply(TRAFFIC_SOURCE_TS, gen_traffic_source_ts(traffic_reg), args.check, diffs)
     _apply(TRAFFIC_SOURCE_PY, gen_traffic_source_py(traffic_reg), args.check, diffs)
     _apply(TRAFFIC_SOURCE_TABLE_MD, gen_traffic_source_table_md(traffic_reg), args.check, diffs)
+    _apply(RIGHTS_TS, gen_rights_ts(rights_reg, transform_reg, activation_reg), args.check, diffs)
+    _apply(RIGHTS_PY, gen_rights_py(rights_reg, transform_reg, activation_reg), args.check, diffs)
+    _apply(RIGHTS_TABLE_MD, gen_rights_table_md(rights_reg, transform_reg, activation_reg), args.check, diffs)
 
     if diffs:
         print("DRIFT: generated files differ from committed versions:", file=sys.stderr)
@@ -1424,8 +1583,10 @@ def main() -> int:
     np = len(consent_reg["purposes"])
     nm = len(metric_reg["metrics"])
     ni = len(integration_reg["connectors"])
+    nr = len(rights_reg["actions"])
     print(
-        f"OK: {n} event types, {np} consent purposes, {nm} metrics, {ni} integration policies "
+        f"OK: {n} event types, {np} consent purposes, {nm} metrics, {ni} integration policies, "
+        f"{nr} rights actions "
         f"— all artifacts up-to-date"
     )
     return 0
