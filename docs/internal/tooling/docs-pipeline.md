@@ -69,7 +69,7 @@ This page is `I`.
 | `scripts/validate_docs.py` | Version-drift check across package manifests, changelogs, doc headers. |
 | `scripts/validate_frontmatter.py` | Validates every `docs/**/*.{md,mdx}` against `docs_schema.json`. Fails on invalid **or** missing frontmatter. |
 | `scripts/validate_contracts.py` | Cross-checks the generated artifacts: every event's consent purpose + family must exist in the canonical contracts. Catches cross-file drift the per-file generators can't. |
-| `scripts/docs_drift.py` | For each page with `source_files:`, verifies the paths exist (fatal if not) and — when `last_synced_commit:` is set — flags staleness. `--update` **selectively** re-stamps only docs whose source files have actually changed since `last_synced_commit` (clean docs are skipped to avoid mass `last_synced_commit` conflicts on every rebase). False-positive prevention: `doc_reviewed_after_sources()` suppresses stale warnings when a doc and its source files were both updated in the same commit range. For an unresolvable pre-squash stamp, the checker finds the newest first-parent source boundary and accepts it only when that same boundary changed the authored doc; synthetic pull-request merge commits are inspected with `diff-tree -m`. A doc commit whose only change is the `last_synced_commit` line is a restamp, not a review, and does **not** count. Known-stale docs pending genuine review live in `config/docs_review_backlog.yaml`: their staleness is reported without failing `--strict`, an unlisted stale doc still fails, a listed doc that is no longer stale fails until its entry is removed (shrink-only), and `--update` refuses to stamp them. The sync-managed pages (`REPO-INDEX.md`, `AUTOMATION.md`) are excluded from drift checks and stamping; their freshness is enforced by repo-doctor's diff-after-sync check instead. |
+| `scripts/docs_drift.py` | For each page with `source_files:`, verifies the paths exist (fatal if not) and — when `last_synced_commit:` is set — flags staleness. `--update` **selectively** re-stamps only docs whose source files have actually changed since `last_synced_commit` (clean docs are skipped to avoid mass `last_synced_commit` conflicts on every rebase). False-positive prevention: `doc_reviewed_after_sources()` suppresses stale warnings when a doc and its source files were both updated in the same commit range. For an unresolvable pre-squash stamp, the checker finds the newest first-parent source boundary and accepts it only when that same boundary changed the authored doc; synthetic pull-request merge commits are inspected with `diff-tree -m`. A doc commit whose only change is the `last_synced_commit` line is a restamp, not a review, and does **not** count. A reviewed source commit that intentionally needs no prose change is recorded with a `reviewed_source_commits` receipt containing a resolvable commit and non-empty reason; the checker verifies that each receipt touches a declared source and covers every newer source commit, making this an auditable review record rather than a bypass. Known-stale docs pending genuine review live in `config/docs_review_backlog.yaml`: their staleness is reported without failing `--strict`, an unlisted stale doc still fails, a listed doc that is no longer stale fails until its entry is removed (shrink-only), and `--update` refuses to stamp them. The sync-managed pages (`REPO-INDEX.md`, `AUTOMATION.md`) are excluded from drift checks and stamping; their freshness is enforced by repo-doctor's diff-after-sync check instead. |
 | `scripts/sync_docs.py` | Regenerates `docs/REPO-INDEX.md` and `docs/AUTOMATION.md` from the live tree. |
 | `scripts/docs_extract/run_all.py` | Runs every generator (see below). |
 
@@ -215,6 +215,25 @@ Two ways to remediate:
 
 Don't blanket-stamp without checking. The whole point of the gate is
 to force a human eye on every change a doc claims to describe.
+
+### Reviewed source receipts
+
+Some source changes are intentionally orthogonal to a page even though the
+source path is shared by that page's `source_files` declaration. In that case,
+review the page and add a frontmatter receipt such as:
+
+```yaml
+reviewed_source_commits:
+  - commit: "54eaac5d"
+    reason: "Reviewed the staging bootstrap change; this fraud-network page is unaffected."
+```
+
+The drift checker resolves each receipt, proves that its commit touched a
+declared source, and requires coverage for every newer source commit. Receipts
+must not be used for a behavior change: update the page's authored content and
+stamp it normally when the documented behavior moved. This makes the decision
+durable across squash merges without turning `last_synced_commit` into an
+unreviewed exemption.
 
 ### Selective stamping
 

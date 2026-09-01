@@ -22,7 +22,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
-last_synced_commit: "c148176e"
+last_synced_commit: "845b1c14"
 ---
 
 # Deployment Profiles
@@ -132,6 +132,13 @@ untaint path, a remote repository absent from state uses the confirmation-gated
 import path, and ambiguous or cross-profile ownership stops the run. Any state
 change invalidates the previous plan and requires a new reviewed plan for the
 same immutable release digest.
+
+The staging apply contract also checks the AWS account plan before mutation.
+Free-plan accounts are rejected for the reviewed VPC/KMS Aurora shape, while
+paid accounts may proceed after the normal policy and cost gates. State
+reconciliation can import pre-existing Secrets Manager metadata only after
+verifying the exact staging CMK and `AWSCURRENT` version; values are populated
+through the separate secure bootstrap and are never read by CI.
 
 ---
 

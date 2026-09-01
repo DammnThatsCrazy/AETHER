@@ -30,6 +30,11 @@ statements:
       - ecr:DescribeRepositories
     resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
     scope: staging-name-prefix
+  - sid: ConfigureStagingRepositoryScanning
+    actions:
+      - ecr:PutImageScanningConfiguration
+    resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
+    scope: staging-name-prefix
   - sid: TagStagingSecrets
     actions:
       - secretsmanager:TagResource
@@ -83,6 +88,11 @@ statements:
     scope: staging-kms-resource-tag
     conditions:
       aws:ResourceTag/Environment: staging
+  - sid: DiscoverStagingKmsAliases
+    actions:
+      - kms:ListAliases
+    resource: '*'
+    scope: global-read-required-by-api
   - sid: CreateStagingKmsGrants
     actions:
       - kms:CreateGrant
@@ -106,6 +116,11 @@ statements:
   - sid: DiscoverVpcSecurityGroupsForStagingAlb
     actions:
       - ec2:GetSecurityGroupsForVpc
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: ReadAccountFreeTierPlan
+    actions:
+      - freetier:GetAccountPlanState
     resource: '*'
     scope: global-read-required-by-api
   - sid: ReadStagingKeyRotation

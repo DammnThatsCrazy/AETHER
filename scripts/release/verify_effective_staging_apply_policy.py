@@ -195,6 +195,11 @@ SUPPORTED_CONDITION_OPERATORS = frozenset(
     }
 )
 
+# KMS exposes alias discovery only through the account-level ListAliases API.
+# Keep this explicit so the live effective-policy check cannot accidentally
+# accept a resource-scoped approximation for the reconciliation probe.
+GLOBAL_READ_ACTIONS = frozenset({"kms:listaliases"})
+
 
 def _has_unsupported_condition_operator(condition: Any) -> bool:
     """Return true when a condition cannot be evaluated by this checker."""
@@ -412,6 +417,8 @@ def main() -> int:
                 continue
             for resource in resources:
                 if isinstance(resource, str):
+                    if action.lower() in GLOBAL_READ_ACTIONS and resource != "*":
+                        fail(f"{action} must be validated with the account-level resource scope")
                     if action.lower() == "kms:createalias" and ":alias/" in resource:
                         alias_sample = _resource_samples(resource)[0]
                         paired_alias = "alias/" + alias_sample.split(":alias/", 1)[1]

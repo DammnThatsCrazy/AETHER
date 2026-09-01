@@ -147,6 +147,19 @@ def _validate_against(value: Any, prop_schema: dict[str, Any], path: str) -> Non
         if item_schema:
             for i, item in enumerate(value):
                 _validate_against(item, item_schema, f"{path}[{i}]")
+    if expected_type == "object":
+        properties = prop_schema.get("properties", {})
+        required = prop_schema.get("required", [])
+        additional = prop_schema.get("additionalProperties", True)
+        for key in required:
+            if key not in value:
+                raise ValidationError(f"{path}: missing required key '{key}'")
+        for key, nested in value.items():
+            if key not in properties:
+                if additional is False:
+                    raise ValidationError(f"{path}: unknown key '{key}'")
+                continue
+            _validate_against(nested, properties[key], f"{path}.{key}")
 
 
 def validate_frontmatter(data: dict[str, Any], schema: dict[str, Any]) -> None:

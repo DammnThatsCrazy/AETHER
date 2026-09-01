@@ -146,6 +146,41 @@ def test_check_doc_stale_when_commits_after_sync(dd, tmp_path, monkeypatch):
     assert "abc1234" in r["stale_detail"]
 
 
+def test_check_doc_accepts_explicit_review_receipts(dd, tmp_path, monkeypatch):
+    """A reviewed but intentionally unchanged page may record its receipt."""
+    monkeypatch.setattr(dd, "commits_touching_after", lambda declared, paths: ["source123"])
+    monkeypatch.setattr(dd, "doc_reviewed_after_sources", lambda *args: False)
+    monkeypatch.setattr(dd, "reviewed_source_commits_cover", lambda *args: True)
+    p = tmp_path / "doc.md"
+    p.write_text(
+        "---\n"
+        "title: T\n"
+        "source_files:\n"
+        "  - README.md\n"
+        "last_synced_commit: abc1234\n"
+        "reviewed_source_commits:\n"
+        "  - commit: source123\n"
+        "    reason: source change is orthogonal\n"
+        "---\n"
+        "body\n"
+    )
+    r = dd.check_doc(p)
+    assert r["stale"] is False
+
+
+def test_reviewed_source_receipts_require_resolved_source_commit(dd, monkeypatch):
+    """Receipt validation is fail-closed when a marker cannot be resolved."""
+    monkeypatch.setattr(dd, "resolve_commit", lambda sha: None if sha == "missing1" else "a" * 40)
+    monkeypatch.setattr(dd, "is_ancestor", lambda *args: True)
+    monkeypatch.setattr(dd, "commit_touches_paths", lambda *args: True)
+    assert dd.reviewed_source_commits_cover(
+        "b" * 7,
+        [{"commit": "missing1", "reason": "reviewed"}],
+        ["README.md"],
+        ["source123"],
+    ) is False
+
+
 def test_commits_touching_after_returns_none_for_unknown_sha(dd):
     """An unresolvable declared SHA must be distinguishable from "no drift".
 
@@ -388,6 +423,40 @@ def test_doc_content_mentioning_stamp_field_is_not_restamp_only(dd, tmp_path, mo
         capture_output=True, text=True, env=env,
     ).stdout.strip()
     assert dd._commit_is_restamp_only(sha, "doc.md") is False
+
+
+def test_receipt_only_commit_is_not_treated_as_content_review(dd, tmp_path, monkeypatch):
+    """A metadata-only review receipt must go through receipt validation."""
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    env = {
+        "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+        "PATH": os.environ["PATH"],
+    }
+    def git(*args):
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, env=env)
+    git("init", "-q")
+    doc = repo / "doc.md"
+    doc.write_text(
+        "---\ntitle: T\nreviewed_source_commits:\n  - commit: abc1234\n    reason: old\n---\nbody\n",
+        encoding="utf-8",
+    )
+    git("add", "doc.md")
+    git("commit", "-qm", "initial")
+    doc.write_text(
+        "---\ntitle: T\nreviewed_source_commits:\n  - commit: def5678\n    reason: new\n---\nbody\n",
+        encoding="utf-8",
+    )
+    git("commit", "-aqm", "receipt only")
+    monkeypatch.setattr(dd, "ROOT", repo)
+    sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True,
+        capture_output=True, text=True, env=env,
+    ).stdout.strip()
+    assert dd._commit_is_receipt_only(sha, "doc.md") is True
 
 
 def test_backlog_loader_rejects_anonymous_entries(dd, tmp_path):
