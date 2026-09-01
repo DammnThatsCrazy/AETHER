@@ -42,6 +42,7 @@ const NAV_ITEMS: readonly NavEntry[] = [
   { to: '/onboarding', label: 'Onboarding', destination: 'aether-onboarding' },
   { to: '/notifications', label: 'Notifications', destination: 'aether-notifications' },
   { to: '/settings', label: 'Settings', destination: 'aether-settings' },
+  { to: '/rights', label: 'Rights Center', destination: 'aether-security' },
   { to: '/billing', label: 'Billing', destination: 'aether-billing' },
   { to: '/me', label: 'Profile', destination: 'aether-profile' },
   { to: '/audit-exports', label: 'Audit Exports', destination: 'aether-audit-exports' },

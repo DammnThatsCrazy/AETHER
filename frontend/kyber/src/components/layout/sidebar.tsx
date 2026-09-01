@@ -39,6 +39,7 @@ export const KYBER_NAV_ITEMS: readonly NavItem[] = [
   { path: '/tenant-mirror',   label: 'Tenant Mirror',   destination: 'kyber-tenant-mirror' },
   { path: '/kyber-exceptions', label: 'Exceptions',     destination: 'kyber-exceptions' },
   { path: '/kyber-commands',  label: 'Commands',        destination: 'kyber-commands' },
+  { path: '/rights-operations', label: 'Rights Ops',    destination: 'kyber-security' },
   { path: '/live',            label: 'Live',            destination: 'kyber-live' },
   { path: '/command',         label: 'Command',         destination: 'kyber-command' },
   { path: '/review',          label: 'Review',          destination: 'kyber-review' },

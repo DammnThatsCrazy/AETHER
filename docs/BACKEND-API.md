@@ -8,10 +8,11 @@ status: stable
 since_version: "8.8.0"
 source_files:
   - Backend Architecture/aether-backend/services/
+  - Backend Architecture/aether-backend/shared/rights_authority/
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "b1dc6671"
+last_synced_commit: "72d48888"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -19,6 +20,55 @@ last_synced_commit: "b1dc6671"
 ## Overview
 
 The thin-client architecture requires the backend to handle all processing that was previously done client-side. This document specifies all backend endpoints.
+
+## Rights Authority and IRRL
+
+The Rights Authority is the backend enforcement boundary for tenant data use.
+It persists append-only policy revisions, source-grant revisions, artifact
+rights envelopes, signed use decisions, derivation edges, impact graphs, and
+remediation/audit receipts. In `off` mode local development preserves legacy
+behavior; `shadow` records decisions and violations; `enforce` blocks a use
+before the adapter or materialization boundary when authority state or a signed
+receipt is missing. Kyber is an internal operator surface; Aether is the
+external customer platform and never exposes Kyber as a customer dependency.
+
+### Tenant rights routes (`/v1/integrations/data-rights/*`)
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/v1/integrations/data-rights/policies` | Read the calling tenant's latest policy revisions |
+| `POST` | `/v1/integrations/data-rights/policies` | Register a pending policy set from an accepted agreement |
+| `POST` | `/v1/integrations/data-rights/policies/{policy_set_ref}/request-review` | Append a tenant policy review transition |
+| `GET` | `/v1/integrations/data-rights/envelopes` | Read tenant artifact rights envelopes |
+| `POST` | `/v1/integrations/data-rights/envelopes` | Attach an immutable envelope after tenant/grant checks |
+| `GET` | `/v1/integrations/data-rights/decisions` | Read signed tenant-scoped use decisions |
+| `GET` | `/v1/integrations/data-rights/evidence-manifests` | Read evidence-manifest references and statuses |
+| `POST` | `/v1/integrations/data-rights/evidence-manifests` | Persist a signed evidence manifest reference |
+| `GET` | `/v1/integrations/data-rights/impacts` | Read tenant rights-impact graphs |
+| `POST` | `/v1/integrations/data-rights/impacts/revoke` | Revoke roots and create an impact graph |
+| `GET` | `/v1/integrations/data-rights/impacts/{impact_graph_id}/remediation` | Read remediation steps and receipts |
+
+The source-grant compatibility routes remain under `/v1/data-rights/*`; grant
+changes are durable IRRL source-grant revisions, not an in-memory permission
+cache. The server evaluates `ingest` and `store` before Bronze persistence,
+re-evaluates saved views and Profile360 reads, and revalidates signed decisions
+at Silver/Gold, graph, export, model, and remediation writes.
+
+### Kyber rights operations (`/v1/admin/kyber/data-rights/*`)
+
+These routes require operator authorization and are not part of the Aether
+customer contract:
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/v1/admin/kyber/data-rights/policies` | Cross-tenant policy inspection |
+| `GET` | `/v1/admin/kyber/data-rights/impacts` | Cross-tenant impact inspection |
+| `GET` | `/v1/admin/kyber/data-rights/reconciliation` | Read-only legacy rights coverage report |
+| `POST` | `/v1/admin/kyber/data-rights/impacts/{impact_graph_id}/execute` | Execute registered remediation adapters and return receipts |
+
+Missing object/search/vector/replay/cache/model adapters remain explicitly
+blocked or unavailable; no endpoint reports an unexecuted remediation as
+complete.
 
 ## Authentication
 

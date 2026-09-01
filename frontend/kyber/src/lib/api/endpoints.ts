@@ -2682,4 +2682,14 @@ export const api = {
     tenantEnvelope: (tenantId: string) =>
       restClient.get(`/v1/kyber/tenants/${encodeURIComponent(tenantId)}/operational-envelope`, wrap(unknownSchema)).then(r => r.data),
   },
+
+  // ── Kyber Rights Operations ───────────────────────────────────────────────
+  rightsAuthority: {
+    reconciliation: (tenantId?: string) =>
+      restClient.get(`/v1/admin/kyber/data-rights/reconciliation${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+    impacts: (tenantId?: string) =>
+      restClient.get(`/v1/admin/kyber/data-rights/impacts${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema)).then(r => r.data),
+    executeImpact: (impactGraphId: string) =>
+      restClient.post(`/v1/admin/kyber/data-rights/impacts/${encodeURIComponent(impactGraphId)}/execute`, wrap(unknownSchema), {}).then(r => r.data),
+  },
 };
