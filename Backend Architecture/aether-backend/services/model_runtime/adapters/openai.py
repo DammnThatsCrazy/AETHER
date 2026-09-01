@@ -47,7 +47,10 @@ class OpenAIModelProvider(BaseModelProvider):
         max_tokens: int = 512,
         max_retries: int = 1,
     ) -> None:
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY", "")
+        # ``None`` means use the process environment; an explicit empty key
+        # intentionally disables process-wide credentials for deterministic,
+        # fail-closed construction and tenant-bound adapter tests.
+        self.api_key = api_key if api_key is not None else os.getenv("OPENAI_API_KEY", "")
         self.model = model or os.getenv("NOESIS_LLM_MODEL", "gpt-4o-mini")
         self.base_url = base_url or os.getenv(
             "OPENAI_API_BASE", "https://api.openai.com/v1"

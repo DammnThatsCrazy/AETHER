@@ -53,7 +53,10 @@ class AnthropicModelProvider(BaseModelProvider):
         max_retries: int = 1,
     ) -> None:
         """api_key/model override env; defaults mirror the legacy Noesis provider."""
-        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
+        # ``None`` means use the process environment; an explicit empty key
+        # intentionally disables process-wide credentials for deterministic,
+        # fail-closed construction and tenant-bound adapter tests.
+        self.api_key = api_key if api_key is not None else os.getenv("ANTHROPIC_API_KEY", "")
         self.model = model or os.getenv("NOESIS_LLM_MODEL", "claude-haiku-4-5-20251001")
         self.timeout_s = timeout_s
         self.max_tokens = max_tokens

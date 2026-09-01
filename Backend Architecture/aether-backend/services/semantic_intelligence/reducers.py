@@ -793,7 +793,7 @@ async def recompute_cascades(tenant_id: str) -> list[SemanticCascade]:
     its result durable. Cascade ids are content-derived (tenant|subject|topic|
     stance), so recomputation refreshes rows instead of duplicating them.
     """
-    from .engine import cascades_for_tenant
+    from .engine import cascades_for_tenant, get_store
 
     cascades = await cascades_for_tenant(tenant_id)
     observations = await get_store().list_semantic(tenant_id)
