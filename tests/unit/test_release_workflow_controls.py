@@ -460,6 +460,21 @@ def test_founding_release_gate_requires_durable_suites_or_hosted_evidence():
     assert "collect_evidence.py --release-mode" in gate
 
 
+def test_durable_integration_uses_read_only_repository_test_runner():
+    compose = (ROOT / "deploy/integration/docker-compose.durable.yml").read_text(encoding="utf-8")
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert "integration-tests:" in compose
+    assert "source: ../.." in compose
+    assert "target: /workspace" in compose
+    assert "working_dir: /workspace" in compose
+    assert "entrypoint: []" in compose
+    assert "AUTHORITATIVE_CONSENT_ENFORCEMENT_ENABLED: \"false\"" in compose
+    assert "TENANT_COMPLIANCE_POLICY_ENABLED: \"false\"" in compose
+    assert "tests/integration/test_batch_endpoint.py" in makefile
+    assert "run --rm integration-tests" in makefile
+
+
 # ---------------------------------------------------------------------------
 # Infrastructure Profiles (infrastructure.yml) is validate-and-plan only, and
 # the reviewed promotion workflow is the single production apply path.

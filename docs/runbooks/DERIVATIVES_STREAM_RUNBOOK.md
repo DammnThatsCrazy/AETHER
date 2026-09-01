@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/services/derivatives/connectors/stream.py
   - Backend Architecture/aether-backend/services/derivatives/admin_routes.py
 canonical_owner: platform@aether
-last_synced_commit: "ac900d5"
+last_synced_commit: "845b1c14"
 ---
 
 # Derivatives Stream Runbook

@@ -20,7 +20,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "187a458b8"
+last_synced_commit: "0e789921"
 ---
 
 # Documentation Pipeline
@@ -111,6 +111,8 @@ make repo-doctor-fix      # regenerate generated docs + sync
 make docs-check           # docs/version/frontmatter/drift only (fast gate)
 make ci-check             # CI-safe full path — fails on any generated diff
 make docs-fix             # regenerate and sync docs only
+make test-fast BASE=<ref> # bounded local evidence; reports stronger follow-up lane
+make test-pr BASE=<ref>   # affected-domain PR verification selection
 
 # Deployment-profile enforcement (profile class, parity, cost policy, doctor)
 make validate-profile-config    # deployment-profile matrix + founding-tenant posture

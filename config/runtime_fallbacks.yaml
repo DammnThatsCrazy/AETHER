@@ -1,0 +1,64 @@
+schema_version: 1
+profiles: [local, unit_test, staging, production-lean, production-scale, enterprise-isolated]
+fallbacks:
+  - fallback_id: in_memory_repository
+    owner: platform
+    surfaces: [repositories]
+    allowed_profiles: [local, unit_test]
+    readiness_effect: blocking
+    implementation_paths:
+      - Backend Architecture/aether-backend/repositories/repos.py
+  - fallback_id: in_memory_queue
+    owner: platform
+    surfaces: [queues]
+    allowed_profiles: [local, unit_test]
+    readiness_effect: blocking
+    implementation_paths:
+      - Agent Layer/agent_controller/controller.py
+      - Agent Layer/queue/celery_app.py
+      - packages/server/src/index.ts
+  - fallback_id: in_memory_cache
+    owner: platform
+    surfaces: [caches, rate_limiters]
+    allowed_profiles: [local, unit_test]
+    readiness_effect: blocking
+    implementation_paths:
+      - Backend Architecture/aether-backend/shared/cache/cache.py
+      - Data Ingestion Layer/packages/cache/src/index.ts
+  - fallback_id: deterministic_model
+    owner: ml-platform
+    surfaces: [model_runtime]
+    allowed_profiles: [local, unit_test]
+    readiness_effect: blocking
+    implementation_paths:
+      - ML Models/aether-ml/serving/src/api.py
+  - fallback_id: in_memory_graph
+    owner: graph
+    surfaces: [graph_clients]
+    allowed_profiles: [local, unit_test]
+    readiness_effect: blocking
+    implementation_paths:
+      - Backend Architecture/aether-backend/shared/graph/graph.py
+  - fallback_id: in_memory_rate_limiter
+    owner: security
+    surfaces: [rate_limiters]
+    allowed_profiles: [local, unit_test]
+    readiness_effect: blocking
+    implementation_paths:
+      - Backend Architecture/aether-backend/shared/rate_limit/limiter.py
+      - security/model_extraction_defense/defense_layer.py
+  - fallback_id: in_memory_api_key_store
+    owner: ingestion
+    surfaces: [key_stores]
+    allowed_profiles: [local, unit_test]
+    readiness_effect: blocking
+    implementation_paths:
+      - Data Ingestion Layer/packages/auth/src/index.ts
+      - Data Lake Architecture/aether-Datalake-backend/packages/auth/src/index.ts
+  - fallback_id: detached_retention_stub
+    owner: account-lifecycle
+    surfaces: [repositories]
+    allowed_profiles: [local, unit_test]
+    readiness_effect: blocking
+    implementation_paths:
+      - Backend Architecture/aether-backend/repositories/account_deletion.py
