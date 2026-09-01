@@ -122,6 +122,8 @@ jobs:
             --component repository-build=release-evidence/repository-build.tar.gz \
             --lockfile package-lock.json --lockfile pyproject.toml \
             --output release-evidence/release-candidate.json
+      - name: Materialize verified build outputs for consumers
+        run: tar --extract --gzip --file release-evidence/repository-build.tar.gz
       - name: Execute the selected minimum lane
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}

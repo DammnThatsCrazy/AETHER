@@ -55,6 +55,7 @@ def test_built_candidate_is_verified_without_rebuilding_in_consumers() -> None:
     assert "scripts/artifact_builder.py" in build
     assert "release-candidate.json" in build
     assert "--verify" in selected
+    assert "tar --extract --gzip --file release-evidence/repository-build.tar.gz" in selected
     assert "npm run build" not in selected
     assert "build-artifact" in jobs["selected-verification"]["needs"]
 
