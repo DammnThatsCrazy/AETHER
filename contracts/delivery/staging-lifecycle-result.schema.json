@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.olympuslabs.io/contracts/delivery/staging-lifecycle-result/v1",
+  "title": "Aether StagingLifecycleResult v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "release_candidate_id", "profile", "artifact_digest", "status", "checks", "timestamp"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "release_candidate_id": {"type": "string", "minLength": 1},
+    "profile": {"type": "string", "minLength": 1},
+    "artifact_digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "status": {"enum": ["DRY_RUN", "BLOCKED", "FAILED", "DEPLOYED"]},
+    "checks": {"type": "array", "items": {"$ref": "#/$defs/checkResult"}},
+    "timestamp": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "checkResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check_id", "status", "reason"],
+      "properties": {
+        "check_id": {"type": "string", "minLength": 1},
+        "status": {"enum": ["PASS", "PASS_WITH_DEGRADATION", "BLOCKED", "FAILED", "NOT_APPLICABLE"]},
+        "reason": {"type": "string"}
+      }
+    }
+  }
+}

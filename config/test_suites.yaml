@@ -49,7 +49,10 @@ suites:
   - id: root
     subsystem: root
     paths: ["tests"]
-    runner: ["python", "-m", "pytest", "tests/", "-v", "--tb=short"]
+    # Kyber and capability tests use process-global repositories. Execute each
+    # file in its own process and parallelize files, preventing state leakage
+    # without serializing the entire root estate.
+    runner: ["python", "scripts/run_pytest_files.py", "tests", "--workers", "16"]
     requires:
       python_packages: []
       services: []
@@ -183,14 +186,13 @@ suites:
     runner:
       [
         "python",
-        "-m",
-        "pytest",
+        "scripts/run_pytest_files.py",
         "Backend Architecture/aether-backend/services/agent_comm_observability/tests",
         "Backend Architecture/aether-backend/services/external_account_observability/tests",
         "Backend Architecture/aether-backend/services/agentic_observability/tests",
         "Backend Architecture/aether-backend/services/protocol_observability/tests",
-        "-v",
-        "--tb=short",
+        "--workers",
+        "4",
       ]
     requires:
       python_packages: []

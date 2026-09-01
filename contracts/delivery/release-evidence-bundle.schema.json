@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.olympuslabs.io/contracts/delivery/release-evidence-bundle/v1",
+  "title": "Aether ReleaseEvidenceBundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "release_candidate_id", "status", "commit_sha", "artifact_digest", "deployment_profile", "checks", "known_degradations", "evidence", "timestamps"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "release_candidate_id": {"type": "string", "minLength": 1},
+    "status": {"enum": ["READY", "PASS_WITH_DEGRADATION", "BLOCKED", "FAILED"]},
+    "commit_sha": {"type": "string", "minLength": 7},
+    "artifact_digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "deployment_profile": {"type": "string", "minLength": 1},
+    "checks": {"type": "object", "additionalProperties": {"$ref": "#/$defs/checkResult"}, "required": ["code_correctness", "contract_compatibility", "infrastructure_preflight", "migration", "tenant_activation", "golden_journeys", "security", "operability", "rollback"]},
+    "known_degradations": {"type": "array", "items": {"type": "string"}},
+    "evidence": {"type": "array", "items": {"type": "string"}},
+    "timestamps": {"type": "object", "additionalProperties": {"type": "string", "format": "date-time"}}
+  },
+  "$defs": {
+    "checkResult": {"enum": ["PASS", "PASS_WITH_DEGRADATION", "BLOCKED", "FAILED", "NOT_APPLICABLE"]}
+  }
+}

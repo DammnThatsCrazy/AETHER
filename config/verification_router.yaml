@@ -1,0 +1,93 @@
+schema_version: 1
+default_lane: pr
+lanes:
+  fast: [toolchain, repository_metadata, test_inventory, delivery_metadata]
+  pr: [toolchain, repository_metadata, test_inventory, delivery_metadata, contracts]
+  integration: [toolchain, repository_metadata, contracts, integration]
+  regression: [toolchain, repository_metadata, contracts, integration, regression]
+  release: [toolchain, repository_metadata, contracts, integration, regression, release]
+
+checks:
+  toolchain:
+    owner: platform
+    risk: critical
+    command: [python, scripts/validate_toolchain.py]
+    runtime_budget_seconds: 15
+  repository_metadata:
+    owner: platform
+    risk: high
+    command: [python, scripts/validate_makefile.py]
+    runtime_budget_seconds: 5
+  test_inventory:
+    owner: quality
+    risk: high
+    command: [python, scripts/test_inventory.py, --summary]
+    runtime_budget_seconds: 10
+  delivery_metadata:
+    owner: release
+    risk: critical
+    command: [python, scripts/validate_delivery_profiles.py, --check-registry]
+    runtime_budget_seconds: 5
+  contracts:
+    owner: platform
+    risk: critical
+    command: [python, scripts/validate_contracts.py]
+    runtime_budget_seconds: 30
+  integration:
+    owner: platform
+    risk: high
+    command: [make, integration-durable]
+    runtime_budget_seconds: 600
+  regression:
+    owner: quality
+    risk: high
+    command: [make, test]
+    runtime_budget_seconds: 3600
+  release:
+    owner: release
+    risk: critical
+    command: [make, release-gate]
+    runtime_budget_seconds: 7200
+
+domains:
+  delivery:
+    owner: platform
+    paths: [Makefile, scripts/**, config/**, .github/workflows/**]
+    checks: [toolchain, repository_metadata, delivery_metadata]
+    minimum_lane: fast
+  backend:
+    owner: backend
+    paths: [Backend Architecture/**, tests/**]
+    checks: [root, backend]
+    minimum_lane: pr
+  frontend:
+    owner: frontend
+    paths: [frontend/**]
+    checks: [frontend-aether, frontend-kyber, frontend-shared]
+    minimum_lane: pr
+  sdk:
+    owner: sdk
+    paths: [packages/**]
+    checks: [sdk-shared, sdk-web, sdk-server, sdk-react-native, contracts]
+    minimum_lane: pr
+  machine_learning:
+    owner: ml
+    paths: [ML Models/**]
+    checks: [ml]
+    minimum_lane: pr
+  infrastructure:
+    owner: platform
+    paths: [AWS Deployment/**, deploy/**, docker-compose.yml]
+    checks: [integration]
+    minimum_lane: integration
+  documentation:
+    owner: docs
+    paths: [docs/**, README.md, DEVELOPMENT.md, CONTRIBUTING.md]
+    checks: [repository_metadata]
+    minimum_lane: fast
+
+global_paths:
+  - pyproject.toml
+  - package.json
+  - package-lock.json
+  - config/verification_router.yaml

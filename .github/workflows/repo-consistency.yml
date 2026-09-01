@@ -15,69 +15,214 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  repo-consistency:
+  classify-change:
+    name: Classify change (selection authority)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
+    timeout-minutes: 10
+    outputs:
+      minimum-lane: ${{ steps.selection.outputs.minimum_lane }}
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history required for docs_drift.py commit-range checks
           fetch-depth: 0
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: "pyproject.toml"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Bootstrap router dependencies
+        run: make bootstrap
+      - name: Select affected verification
+        id: selection
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
+        run: |
+          mkdir -p release-evidence
+          .venv/bin/python scripts/check_router.py --base "$BASE_SHA" --output release-evidence/verification-selection.json
+          .venv/bin/python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          with open("release-evidence/verification-selection.json") as source:
+              print("minimum_lane=" + json.load(source)["minimum_lane"])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-selection-evidence
+          path: release-evidence/verification-selection.json
+          if-no-files-found: error
 
+  build-artifact:
+    name: Build PR artifact (build authority)
+    needs: classify-change
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
-
-      - name: Bootstrap toolchain (.venv + fail-closed dependency gate)
-        run: make bootstrap
-
-      - name: Add project virtualenv to PATH
-        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-
-      - name: Install Node dependencies
+          cache: npm
+      - name: Install dependencies
         run: npm ci --ignore-scripts
-
-      - name: Frontend data-truth source guardrail
-        run: npm run validate:frontend-data-truth
-
-      - name: Frontend route-state coverage
-        run: npm run validate:frontend-route-state
-
-      - name: Frontend brand migration guardrail
-        run: npm run validate:frontend-branding
-
-      - name: Clean-install and demo seed safety smokes
-        run: make clean-install-smoke demo-seed-smoke demo-reset-smoke
-
-      - name: Contract generator parity check
-        run: make generate-contracts-check
-
-      - name: Event registry schema parity check
-        run: make validate-schema-parity
-
-      - name: Consent registry parity check
-        run: python scripts/validate_consent_schema_parity.py
-
-      - name: Run repo consistency checks
-        run: make ci-check
-
-      - name: Record repo-consistency evidence
+      - name: Build repository packages
+        run: npm run build
+      - name: Package build outputs once and create immutable candidate
         run: |
           mkdir -p release-evidence
-          printf '{"sha":"%s","job":"repo-consistency"}\n' "$GITHUB_SHA" > release-evidence/repo-consistency.json
-
+          mapfile -d '' outputs < <(find packages frontend apps -type d -name node_modules -prune -o -type d -name dist -print0 | sort -z)
+          test "${#outputs[@]}" -gt 0 || { echo "build produced no dist directories"; exit 1; }
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+            -czf release-evidence/repository-build.tar.gz "${outputs[@]}"
+          python scripts/artifact_builder.py \
+            --candidate-id "pr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --profile bundle-certification \
+            --component repository-build=release-evidence/repository-build.tar.gz \
+            --lockfile package-lock.json --lockfile pyproject.toml \
+            --required-check canonical-consistency \
+            --output release-evidence/release-candidate.json
+          cp release-evidence/release-candidate.json release-evidence/build.json
       - uses: actions/upload-artifact@v4
         with:
+          name: pr-build-evidence
+          path: |
+            release-evidence/build.json
+            release-evidence/release-candidate.json
+            release-evidence/repository-build.tar.gz
+          if-no-files-found: error
+
+  selected-verification:
+    name: Selected verification (affected-surface authority)
+    needs: [classify-change, build-artifact]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: make bootstrap
+      - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          name: pr-build-evidence
+          path: release-evidence
+      - name: Verify exact build candidate before testing
+        run: |
+          python scripts/artifact_builder.py --verify \
+            --expected-commit "$GITHUB_SHA" \
+            --component repository-build=release-evidence/repository-build.tar.gz \
+            --lockfile package-lock.json --lockfile pyproject.toml \
+            --output release-evidence/release-candidate.json
+      - name: Materialize verified build outputs for consumers
+        run: tar --extract --gzip --file release-evidence/repository-build.tar.gz
+      - name: Execute the selected minimum lane
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
+        run: .venv/bin/python scripts/check_router.py --base "$BASE_SHA" --execute
+      - name: Record selected-verification evidence
+        if: always()
+        env:
+          STAGE_RESULT: ${{ job.status }}
+          MINIMUM_LANE: ${{ needs.classify-change.outputs.minimum-lane }}
+        run: |
+          mkdir -p release-evidence
+          printf '{"schema_version":1,"stage":"selected-verification","authority":"affected-surface","blocking":true,"status":"%s","minimum_lane":"%s","commit_sha":"%s"}\n' \
+            "$(test "$STAGE_RESULT" = success && echo PASS || echo FAILED)" "$MINIMUM_LANE" "$GITHUB_SHA" > release-evidence/selected-verification.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selected-verification-evidence
+          path: release-evidence/selected-verification.json
+          if-no-files-found: error
+
+  repo-consistency:
+    name: Canonical PR completion gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: make bootstrap
+      - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+      - run: npm ci --ignore-scripts
+      - name: Frontend data-truth source guardrail
+        run: npm run validate:frontend-data-truth
+      - name: Frontend brand migration guardrail
+        run: npm run validate:frontend-branding
+      - name: Run canonical repository gate
+        run: make ci-check
+      - name: Record canonical evidence
+        if: always()
+        env:
+          STAGE_RESULT: ${{ job.status }}
+        run: |
+          mkdir -p release-evidence
+          printf '{"schema_version":1,"stage":"canonical-consistency","authority":"pr-completion","blocking":true,"status":"%s","commit_sha":"%s"}\n' \
+            "$(test "$STAGE_RESULT" = success && echo PASS || echo FAILED)" "$GITHUB_SHA" > release-evidence/canonical-consistency.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: canonical-consistency-evidence
+          path: release-evidence/canonical-consistency.json
+          if-no-files-found: error
+
+  publish-evidence:
+    name: Publish PR evidence (publication authority)
+    if: always()
+    needs: [classify-change, build-artifact, selected-verification, repo-consistency]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*evidence*'
+          path: release-evidence
+          merge-multiple: true
+      - name: Enforce blocking stage disposition
+        env:
+          CLASSIFY_RESULT: ${{ needs.classify-change.result }}
+          BUILD_RESULT: ${{ needs.build-artifact.result }}
+          SELECTED_RESULT: ${{ needs.selected-verification.result }}
+          CANONICAL_RESULT: ${{ needs.repo-consistency.result }}
+        run: |
+          python - <<'PY'
+          import json, os
+          results = {name: os.environ[name] for name in (
+              "CLASSIFY_RESULT", "BUILD_RESULT", "SELECTED_RESULT", "CANONICAL_RESULT"
+          )}
+          failed = {name: value for name, value in results.items() if value != "success"}
+          with open("release-evidence/pr-disposition.json", "w") as fh:
+              json.dump({"schema_version": 1, "stage": "publication", "authority": "pr-evidence",
+                         "blocking": True, "status": "FAILED" if failed else "PASS",
+                         "results": results}, fh, indent=2)
+              fh.write("\n")
+          if failed:
+              raise SystemExit("blocking PR stages did not pass: " + repr(failed))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
           name: repo-consistency-evidence
-          path: release-evidence/repo-consistency.json
+          path: release-evidence/*.json
+          if-no-files-found: error
 
   # Full release gate (ci-check + strict production status + ops readiness +
   # staging preflight self-test). Manual dispatch only — this is the

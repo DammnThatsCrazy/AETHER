@@ -66,6 +66,31 @@ services:
     environment: {<<: *runtime-env, AETHER_ROLE: api}
     command: uvicorn main:app --host 0.0.0.0 --port 8000
     ports: ["8000:8000"]
+  # The production image intentionally contains application code, not the
+  # repository's test suite.  Run the durable harness in a separate container
+  # using the same production-shaped runtime image and dependencies, while
+  # preserving the repository source layout required by source-of-truth
+  # registry loaders.
+  integration-tests:
+    <<: *runtime
+    # This harness calls the ingestion validator directly with mocked cache
+    # and producer dependencies; it intentionally exercises the local/snapshot
+    # consent path rather than requiring seeded ConsentReceipt rows. Real
+    # server-authoritative consent is covered by the database-backed suites.
+    environment:
+      <<: *runtime-env
+      AETHER_ROLE: api
+      AUTHORITATIVE_CONSENT_ENFORCEMENT_ENABLED: "false"
+      TENANT_COMPLIANCE_POLICY_ENABLED: "false"
+      PYTHONDONTWRITEBYTECODE: "1"
+    working_dir: /workspace
+    entrypoint: []
+    volumes:
+      - type: bind
+        source: ../..
+        target: /workspace
+        read_only: true
+    command: python -m pytest tests/integration/test_batch_endpoint.py -q -p no:cacheprovider
   outbox-relay:
     <<: *runtime
     environment: {<<: *runtime-env, AETHER_ROLE: outbox-relay}

@@ -33,7 +33,9 @@ from repositories.repos import _IN_MEMORY_STORES, reset_in_memory_stores
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    # Python 3.14 no longer creates an implicit main-thread event loop after
+    # TestClient/asyncio code has closed the previous loop.
+    return asyncio.run(coro)
 
 
 class _Tenant:
