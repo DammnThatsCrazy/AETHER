@@ -144,14 +144,26 @@ def journeys(args: argparse.Namespace) -> int:
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser()
     sub = p.add_subparsers(dest="action", required=True)
-    s = sub.add_parser("staging"); s.set_defaults(func=staging)
-    s.add_argument("--candidate", type=Path, required=True); s.add_argument("--profile", required=True); s.add_argument("--output", type=Path, required=True); s.add_argument("--dry-run", action="store_true")
+    s = sub.add_parser("staging")
+    s.set_defaults(func=staging)
+    s.add_argument("--candidate", type=Path, required=True)
+    s.add_argument("--profile", required=True)
+    s.add_argument("--output", type=Path, required=True)
+    s.add_argument("--dry-run", action="store_true")
     for name in ("preflight", "deploy", "migration", "tenant-activation", "journeys"):
         s.add_argument(f"--{name}-command", default="")
-    m = sub.add_parser("migration"); m.set_defaults(func=migration)
-    m.add_argument("--metadata", type=Path, required=True); m.add_argument("--output", type=Path, required=True); m.add_argument("--command", default=""); m.add_argument("--validation-command", default=""); m.add_argument("--dry-run", action="store_true")
-    j = sub.add_parser("journeys"); j.set_defaults(func=journeys)
-    j.add_argument("--profile", required=True); j.add_argument("--output", type=Path, required=True); j.add_argument("--dry-run", action="store_true")
+    m = sub.add_parser("migration")
+    m.set_defaults(func=migration)
+    m.add_argument("--metadata", type=Path, required=True)
+    m.add_argument("--output", type=Path, required=True)
+    m.add_argument("--command", default="")
+    m.add_argument("--validation-command", default="")
+    m.add_argument("--dry-run", action="store_true")
+    j = sub.add_parser("journeys")
+    j.set_defaults(func=journeys)
+    j.add_argument("--profile", required=True)
+    j.add_argument("--output", type=Path, required=True)
+    j.add_argument("--dry-run", action="store_true")
     return p
 
 
