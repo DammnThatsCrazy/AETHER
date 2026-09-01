@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: "a4276ce1"
+last_synced_commit: "b3aee241"
 reviewed_source_commits:
   - commit: "7ba83380"
     reason: "Reviewed the Kyber component-test synchronization change; frontend architecture and runtime contracts are unaffected."
