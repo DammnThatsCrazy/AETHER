@@ -272,6 +272,18 @@ delete/recreate plan.
 | **Limitations** | Never applied, never billed, never load-tested. First application of the consolidated shape **destroys seven ECS services** — see [Migration hazards](#migration-hazards). Shares `environment = "production"` with the other two production-class profiles and therefore needs its own AWS account. |
 | **Promotion path** | → `production-scale` on observed, sustained load. Trigger table in [AWS Lean Production](AWS-LEAN-PRODUCTION.md). |
 
+
+**tfmcp (opt-in).** `production-lean` supports an optional Terraform MCP server
+via `enable_tfmcp_in_lean = true` in the profile tfvars. When enabled, one
+Fargate task (512 CPU / 1024 MiB, `public_ip` egress) serves the MCP protocol
+over Streamable HTTP on port 8080 behind the shared ALB at `/mcp*`. The task
+role grants scoped Terraform state access, an apply policy covering the resource
+classes this root manages, and Secrets Manager reads for the auth token and
+GitHub PAT. The endpoint uses the configured `domain_name` (cert-backed HTTPS)
+when set. Enabling tfmcp raises the lean fixed baseline by roughly USD 18/month;
+the USD 200 hard ceiling is exceeded and must be reviewed as a cost-policy
+exception. See [AWS Deployment](AWS-DEPLOYMENT.md#tfmcp--terraform-mcp-server)
+and `AWS Deployment/aether-aws/terraform/modules/tfmcp`.
 ## `production-scale`
 
 | | |

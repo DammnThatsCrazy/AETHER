@@ -1,0 +1,15 @@
+# Codex MCP server configuration for Aether tfmcp.
+# Install: cp this file to ~/.codex/config.toml (or merge into existing config.toml)
+# Then:  codex mcp install aether-tfmcp --config ~/.codex/config.toml
+# Or add the [mcp_servers.aether-tfmcp] table to your existing ~/.codex/config.toml.
+
+[mcp_servers.aether-tfmcp]
+# Streamable HTTP transport — replace <ALB_DNS_NAME> with the terraform output value.
+url = "https://<ALB_DNS_NAME>/mcp"
+
+[mcp_servers.aether-tfmcp.headers]
+# Bearer token from the Secrets Manager secret (terraform output mcp_auth_token_secret_arn).
+Authorization = "Bearer <TOKEN>"
+
+# Optional: 2-minute timeout for long-running plan/apply operations.
+timeout = 120
