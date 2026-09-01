@@ -12,6 +12,11 @@ IMAGE_LATEST="${ECR_URI}/${ECR_REPO}:latest"
 
 echo "==> Building tfmcp v${TFMCP_VERSION}"
 
+# NOTE: In the live root, the ECR repository is managed by
+# terraform/modules/ecr/main.tf (aether-tfmcp). This standalone build script
+# creates the repo if missing so the build can proceed without Terraform — for
+# first-time build or local development only. In production, let Terraform own
+# the repository lifecycle (encryption, scan-on-push, lifecycle policy, tags).
 aws ecr describe-repositories \
   --repository-names "${ECR_REPO}" --region "${AWS_REGION}" \
   >/dev/null 2>&1 || {

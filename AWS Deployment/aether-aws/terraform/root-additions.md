@@ -122,7 +122,7 @@ module "tfmcp" {
   count = local.enable_tfmcp ? 1 : 0
   source = "./modules/tfmcp"
 
-  enable_tfmcp            = var.enable_tfmcp
+  enable_tfmcp            = local.enable_tfmcp  # drive from profile gate, not root var (default=false, unused)
   tfmcp_image_digest      = var.tfmcp_image_digest
   tfmcp_cpu               = var.tfmcp_cpu
   tfmcp_memory            = var.tfmcp_memory

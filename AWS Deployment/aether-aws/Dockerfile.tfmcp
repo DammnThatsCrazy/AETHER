@@ -2,8 +2,13 @@ FROM rust:1.85-slim-bookworm AS builder
 ARG TFMCP_VERSION="0.2.2"
 ARG TFMCP_REVISION="unknown"
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends libssl-dev && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 --branch v${TFMCP_VERSION} https://github.com/nwiizo/tfmcp.git /app/tfmcp-src || (echo "Failed to clone tfmcp" && exit 1)
+
+# Install git before cloning — rust:slim-bookworm does not include it
+RUN apt-get update && apt-get install -y --no-install-recommends libssl-dev git && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --depth 1 --branch v${TFMCP_VERSION} https://github.com/nwiizo/tfmcp.git /app/tfmcp-src || \
+  (echo "Failed to clone tfmcp v${TFMCP_VERSION}" && exit 1)
+
 WORKDIR /app/tfmcp-src
 RUN cargo build --release --bin tfmcp
 
@@ -11,11 +16,26 @@ FROM hashicorp/terraform:1.9.5 AS terraform
 
 FROM debian:trixie-slim
 ARG TFMCP_VERSION="0.2.2"
-LABEL io.modelcontextprotocol.server.name="io.github.nwiizo/tfmcp" org.opencontainers.image.title="tfmcp" org.opencontainers.image.description="Aether-hosted Terraform MCP server" org.opencontainers.image.source="https://github.com/nwiizo/tfmcp" org.opencontainers.image.version="${TFMCP_VERSION}"
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+LABEL io.modelcontextprotocol.server.name="io.github.nwiizo/tfmcp" \
+      org.opencontainers.image.title="tfmcp" \
+      org.opencontainers.image.description="Aether-hosted Terraform MCP server" \
+      org.opencontainers.image.source="https://github.com/nwiizo/tfmcp" \
+      org.opencontainers.image.version="${TFMCP_VERSION}"
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
+
 COPY --from=builder /app/tfmcp-src/target/release/tfmcp /usr/local/bin/tfmcp
 COPY --from=terraform /bin/terraform /usr/local/bin/terraform
+
+# Include the Aether Terraform configuration so the container can plan and apply
+# against the live root without requiring an external git clone at runtime.
+# The startup entrypoint copies the mounted TF config (or clones AETHER_REPO_REF
+# at runtime if no volume is mounted) and sets up the backend before invoking tfmcp.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 ENV RUST_LOG=info
-ENTRYPOINT ["tfmcp"]
-CMD ["mcp", "--toolsets", "all"]
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["tfmcp", "--toolsets", "all"]
