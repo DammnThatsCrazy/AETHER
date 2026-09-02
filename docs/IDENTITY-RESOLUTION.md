@@ -12,7 +12,7 @@ source_files:
 canonical_owner: identity@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "bb1aef2"
+last_synced_commit: "4764707"
 ---
 # Aether Identity Resolution v8.12.0 — Technical Guide
 
@@ -115,12 +115,14 @@ These produce `confidence = 1.0` and trigger immediate merging:
 | Signal | Match Logic | Example |
 |---|---|---|
 | **UserIdSignal** | Same `userId` across profiles | User logs in on phone and laptop |
-| **EmailSignal** | Same normalized email hash | Same email in traits from two browsers |
+| **VerifiedEmailSignal** | Same email with **verified ownership** (`email_ownership_verified`) | Mailbox control proven via OTP / magic link / trusted OIDC |
 | **PhoneSignal** | Same E.164 phone hash | Same phone number registered from web and app |
-| **WalletAddressSignal** | Same wallet address + VM type | MetaMask connected on Chrome and Firefox |
+| **WalletSignatureSignal** | Same wallet address with verified signature | Cryptographic key-control proof |
 | **OAuthSignal** | Same OAuth provider + subject | Google login on desktop and mobile |
 
 **Email normalization**: lowercase, trim whitespace, remove dots from Gmail local part (j.doe@gmail.com = jdoe@gmail.com), remove plus aliases (user+tag@domain.com = user@domain.com).
+
+> **Observed vs. verified email.** A merely *observed* `email_hash` (asserted in event traits) is **strong** evidence, not deterministic — it does not prove the subject controls the mailbox, and does not auto-merge in staging/production. Only **verified email ownership** (`email_ownership_verified`, established by the backend verification layer — OTP, scanner-safe magic link, or a server-validated OIDC `email_verified` claim) is deterministic. Verified email still requires identity-linking consent, respects identifier suppression, and opens a conflict rather than merging when candidates carry contradictory deterministic identifiers. A client-supplied `email_verified` flag is never trusted.
 
 **Phone normalization**: E.164 format (+1234567890), strip spaces/dashes/parens.
 
