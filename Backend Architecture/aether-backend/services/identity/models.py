@@ -17,6 +17,7 @@ class IdentitySignalType(str, Enum):
     EXTERNAL_ID = "external_id"
     WALLET_ADDRESS = "wallet_address"
     WALLET_SIGNATURE_VERIFIED = "wallet_signature_verified"
+    EMAIL_OWNERSHIP_VERIFIED = "email_ownership_verified"
     AGENT_ID = "agent_id"
     ORG_ID = "org_id"
     CAMPAIGN_ID = "campaign_id"
@@ -89,6 +90,47 @@ class SubjectStatus(str, Enum):
     SPLIT = "split"
 
 
+# ── Identity assurance / verification enums ─────────────────────────────────────
+
+class VerificationMethod(str, Enum):
+    EMAIL_OTP = "email_otp"
+    EMAIL_MAGIC_LINK = "email_magic_link"
+    OIDC_VERIFIED_CLAIM = "oidc_verified_claim"
+    SSO_VERIFIED_CLAIM = "sso_verified_claim"
+    WALLET_SIGNATURE = "wallet_signature"
+    TRUSTED_PROVIDER = "trusted_provider"
+
+
+class VerificationChallengeState(str, Enum):
+    ISSUED = "issued"
+    VALIDATED = "validated"
+    CONSUMED = "consumed"
+    EXPIRED = "expired"
+    REVOKED = "revoked"
+    LOCKED = "locked"
+
+
+class VerificationEvidenceType(str, Enum):
+    EMAIL_OWNERSHIP_VERIFIED = "email_ownership_verified"
+    WALLET_OWNERSHIP_VERIFIED = "wallet_ownership_verified"
+    PHONE_OWNERSHIP_VERIFIED = "phone_ownership_verified"
+
+
+class VerificationEvidenceStatus(str, Enum):
+    ACTIVE = "active"
+    REVOKED = "revoked"
+    EXPIRED = "expired"
+
+
+class VerificationPurpose(str, Enum):
+    IDENTITY_VERIFICATION = "identity_verification"
+
+
+class AssuranceLevel(str, Enum):
+    VERIFIED = "verified"
+    AUTHORITATIVE = "authoritative"
+
+
 # ── Reason codes ──────────────────────────────────────────────────────────────
 
 REASON_SAME_USER_ID = "same_user_id"
@@ -118,6 +160,16 @@ REASON_FRAGMENT_SPLIT = "fragment_split"
 REASON_CAMPAIGN_ONLY_SAMENESS_BLOCKED = "campaign_only_sameness_blocked"
 REASON_CROSS_TENANT_FRAGMENT_BLOCKED = "cross_tenant_fragment_blocked"
 REASON_IDENTITY_CYCLE_BLOCKED = "identity_cycle_detected"
+# ── Identity assurance / verification reason codes ─────────────────────────────
+REASON_SAME_VERIFIED_EMAIL = "same_verified_email"
+REASON_VERIFIED_EMAIL_EVIDENCE = "verified_email_evidence"
+REASON_VERIFIED_WALLET_EVIDENCE = "verified_wallet_evidence"
+REASON_VERIFICATION_EVIDENCE_REVOKED = "verification_evidence_revoked"
+REASON_VERIFICATION_EVIDENCE_EXPIRED = "verification_evidence_expired"
+REASON_UNTRUSTED_VERIFICATION_ISSUER = "untrusted_verification_issuer"
+REASON_CONFLICTING_VERIFIED_IDENTIFIER = "conflicting_verified_identifier"
+REASON_VERIFICATION_CONSENT_BLOCKED = "verification_consent_blocked"
+REASON_RESOLUTION_REPLAY = "resolution_replay"
 
 
 # ── Domain model dataclasses ──────────────────────────────────────────────────
@@ -296,3 +348,119 @@ class IdentityResolutionAuditRecord:
     policy_result: str
     consent_snapshot: Optional[dict]
     created_at: str
+
+
+# ── Identity assurance / verification records ──────────────────────────────────
+
+@dataclass
+class VerificationChallenge:
+    """A single-use ownership-verification challenge (OTP / magic link).
+
+    The raw secret is never stored — only ``secret_digest`` (an HMAC of the
+    OTP/token under the verification-token key domain). ``source_context`` holds
+    PII-safe provenance only.
+    """
+
+    id: str
+    tenant_id: str
+    identifier_type: str          # e.g. "email"
+    identifier_hash: str
+    method: str                   # VerificationMethod value
+    purpose: str = "identity_verification"
+    secret_digest: str = ""       # HMAC digest of the OTP/token; never the raw secret
+    state: str = "issued"         # VerificationChallengeState value
+    subject_hint_id: Optional[str] = None
+    issued_at: str = ""
+    expires_at: str = ""
+    validated_at: Optional[str] = None
+    consumed_at: Optional[str] = None
+    attempt_count: int = 0
+    max_attempts: int = 5
+    source_context: dict = field(default_factory=dict)   # PII-safe provenance only
+    created_at: str = ""
+    updated_at: str = ""
+
+    def to_record(self) -> dict[str, Any]:
+        """Serialize to a JSONB-friendly persistence record."""
+        return {
+            "id": self.id,
+            "tenant_id": self.tenant_id,
+            "identifier_type": self.identifier_type,
+            "identifier_hash": self.identifier_hash,
+            "method": self.method,
+            "purpose": self.purpose,
+            "secret_digest": self.secret_digest,
+            "state": self.state,
+            "subject_hint_id": self.subject_hint_id,
+            "issued_at": self.issued_at,
+            "expires_at": self.expires_at,
+            "validated_at": self.validated_at,
+            "consumed_at": self.consumed_at,
+            "attempt_count": self.attempt_count,
+            "max_attempts": self.max_attempts,
+            "source_context": dict(self.source_context),
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+
+@dataclass
+class VerificationEvidence:
+    """Durable, tenant-scoped proof that an identifier's ownership was verified.
+
+    Emitted after a challenge is consumed (or a trusted-provider claim is
+    accepted). Consumed by the resolver to raise assurance and to gate
+    verified-identifier links.
+    """
+
+    id: str
+    tenant_id: str
+    evidence_type: str            # VerificationEvidenceType value
+    identifier_type: str          # "email"/"wallet"/"phone"
+    identifier_hash: str
+    verification_method: str      # VerificationMethod value
+    assurance_level: str = "verified"
+    issuer: str = "aether"
+    canonical_entity_id: Optional[str] = None
+    issuer_subject_hash: Optional[str] = None
+    challenge_id: Optional[str] = None
+    source_event_id: Optional[str] = None
+    proof_reference: Optional[str] = None
+    proof_digest: Optional[str] = None
+    status: str = "active"        # VerificationEvidenceStatus value
+    verified_at: str = ""
+    expires_at: Optional[str] = None
+    revoked_at: Optional[str] = None
+    policy_version: str = "1.0.0"
+    consent_snapshot: Optional[dict] = None
+    metadata: dict = field(default_factory=dict)
+    created_at: str = ""
+    updated_at: str = ""
+
+    def to_record(self) -> dict[str, Any]:
+        """Serialize to a JSONB-friendly persistence record."""
+        return {
+            "id": self.id,
+            "tenant_id": self.tenant_id,
+            "evidence_type": self.evidence_type,
+            "identifier_type": self.identifier_type,
+            "identifier_hash": self.identifier_hash,
+            "verification_method": self.verification_method,
+            "assurance_level": self.assurance_level,
+            "issuer": self.issuer,
+            "canonical_entity_id": self.canonical_entity_id,
+            "issuer_subject_hash": self.issuer_subject_hash,
+            "challenge_id": self.challenge_id,
+            "source_event_id": self.source_event_id,
+            "proof_reference": self.proof_reference,
+            "proof_digest": self.proof_digest,
+            "status": self.status,
+            "verified_at": self.verified_at,
+            "expires_at": self.expires_at,
+            "revoked_at": self.revoked_at,
+            "policy_version": self.policy_version,
+            "consent_snapshot": self.consent_snapshot,
+            "metadata": dict(self.metadata),
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
