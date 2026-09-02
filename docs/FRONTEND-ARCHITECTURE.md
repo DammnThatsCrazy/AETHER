@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: "71ebc958"
+last_synced_commit: "99736fed"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -46,7 +46,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Social Intelligence** panels — their users' social platform presence
 - **Recommendation cards** — pending retargeting / campaign actions for the tenant to approve
 - **Suggestion feed** — OODA-driven prioritised recommendations with helpful/not helpful/dismiss feedback
-- Campaign management, attribution dashboards, Campaign 360 (`/campaigns/:id`) — per-campaign overview, population, clusters, conversions, and attribution with referral/source-class rollups; communication rates expose governed value state, sample sufficiency, Wilson uncertainty, and lineage, and the tenant UI withholds values that do not meet the registry minimum sample
+- Campaign management, attribution dashboards, Campaign 360 (`/campaigns/:id`) — per-campaign overview, population, clusters, conversions, and attribution with referral/source-class rollups; communication rates expose governed value state, sample sufficiency, Wilson uncertainty, and lineage, and the tenant UI withholds values that do not meet the registry minimum sample. Campaign 360 also hosts **Outcome 360** / **Economic 360** intelligence-projection tabs (`features/projection-360/`): they render typed projection section states for the campaign focus (available/degraded/empty …), never recomputing projection content
 - Profile360 and Journey Explorer source evidence — journey steps surface AI provider/product, mediation type, verification, confidence, classifier version, attribution eligibility, and attributed net revenue when backed by active credits; excluded crawler/scanner noise remains counted in journey quality metadata
 - API key management, plan management, usage metering
 - Webhook endpoint management — add/test/delete outbound delivery endpoints
@@ -73,7 +73,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Journey Explorer** — chronological journey timeline with attribution weight annotations (`/measurement/journeys`)
 - **Conversion Explorer** — canonical conversion detail, revenue history, attribution drill-down (`/measurement/conversions`)
 - **Campaign Intelligence** — campaign hierarchy, performance metrics, spend/ROAS time-series (`/measurement/campaigns`)
-- **Campaign 360** — full per-campaign drill-down: overview metrics, population funnel (observed→resolved→engaged→converted→attributed), identity clusters, entities, journeys, conversions, attribution model comparison, graph anchor, quality/freshness diagnostics (`/measurement/campaigns/:campaignId`); launched via "Campaign 360 →" links in Campaign Intelligence rows and Profile360 attribution panel
+- **Campaign 360** — full per-campaign drill-down: overview metrics, population funnel (observed→resolved→engaged→converted→attributed), identity clusters, entities, journeys, conversions, attribution model comparison, graph anchor, quality/freshness diagnostics (`/measurement/campaigns/:campaignId`); launched via "Campaign 360 →" links in Campaign Intelligence rows and Profile360 attribution panel. Also hosts **Outcome 360** / **Economic 360** intelligence-projection tabs (`features/projection-360/`) rendering typed projection section states for the campaign focus — never recomputing projection content
 - **Campaign Registry** (v8.11.0+) — canonical campaign list with origin/platform/status filters, alias management, external references view (`/campaign-intelligence/registry`)
 - **Campaign Sources** (v8.11.0+) — connected ad platform sources with sync controls and health indicators (`/campaign-intelligence/sources`)
 - **Mapping Review** (v8.11.0+) — unresolved/ambiguous attribution evidence queue; resolve/ignore actions create durable aliases and trigger reprocessing (`/campaign-intelligence/mapping-review`)

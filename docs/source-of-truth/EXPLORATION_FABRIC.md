@@ -22,7 +22,7 @@ source_files:
   - Backend Architecture/aether-backend/services/exploration/adapters/base.py
   - Backend Architecture/aether-backend/services/exploration/adapters/graph.py
   - Backend Architecture/aether-backend/services/exploration/adapters/projection.py
-last_synced_commit: "ae973059"
+last_synced_commit: "99736fed"
 ---
 
 # Unified Exploration Fabric — source of truth (backend)
