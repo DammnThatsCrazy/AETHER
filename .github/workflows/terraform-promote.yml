@@ -790,7 +790,7 @@ jobs:
             echo '::error::Unable to determine the AWS account plan; refusing staging apply until the Free Tier plan check succeeds.'
             exit 1
           }
-          uses_cmk="$(jq '[.resource_changes[]? | select(.address | startswith("module.aurora.aws_kms_key."))] | length' \
+          uses_cmk="$(jq '[.resource_changes[]? | select(.address | startswith("module.aurora.aws_kms_key.")) | select(.change.actions != ["delete"])] | length' \
             "${RUNNER_TEMP}/reviewed-plan/reviewed.tfplan.json")"
           case "$plan_type" in
             PAID)
