@@ -15,6 +15,7 @@ intentionally additive and mirrors ``decision_evidence.py``'s repository shape.
 
 from __future__ import annotations
 
+import json
 from typing import Optional
 
 from shared.common.common import utc_now
@@ -68,33 +69,111 @@ class VerificationChallengeRepository(_ScopedRepo):
     async def increment_attempt(
         self, tenant_id: str, challenge_id: str
     ) -> Optional[dict]:
-        record = await self.get_for_tenant(tenant_id, challenge_id)
-        if record is None:
+        """Atomically bump ``attempt_count`` and lock at ``max_attempts``.
+
+        Concurrency contract: a burst of concurrent OTP verifications must never
+        lose an increment (a lost update would under-count attempts and weaken
+        the lock, letting a burst exceed ``max_attempts``). The Postgres path
+        does the read-modify-write in ONE ``UPDATE ... RETURNING`` statement; the
+        in-memory path performs a compare-and-set directly on the shared store
+        with NO ``await`` between reading and writing, so under ``asyncio`` a
+        second coroutine cannot interleave and read a stale count.
+        """
+        pool = await self._ensure_pool()
+        if pool is not None:
+            row = await pool.fetchrow(
+                f"""
+                UPDATE {self.table_name}
+                SET data = jsonb_set(
+                        jsonb_set(
+                            data,
+                            '{{attempt_count}}',
+                            to_jsonb(COALESCE((data->>'attempt_count')::int, 0) + 1)
+                        ),
+                        '{{state}}',
+                        CASE
+                            WHEN COALESCE((data->>'attempt_count')::int, 0) + 1
+                                 >= COALESCE((data->>'max_attempts')::int, 5)
+                            THEN '"locked"'::jsonb
+                            ELSE data->'state'
+                        END
+                    ),
+                    updated_at = NOW()
+                WHERE id = $1 AND tenant_id = $2
+                RETURNING data
+                """,
+                challenge_id,
+                tenant_id,
+            )
+            return json.loads(row["data"]) if row is not None else None
+
+        # In-memory compare-and-set: no await between read and write.
+        record = self._store.get(challenge_id)
+        if record is None or record.get("tenant_id") != tenant_id:
             return None
         attempts = int(record.get("attempt_count", 0)) + 1
-        fields: dict = {"attempt_count": attempts}
+        record["attempt_count"] = attempts
         if attempts >= int(record.get("max_attempts", 5)):
-            fields["state"] = "locked"
-        return await self.update(challenge_id, fields)
+            record["state"] = "locked"
+        record["updated_at"] = utc_now().isoformat()
+        return record
 
     async def consume_atomic(
         self, tenant_id: str, challenge_id: str
     ) -> Optional[dict]:
         """Guarded one-time consume of a validated challenge.
 
-        Re-reads the row and, only if it is currently ``validated``, transitions
-        it to ``consumed`` and stamps ``consumed_at``. A row in any other state
-        (already consumed / expired / locked / issued) yields ``None``. This is
-        best-effort atomic under the in-memory / JSONB backend — there is no
-        row-level lock, so concurrent callers rely on the read-check-write here.
+        Concurrency contract: exactly one of any number of concurrent callers
+        may transition a ``validated`` challenge to ``consumed``; every other
+        caller (and any call on an already consumed / expired / locked / issued
+        row) gets ``None``. This prevents a double-consume that would mint two
+        evidence rows for one challenge.
+
+        The Postgres path relies on a single conditional ``UPDATE``: the
+        ``WHERE ... data->>'state' = 'validated'`` predicate is evaluated
+        atomically, so only the first statement to run flips the state and gets
+        a ``RETURNING`` row; a concurrent statement matches zero rows and
+        returns ``None``. The in-memory path performs a compare-and-set directly
+        on the shared store with NO ``await`` between the state check and the
+        write, so two gathered coroutines cannot both observe ``validated``.
         """
-        record = await self.get_for_tenant(tenant_id, challenge_id)
-        if record is None or record.get("state") != "validated":
+        now_iso = utc_now().isoformat()
+        pool = await self._ensure_pool()
+        if pool is not None:
+            row = await pool.fetchrow(
+                f"""
+                UPDATE {self.table_name}
+                SET data = jsonb_set(
+                        jsonb_set(data, '{{state}}', '"consumed"'),
+                        '{{consumed_at}}',
+                        to_jsonb($3::text)
+                    ),
+                    updated_at = NOW()
+                WHERE id = $1
+                  AND tenant_id = $2
+                  AND data->>'state' = 'validated'
+                RETURNING data
+                """,
+                challenge_id,
+                tenant_id,
+                now_iso,
+            )
+            # No row returned => the row was not 'validated' (already consumed by
+            # a concurrent caller, or never validated): treat as already-consumed.
+            return json.loads(row["data"]) if row is not None else None
+
+        # In-memory compare-and-set: no await between read and write.
+        record = self._store.get(challenge_id)
+        if (
+            record is None
+            or record.get("tenant_id") != tenant_id
+            or record.get("state") != "validated"
+        ):
             return None
-        return await self.update(
-            challenge_id,
-            {"state": "consumed", "consumed_at": utc_now().isoformat()},
-        )
+        record["state"] = "consumed"
+        record["consumed_at"] = now_iso
+        record["updated_at"] = now_iso
+        return record
 
 
 class VerificationEvidenceRepository(_ScopedRepo):

@@ -12,7 +12,7 @@ source_files:
 canonical_owner: identity@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "4764707"
+last_synced_commit: "b23e78c0"
 ---
 # Aether Identity Resolution v8.12.0 — Technical Guide
 
@@ -347,8 +347,12 @@ changing any resolution outcome:
   resolver records an `IdentityDecisionEvidence` row (decision type — `auto_link`,
   `candidate_link`, `merge`, `split`, `suppress`, `reject`, `conflict`, …, the
   matched signals, confidence, and a hashed consent snapshot) for each resolution.
-  Recording is wrapped so a failure can never break resolution; evidence is
-  tenant-scoped.
+  When a **verified ownership proof** drove the decision the row additionally
+  carries verification provenance — `verification_evidence_id`,
+  `verification_method`, `verification_issuer`, `verification_policy_version`, and
+  the survivor's `resolution_revision` (so a stale-revision read is detectable);
+  ordinary decisions leave these blank. Recording is wrapped so a failure can
+  never break resolution; evidence is tenant-scoped.
 - **Source Precedence Engine** (`services/identity/source_precedence.py`) — a
   machine-readable precedence matrix ranks conflicting sources per field
   (identity, revenue, wallet/account/payment linkage, financial value, reward

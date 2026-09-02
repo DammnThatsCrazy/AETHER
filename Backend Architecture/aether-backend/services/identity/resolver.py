@@ -243,6 +243,9 @@ class IdentityResolutionService:
     ) -> IdentityResolutionDecision:
         event_id = event.get("event_id", "")
         consent_snapshot = _extract_consent(event)
+        # Verification provenance carried by a replay's synthetic event (§14):
+        # {evidence_id, issuer, method, policy_version}. Empty for ordinary events.
+        verification_ctx = (event.get("context") or {}).get("verification") or {}
 
         # Recompute path: caller provides pre-hashed signals to bypass
         # extract/normalize/hash/persist steps (observations already in DB).
@@ -631,6 +634,7 @@ class IdentityResolutionService:
                 event_id=event_id,
                 consent_snapshot=consent_snapshot,
                 policy_decision_id=audit_id,
+                verification_ctx=verification_ctx,
             )
         except Exception as exc:  # noqa: BLE001 - evidence must never break resolution
             logger.warning("decision evidence recording failed: %s", exc)
@@ -747,12 +751,16 @@ class IdentityResolutionService:
         event_id: str,
         consent_snapshot: Optional[dict],
         policy_decision_id: Optional[str],
+        verification_ctx: Optional[dict] = None,
     ) -> None:
         """Record an IdentityDecisionEvidence row for this resolution (§3.3).
 
         Purely observational: maps the policy MergeDecision to a decision_type,
         captures matching signal types as evidence and suppressed/revoked types
-        as exclusions, and links the audit record as the policy decision id.
+        as exclusions, links the audit record as the policy decision id, and —
+        when a verified ownership proof drove the decision — stamps the
+        verification provenance (§14): evidence id, method, issuer, policy
+        version, and the survivor's current resolution revision.
         """
         decision_type = decision_type_from_merge_decision(
             policy_result.decision, has_conflict=has_conflict
@@ -764,6 +772,27 @@ class IdentityResolutionService:
                 val = getattr(sig, attr, "") or ""
                 if val:
                     source_connectors.append(val)
+
+        # Verification provenance (§14). ``method`` comes from the replay's
+        # verification context when present, else is inferred from a verified
+        # signal type among the matches. The revision is read only when a
+        # verified proof is involved so ordinary decisions stay revision-0.
+        vctx = verification_ctx or {}
+        verified_types = {
+            IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED,
+            IdentitySignalType.WALLET_SIGNATURE_VERIFIED,
+        }
+        verified_signal = next(
+            (getattr(t, "value", t) for t in matching_types if t in verified_types),
+            "",
+        )
+        verification_method = str(vctx.get("method") or verified_signal or "")
+        resolution_revision = 0
+        if verification_method:
+            resolution_revision = await self._current_resolution_revision(
+                tenant_id, canonical_entity_id
+            )
+
         await self._decision_evidence.record_decision(
             tenant_id=tenant_id,
             entity_id=canonical_entity_id,
@@ -777,6 +806,11 @@ class IdentityResolutionService:
             policy_decision_id=policy_decision_id,
             confidence_score=policy_result.confidence,
             confidence_tier=policy_result.confidence_tier,
+            verification_evidence_id=str(vctx.get("evidence_id") or ""),
+            verification_method=verification_method,
+            verification_issuer=str(vctx.get("issuer") or ""),
+            verification_policy_version=str(vctx.get("policy_version") or ""),
+            resolution_revision=resolution_revision,
         )
 
     # ── Verified-ownership merge helpers ──────────────────────────────────

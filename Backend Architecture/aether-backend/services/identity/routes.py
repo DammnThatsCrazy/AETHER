@@ -765,9 +765,13 @@ class VerificationOTPVerifyRequest(BaseModel):
 
 
 class VerificationOIDCRequest(BaseModel):
-    claims: dict
+    # A RAW provider ID token — the service verifies its RS256 signature against
+    # the issuer's JWKS and enforces iss/aud/exp/nonce. Never accept a
+    # pre-decoded claims dict from the client.
+    id_token: str
     issuer_allowlist: list[str] = Field(default_factory=list)
     audience: str
+    nonce: Optional[str] = None
     consent_snapshot: Optional[dict] = None
 
 
@@ -857,16 +861,18 @@ async def verify_oidc_trusted_claim(
     body: VerificationOIDCRequest,
     request: Request,
 ) -> dict:
-    """Accept a pre-validated, upstream-verified OIDC/SSO claims dict and, when
-    trusted, issue authoritative email-ownership evidence."""
+    """Accept a raw OIDC/SSO ID token, verify it server-side (RS256 signature
+    against the issuer JWKS + iss/aud/exp/nonce), and, when trusted, issue
+    authoritative email-ownership evidence."""
     tenant = request.state.tenant
     tenant.require_permission("write")
     service = _get_email_verification_service()
     result = await service.verify_trusted_claim(
         tenant_id=tenant.tenant_id,
-        claims=body.claims,
+        id_token=body.id_token,
         issuer_allowlist=body.issuer_allowlist,
         expected_audience=body.audience,
+        expected_nonce=body.nonce,
         consent_snapshot=body.consent_snapshot,
     )
     return APIResponse(data=result).to_dict()

@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: "ead4ba6c"
+last_synced_commit: "b23e78c0"
 ---
 
 # Events / Kafka Subsystem
@@ -34,7 +34,7 @@ Non-local environments fail closed: if `EVENT_BROKER=sns_sqs` but boto3 or the q
 - `EventConsumer` — Subscribes to topics with consumer groups, backpressure (`MAX_CONCURRENT=10`, resizable via `resize_concurrency()`), per-role queue/DLQ bindings, and durable dead-lettering.
 - `Event` — Serializable event schema with topic, payload, tenant_id, correlation_id, version, retry_count, and an optional `envelope` (v2 enrichment).
 - `EventEnvelopeV2` — Profile 360 v2 enrichment envelope; every field optional, additive only. Attached via `Event.with_v2()`, which bumps `version` to `"2.0"`.
-- `Topic` — Enum of all event topics (181 topics grouped into domain sections).
+- `Topic` — Enum of all event topics (243 topics grouped into domain sections).
 - `DLQPublishError` / `ConsumerClientTornDown` — named failure types: a failed durable dead-letter publish, and a broker client torn down while messages were still unacknowledged (which would otherwise turn a shutdown into a batch of duplicates).
 
 ## Environment Variables
@@ -73,9 +73,9 @@ In `AETHER_ENV=local` with no broker reachable, `EventProducer.publish()` append
 
 ## Event Topics
 
-Topics are organized by domain (181 total). Examples:
+Topics are organized by domain (243 total). Examples:
 - **Ingestion:** `aether.sdk.events.raw`, `aether.sdk.events.validated`
-- **Identity:** `aether.identity.resolved`, `aether.identity.merged`
+- **Identity:** `aether.identity.resolved`, `aether.identity.merged`; identity-assurance lifecycle `aether.identity.verification.completed`, `aether.identity.verification.revoked`, and the async replay trigger `aether.identity.resolution.replay_requested`
 - **Analytics:** `aether.analytics.session.scored`, `aether.analytics.anomaly`
 - **Agent:** `aether.agent.task.started`, `aether.agent.task.completed`
 - **Commerce:** `aether.commerce.payment.sent`, `aether.commerce.agent.hired`

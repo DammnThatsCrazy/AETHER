@@ -118,6 +118,14 @@ class Topic(str, Enum):
     IDENTITY_SPLIT = "aether.identity.split"
     PROFILE_UPDATED = "aether.profile.updated"
 
+    # Identity assurance — verification lifecycle + async resolution replay.
+    # COMPLETED/REVOKED announce that an identifier's ownership proof was issued
+    # or withdrawn; REPLAY_REQUESTED drives the durable, retryable replay worker
+    # that re-scores affected identities off the request path.
+    IDENTITY_VERIFICATION_COMPLETED = "aether.identity.verification.completed"
+    IDENTITY_VERIFICATION_REVOKED = "aether.identity.verification.revoked"
+    IDENTITY_RESOLUTION_REPLAY_REQUESTED = "aether.identity.resolution.replay_requested"
+
     # Analytics
     SESSION_SCORED = "aether.analytics.session.scored"
     ANOMALY_DETECTED = "aether.analytics.anomaly"

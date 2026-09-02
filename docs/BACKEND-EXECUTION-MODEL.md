@@ -16,7 +16,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
-last_synced_commit: "b1dc6671"
+last_synced_commit: "b23e78c0"
 ---
 
 # Backend Execution Model
@@ -34,7 +34,7 @@ API process no longer starts every worker, consumer, and cron in-request.
 | `api` | The FastAPI HTTP server only — no supervised workers, no stream consumers. |
 | `outbox-relay` | Outbox relay workers: the notification outbox, the ingestion `event_outbox` relay (FT-6), and the reward delivery outbox (drains `reward_delivery_jobs` through the rail-sender registry — the at-least-once delivery path for the reward plane). |
 | `stream-worker` | Stream loops plus Bronze/Silver projection and notification consumers. |
-| `identity-worker` | Identity-signal emission from validated SDK events. |
+| `identity-worker` | Identity-signal emission from validated SDK events, plus the durable resolution-replay consumer (own group `aether-identity-replay`) that re-scores affected identities when verified-ownership evidence is issued or revoked. |
 | `graph-writer` | Profile/graph projection and delegation mutation consumers. |
 | `measurement-worker` | Identity merge/split journey rebuild and attribution restatement consumers. |
 | `semantic-worker` | Semantic classification + identity-restatement consumers plus the `semantic_reconciler` (Gold recompute sweep, gated by `settings.semantic.reconciler_enabled`), `semantic_retention` (Silver tombstone / Gold delete sweep, gated by `settings.semantic.retention_enabled`), and `semantic_graph_projector` (per-tenant Gold relationship-state projection into the intelligence graph via the canonical mutation gateway, gated by `settings.semantic.graph_projector_enabled`) loop workers. |

@@ -532,7 +532,12 @@ def test_distinct_roles_do_not_share_topic_handlers():
     identity = runners["identity-worker"]
     measurement = runners["measurement-worker"]
 
-    assert set(identity.consumer._handlers) == {Topic.SDK_EVENTS_VALIDATED}
+    # identity-worker co-hosts signal emission and the durable resolution-replay
+    # consumer on its one SQS queue (separate Kafka groups; one queue under SQS).
+    assert set(identity.consumer._handlers) == {
+        Topic.SDK_EVENTS_VALIDATED,
+        Topic.IDENTITY_RESOLUTION_REPLAY_REQUESTED,
+    }
     assert set(measurement.consumer._handlers) == {Topic.IDENTITY_MERGED, Topic.IDENTITY_SPLIT}
     # Identity and measurement never see each other's traffic.
     assert Topic.IDENTITY_MERGED not in identity.consumer._handlers
