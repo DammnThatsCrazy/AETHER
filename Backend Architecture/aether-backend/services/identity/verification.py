@@ -24,9 +24,10 @@ from __future__ import annotations
 
 import os
 import secrets
+import time
 import uuid
 from datetime import timedelta
-from typing import Optional
+from typing import Any, Optional
 
 from shared.common.common import parse_iso, utc_now
 from shared.logger.logger import get_logger
@@ -41,6 +42,7 @@ from .models import (
     VerificationChallengeState,
     VerificationMethod,
 )
+from .oidc_verifier import OIDCVerificationError, verify_oidc_id_token
 from .verification_repository import VerificationChallengeRepository
 
 logger = get_logger("aether.service.identity.verification")
@@ -49,6 +51,100 @@ logger = get_logger("aether.service.identity.verification")
 _OTP_TTL_SECONDS = 600
 _MAGIC_LINK_TTL_SECONDS = 1800
 _MAX_ATTEMPTS = 5
+
+# ── Challenge issuance rate-limit caps (env-overridable module constants) ──────
+# Sliding hourly window. Caps abuse of the (costly) email-send + challenge
+# issuance path. The source IP is used ONLY for limiting and is never persisted
+# as an identity signal.
+_RATE_LIMIT_WINDOW_SECONDS = int(
+    os.getenv("AETHER_VERIFY_RATE_WINDOW_SECONDS", "3600")
+)
+_MAX_CHALLENGES_PER_IDENTIFIER = int(
+    os.getenv("AETHER_VERIFY_MAX_CHALLENGES_PER_IDENTIFIER_PER_HOUR", "5")
+)
+_MAX_CHALLENGES_PER_IP = int(
+    os.getenv("AETHER_VERIFY_MAX_CHALLENGES_PER_IP_PER_HOUR", "20")
+)
+
+
+class _ChallengeRateLimiter:
+    """Fixed-window issuance limiter for verification challenges.
+
+    Caps challenge issuance per ``(tenant, identifier_hash)`` and per
+    ``(tenant, source_ip)`` over a fixed window. Redis-backed (INCR + EXPIRE)
+    when a client is injected; per-process in-memory otherwise (local / dev).
+    Modeled on :class:`shared.rate_limit.limiter.BurstRateLimiter`'s
+    ``_check_memory`` / ``_check_redis``.
+
+    An instance is owned per :class:`EmailVerificationService`; the route holds a
+    process singleton service, so counters persist across requests in
+    production, while tests that build a fresh service get isolated counters.
+    """
+
+    def __init__(self, redis_client: Optional[Any] = None) -> None:
+        self._redis = redis_client
+        self._buckets: dict[str, dict] = {}
+
+    async def check_issue(
+        self,
+        *,
+        tenant_id: str,
+        identifier_hash: str,
+        source_ip: Optional[str] = None,
+    ) -> tuple[bool, int]:
+        """Return ``(allowed, retry_after_seconds)`` for one issuance attempt.
+
+        Identifier is checked first; the IP dimension is only consulted when a
+        source IP is available. ``retry_after`` is 0 when allowed.
+        """
+        allowed, retry = await self._hit(
+            f"verify:chal:id:{tenant_id}:{identifier_hash}",
+            _MAX_CHALLENGES_PER_IDENTIFIER,
+        )
+        if not allowed:
+            return False, retry
+        if source_ip:
+            allowed, retry = await self._hit(
+                f"verify:chal:ip:{tenant_id}:{source_ip}",
+                _MAX_CHALLENGES_PER_IP,
+            )
+            if not allowed:
+                return False, retry
+        return True, 0
+
+    async def _hit(self, key: str, limit: int) -> tuple[bool, int]:
+        if self._redis is not None:
+            return await self._hit_redis(key, limit)
+        return self._hit_memory(key, limit)
+
+    def _hit_memory(self, key: str, limit: int) -> tuple[bool, int]:
+        now = time.time()
+        window = _RATE_LIMIT_WINDOW_SECONDS
+        bucket = self._buckets.get(key)
+        if bucket is None or (now - bucket["window_start"]) >= window:
+            self._buckets[key] = {"count": 1, "window_start": now}
+            return True, 0
+        bucket["count"] += 1
+        if bucket["count"] > limit:
+            retry = max(1, int(bucket["window_start"] + window - now))
+            return False, retry
+        return True, 0
+
+    async def _hit_redis(self, key: str, limit: int) -> tuple[bool, int]:
+        now = time.time()
+        window = _RATE_LIMIT_WINDOW_SECONDS
+        bucket_ts = int(now // window)
+        rkey = f"{key}:{bucket_ts}"
+        try:
+            count = await self._redis.incr(rkey)
+            if count == 1:
+                await self._redis.expire(rkey, window + 60)
+        except Exception:  # noqa: BLE001 - fall back to in-memory on Redis error
+            return self._hit_memory(key, limit)
+        if count > limit:
+            retry = max(1, int((bucket_ts + 1) * window - now))
+            return False, retry
+        return True, 0
 
 
 def _is_expired(record: dict, now_iso: str) -> bool:
@@ -72,10 +168,12 @@ class EmailVerificationService:
         challenge_repo: Optional[VerificationChallengeRepository] = None,
         evidence_service: Optional[EvidenceService] = None,
         metrics: Optional[IdentityMetrics] = None,
+        rate_limiter: Optional[_ChallengeRateLimiter] = None,
     ) -> None:
         self._challenges = challenge_repo or VerificationChallengeRepository()
         self._evidence = evidence_service or EvidenceService()
         self._metrics = metrics or IdentityMetrics()
+        self._rate_limiter = rate_limiter or _ChallengeRateLimiter()
 
     async def issue_email_challenge(
         self,
@@ -97,6 +195,26 @@ class EmailVerificationService:
         identifier_hash = hash_email(email, tenant_id)
         if not identifier_hash:
             raise ValueError("invalid email")
+
+        # GAP 3: cap issuance per (tenant, identifier) and per (tenant, IP). The
+        # source IP is read from provenance ONLY for limiting and is never
+        # persisted or hashed as an identity signal. On exceed we return a
+        # shaped dict (never raise) so the route can surface a 429-style result.
+        source_ip = None
+        if source_context:
+            source_ip = (
+                source_context.get("ip")
+                or source_context.get("source_ip")
+                or source_context.get("ip_address")
+            )
+        allowed, retry_after = await self._rate_limiter.check_issue(
+            tenant_id=tenant_id,
+            identifier_hash=identifier_hash,
+            source_ip=source_ip,
+        )
+        if not allowed:
+            self._metrics.record_verification_failure("rate_limited")
+            return {"status": "rate_limited", "retry_after": retry_after}
 
         scope = f"{purpose}:{tenant_id}"
         if method == VerificationMethod.EMAIL_MAGIC_LINK.value:
@@ -266,40 +384,60 @@ class EmailVerificationService:
         )
         return {"status": "verified", "evidence_id": evidence.id}
 
-    async def verify_trusted_claim(
-        self,
-        *,
-        tenant_id: str,
-        claims: dict,
-        issuer_allowlist: list[str],
-        expected_audience: str,
-        consent_snapshot: Optional[dict] = None,
-    ) -> dict:
-        """Server-side trusted OIDC/SSO adapter.
+    # Map an OIDCVerificationError.reason to the shaped failure dict + metric.
+    _OIDC_FAILURE_STATUS = {
+        "untrusted_issuer": "untrusted_issuer",
+        "invalid_audience": "invalid_audience",
+        "expired": "expired",
+        "invalid_nonce": "invalid_nonce",
+        "signature_unverifiable": "unverified",
+        "malformed": "unverified",
+    }
 
-        ``claims`` MUST already be a fully validated, decoded token payload:
-        signature, expiry (``exp``) and nonce verification are the caller's or
-        the gateway's responsibility (e.g. PyJWT against the provider JWKS) and
-        MUST happen BEFORE this method is called. This method performs only the
-        trust/authorization checks below and NEVER verifies a signature.
-
-        NEVER trust a client SDK's ``email_verified`` — this path is only for
-        backend-validated provider claims.
-        """
-        issuer = claims.get("iss")
-        if issuer not in issuer_allowlist:
-            self._metrics.record_verification_failure("untrusted_issuer")
+    def _oidc_failure(self, reason: str) -> dict:
+        status = self._OIDC_FAILURE_STATUS.get(reason, "unverified")
+        self._metrics.record_verification_failure(reason)
+        if status == "untrusted_issuer":
             return {
                 "status": "untrusted_issuer",
                 "reason": REASON_UNTRUSTED_VERIFICATION_ISSUER,
             }
+        return {"status": status}
 
-        aud = claims.get("aud")
-        aud_values = aud if isinstance(aud, (list, tuple, set)) else [aud]
-        if expected_audience not in aud_values:
-            self._metrics.record_verification_failure("audience_mismatch")
-            return {"status": "invalid_audience"}
+    async def verify_trusted_claim(
+        self,
+        *,
+        tenant_id: str,
+        id_token: str,
+        issuer_allowlist: list[str],
+        expected_audience: str,
+        expected_nonce: Optional[str] = None,
+        consent_snapshot: Optional[dict] = None,
+    ) -> dict:
+        """Server-side trusted OIDC/SSO adapter.
 
+        Accepts a RAW provider ``id_token`` and performs REAL server-side
+        verification via :func:`verify_oidc_id_token` (JWKS + PyJWT RS256 with a
+        local-only unsigned fallback): the RS256 signature, ``iss`` allowlist,
+        ``aud``, ``exp`` and — when supplied — ``nonce`` are all enforced before
+        any trust decision.
+
+        NEVER trust a client SDK's ``email_verified`` — it is only honoured when
+        it rides inside a token that passed verification here.
+        """
+        try:
+            claims = await verify_oidc_id_token(
+                id_token=id_token,
+                issuer_allowlist=issuer_allowlist,
+                expected_audience=expected_audience,
+                expected_nonce=expected_nonce,
+            )
+        except OIDCVerificationError as exc:
+            return self._oidc_failure(getattr(exc, "reason", "unverified"))
+        except ValueError:
+            return self._oidc_failure("malformed")
+
+        # email_verified is only trusted because the token was verified above.
         email = claims.get("email")
         if claims.get("email_verified") is not True or not email:
             self._metrics.record_verification_failure("unverified")
@@ -310,6 +448,7 @@ class EmailVerificationService:
             self._metrics.record_verification_failure("unverified")
             return {"status": "unverified"}
 
+        issuer = claims.get("iss")
         evidence = await self._evidence.issue_evidence(
             tenant_id=tenant_id,
             identifier_type="email",

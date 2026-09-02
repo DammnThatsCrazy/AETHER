@@ -19,8 +19,12 @@ Covered:
 """
 from __future__ import annotations
 
+import asyncio
+import base64
+import json
 import os
 import sys
+import time
 
 import pytest
 
@@ -37,7 +41,10 @@ from services.identity.models import (  # noqa: E402
     IdentitySignalType,
     VerificationEvidenceType,
 )
-from services.identity.verification import EmailVerificationService  # noqa: E402
+from services.identity.verification import (  # noqa: E402
+    _MAX_CHALLENGES_PER_IDENTIFIER,
+    EmailVerificationService,
+)
 from services.identity.verification_repository import (  # noqa: E402
     VerificationChallengeRepository,
     VerificationEvidenceRepository,
@@ -241,26 +248,55 @@ async def test_magic_link_get_does_not_issue_evidence_post_consume_does():
 
 
 # ── OIDC trusted-claim flow ──────────────────────────────────────────────────
+#
+# verify_trusted_claim now takes a RAW id_token and verifies it server-side.
+# These tests exercise the AETHER_ENV=local unsigned-decode fallback: they force
+# it by monkeypatching the verifier's JWKS fetch to be unreachable, so no
+# network is required. iss-allowlist / aud / exp / nonce are still enforced on
+# that fallback path, exactly as they are on the real RS256 path.
 
-def _oidc_claims(**overrides) -> dict:
+_ISSUER = "https://accounts.example.com"
+
+
+def _b64url(obj: dict) -> str:
+    return base64.urlsafe_b64encode(json.dumps(obj).encode()).decode().rstrip("=")
+
+
+def _make_id_token(**overrides) -> str:
+    """Build an (unsigned) JWT string carrying the given OIDC claims."""
+    now = int(time.time())
     claims = {
-        "iss": "https://accounts.example.com",
+        "iss": _ISSUER,
         "aud": "aether-app",
         "sub": "provider-subject-123",
         "email": EMAIL,
         "email_verified": True,
+        "iat": now,
+        "exp": now + 3600,
     }
     claims.update(overrides)
-    return claims
+    header = {"alg": "RS256", "typ": "JWT", "kid": "test-kid"}
+    return f"{_b64url(header)}.{_b64url(claims)}.ZmFrZS1zaWc"
+
+
+def _patch_jwks_unreachable(monkeypatch) -> None:
+    """Force the local unsigned-decode fallback by making JWKS fetch fail."""
+    async def _boom(issuer):  # noqa: ANN001
+        raise RuntimeError("jwks unreachable (test)")
+
+    monkeypatch.setattr(
+        "services.identity.oidc_verifier._fetch_jwks", _boom
+    )
 
 
 @pytest.mark.asyncio
-async def test_oidc_trusted_claim_issues_authoritative_evidence():
+async def test_oidc_trusted_claim_issues_authoritative_evidence(monkeypatch):
+    _patch_jwks_unreachable(monkeypatch)
     svc, _ = _make_service()
     result = await svc.verify_trusted_claim(
         tenant_id=TENANT,
-        claims=_oidc_claims(aud=["aether-app", "other"]),
-        issuer_allowlist=["https://accounts.example.com"],
+        id_token=_make_id_token(aud=["aether-app", "other"]),
+        issuer_allowlist=[_ISSUER],
         expected_audience="aether-app",
     )
     assert result["status"] == "verified"
@@ -272,19 +308,20 @@ async def test_oidc_trusted_claim_issues_authoritative_evidence():
     assert len(active) == 1
     assert active[0]["assurance_level"] == "authoritative"
     assert active[0]["verification_method"] == "oidc_verified_claim"
-    assert active[0]["issuer"] == "https://accounts.example.com"
+    assert active[0]["issuer"] == _ISSUER
     # The provider subject is stored only as a digest, never in the clear.
     assert active[0]["issuer_subject_hash"]
     assert "provider-subject-123" not in str(active[0])
 
 
 @pytest.mark.asyncio
-async def test_oidc_untrusted_issuer_creates_no_evidence():
+async def test_oidc_untrusted_issuer_creates_no_evidence(monkeypatch):
+    _patch_jwks_unreachable(monkeypatch)
     svc, _ = _make_service()
     result = await svc.verify_trusted_claim(
         tenant_id=TENANT,
-        claims=_oidc_claims(iss="https://evil.example.com"),
-        issuer_allowlist=["https://accounts.example.com"],
+        id_token=_make_id_token(iss="https://evil.example.com"),
+        issuer_allowlist=[_ISSUER],
         expected_audience="aether-app",
     )
     assert result["status"] == "untrusted_issuer"
@@ -297,12 +334,13 @@ async def test_oidc_untrusted_issuer_creates_no_evidence():
 
 
 @pytest.mark.asyncio
-async def test_oidc_wrong_audience_creates_no_evidence():
+async def test_oidc_wrong_audience_creates_no_evidence(monkeypatch):
+    _patch_jwks_unreachable(monkeypatch)
     svc, _ = _make_service()
     result = await svc.verify_trusted_claim(
         tenant_id=TENANT,
-        claims=_oidc_claims(aud="some-other-app"),
-        issuer_allowlist=["https://accounts.example.com"],
+        id_token=_make_id_token(aud="some-other-app"),
+        issuer_allowlist=[_ISSUER],
         expected_audience="aether-app",
     )
     assert result["status"] == "invalid_audience"
@@ -313,12 +351,13 @@ async def test_oidc_wrong_audience_creates_no_evidence():
 
 
 @pytest.mark.asyncio
-async def test_oidc_missing_email_verified_creates_no_evidence():
+async def test_oidc_missing_email_verified_creates_no_evidence(monkeypatch):
+    _patch_jwks_unreachable(monkeypatch)
     svc, _ = _make_service()
     result = await svc.verify_trusted_claim(
         tenant_id=TENANT,
-        claims=_oidc_claims(email_verified=False),
-        issuer_allowlist=["https://accounts.example.com"],
+        id_token=_make_id_token(email_verified=False),
+        issuer_allowlist=[_ISSUER],
         expected_audience="aether-app",
     )
     assert result["status"] == "unverified"
@@ -326,6 +365,117 @@ async def test_oidc_missing_email_verified_creates_no_evidence():
     assert await evidence_repo.get_active_for_identifier(
         TENANT, "email", hash_email(EMAIL, TENANT),
     ) == []
+
+
+@pytest.mark.asyncio
+async def test_oidc_wrong_nonce_creates_no_evidence(monkeypatch):
+    _patch_jwks_unreachable(monkeypatch)
+    svc, _ = _make_service()
+    result = await svc.verify_trusted_claim(
+        tenant_id=TENANT,
+        id_token=_make_id_token(nonce="attacker-nonce"),
+        issuer_allowlist=[_ISSUER],
+        expected_audience="aether-app",
+        expected_nonce="expected-nonce",
+    )
+    assert result["status"] == "invalid_nonce"
+    evidence_repo = VerificationEvidenceRepository()
+    assert await evidence_repo.get_active_for_identifier(
+        TENANT, "email", hash_email(EMAIL, TENANT),
+    ) == []
+
+
+@pytest.mark.asyncio
+async def test_oidc_expired_token_is_rejected(monkeypatch):
+    _patch_jwks_unreachable(monkeypatch)
+    svc, _ = _make_service()
+    past = int(time.time()) - 10
+    result = await svc.verify_trusted_claim(
+        tenant_id=TENANT,
+        id_token=_make_id_token(exp=past, iat=past - 3600),
+        issuer_allowlist=[_ISSUER],
+        expected_audience="aether-app",
+    )
+    assert result["status"] == "expired"
+    evidence_repo = VerificationEvidenceRepository()
+    assert await evidence_repo.get_active_for_identifier(
+        TENANT, "email", hash_email(EMAIL, TENANT),
+    ) == []
+
+
+# ── Atomic one-time consume under concurrency ────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_concurrent_consume_yields_exactly_one_success():
+    svc, _ = _make_service()
+    issued = await svc.issue_email_challenge(
+        tenant_id=TENANT, email=EMAIL, method="email_magic_link",
+    )
+    cid = issued["challenge_id"]
+
+    # Validate (non-consuming) so the challenge is eligible to be consumed.
+    validated = await svc.validate_magic_link(
+        tenant_id=TENANT, challenge_id=cid, token=issued["secret"],
+    )
+    assert validated["status"] == "validated"
+
+    # Two concurrent consumes race for the single validated challenge.
+    r1, r2 = await asyncio.gather(
+        svc.consume_magic_link(tenant_id=TENANT, challenge_id=cid),
+        svc.consume_magic_link(tenant_id=TENANT, challenge_id=cid),
+    )
+    statuses = sorted([r1["status"], r2["status"]])
+    assert statuses == ["not_validated_or_consumed", "verified"]
+
+    # Exactly one evidence row exists despite the double consume attempt.
+    evidence_repo = VerificationEvidenceRepository()
+    active = await evidence_repo.get_active_for_identifier(
+        TENANT, "email", issued["identifier_hash"],
+    )
+    assert len(active) == 1
+
+
+@pytest.mark.asyncio
+async def test_concurrent_consume_atomic_repo_level():
+    """The repository primitive itself flips the state exactly once."""
+    svc, _ = _make_service()
+    issued = await svc.issue_email_challenge(
+        tenant_id=TENANT, email=EMAIL, method="email_magic_link",
+    )
+    cid = issued["challenge_id"]
+    challenge_repo = VerificationChallengeRepository()
+    await challenge_repo.apply_update(TENANT, cid, {"state": "validated"})
+
+    r1, r2 = await asyncio.gather(
+        challenge_repo.consume_atomic(TENANT, cid),
+        challenge_repo.consume_atomic(TENANT, cid),
+    )
+    results = [r1, r2]
+    assert sum(1 for r in results if r is not None) == 1
+    assert sum(1 for r in results if r is None) == 1
+
+
+# ── Challenge issuance rate limiting ─────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_issue_past_identifier_cap_is_rate_limited():
+    svc, _ = _make_service()
+    email = "burst@example.com"
+    ident = hash_email(email, TENANT)
+
+    for _ in range(_MAX_CHALLENGES_PER_IDENTIFIER):
+        res = await svc.issue_email_challenge(tenant_id=TENANT, email=email)
+        assert "challenge_id" in res
+        assert res.get("status") != "rate_limited"
+
+    limited = await svc.issue_email_challenge(tenant_id=TENANT, email=email)
+    assert limited["status"] == "rate_limited"
+    assert limited["retry_after"] >= 1
+
+    # The rejected issuance created no additional challenge.
+    challenge_repo = VerificationChallengeRepository()
+    active = await challenge_repo.list_active_for_identifier(TENANT, ident)
+    assert len(active) == _MAX_CHALLENGES_PER_IDENTIFIER
 
 
 # ── Tenant isolation ─────────────────────────────────────────────────────────
