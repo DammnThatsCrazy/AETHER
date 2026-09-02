@@ -183,6 +183,7 @@ module "aurora" {
 
   backup_retention_days = var.aurora_backup_retention_days
   deletion_protection   = var.environment == "production"
+  express_mode          = var.aurora_express_mode
 }
 
 # ---------------------------------------------------------------------------

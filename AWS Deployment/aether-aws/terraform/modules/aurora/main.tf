@@ -12,10 +12,11 @@
 data "aws_region" "current" {}
 
 # --------------------------------------------------------------------------
-# KMS Key
+# KMS Key (skipped in express mode — uses AWS-managed default encryption)
 # --------------------------------------------------------------------------
 
 resource "aws_kms_key" "aurora" {
+  count                   = var.express_mode ? 0 : 1
   description             = "${var.project} Aurora encryption key (${var.environment})"
   deletion_window_in_days = 30
   enable_key_rotation     = true
@@ -27,8 +28,9 @@ resource "aws_kms_key" "aurora" {
 }
 
 resource "aws_kms_alias" "aurora" {
+  count         = var.express_mode ? 0 : 1
   name          = "alias/${lower(var.project)}-${var.environment}-aurora"
-  target_key_id = aws_kms_key.aurora.key_id
+  target_key_id = aws_kms_key.aurora[0].key_id
 }
 
 # --------------------------------------------------------------------------
@@ -99,7 +101,7 @@ resource "aws_rds_cluster" "this" {
 
   # AWS manages the master password — never stored in Terraform state.
   manage_master_user_password   = true
-  master_user_secret_kms_key_id = aws_kms_key.aurora.arn
+  master_user_secret_kms_key_id = var.express_mode ? null : aws_kms_key.aurora[0].arn
 
   # Serverless v2 scaling — min=0 enables auto-pause (staging); min=0.5 keeps warm (prod).
   serverlessv2_scaling_configuration {
@@ -110,7 +112,7 @@ resource "aws_rds_cluster" "this" {
 
   # Storage
   storage_encrypted = true
-  kms_key_id        = aws_kms_key.aurora.arn
+  kms_key_id        = var.express_mode ? null : aws_kms_key.aurora[0].arn
 
   # Network
   db_subnet_group_name   = aws_db_subnet_group.aurora.name
@@ -157,7 +159,7 @@ resource "aws_rds_cluster_instance" "writer" {
 
   performance_insights_enabled          = true
   performance_insights_retention_period = 7
-  performance_insights_kms_key_id       = aws_kms_key.aurora.arn
+  performance_insights_kms_key_id       = var.express_mode ? null : aws_kms_key.aurora[0].arn
 
   auto_minor_version_upgrade = true
   apply_immediately          = var.environment != "production"

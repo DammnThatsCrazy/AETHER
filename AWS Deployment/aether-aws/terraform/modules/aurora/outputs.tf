@@ -24,8 +24,8 @@ output "cluster_identifier" {
 }
 
 output "kms_key_arn" {
-  description = "ARN of the KMS key used for Aurora encryption"
-  value       = aws_kms_key.aurora.arn
+  description = "ARN of the KMS key used for Aurora encryption (empty in express mode)"
+  value       = var.express_mode ? "" : aws_kms_key.aurora[0].arn
 }
 
 output "db_password_secret_arn" {

@@ -169,6 +169,7 @@ run "staging_profile_plan" {
     network_egress_mode = null
     aurora_min_acu      = 0
     aurora_max_acu      = 2
+    aurora_express_mode = true
     log_retention_days  = 3
   }
 
@@ -677,6 +678,7 @@ run "staging_asleep_profile_plan" {
     network_egress_mode = null
     aurora_min_acu      = 0
     aurora_max_acu      = 2
+    aurora_express_mode = true
     log_retention_days  = 3
   }
 
@@ -1283,6 +1285,7 @@ run "staging_awake_applied" {
     network_egress_mode   = null
     aurora_min_acu        = 0
     aurora_max_acu        = 2
+    aurora_express_mode   = true
     log_retention_days    = 3
     enable_credential_kms = false
   }
@@ -1310,6 +1313,7 @@ run "staging_sleep_plan_against_applied" {
     network_egress_mode = null
     aurora_min_acu      = 0
     aurora_max_acu      = 2
+    aurora_express_mode = true
     log_retention_days  = 3
   }
 

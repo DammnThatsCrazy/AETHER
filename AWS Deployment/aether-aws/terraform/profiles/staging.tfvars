@@ -29,6 +29,9 @@ aurora_max_acu = 2
 # The AWS account's free-tier guard permits one day of automated Aurora
 # backups. Longer retention is reserved for paid production profiles.
 aurora_backup_retention_days = 1
+# Express mode uses AWS-managed encryption instead of a customer-managed KMS
+# key, which is required for AWS Free-tier accounts.
+aurora_express_mode = true
 
 # Logs — short retention; INFO/DEBUG ship to S3.
 log_retention_days        = 3
