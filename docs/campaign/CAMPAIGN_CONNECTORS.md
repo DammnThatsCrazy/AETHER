@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/connectors/x_ads.py
   - Backend Architecture/aether-backend/services/measurement/connectors/reddit_ads.py
   - Backend Architecture/aether-backend/services/measurement/connectors/microsoft_ads.py
-last_synced_commit: "bb1aef2"
+last_synced_commit: "4e6fdad"
 ---
 
 # Campaign Source Connectors

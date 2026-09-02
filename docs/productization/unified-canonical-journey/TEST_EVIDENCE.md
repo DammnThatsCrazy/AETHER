@@ -13,7 +13,7 @@ source_files:
   - tests/unit/test_silver_adapters.py
   - tests/integration/test_unified_journey_e2e.py
   - tests/security/test_journey_tenant_isolation.py
-last_synced_commit: "694479b"
+last_synced_commit: "4e6fdad"
 ---
 
 # Test Evidence — Unified Canonical Journey

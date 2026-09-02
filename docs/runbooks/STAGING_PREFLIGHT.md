@@ -13,7 +13,7 @@ source_files:
   - scripts/lib/preflight_env.py
   - scripts/lib/preflight_results.py
   - Backend Architecture/aether-backend/services/gateway/readiness.py
-last_synced_commit: "146e1603"
+last_synced_commit: "4e6fdad"
 ---
 
 # Runbook — Staging Preflight & Readiness

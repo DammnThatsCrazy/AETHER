@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/services/derivatives/adapters/base.py
   - Backend Architecture/aether-backend/services/agentic_observability/foundation.py
 canonical_owner: platform@aether
-last_synced_commit: "41c79d4"
+last_synced_commit: "4e6fdad"
 ---
 
 # ADR-007: Observation-Only Execution Invariant

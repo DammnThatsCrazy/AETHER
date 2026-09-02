@@ -14,7 +14,7 @@ source_files:
   - Backend Architecture/aether-backend/services/suggestions/adapters/derivatives_adapter.py
   - Backend Architecture/aether-backend/services/suggestions/adapters/interop_adapter.py
 canonical_owner: platform@aether
-last_synced_commit: "41c79d4"
+last_synced_commit: "4e6fdad"
 ---
 
 # Noesis and OODA Integration
