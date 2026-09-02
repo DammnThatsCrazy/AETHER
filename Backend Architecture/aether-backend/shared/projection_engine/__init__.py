@@ -14,6 +14,15 @@ never owns canonical state.
 """
 
 from shared.projection_engine.compiler import ProjectionCompiler
+from shared.projection_engine.composition import (
+    CompositionConflict,
+    CompositionContext,
+    CompositionResult,
+    compose_economic_infrastructure,
+    compose_economic_outcome,
+    compose_operational_value_triangle,
+    compose_outcome_infrastructure,
+)
 from shared.projection_engine.conflict import (
     ConflictClass,
     ConflictResolution,
@@ -57,6 +66,9 @@ from shared.projection_engine.temporal_modes import (
 
 __all__ = [
     "Composition",
+    "CompositionConflict",
+    "CompositionContext",
+    "CompositionResult",
     "ConflictClass",
     "ConflictResolution",
     "ContextOperation",
@@ -80,7 +92,11 @@ __all__ = [
     "ProjectionRuntime",
     "TemporalMode",
     "canonical_json",
+    "compose_economic_infrastructure",
+    "compose_economic_outcome",
     "compose_lenses",
+    "compose_operational_value_triangle",
+    "compose_outcome_infrastructure",
     "compute_projection_digest",
     "dispatch_temporal_mode",
     "lens_registry",

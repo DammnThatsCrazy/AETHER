@@ -1,0 +1,253 @@
+"""Projection-surface adapter — the S1 migration seam for 360 surfaces.
+
+Exploration surfaces whose backing plane is an intelligence projection
+(outcome360 / economic360 / infrastructure360) run through this adapter: it maps
+one registered exploration surface to its projection id (here equal by name) and
+executes the projection through the S1 engine
+(:class:`ProjectionRuntime <shared.projection_engine.runtime.ProjectionRuntime>`
+→ :class:`ProjectionExecutor` → the fail-isolated
+:class:`ProviderRegistry <shared.intelligence_projections.registry.ProviderRegistry>`)
+for the tenant-scoped subject derived from the exploration context.
+
+ADR-010 posture:
+
+* **Fail-isolated** — a missing projection provider, an invalid lens frame, or
+  any engine error degrades to a content-free reason
+  (``provider_unavailable`` / ``lens_frame_invalid`` / ``projection_failed``);
+  the adapter never raises and never echoes a provider diagnostic. The
+  content-free reason keys mirror the fabric's session composition
+  (``services/exploration/service.py::_compose_projection``).
+* **Read-only** — it only ever runs a projection; it has no write path and the
+  projection plane never mutates canonical state.
+* **Tenant-scoped end to end** — every request carries ``ctx.tenant_id`` (the
+  authenticated scope); the adapter derives no tenant of its own.
+* **Never fabricates** — a missing provider yields ``populated=False`` with an
+  honest degraded payload, never a placeholder row.
+
+The generic adapter is intentionally NOT registered: only the thin per-surface
+subclasses for 360 surfaces that previously had no dedicated exploration adapter
+(outcome360 / economic360 / infrastructure360) join the surface registry, so an
+already-owned surface (profile360, campaign360, ...) is never shadowed.
+"""
+
+from __future__ import annotations
+
+from typing import Optional
+
+from shared.exploration.models import ExplorationContextV1
+from shared.intelligence_projections.contracts import (
+    ProjectionRequest,
+    ProjectionResult,
+    ProjectionSubject,
+)
+from shared.intelligence_projections.generated_registry import (
+    PROJECTION_SUBJECT_KINDS,
+)
+from shared.projection_engine.conflict import LensConflict, LensNotFound
+from shared.projection_engine.lens_registry import (
+    lens_registry as default_lens_registry,
+)
+from shared.projection_engine.lens_set import LensSet
+from shared.projection_engine.runtime import ProjectionRuntime
+
+from services.exploration.adapters.base import (
+    AdapterContext,
+    AdapterResult,
+    AdapterTruncation,
+    SurfaceAdapter,
+)
+
+# The read plane this adapter honestly reports in AdapterResult.backend.
+_BACKEND = "intelligence_projection"
+
+# Content-free degraded reason keys (mirror service.py::_compose_projection so
+# the surface data path and the session-composition summary agree).
+_REASON_PROVIDER_UNAVAILABLE = "provider_unavailable"
+_REASON_LENS_FRAME_INVALID = "lens_frame_invalid"
+_REASON_PROJECTION_FAILED = "projection_failed"
+
+_VALID_SUBJECT_KINDS = frozenset(PROJECTION_SUBJECT_KINDS)
+_DEFAULT_SUBJECT_KIND = "entity"
+_DEFAULT_SUBJECT_ID = "current"
+
+
+def _subject_from_context(context: ExplorationContextV1) -> ProjectionSubject:
+    """The tenant-scoped subject a projection is asked about.
+
+    Mirrors ``service.py::_compose_projection`` exactly: a ``selection.focused``
+    anchor whose kind is a registered projection subject kind becomes the
+    subject; otherwise the projection falls back to the canonical default
+    (``entity`` / ``current``) so the surface data path and the session
+    projection summary always agree.
+    """
+    focus = context.selection.focused if context.selection else None
+    if focus is not None and focus.kind in _VALID_SUBJECT_KINDS:
+        return ProjectionSubject(kind=focus.kind, id=focus.id)
+    return ProjectionSubject(kind=_DEFAULT_SUBJECT_KIND, id=_DEFAULT_SUBJECT_ID)
+
+
+class ProjectionSurfaceAdapter(SurfaceAdapter):
+    """Execute an intelligence projection for one exploration surface.
+
+    Subclasses declare ``surface_id`` (and optionally ``projection_id`` when the
+    exploration surface and the projection id differ — here they are equal by
+    name). ``execute`` composes any lens frame / temporal mode the exploration
+    context carries and reshapes the engine result into the exploration
+    ``AdapterResult`` envelope: projection digest, per-section state and the
+    engine degradation summary.
+    """
+
+    surface_id = ""
+    # Optional explicit projection id; defaults to the surface id (the three
+    # registered 360 surfaces share their name with their projection row).
+    projection_id: Optional[str] = None
+
+    def __init__(self, *, runtime: Optional[ProjectionRuntime] = None) -> None:
+        # ``runtime`` is injectable so tests can bind a fresh-registry executor;
+        # the default is the module-level engine runtime over the global
+        # projection_registry (wired at app mount).
+        self._runtime = runtime if runtime is not None else ProjectionRuntime()
+
+    @property
+    def resolved_projection_id(self) -> str:
+        """The intelligence-projection id this surface projects."""
+        return self.projection_id or self.surface_id
+
+    # ── Execution ───────────────────────────────────────────────────────────
+
+    async def execute(self, ctx: AdapterContext) -> AdapterResult:
+        """Run the surface's intelligence projection for the tenant scope.
+
+        Fail-isolated: an invalid lens frame, a missing provider, or any engine
+        error returns a degraded ``AdapterResult`` (``populated=False``,
+        content-free reason) — never an exception, never a provider diagnostic.
+        """
+        surface = self.surface_id
+        projection_id = self.resolved_projection_id
+        lens_ids = list(ctx.context.lens_set) if ctx.context.lens_set else None
+        temporal_mode = ctx.context.temporal_mode
+
+        # Pre-validate the lens frame so an invalid frame degrades to the same
+        # content-free reason as the fabric's session composition (the engine's
+        # LensSet.from_request would otherwise raise mid-flight).
+        if lens_ids:
+            try:
+                LensSet.from_request(
+                    lens_ids, registry=default_lens_registry
+                ).validate(default_lens_registry)
+            except (LensConflict, LensNotFound):
+                return self._degraded_result(
+                    surface, projection_id, _REASON_LENS_FRAME_INVALID
+                )
+
+        try:
+            request = ProjectionRequest(
+                projectionId=projection_id,
+                tenantId=ctx.tenant_id,
+                subject=_subject_from_context(ctx.context),
+                lensIds=lens_ids,
+                temporalMode=temporal_mode,
+            )
+            result = await self._runtime.execute_projection(
+                request,
+                lens_ids=lens_ids,
+                temporal_mode=temporal_mode,
+            )
+        except (LensConflict, LensNotFound):
+            return self._degraded_result(
+                surface, projection_id, _REASON_LENS_FRAME_INVALID
+            )
+        except Exception:  # noqa: BLE001 - fail-isolated projection seam
+            return self._degraded_result(
+                surface, projection_id, _REASON_PROJECTION_FAILED
+            )
+
+        # A result with no sections means the target could not be satisfied
+        # (no registered provider / a fail-isolated provider). A real projection
+        # always renders at least its registered output sections (typed states).
+        if not result.sections:
+            return self._degraded_result(
+                surface, projection_id, _REASON_PROVIDER_UNAVAILABLE
+            )
+        return self._result_from(result, surface)
+
+    # ── Result shaping ──────────────────────────────────────────────────────
+
+    def _result_from(
+        self, result: ProjectionResult, surface: str
+    ) -> AdapterResult:
+        """Shape an engine result into the exploration adapter envelope."""
+        degradation_state = (
+            result.degradation.level if result.degradation is not None else None
+        )
+        return AdapterResult(
+            surface=surface,
+            backend=_BACKEND,
+            data={
+                "projectionId": result.projectionId,
+                "tenantId": result.tenantId,
+                "available": True,
+                "digest": result.digest,
+                "asOf": result.asOf,
+                "lensIds": result.lensIds,
+                "temporalMode": result.temporalMode,
+                "degradationState": degradation_state,
+                "sections": [
+                    {"id": s.id, "state": s.state} for s in result.sections
+                ],
+                "suppressedSections": result.suppressedSections,
+                "dependencyState": [
+                    {"projectionId": d.projectionId, "state": d.state}
+                    for d in result.dependencyState
+                ],
+            },
+            truncation=AdapterTruncation(returned_count=len(result.sections)),
+            populated=any(s.state == "available" for s in result.sections),
+        )
+
+    def _degraded_result(
+        self, surface: str, projection_id: str, reason: str
+    ) -> AdapterResult:
+        """A content-free degraded adapter result — never an exception."""
+        return AdapterResult(
+            surface=surface,
+            backend=_BACKEND,
+            data={
+                "projectionId": projection_id,
+                "available": False,
+                "reason": reason,
+                "sections": [],
+            },
+            truncation=AdapterTruncation(),
+            warnings=[reason],
+            populated=False,
+        )
+
+
+# ── Registered 360 projection surfaces (previously adapter-less) ────────────
+
+class Outcome360SurfaceAdapter(ProjectionSurfaceAdapter):
+    """outcome360 exploration surface → the outcome360 intelligence projection."""
+
+    surface_id = "outcome360"
+
+
+class Economic360SurfaceAdapter(ProjectionSurfaceAdapter):
+    """economic360 exploration surface → the economic360 intelligence projection."""
+
+    surface_id = "economic360"
+
+
+class Infrastructure360SurfaceAdapter(ProjectionSurfaceAdapter):
+    """infrastructure360 exploration surface → the infrastructure360 projection."""
+
+    surface_id = "infrastructure360"
+
+
+__all__ = [
+    "Economic360SurfaceAdapter",
+    "Infrastructure360SurfaceAdapter",
+    "Outcome360SurfaceAdapter",
+    "ProjectionSurfaceAdapter",
+    "_subject_from_context",
+]

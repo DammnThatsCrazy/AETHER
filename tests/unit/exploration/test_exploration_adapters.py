@@ -13,7 +13,19 @@ import services.exploration.adapters.graph as graph_adapter
 
 
 def test_every_backed_surface_has_an_adapter():
-    expected = {"graph", "profile360", "cluster360", "timeline", "geo", "campaign360"}
+    # S6 adds projection-backed adapters for the three implemented 360 surfaces
+    # (migration seam: surface -> intelligence projection via the S1 engine).
+    expected = {
+        "campaign360",
+        "cluster360",
+        "economic360",
+        "geo",
+        "graph",
+        "infrastructure360",
+        "outcome360",
+        "profile360",
+        "timeline",
+    }
     assert available_surfaces() == frozenset(expected)
 
 

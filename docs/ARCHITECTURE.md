@@ -469,8 +469,12 @@ existing implementation that is not yet a native provider) — it is NOT a
 readiness signal and is never surfaced as `production_ready`. The runtime is a
 fail-isolated provider protocol
 (`shared/intelligence_projections/provider.py` + `registry.py`): one broken
-projection degrades its own result, never the plane. P0 mounts no projection
-route — the plane is a library; app wiring lands with the first real provider.
+projection degrades its own result, never the plane. P0 shipped the plane as a
+library with no projection route; projection routes land only as classified
+legacy bindings per vertical slice — the read-only `/v1/infrastructure` (every
+route a GET, no generic catch-all) is the first. Exploration surfaces compose
+over the engine through projection-backed surface adapters
+(`services/exploration/adapters/projection.py`).
 The design decision is [ADR-010](decisions/ADR-010-intelligence-projection-plane.md);
 the source-of-truth is
 [INTELLIGENCE_PROJECTION_ARCHITECTURE.md](source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md).

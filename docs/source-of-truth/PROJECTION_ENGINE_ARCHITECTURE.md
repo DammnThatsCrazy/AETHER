@@ -10,6 +10,7 @@ source_files:
   - packages/shared/contracts/lens-registry.json
   - Backend Architecture/aether-backend/shared/projection_engine/__init__.py
   - Backend Architecture/aether-backend/shared/projection_engine/compiler.py
+  - Backend Architecture/aether-backend/shared/projection_engine/composition.py
   - Backend Architecture/aether-backend/shared/projection_engine/conflict.py
   - Backend Architecture/aether-backend/shared/projection_engine/context_operator.py
   - Backend Architecture/aether-backend/shared/projection_engine/degradation.py
@@ -58,7 +59,7 @@ services/exploration ──► ProjectionRuntime ──► ProjectionExecutor
                                                  │ compile → plan → run
                               ┌──────────────────┴───────────────────┐
                         ProjectionCompiler                     ProviderRegistry (P0)
-                        ProjectionPlanner                      └─ 18 projection providers
+                        ProjectionPlanner                      └─ 19 projection providers
                         ProjectionIR / ProjectionPlan
                         LensRegistry / LensSet / compose_lenses
                         ProjectionDegradation / digest / G @ C
@@ -71,7 +72,9 @@ services/exploration ──► ProjectionRuntime ──► ProjectionExecutor
   contracts with **strictly optional** fields (see below).
 - **Engine (this doc):** lenses + composition algebra, the temporal-mode
   vocabulary, IR/compiler/planner/executor, typed degradation, deterministic
-  digest, and the `G @ C` context operator.
+  digest, the `G @ C` context operator, and multi-360 `composition` (S6) that
+  runs two/three 360 members over the same tenant-scoped subject and returns a
+  deterministic composite (see below).
 
 ## Why a separate layer?
 
@@ -261,6 +264,57 @@ scope (tenant id is server-authoritative). Operations: `SET_TEMPORAL`,
 
 ---
 
+## Cross-360 composition (S6)
+
+`composition.py` layers the engine onto MULTI-360 orchestration: running two or
+three 360 providers over the SAME tenant-scoped subject and returning a
+deterministic composite (`CompositionResult`) while every member projection
+stays fail-isolated. Four public entry points:
+
+* `compose_economic_outcome` — economic360 + outcome360 (value view).
+* `compose_outcome_infrastructure` — outcome360 + infrastructure360
+  (condition → outcome seam).
+* `compose_economic_infrastructure` — economic360 + infrastructure360
+  (condition → economic effect seam).
+* `compose_operational_value_triangle` — infrastructure condition → outcome →
+  economic effect, running all three.
+
+Each member is named by the registry 360 id it serves and mapped to its real
+engine overlay lens (`economic` / `outcome` / `infrastructure`, defined in
+`generated_lenses.py` — never hardcoded ids outside that generated
+vocabulary). The composition forms ONE `LensSet` whose base is the engine
+default (`standard`) and whose overlays are the member lenses, then composes it
+over the subject kind with `compose_lenses` — so identity / idempotence /
+order stability come from the shared algebra. A member lens that cannot apply
+to the subject kind is dropped by the algebra as a `CAPABILITY_MISSING` and
+recorded as a typed `CompositionConflict` (content-free reason): that member
+does NOT run, the surviving members still compose. A member whose overlay
+composes but whose provider is absent degrades with a content-free
+`CAPABILITY_MISSING` reason (the executor's fail-closed fully-degraded result)
+— never an exception.
+
+Members run through a `ProjectionExecutor` (callers inject their own — e.g.
+over a fresh `ProviderRegistry` of stubs — by passing `executor=`); each run
+inherits the engine's fail-isolation, so a raising provider degrades its
+member rather than the whole composition. Provider diagnostics never reach the
+composition's reasons — only engine-computed, content-free text. The
+composition is read-only and never widens tenant scope.
+
+`CompositionResult` is a plain dataclass, NOT a `ProjectionResult` — a composed
+360 has no single registry `projectionId` and therefore no `ProjectionResult`
+home. It carries: sorted `members`, `composed_lens_ids`, the flattened
+top-level `sections` (ONE section per distinct section id across the member
+results — the UNION of member section vocabularies, no duplicates; when two
+members render the same id the first member in member order wins at the top
+level and the overlap is preserved in `member_results`, nothing silently
+dropped), the deduplicated `claims` union, every requested member's FULL result
+in `member_results`, `degraded_members`, typed `conflicts`, an engine
+`degradation` summary (`none` when every member composed cleanly, `partial`
+when some degraded, `full` when none produced sections), and a deterministic
+`digest` (sha256 over the composed content, stable across identical runs).
+
+---
+
 ## Contract extension (backward compatible)
 
 The engine extends the P0 contracts with STRICTLY OPTIONAL fields so a minimal
@@ -297,10 +351,16 @@ The richer engine `TemporalMode` enum never leaks into the wire contract.
 ## Relationships
 
 * **Registry**: `packages/shared/contracts/intelligence-projection-registry.json`
-  (18 projections) and `packages/shared/contracts/lens-registry.json` (28 lenses)
+  (19 projections) and `packages/shared/contracts/lens-registry.json` (28 lenses)
   are both generated with order-stable emission (see
   [generated docs rule](../REPO-INDEX.md)).
 * **Doctrine**: ADR-010 — a 360 is an intelligence projection over canonical
   Aether truth, never a competing system of record.
 * **Checklist**: `INTELLIGENCE_PROJECTION_VERTICAL_SLICE_CHECKLIST.md` — the
   vertical-slice DoD the engine-backed 360s converge on.
+* **Consumption seams (S6)**: the exploration projection-surface adapter
+  (`services/exploration/adapters/projection.py`) and the Noesis
+  projection-intelligence adapter
+  (`services/noesis/adapters/projection_intelligence_adapter.py`) run
+  tenant-scoped projections through `ProjectionRuntime`; both are read-only,
+  fail-isolated and content-free on degradation.

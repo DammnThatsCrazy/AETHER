@@ -152,7 +152,7 @@ rows stay byte-stable.
 |---|---|
 | **Silver projector-ownership registry** | Separate authority. Projectors WRITE Silver; projections READ Gold. The projector registry is never a canonical authority of a projection (validator forbids it; it may appear only as an input ref). |
 | **Graph Mutation Gateway** | The write path. Projections default `read_only`; `canonical_gateway_only` projections write only via `GraphMutationGateway.apply(MutationIntent)` (`off\|shadow\|enforce`, `replay_ledger()` digest). |
-| **Exploration Fabric** | Surface join. Projections JOIN `surface-capability-registry.json`; `surfaceIds ⊆` the surface registry. The projection registry never defines surfaces. |
+| **Exploration Fabric** | Surface join. Projections JOIN `surface-capability-registry.json`; `surfaceIds ⊆` the surface registry. The projection registry never defines surfaces. S6 migration seam — the three implemented 360 surfaces (`outcome360`/`economic360`/`infrastructure360`) surface in exploration through `services/exploration/adapters/projection.py::ProjectionSurfaceAdapter`, which maps the surface to its projection id and runs the projection through the S1 engine for the tenant-scoped subject, reshaping the engine result into the exploration `AdapterResult` envelope (digest, per-section state, degradation; fail-isolated + content-free, `populated=False` on a missing provider). Registered only for 360s that previously had no adapter — an already-owned surface is never shadowed. |
 | **Readiness vocabulary** | No parallel ladder. `implementationState` never maps to readiness; `readiness.py` maps it to presentation-only tokens and is asserted to never emit a certification token or `production_ready`. |
 | **Measurement plane** | An authority (`shared/measurement`, computation substrate). `metricRefs` resolve against `metric-registry.json`; economic/outcome metrics not yet in the registry stay in `pendingReference`. |
 | **UPR** | An authority (`services/provider_runtime/`). `connection360`/`source360` read connections/credentials/health from it; the `ProviderRegistry` mirrors the UPR `ProviderRegistry` shape. |
@@ -199,6 +199,24 @@ and ships as a library (no `main.py` wiring, no public projection route, in P0):
   `ClaimEnvelope`, typed `SectionState`) reuse `ContractModel`, `EntityRef`,
   `EvidenceRef`, `PageRequest`, `PageInfo`, `TimeRangeFilter` from
   `services/operational_intelligence/models.py`. **No redefinitions.**
+
+**Consumption seams (S6)** — projections surface OUT of the plane through two
+thin, read-only seams, neither of which registers here or re-declares a
+contract:
+- The **exploration surface seam**
+  (`services/exploration/adapters/projection.py::ProjectionSurfaceAdapter`)
+  backs the implemented 360 exploration surfaces by running each surface's
+  projection through the S1 engine (`ProjectionRuntime` → `ProjectionExecutor`)
+  — see the **Exploration Fabric** row in §4 and
+  `EXPLORATION_FABRIC.md`.
+- The **Noesis read seam**
+  (`services/noesis/adapters/projection_intelligence_adapter.py`) answers a
+  `projection_read` for one registered projection id behind the existing Noesis
+  tenant/permission gate, returning the projection digest + per-section state;
+  an unknown id / invalid subject kind / missing provider / engine error
+  degrades to a static content-free reason (`unknown_projection` /
+  `invalid_subject_kind` / `provider_unavailable` / `projection_failed`) and
+  answers `sufficient=False` — never a synthesized result.
 
 ## 6. Vertical-slice DoD + migration rules
 
@@ -265,7 +283,8 @@ regenerate; new surfaces/metrics are appended, never rewritten.
   — the Definition-of-Done checklist.
 - `docs/source-of-truth/PROJECTION_ENGINE_ARCHITECTURE.md` — the higher
   orchestration layer (lens composition algebra, projection IR / compiler /
-  planner / executor / digest, typed degradation, `G @ C` context operator)
+  planner / executor / digest, typed degradation, `G @ C` context operator,
+  cross-360 `composition`)
   that runs projections through this plane's `ProviderRegistry`.
 - `docs/source-of-truth/BACKEND_INTELLIGENCE_ARCHITECTURE.md` — the additive
   target architecture this plane is a part of.

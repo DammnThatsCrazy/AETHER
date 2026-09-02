@@ -17,6 +17,7 @@ import {
   useExplorationContext,
 } from '@aether/ui/exploration';
 import { campaignExplorationContext } from '@aether-app/features/campaigns/use-campaign-exploration';
+import { ProjectionSurfacePanel } from '@aether-app/features/projection-360';
 
 type AnyRecord = Record<string, unknown>;
 
@@ -695,6 +696,8 @@ const TABS = [
   { value: 'attribution', label: 'Attribution' },
   { value: 'targeting', label: 'Targeting Intelligence' },
   { value: 'card-linked', label: 'Card-linked Outcomes' },
+  { value: 'outcome360', label: 'Outcome 360' },
+  { value: 'economic360', label: 'Economic 360' },
 ];
 
 export function Campaign360Page() {
@@ -796,6 +799,14 @@ export function Campaign360Page() {
 
         <TabsContent value="card-linked">
           <CardLinkedOutcomesTab campaignId={campaignId} />
+        </TabsContent>
+
+        <TabsContent value="outcome360">
+          <ProjectionSurfacePanel surface="outcome360" focus={{ kind: 'campaign', id: campaignId }} />
+        </TabsContent>
+
+        <TabsContent value="economic360">
+          <ProjectionSurfacePanel surface="economic360" focus={{ kind: 'campaign', id: campaignId }} />
         </TabsContent>
       </Tabs>
     </div>

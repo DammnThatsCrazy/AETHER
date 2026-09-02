@@ -1472,6 +1472,40 @@ from the authenticated tenant, capability-gated on `infrastructure360.read`):
 
 ---
 
+### Exploration Fabric — Sessions & Operations (v8.12.0)
+
+The Exploration Fabric (`/v1/explore`) is the context-preserving
+query/filter/presentation workbench over every analytical surface. Its
+validate/query/facets/views/links endpoints and the per-surface adapter model
+are documented in `docs/source-of-truth/EXPLORATION_FABRIC.md`; this section
+covers the **sessions + operations** surface, added over the S1 projection
+engine. An `ExplorationSession` persists one tenant-scoped exploration —
+surface, seed `ExplorationContextV1`, op history, and current context — and
+every submitted filter stays accounted for (no silent drops). Flag-gated inside
+every handler via `AETHER_EXPLORATION_ENABLED` (default OFF): when the flag is
+off the surface answers 404, indistinguishable from an unmounted route.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/explore/sessions` | Create a session from a seed `ExplorationContextV1` (optional client-supplied `session_id`); returns the persisted `ExplorationSession` |
+| GET | `/v1/explore/sessions` | List the tenant's sessions (`limit` ≤ 500, `offset` pagination) |
+| GET | `/v1/explore/sessions/{session_id}` | Load one session (404 when absent) |
+| DELETE | `/v1/explore/sessions/{session_id}` | Delete one session (404 when absent) |
+| POST | `/v1/explore/sessions/{session_id}/operations` | Apply one operation to the session; returns `{result, session}` — `result` carries the post-op context, op status (`applied` \| `rejected` \| `degraded`), and, for projection surfaces, the S1 engine composition summary |
+
+**Operation vocabulary:** `OPEN` \| `PIVOT` \| `EXPAND` \| `COLLAPSE` \|
+`FILTER_ADD` \| `FILTER_REMOVE` \| `LENS_ADD` \| `TIME_TRAVEL` \| `DRILL_DOWN`
+\| `RESET` \| `SAVE` \| `LOAD`. Operations are PURE context transforms over the
+session's `current_context` (which may carry a lens set / engine temporal
+mode); `SAVE`/`LOAD` are session-repository operations handled by the service
+layer.
+
+**Permissions:** `write` for create/delete/apply-operation, `read` for
+list/load — both behind the feature flag. All session ids are
+tenant-qualified: a caller can only reach its own tenant's sessions.
+
+---
+
 ### Population Intelligence Service (v8.5.0)
 
 Macro-to-micro group intelligence. Supports segments, cohorts, clusters, communities, batches, archetypes, anomaly groups, lookalike groups, risk groups, and lifecycle groups.
