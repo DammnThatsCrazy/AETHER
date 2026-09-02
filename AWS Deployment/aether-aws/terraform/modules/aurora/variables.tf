@@ -63,3 +63,9 @@ variable "deletion_protection" {
   description = "Enable deletion protection"
   default     = false
 }
+
+variable "express_mode" {
+  type        = bool
+  description = "Use AWS-managed encryption instead of a customer-managed KMS key. Required for AWS Free-tier accounts where the full VPC/KMS Aurora topology is not supported."
+  default     = false
+}

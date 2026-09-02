@@ -212,6 +212,12 @@ variable "aurora_backup_retention_days" {
   default     = 7
 }
 
+variable "aurora_express_mode" {
+  type        = bool
+  description = "Use AWS-managed encryption for Aurora instead of a customer-managed KMS key. Required for AWS Free-tier accounts."
+  default     = false
+}
+
 # --------------------------------------------------------------------------
 # RDS Postgres (kept for rollback safety — decommission after E3 validation)
 # --------------------------------------------------------------------------

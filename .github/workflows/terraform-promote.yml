@@ -781,23 +781,27 @@ jobs:
         run: |
           set -euo pipefail
           # AWS Free accounts can create Aurora only through Express
-          # Configuration. The reviewed staging topology intentionally uses a
-          # VPC, customer-managed KMS key, and explicit Serverless v2 settings,
-          # which the Express API does not represent. Fail closed before any
-          # service-linked-role or Terraform mutation instead of allowing a
-          # partial apply to fail after other resources have changed.
+          # Configuration. The full staging topology uses a customer-managed
+          # KMS key, which the Express API does not represent. Express mode
+          # (aurora_express_mode = true) uses AWS-managed encryption and is
+          # compatible with Free accounts.
           plan_type="$(aws freetier get-account-plan-state --query 'accountPlanType' --output text 2>/tmp/freetier.err)" || {
             cat /tmp/freetier.err >&2
             echo '::error::Unable to determine the AWS account plan; refusing staging apply until the Free Tier plan check succeeds.'
             exit 1
           }
+          uses_cmk="$(jq '[.resource_changes[]? | select(.address | startswith("module.aurora.aws_kms_key."))] | length' \
+            "${RUNNER_TEMP}/reviewed-plan/reviewed.tfplan.json")"
           case "$plan_type" in
             PAID)
-              echo 'AWS account plan is PAID; the reviewed VPC/KMS Aurora staging topology is eligible to proceed.'
+              echo 'AWS account plan is PAID; Aurora topology is eligible to proceed.'
               ;;
             FREE)
-              echo '::error::AWS Free plan cannot apply the reviewed staging Aurora topology. Free-plan Aurora requires Express Configuration, while this topology uses VPC, customer-managed KMS, and explicit Serverless v2 settings. Upgrade the account plan or approve a separate Express-mode topology before applying.'
-              exit 1
+              if [ "$uses_cmk" -gt 0 ]; then
+                echo '::error::AWS Free plan cannot apply a staging Aurora topology with a customer-managed KMS key. Set aurora_express_mode = true in the staging profile or upgrade the account plan.'
+                exit 1
+              fi
+              echo 'AWS account plan is FREE; reviewed plan uses express mode (AWS-managed encryption). Eligible to proceed.'
               ;;
             *)
               echo "::error::AWS account plan returned an unsupported value '$plan_type'; refusing staging apply."
