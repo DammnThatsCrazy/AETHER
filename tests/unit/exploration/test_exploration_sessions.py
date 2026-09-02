@@ -10,6 +10,7 @@ composes), and the /v1/explore session/operation route family.
 """
 from __future__ import annotations
 
+import uuid
 from types import SimpleNamespace
 
 import pytest
@@ -302,10 +303,15 @@ class TestSessionRoutes:
     async def test_create_get_list_delete_roundtrip(self, monkeypatch):
         import services.exploration.routes as routes
 
+        # Use a per-test tenant: the in-memory backend is shared by table name
+        # across the whole suite, and sibling tests may leak "t1" rows (see
+        # conftest._isolated_exploration_state). A fresh tenant keeps the list
+        # assertion exact without depending on global store emptiness.
+        tenant = f"rt-{uuid.uuid4().hex}"
         _enable(monkeypatch)
-        req = _request()
+        req = _request(tenant)
         created = await routes.create_session(
-            req, routes.SessionCreateRequest(context=context("graph"))
+            req, routes.SessionCreateRequest(context=context("graph", tenant_id=tenant))
         )
         sid = created.data["session"]["session_id"]
         assert created.data["session"]["op_count"] == 0
