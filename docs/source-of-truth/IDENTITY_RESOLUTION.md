@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/identity/resolver.py
   - Backend Architecture/aether-backend/services/identity/repository.py
 canonical_owner: identity@aether
-last_synced_commit: 0adc1534d28d00a7aa98aaffb61c50698e8d33cb
+last_synced_commit: 4764707
 ---
 # Identity Resolution
 
