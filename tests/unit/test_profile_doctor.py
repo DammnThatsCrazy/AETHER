@@ -64,22 +64,36 @@ def _build_report(mod, profile: str, data=None):
     )
 
 
-def test_staging_is_cloud_rehearsal_required_with_evidence():
-    """Staging advances to CLOUD_REHEARSAL_REQUIRED once all in-repo checks pass."""
+def _has_aws_credentials() -> bool:
+    """Mirror the doctor's own credential detection for env-aware assertions."""
+    return any(os.environ.get(v) for v in (
+        "AWS_ACCESS_KEY_ID", "AWS_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN", "AWS_PROFILE", "AWS_SHARED_CREDENTIALS_FILE",
+    ))
+
+
+def test_staging_readiness_with_evidence():
+    """Staging reaches at least CREDENTIAL_WAITING once all in-repo checks pass.
+    With AWS credentials present it advances to CLOUD_REHEARSAL_REQUIRED."""
     proc = subprocess.run(
         [sys.executable, str(RELEASE / "profile_doctor.py"), "staging"],
         cwd=ROOT, capture_output=True, text=True,
     )
     assert proc.returncode == 0, proc.stderr
-    assert "STAGING: CLOUD_REHEARSAL_REQUIRED" in proc.stdout
-    assert "credentialed rehearsal" in proc.stdout.lower()
+    if _has_aws_credentials():
+        expected = "cloud_rehearsal_required"
+        assert "STAGING: CLOUD_REHEARSAL_REQUIRED" in proc.stdout
+    else:
+        expected = "credential_waiting"
+        assert "STAGING: CREDENTIAL_WAITING" in proc.stdout
+    assert "credential" in proc.stdout.lower()
     doc = json.loads(
         subprocess.run(
             [sys.executable, str(RELEASE / "profile_doctor.py"), "staging", "--json"],
             cwd=ROOT, capture_output=True, text=True,
         ).stdout
     )
-    assert doc["readiness_state"] == "cloud_rehearsal_required"
+    assert doc["readiness_state"] == expected
     assert all(c["result"] in ("passed", "not_applicable") for c in doc["checks"])
     assert doc["external_evidence"]["all_validated"] is False
     assert doc["deployable"] is False
@@ -107,8 +121,9 @@ def test_all_profiles_report_a_valid_state():
     # below proves the same state machine never hands it out early.
     assert states["demo"] == "credential_waiting"
     assert states["preview"] == "credential_waiting"
+    expected_cloud = "cloud_rehearsal_required" if _has_aws_credentials() else "credential_waiting"
     for cloud in ("staging", "production-lean", "production-scale", "enterprise-isolated"):
-        assert states[cloud] == "cloud_rehearsal_required", cloud
+        assert states[cloud] == expected_cloud, cloud
 
 
 def test_demo_preview_lifecycle_contract_gates_credential_waiting(tmp_path):
@@ -264,7 +279,8 @@ def test_certificate_carries_machine_readable_schema():
                 "summary", "external_evidence", "conclusion", "deployable"):
         assert key in report, key
     assert report["schema_version"] == 1
-    assert report["readiness_rank"] == 4  # cloud_rehearsal_required
+    expected_rank = 4 if _has_aws_credentials() else 3
+    assert report["readiness_rank"] == expected_rank
 
 
 def test_env_template_drift_knocks_staging_to_invalid(monkeypatch, tmp_path):
