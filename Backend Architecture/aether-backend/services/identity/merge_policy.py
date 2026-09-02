@@ -30,10 +30,21 @@ from .models import (
     REASON_FINGERPRINT_ONLY_BLOCKED,
     REASON_CONSENT_BLOCKS_LINK,
     REASON_CONFLICTING_ALIAS,
+    REASON_CONFLICTING_VERIFIED_IDENTIFIER,
     REASON_INSUFFICIENT_EVIDENCE,
     REASON_MANUAL_OPERATOR_MERGE,
     REASON_NEW_ENTITY,
+    REASON_VERIFIED_EMAIL_EVIDENCE,
 )
+
+
+# Verified-ownership signal types: deterministic proof that a subject controls
+# an identifier (wallet or email). Their presence in a match authorizes merging
+# compatible fragments, and re-shapes conflict handling.
+VERIFIED_OWNERSHIP_TYPES = frozenset({
+    IdentitySignalType.WALLET_SIGNATURE_VERIFIED,
+    IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED,
+})
 
 
 # External agent telemetry signals are observational context, never identity
@@ -79,6 +90,9 @@ class MergePolicyContext:
     auto_link_deterministic: bool = True
     auto_link_strong: bool = True
     require_consent_for_sensitive: bool = True
+    # verified-ownership evidence present in this match?
+    verified_present: bool = False
+    auto_merge_verified: bool = True
 
 
 @dataclass
@@ -89,6 +103,8 @@ class MergePolicyResult:
     reason_codes: list[str]
     merge_target_entity_id: Optional[str] = None  # ID to merge into, if known
     conflict_type: Optional[str] = None
+    # verified evidence authorizes collapsing ALL compatible candidates
+    merge_all_candidates: bool = False
 
 
 def evaluate(ctx: MergePolicyContext) -> MergePolicyResult:
@@ -145,12 +161,38 @@ def evaluate(ctx: MergePolicyContext) -> MergePolicyResult:
 
     # ── 8. Conflicting strong aliases → CANDIDATE + flag conflict ─────────
     if ctx.has_conflict:
+        conflict_reasons = reason_codes + [REASON_CONFLICTING_ALIAS]
+        if ctx.verified_present:
+            # A contradictory deterministic identifier stands against verified
+            # ownership — surface it explicitly (blueprint §41) but keep the
+            # CANDIDATE decision + conflict type unchanged.
+            conflict_reasons = conflict_reasons + [REASON_CONFLICTING_VERIFIED_IDENTIFIER]
         return MergePolicyResult(
             decision=MergeDecision.CANDIDATE,
             confidence=score,
             confidence_tier=tier,
-            reason_codes=reason_codes + [REASON_CONFLICTING_ALIAS],
+            reason_codes=conflict_reasons,
             conflict_type="conflicting_strong_alias",
+        )
+
+    # ── 4a. Verified ownership authorizes deterministic merge ────────────
+    # Verified email/wallet ownership is deterministic proof; with no conflict
+    # it may collapse ALL compatible candidate fragments into one survivor.
+    if (
+        tier == ConfidenceTier.DETERMINISTIC
+        and ctx.verified_present
+        and ctx.auto_merge_verified
+        and not ctx.has_conflict
+        and ctx.existing_entity_ids
+    ):
+        target = ctx.existing_entity_ids[0] if len(ctx.existing_entity_ids) == 1 else None
+        return MergePolicyResult(
+            decision=MergeDecision.MERGE,
+            confidence=score,
+            confidence_tier=tier,
+            reason_codes=reason_codes + [REASON_VERIFIED_EMAIL_EVIDENCE],
+            merge_target_entity_id=target,
+            merge_all_candidates=(len(ctx.existing_entity_ids) > 1),
         )
 
     # ── 4. DETERMINISTIC + auto-link allowed ─────────────────────────────

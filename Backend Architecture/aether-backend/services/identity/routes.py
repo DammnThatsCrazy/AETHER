@@ -710,3 +710,202 @@ async def revoke_siwx_session(session_id: str, request: Request) -> dict:
     await store.record(tenant.tenant_id, f"siwx:{session_id}", record)
     logger.info("SIWX session revoked: session=%s tenant=%s", session_id, tenant.tenant_id)
     return APIResponse(data={"session_id": session_id, "revoked": True}).to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Identity Assurance — Verification API (additive)
+#
+#   POST /v1/identity/verification/email/challenges
+#   POST /v1/identity/verification/email/challenges/{challenge_id}/verify
+#   GET  /v1/identity/verification/email/callback           (non-consuming)
+#   POST /v1/identity/verification/email/challenges/{challenge_id}/consume
+#   POST /v1/identity/verification/oidc
+#   GET  /v1/identity/entities/{canonical_entity_id}/evidence   (redacted)
+#   POST /v1/identity/evidence/{evidence_id}/revoke
+# ═══════════════════════════════════════════════════════════════════════════
+
+from shared.common.common import BadRequestError  # noqa: E402
+
+from .evidence import EvidenceService  # noqa: E402
+from .verification import EmailVerificationService  # noqa: E402
+
+# ── Verification service singletons ────────────────────────────────────────
+
+_evidence_service: Optional[EvidenceService] = None
+_email_verification_service: Optional[EmailVerificationService] = None
+
+
+def _get_evidence_service() -> EvidenceService:
+    global _evidence_service
+    if _evidence_service is None:
+        _evidence_service = EvidenceService()
+    return _evidence_service
+
+
+def _get_email_verification_service() -> EmailVerificationService:
+    global _email_verification_service
+    if _email_verification_service is None:
+        _email_verification_service = EmailVerificationService(
+            evidence_service=_get_evidence_service()
+        )
+    return _email_verification_service
+
+
+# ── Request models ─────────────────────────────────────────────────────────
+
+class VerificationEmailChallengeRequest(BaseModel):
+    email: str
+    method: str = Field(default="email_otp")
+    purpose: str = Field(default="identity_verification")
+    consent_snapshot: Optional[dict] = None
+
+
+class VerificationOTPVerifyRequest(BaseModel):
+    code: str
+
+
+class VerificationOIDCRequest(BaseModel):
+    claims: dict
+    issuer_allowlist: list[str] = Field(default_factory=list)
+    audience: str
+    consent_snapshot: Optional[dict] = None
+
+
+class EvidenceRevokeRequest(BaseModel):
+    reason: str = ""
+
+
+# ── Endpoints ──────────────────────────────────────────────────────────────
+
+@router.post("/verification/email/challenges")
+async def issue_email_verification_challenge(
+    body: VerificationEmailChallengeRequest,
+    request: Request,
+) -> dict:
+    """Issue an email OTP / magic-link ownership-verification challenge."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    service = _get_email_verification_service()
+    try:
+        result = await service.issue_email_challenge(
+            tenant_id=tenant.tenant_id,
+            email=body.email,
+            method=body.method,
+            purpose=body.purpose,
+            consent_snapshot=body.consent_snapshot,
+        )
+    except ValueError:
+        # Never echo the raw email back into the error.
+        raise BadRequestError("Invalid email address")
+    return APIResponse(data=result).to_dict()
+
+
+@router.post("/verification/email/challenges/{challenge_id}/verify")
+async def verify_email_verification_otp(
+    challenge_id: str,
+    body: VerificationOTPVerifyRequest,
+    request: Request,
+) -> dict:
+    """Verify an OTP code for a challenge; issues evidence on success."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    service = _get_email_verification_service()
+    result = await service.verify_email_otp(
+        tenant_id=tenant.tenant_id,
+        challenge_id=challenge_id,
+        code=body.code,
+    )
+    return APIResponse(data=result).to_dict()
+
+
+@router.get("/verification/email/callback")
+async def verify_email_magic_link_callback(
+    request: Request,
+    cid: str = Query(..., description="Challenge id"),
+    t: str = Query(..., description="Magic-link token"),
+) -> dict:
+    """GET landing for a magic link. NON-CONSUMING and scanner-safe: validates
+    the token but never consumes the challenge or issues evidence."""
+    tenant = request.state.tenant
+    service = _get_email_verification_service()
+    result = await service.validate_magic_link(
+        tenant_id=tenant.tenant_id,
+        challenge_id=cid,
+        token=t,
+    )
+    return APIResponse(data=result).to_dict()
+
+
+@router.post("/verification/email/challenges/{challenge_id}/consume")
+async def consume_email_magic_link(
+    challenge_id: str,
+    request: Request,
+) -> dict:
+    """Consume a previously validated magic link; issues evidence on success."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    service = _get_email_verification_service()
+    result = await service.consume_magic_link(
+        tenant_id=tenant.tenant_id,
+        challenge_id=challenge_id,
+    )
+    return APIResponse(data=result).to_dict()
+
+
+@router.post("/verification/oidc")
+async def verify_oidc_trusted_claim(
+    body: VerificationOIDCRequest,
+    request: Request,
+) -> dict:
+    """Accept a pre-validated, upstream-verified OIDC/SSO claims dict and, when
+    trusted, issue authoritative email-ownership evidence."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    service = _get_email_verification_service()
+    result = await service.verify_trusted_claim(
+        tenant_id=tenant.tenant_id,
+        claims=body.claims,
+        issuer_allowlist=body.issuer_allowlist,
+        expected_audience=body.audience,
+        consent_snapshot=body.consent_snapshot,
+    )
+    return APIResponse(data=result).to_dict()
+
+
+@router.get("/entities/{canonical_entity_id}/evidence")
+async def list_entity_verification_evidence(
+    canonical_entity_id: str,
+    request: Request,
+) -> dict:
+    """List REDACTED verification evidence bound to a canonical entity (§56)."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+    service = _get_evidence_service()
+    rows = await service.list_for_entity(tenant.tenant_id, canonical_entity_id)
+    return APIResponse(data={
+        "canonical_entity_id": canonical_entity_id,
+        "evidence": rows,
+        "total": len(rows),
+    }).to_dict()
+
+
+@router.post("/evidence/{evidence_id}/revoke")
+async def revoke_verification_evidence(
+    evidence_id: str,
+    body: EvidenceRevokeRequest,
+    request: Request,
+) -> dict:
+    """Revoke a verification evidence row (operator action)."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+    service = _get_evidence_service()
+    row = await service.revoke_evidence(
+        tenant.tenant_id, evidence_id, reason=body.reason
+    )
+    if row is None:
+        raise NotFoundError("VerificationEvidence")
+    return APIResponse(data={
+        "evidence_id": evidence_id,
+        "status": row.get("status"),
+        "revoked_at": row.get("revoked_at"),
+    }).to_dict()
