@@ -59,6 +59,29 @@ export const explorationTemporalFields = [
 
 export type ExplorationTemporalField = typeof explorationTemporalFields[number];
 
+/** The typed exploration-session operation family. SAVE/LOAD are
+ * session-repository operations; the rest are PURE context transforms
+ * (see services/exploration/operations.py). */
+export const explorationOperations = [
+  'OPEN',
+  'PIVOT',
+  'EXPAND',
+  'COLLAPSE',
+  'FILTER_ADD',
+  'FILTER_REMOVE',
+  'LENS_ADD',
+  'TIME_TRAVEL',
+  'DRILL_DOWN',
+  'RESET',
+  'SAVE',
+  'LOAD',
+] as const;
+
+export type ExplorationOperation = typeof explorationOperations[number];
+
+/** Status of an applied operation (applied / rejected / degraded). */
+export type ExplorationOpStatus = 'applied' | 'rejected' | 'degraded';
+
 /** A typed reference to any first-class object (entity, cluster, campaign…). */
 export interface ExplorationAnchor {
   kind: string;
@@ -110,7 +133,12 @@ export interface TruthRequirements {
 }
 
 /** The versioned, shareable exploration state. URL/state codecs carry ONLY
- * registry field names and opaque ids — never raw PII. */
+ * registry field names and opaque ids — never raw PII. `lens_set` (engine
+ * lens-ids frame) and `temporal_mode` (engine `TemporalMode` string) are
+ * strictly optional so every existing construction stays valid. NOTE:
+ * `context.temporal.mode` is the FABRIC mode (`window|as_of|compare|relative`);
+ * `context.temporal_mode` is the ENGINE mode (`live|as_of|known_then|known_now|
+ * compare|correction_diff|playback|simulation`) — distinct vocabularies. */
 export interface ExplorationContextV1 {
   version: '1';
   scope: { tenant_id: string; surface: string };
@@ -123,6 +151,60 @@ export interface ExplorationContextV1 {
   presentation?: PresentationSpec | null;
   selection?: SelectionSet | null;
   truth?: TruthRequirements | null;
+  lens_set?: string[] | null;
+  temporal_mode?: string | null;
+}
+
+/** The PIVOT operation spec — retarget a context to another surface. Filters,
+ * temporal, lens frame, and presentation carry over unchanged; `clear_selection`
+ * resets the selection and `focus` re-anchors it. */
+export interface PivotSpec {
+  target_surface: string;
+  focus?: ExplorationAnchor | null;
+  clear_selection?: boolean;
+}
+
+/** The outcome of applying one operation — POST-op context + composition.
+ * `op_number` is the 1-based sequence index within the session (`0` for the
+ * initializing `OPEN`). `projection` carries the S1 projection-engine
+ * composition summary (`null` for non-projection surfaces); a degraded
+ * composition carries a static, content-free `reason` — never an echoed
+ * provider diagnostic. */
+export interface ExplorationOpResult {
+  session_id?: string | null;
+  op_number: number;
+  operation: ExplorationOperation;
+  context: ExplorationContextV1;
+  status: ExplorationOpStatus;
+  reason?: string | null;
+  warnings: string[];
+  projection?: { available: boolean; digest?: string | null; lensIds?: string[]; temporalMode?: string | null; degradationState?: string | null; suppressedSections?: string[]; reason?: string | null } | null;
+}
+
+/** One applied-or-rejected operation record in a session's history. The
+ * `context` is the snapshot AFTER the op (the pre-op input on reject). */
+export interface ExplorationOpRecord {
+  op_number: number;
+  operation: ExplorationOperation;
+  context: ExplorationContextV1;
+  status: ExplorationOpStatus;
+  reason?: string | null;
+  applied_at: string;
+}
+
+/** A persisted exploration session — seed + current state + op history. */
+export interface ExplorationSession {
+  session_id: string;
+  tenant_id: string;
+  surface: string;
+  seed_context: ExplorationContextV1;
+  current_context: ExplorationContextV1;
+  lens_set?: string[] | null;
+  temporal_mode?: string | null;
+  operations: ExplorationOpRecord[];
+  op_count: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface FilterApplicabilityEntry {

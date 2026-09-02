@@ -60,6 +60,43 @@ EXPLORATION_TEMPORAL_FIELDS: tuple[str, ...] = (
     "computed_at",
 )
 
+# The typed exploration-session operation family. Each operation is a PURE
+# context transform (see services/exploration/operations.py); SAVE/LOAD are
+# session-repository operations handled by the service layer, not the pure
+# transform. ``context.temporal.mode`` (fabric) and ``context.temporal_mode``
+# (engine TemporalMode) are distinct vocabularies — both are kept.
+ExplorationOperation = Literal[
+    "OPEN",
+    "PIVOT",
+    "EXPAND",
+    "COLLAPSE",
+    "FILTER_ADD",
+    "FILTER_REMOVE",
+    "LENS_ADD",
+    "TIME_TRAVEL",
+    "DRILL_DOWN",
+    "RESET",
+    "SAVE",
+    "LOAD",
+]
+
+EXPLORATION_OPERATIONS: tuple[str, ...] = (
+    "OPEN",
+    "PIVOT",
+    "EXPAND",
+    "COLLAPSE",
+    "FILTER_ADD",
+    "FILTER_REMOVE",
+    "LENS_ADD",
+    "TIME_TRAVEL",
+    "DRILL_DOWN",
+    "RESET",
+    "SAVE",
+    "LOAD",
+)
+
+ExplorationOpStatus = Literal["applied", "rejected", "degraded"]
+
 EXPLORATION_CONTRACT_VERSION = "1"
 
 
@@ -70,6 +107,18 @@ class _Model(BaseModel):
 class ExplorationAnchor(_Model):
     kind: str
     id: str
+
+
+class PivotSpec(_Model):
+    """The PIVOT operation spec — retarget a context to another surface.
+
+    Filters, temporal, lens frame, and presentation carry over unchanged;
+    ``clear_selection`` resets the selection and ``focus`` re-anchors it.
+    """
+
+    target_surface: str
+    focus: Optional[ExplorationAnchor] = None
+    clear_selection: bool = False
 
 
 class TemporalSelection(_Model):
@@ -122,7 +171,15 @@ class ExplorationScope(_Model):
 
 
 class ExplorationContextV1(_Model):
-    """The versioned, shareable exploration state (composes FilterGroup)."""
+    """The versioned, shareable exploration state (composes FilterGroup).
+
+    ``lens_set`` (engine lens-ids frame) and ``temporal_mode`` (engine
+    ``TemporalMode`` string) are strictly OPTIONAL so every existing
+    construction stays valid. NOTE: ``context.temporal.mode`` is the FABRIC
+    mode (``window|as_of|compare|relative``); ``context.temporal_mode`` is the
+    ENGINE mode (``live|as_of|known_then|known_now|compare|correction_diff|
+    playback|simulation``). Distinct vocabularies — keep both.
+    """
 
     version: Literal["1"] = "1"
     scope: ExplorationScope
@@ -135,6 +192,55 @@ class ExplorationContextV1(_Model):
     presentation: Optional[PresentationSpec] = None
     selection: Optional[SelectionSet] = None
     truth: Optional[TruthRequirements] = None
+    lens_set: Optional[list[str]] = None
+    temporal_mode: Optional[str] = None
+
+
+class ExplorationOpResult(_Model):
+    """The outcome of applying one operation — POST-op context + composition.
+
+    ``op_number`` is the 1-based sequence index within the session (``0`` for
+    the initializing ``OPEN``). ``projection`` carries the S1 projection-engine
+    composition summary (``None`` for non-projection surfaces); a degraded
+    composition carries a static, content-free ``reason`` — never an echoed
+    provider diagnostic.
+    """
+
+    session_id: Optional[str] = None
+    op_number: int
+    operation: ExplorationOperation
+    context: ExplorationContextV1
+    status: ExplorationOpStatus
+    reason: Optional[str] = None
+    warnings: list[str] = Field(default_factory=list)
+    projection: Optional[dict[str, Any]] = None
+
+
+class ExplorationOpRecord(_Model):
+    """One applied-or-rejected operation record in a session's history."""
+
+    op_number: int
+    operation: ExplorationOperation
+    context: ExplorationContextV1  # snapshot AFTER the op (input unchanged on reject)
+    status: ExplorationOpStatus
+    reason: Optional[str] = None
+    applied_at: str
+
+
+class ExplorationSession(_Model):
+    """A persisted exploration session — seed + current state + op history."""
+
+    session_id: str
+    tenant_id: str
+    surface: str
+    seed_context: ExplorationContextV1
+    current_context: ExplorationContextV1
+    lens_set: Optional[list[str]] = None
+    temporal_mode: Optional[str] = None
+    operations: list[ExplorationOpRecord] = Field(default_factory=list)
+    op_count: int = 0
+    created_at: str
+    updated_at: str
 
 
 class FilterApplicabilityEntry(_Model):
@@ -209,7 +315,11 @@ __all__ = [
     "EXPLORATION_TEMPORAL_MODES",
     "ExplorationTemporalField",
     "EXPLORATION_TEMPORAL_FIELDS",
+    "ExplorationOperation",
+    "EXPLORATION_OPERATIONS",
+    "ExplorationOpStatus",
     "ExplorationAnchor",
+    "PivotSpec",
     "TemporalSelection",
     "GraphConstraints",
     "ExplorationSort",
@@ -218,6 +328,9 @@ __all__ = [
     "TruthRequirements",
     "ExplorationScope",
     "ExplorationContextV1",
+    "ExplorationOpResult",
+    "ExplorationOpRecord",
+    "ExplorationSession",
     "FilterApplicabilityEntry",
     "ApplicabilityReport",
     "ExplorationCompleteness",

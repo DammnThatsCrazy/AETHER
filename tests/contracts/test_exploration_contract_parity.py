@@ -19,6 +19,7 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 from shared.exploration.models import (  # noqa: E402
+    EXPLORATION_OPERATIONS,
     EXPLORATION_TEMPORAL_FIELDS,
     EXPLORATION_TEMPORAL_MODES,
     EXPLORATION_VIEWS,
@@ -26,8 +27,12 @@ from shared.exploration.models import (  # noqa: E402
     ApplicabilityReport,
     ContextLink,
     ExplorationContextV1,
+    ExplorationOpRecord,
+    ExplorationOpResult,
     ExplorationResultEnvelope,
+    ExplorationSession,
     FilterApplicabilityEntry,
+    PivotSpec,
     TemporalSelection,
 )
 
@@ -38,7 +43,8 @@ def _const_array(name: str) -> list[str]:
     text = TS_PATH.read_text(encoding="utf-8")
     m = re.search(rf"{name}[^\[]*\[(.*?)\]\s*as const", text, re.S)
     assert m, f"const array {name!r} not found in exploration-contract.ts"
-    return re.findall(r"'([a-z_]+)'", m.group(1))
+    # Operation names are UPPER_CASE ('OPEN', 'PIVOT', …); values are lower.
+    return re.findall(r"'([A-Za-z_]+)'", m.group(1))
 
 
 def _interface_fields(interface: str) -> set[str]:
@@ -73,6 +79,26 @@ def test_context_field_parity():
         f"ExplorationContextV1 drift: TS-only={ts_fields - py_fields}, "
         f"PY-only={py_fields - ts_fields}"
     )
+
+
+def test_operations_parity():
+    assert set(_const_array("explorationOperations")) == set(EXPLORATION_OPERATIONS)
+
+
+def test_pivot_spec_parity():
+    assert _interface_fields("PivotSpec") == set(PivotSpec.model_fields)
+
+
+def test_op_result_parity():
+    assert _interface_fields("ExplorationOpResult") == set(ExplorationOpResult.model_fields)
+
+
+def test_op_record_parity():
+    assert _interface_fields("ExplorationOpRecord") == set(ExplorationOpRecord.model_fields)
+
+
+def test_session_parity():
+    assert _interface_fields("ExplorationSession") == set(ExplorationSession.model_fields)
 
 
 def test_result_envelope_field_parity():
