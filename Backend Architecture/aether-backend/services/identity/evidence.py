@@ -16,6 +16,7 @@ import uuid
 from typing import Any, Optional
 
 from shared.common.common import utc_now
+from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger
 
 from .metrics import IdentityMetrics
@@ -70,12 +71,19 @@ class EvidenceService:
         repo: Optional[VerificationEvidenceRepository] = None,
         metrics: Optional[IdentityMetrics] = None,
         replay_service: Any = None,
+        producer: Optional[EventProducer] = None,
     ) -> None:
         self._repo = repo or VerificationEvidenceRepository()
         self._metrics = metrics or IdentityMetrics()
         # Optional injected replay service — tests pass a fake and assert it was
-        # called; None means lazily construct the real one at trigger time.
+        # called; None routes replay through the async event worker (production)
+        # or lazily constructs the real service inline (local without a bus).
         self._replay_service = replay_service
+        # Event producer for verification-lifecycle + replay-request events.
+        # Optional/injectable (tests); when absent it is lazily resolved from the
+        # shared registry, mirroring the resolver. A lookup failure degrades to
+        # no-publish — events must never break evidence issuance.
+        self._producer = producer
 
     async def issue_evidence(
         self,
@@ -125,6 +133,26 @@ class EvidenceService:
         )
         await self._repo.create(evidence)
         self._metrics.record_evidence_active(evidence_type)
+        verification = {
+            "evidence_id": evidence.id,
+            "issuer": issuer,
+            "method": verification_method,
+            "policy_version": policy_version,
+        }
+        await self._publish_lifecycle(
+            Topic.IDENTITY_VERIFICATION_COMPLETED,
+            tenant_id=tenant_id,
+            payload={
+                "evidence_id": evidence.id,
+                "identifier_type": identifier_type,
+                "identifier_hash": identifier_hash,
+                "evidence_type": evidence_type,
+                "verification_method": verification_method,
+                "issuer": issuer,
+                "assurance_level": assurance_level,
+                "policy_version": policy_version,
+            },
+        )
         await self._trigger_replay(
             tenant_id=tenant_id,
             identifier_type=identifier_type,
@@ -133,6 +161,7 @@ class EvidenceService:
             trigger_id=evidence.id,
             policy_version=policy_version,
             consent_snapshot=consent_snapshot,
+            verification=verification,
         )
         return evidence
 
@@ -147,6 +176,26 @@ class EvidenceService:
         if row is None:
             return None
         self._metrics.record_evidence_revoked(row.get("evidence_type", ""))
+        verification = {
+            "evidence_id": evidence_id,
+            "issuer": row.get("issuer", ""),
+            "method": row.get("verification_method", ""),
+            "policy_version": row.get("policy_version", "1.0.0"),
+            "revoked": True,
+        }
+        await self._publish_lifecycle(
+            Topic.IDENTITY_VERIFICATION_REVOKED,
+            tenant_id=tenant_id,
+            payload={
+                "evidence_id": evidence_id,
+                "identifier_type": row.get("identifier_type", ""),
+                "identifier_hash": row.get("identifier_hash", ""),
+                "evidence_type": row.get("evidence_type", ""),
+                "verification_method": row.get("verification_method", ""),
+                "issuer": row.get("issuer", ""),
+                "reason": reason,
+            },
+        )
         await self._trigger_replay(
             tenant_id=tenant_id,
             identifier_type=row.get("identifier_type", ""),
@@ -155,6 +204,7 @@ class EvidenceService:
             trigger_id=evidence_id,
             policy_version=row.get("policy_version", "1.0.0"),
             consent_snapshot=row.get("consent_snapshot"),
+            verification=verification,
         )
         return row
 
@@ -184,6 +234,49 @@ class EvidenceService:
     def _redact(row: dict) -> dict:
         return {key: row.get(key) for key in _REDACTED_EVIDENCE_FIELDS if key in row}
 
+    def _resolve_producer(self) -> Optional[EventProducer]:
+        """Return the event producer, falling back to the shared registry.
+
+        verification.py / routes.py construct this service without a producer, so
+        when none was injected obtain the process-wide producer (the same one the
+        resolver and operator merge route publish through). The import is deferred
+        to avoid a provider import cycle. A lookup failure degrades to no-publish
+        — events must never break evidence issuance.
+        """
+        if self._producer is not None:
+            return self._producer
+        try:
+            from dependencies.providers import get_producer
+
+            self._producer = get_producer()
+        except Exception as exc:  # noqa: BLE001 - never break issuance
+            logger.warning("evidence service could not obtain a producer: %s", exc)
+            return None
+        return self._producer
+
+    async def _publish_lifecycle(
+        self, topic: Topic, *, tenant_id: str, payload: dict
+    ) -> None:
+        """Best-effort publish of a verification-lifecycle event.
+
+        Never raises — a bus failure must not break issuance/revocation. Payloads
+        carry only hashed identifiers and provenance, never raw PII or secrets.
+        """
+        try:
+            producer = self._resolve_producer()
+            if producer is None:
+                return
+            await producer.publish(Event(
+                topic=topic,
+                tenant_id=tenant_id,
+                source_service="identity",
+                payload=payload,
+            ))
+        except Exception as exc:  # noqa: BLE001 - lifecycle events are best-effort
+            logger.warning(
+                "verification lifecycle publish failed (%s): %s", topic, exc
+            )
+
     async def _trigger_replay(
         self,
         *,
@@ -194,15 +287,42 @@ class EvidenceService:
         trigger_id: str,
         policy_version: str,
         consent_snapshot: Optional[dict],
+        verification: Optional[dict] = None,
     ) -> None:
-        """Best-effort resolution replay fan-out.
+        """Fan out a resolution replay for the affected identifier.
 
-        Uses an injected replay service when present (tests); otherwise lazily
-        constructs the real resolver + replay service. Lazy imports avoid an
-        import cycle and tolerate Agent C's ``resolution_replay`` not yet being
-        present. Any failure is swallowed — replay must never break evidence.
+        Production path (no inline service injected): publish
+        ``IDENTITY_RESOLUTION_REPLAY_REQUESTED`` so the durable, retryable replay
+        worker (services.runtime.consumer_specs) runs it off the request path.
+        Fallback path (an injected replay service — tests — or no producer
+        available — local without a bus): run the replay inline. Lazy imports
+        avoid an import cycle. Any failure is swallowed — replay must NEVER break
+        evidence issuance.
         """
         try:
+            # Async worker path: emit an event a registered consumer will run.
+            if self._replay_service is None:
+                producer = self._resolve_producer()
+                if producer is not None:
+                    await producer.publish(Event(
+                        topic=Topic.IDENTITY_RESOLUTION_REPLAY_REQUESTED,
+                        tenant_id=tenant_id,
+                        source_service="identity",
+                        payload={
+                            "tenant_id": tenant_id,
+                            "identifier_type": identifier_type,
+                            "identifier_hash": identifier_hash,
+                            "trigger_type": trigger_type,
+                            "trigger_id": trigger_id,
+                            "policy_version": policy_version,
+                            "consent_snapshot": consent_snapshot,
+                            "verification": verification,
+                        },
+                    ))
+                    self._metrics.record_resolution_replay("requested")
+                    return
+
+            # Inline fallback: injected service (tests) or no producer (local).
             replay = self._replay_service
             if replay is None:
                 from .resolution_replay import ResolutionReplayService
@@ -231,6 +351,7 @@ class EvidenceService:
                 trigger_id=trigger_id,
                 policy_version=policy_version,
                 consent_snapshot=consent_snapshot,
+                verification=verification,
             )
             self._metrics.record_resolution_replay("requested")
         except Exception as exc:  # noqa: BLE001 - replay must never break evidence

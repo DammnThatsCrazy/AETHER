@@ -14,6 +14,7 @@ never re-run, so a duplicate verification callback cannot double-merge.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Optional
 
 from shared.logger.logger import get_logger
@@ -23,6 +24,29 @@ from services.security.repositories import _ScopedRepo
 from .models import IdentitySignalType
 
 logger = get_logger("aether.identity.resolution_replay")
+
+
+# Per-identifier in-process serialization. Two verified proofs for the SAME
+# identifier arrive with DIFFERENT trigger ids (so different idempotency keys)
+# and would otherwise replay concurrently and race to merge the same component.
+# A per-key asyncio.Lock serializes replays for one identifier within a worker
+# process; the resolver's deterministic oldest-survivor merge keeps any
+# residual cross-process runs convergent rather than double-merging.
+_IDENTIFIER_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+def _identifier_lock(key: str) -> asyncio.Lock:
+    """Return the process-wide lock for ``key`` (created on first use).
+
+    Safe without its own guard: asyncio is single-threaded and there is no
+    ``await`` between the read and the insert, so two coroutines cannot both
+    create a lock for the same key.
+    """
+    lock = _IDENTIFIER_LOCKS.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _IDENTIFIER_LOCKS[key] = lock
+    return lock
 
 
 # identifier_type → verified-ownership signal type. Only email is wired for now;
@@ -72,12 +96,43 @@ class ResolutionReplayService:
         trigger_id: str,
         policy_version: str = "1.0.0",
         consent_snapshot: Optional[dict] = None,
+        verification: Optional[dict] = None,
     ) -> dict:
         """Idempotently replay resolution for a verified identifier.
 
+        Serialized per identifier (see ``_identifier_lock``) so concurrent
+        proofs for the same identifier cannot race to merge the same component.
         Returns a status dict; never raises — any failure marks the job failed
         and returns ``{"status": "error", ...}``.
         """
+        lock_key = (
+            f"{tenant_id}:{(identifier_type or '').strip().lower()}:{identifier_hash}"
+        )
+        async with _identifier_lock(lock_key):
+            return await self._request_replay_locked(
+                tenant_id=tenant_id,
+                identifier_type=identifier_type,
+                identifier_hash=identifier_hash,
+                trigger_type=trigger_type,
+                trigger_id=trigger_id,
+                policy_version=policy_version,
+                consent_snapshot=consent_snapshot,
+                verification=verification,
+            )
+
+    async def _request_replay_locked(
+        self,
+        *,
+        tenant_id: str,
+        identifier_type: str,
+        identifier_hash: str,
+        trigger_type: str,
+        trigger_id: str,
+        policy_version: str = "1.0.0",
+        consent_snapshot: Optional[dict] = None,
+        verification: Optional[dict] = None,
+    ) -> dict:
+        """Replay body, run while holding the per-identifier lock."""
         key = f"{tenant_id}:{trigger_id}:{policy_version}"
 
         # ── Idempotency: a completed job is never re-run ──────────────────
@@ -124,7 +179,7 @@ class ResolutionReplayService:
             synthetic = {
                 "event_id": f"verify:{trigger_id}",
                 "tenant_id": tenant_id,
-                "context": {"consent": consent_snapshot},
+                "context": {"consent": consent_snapshot, "verification": verification},
                 "_pre_hashed_signals": [
                     {
                         "type": sig_type.value,

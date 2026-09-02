@@ -160,6 +160,14 @@ class IdentityDecisionEvidence:
     operator_id: str = ""
     review_status: str = "pending"
     created_at: str = ""
+    # Verification provenance (identity assurance §14): populated when a verified
+    # ownership proof (email / wallet / phone) drove the decision. Empty / 0 when
+    # no verified signal did, so ordinary decisions carry blank provenance.
+    verification_evidence_id: str = ""
+    verification_method: str = ""
+    verification_issuer: str = ""
+    verification_policy_version: str = ""
+    resolution_revision: int = 0
 
     def to_record(self) -> dict[str, Any]:
         """Serialize to a JSONB-friendly persistence record."""
@@ -182,6 +190,11 @@ class IdentityDecisionEvidence:
             "operator_id": self.operator_id,
             "review_status": self.review_status,
             "created_at": self.created_at,
+            "verification_evidence_id": self.verification_evidence_id,
+            "verification_method": self.verification_method,
+            "verification_issuer": self.verification_issuer,
+            "verification_policy_version": self.verification_policy_version,
+            "resolution_revision": self.resolution_revision,
         }
 
 
@@ -238,6 +251,11 @@ class IdentityDecisionEvidenceService:
         operator_id: str = "",
         review_status: Optional[str] = None,
         decision_id: Optional[str] = None,
+        verification_evidence_id: str = "",
+        verification_method: str = "",
+        verification_issuer: str = "",
+        verification_policy_version: str = "",
+        resolution_revision: int = 0,
     ) -> IdentityDecisionEvidence:
         """Build an evidence record, persist it, and return it.
 
@@ -273,6 +291,11 @@ class IdentityDecisionEvidenceService:
                 else _default_review_status(dtype, operator_id)
             ),
             created_at=utc_now().isoformat(),
+            verification_evidence_id=verification_evidence_id,
+            verification_method=verification_method,
+            verification_issuer=verification_issuer,
+            verification_policy_version=verification_policy_version,
+            resolution_revision=int(resolution_revision or 0),
         )
         await self._repo.record(evidence)
         return evidence

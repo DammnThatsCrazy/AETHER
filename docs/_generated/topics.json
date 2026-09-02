@@ -41,6 +41,23 @@
       ]
     },
     {
+      "name": "Identity assurance \u2014 verification lifecycle + async resolution replay.",
+      "topics": [
+        {
+          "member": "IDENTITY_VERIFICATION_COMPLETED",
+          "value": "aether.identity.verification.completed"
+        },
+        {
+          "member": "IDENTITY_VERIFICATION_REVOKED",
+          "value": "aether.identity.verification.revoked"
+        },
+        {
+          "member": "IDENTITY_RESOLUTION_REPLAY_REQUESTED",
+          "value": "aether.identity.resolution.replay_requested"
+        }
+      ]
+    },
+    {
       "name": "Analytics",
       "topics": [
         {
@@ -1201,6 +1218,18 @@
     {
       "member": "PROFILE_UPDATED",
       "value": "aether.profile.updated"
+    },
+    {
+      "member": "IDENTITY_VERIFICATION_COMPLETED",
+      "value": "aether.identity.verification.completed"
+    },
+    {
+      "member": "IDENTITY_VERIFICATION_REVOKED",
+      "value": "aether.identity.verification.revoked"
+    },
+    {
+      "member": "IDENTITY_RESOLUTION_REPLAY_REQUESTED",
+      "value": "aether.identity.resolution.replay_requested"
     },
     {
       "member": "SESSION_SCORED",

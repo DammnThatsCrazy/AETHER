@@ -81,6 +81,12 @@ def _attach_semantic_identity(registry: Any) -> None:
     SemanticIdentityConsumer().register(registry.consumer)
 
 
+def _attach_identity_replay(registry: Any) -> None:
+    from services.identity.replay_consumer import IdentityReplayConsumer
+
+    IdentityReplayConsumer().register(registry.consumer)
+
+
 def _attach_notifications(registry: Any) -> None:
     from services.notification_intelligence.consumer import attach_notification_consumers
 
@@ -171,6 +177,18 @@ CONSUMER_SPECS: tuple[ConsumerSpec, ...] = (
         topics=(Topic.SDK_EVENTS_VALIDATED,),
         group_id="aether-identity",
         handler_factory=_attach_identity,
+    ),
+    ConsumerSpec(
+        name="identity-resolution-replay",
+        role="identity-worker",
+        # Durable, retryable replay driven by verified-evidence issuance/revocation.
+        # A separate group from identity-signal-emission so the low-volume replay
+        # stream gets its own consumer group, DLQ and retry budget (a group never
+        # spans roles — see test_runtime_consumer_specs).
+        topics=(Topic.IDENTITY_RESOLUTION_REPLAY_REQUESTED,),
+        group_id="aether-identity-replay",
+        handler_factory=_attach_identity_replay,
+        max_handler_retries=3,
     ),
     ConsumerSpec(
         name="graph-profile-projection",
