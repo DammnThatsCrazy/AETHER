@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/sync_worker.py
   - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/reconciliation.py
 canonical_owner: platform@aether
-last_synced_commit: "380de9d"
+last_synced_commit: "4e6fdad"
 ---
 
 # Payment Rail Observability Runbook

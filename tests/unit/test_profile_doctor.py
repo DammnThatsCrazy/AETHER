@@ -64,26 +64,23 @@ def _build_report(mod, profile: str, data=None):
     )
 
 
-def test_staging_is_credential_waiting_with_evidence():
-    """The §46 objective: STAGING: CREDENTIAL_WAITING with the honest gap."""
+def test_staging_is_cloud_rehearsal_required_with_evidence():
+    """Staging advances to CLOUD_REHEARSAL_REQUIRED once all in-repo checks pass."""
     proc = subprocess.run(
         [sys.executable, str(RELEASE / "profile_doctor.py"), "staging"],
         cwd=ROOT, capture_output=True, text=True,
     )
     assert proc.returncode == 0, proc.stderr
-    assert "STAGING: CREDENTIAL_WAITING" in proc.stdout
-    assert "pending credentialed runs" in proc.stdout
-    # Every in-repo check passed; the only non-passed rows are pending_external.
+    assert "STAGING: CLOUD_REHEARSAL_REQUIRED" in proc.stdout
+    assert "credentialed rehearsal" in proc.stdout.lower()
     doc = json.loads(
         subprocess.run(
             [sys.executable, str(RELEASE / "profile_doctor.py"), "staging", "--json"],
             cwd=ROOT, capture_output=True, text=True,
         ).stdout
     )
-    assert doc["readiness_state"] == "credential_waiting"
-    # Every APPLICABLE in-repo check passed (not_applicable rows are allowed).
+    assert doc["readiness_state"] == "cloud_rehearsal_required"
     assert all(c["result"] in ("passed", "not_applicable") for c in doc["checks"])
-    assert doc["external_evidence"]["credentials_available"] is False
     assert doc["external_evidence"]["all_validated"] is False
     assert doc["deployable"] is False
 
@@ -111,7 +108,7 @@ def test_all_profiles_report_a_valid_state():
     assert states["demo"] == "credential_waiting"
     assert states["preview"] == "credential_waiting"
     for cloud in ("staging", "production-lean", "production-scale", "enterprise-isolated"):
-        assert states[cloud] == "credential_waiting", cloud
+        assert states[cloud] == "cloud_rehearsal_required", cloud
 
 
 def test_demo_preview_lifecycle_contract_gates_credential_waiting(tmp_path):
@@ -267,7 +264,7 @@ def test_certificate_carries_machine_readable_schema():
                 "summary", "external_evidence", "conclusion", "deployable"):
         assert key in report, key
     assert report["schema_version"] == 1
-    assert report["readiness_rank"] == 3  # credential_waiting
+    assert report["readiness_rank"] == 4  # cloud_rehearsal_required
 
 
 def test_env_template_drift_knocks_staging_to_invalid(monkeypatch, tmp_path):

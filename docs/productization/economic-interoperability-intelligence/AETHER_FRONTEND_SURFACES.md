@@ -15,7 +15,7 @@ source_files:
   - frontend/aether/src/pages/interop/interop-page.tsx
   - frontend/aether/src/pages/interop/interop-message-page.tsx
 canonical_owner: platform@aether
-last_synced_commit: "8a13b580"
+last_synced_commit: "4e6fdad"
 ---
 
 # Aether Frontend Surfaces

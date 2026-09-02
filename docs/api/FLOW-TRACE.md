@@ -9,7 +9,7 @@ since_version: "9.0.0"
 source_files:
   - Backend Architecture/aether-backend/services/flow_trace/routes.py
   - Backend Architecture/aether-backend/services/flow_trace/traversal.py
-last_synced_commit: "41c79d4"
+last_synced_commit: "4e6fdad"
 ---
 
 # Flow Trace API Reference

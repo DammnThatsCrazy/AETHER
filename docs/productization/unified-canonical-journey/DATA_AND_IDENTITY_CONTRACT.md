@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/contracts.py
   - Backend Architecture/aether-backend/alembic/versions/20260627_canonical_activity.py
   - Backend Architecture/aether-backend/alembic/versions/20260725_ai_referral_attribution.py
-last_synced_commit: "33f4303"
+last_synced_commit: "4e6fdad"
 ---
 
 # Data and Identity Contract
