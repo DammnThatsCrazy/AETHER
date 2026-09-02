@@ -780,9 +780,9 @@ jobs:
         if: inputs.profile == 'staging'
         run: |
           set -euo pipefail
-          # AWS Free accounts can create Aurora only through Express
-          # Configuration. The full staging topology uses a customer-managed
-          # KMS key, which the Express API does not represent. Express mode
+          # AWS Free accounts can create Aurora only through Express Configuration.
+          # The full staging topology uses a customer-managed KMS key, which
+          # the Express API does not represent. Express mode
           # (aurora_express_mode = true) uses AWS-managed encryption and is
           # compatible with Free accounts.
           plan_type="$(aws freetier get-account-plan-state --query 'accountPlanType' --output text 2>/tmp/freetier.err)" || {
