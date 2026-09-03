@@ -1,6 +1,6 @@
 ---
-title: "ADR-007: Observation-Only Execution Invariant"
-slug: decisions/adr-007-observation-only-execution-invariant
+title: "ADR-011: Observation-Only Execution Invariant"
+slug: decisions/adr-011-observation-only-execution-invariant
 section: reference
 visibility: I
 audience: [architect, dev-senior]
@@ -13,7 +13,7 @@ canonical_owner: platform@aether
 last_synced_commit: "4e6fdad"
 ---
 
-# ADR-007: Observation-Only Execution Invariant
+# ADR-011: Observation-Only Execution Invariant
 
 **Status**: Accepted (8.12.0); applies platform-wide to economic domains
 

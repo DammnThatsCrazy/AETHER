@@ -298,5 +298,5 @@ additively safe:
   registry the harness registry must not be confused with (D3).
 - `docs/decisions/ADR-007-domain-canonicalization.md` — the one-source-of-truth
   precedent this ADR extends.
-- `docs/decisions/ADR-007-observation-only-execution-invariant.md` — the
+- `docs/decisions/ADR-011-observation-only-execution-invariant.md` — the
   Noesis read-only execution invariant the harness preserves.
