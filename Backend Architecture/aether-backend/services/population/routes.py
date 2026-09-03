@@ -46,6 +46,20 @@ logger = get_logger("aether.service.population")
 router = APIRouter(prefix="/v1/population", tags=["Population Intelligence"])
 
 
+async def _require_owned_group(population_id: str, tenant_id: str) -> dict:
+    """Fetch a population group, enforcing tenant ownership (IDOR guard).
+
+    Population rows are tenant-scoped, but ``population_repo.find_by_id`` is a
+    global lookup; a caller who knows another tenant's ``population_id`` must
+    not be able to read or mutate that group through these routes. Returns 404
+    (not 403) so a foreign group id is indistinguishable from a missing one.
+    """
+    group = await population_repo.find_by_id(population_id)
+    if group is None or group.get("tenant_id") != tenant_id:
+        raise NotFoundError("Population group")
+    return group
+
+
 # ══════════════════════════════════════════════════════════════════════
 # MACRO — Population-level views
 # ══════════════════════════════════════════════════════════════════════
@@ -147,14 +161,11 @@ async def get_group(population_id: str, request: Request):
     """Get group details including definition, metadata, and member count."""
     request.state.tenant.require_permission("read")
 
-    group = await population_repo.find_by_id(population_id)
-    if not group:
-        raise NotFoundError("Population group")
+    tenant_id = request.state.tenant.tenant_id
+    group = await _require_owned_group(population_id, tenant_id)
 
     # Get current *active* member count (governed materialisation, P3.1)
-    members = await membership_repo.get_members(population_id, limit=1)
-    member_count = await membership_repo.count_active_members(population_id)
-    group["member_count"] = member_count
+    group["member_count"] = await membership_repo.count_active_members(population_id)
 
     return APIResponse(data=group).to_dict()
 
@@ -198,10 +209,8 @@ async def add_members(
     tenant = request.state.tenant
     tenant.require_permission("write")
 
-    # Verify group exists
-    group = await population_repo.find_by_id(population_id)
-    if not group:
-        raise NotFoundError("Population group")
+    # Verify the group exists AND belongs to this tenant (IDOR guard).
+    group = await _require_owned_group(population_id, tenant.tenant_id)
 
     governor = PopulationMembershipGovernor(graph_client=graph)
     added = 0
@@ -266,9 +275,8 @@ async def remove_member(
     tenant = request.state.tenant
     tenant.require_permission("write")
 
-    group = await population_repo.find_by_id(population_id)
-    if not group:
-        raise NotFoundError("Population group")
+    # Verify the group exists AND belongs to this tenant (IDOR guard).
+    group = await _require_owned_group(population_id, tenant.tenant_id)
 
     governor = PopulationMembershipGovernor(graph_client=graph)
     row = await governor.remove_membership(
@@ -298,9 +306,7 @@ async def group_intelligence(population_id: str, request: Request):
     """
     request.state.tenant.require_permission("read")
 
-    group = await population_repo.find_by_id(population_id)
-    if not group:
-        raise NotFoundError("Population group")
+    group = await _require_owned_group(population_id, request.state.tenant.tenant_id)
 
     members = await membership_repo.get_members(population_id, limit=500)
 
@@ -336,10 +342,9 @@ async def compare_groups(
     """Compare two groups: member overlap, feature differences, basis distribution."""
     request.state.tenant.require_permission("read")
 
-    pop_a = await population_repo.find_by_id(group_a)
-    pop_b = await population_repo.find_by_id(group_b)
-    if not pop_a or not pop_b:
-        raise NotFoundError("One or both groups not found")
+    tenant_id = request.state.tenant.tenant_id
+    pop_a = await _require_owned_group(group_a, tenant_id)
+    pop_b = await _require_owned_group(group_b, tenant_id)
 
     members_a = await membership_repo.get_members(group_a, limit=1000)
     members_b = await membership_repo.get_members(group_b, limit=1000)
@@ -368,9 +373,13 @@ async def entity_memberships(entity_id: str, request: Request):
     """Get all groups an entity belongs to with confidence and basis."""
     request.state.tenant.require_permission("read")
 
-    memberships = await membership_repo.get_populations_for_entity(entity_id)
+    tenant_id = request.state.tenant.tenant_id
+    memberships = [
+        m for m in await membership_repo.get_populations_for_entity(entity_id)
+        if m.get("tenant_id") == tenant_id
+    ]
 
-    # Enrich with group names
+    # Enrich with group names (group ownership already enforced per row).
     enriched = []
     for m in memberships:
         group = await population_repo.find_by_id(m.get("population_id", ""))
@@ -392,13 +401,14 @@ async def explain_membership(entity_id: str, population_id: str, request: Reques
     """Explain why an entity is in a specific group: basis, confidence, reason, provenance."""
     request.state.tenant.require_permission("read")
 
+    tenant_id = request.state.tenant.tenant_id
+    group = await _require_owned_group(population_id, tenant_id)
+
     record_id = hashlib.sha256(f"{population_id}:{entity_id}".encode()).hexdigest()[:24]
     membership = await membership_repo.find_by_id(record_id)
 
-    if not membership:
+    if not membership or membership.get("tenant_id") != tenant_id:
         raise NotFoundError("Membership not found — entity may not be in this group")
-
-    group = await population_repo.find_by_id(population_id)
 
     return APIResponse(data={
         "entity_id": entity_id,
