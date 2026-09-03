@@ -1,0 +1,276 @@
+[
+  {
+    "path": "AWS Deployment",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "Agent Layer",
+    "role": "registered-not-deployable",
+    "owner": "platform@aether",
+    "note": "live broker-coupled Celery workers (Agent Layer); never canonical, never deprecated."
+  },
+  {
+    "path": "Backend Architecture",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "umbrella container of the canonical Backend Architecture/aether-backend and the deprecated orphaned modules (each registered individually)."
+  },
+  {
+    "path": "Backend Architecture/aether-backend",
+    "role": "canonical",
+    "owner": "platform@aether",
+    "note": "deployed authoritative ingestion/lake/silver monolith; build + ingress evidence references only this tree."
+  },
+  {
+    "path": "Backend Architecture/auth.py",
+    "role": "deprecated",
+    "owner": "platform@aether",
+    "note": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase.",
+    "deprecated_at": "2026-09-03",
+    "disposition": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase."
+  },
+  {
+    "path": "Backend Architecture/cache.py",
+    "role": "deprecated",
+    "owner": "platform@aether",
+    "note": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase.",
+    "deprecated_at": "2026-09-03",
+    "disposition": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase."
+  },
+  {
+    "path": "Backend Architecture/common.py",
+    "role": "deprecated",
+    "owner": "platform@aether",
+    "note": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase.",
+    "deprecated_at": "2026-09-03",
+    "disposition": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase."
+  },
+  {
+    "path": "Backend Architecture/events.py",
+    "role": "deprecated",
+    "owner": "platform@aether",
+    "note": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase.",
+    "deprecated_at": "2026-09-03",
+    "disposition": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase."
+  },
+  {
+    "path": "Backend Architecture/graph.py",
+    "role": "deprecated",
+    "owner": "platform@aether",
+    "note": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase.",
+    "deprecated_at": "2026-09-03",
+    "disposition": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase."
+  },
+  {
+    "path": "Backend Architecture/limiter.py",
+    "role": "deprecated",
+    "owner": "platform@aether",
+    "note": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase.",
+    "deprecated_at": "2026-09-03",
+    "disposition": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase."
+  },
+  {
+    "path": "Backend Architecture/logger.py",
+    "role": "deprecated",
+    "owner": "platform@aether",
+    "note": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase.",
+    "deprecated_at": "2026-09-03",
+    "disposition": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase."
+  },
+  {
+    "path": "Backend Architecture/migrations",
+    "role": "deprecated",
+    "owner": "platform@aether",
+    "note": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase.",
+    "deprecated_at": "2026-09-03",
+    "disposition": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase."
+  },
+  {
+    "path": "Backend Architecture/mnt",
+    "role": "deprecated",
+    "owner": "platform@aether",
+    "note": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase.",
+    "deprecated_at": "2026-09-03",
+    "disposition": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase."
+  },
+  {
+    "path": "Backend Architecture/repos.py",
+    "role": "deprecated",
+    "owner": "platform@aether",
+    "note": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase.",
+    "deprecated_at": "2026-09-03",
+    "disposition": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase."
+  },
+  {
+    "path": "Backend Architecture/routes.py",
+    "role": "deprecated",
+    "owner": "platform@aether",
+    "note": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase.",
+    "deprecated_at": "2026-09-03",
+    "disposition": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase."
+  },
+  {
+    "path": "Backend Architecture/services/delegation",
+    "role": "deprecated",
+    "owner": "platform@aether",
+    "note": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase.",
+    "deprecated_at": "2026-09-03",
+    "disposition": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase."
+  },
+  {
+    "path": "Backend Architecture/services/journey-service",
+    "role": "deprecated",
+    "owner": "platform@aether",
+    "note": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase.",
+    "deprecated_at": "2026-09-03",
+    "disposition": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase."
+  },
+  {
+    "path": "Backend Architecture/services/web3",
+    "role": "deprecated",
+    "owner": "platform@aether",
+    "note": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase.",
+    "deprecated_at": "2026-09-03",
+    "disposition": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase."
+  },
+  {
+    "path": "Backend Architecture/settings.py",
+    "role": "deprecated",
+    "owner": "platform@aether",
+    "note": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase.",
+    "deprecated_at": "2026-09-03",
+    "disposition": "orphaned dead legacy module under Backend Architecture/. No new code may be added here; route work into the canonical tree. Physical removal deferred to a later phase."
+  },
+  {
+    "path": "Data Ingestion Layer",
+    "role": "deprecated",
+    "owner": "platform@aether",
+    "note": "un-deployed TypeScript duplicate of the canonical Python monolith (Backend Architecture/aether-backend). Kept only by version-sync, runtime-fallback, and temporal-integrity coupling; physical removal deferred to a later phase. Do not extend.",
+    "deprecated_at": "2026-09-03",
+    "disposition": "un-deployed TypeScript duplicate of the canonical Python monolith (Backend Architecture/aether-backend). Kept only by version-sync, runtime-fallback, and temporal-integrity coupling; physical removal deferred to a later phase. Do not extend."
+  },
+  {
+    "path": "Data Lake Architecture",
+    "role": "deprecated",
+    "owner": "platform@aether",
+    "note": "un-deployed TypeScript duplicate of the canonical Python monolith (Backend Architecture/aether-backend). Kept only by version-sync, runtime-fallback, and temporal-integrity coupling; physical removal deferred to a later phase. Do not extend.",
+    "deprecated_at": "2026-09-03",
+    "disposition": "un-deployed TypeScript duplicate of the canonical Python monolith (Backend Architecture/aether-backend). Kept only by version-sync, runtime-fallback, and temporal-integrity coupling; physical removal deferred to a later phase. Do not extend."
+  },
+  {
+    "path": "GDPR & SOC2",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "ML Models",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "Smart Contracts",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "apps",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "artifacts",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "cicd",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "config",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "contracts",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "data-modules",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "deploy",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "docs",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "frontend",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "lambda",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "packages",
+    "role": "canonical",
+    "owner": "platform@aether",
+    "note": "canonical SDK + shared monorepo container (packages/*)."
+  },
+  {
+    "path": "playground",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "reports",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "scripts",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "security",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
+    "path": "tests",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  }
+]

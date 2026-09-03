@@ -649,6 +649,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="update the derived surfaces required by docs/source-of-truth/repo_consistency_ownership.json",
     )
     run(
+        [sys.executable, "scripts/validate_canonical_ingestion_trees.py"],
+        name="Canonical ingestion-tree ownership (single-owner registration; no new duplicate trees)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="route new tree units into the canonical tree (Backend Architecture/aether-backend, packages/*) or register them in scripts/allowlists/repo_tree_ownership.json with architect review; never extend deprecated legacy trees",
+    )
+    run(
         [sys.executable, "scripts/validate_ts_public_exports.py"],
         name="TypeScript public export/package boundary validation",
         results=results,
@@ -818,6 +825,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         results=results,
         stop_on_failure=stop,
         remediation="align packages/shared/ingestion-contract.ts with services/ingestion/batch.py (endpoint, idempotency key, batch bounds)",
+    )
+    run(
+        [sys.executable, "scripts/validate_sdk_import_boundary.py"],
+        name="SDK import boundary (client SDK surfaces must not import backend/legacy internals)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="keep SDK client surfaces thin — talk to api.aether.io / ingest.aether.so; never import aether-backend, Data Ingestion Layer, or Data Lake Architecture internals (shrink scripts/allowlists/sdk_internal_import_allowlist.json only)",
     )
     run(
         [sys.executable, "scripts/validate_model_governance.py"],
