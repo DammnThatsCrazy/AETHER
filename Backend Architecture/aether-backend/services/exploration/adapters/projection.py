@@ -34,14 +34,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from shared.exploration.models import ExplorationContextV1
 from shared.intelligence_projections.contracts import (
     ProjectionRequest,
     ProjectionResult,
-    ProjectionSubject,
-)
-from shared.intelligence_projections.generated_registry import (
-    PROJECTION_SUBJECT_KINDS,
 )
 from shared.projection_engine.conflict import LensConflict, LensNotFound
 from shared.projection_engine.lens_registry import (
@@ -56,6 +51,7 @@ from services.exploration.adapters.base import (
     AdapterTruncation,
     SurfaceAdapter,
 )
+from services.exploration.projection_subject import projection_subject_for
 
 # The read plane this adapter honestly reports in AdapterResult.backend.
 _BACKEND = "intelligence_projection"
@@ -65,25 +61,6 @@ _BACKEND = "intelligence_projection"
 _REASON_PROVIDER_UNAVAILABLE = "provider_unavailable"
 _REASON_LENS_FRAME_INVALID = "lens_frame_invalid"
 _REASON_PROJECTION_FAILED = "projection_failed"
-
-_VALID_SUBJECT_KINDS = frozenset(PROJECTION_SUBJECT_KINDS)
-_DEFAULT_SUBJECT_KIND = "entity"
-_DEFAULT_SUBJECT_ID = "current"
-
-
-def _subject_from_context(context: ExplorationContextV1) -> ProjectionSubject:
-    """The tenant-scoped subject a projection is asked about.
-
-    Mirrors ``service.py::_compose_projection`` exactly: a ``selection.focused``
-    anchor whose kind is a registered projection subject kind becomes the
-    subject; otherwise the projection falls back to the canonical default
-    (``entity`` / ``current``) so the surface data path and the session
-    projection summary always agree.
-    """
-    focus = context.selection.focused if context.selection else None
-    if focus is not None and focus.kind in _VALID_SUBJECT_KINDS:
-        return ProjectionSubject(kind=focus.kind, id=focus.id)
-    return ProjectionSubject(kind=_DEFAULT_SUBJECT_KIND, id=_DEFAULT_SUBJECT_ID)
 
 
 class ProjectionSurfaceAdapter(SurfaceAdapter):
@@ -144,7 +121,7 @@ class ProjectionSurfaceAdapter(SurfaceAdapter):
             request = ProjectionRequest(
                 projectionId=projection_id,
                 tenantId=ctx.tenant_id,
-                subject=_subject_from_context(ctx.context),
+                subject=projection_subject_for(ctx.context),
                 lensIds=lens_ids,
                 temporalMode=temporal_mode,
             )
@@ -249,5 +226,4 @@ __all__ = [
     "Infrastructure360SurfaceAdapter",
     "Outcome360SurfaceAdapter",
     "ProjectionSurfaceAdapter",
-    "_subject_from_context",
 ]

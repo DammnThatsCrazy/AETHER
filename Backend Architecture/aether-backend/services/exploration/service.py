@@ -35,16 +35,13 @@ from services.exploration.facets import FacetResult, compute_facets
 from services.exploration.planner import ExplorationPlan, plan_context
 
 from services.exploration.operations import apply_operation
+from services.exploration.projection_subject import projection_subject_for
 from services.exploration.session import ExplorationSessionRepository
 
 # S1 projection-engine composition (fail-isolated — see _compose_projection).
-from shared.intelligence_projections.contracts import (
-    ProjectionRequest,
-    ProjectionSubject,
-)
+from shared.intelligence_projections.contracts import ProjectionRequest
 from shared.intelligence_projections.generated_registry import (
     INTELLIGENCE_PROJECTION_IDS,
-    PROJECTION_SUBJECT_KINDS,
 )
 from shared.projection_engine.conflict import LensConflict, LensNotFound
 from shared.projection_engine.lens_registry import (
@@ -262,9 +259,6 @@ async def execute_facets(
 
 _sessions = ExplorationSessionRepository()
 
-_VALID_SUBJECT_KINDS = frozenset(PROJECTION_SUBJECT_KINDS)
-_DEFAULT_SUBJECT_KIND = "entity"
-
 
 def _empty_context(tenant_id: str) -> ExplorationContextV1:
     """A minimal pre-op context for REJECTED results that had no input context."""
@@ -301,11 +295,7 @@ async def _compose_projection(
     except (LensConflict, LensNotFound):
         return {"available": False, "reason": "lens_frame_invalid"}, "degraded", []
 
-    focus = context.selection.focused if context.selection else None
-    if focus is not None and focus.kind in _VALID_SUBJECT_KINDS:
-        subject = ProjectionSubject(kind=focus.kind, id=focus.id)
-    else:
-        subject = ProjectionSubject(kind=_DEFAULT_SUBJECT_KIND, id="current")
+    subject = projection_subject_for(context)
 
     engine_mode = parse_temporal_mode(context.temporal_mode)
     try:
