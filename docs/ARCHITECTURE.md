@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: "99736fed"
+last_synced_commit: "904352c4"
 ---
 # Aether vNext — Architecture Guide
 
@@ -472,8 +472,13 @@ fail-isolated provider protocol
 projection degrades its own result, never the plane. P0 shipped the plane as a
 library with no projection route; projection routes land only as classified
 legacy bindings per vertical slice — the read-only `/v1/infrastructure` (every
-route a GET, no generic catch-all) is the first. Exploration surfaces compose
-over the engine through projection-backed surface adapters
+route a GET, no generic catch-all) is the first. The implemented providers are
+registered at boot — `main.py`'s lifespan calls
+`dependencies.projection_plane.register_implemented_projection_providers` — so a
+projection surface answers live instead of degrading to `provider_unavailable`
+(a provider is not live until registered at this mount; the enforcement note is
+in the source-of-truth). Exploration surfaces compose over the engine through
+projection-backed surface adapters
 (`services/exploration/adapters/projection.py`).
 The design decision is [ADR-010](decisions/ADR-010-intelligence-projection-plane.md);
 the source-of-truth is
