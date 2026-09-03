@@ -103,6 +103,11 @@ updated as each phase lands.
 | **4** — `geographic360` | The **one new canonical location primitive**: `location-registry.json` + `shared/geo` + `services/geo` (LocationFact with roles/precision/coordinates; Place/Region/Jurisdiction; region-type hierarchy — not US-only), H3 client-side cells, geodesy via pure-python libs, `GeocodingProvider` behind the existing credential vault; graph edges with new `EdgeType` + `relationship_layers` entry; jurisdiction-vs-location and privacy downgrade (`exact→city→metro`) with `suppressed`/`precision_reduced`; provider lenses; DSR components; `docs/blueprints/geographic360.md`; registry → `implemented` | Phase 2 landed (temporal dep); location authority design reviewed | geographic360 answers on the exploration surface with precision never exceeding evidence; parity/gate green | NOT YET SHIPPED |
 | **5** — Cross-cutting close-out | Cross-dimensional composition (temporal × geographic × population via the engine composition pattern); cross-360 monetary metrics consume canonical `value.ts`/FX only; full gates + docs regen; PR | Phases 2–4 landed | All three `implemented`; `make ci-check` green; `make release-gate` only if readiness is claimed | NOT YET SHIPPED |
 
+> **Note on blueprints:** the per-360 vertical-slice blueprints
+> (`docs/blueprints/{temporal360,geographic360,population360}.md`) are authored
+> in the Phase-0 scaffold (they are this program's slice specs) and are
+> *satisfied* — reviewed, not re-authored — inside each owning phase (§3.1).
+
 ### Implementation priority
 
 - **Phase 1 before any provider** because no context_360 provider can serve live
@@ -118,6 +123,47 @@ updated as each phase lands.
 - **Geographic (Phase 4) last** because it defines the program's only new
   canonical authority (the location primitive) and consumes the settled
   membership/edge/DSR conventions.
+
+### Per-360 workstreams (sub-phases)
+
+Each single phase row above expands into the ordered workstreams below, and each
+workstream ships as its own reviewable commit. A phase is complete only when all
+its workstreams are green **and** its vertical-slice blueprint (§3 note) is
+satisfied. Every row below is **NOT YET SHIPPED**.
+
+#### Phase 2 → `temporal360` (spec: [docs/blueprints/temporal360.md](../../docs/blueprints/temporal360.md))
+
+| WS | What ships | Exit criteria | Status |
+| --- | --- | --- | --- |
+| T2.1 | `graph_history_replay` authority — read-side knowledge-time reconstruction from the ledger prefix + `graph_fact_versions` (extending `services/operational_intelligence` + `shared/graph/traversal.py`); `replay_ledger` beyond digest; digest-verifiable | Reconstruction at knowledge instant τ equals the ledger prefix closed at τ; `KNOWN_THEN` served; no write path | NOT YET SHIPPED |
+| T2.2 | `temporal360` provider (leaf; `summary`/`state`/`timeline`/`evidence`/`findings`; surface modes `window`/`as_of`/`compare`/`relative`; `KNOWN_NOW` vs `KNOWN_THEN` correction diff) | Valid `ProjectionResult` on a fresh registry; modes requiring reconstruction degrade with a typed warning until T2.1 lands | NOT YET SHIPPED |
+| T2.3 | Surface-capability block for `temporal360` (`temporal_observatory`, `timeline`) + regen; late-arrival recompute following the measurement pattern; DSR check on any new replay artifact | Surface routable on `/v1/explore/query`; recompute + erasure honest | NOT YET SHIPPED |
+| T2.4 | Blueprint review; zero-pending (`graph_history_replay` resolved); source-linked docs stamped after review | 13-gate checklist passes; `make ci-check` green; row → `implemented` | NOT YET SHIPPED |
+
+#### Phase 3 → `population360` (spec: [docs/blueprints/population360.md](../../docs/blueprints/population360.md))
+
+| WS | What ships | Exit criteria | Status |
+| --- | --- | --- | --- |
+| P3.1 | Governed membership: memberships written as graph `MEMBER_OF` edges through the mutation gateway with provenance (`definition_version`/`membership_state`/`evidence_refs` added to the record/edge vocabulary); migration replaces auto-create JSONB | Membership is a governed graph fact; no direct table-write path remains | NOT YET SHIPPED |
+| P3.2 | Immutable definition versioning; consent/policy evaluation at membership compute/write (gateway parity) | A definition version cannot be silently redefined; writes pass consent | NOT YET SHIPPED |
+| P3.3 | `DSR_COMPONENT` coverage for `populations`/memberships/snapshots in `services/dsr_propagation/` | Erasure of a member recomputes counts honestly; component count grows past 26 | NOT YET SHIPPED |
+| P3.4 | `population360` provider (snapshots/deltas/overlap/transitions/composition) + human demographic lens (no `Demographic360`) | Provider answers on the exploration surface; lens reads canonical profile facts with configurable small-cell suppression | NOT YET SHIPPED |
+| P3.5 | Blueprint review; zero-pending (`grouping_membership` resolved); source-linked docs stamped after review | 13-gate checklist passes; `make ci-check` green; row → `implemented` | NOT YET SHIPPED |
+
+#### Phase 4 → `geographic360` (spec: [docs/blueprints/geographic360.md](../../docs/blueprints/geographic360.md))
+
+| WS | What ships | Exit criteria | Status |
+| --- | --- | --- | --- |
+| G4.1 | The one new canonical authority: `location-registry.json` + `shared/geo` models (`LocationFact` roles/precision/coordinates; `Place`/`Region`/`Jurisdiction`, region-type hierarchy not US-only) | Registry fails closed on unknown/duplicate/non-lower-snake ids; coordinates never back-filled into context capsules (parity green) | NOT YET SHIPPED |
+| G4.2 | Graph vocabulary: new `EdgeType` + `relationship_layers` entry; `services/geo` surfacing; precision classes aligned to the `coarse_cell` taxonomy | Location edges classified + evidence-carrying; unclassified edges still error in staging/prod | NOT YET SHIPPED |
+| G4.3 | H3 client-side cells (hierarchical, k-ring) + `geographiclib` geodesy + vault-backed `GeocodingProvider` | Spatial cells are client-computed strings; no PostGIS; keys live in the credential vault | NOT YET SHIPPED |
+| G4.4 | `geographic360` provider (`summary`/`state`/`timeline`/`evidence`/`findings`; `exact→city→metro` privacy downgrade) + surface-capability block (`geo`) + lenses | Provider + surface routable on `/v1/explore/query`; precision never exceeds evidence | NOT YET SHIPPED |
+| G4.5 | `DSR_COMPONENT` for location facts; blueprint review; zero-pending (`context_capsule_semantics` resolved); source-linked docs stamped after review | 13-gate checklist passes; `make ci-check` green; row → `implemented` | NOT YET SHIPPED |
+
+Within each phase the ordering is fixed: authority resolves before provider,
+provider before surface, governance/erasure ships in the same phase as the
+artifact it governs, and the blueprint is reviewed — never blindly stamped —
+before the row flips.
 
 ## 4. Standing rules (blueprint constraints in repository terms)
 
@@ -251,6 +297,7 @@ its surface-capability block and regenerate.
 | Date | Phase | Result |
 | --- | --- | --- |
 | 2026-09-03 | Phase 0 (kickoff) | Reconciliation complete (blueprint → repository); branch `feat/context-intelligence-360` cut from the stacked lane (carries the projection plane + context_360 registry rows); this program ledger + §5 spike authored; verification spike confirmed the plane is not live, the trio lacks surface-capability entries, the knowledge-time replay authority is absent, population membership is not a governed/consented/DSR-covered graph fact, and the geographic primitive is genuinely new (decision A/A/A/A). Baseline `make ci-check` green pending; final `make ci-check` gate remains. |
+| 2026-09-03 | Phase 0 (scaffold) | Per-360 workstream detail added (§3.1, T2.x/P3.x/G4.x) and the three vertical-slice blueprints `docs/blueprints/{temporal360,geographic360,population360}.md` authored on `feat/context-intelligence-360` rooted at `fced2960`; docs manifest regenerated. Program remains pre-implementation — phases 1–5 NOT YET SHIPPED. |
 
 When a phase lands, its row is updated here and the corresponding registry rows
 move `in_flight` → `implemented` only after the vertical-slice checklist and
