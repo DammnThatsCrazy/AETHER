@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 
 from scripts import validate_sdk_import_boundary as gate
 
@@ -76,8 +77,13 @@ def test_package_deps_scan_flags_internal_dependency(tmp_path) -> None:
     assert any("@aether/ingestion" in o for o in offenders)
 
 
-def test_validate_mode_passes_against_live_tree() -> None:
-    """Default check mode must exit 0 while today's SDK surfaces scan clean."""
+def test_validate_mode_passes_against_live_tree(monkeypatch) -> None:
+    """Default check mode must exit 0 while today's SDK surfaces scan clean.
+
+    gate.main() parses sys.argv (argparse), so isolate it from pytest's own
+    argv — otherwise parse_args errors on the runner arguments.
+    """
+    monkeypatch.setattr(sys, "argv", ["validate_sdk_import_boundary"])
     assert gate.main() == 0
 
 

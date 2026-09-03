@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 
 from scripts import validate_canonical_ingestion_trees as gate
 
@@ -104,8 +105,13 @@ def test_present_detects_registered_missing() -> None:
     assert not gate._present("Data Ingestion Layer", files)
 
 
-def test_validate_mode_passes_against_live_tree() -> None:
-    """Default check mode must exit 0 while the registry matches the tree."""
+def test_validate_mode_passes_against_live_tree(monkeypatch) -> None:
+    """Default check mode must exit 0 while the registry matches the tree.
+
+    gate.main() parses sys.argv (argparse), so isolate it from pytest's own
+    argv — otherwise parse_args errors on the runner arguments.
+    """
+    monkeypatch.setattr(sys, "argv", ["validate_canonical_ingestion_trees"])
     assert gate.main() == 0
 
 
