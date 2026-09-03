@@ -13,15 +13,29 @@ source_files:
 canonical_owner: ingest@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "4e6fdad"
+last_synced_commit: "10bda088"
 ---
 
 # Data Ingestion — Architecture & API Reference
 
-The Aether Ingestion Layer is a Node.js / TypeScript service that accepts
-analytics events from every Aether SDK, enriches them, and fans them out to the
-platform's storage and streaming backends. It is the single authoritative entry
-point for raw event data.
+> **DEPRECATED — historical reference for the un-deployed legacy duplicate.**
+> This document describes the **`Data Ingestion Layer/`** Node.js / TypeScript
+> tree, which is an **un-deployed legacy duplicate**. The deployed, authoritative
+> ingestion implementation is the Python monolith at
+> `Backend Architecture/aether-backend/` (canonical ingress =
+> `Backend Architecture/aether-backend/services/ingestion/batch.py`,
+> `POST /v1/batch`). No new code may be added to this legacy tree; route work
+> into the canonical tree. Banner added by the SDK + Universal Ingestion
+> Alignment program (Phase 0) — see
+> `docs/productization/sdk-universal-ingestion-alignment/`. Physical removal is
+> deferred to a later phase.
+
+The `Data Ingestion Layer/` tree (Node.js / TypeScript) historically accepted
+analytics events from every Aether SDK, enriched them, and fanned them out to
+the platform's storage and streaming backends. This reference documents that
+legacy service as it exists in the tree; it is **not** the authoritative entry
+point for raw event data — the canonical `POST /v1/batch` ingress is the Python
+monolith's `Backend Architecture/aether-backend/services/ingestion/batch.py`.
 
 ## Architecture overview
 
@@ -173,12 +187,15 @@ restoring from the raw S3 archive.
 
 ## Relationship to the Python backend
 
-The Node.js ingestion server handles all **SDK-originated event streams** via
-`POST /v1/batch`. The Python FastAPI backend (`Backend Architecture/`) exposes
-a separate `/v1/ingest/*` family of endpoints for **server-side event ingestion**
-(e.g., back-end commerce events, compliance audit records). Both paths converge
-on the same Kafka topics and downstream sinks, but they are distinct services
-with separate authentication and rate-limiting.
+Following the SDK + Universal Ingestion Alignment convergence (Phase 0), the
+Python monolith (`Backend Architecture/aether-backend/`) is the deployed,
+authoritative implementation: SDK-originated event streams land at its canonical
+`POST /v1/batch` ingress
+(`Backend Architecture/aether-backend/services/ingestion/batch.py`). The
+Node.js `Data Ingestion Layer/` tree described above is an un-deployed legacy
+duplicate retained in the repo for reference only; it must not be extended, and
+physical removal is deferred to a later phase. Do not build new SDK or event
+integrations against the legacy tree.
 
 ## Operational notes
 
