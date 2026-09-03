@@ -758,6 +758,7 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
         "ecr:DeleteRepositoryPolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "secretsmanager:TagResource": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
         "secretsmanager:DescribeSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+        "secretsmanager:GetResourcePolicy": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
         "secretsmanager:CreateSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
         "secretsmanager:UpdateSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
         "secretsmanager:DeleteSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
