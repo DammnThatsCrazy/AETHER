@@ -402,3 +402,84 @@ class TestReadOnlyAndIsolation:
         replay = GraphHistoryReplay(ledger)
         with pytest.raises(BadRequestError):
             await replay.known_as_of(TENANT, "not-an-instant")
+
+
+async def _append_tombstone(
+    ledger: GraphMutationLedgerRepository, *, at: str, node_id: str, key: str
+) -> None:
+    """A vertex erasure: the append-only ledger cannot delete the node row, so
+    an erasure supersedes it with a tombstone write (``node_tombstoned``). The
+    reconstruction reflects the tombstone as the terminal canonical state."""
+    record = MutationRecord(
+        mutation_id=str(uuid.uuid4()),
+        tenant_id=TENANT,
+        aggregate_type="node",
+        aggregate_id=node_id,
+        operation="node_tombstoned",
+        recorded_at=_at(at),
+        valid_from=_at(at),
+        idempotency_key=key,
+    )
+    payload = {
+        "kind": "node",
+        "vertex_type": "User",
+        "vertex_id": node_id,
+        "properties": {"tenant_id": TENANT, "kind": "human", "status": "erased"},
+    }
+    outcome = await ledger.append(record, payload)
+    assert outcome.inserted
+
+
+class TestRecomputeHonesty:
+    """T2.3 recompute/erasure honesty — the replay persists nothing and rebuilds
+    from the ledger prefix at read time, so late-arrival rows are honoured and
+    an erasure is a terminal canonical state that never resurrects."""
+
+    @pytest.mark.asyncio
+    async def test_late_arrival_row_is_honoured_by_read_time_recompute(self) -> None:
+        ledger = GraphMutationLedgerRepository()
+        await _append_node(ledger, at=T1, node_id="a", status="active", key="a-create")
+        replay = GraphHistoryReplay(ledger)
+        tau = "2026-01-02T12:00:00+00:00"  # after T1, at/after late-arrival T2
+
+        first = await replay.known_as_of(TENANT, tau)
+        assert set(first.state.vertices) == {"a"}
+
+        # A fact recorded_at T2 (<= tau) arrives LATE — appended only now, after
+        # the earlier reconstruction. No cached snapshot exists to go stale: the
+        # next read recomputes from the fuller prefix and honours it.
+        await _append_node(ledger, at=T2, node_id="b", status="active", key="b-late")
+        second = await replay.known_as_of(TENANT, tau)
+        assert second.row_count == 2
+        assert set(second.state.vertices) == {"a", "b"}
+        assert first.state.digest != second.state.digest
+
+        # Recompute is idempotent + pure: same prefix -> same digest, and the
+        # authority never writes (no ledger rows added by reading).
+        assert (await replay.known_as_of(TENANT, tau)).state.digest == second.state.digest
+        assert len(await ledger.list_records(TENANT)) == 2
+
+    @pytest.mark.asyncio
+    async def test_erasure_is_terminal_canonical_state_never_resurrected(self) -> None:
+        ledger = GraphMutationLedgerRepository()
+        await _append_node(ledger, at=T1, node_id="a", status="active", key="a-create")
+        await _append_tombstone(ledger, at=T2, node_id="a", key="a-erase")
+        replay = GraphHistoryReplay(ledger)
+
+        # KNOWN_NOW after the erasure: the tombstoned state is what the graph
+        # serves — the pre-erasure live fact is not resurrected.
+        now = await replay.known_now(TENANT)
+        assert now.state.vertices["a"].properties["status"] == "erased"
+
+        # The subject's own timeline shows the erase as a supersession (event),
+        # never a silent rewrite of the create.
+        history = await replay.subject_history(TENANT, "a")
+        assert [e.kind for e in history.events] == ["vertex_created", "vertex_superseded"]
+        assert history.vertex["status"] == "erased"
+
+        # KNOWN_THEN before the erase is the honest audit record of what was
+        # known then (append-only); the erasure surfaces as the change.
+        before = await replay.known_as_of(TENANT, "2026-01-01T12:00:00+00:00")
+        assert before.state.vertices["a"].properties["status"] == "active"
+        report = GraphHistoryReplay.corrections_between(before, now)
+        assert report["changed_vertices"] == ["a"]

@@ -13,8 +13,10 @@ import services.exploration.adapters.graph as graph_adapter
 
 
 def test_every_backed_surface_has_an_adapter():
-    # S6 adds projection-backed adapters for the three implemented 360 surfaces
+    # S6 adds projection-backed adapters for the 360 projection surfaces
     # (migration seam: surface -> intelligence projection via the S1 engine).
+    # temporal360 (context-360 Phase 2) owns a dedicated surface of its own
+    # rather than shadowing timeline / temporal_observatory.
     expected = {
         "campaign360",
         "cluster360",
@@ -24,6 +26,7 @@ def test_every_backed_surface_has_an_adapter():
         "infrastructure360",
         "outcome360",
         "profile360",
+        "temporal360",
         "timeline",
     }
     assert available_surfaces() == frozenset(expected)

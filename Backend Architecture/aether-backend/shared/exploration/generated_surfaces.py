@@ -20,6 +20,7 @@ EXPLORATION_SURFACE_IDS: tuple[str, ...] = (
     "outcome360",
     "product_intelligence",
     "profile360",
+    "temporal360",
     "temporal_observatory",
     "timeline",
 )
@@ -159,6 +160,16 @@ SURFACE_CAPABILITIES: dict[str, dict] = {
         "supports_comparison": True,
         "supports_selection_sets": False,
         "supports_saved_views": False,
+        "supports_export": True,
+    },
+    "temporal360": {
+        "supported_field_categories": ("entity", "time", "truth"),
+        "supported_temporal_modes": ("window", "as_of", "compare", "relative"),
+        "supported_views": ("timeline", "table"),
+        "supports_facets": True,
+        "supports_comparison": True,
+        "supports_selection_sets": True,
+        "supports_saved_views": True,
         "supports_export": True,
     },
     "temporal_observatory": {

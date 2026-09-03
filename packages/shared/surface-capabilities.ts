@@ -27,6 +27,7 @@ export const explorationSurfaceIds = [
   'outcome360',
   'product_intelligence',
   'profile360',
+  'temporal360',
   'temporal_observatory',
   'timeline',
 ] as const;
@@ -176,6 +177,17 @@ export const surfaceCapabilities: Record<ExplorationSurfaceId, SurfaceCapability
     supportsComparison: true,
     supportsSelectionSets: false,
     supportsSavedViews: false,
+    supportsExport: true,
+  },
+  temporal360: {
+    surfaceId: 'temporal360',
+    supportedFieldCategories: ['entity', 'time', 'truth'],
+    supportedTemporalModes: ['window', 'as_of', 'compare', 'relative'],
+    supportedViews: ['timeline', 'table'],
+    supportsFacets: true,
+    supportsComparison: true,
+    supportsSelectionSets: true,
+    supportsSavedViews: true,
     supportsExport: true,
   },
   temporal_observatory: {

@@ -21,6 +21,16 @@ Digest-verifiable: a snapshot's ``digest`` is the sha256 over the reconstructed
 state, identical to replaying the same prefix again — reconstruct twice and the
 digests must match.
 
+Recompute + erasure honesty (temporal360 T2.3): reconstruction persists nothing
+and rebuilds from the ledger prefix at every read, so no cached artifact needs a
+DSR component and no stale snapshot can outlive a canonical change. A row that
+arrives late (``recorded_at <= tau`` appended after an earlier answer) is
+honoured by the next read at the same ``tau`` — the fuller prefix, recomputed
+idempotently. An erasure is a terminal canonical state (the append-only ledger
+tombstones the vertex/edge rather than deleting the row): KNOWN_NOW serves the
+erased state and never resurrects the pre-erasure live fact, while KNOWN_THEN
+before the erase remains the honest audit record of what was known then.
+
 No write path: nothing here appends, closes, or mutates canonical state; the
 authority only ever reads the ledger and returns reconstructed state.
 """

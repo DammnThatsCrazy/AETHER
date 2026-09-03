@@ -1,8 +1,9 @@
 """Projection-surface adapter — the S1 migration seam for 360 surfaces.
 
 Exploration surfaces whose backing plane is an intelligence projection
-(outcome360 / economic360 / infrastructure360) run through this adapter: it maps
-one registered exploration surface to its projection id (here equal by name) and
+(outcome360 / economic360 / infrastructure360 / temporal360) run through this
+adapter: it maps one registered exploration surface to its projection id (here
+equal by name) and
 executes the projection through the S1 engine
 (:class:`ProjectionRuntime <shared.projection_engine.runtime.ProjectionRuntime>`
 → :class:`ProjectionExecutor` → the fail-isolated
@@ -26,8 +27,9 @@ ADR-010 posture:
 
 The generic adapter is intentionally NOT registered: only the thin per-surface
 subclasses for 360 surfaces that previously had no dedicated exploration adapter
-(outcome360 / economic360 / infrastructure360) join the surface registry, so an
-already-owned surface (profile360, campaign360, ...) is never shadowed.
+(outcome360 / economic360 / infrastructure360 / temporal360) join the surface
+registry, so an already-owned surface (profile360, campaign360, ...) is never
+shadowed.
 """
 
 from __future__ import annotations
@@ -75,7 +77,7 @@ class ProjectionSurfaceAdapter(SurfaceAdapter):
     """
 
     surface_id = ""
-    # Optional explicit projection id; defaults to the surface id (the three
+    # Optional explicit projection id; defaults to the surface id (the
     # registered 360 surfaces share their name with their projection row).
     projection_id: Optional[str] = None
 
@@ -221,9 +223,21 @@ class Infrastructure360SurfaceAdapter(ProjectionSurfaceAdapter):
     surface_id = "infrastructure360"
 
 
+class Temporal360SurfaceAdapter(ProjectionSurfaceAdapter):
+    """temporal360 exploration surface → the temporal360 projection.
+
+    The context-360 time leaf (Phase 2): it owns its own ``temporal360``
+    surface rather than shadowing ``timeline`` (a non-projection adapter) or
+    ``temporal_observatory`` (owned by other work packages).
+    """
+
+    surface_id = "temporal360"
+
+
 __all__ = [
     "Economic360SurfaceAdapter",
     "Infrastructure360SurfaceAdapter",
     "Outcome360SurfaceAdapter",
     "ProjectionSurfaceAdapter",
+    "Temporal360SurfaceAdapter",
 ]

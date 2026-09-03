@@ -159,6 +159,17 @@
       "supportsSelectionSets": true,
       "supportsSavedViews": true,
       "supportsExport": true
+    },
+    {
+      "surfaceId": "temporal360",
+      "supportedFieldCategories": ["entity", "time", "truth"],
+      "supportedTemporalModes": ["window", "as_of", "compare", "relative"],
+      "supportedViews": ["timeline", "table"],
+      "supportsFacets": true,
+      "supportsComparison": true,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": true,
+      "supportsExport": true
     }
   ]
 }
