@@ -14,8 +14,13 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from shared.common.common import NotFoundError
+from services.consent.authority import ConsentReceiptRepository
 from services.population.models import MembershipAdd
-from services.population.registry import membership_repo, population_repo
+from services.population.registry import (
+    definition_repo,
+    membership_repo,
+    population_repo,
+)
 from services.population.routes import (
     add_members,
     compare_groups,
@@ -50,9 +55,13 @@ def _request(tenant_id: str):
 def _reset_stores():
     population_repo._store.clear()
     membership_repo._store.clear()
+    definition_repo._store.clear()
+    ConsentReceiptRepository()._store.clear()
     yield
     population_repo._store.clear()
     membership_repo._store.clear()
+    definition_repo._store.clear()
+    ConsentReceiptRepository()._store.clear()
 
 
 async def _group(tenant_id: str) -> dict:
@@ -64,6 +73,17 @@ async def _group(tenant_id: str) -> dict:
         definition={"filters": [{"field": "lifetime_value", "op": "gt", "value": 1}]},
         source_tag="tenant_scope_test",
         tenant_id=tenant_id,
+    )
+
+
+async def _grant(entity_id: str, tenant_id: str) -> None:
+    """A governed join is consent-gated (P3.2): seed a server receipt."""
+    await ConsentReceiptRepository().record(
+        receipt_id=f"rcpt_{tenant_id}_{entity_id}",
+        tenant_id=tenant_id,
+        purpose="analytics",
+        state="granted",
+        subject_id=entity_id,
     )
 
 
@@ -107,6 +127,8 @@ async def test_cross_tenant_remove_member_rejected():
 async def test_owner_can_add_members():
     """Positive control: the owning tenant's write still lands."""
     group = await _group("tenant_a")
+    await _grant("entity_1", "tenant_a")
+    await _grant("entity_2", "tenant_a")
 
     from shared.graph.graph import GraphClient
 

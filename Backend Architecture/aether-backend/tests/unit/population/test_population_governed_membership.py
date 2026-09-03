@@ -11,7 +11,9 @@ governed path maintains; reads surface *active* memberships.
 Suites pin: (1) the governed join writes the edge + ledger record + row;
 (2) a duplicate join stays idempotent; (3) a leave revokes the edge and
 transitions the row to ``left`` (row still present); (4) re-join after a leave
-starts a fresh membership episode; (5) tenant isolation end to end.
+starts a fresh membership episode; (5) tenant isolation end to end. Joins are
+consent-gated since P3.2, so each suite seeds a server consent receipt for the
+member before writing.
 """
 
 from __future__ import annotations
@@ -25,22 +27,44 @@ from repositories.graph_mutation_ledger import (
     GraphMutationLedgerRepository,
     reset_graph_ledger_memory,
 )
+from services.consent.authority import ConsentReceiptRepository
 from shared.graph.graph import EdgeType, GraphClient
 from services.population.governance import PopulationMembershipGovernor
 from services.population.models import MembershipBasis, MembershipState, PopulationType
-from services.population.registry import membership_repo, population_repo
+from services.population.registry import (
+    definition_repo,
+    membership_repo,
+    population_repo,
+)
 
 
 @pytest.fixture(autouse=True)
 def _reset_stores():
-    """Start every test from empty in-memory repos + ledger."""
+    """Start every test from empty in-memory repos + ledger + consent receipts."""
     population_repo._store.clear()
     membership_repo._store.clear()
+    definition_repo._store.clear()
+    ConsentReceiptRepository()._store.clear()
     reset_graph_ledger_memory()
     yield
     population_repo._store.clear()
     membership_repo._store.clear()
+    definition_repo._store.clear()
+    ConsentReceiptRepository()._store.clear()
     reset_graph_ledger_memory()
+
+
+async def _grant(entity_id: str, tenant_id: str = "tenant_a",
+                 purpose: str = "analytics") -> None:
+    """Seed a server consent receipt (population360 P3.2): a governed join is
+    denied until the member's consent is granted under the population purpose."""
+    await ConsentReceiptRepository().record(
+        receipt_id=f"rcpt_{tenant_id}_{entity_id}",
+        tenant_id=tenant_id,
+        purpose=purpose,
+        state="granted",
+        subject_id=entity_id,
+    )
 
 
 @pytest.fixture()
@@ -80,6 +104,7 @@ async def test_join_writes_governed_edge_ledger_and_row(enforce_mode):
     graph = await _graph()
     pop = await _population("tenant_a")
     governor = PopulationMembershipGovernor(graph_client=graph)
+    await _grant("entity_1")
 
     row = await governor.add_membership(
         population=pop,
@@ -126,6 +151,7 @@ async def test_duplicate_join_is_idempotent(enforce_mode):
     graph = await _graph()
     pop = await _population("tenant_a")
     governor = PopulationMembershipGovernor(graph_client=graph)
+    await _grant("entity_1")
 
     await governor.add_membership(population=pop, entity_id="entity_1",
                                   tenant_id="tenant_a")
@@ -148,6 +174,7 @@ async def test_leave_revokes_edge_and_transitions_row(enforce_mode):
     graph = await _graph()
     pop = await _population("tenant_a")
     governor = PopulationMembershipGovernor(graph_client=graph)
+    await _grant("entity_1")
 
     await governor.add_membership(population=pop, entity_id="entity_1",
                                   tenant_id="tenant_a")
@@ -179,6 +206,7 @@ async def test_rejoin_after_leave_starts_fresh_membership_episode(enforce_mode):
     graph = await _graph()
     pop = await _population("tenant_a")
     governor = PopulationMembershipGovernor(graph_client=graph)
+    await _grant("entity_1")
 
     await governor.add_membership(population=pop, entity_id="entity_1",
                                   tenant_id="tenant_a", source_event_id="join_1")
@@ -216,6 +244,8 @@ async def test_tenant_isolation_end_to_end(enforce_mode):
     pop_a = await _population("tenant_a")
     pop_b = await _population("tenant_b")
     governor = PopulationMembershipGovernor(graph_client=graph)
+    await _grant("entity_1", tenant_id="tenant_a")
+    await _grant("entity_2", tenant_id="tenant_b")
 
     await governor.add_membership(population=pop_a, entity_id="entity_1",
                                   tenant_id="tenant_a")

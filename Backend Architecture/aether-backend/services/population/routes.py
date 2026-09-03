@@ -33,14 +33,28 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Request, Query
 
 from dependencies.providers import get_graph, get_producer
-from shared.common.common import APIResponse, NotFoundError, utc_now
+from shared.common.common import (
+    APIResponse,
+    BadRequestError,
+    ForbiddenError,
+    NotFoundError,
+    utc_now,
+)
 from shared.events.events import Event, Topic
 from shared.events.producer import EventProducer
 from shared.graph.graph import GraphClient
 from shared.logger.logger import get_logger, metrics
-from services.population.governance import PopulationMembershipGovernor
-from services.population.models import MembershipAdd, PopulationCreate, PopulationType
-from services.population.registry import membership_repo, population_repo
+from services.population.governance import (
+    MembershipConsentDeniedError,
+    PopulationMembershipGovernor,
+)
+from services.population.models import (
+    DefinitionRevision,
+    MembershipAdd,
+    PopulationCreate,
+    PopulationType,
+)
+from services.population.registry import definition_repo, membership_repo, population_repo
 
 logger = get_logger("aether.service.population")
 router = APIRouter(prefix="/v1/population", tags=["Population Intelligence"])
@@ -152,8 +166,60 @@ async def create_group(body: PopulationCreate, request: Request):
         source_tag=body.source_tag,
         tenant_id=tenant.tenant_id,
         metadata=body.metadata,
+        consent_purpose=body.consent_purpose,
     )
     return APIResponse(data=result).to_dict()
+
+
+@router.post("/groups/{population_id}/definition-revision")
+async def revise_group_definition(
+    population_id: str,
+    body: DefinitionRevision,
+    request: Request,
+):
+    """Publish a NEW immutable population-definition version (P3.2).
+
+    Definitions are versioned contracts: this endpoint appends a new immutable
+    version (the previous definition stays reconstructable in the version
+    ledger) and advances the population's current definition, with the required
+    ``reason`` documenting the transition. It refuses an identical no-op
+    revision. Memberships are never silently reinterpreted: old cohorts keep
+    the version they were computed against.
+    """
+    request.state.tenant.require_permission("write")
+    tenant_id = request.state.tenant.tenant_id
+    group = await _require_owned_group(population_id, tenant_id)
+
+    created_by = getattr(request.state.tenant, "user_id", "") or "population_api"
+    updated, version = await population_repo.revise_definition(
+        group,
+        body.definition,
+        reason=body.reason,
+        created_by=created_by,
+    )
+    metrics.increment("population_definition_revision", labels={"type": group.get("population_type", "")})
+    return APIResponse(data={
+        "population": updated,
+        "definition_version": version["definition_version"],
+        "supersedes_version": version["supersedes_version"],
+        "definition_hash": version["definition_hash"],
+        "reason": version["reason"],
+    }).to_dict()
+
+
+@router.get("/groups/{population_id}/definition-history")
+async def group_definition_history(population_id: str, request: Request):
+    """Immutable definition-version history, oldest -> newest (P3.2)."""
+    request.state.tenant.require_permission("read")
+    tenant_id = request.state.tenant.tenant_id
+    await _require_owned_group(population_id, tenant_id)
+
+    history = await definition_repo.history(population_id)
+    return APIResponse(data={
+        "population_id": population_id,
+        "definition_versions": history,
+        "count": len(history),
+    }).to_dict()
 
 
 @router.get("/groups/{population_id}")
@@ -213,6 +279,27 @@ async def add_members(
     group = await _require_owned_group(population_id, tenant.tenant_id)
 
     governor = PopulationMembershipGovernor(graph_client=graph)
+
+    # Preflight consent for EVERY requested member (P3.2) so a batch never
+    # partially lands: a denied subject aborts the whole request before any
+    # edge, ledger row, or materialised membership is written.
+    for entity_id in body.entity_ids:
+        try:
+            await governor.assert_membership_allowed(
+                population=group,
+                entity_id=entity_id,
+                tenant_id=tenant.tenant_id,
+            )
+        except MembershipConsentDeniedError as exc:
+            raise ForbiddenError(
+                f"Membership denied by consent for entity {exc.entity_id}",
+                details={
+                    "reason_code": exc.reason_code,
+                    "purpose": exc.purpose,
+                    "entity_id": exc.entity_id,
+                },
+            ) from exc
+
     added = 0
     for entity_id in body.entity_ids:
         row = await governor.add_membership(

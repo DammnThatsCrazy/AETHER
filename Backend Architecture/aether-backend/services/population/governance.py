@@ -13,8 +13,12 @@ the governed path maintains after a successful edge write. Leaves are state
 transitions (``membership_state=left`` + ``left_at``) — never a hard delete —
 so the row stays a rebuildable materialization of the graph truth.
 
-Consent/policy evaluation (P3.2) is applied by callers *before* invoking the
-governor; this module is the write boundary, not the consent authority.
+Consent/policy evaluation (P3.2) is applied at the write boundary itself,
+server-authoritative (``services.consent.authority.evaluate_consent``) for the
+member data subject under the population's declared ``consent_purpose`` —
+fail-closed, never merely a tenant ``write`` permission. Joining is gated;
+leaving is always honored (a subject may exit a cohort regardless of current
+grant state), so a leave is never blocked by a revoked receipt.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from __future__ import annotations
 import hashlib
 from typing import Optional
 
+from services.consent.authority import evaluate_consent
 from shared.common.common import utc_now
 from shared.graph.graph import Edge, EdgeType, GraphClient
 from shared.graph.mutation_gateway import GraphMutationGateway
@@ -40,6 +45,21 @@ from services.population.registry import (
 
 MEMBER_EDGE_ACTOR = "population_api"
 MEMBER_EDGE_ROLE = "member"
+DEFAULT_CONSENT_PURPOSE = "analytics"
+
+
+class MembershipConsentDeniedError(Exception):
+    """A governed membership write was refused by server consent evaluation.
+
+    Carries the stable ``REJECTION_CODES`` reason (e.g. ``consent_receipt_missing``,
+    ``consent_revoked``) so callers can render a typed 403.
+    """
+
+    def __init__(self, reason_code: str, *, entity_id: str, purpose: str) -> None:
+        super().__init__(f"Membership denied by consent: {reason_code}")
+        self.reason_code = reason_code
+        self.entity_id = entity_id
+        self.purpose = purpose
 
 
 def _membership_row_id(population_id: str, entity_id: str) -> str:
@@ -67,6 +87,40 @@ class PopulationMembershipGovernor:
         self._memberships = membership_repository or membership_repo
         self._gateway = GraphMutationGateway(graph_client=graph_client)
 
+    # ── consent ──────────────────────────────────────────────────────────────
+
+    async def assert_membership_allowed(
+        self,
+        *,
+        population: dict,
+        entity_id: str,
+        tenant_id: str,
+    ) -> None:
+        """Server-authoritative consent check for a membership write (P3.2).
+
+        Joining an entity into a population processes that entity under the
+        population's declared ``consent_purpose`` (default ``analytics``). The
+        server consent-receipt store decides — absence is denial. Raises
+        :class:`MembershipConsentDeniedError` with the stable reason code on any
+        denial. Leaves are deliberately NOT gated: a subject may exit a cohort
+        regardless of current grant state.
+        """
+        purpose = str(
+            population.get("consent_purpose") or DEFAULT_CONSENT_PURPOSE
+        ).strip() or DEFAULT_CONSENT_PURPOSE
+        allowed, reason_code = await evaluate_consent(
+            tenant_id,
+            subject_id=entity_id,
+            anonymous_id=None,
+            purpose=purpose,
+        )
+        if not allowed:
+            raise MembershipConsentDeniedError(
+                reason_code or "consent_denied",
+                entity_id=entity_id,
+                purpose=purpose,
+            )
+
     # ── writes ────────────────────────────────────────────────────────────────
 
     async def add_membership(
@@ -86,10 +140,15 @@ class PopulationMembershipGovernor:
     ) -> dict:
         """Join ``entity_id`` to ``population`` as a governed ``MEMBER_OF`` edge.
 
+        The write is consent-gated (P3.2): :meth:`assert_membership_allowed` is
+        evaluated first and any denial raises before an edge or row is touched.
         Returns the materialised membership row. Re-joining an active member is
         idempotent (the gateway dedups an identical edge write); re-joining a
         member who left starts a new membership episode on the ledger.
         """
+        await self.assert_membership_allowed(
+            population=population, entity_id=entity_id, tenant_id=tenant_id
+        )
         population_id = population["id"]
         definition_version = str(population.get("definition_version") or "1")
         evidence_refs = evidence_refs or []
@@ -248,6 +307,8 @@ class PopulationMembershipGovernor:
 
 
 __all__ = [
+    "DEFAULT_CONSENT_PURPOSE",
+    "MembershipConsentDeniedError",
     "PopulationMembershipGovernor",
     "MEMBER_EDGE_ACTOR",
     "MEMBER_EDGE_ROLE",
