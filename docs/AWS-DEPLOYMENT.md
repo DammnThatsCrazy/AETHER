@@ -23,7 +23,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "2ed9ab8"
+last_synced_commit: "6a11394"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -101,7 +101,9 @@ guard, while a plan containing customer-managed Aurora KMS keys fails closed
 before any Terraform mutation. Existing Secrets Manager
 objects are reconciled by metadata only: exact names, the staging CMK, and an
 `AWSCURRENT` version are checked before state import; no secret value is read
-or written by that workflow.
+or written by that workflow. The ECS module uses `lookup()` for secret ARN
+references so that `terraform import` can evaluate the full configuration
+graph while secrets are imported incrementally.
 
 ## Scope — three different things live under `AWS Deployment/`
 

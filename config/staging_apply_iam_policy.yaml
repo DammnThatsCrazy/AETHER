@@ -56,6 +56,7 @@ statements:
   - sid: VerifyStagingSecretVersions
     actions:
       - secretsmanager:DescribeSecret
+      - secretsmanager:GetResourcePolicy
     resource: arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*
     scope: staging-name-prefix
   - sid: ManageStagingSecrets

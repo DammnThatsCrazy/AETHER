@@ -305,27 +305,30 @@ locals {
     [for arn in values(var.companion_secret_arns) : arn],
   )
 
-  # Secret name → container env var name mapping for backend
+  # Secret name → container env var name mapping for backend.
+  # lookup() tolerates missing keys so terraform import can evaluate the
+  # graph before every secret is in state; the apply workflow validates
+  # all secrets exist before any task definition is created.
   backend_secrets = merge(
     {
-      JWT_SECRET                = var.secret_arns["jwt-secret"]
-      BYOK_ENCRYPTION_KEY       = var.secret_arns["byok-encryption-key"]
-      DATABASE_URL_SECRET       = var.secret_arns["db-password"]
-      STRIPE_SECRET_KEY         = var.secret_arns["stripe-secret-key"]
-      STRIPE_WEBHOOK_SECRET     = var.secret_arns["stripe-webhook-secret"]
-      ORACLE_SIGNER_PRIVATE_KEY = var.secret_arns["oracle-signer-private-key"]
-      WATERMARK_SECRET_KEY      = var.secret_arns["watermark-secret-key"]
-      CANARY_SECRET_SEED        = var.secret_arns["canary-secret-seed"]
-      EXTRACTION_CANARY_SEED    = var.secret_arns["extraction-canary-seed"]
-      SDK_CONFIG_SECRET         = var.secret_arns["sdk-config-secret"]
-      FIRST_ADMIN_BOOTSTRAP_TOKEN = var.secret_arns["first-admin-bootstrap-token"]
+      JWT_SECRET                  = lookup(var.secret_arns, "jwt-secret", "")
+      BYOK_ENCRYPTION_KEY         = lookup(var.secret_arns, "byok-encryption-key", "")
+      DATABASE_URL_SECRET         = lookup(var.secret_arns, "db-password", "")
+      STRIPE_SECRET_KEY           = lookup(var.secret_arns, "stripe-secret-key", "")
+      STRIPE_WEBHOOK_SECRET       = lookup(var.secret_arns, "stripe-webhook-secret", "")
+      ORACLE_SIGNER_PRIVATE_KEY   = lookup(var.secret_arns, "oracle-signer-private-key", "")
+      WATERMARK_SECRET_KEY        = lookup(var.secret_arns, "watermark-secret-key", "")
+      CANARY_SECRET_SEED          = lookup(var.secret_arns, "canary-secret-seed", "")
+      EXTRACTION_CANARY_SEED      = lookup(var.secret_arns, "extraction-canary-seed", "")
+      SDK_CONFIG_SECRET           = lookup(var.secret_arns, "sdk-config-secret", "")
+      FIRST_ADMIN_BOOTSTRAP_TOKEN = lookup(var.secret_arns, "first-admin-bootstrap-token", "")
     },
     # Redis AUTH token — read by shared/cache/cache.py as REDIS_PASSWORD.
     # Only mounted when ElastiCache exists; every task (API and workers)
     # shares this block, so an unconditional mapping would pin the
     # ElastiCache module in place for the whole fleet.
     var.enable_elasticache ? {
-      REDIS_PASSWORD = var.secret_arns["redis-auth-token"]
+      REDIS_PASSWORD = lookup(var.secret_arns, "redis-auth-token", "")
     } : {},
     # Companion secrets for zero-downtime rotation window.
     # Populated by the rotation Lambda in setSecret phase; empty until first rotation.
@@ -345,7 +348,7 @@ locals {
   ml_secrets_block = [
     {
       name      = "JWT_SECRET"
-      valueFrom = var.secret_arns["jwt-secret"]
+      valueFrom = lookup(var.secret_arns, "jwt-secret", "")
     },
   ]
 }
