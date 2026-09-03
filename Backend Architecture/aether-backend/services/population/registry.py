@@ -12,8 +12,11 @@ from repositories.repos import BaseRepository
 from shared.common.common import utc_now
 from shared.logger.logger import get_logger, metrics
 from services.population.models import (
-    PopulationType, MembershipBasis,
-    make_population_record, make_membership_record,
+    MembershipBasis,
+    MembershipState,
+    PopulationType,
+    make_membership_record,
+    make_population_record,
 )
 
 logger = get_logger("aether.population.registry")
@@ -61,8 +64,24 @@ class PopulationRepository(BaseRepository):
         return await self.find_many(filters=filters, limit=limit)
 
 
+def _membership_is_active(row: dict) -> bool:
+    """A materialised membership row is active unless it says otherwise.
+
+    Governed rows carry ``membership_state`` (P3.1); pre-governance legacy rows
+    carry only ``status="active"`` and are treated as active.
+    """
+    state = row.get("membership_state") or row.get("status") or MembershipState.ACTIVE.value
+    return state == MembershipState.ACTIVE.value
+
+
 class MembershipRepository(BaseRepository):
-    """Stores population memberships with evidence and provenance."""
+    """Materialised population memberships with evidence and provenance.
+
+    Since population360 P3.1 the authoritative membership fact is the governed
+    ``MEMBER_OF`` graph edge; this table is the current-state materialisation
+    the governed write path maintains (leaves transition state, never delete).
+    Read helpers therefore surface *active* memberships by default.
+    """
 
     def __init__(self) -> None:
         super().__init__("population_memberships")
@@ -130,17 +149,28 @@ class MembershipRepository(BaseRepository):
         population_id: str,
         limit: int = 100,
         min_confidence: float = 0.0,
+        include_inactive: bool = False,
     ) -> list[dict]:
         members = await self.find_many(
             filters={"population_id": population_id}, limit=limit
         )
+        if not include_inactive:
+            members = [m for m in members if _membership_is_active(m)]
         if min_confidence > 0:
             members = [m for m in members if m.get("confidence", 0) >= min_confidence]
         return members
 
+    async def count_active_members(self, population_id: str) -> int:
+        """Count *active* memberships (governed materialisation)."""
+        rows = await self.find_many(
+            filters={"population_id": population_id}, limit=10000
+        )
+        return sum(1 for r in rows if _membership_is_active(r))
+
     async def get_populations_for_entity(self, entity_id: str) -> list[dict]:
-        """Get all populations an entity belongs to."""
-        return await self.find_many(filters={"entity_id": entity_id}, limit=100)
+        """Get all populations an entity *actively* belongs to."""
+        rows = await self.find_many(filters={"entity_id": entity_id}, limit=100)
+        return [r for r in rows if _membership_is_active(r)]
 
     async def remove_member(self, population_id: str, entity_id: str) -> bool:
         import hashlib

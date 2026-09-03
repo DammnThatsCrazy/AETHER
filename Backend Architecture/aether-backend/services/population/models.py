@@ -40,6 +40,13 @@ class MembershipBasis(str, Enum):
     INFERRED = "inferred"         # Confidence-weighted inference
 
 
+class MembershipState(str, Enum):
+    """Lifecycle state of a governed membership (population360 P3.1)."""
+    ACTIVE = "active"             # Currently a member
+    LEFT = "left"                 # Voluntarily left / removed (close-and-append, no hard delete)
+    EXPIRED = "expired"           # Membership lapsed (definition recompute no longer matches)
+
+
 class PopulationCreate(BaseModel):
     """Request to create a population object."""
     name: str
@@ -75,6 +82,7 @@ def make_population_record(
     source_tag: str = "",
     tenant_id: str = "",
     metadata: Optional[dict] = None,
+    definition_version: str = "1",
 ) -> dict:
     """Create a canonical population object record."""
     now = utc_now().isoformat()
@@ -84,6 +92,7 @@ def make_population_record(
         "population_type": population_type.value,
         "description": description,
         "definition": definition or {},
+        "definition_version": definition_version,
         "source_tag": source_tag,
         "tenant_id": tenant_id,
         "metadata": metadata or {},
@@ -103,8 +112,20 @@ def make_membership_record(
     reason: str = "",
     source_tag: str = "",
     tenant_id: str = "",
+    membership_state: str = MembershipState.ACTIVE.value,
+    definition_version: str = "1",
+    evidence_refs: Optional[list[str]] = None,
+    left_at: str = "",
+    leave_reason: str = "",
 ) -> dict:
-    """Create a canonical membership record."""
+    """Create a canonical membership record (population360 P3.1 governed form).
+
+    The record is the *materialized* current state of a governed membership;
+    the authoritative, history-bearing fact is the ``MEMBER_OF`` graph edge
+    written through the mutation gateway (close-and-append into the ledger).
+    Leaves are state transitions (``membership_state=left`` + ``left_at``),
+    never hard deletes, so the row stays a rebuildable materialization.
+    """
     now = utc_now().isoformat()
     record_id = hashlib.sha256(f"{population_id}:{entity_id}".encode()).hexdigest()[:24]
     return {
@@ -117,8 +138,13 @@ def make_membership_record(
         "reason": reason,
         "source_tag": source_tag,
         "tenant_id": tenant_id,
-        "status": "active",
+        "status": membership_state,
+        "membership_state": membership_state,
+        "definition_version": definition_version,
+        "evidence_refs": evidence_refs or [],
         "joined_at": now,
+        "left_at": left_at,
+        "leave_reason": leave_reason,
         "created_at": now,
         "updated_at": now,
     }

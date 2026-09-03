@@ -32,13 +32,15 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Request, Query
 
-from dependencies.providers import get_producer
+from dependencies.providers import get_graph, get_producer
 from shared.common.common import APIResponse, NotFoundError, utc_now
 from shared.events.events import Event, Topic
 from shared.events.producer import EventProducer
+from shared.graph.graph import GraphClient
 from shared.logger.logger import get_logger, metrics
-from services.population.models import PopulationCreate, MembershipAdd, PopulationType
-from services.population.registry import population_repo, membership_repo
+from services.population.governance import PopulationMembershipGovernor
+from services.population.models import MembershipAdd, PopulationCreate, PopulationType
+from services.population.registry import membership_repo, population_repo
 
 logger = get_logger("aether.service.population")
 router = APIRouter(prefix="/v1/population", tags=["Population Intelligence"])
@@ -149,9 +151,9 @@ async def get_group(population_id: str, request: Request):
     if not group:
         raise NotFoundError("Population group")
 
-    # Get current member count
+    # Get current *active* member count (governed materialisation, P3.1)
     members = await membership_repo.get_members(population_id, limit=1)
-    member_count = await membership_repo.count(filters={"population_id": population_id})
+    member_count = await membership_repo.count_active_members(population_id)
     group["member_count"] = member_count
 
     return APIResponse(data=group).to_dict()
@@ -182,9 +184,17 @@ async def add_members(
     population_id: str,
     body: MembershipAdd,
     request: Request,
+    graph: GraphClient = Depends(get_graph),
     producer: EventProducer = Depends(get_producer),
 ):
-    """Add members to a group with basis, confidence, and provenance."""
+    """Add members to a group through the governed membership path (P3.1).
+
+    Membership is a graph fact: each join is written as a ``MEMBER_OF`` edge
+    (entity -> population) through the mutation gateway with provenance
+    (``definition_version`` / ``membership_state`` / ``evidence_refs`` on the
+    edge and ledger vocabulary), and the population-membership table row is
+    materialised after the edge write. There is no direct table-write path.
+    """
     tenant = request.state.tenant
     tenant.require_permission("write")
 
@@ -193,19 +203,24 @@ async def add_members(
     if not group:
         raise NotFoundError("Population group")
 
-    count = await membership_repo.add_members_batch(
-        population_id=population_id,
-        entity_ids=body.entity_ids,
-        entity_type=body.entity_type,
-        basis=body.basis,
-        confidence=body.confidence,
-        reason=body.reason,
-        source_tag=body.source_tag,
-        tenant_id=tenant.tenant_id,
-    )
+    governor = PopulationMembershipGovernor(graph_client=graph)
+    added = 0
+    for entity_id in body.entity_ids:
+        row = await governor.add_membership(
+            population=group,
+            entity_id=entity_id,
+            entity_type=body.entity_type,
+            basis=body.basis,
+            confidence=body.confidence,
+            reason=body.reason,
+            source_tag=body.source_tag,
+            tenant_id=tenant.tenant_id,
+        )
+        if row:
+            added += 1
 
-    # Update member count on group
-    total = await membership_repo.count(filters={"population_id": population_id})
+    # Recompute the materialised member count over *active* memberships.
+    total = await membership_repo.count_active_members(population_id)
     await population_repo.update(population_id, {"member_count": total})
 
     for entity_id in body.entity_ids:
@@ -218,6 +233,8 @@ async def add_members(
                 "population_id": population_id,
                 "population_type": group.get("population_type", ""),
                 "basis": body.basis,
+                "membership_state": "active",
+                "definition_version": group.get("definition_version", "1"),
                 "confidence": body.confidence,
                 "source_tag": body.source_tag,
             },
@@ -226,7 +243,49 @@ async def add_members(
     metrics.increment("population_members_added", labels={"type": group.get("population_type", "")})
     return APIResponse(data={
         "population_id": population_id,
-        "members_added": count,
+        "members_added": added,
+        "total_members": total,
+    }).to_dict()
+
+
+@router.delete("/groups/{population_id}/members/{entity_id}")
+async def remove_member(
+    population_id: str,
+    entity_id: str,
+    request: Request,
+    reason: str = Query("membership_left", description="Leave reason (recorded on the edge revocation)"),
+    graph: GraphClient = Depends(get_graph),
+):
+    """Remove a member through the governed membership path (P3.1).
+
+    A leave is a governed soft-revoke of the ``MEMBER_OF`` edge
+    (``edge_expired`` — never a hard delete) and a ``membership_state=left``
+    transition on the materialised row, so membership history stays
+    reconstructable from the ledger.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+
+    group = await population_repo.find_by_id(population_id)
+    if not group:
+        raise NotFoundError("Population group")
+
+    governor = PopulationMembershipGovernor(graph_client=graph)
+    row = await governor.remove_membership(
+        population=group,
+        entity_id=entity_id,
+        reason=reason,
+        tenant_id=tenant.tenant_id,
+    )
+
+    total = await membership_repo.count_active_members(population_id)
+    await population_repo.update(population_id, {"member_count": total})
+
+    return APIResponse(data={
+        "population_id": population_id,
+        "entity_id": entity_id,
+        "removed": bool(row),
+        "membership_state": (row or {}).get("membership_state", "left"),
         "total_members": total,
     }).to_dict()
 

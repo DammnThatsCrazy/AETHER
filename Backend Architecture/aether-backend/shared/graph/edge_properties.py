@@ -48,6 +48,12 @@ OPTIONAL_EDGE_PROPERTIES: frozenset[str] = frozenset({
     "journey_id",        # journey this edge belongs to
     "journey_version",   # version of the journey definition
     "step_index",        # ordinal position within the journey
+    # Grouping / membership provenance (population360 P3.1 — MEMBER_OF edges):
+    "membership_state",      # active | left | expired — the membership's lifecycle state
+    "definition_version",    # immutable population-definition version the membership was computed under
+    "membership_basis",      # rule | graph | ml_model | similarity | manual | inferred
+    "population_type",       # segment | cohort | cluster | ... (PopulationType value)
+    "evidence_refs",         # list of EvidenceRef ids grounding this membership fact
 })
 
 # Valid causality classes — prediction edges must NOT use direct_cause
