@@ -243,6 +243,127 @@ class TestCorrections:
         assert mid["removed_edges"] == []
 
 
+class TestSubjectHistory:
+    @pytest.mark.asyncio
+    async def test_subject_events_in_ledger_order(self) -> None:
+        ledger = GraphMutationLedgerRepository()
+        await _scenario(ledger)
+        replay = GraphHistoryReplay(ledger)
+
+        history = await replay.subject_history(TENANT, "a")
+        # a's own node rows + the incident edge rows, in ledger order.
+        assert [e.kind for e in history.events] == [
+            "vertex_created",
+            "edge_added",
+            "vertex_superseded",
+            "edge_revoked",
+        ]
+        assert [e.recorded_at for e in history.events] == [T1, T3, T4, T5]
+        assert history.present is True
+        assert history.vertex["status"] == "archived"
+        assert history.vertex_supersessions == 1
+        assert history.incident_edge_adds == 1
+        assert history.incident_edge_revocations == 1
+        assert history.event_count == 4
+
+    @pytest.mark.asyncio
+    async def test_vertex_supersession_carries_property_delta(self) -> None:
+        ledger = GraphMutationLedgerRepository()
+        await _scenario(ledger)
+        replay = GraphHistoryReplay(ledger)
+
+        superseded = [e for e in (await replay.subject_history(TENANT, "a")).events
+                      if e.kind == "vertex_superseded"]
+        assert len(superseded) == 1
+        assert superseded[0].changed == {
+            "status": {"before": "active", "after": "archived"}
+        }
+        assert superseded[0].vertex_id == "a"
+
+    @pytest.mark.asyncio
+    async def test_known_then_slices_the_subject_timeline(self) -> None:
+        ledger = GraphMutationLedgerRepository()
+        await _scenario(ledger)
+        replay = GraphHistoryReplay(ledger)
+
+        # At T4.5 the revocation (T5) is not yet known.
+        then = await replay.subject_history(
+            TENANT, "a", as_of="2026-01-04T12:00:00+00:00"
+        )
+        assert [e.kind for e in then.events] == [
+            "vertex_created",
+            "edge_added",
+            "vertex_superseded",
+        ]
+        assert then.last_recorded == T4
+        # Earlier still (between T3 and T4) the supersession is not yet known.
+        earlier = await replay.subject_history(
+            TENANT, "a", as_of="2026-01-03T12:00:00+00:00"
+        )
+        assert [e.kind for e in earlier.events] == ["vertex_created", "edge_added"]
+        assert earlier.vertex["status"] == "active"
+        # Digest differs across distinct prefixes; deterministic per prefix.
+        assert earlier.digest != then.digest
+        assert then.digest == (
+            await replay.subject_history(
+                TENANT, "a", as_of="2026-01-04T12:00:00+00:00"
+            )
+        ).digest
+
+    @pytest.mark.asyncio
+    async def test_unknown_subject_is_honest_unknown_not_fabricated(self) -> None:
+        ledger = GraphMutationLedgerRepository()
+        await _scenario(ledger)
+        replay = GraphHistoryReplay(ledger)
+
+        ghost = await replay.subject_history(TENANT, "ghost")
+        assert ghost.present is False
+        assert ghost.vertex is None
+        assert ghost.events == ()
+        assert ghost.event_count == 0
+        assert ghost.first_recorded is None
+        assert ghost.last_recorded is None
+
+    @pytest.mark.asyncio
+    async def test_relationship_subject_sees_its_edge_lifecycle(self) -> None:
+        ledger = GraphMutationLedgerRepository()
+        await _scenario(ledger)
+        replay = GraphHistoryReplay(ledger)
+
+        # The edge aggregate id IS the relationship subject: create + revoke.
+        rel = await replay.subject_history(TENANT, "a:b:SAME_AS")
+        assert [e.kind for e in rel.events] == ["edge_added", "edge_revoked"]
+        assert rel.incident_edge_adds == 1
+        assert rel.incident_edge_revocations == 1
+        assert rel.present is False  # a relationship has no vertex of its own
+
+    @pytest.mark.asyncio
+    async def test_other_vertices_are_not_leaked_into_the_subject(self) -> None:
+        ledger = GraphMutationLedgerRepository()
+        await _scenario(ledger)
+        replay = GraphHistoryReplay(ledger)
+
+        b = await replay.subject_history(TENANT, "b")
+        # Node a supersession and node a creation do NOT appear under b.
+        assert [e.kind for e in b.events] == ["vertex_created", "edge_added", "edge_revoked"]
+        assert b.vertex["status"] == "active"
+        assert b.vertex_supersessions == 0
+
+    @pytest.mark.asyncio
+    async def test_subject_history_is_read_only_and_tenant_scoped(self) -> None:
+        ledger = GraphMutationLedgerRepository()
+        await _scenario(ledger)
+        replay = GraphHistoryReplay(ledger)
+        before = len(await ledger.list_records(TENANT))
+
+        other = await replay.subject_history(OTHER_TENANT, "a")
+        assert other.events == ()
+        assert other.present is False
+
+        await replay.subject_history(TENANT, "a")
+        assert len(await ledger.list_records(TENANT)) == before == 5
+
+
 class TestReadOnlyAndIsolation:
     @pytest.mark.asyncio
     async def test_authority_reads_only_and_never_mutates_the_ledger(self) -> None:

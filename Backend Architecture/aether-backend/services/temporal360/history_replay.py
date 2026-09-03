@@ -58,6 +58,95 @@ def _edge_live(edge: Edge) -> bool:
     return not bool((edge.properties or {}).get("revoked"))
 
 
+def _row_is_revocation(row: dict) -> bool:
+    """True for an edge-revocation ledger row (the canonical close-and-append
+    revocation the gateway writes carries ``payload.kind == edge_revocation``)."""
+    return ((row.get("payload") or {}).get("kind")) == "edge_revocation"
+
+
+def _row_touches_subject(row: dict, subject_id: str) -> bool:
+    """Whether a ledger row concerns ``subject_id``: the row's own aggregate
+    (a vertex write's aggregate is its vertex id; an edge's aggregate is its
+    three-part key — both match a subject) or, for an incident edge, one of
+    its endpoints. Vertex writes for OTHER vertices never mention this subject,
+    so this set is exactly the subject's own evolution."""
+    payload = row.get("payload") or {}
+    if str(row.get("aggregate_id") or "") == subject_id:
+        return True
+    if payload.get("vertex_id") == subject_id:
+        return True
+    if payload.get("from_vertex_id") == subject_id:
+        return True
+    if payload.get("to_vertex_id") == subject_id:
+        return True
+    return False
+
+
+def _prop_delta(
+    before: dict[str, Any], after: dict[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """Keys whose value changed between two property maps (supersession)."""
+    return {
+        key: {"before": before.get(key), "after": after.get(key)}
+        for key in set(before) | set(after)
+        if before.get(key) != after.get(key)
+    }
+
+
+@dataclass(frozen=True)
+class SubjectEvent:
+    """One ledger transition touching a subject, in ledger order.
+
+    ``kind`` is the derived transition — ``vertex_created`` /
+    ``vertex_superseded`` for the subject's own node rows, ``edge_added`` /
+    ``edge_revoked`` for incident edge rows. ``changed`` carries the
+    superseded properties (before/after) for a vertex supersession. Every
+    event names its source ledger row (``mutation_id`` + ``ledger_offset``) so
+    a timeline entry is evidence-grounded.
+    """
+
+    recorded_at: str
+    ledger_offset: int
+    kind: str
+    operation: str
+    aggregate_type: str
+    aggregate_id: str
+    mutation_id: str
+    valid_from: Optional[str] = None
+    vertex_id: Optional[str] = None
+    edge_type: Optional[str] = None
+    from_vertex_id: Optional[str] = None
+    to_vertex_id: Optional[str] = None
+    changed: Optional[dict[str, dict[str, Any]]] = None
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class SubjectHistory:
+    """A subject's own local history reconstructed from its ledger rows.
+
+    ``vertex`` is the subject's reconstructed property state at the anchor
+    (``as_of``); ``present`` is whether that vertex is known. ``events`` are
+    the subject's ordered transitions. ``digest`` is sha256 over the
+    subject-scoped prefix (replaying exactly those rows reproduces it), so a
+    subject timeline is verifiable exactly like a full reconstruction.
+    """
+
+    subject_id: str
+    as_of: Optional[str]
+    present: bool
+    vertex: Optional[dict[str, Any]]
+    first_recorded: Optional[str]
+    last_recorded: Optional[str]
+    event_count: int
+    events: tuple[SubjectEvent, ...]
+    live_edges: tuple[tuple[str, str, str], ...]
+    vertex_supersessions: int
+    incident_edge_adds: int
+    incident_edge_revocations: int
+    digest: str
+
+
 @dataclass(frozen=True)
 class KnownState:
     """A tenant graph state as Aether knew it at a knowledge instant.
@@ -127,6 +216,152 @@ class GraphHistoryReplay:
     ) -> str:
         """The reconstruction digest at τ (deterministic — verifiable)."""
         return (await self.known_as_of(tenant_id, as_of, aggregate_id=aggregate_id)).state.digest
+
+    async def subject_history(
+        self,
+        tenant_id: str,
+        subject_id: str,
+        *,
+        as_of: Optional[str] = None,
+    ) -> SubjectHistory:
+        """A subject's local history reconstructed from its own ledger rows.
+
+        KNOWN_THEN (``as_of`` set, prefix closed at τ) or KNOWN_NOW (full
+        ledger). The subject's own node rows (its supersessions) and the
+        incident edge rows (adds/revocations) are replayed in ledger order into
+        an ordered :class:`SubjectEvent` timeline plus the reconstructed vertex
+        state — the raw material a ``timeline``/``findings`` section is built
+        from. Read-only and digest-verifiable (``digest`` reproduces when the
+        same subject rows are replayed); never mutates the ledger.
+
+        A vertex the ledger never mentions is ``present: False`` with no events
+        — an honest ``unknown`` subject, never a fabricated empty one.
+        """
+        if as_of is not None:
+            rows = await self._ledger.list_records_known_as_of(
+                tenant_id, as_of
+            )
+        else:
+            rows = await self._ledger.list_records(
+                tenant_id, limit=_KNOWN_NOW_LIMIT
+            )
+        subject_rows = [r for r in rows if _row_touches_subject(r, subject_id)]
+        return self._history_from_rows(subject_id, as_of, subject_rows)
+
+    # ── Subject-history reconstruction (pure, unit-testable) ───────────────
+
+    @staticmethod
+    def _history_from_rows(
+        subject_id: str, as_of: Optional[str], rows: list[dict]
+    ) -> SubjectHistory:
+        """Replay subject-scoped rows into a :class:`SubjectHistory`.
+
+        Pure and deterministic: the same rows always produce the same events
+        and digest. Node rows carry the subject's vertex supersessions;
+        incident edge rows carry adds/revocations.
+        """
+        vertex_props: Optional[dict[str, Any]] = None
+        live_edges: set[tuple[str, str, str]] = set()
+        events: list[SubjectEvent] = []
+        supersessions = 0
+        edge_adds = 0
+        edge_revocations = 0
+
+        for row in rows:
+            payload = row.get("payload") or {}
+            kind = payload.get("kind")
+            operation = row.get("operation", "")
+            common = dict(
+                recorded_at=str(row.get("recorded_at") or ""),
+                ledger_offset=int(row.get("ledger_offset") or 0),
+                operation=operation,
+                aggregate_type=str(row.get("aggregate_type") or ""),
+                aggregate_id=str(row.get("aggregate_id") or ""),
+                mutation_id=str(row.get("mutation_id") or ""),
+                valid_from=row.get("valid_from"),
+            )
+
+            if kind == "node" and payload.get("vertex_id") == subject_id:
+                new_props = dict(payload.get("properties") or {})
+                if vertex_props is None:
+                    events.append(
+                        SubjectEvent(
+                            kind="vertex_created",
+                            vertex_id=subject_id,
+                            changed=_prop_delta({}, new_props) or None,
+                            **common,
+                        )
+                    )
+                else:
+                    delta = _prop_delta(vertex_props, new_props)
+                    supersessions += 1
+                    events.append(
+                        SubjectEvent(
+                            kind="vertex_superseded",
+                            vertex_id=subject_id,
+                            changed=delta or None,
+                            **common,
+                        )
+                    )
+                vertex_props = new_props
+
+            elif kind == "edge" and _row_touches_subject(row, subject_id):
+                key = (
+                    str(payload["edge_type"]),
+                    str(payload["from_vertex_id"]),
+                    str(payload["to_vertex_id"]),
+                )
+                if key in live_edges:
+                    # A live edge is never re-added (changes revoke-then-re-add);
+                    # a duplicate would be a ledger anomaly — skip the noise.
+                    continue
+                live_edges.add(key)
+                edge_adds += 1
+                events.append(
+                    SubjectEvent(
+                        kind="edge_added",
+                        edge_type=key[0],
+                        from_vertex_id=key[1],
+                        to_vertex_id=key[2],
+                        **common,
+                    )
+                )
+
+            elif _row_is_revocation(row) and _row_touches_subject(row, subject_id):
+                key = (
+                    str(payload.get("edge_type", "")),
+                    str(payload.get("from_vertex_id", "")),
+                    str(payload.get("to_vertex_id", "")),
+                )
+                if key in live_edges:
+                    live_edges.remove(key)
+                edge_revocations += 1
+                events.append(
+                    SubjectEvent(
+                        kind="edge_revoked",
+                        edge_type=key[0] or None,
+                        from_vertex_id=key[1] or None,
+                        to_vertex_id=key[2] or None,
+                        reason=payload.get("reason"),
+                        **common,
+                    )
+                )
+
+        return SubjectHistory(
+            subject_id=subject_id,
+            as_of=as_of,
+            present=vertex_props is not None,
+            vertex=dict(vertex_props) if vertex_props is not None else None,
+            first_recorded=events[0].recorded_at if events else None,
+            last_recorded=events[-1].recorded_at if events else None,
+            event_count=len(events),
+            events=tuple(events),
+            live_edges=tuple(sorted(live_edges)),
+            vertex_supersessions=supersessions,
+            incident_edge_adds=edge_adds,
+            incident_edge_revocations=edge_revocations,
+            digest=replay_state(rows).digest,
+        )
 
     @staticmethod
     def corrections_between(then: KnownState, now: KnownState) -> dict[str, Any]:
@@ -199,4 +434,6 @@ class GraphHistoryReplay:
 __all__ = [
     "GraphHistoryReplay",
     "KnownState",
+    "SubjectEvent",
+    "SubjectHistory",
 ]
