@@ -14,7 +14,7 @@ canonical_owner: platform@aether
 ## Method
 
 Read-only gap assessment against the live tree on **2026-09-03** at branch
-`feat/sdk-universal-ingestion` (base `6a11394f`, now on `origin/main` head).
+`feat/sdk-universal-ingestion` (base `71c37d0d`, now on `origin/main` head).
 The assessment classified every section of the 34-section **SDK + Universal
 Ingestion Alignment Blueprint** (blueprint sections 1–34; section 0 is the
 executive-directive preamble, not a requirement row) against the repository.
