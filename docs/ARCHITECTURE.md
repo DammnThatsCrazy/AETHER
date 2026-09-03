@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: "904352c4"
+last_synced_commit: "e31f9724"
 ---
 # Aether vNext — Architecture Guide
 
@@ -460,10 +460,10 @@ Canonical contract plane (single source of truth, codegen twins via
 
 A **360** is an intelligence projection over canonical Aether truth — it is
 never a competing system of record. The intelligence projection plane owns the
-single canonical registry (19 projections, three of which — `outcome360`,
-`economic360`, `infrastructure360` — are now implemented native providers) and
-the shared request/context/result contracts (TS + Python) that every future 360
-provider implements against. `implementationState` is repo metadata describing
+single canonical registry (19 projections, four of which — `outcome360`,
+`economic360`, `infrastructure360`, and the context-360 time leaf `temporal360`
+— are now implemented native providers) and the shared request/context/result
+contracts (TS + Python) that every future 360 provider implements against. `implementationState` is repo metadata describing
 how far a projection has been converged onto the plane (`in_flight` = an
 existing implementation that is not yet a native provider) — it is NOT a
 readiness signal and is never surfaced as `production_ready`. The runtime is a

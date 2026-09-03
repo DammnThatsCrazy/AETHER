@@ -661,7 +661,7 @@ Controlled by `IG_SEMANTIC_ZOOM` feature flag.
 
 ### Bitemporal Replay and Comparison
 
-**Replay** — `POST /v1/graph/replay` with `as_of: "2026-01-01T00:00:00Z"` returns the graph as it existed at that point in time. The result set is materially different (different nodes, different edges) — not just a timestamp label change.
+**Replay** — `POST /v1/graph/replay` with `as_of: "2026-01-01T00:00:00Z"` returns the graph as it existed at that point in time. Replay is a **knowledge-time** reconstruction (the `graph_history_replay` authority, temporal360 T2.1): the append-only mutation ledger is replayed as of τ (rows with `recorded_at <= τ`, applied in ledger insertion order — never re-sorted by wall-clock), rebuilding the vertices/edges Aether actually had at τ (`KNOWN_THEN`). The reconstruction is digest-verifiable (the same prefix always yields the same sha256) and strictly read-side — it never writes canonical state. Late-arriving rows recorded at `recorded_at <= τ` but appended later are honored idempotently; erased subjects stay terminal-tombstoned (never resurrected, so a KNOWN_THEN answer before an erasure remains a faithful audit record). Revoked edges remain in the canonical edge list flagged `revoked: true` — live reads filter them while the replay keeps the full audit trail intact. The result set is materially different (different nodes, different edges) — not just a timestamp label change.
 
 **Comparison** — `POST /v1/graph/compare` with `as_of` and `compare_to` returns:
 - `added_nodes` — nodes that appeared between the two snapshots

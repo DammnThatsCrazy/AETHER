@@ -195,7 +195,7 @@ def test_owns_canonical_truth_false_for_all() -> None:
 
 
 def test_implementation_states_match_slice_program() -> None:
-    # Exactly the three 360 vertical slices are implemented; everything else
+    # The four implemented 360 vertical slices are implemented; everything else
     # stays in_flight. No registered/deprecated rows, and the implemented set is
     # honest (each has zero pending + converged bindings — proven by the
     # dependency-DAG gate in the order-resilience suite).
@@ -204,7 +204,12 @@ def test_implementation_states_match_slice_program() -> None:
     implemented = {
         p["id"] for p in _projections() if p["implementationState"] == "implemented"
     }
-    assert implemented == {"outcome360", "economic360", "infrastructure360"}
+    assert implemented == {
+        "outcome360",
+        "economic360",
+        "infrastructure360",
+        "temporal360",
+    }
     assert all(
         p["implementationState"] == "in_flight"
         for p in _projections()

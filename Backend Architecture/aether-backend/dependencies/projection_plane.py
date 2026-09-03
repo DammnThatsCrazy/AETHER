@@ -24,12 +24,13 @@ logger = logging.getLogger(__name__)
 
 # The plane's implemented projections, in registration order. When a follow-up
 # vertical slice flips a row to ``implemented`` (e.g. risk360 / fraud360 /
-# temporal360 / geographic360 / population360), add its provider module below
-# and extend this tuple in the same change.
+# geographic360 / population360), add its provider module below and extend this
+# tuple in the same change.
 IMPLEMENTED_PROJECTION_IDS: tuple[str, ...] = (
     "economic360",
     "outcome360",
     "infrastructure360",
+    "temporal360",
 )
 
 
@@ -70,11 +71,15 @@ def register_implemented_projection_providers(
     from services.measurement.outcome.provider import (
         register_provider as _register_outcome360,
     )
+    from services.temporal360.provider import (
+        register_provider as _register_temporal360,
+    )
 
     for pid, register in (
         ("economic360", _register_economic360),
         ("outcome360", _register_outcome360),
         ("infrastructure360", _register_infrastructure360),
+        ("temporal360", _register_temporal360),
     ):
         if registry.get(pid) is None:
             register(registry)

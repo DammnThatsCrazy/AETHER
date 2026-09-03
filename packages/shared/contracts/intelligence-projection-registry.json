@@ -850,7 +850,7 @@
       "id": "temporal360",
       "displayName": "Temporal 360",
       "projectionKind": "context_360",
-      "implementationState": "in_flight",
+      "implementationState": "implemented",
       "implementationBlueprint": "docs/blueprints/temporal360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
@@ -889,8 +889,7 @@
         "relative"
       ],
       "surfaceIds": [
-        "temporal_observatory",
-        "timeline"
+        "temporal360"
       ],
       "capabilityKeys": [
         "temporal360.read",
@@ -933,25 +932,17 @@
           "/v1/preferences"
         ],
         "surfaceIds": [
-          "temporal_observatory",
-          "timeline"
+          "temporal360"
         ],
         "services": [
           "Backend Architecture/aether-backend/shared/temporal"
         ],
-        "migrationMode": "adapter",
+        "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/temporal360.md"
       },
       "deprecatedReason": null,
       "successorId": null,
-      "pendingAuthority": [
-        {
-          "id": "graph_history_replay",
-          "kind": "spine",
-          "reason": "bitemporal ledger exists; graph-history replay API not yet built",
-          "resolvesInProjection": "temporal360"
-        }
-      ],
+      "pendingAuthority": [],
       "pendingReference": []
     },
     {

@@ -87,10 +87,10 @@ raises, never fabricates, and never leaks exception detail. `requiresEvidence`,
 honored — a Temporal360 result without evidence-grounding, dimension state,
 freshness, and limitations is incomplete.
 
-### The `graph_history_replay` authority (the pending authority this slice resolves)
+### The `graph_history_replay` authority (resolved by this slice)
 
-The row declares `hardDependencies: [contract_spine, graph_history_replay]` and a
-single `pendingAuthority`:
+The row declares `hardDependencies: [contract_spine, graph_history_replay]` —
+`graph_history_replay` began as the row's single `pendingAuthority`:
 
 ```json
 { "id": "graph_history_replay", "kind": "spine",
@@ -98,10 +98,16 @@ single `pendingAuthority`:
   "resolvesInProjection": "temporal360" }
 ```
 
-Phase 2 builds that authority as a **read-side reconstruction** from the
-append-only ledger + `graph_fact_versions` (extending `services/operational_intelligence`
-and `shared/graph/traversal.py`), so that for any knowledge instant τ the slice
-can answer:
+Phase 2 resolves that authority as a **read-side knowledge-time reconstruction**:
+`shared/graph/mutation_gateway.py` gained `replay_state` (state-returning replay —
+`GraphReplayState` of vertices/edges/digest, the substrate behind digest-only
+`replay_ledger`) and `repositories/graph_mutation_ledger.py` gained
+`list_records_known_as_of` (the knowledge-time-bounded prefix read, in-memory +
+PG); `services/temporal360/history_replay.py` composes them into the read-side
+answers. Once shipped (T2.1), `graph_history_replay` is formalized into the
+validator `SPINE_INDEX` at T2.4 so the now-zero-pending row's `hardDependency`
+still resolves — the designed spine-formalization step, not a validator
+weakening. For any knowledge instant τ the slice can answer:
 
 * **As of τ (live-valid)** — facts whose validity interval covers τ, read from
   the current graph (already exists via `temporal_bfs` / `as_of`).
@@ -117,9 +123,9 @@ can answer:
 pure read that may be cached by digest and never writes canonical state. The
 surface modes the row declares — `window`, `as_of`, `compare`, `relative` —
 map onto the engine's `TemporalMode` vocabulary (`LIVE/AS_OF/KNOWN_THEN/
-KNOWN_NOW/COMPARE/...`). Until the authority lands, modes that require
-reconstruction degrade honestly to live/valid-time with a typed warning; they
-never silently relabel.
+KNOWN_NOW/COMPARE/...`). With the authority landed, `as_of`/`compare` serve a
+`KNOWN_THEN` reconstruction; a mode with no usable instant still degrades
+honestly to live/valid-time with a typed warning — never a silent relabel.
 
 ### No redefinition (do-not-duplicate boundaries)
 

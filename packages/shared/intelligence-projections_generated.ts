@@ -1277,7 +1277,7 @@ export const intelligenceProjectionDefinitions: Record<
     id: 'temporal360',
     displayName: 'Temporal 360',
     projectionKind: 'context_360',
-    implementationState: 'in_flight',
+    implementationState: 'implemented',
     implementationBlueprint: 'docs/blueprints/temporal360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['entity', 'relationship'],
@@ -1288,7 +1288,7 @@ export const intelligenceProjectionDefinitions: Record<
     inputRefs: ['GraphResult', 'GraphSnapshotRef', 'PageRequest', 'TimeRangeFilter'],
     outputSections: ['evidence', 'findings', 'state', 'summary', 'timeline'],
     supportedTemporalModes: ['as_of', 'compare', 'relative', 'window'],
-    surfaceIds: ['temporal_observatory', 'timeline'],
+    surfaceIds: ['temporal360'],
     capabilityKeys: ['temporal360.explore', 'temporal360.read'],
     metricRefs: [],
     graphMutationPolicy: 'read_only',
@@ -1323,21 +1323,14 @@ export const intelligenceProjectionDefinitions: Record<
     },
     legacyBindings: {
       routes: ['/v1/graph', '/v1/preferences'],
-      surfaceIds: ['temporal_observatory', 'timeline'],
+      surfaceIds: ['temporal360'],
       services: ['Backend Architecture/aether-backend/shared/temporal'],
-      migrationMode: 'adapter',
+      migrationMode: 'converged',
       migrationBlueprint: 'docs/blueprints/temporal360.md'
     },
     deprecatedReason: null,
     successorId: null,
-    pendingAuthority: [
-      {
-        id: 'graph_history_replay',
-        kind: 'spine',
-        reason: 'bitemporal ledger exists; graph-history replay API not yet built',
-        resolvesInProjection: 'temporal360'
-      }
-    ],
+    pendingAuthority: [],
     pendingReference: []
   },
 };
@@ -1405,14 +1398,6 @@ export const pendingAuthorities: Partial<
       kind: 'spine',
       reason: 'canonical grouping/membership contract not yet formalized',
       resolvesInProjection: 'population360'
-    }
-  ],
-  temporal360: [
-    {
-      id: 'graph_history_replay',
-      kind: 'spine',
-      reason: 'bitemporal ledger exists; graph-history replay API not yet built',
-      resolvesInProjection: 'temporal360'
     }
   ],
 };
