@@ -20,8 +20,17 @@ REQUIRED_ACTIONS = {
     "ecr:ListTagsForResource",
     "ecr:DescribeRepositories",
     "ecr:PutImageScanningConfiguration",
+    "ecr:GetLifecyclePolicy",
+    "ecr:PutLifecyclePolicy",
+    "ecr:GetRepositoryPolicy",
+    "ecr:SetRepositoryPolicy",
+    "ecr:DeleteRepositoryPolicy",
     "secretsmanager:TagResource",
     "secretsmanager:DescribeSecret",
+    "secretsmanager:CreateSecret",
+    "secretsmanager:UpdateSecret",
+    "secretsmanager:DeleteSecret",
+    "secretsmanager:RotateSecret",
     "ssm:AddTagsToResource",
     "ssm:ListTagsForResource",
     "kms:CreateKey",
@@ -33,6 +42,8 @@ REQUIRED_ACTIONS = {
     "kms:ListResourceTags",
     "kms:CreateGrant",
     "kms:PutKeyPolicy",
+    "kms:GenerateDataKey",
+    "kms:Decrypt",
     "ec2:GetSecurityGroupsForVpc",
     "freetier:GetAccountPlanState",
     "kms:GetKeyRotationStatus",
@@ -46,14 +57,67 @@ REQUIRED_ACTIONS = {
     "iam:CreateServiceLinkedRole",
     "iam:GetRole",
     "iam:PassRole",
+    "iam:CreateRole",
+    "iam:DeleteRole",
+    "iam:TagRole",
+    "iam:PutRolePolicy",
+    "iam:GetRolePolicy",
+    "iam:DeleteRolePolicy",
+    "iam:AttachRolePolicy",
+    "iam:DetachRolePolicy",
+    "iam:ListAttachedRolePolicies",
+    "iam:ListRolePolicies",
+    "iam:ListInstanceProfilesForRole",
     "lambda:TagResource",
+    "lambda:CreateFunction",
+    "lambda:GetFunction",
+    "lambda:UpdateFunctionCode",
+    "lambda:UpdateFunctionConfiguration",
+    "lambda:DeleteFunction",
+    "lambda:AddPermission",
+    "lambda:RemovePermission",
+    "lambda:GetPolicy",
+    "lambda:ListTags",
     "events:ListTargetsByRule",
+    "events:PutRule",
+    "events:DeleteRule",
+    "events:DescribeRule",
+    "events:PutTargets",
+    "events:RemoveTargets",
+    "events:TagResource",
     "logs:CreateLogGroup",
     "logs:TagResource",
+    "logs:DescribeLogGroups",
+    "logs:PutRetentionPolicy",
+    "logs:DeleteLogGroup",
     "elasticloadbalancing:DescribeTargetGroups",
     "elasticloadbalancing:DescribeLoadBalancers",
     "elasticloadbalancing:DescribeListeners",
     "iam:SimulatePrincipalPolicy",
+}
+_LAMBDA_MANAGEMENT_ACTIONS = {
+    "lambda:CreateFunction",
+    "lambda:GetFunction",
+    "lambda:UpdateFunctionCode",
+    "lambda:UpdateFunctionConfiguration",
+    "lambda:DeleteFunction",
+    "lambda:AddPermission",
+    "lambda:RemovePermission",
+    "lambda:GetPolicy",
+    "lambda:ListTags",
+}
+_IAM_ROLE_MANAGEMENT_ACTIONS = {
+    "iam:CreateRole",
+    "iam:DeleteRole",
+    "iam:TagRole",
+    "iam:PutRolePolicy",
+    "iam:GetRolePolicy",
+    "iam:DeleteRolePolicy",
+    "iam:AttachRolePolicy",
+    "iam:DetachRolePolicy",
+    "iam:ListAttachedRolePolicies",
+    "iam:ListRolePolicies",
+    "iam:ListInstanceProfilesForRole",
 }
 ALLOWED_GLOBAL_ACTIONS = {
     "ec2:GetSecurityGroupsForVpc",
@@ -67,6 +131,7 @@ ALLOWED_GLOBAL_ACTIONS = {
     "kms:ScheduleKeyDeletion",
     "kms:CreateKey",
     "kms:ListAliases",
+    "logs:DescribeLogGroups",
 }
 REQUIRED_AUTH0_SCOPES = {
     "create:resource_servers",
@@ -171,6 +236,10 @@ def main() -> int:
         if "kms:PutKeyPolicy" in statement_actions:
             if resource != "arn:aws:kms:us-east-1:${account_id}:key/*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                 fail("kms:PutKeyPolicy must use a staging KMS key ARN and resource-tag condition")
+        for _kms_data_action in ("kms:GenerateDataKey", "kms:Decrypt"):
+            if _kms_data_action in statement_actions:
+                if resource != "arn:aws:kms:us-east-1:${account_id}:key/*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
+                    fail(f"{_kms_data_action} must use a staging KMS key ARN and resource-tag condition")
         if "iam:CreateServiceLinkedRole" in statement_actions:
             if (statement.get("conditions") or {}).get("iam:AWSServiceName") != "ecs.amazonaws.com":
                 fail("iam:CreateServiceLinkedRole must be restricted to ECS")
@@ -184,8 +253,17 @@ def main() -> int:
         "ecr:ListTagsForResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "ecr:DescribeRepositories": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "ecr:PutImageScanningConfiguration": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:GetLifecyclePolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:PutLifecyclePolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:GetRepositoryPolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:SetRepositoryPolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:DeleteRepositoryPolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "secretsmanager:TagResource": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
         "secretsmanager:DescribeSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+        "secretsmanager:CreateSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+        "secretsmanager:UpdateSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+        "secretsmanager:DeleteSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+        "secretsmanager:RotateSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
         "ssm:AddTagsToResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
         "ssm:ListTagsForResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
         "kms:CreateKey": "*",
@@ -200,6 +278,8 @@ def main() -> int:
         "kms:ListResourceTags": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:CreateGrant": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:PutKeyPolicy": "arn:aws:kms:us-east-1:${account_id}:key/*",
+        "kms:GenerateDataKey": "arn:aws:kms:us-east-1:${account_id}:key/*",
+        "kms:Decrypt": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "ec2:GetSecurityGroupsForVpc": "*",
         "freetier:GetAccountPlanState": "*",
         "kms:GetKeyRotationStatus": "*",
@@ -220,17 +300,31 @@ def main() -> int:
         "elasticloadbalancing:ModifyLoadBalancerAttributes": "arn:aws:elasticloadbalancing:us-east-1:${account_id}:loadbalancer/app/aether-staging-*",
         "dynamodb:ListTagsOfResource": "arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*",
         "iam:CreateServiceLinkedRole": "*",
-        "iam:GetRole": "arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
+        "iam:GetRole": "exact-staging-role-read-bindings",
         "iam:PassRole": "exact-staging-role-bindings",
         "lambda:TagResource": "exact-staging-lambda-bindings",
         "events:ListTargetsByRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
+        "events:PutRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
+        "events:DeleteRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
+        "events:DescribeRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
+        "events:PutTargets": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
+        "events:RemoveTargets": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
+        "events:TagResource": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
         "logs:CreateLogGroup": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
         "logs:TagResource": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
+        "logs:DescribeLogGroups": "*",
+        "logs:PutRetentionPolicy": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
+        "logs:DeleteLogGroup": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
         "elasticloadbalancing:DescribeTargetGroups": "*",
         "elasticloadbalancing:DescribeLoadBalancers": "*",
         "elasticloadbalancing:DescribeListeners": "*",
         "iam:SimulatePrincipalPolicy": "*",
     }
+    for action in _LAMBDA_MANAGEMENT_ACTIONS:
+        expected_resources[action] = "exact-staging-lambda-bindings"
+    for action in _IAM_ROLE_MANAGEMENT_ACTIONS:
+        expected_resources[action] = "exact-staging-lambda-role-bindings"
+
     for action, expected in expected_resources.items():
         matching = [s for s in statements if action in (s.get("actions") or [])]
         if action == "iam:PassRole":
@@ -239,6 +333,7 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-ecs-execution-role",
                 "arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role",
                 "arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda",
+                "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation",
             }
             if {s.get("resource") for s in matching} != expected_scopes:
                 fail("iam:PassRole has an unexpected resource scope")
@@ -251,8 +346,23 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-ecs-execution-role": ["ecs-tasks.amazonaws.com"],
                 "arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role": ["vpc-flow-logs.amazonaws.com"],
                 "arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda": ["lambda.amazonaws.com"],
+                "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation": ["lambda.amazonaws.com"],
             }:
                 fail("iam:PassRole resource and service-principal bindings do not match")
+        elif action == "iam:GetRole":
+            slr_arn = "arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
+            lambda_role_arns = {
+                "arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda",
+                "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation",
+            }
+            single_resources = {s.get("resource") for s in matching if isinstance(s.get("resource"), str)}
+            list_resources: set[str] = set()
+            for s in matching:
+                r = s.get("resource")
+                if isinstance(r, list):
+                    list_resources.update(r)
+            if single_resources != {slr_arn} or list_resources != lambda_role_arns:
+                fail("iam:GetRole has an unexpected resource scope")
         elif action == "lambda:TagResource":
             expected = {
                 "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift",
@@ -260,6 +370,20 @@ def main() -> int:
             }
             if len(matching) != 1 or set(matching[0].get("resource") or []) != expected:
                 fail("lambda:TagResource must cover exactly the staging drift and secret-rotation functions")
+        elif action in _LAMBDA_MANAGEMENT_ACTIONS:
+            expected_fns = {
+                "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift",
+                "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation",
+            }
+            if len(matching) != 1 or set(matching[0].get("resource") or []) != expected_fns:
+                fail(f"{action} must cover exactly the staging Lambda functions")
+        elif action in _IAM_ROLE_MANAGEMENT_ACTIONS:
+            expected_roles = {
+                "arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda",
+                "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation",
+            }
+            if len(matching) != 1 or set(matching[0].get("resource") or []) != expected_roles:
+                fail(f"{action} must cover exactly the staging Lambda roles")
         elif action == "kms:CreateGrant":
             if len(matching) != 1 or matching[0].get("resource") != expected or (matching[0].get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                 fail("kms:CreateGrant must be limited to staging-tagged keys")

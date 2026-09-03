@@ -100,7 +100,7 @@ def test_ecs_service_linked_role_precedes_reviewed_apply() -> None:
     assert create < wait < apply
     assert "iam:CreateServiceLinkedRole" in POLICY.read_text(encoding="utf-8")
     manifest = yaml.safe_load(POLICY.read_text(encoding="utf-8"))
-    get_role = next(s for s in manifest["statements"] if "iam:GetRole" in s["actions"])
+    get_role = next(s for s in manifest["statements"] if s["sid"] == "ReadEcsServiceLinkedRole")
     assert get_role["resource"].endswith(
         "role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
     )
@@ -695,6 +695,20 @@ def test_reviewed_iam_manifest_matches_checker() -> None:
     assert "events:ListTargetsByRule" in {
         action for statement in statements for action in statement["actions"]
     }
+    all_actions = {action for statement in statements for action in statement["actions"]}
+    for required in (
+        "ecr:GetLifecyclePolicy",
+        "ecr:SetRepositoryPolicy",
+        "secretsmanager:CreateSecret",
+        "secretsmanager:RotateSecret",
+        "kms:GenerateDataKey",
+        "kms:Decrypt",
+        "lambda:CreateFunction",
+        "iam:CreateRole",
+        "events:PutRule",
+        "logs:PutRetentionPolicy",
+    ):
+        assert required in all_actions
 
 
 def test_passrole_resource_principal_pairs_are_not_swappable(tmp_path: Path) -> None:
@@ -737,16 +751,38 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
         "ecr:ListTagsForResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "ecr:DescribeRepositories": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "ecr:PutImageScanningConfiguration": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:GetLifecyclePolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:PutLifecyclePolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:GetRepositoryPolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:SetRepositoryPolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:DeleteRepositoryPolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "secretsmanager:TagResource": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+        "secretsmanager:DescribeSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+        "secretsmanager:CreateSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+        "secretsmanager:UpdateSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+        "secretsmanager:DeleteSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
+        "secretsmanager:RotateSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
         "ssm:AddTagsToResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
+        "ssm:ListTagsForResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
         "kms:TagResource": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:PutKeyPolicy": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:DescribeKey": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:ListResourceTags": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "kms:ListAliases": "*",
+        "kms:GenerateDataKey": "arn:aws:kms:us-east-1:${account_id}:key/*",
+        "kms:Decrypt": "arn:aws:kms:us-east-1:${account_id}:key/*",
         "events:ListTargetsByRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
+        "events:PutRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
+        "events:DeleteRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
+        "events:DescribeRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
+        "events:PutTargets": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
+        "events:RemoveTargets": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
+        "events:TagResource": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
         "logs:CreateLogGroup": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
         "logs:TagResource": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
+        "logs:DescribeLogGroups": "*",
+        "logs:PutRetentionPolicy": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
+        "logs:DeleteLogGroup": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
         "freetier:GetAccountPlanState": "*",
     }
     for action, resource in expected.items():
@@ -783,3 +819,23 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
         s for s in create_alias if s["resource"].endswith("alias/aether-staging-*")
     )
     assert alias_statement["condition_operators"] == {"kms:RequestAlias": "StringLike"}
+
+    _staging_lambda_fns = {
+        "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift",
+        "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation",
+    }
+    _staging_lambda_roles = {
+        "arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda",
+        "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation",
+    }
+    lambda_tag = next(s for s in statements if s["sid"] == "TagOnlyStagingDriftLambda")
+    assert set(lambda_tag["resource"]) == _staging_lambda_fns
+    assert lambda_tag["conditions"] == {"aws:RequestTag/Environment": "staging"}
+    lambda_mgmt = next(s for s in statements if s["sid"] == "ManageStagingLambdaFunctions")
+    assert set(lambda_mgmt["resource"]) == _staging_lambda_fns
+    assert "lambda:CreateFunction" in lambda_mgmt["actions"]
+    assert "lambda:DeleteFunction" in lambda_mgmt["actions"]
+    iam_role_mgmt = next(s for s in statements if s["sid"] == "ManageStagingLambdaRoles")
+    assert set(iam_role_mgmt["resource"]) == _staging_lambda_roles
+    assert "iam:CreateRole" in iam_role_mgmt["actions"]
+    assert "iam:DeleteRole" in iam_role_mgmt["actions"]
