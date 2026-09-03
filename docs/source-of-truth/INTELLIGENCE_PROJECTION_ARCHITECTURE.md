@@ -175,7 +175,10 @@ plane at runtime.
 ## 5. Runtime provider protocol
 
 The runtime lives in `Backend Architecture/aether-backend/shared/intelligence_projections/`
-and ships as a library (no `main.py` wiring, no public projection route, in P0):
+and ships as a library whose provider modules never auto-wire at import — in P0
+there was no `main.py` wiring and no public projection route. The plane is
+brought live explicitly, at boot, through a single seam — §6 *Plane-live
+enforcement*:
 
 - **`provider.py`** — `IntelligenceProjectionProvider` is a `typing.Protocol`
   (`projection_id`, `contract_version`, `async project(request, context) ->
@@ -238,6 +241,20 @@ byte-stable (order-stable, additive rollback).
 **Converge** existing work: swap `legacyBindings.adapter` for a real provider
 (Protocol + `ProviderRegistry.register`), converge the surfaces/metrics it
 resolves, land the vertical slice, then flip to `implemented`.
+
+**Plane-live enforcement (registration at mount)**: a provider is **not live**
+until it is registered at the boot seam. `main.py`'s `lifespan` startup calls
+`dependencies.projection_plane.register_implemented_projection_providers`
+(`Backend Architecture/aether-backend/dependencies/projection_plane.py`), which
+registers exactly the providers listed in `IMPLEMENTED_PROJECTION_IDS` on the
+global runtime `projection_registry`. Landing a vertical slice therefore means
+adding its provider module to that seam **in the same change that flips the row
+to `implemented`** — otherwise the projection stays unregistered and its surface
+degrades to `provider_unavailable` instead of composing live. Provider modules
+keep their caller-driven `register_provider(registry)` contract and never mutate
+the global at import time; the seam is the sole production caller and is
+idempotent across repeated boot entries (an id already registered is left
+untouched).
 
 **Pending-ref rules**: unresolved refs are legal only when declared
 `pendingAuthority`/`pendingReference` with `{id, kind, reason,

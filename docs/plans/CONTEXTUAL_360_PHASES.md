@@ -97,7 +97,7 @@ updated as each phase lands.
 | Phase | What ships | Entry criteria | Exit criteria | Status |
 | --- | --- | --- | --- | --- |
 | **0** — Baseline, program scaffold, verification spike | This program ledger; branch `feat/context-intelligence-360` cut from the stacked lane; baseline `make ci-check` green; read-only verification spike (plane wiring, history/replay substrate, population→graph path, geo primitive/library decision) | Program scope approved (this doc) | Spike findings recorded (§5); baseline gate green; docs-only commit | IN PROGRESS — this doc + spike; final `make ci-check` pending |
-| **1** — Plane live + shared foundation | Production registration seam wiring the implemented providers onto the global `projection_registry` at app mount (fixes the empty-singleton degrade for all implemented projections); `SubjectRef` canonicalization to `ProjectionSubject`; enforcement note in `INTELLIGENCE_PROJECTION_ARCHITECTURE.md` that a provider is not live until registered at mount | Phase 0 landed | Boot-time providers answer on `/v1/explore/query` with live data; one `SubjectRef` surface with no duplicated `subject_type`/`subject_id` shapes; contracts parity + gate green | NOT YET SHIPPED |
+| **1** — Plane live + shared foundation | Production registration seam wiring the implemented providers onto the global `projection_registry` at app mount (fixes the empty-singleton degrade for all implemented projections); `SubjectRef` canonicalization to `ProjectionSubject`; enforcement note in `INTELLIGENCE_PROJECTION_ARCHITECTURE.md` that a provider is not live until registered at mount | Phase 0 landed | Boot-time providers answer on `/v1/explore/query` with live data; one `SubjectRef` surface with no duplicated `subject_type`/`subject_id` shapes; contracts parity + gate green | IN PROGRESS — plane-live seam landed 2026-09-03 (registration seam + infra router mount + enforcement note; spike §5.1 resolved); `SubjectRef` canonicalization and the Phase-1 exit gate remain |
 | **2** — `temporal360` (root of the cluster) | The `graph_history_replay` authority (system-time/knowledge-as-of reconstruction from `graph_fact_versions`, extending `services/operational_intelligence` + `shared/graph/traversal.py`; materialize `replay_ledger` beyond digest); `temporal360` provider + surface-capability entry + lenses; late-arrival recompute following the measurement pattern; `docs/blueprints/temporal360.md`; registry → `implemented` | Phase 1 landed | `temporal360` answers reality-vs-knowledge as-of via the exploration surface; 13-gate checklist passes; gate green | NOT YET SHIPPED |
 | **3** — `population360` | Governed membership path: memberships written as graph membership edges through the mutation gateway with provenance (`definition_version`/`membership_state`/`evidence_refs` carried on the record/edge vocabulary), definition versioning (immutable), consent gating at membership compute/write, DSR components for the population tables; provider (snapshots/deltas/overlap/transitions/composition) + human **demographic lens** (no `Demographic360`); `docs/blueprints/population360.md`; registry → `implemented` | Phase 2 landed (temporal dep) | Memberships are governed graph facts with provenance + consent + erasure; population360 answers on the exploration surface; 13-gate checklist passes; gate green | NOT YET SHIPPED |
 | **4** — `geographic360` | The **one new canonical location primitive**: `location-registry.json` + `shared/geo` + `services/geo` (LocationFact with roles/precision/coordinates; Place/Region/Jurisdiction; region-type hierarchy — not US-only), H3 client-side cells, geodesy via pure-python libs, `GeocodingProvider` behind the existing credential vault; graph edges with new `EdgeType` + `relationship_layers` entry; jurisdiction-vs-location and privacy downgrade (`exact→city→metro`) with `suppressed`/`precision_reduced`; provider lenses; DSR components; `docs/blueprints/geographic360.md`; registry → `implemented` | Phase 2 landed (temporal dep); location authority design reviewed | geographic360 answers on the exploration surface with precision never exceeding evidence; parity/gate green | NOT YET SHIPPED |
@@ -221,6 +221,22 @@ full citations live in the exploration transcripts.
   capability keys need no change for the `/v1/explore/query` path (it is already
   classified and `read`-permissioned).
 
+**Status — RESOLVED (Phase 1, 2026-09-03).** `main.py`'s `lifespan` startup now
+calls `dependencies.projection_plane.register_implemented_projection_providers`
+(`Backend Architecture/aether-backend/dependencies/projection_plane.py`) — the
+first production call site of `register_provider(projection_registry)`. The
+implemented trio (`economic360`/`outcome360`/`infrastructure360` =
+`IMPLEMENTED_PROJECTION_IDS`) is live at boot, exactly once (guard-by-id —
+idempotent across repeated boot entries); `services/infrastructure` is imported
+and its classified router mounted in `create_app()`; and a live projection
+surface composes through the exploration fabric instead of degrading to
+`provider_unavailable` (pinned end-to-end by
+`tests/unit/exploration/test_projection_plane_boot.py` and unit-pinned by
+`Backend Architecture/aether-backend/tests/unit/test_projection_plane_boot_wiring.py`).
+The enforcement rule this finding drives — a provider is not live until
+registered at mount — is recorded in
+`docs/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md` (§6).
+
 ### 5.2 Surface capability registry — trio absent
 
 `shared/exploration/generated_surfaces.py` (from `surface-capability-registry.json`)
@@ -298,9 +314,10 @@ its surface-capability block and regenerate.
 | --- | --- | --- |
 | 2026-09-03 | Phase 0 (kickoff) | Reconciliation complete (blueprint → repository); branch `feat/context-intelligence-360` cut from the stacked lane (carries the projection plane + context_360 registry rows); this program ledger + §5 spike authored; verification spike confirmed the plane is not live, the trio lacks surface-capability entries, the knowledge-time replay authority is absent, population membership is not a governed/consented/DSR-covered graph fact, and the geographic primitive is genuinely new (decision A/A/A/A). Baseline `make ci-check` green pending; final `make ci-check` gate remains. |
 | 2026-09-03 | Phase 0 (scaffold) | Per-360 workstream detail added (§3.1, T2.x/P3.x/G4.x) and the three vertical-slice blueprints `docs/blueprints/{temporal360,geographic360,population360}.md` authored on `feat/context-intelligence-360` rooted at `fced2960`; docs manifest regenerated. Program remains pre-implementation — phases 1–5 NOT YET SHIPPED. |
+| 2026-09-03 | Phase 1 (plane-live seam) | First implementation step landed: `dependencies.projection_plane.register_implemented_projection_providers` wired into `main.py` `lifespan` (implemented trio live on the global `projection_registry` at boot, guard-by-id idempotent); `services/infrastructure` router mounted in `create_app()`; enforcement note added to `INTELLIGENCE_PROJECTION_ARCHITECTURE.md` (§6, §5) and spike §5.1 marked RESOLVED. Pinned by `test_projection_plane_boot_wiring.py` + `tests/unit/exploration/test_projection_plane_boot.py` (live surface composes, not `provider_unavailable`). Registry rows unchanged — all context_360 rows still `in_flight`. |
 
 When a phase lands, its row is updated here and the corresponding registry rows
 move `in_flight` → `implemented` only after the vertical-slice checklist and
 `make ci-check` pass. No context_360 projection has shipped as of this ledger;
 the implemented set is still `economic360`, `outcome360`, `infrastructure360`
-(and, until Phase 1, none of them is actually served live).
+— none of which was actually served live until the Phase-1 registration seam.
