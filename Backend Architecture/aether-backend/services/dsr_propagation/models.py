@@ -60,6 +60,9 @@ DSRComponent = Literal[
     "kyber_trusted_devices",
     "kyber_webauthn_credentials",
     "kyber_device_proof_keys",
+    "population_memberships",
+    "population_snapshots",
+    "populations",
 ]
 DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "identity_aliases",
@@ -88,6 +91,9 @@ DSR_COMPONENTS: tuple[DSRComponent, ...] = (
     "kyber_trusted_devices",
     "kyber_webauthn_credentials",
     "kyber_device_proof_keys",
+    "population_memberships",
+    "population_snapshots",
+    "populations",
 )
 
 # ── Per-step status machine (prompt §3.11) ────────────────────────────────────

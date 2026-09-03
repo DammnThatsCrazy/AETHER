@@ -300,6 +300,19 @@ class MembershipRepository(BaseRepository):
         rows = await self.find_many(filters={"entity_id": entity_id}, limit=100)
         return [r for r in rows if _membership_is_active(r)]
 
+    async def active_memberships_for_subject(
+        self, tenant_id: str, entity_id: str
+    ) -> list[dict]:
+        """Active membership rows for one subject, tenant-scoped.
+
+        Used by the population DSR-erasure plane (population360 P3.3) so a data
+        subject's memberships are discovered without crossing tenants.
+        """
+        rows = await self.find_many(
+            filters={"tenant_id": tenant_id, "entity_id": entity_id}, limit=10000
+        )
+        return [r for r in rows if _membership_is_active(r)]
+
     async def remove_member(self, population_id: str, entity_id: str) -> bool:
         import hashlib
         record_id = hashlib.sha256(f"{population_id}:{entity_id}".encode()).hexdigest()[:24]

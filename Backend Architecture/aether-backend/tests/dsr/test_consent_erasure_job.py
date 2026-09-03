@@ -135,14 +135,16 @@ async def test_worker_executes_erasure_and_marks_step_with_evidence():
     assert step["records_impacted"] == 5
     assert step["audit_event_id"] == job_id
     assert step["requires_recompute"] is False
-    # The three mobile stores, three kyber device stores and four semantic
-    # stores were all erased end-to-end and marked with their OWN real
-    # erased-row receipts (0 here — nothing was seeded for this subject).
+    # The three mobile stores, three kyber device stores, four semantic stores
+    # and three population-plane artifacts were all erased end-to-end and marked
+    # with their OWN real erased-row receipts (0 here — nothing was seeded for
+    # this subject).
     handler_components = {
         "continuation_records", "mobile_installations", "client_sync_records",
         "kyber_trusted_devices", "kyber_webauthn_credentials", "kyber_device_proof_keys",
         "semantic_observations", "sentiment_observations",
         "semantic_gold_state", "semantic_review_queue",
+        "population_memberships", "population_snapshots", "populations",
     }
     for c in status["components"]:
         if c["component"] in handler_components:

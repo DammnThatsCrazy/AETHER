@@ -34,6 +34,15 @@ with each store's own real erased-row receipt. These components were already
 declared expected in ``dsr_propagation.models.DSR_COMPONENTS`` but were never
 marked, so semantic data silently survived an erasure the DSR record reported as
 ``completed`` — a live compliance defect this handler closes.
+
+The population-intelligence plane closes the same defect for cohort artifacts
+(population360 P3.3): a subject's active memberships are erased as *governed
+leaves* (``MEMBER_OF`` edge revoked, membership row -> ``left``, member_count
+recomputed) and the three population components are marked with their own real
+receipts — leaves for ``population_memberships``, and honest zero receipts for
+the aggregate ``population_snapshots`` and tenant-owned ``populations`` rows.
+These components are appended to ``DSR_COMPONENTS`` (29 total) so every erasure
+request seeds a pending step for each from birth.
 """
 
 from __future__ import annotations
@@ -75,6 +84,27 @@ MOBILE_CLIENT_SYNC_COMPONENT = "client_sync_records"
 KYBER_DEVICE_COMPONENT = "kyber_trusted_devices"
 KYBER_WEBAUTHN_COMPONENT = "kyber_webauthn_credentials"
 KYBER_PROOF_KEY_COMPONENT = "kyber_device_proof_keys"
+
+# The population-plane dsr_propagation components (population360 P3.3). None of
+# the pre-P3.3 26 components touched the population tables, so a data subject's
+# cohort memberships silently survived an erasure the DSR record reported as
+# ``completed``. The erasure handler now closes that gap:
+#   population_memberships → governed leave for every active membership of the
+#                            subject (edge revoked + row -> ``left``)
+#   population_snapshots   → aggregate rows hold no subject identity; receipt 0
+#   populations            → population objects + immutable definition contracts
+#                            are tenant artifacts, not subject personal data;
+#                            receipt 0
+# Each affected population's materialised ``member_count`` is recomputed from
+# active memberships so no read ever counts an erased member.
+POPULATION_MEMBERSHIP_COMPONENT = "population_memberships"
+POPULATION_SNAPSHOT_COMPONENT = "population_snapshots"
+POPULATION_RECORDS_COMPONENT = "populations"
+
+# The population-plane erasure executes a governed leave for each active
+# membership. This actor stamps the membership-edge revocation and ledger rows.
+POPULATION_ERASURE_ACTOR = "dsr_erasure_job"
+POPULATION_ERASURE_LEAVE_REASON = "dsr_erasure"
 
 
 def _kyber_device_eraser(repo_cls: type) -> Any:
@@ -132,6 +162,67 @@ def _semantic_component_receipts(deleted: dict) -> dict[str, int]:
             _n("gold_entity_semantic_state") + _n("gold_entity_sentiment_state")
         ),
         SEMANTIC_REVIEW_QUEUE_COMPONENT: _n("semantic_review_queue"),
+    }
+
+
+async def _erase_population_plane(tenant_id: str, entity_id: str) -> dict[str, int]:
+    """Governed population-plane erasure for one data subject (population360 P3.3).
+
+    Erases every *active* cohort membership the subject holds, then recomputes
+    each affected population's materialised ``member_count``. Each membership is
+    a governed leave (``PopulationMembershipGovernor.remove_membership``) — the
+    ``MEMBER_OF`` edge is soft-revoked and the membership row transitions to
+    ``left``, never a hard delete, so the append-only membership/definition
+    ledgers stay intact and the close-and-append honesty P3.1 guarantees holds
+    under erasure too. A missing or foreign-tenant population row is skipped
+    rather than erased across tenants (defence in depth).
+
+    Receipts (one per dsr_propagation component, each the store's OWN count):
+      population_memberships -> number of governed leaves executed
+      population_snapshots   -> 0 (aggregate rows hold no subject identity)
+      populations            -> 0 (population objects + immutable definition
+                                contracts are tenant artifacts, not subject
+                                personal data — the tenant, not the erased
+                                subject, owns the cohort definition)
+
+    The snapshots/objects zero receipts are honest: ``mark_step`` accepts a real
+    zero. Only memberships carry subject identity.
+    """
+    from services.population.governance import PopulationMembershipGovernor
+    from services.population.registry import membership_repo, population_repo
+
+    memberships = await membership_repo.active_memberships_for_subject(
+        tenant_id, entity_id
+    )
+    leaves = 0
+    affected: set[str] = set()
+    if memberships:
+        # The governor's gateway resolves the process graph client lazily
+        # (module singleton or provider registry) — zero cost when no active
+        # membership exists.
+        governor = PopulationMembershipGovernor(graph_client=None)
+        for row in memberships:
+            population = await population_repo.find_by_id(row["population_id"])
+            if population is None or population.get("tenant_id") != tenant_id:
+                continue
+            await governor.remove_membership(
+                population=population,
+                entity_id=row["entity_id"],
+                reason=POPULATION_ERASURE_LEAVE_REASON,
+                tenant_id=tenant_id,
+                actor_id=POPULATION_ERASURE_ACTOR,
+            )
+            leaves += 1
+            affected.add(row["population_id"])
+    # Recompute each affected population's materialised count from *active*
+    # memberships (scheduler parity) so no read ever counts an erased member.
+    for population_id in affected:
+        active = await membership_repo.count_active_members(population_id)
+        await population_repo.update(population_id, {"member_count": active})
+    return {
+        POPULATION_MEMBERSHIP_COMPONENT: leaves,
+        POPULATION_SNAPSHOT_COMPONENT: 0,
+        POPULATION_RECORDS_COMPONENT: 0,
     }
 
 
@@ -315,6 +406,54 @@ def register_consent_erasure_handler() -> None:
                     except Exception:  # noqa: BLE001 — never let marking abort
                         logger.warning(
                             "failed to mark semantic DSR component %s failed",
+                            component,
+                            exc_info=True,
+                        )
+
+            # ── Population-intelligence plane (population360 P3.3) ───────────
+            # None of the pre-P3.3 26 registry components touched the population
+            # tables, so a subject's cohort memberships silently survived an
+            # erasure the DSR record reported as completed. This handler now
+            # performs a governed leave for every active membership the subject
+            # holds (edge revoked + row -> ``left``), recomputes affected
+            # member counts, and marks the three population components with
+            # their OWN real receipts — the membership leaves for
+            # ``population_memberships`` and honest zero receipts for the
+            # aggregate/object artifacts. The whole plane is one isolated
+            # try/except: any failure marks all three components ``failed`` and
+            # keeps the job retryable (the governed leaves are idempotent).
+            population_components = (
+                POPULATION_MEMBERSHIP_COMPONENT,
+                POPULATION_SNAPSHOT_COMPONENT,
+                POPULATION_RECORDS_COMPONENT,
+            )
+            try:
+                population_receipts = await _erase_population_plane(
+                    ctx.tenant_id, user_id
+                )
+                for component in population_components:
+                    await dsr_propagation_service.mark_step(
+                        propagation_request_id,
+                        component,
+                        "completed",
+                        tenant_id=ctx.tenant_id,
+                        records_impacted=population_receipts[component],
+                        audit_event_id=ctx.job_id,
+                    )
+            except Exception as exc:  # noqa: BLE001 — isolate the population plane
+                errors.append(f"population: {exc}")
+                for component in population_components:
+                    try:
+                        await dsr_propagation_service.mark_step(
+                            propagation_request_id,
+                            component,
+                            "failed",
+                            tenant_id=ctx.tenant_id,
+                            audit_event_id=ctx.job_id,
+                        )
+                    except Exception:  # noqa: BLE001 — never let marking abort
+                        logger.warning(
+                            "failed to mark population DSR component %s failed",
                             component,
                             exc_info=True,
                         )
