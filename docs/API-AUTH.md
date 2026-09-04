@@ -34,4 +34,24 @@ Tenant context carries role + permissions; routes enforce
 (no Aether tenant may access Kyber) — see [Access Control](ACCESS-CONTROL.md).
 Cross-tenant access is denied; aggregate Kyber views are tenant-anonymous.
 
+## Destructive cleanup and rehearsal credentials
+
+Administrative tenant cleanup is fail-closed. Durable API keys are revoked
+before their rows are removed, then every corresponding Redis auth-cache entry
+is evicted and read back to verify that a stale cache hit cannot authenticate.
+Contained public-ingest identifiers are revoked before the tenant is deleted;
+any repository or per-identifier failure aborts cleanup so an orphaned ingest
+credential is never reported as removed. The deactivation fallback applies the
+same credential invalidation contract but deliberately retains tenant data for
+recovery.
+
+The staging smoke harness uses two credentials with different boundaries. The
+run-scoped tenant key is limited to data-plane checks. The encrypted
+`STAGING_ADMIN_API_KEY` is supplied only to the diagnostics probes and the
+run-scoped bootstrap/cleanup calls; it is never written to an artifact or used
+as the tenant's application credential. A successful destructive cleanup must
+return its complete erasure receipt, including consent/DSR, ingestion and
+analytics records, profiles, and graph projection data. Billing and immutable
+security-audit evidence remain retained under policy.
+
 See [API Rate Limits](API-RATE-LIMITS.md) and [API Errors](API-ERRORS.md).

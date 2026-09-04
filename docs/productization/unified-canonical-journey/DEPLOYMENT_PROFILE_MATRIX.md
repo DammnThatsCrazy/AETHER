@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/engine/journey_compiler.py
   - Backend Architecture/aether-backend/services/measurement/repositories/activity_repo.py
   - Backend Architecture/aether-backend/services/measurement/repositories/journey_step_repo.py
-last_synced_commit: "33f4303"
+last_synced_commit: "4e6fdad"
 ---
 
 # Deployment Profile Matrix — Unified Canonical Journey

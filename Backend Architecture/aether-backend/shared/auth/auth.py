@@ -415,6 +415,10 @@ async def _lookup_api_key_from_db(key_hash: str) -> Optional[dict]:
         # Validate full hash to prevent 48-bit prefix collisions
         if record.get("key_hash") != key_hash:
             return None
+        # Durable revocation is authoritative after a Redis miss. Never
+        # rehydrate a key row that deactivation has marked revoked.
+        if record.get("status") == "revoked" or record.get("revoked_at"):
+            return None
         # Normalize to the same shape that cache stores
         tier_raw = record.get("tier", "free")
         valid_tiers = {"free", "pro", "enterprise"}

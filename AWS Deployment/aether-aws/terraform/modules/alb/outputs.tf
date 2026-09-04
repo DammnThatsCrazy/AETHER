@@ -12,7 +12,12 @@ output "alb_name" {
 
 output "backend_target_group_name" {
   description = "Name of the backend target group"
-  value       = aws_lb_target_group.backend.name
+  value       = local.backend_target_group.name
+}
+
+output "backend_target_group_replacement_strategy" {
+  description = "Replacement strategy selected by the deployment environment"
+  value       = var.environment == "staging" ? "destroy-before-create" : "create-before-destroy"
 }
 
 output "alb_arn" {
@@ -32,7 +37,12 @@ output "https_listener_arn" {
 
 output "backend_target_group_arn" {
   description = "ARN of the backend target group"
-  value       = aws_lb_target_group.backend.arn
+  value       = local.backend_target_group.arn
+}
+
+output "https_listener_target_group_arn" {
+  description = "Target group currently selected by the HTTPS listener"
+  value       = var.environment == "staging" && var.staging_listener_target_group_arn != "" ? var.staging_listener_target_group_arn : local.backend_target_group.arn
 }
 
 output "ml_target_group_arn" {
@@ -47,7 +57,7 @@ output "ml_target_group_arns" {
 
 output "backend_tg_arn_suffix" {
   description = "ARN suffix of the backend target group (CloudWatch metrics)"
-  value       = aws_lb_target_group.backend.arn_suffix
+  value       = local.backend_target_group.arn_suffix
 }
 
 output "ml_tg_arn_suffix" {

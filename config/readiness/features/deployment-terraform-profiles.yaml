@@ -1,0 +1,172 @@
+# Feature readiness record — see config/readiness/schema.json.
+# Migrated from config/deployment_readiness.yaml (FT-9-TERRAFORM-PROFILES) and
+# config/deployment_profiles.yaml. Terraform + application bindings exist; the
+# infrastructure has not been applied (no AWS account inside CI).
+feature_id: deployment-terraform-profiles
+title: Deployment Terraform Profiles
+owning_system: aether
+summary: >-
+  Per-profile Terraform + application bindings that make production-lean
+  selectable and enforce the cost policy. Infrastructure-turnkey: the plan is
+  complete and policy-validated in-repo; applying it needs an AWS account.
+
+scope:
+  id: deployment-terraform-profiles-v1
+  version: 1
+  title: V1 Per-Profile Terraform
+  target: infrastructure-turnkey
+  included:
+    - per-profile Terraform modules
+    - cost-policy enforcement
+    - plan-level profile policy validation
+    - application profile bindings
+  excluded:
+    - applied cloud infrastructure (requires an AWS account)
+  deferred: []
+  release_profile_applicability: [staging, production-lean, production-scale]
+
+repository_ceiling:
+  type: INFRASTRUCTURE_TURNKEY
+  achieved: true
+  remaining_after_ceiling:
+    - Apply the Terraform plan against a real AWS account
+    - Capture a credentialed plan/apply artifact
+  remaining_is_repository_controlled: false
+  evidence:
+    - deploy/terraform/
+    - config/deployment_profiles.yaml
+    - config/deployment_readiness.yaml
+
+implementation:
+  state: TURNKEY
+  denominator: in-scope Terraform + binding controls
+  controls:
+    - id: modules
+      description: Per-profile Terraform modules exist
+      weight: 30
+      satisfied: true
+    - id: cost-policy
+      description: Cost policy encoded + validated against the plan
+      weight: 25
+      satisfied: true
+      evidence: ["Makefile: validate-cost-policy-terraform"]
+    - id: plan-policy
+      description: Plan-level required/forbidden resource enforcement
+      weight: 25
+      satisfied: true
+    - id: bindings
+      description: Application profile bindings select the backend by config
+      weight: 20
+      satisfied: true
+  remaining_work: []
+
+productionization:
+  denominator: in-scope productionization controls
+  controls:
+    - id: rollback
+      description: Documented apply/rollback procedure
+      weight: 34
+      satisfied: true
+    - id: cost-model
+      description: Numeric budget priced against the price book
+      weight: 33
+      satisfied: true
+    - id: drift
+      description: Plan drift detection wired
+      weight: 33
+      satisfied: true
+  remaining_work: []
+
+activation:
+  state: INFRASTRUCTURE_WAITING
+  blockers:
+    - type: INFRASTRUCTURE_WAITING
+      description: The Terraform plan has not been applied (no AWS account).
+      owner: platform-ops
+      required_action: Apply the plan against a real AWS account for the target profile.
+      source_code_change_expected: false
+      affected_environments: [staging, production, scale]
+      affected_release_profiles: [staging, production-lean, production-scale]
+      evidence_required: credentialed apply artifact (real account id + region + captured_at)
+    - type: ACCOUNT_WAITING
+      description: An AWS account/organization must be available.
+      owner: platform-ops
+      required_action: Provision an AWS account and bind credentials.
+      source_code_change_expected: false
+      affected_environments: [staging, production, scale]
+      affected_release_profiles: [staging, production-lean, production-scale]
+      evidence_required: account id bound to the deployment pipeline
+
+dependencies:
+  hard: []
+  soft: []
+
+environment_evidence:
+  local:
+    state: NOT_APPLICABLE
+  ci:
+    state: VERIFIED
+    credentialed: false
+    verification_method: terraform validate + plan-policy + cost-model gates
+  staging:
+    state: BLOCKED_EXTERNAL
+    credentialed: true
+  production:
+    state: BLOCKED_EXTERNAL
+    credentialed: true
+  scale:
+    state: NOT_ATTEMPTED
+    credentialed: true
+
+operational_ownership:
+  team: platform
+  technical_owner: platform-infra
+  operational_owner: platform-ops
+  escalation: pagerduty:platform
+  runbook: docs/runbooks/deployment-profiles.md
+  dashboards: [grafana:infra-cost]
+  alerts: [pagerduty:platform-infra]
+  service_level_target: n/a (control-plane)
+  recovery_objective: RTO 1h / RPO 15m
+
+business_readiness:
+  applicable: false
+  controls: []
+
+confidence:
+  level: MODERATE
+  reasons:
+    - plan validates + cost model prices in CI
+  evidence_gaps:
+    - never applied against a real account
+
+release_profiles:
+  local:
+    participation: disabled_intentionally
+    note: Terraform profiles are not exercised in local development.
+  staging:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: staging
+    business_gate: false
+  pilot:
+    participation: not_in_release
+    note: Pilot rides the production-lean infrastructure profile.
+  production-lean:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: production
+    business_gate: false
+  production-scale:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: scale
+    business_gate: false
+
+historical:
+  historical_maturity_index: 3
+  historical_maturity_index_scale: "0-5"
+  historical_maturity_index_authoritative: false

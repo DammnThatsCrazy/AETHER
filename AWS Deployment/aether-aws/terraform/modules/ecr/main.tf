@@ -23,7 +23,8 @@ resource "aws_kms_key" "ecr" {
   enable_key_rotation     = true
 
   tags = {
-    Name = "${var.project}-${var.environment}-ecr-kms"
+    Name        = "${var.project}-${var.environment}-ecr-kms"
+    Environment = var.environment
   }
 }
 
@@ -43,21 +44,32 @@ locals {
     "aether-kyber",
     "aether-aether",
   ]
+
+  encryption_types = {
+    for repository in local.repos : repository => lookup(var.repository_encryption_types, repository, "KMS")
+  }
+
+  tag_mutabilities = {
+    for repository in local.repos : repository => lookup(var.repository_tag_mutabilities, repository, "MUTABLE")
+  }
 }
 
 resource "aws_ecr_repository" "this" {
   for_each = toset(local.repos)
 
   name                 = each.value
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = local.tag_mutabilities[each.value]
 
   image_scanning_configuration {
     scan_on_push = true
   }
 
   encryption_configuration {
-    encryption_type = "KMS"
-    kms_key         = aws_kms_key.ecr.arn
+    encryption_type = local.encryption_types[each.value]
+    # ECR encryption is immutable. The staging backend repository predates
+    # Terraform and is intentionally reconciled as AWS-managed AES256; every
+    # other repository remains on the staging customer-managed KMS key.
+    kms_key = local.encryption_types[each.value] == "KMS" ? aws_kms_key.ecr.arn : null
   }
 
   tags = {

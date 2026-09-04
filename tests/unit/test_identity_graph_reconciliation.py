@@ -342,14 +342,18 @@ async def test_get_route_returns_envelope():
 
 @pytest.mark.asyncio
 async def test_admin_route_rejects_non_operator():
-    from shared.common.common import ForbiddenError
     from services.identity import reconciliation_routes as rr
 
     # Even a role-admin Aether tenant is not a Kyber operator.
     request = _Request(_Tenant("tenant-route-admin", {"admin"}))
     body = rr.ReconciliationTriggerRequest(tenant_id="tenant-x")
 
-    with pytest.raises(ForbiddenError):
+    # Import-sandbox tests can reload ``shared.common.common`` while leaving
+    # the route's already-imported guard function intact.  Use the exception
+    # class bound in that function's globals so the assertion remains stable
+    # under xdist regardless of worker/module import order.
+    expected_forbidden = rr.require_kyber_operator.__globals__["ForbiddenError"]
+    with pytest.raises(expected_forbidden):
         await rr.trigger_identity_reconciliation(body, request)
 
 

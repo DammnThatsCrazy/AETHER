@@ -208,6 +208,46 @@ policies:
     requires_consent_invalidation: false
     requires_permission_hash: false
 
+  # Identity assurance — verification challenges are short-lived proof
+  # workflows (OTP / magic link); only a secret DIGEST is stored, never a raw
+  # token or PII, so they are transient and hard-deletable.
+  - resource_type: identity_verification_challenges
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: false
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: false
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Verification evidence is the durable, revocable provenance of an
+  # ownership proof — audit-grade, never silently deleted (tombstone), and
+  # stores hashed identifiers only.
+  - resource_type: identity_verification_evidence
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: legal
+    delete_behavior: tombstone
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
 
   # Consent-aware integration control-plane stores — PR0 seed.
 
@@ -506,6 +546,44 @@ policies:
     requires_permission_hash: false
 
   - resource_type: graph_checkpoints
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  # Postgres graph backend tables (_PostgresGraphBackend). A projection store:
+  # the authoritative relationship/entity state lives in the semantic Gold
+  # tables and is re-projected here; tenant erasure hard-deletes the rows via
+  # GraphClient.delete_tenant_data.
+  - resource_type: graph_edges
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  - resource_type: graph_vertices
     authoritative_store: postgres
     metadata_store: postgres
     projection_stores: []
@@ -2598,6 +2676,26 @@ policies:
     allow_historical_table_storage: true
     requires_consent_invalidation: false
     requires_permission_hash: false
+
+  # One-time staging first-admin bootstrap claim. The row stores only the
+  # environment, email, tenant id, and a hash of the minted key; preserving it
+  # prevents a replay from silently minting a second first-admin credential.
+  - resource_type: first_admin_bootstrap
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: legal
+    delete_behavior: preserve
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: true
 
   - resource_type: assets
     authoritative_store: postgres

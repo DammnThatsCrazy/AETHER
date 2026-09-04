@@ -165,6 +165,27 @@ class TestAPIKeyValidation:
         h2 = auth_mod.APIKeyValidator.hash_key("key-b")
         assert h1 != h2
 
+    @pytest.mark.asyncio
+    async def test_revoked_durable_key_is_not_rehydrated_after_cache_miss(
+        self, auth_modules, monkeypatch
+    ):
+        auth_mod, _ = auth_modules
+        repos = importlib.import_module("repositories.repos")
+        key_hash = auth_mod.APIKeyValidator.hash_key("revoked-key")
+
+        async def find_by_id(_self, record_id):
+            assert record_id == key_hash[:12]
+            return {
+                "id": record_id,
+                "tenant_id": "tenant-revoked",
+                "key_hash": key_hash,
+                "status": "revoked",
+                "tier": "free",
+            }
+
+        monkeypatch.setattr(repos.APIKeyRepository, "find_by_id", find_by_id)
+        assert await auth_mod._lookup_api_key_from_db(key_hash) is None
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # JWT TOKEN VALIDATION

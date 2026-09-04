@@ -11,7 +11,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "41c79d4"
+last_synced_commit: "4e6fdad"
 ---
 # Smoke Test & Post-Deploy Verification Checklist — Aether Platform v8.12.0
 

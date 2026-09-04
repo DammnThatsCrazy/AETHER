@@ -13,7 +13,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/silver_adapters.py
   - Backend Architecture/aether-backend/alembic/versions/20260627_canonical_activity.py
   - Backend Architecture/aether-backend/alembic/versions/20260725_ai_referral_attribution.py
-last_synced_commit: "33f4303"
+last_synced_commit: "4e6fdad"
 ---
 
 # Unified Web2/Web3 Canonical Journey — Execution State

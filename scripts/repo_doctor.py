@@ -21,13 +21,63 @@ import argparse
 import json
 import subprocess
 import sys
+import tempfile
 import textwrap
+import shutil
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
 ROOT = Path(__file__).resolve().parent.parent
 GENERATED_DOC_PATHS = ["docs/_generated", "docs/REPO-INDEX.md", "docs/AUTOMATION.md"]
+
+
+@contextmanager
+def readonly_generation_workspace(enabled: bool):
+    """Yield an isolated mirror for generators in validation modes.
+
+    Generators historically wrote into the caller's checkout and relied on a
+    later ``git diff`` to detect drift.  That made ``--check`` surprisingly
+    mutating.  A temporary local clone plus the caller's complete worktree
+    patch gives generators the exact inputs being reviewed without allowing
+    them to touch the source checkout.
+    """
+    if not enabled:
+        yield ROOT
+        return
+    with tempfile.TemporaryDirectory(prefix="aether-doctor-") as directory:
+        mirror = Path(directory) / "repo"
+        subprocess.run(
+            ["git", "clone", "--quiet", "--shared", "--no-checkout", str(ROOT), str(mirror)],
+            check=True,
+        )
+        subprocess.run(["git", "checkout", "--quiet", "HEAD", "--"], cwd=mirror, check=True)
+        patch = subprocess.run(
+            ["git", "diff", "--binary", "HEAD", "--"], cwd=ROOT,
+            check=True, capture_output=True,
+        ).stdout
+        if patch:
+            subprocess.run(["git", "apply", "--binary", "-"], cwd=mirror, input=patch, check=True)
+        untracked = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard", "-z"], cwd=ROOT,
+            check=True, capture_output=True,
+        ).stdout.split(b"\0")
+        for raw_path in filter(None, untracked):
+            relative = Path(raw_path.decode("utf-8", errors="surrogateescape"))
+            source, target = ROOT / relative, mirror / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if source.is_dir():
+                shutil.copytree(source, target, dirs_exist_ok=True)
+            else:
+                shutil.copy2(source, target)
+        subprocess.run(["git", "add", "-A"], cwd=mirror, check=True)
+        subprocess.run(
+            ["git", "-c", "user.name=Aether Doctor", "-c", "user.email=doctor@invalid",
+             "commit", "--quiet", "--allow-empty", "-m", "validation baseline"],
+            cwd=mirror, check=True,
+        )
+        yield mirror
 
 
 @dataclass
@@ -269,13 +319,14 @@ def _check_clean(
     name: str,
     results: list[CheckResult],
     stop_on_failure: bool,
+    cwd: Path = ROOT,
 ) -> bool:
     command = f"git diff --exit-code -- {' '.join(paths)}"
     print(f"\n{'=' * 70}")
     print(f"CHECK: {name}")
     print(f"  CMD: {command}")
     print("=" * 70)
-    proc = subprocess.run(["git", "diff", "--exit-code", "--", *paths], cwd=ROOT)
+    proc = subprocess.run(["git", "diff", "--exit-code", "--", *paths], cwd=cwd)
     passed = proc.returncode == 0
     remediation = "make repo-doctor-fix && commit regenerated/synced docs"
     if passed:
@@ -358,6 +409,54 @@ def main(argv: Sequence[str] | None = None) -> None:
     results: list[CheckResult] = []
 
     run(
+        [sys.executable, "scripts/validate_toolchain.py"],
+        name="Toolchain preflight",
+        results=results,
+        stop_on_failure=stop,
+        remediation="run make bootstrap for the repository toolchain",
+    )
+
+    run(
+        [sys.executable, "scripts/validate_makefile.py"],
+        name="Makefile command registry",
+        results=results,
+        stop_on_failure=stop,
+        remediation="merge or rename duplicate concrete Make targets",
+    )
+
+    run(
+        [sys.executable, "scripts/test_inventory.py", "--summary"],
+        name="Test ownership, dependency, and quarantine inventory",
+        results=results,
+        stop_on_failure=stop,
+        remediation="complete config/test_inventory.yaml metadata and repair expired quarantines",
+    )
+
+    run(
+        [sys.executable, "scripts/validate_delivery_profiles.py", "--check-registry"],
+        name="Deployment-profile and runtime-fallback policy",
+        results=results,
+        stop_on_failure=stop,
+        remediation="repair config/deployment_profile_compatibility.yaml or config/runtime_fallbacks.yaml",
+    )
+
+    run(
+        [sys.executable, "scripts/validate_delivery_registries.py"],
+        name="Fallback implementation and golden-journey execution registry",
+        results=results,
+        stop_on_failure=stop,
+        remediation="bind fallbacks to real implementations and keep unimplemented journeys explicitly BLOCKED",
+    )
+
+    run(
+        [sys.executable, "scripts/release/evidence_bundle.py", "--check-registry"],
+        name="Golden product journey registry",
+        results=results,
+        stop_on_failure=stop,
+        remediation="register all five owned golden journeys with meaningful assertions",
+    )
+
+    run(
         [sys.executable, "scripts/bump_version.py", "--check"],
         name="Version alignment (pyproject.toml is canonical)",
         results=results,
@@ -365,81 +464,83 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="python scripts/bump_version.py <canonical-version>",
     )
 
-    run(
-        [sys.executable, "scripts/docs_extract/run_all.py"],
-        name="Regenerate docs/_generated artifacts",
-        results=results,
-        stop_on_failure=stop,
-        remediation="fix the generator failure, then rerun make repo-doctor-fix",
-    )
-
-    run(
-        [sys.executable, "scripts/generate_ml_manifest.py"],
-        name="Regenerate ML implementation manifest (docs/_generated/ml-implementation-manifest.json)",
-        results=results,
-        stop_on_failure=stop,
-        remediation="fix common/model_registry.py or common/feature_contracts.py, then rerun make repo-doctor-fix",
-    )
-
-    run(
-        [sys.executable, "scripts/generate_platform_contracts.py"],
-        name="Regenerate unified-platform contract artifacts (platform registries)",
-        results=results,
-        stop_on_failure=stop,
-        remediation="fix packages/shared/contracts/*-registry.json or the generator, then rerun make repo-doctor-fix",
-    )
-
-    if args.ci or args.check:
-        _check_clean(
-            ["docs/_generated"],
-            name="Generated artifacts — no uncommitted diff",
+    with readonly_generation_workspace(args.check or args.ci) as generation_root:
+        run(
+            [sys.executable, "scripts/docs_extract/run_all.py"],
+            name="Regenerate docs/_generated artifacts",
             results=results,
             stop_on_failure=stop,
-        )
-        _check_clean(
-            [
-                "packages/shared/temporal-policy.ts",
-                "Backend Architecture/aether-backend/shared/temporal/generated_policy.py",
-                "packages/shared/interaction-contract.ts",
-                "Backend Architecture/aether-backend/shared/product/generated_vocabulary.py",
-                "packages/shared/context-capsule.ts",
-                "Backend Architecture/aether-backend/shared/context_capsule/generated_taxonomy.py",
-                "packages/shared/graph-mutation.ts",
-                "Backend Architecture/aether-backend/shared/graph/generated_mutation_taxonomy.py",
-                "packages/shared/filter-fields.ts",
-                "Backend Architecture/aether-backend/shared/exploration/generated_fields.py",
-                "packages/shared/surface-capabilities.ts",
-                "Backend Architecture/aether-backend/shared/exploration/generated_surfaces.py",
-                "packages/shared/comparison-contract.ts",
-                "Backend Architecture/aether-backend/services/intelligence/comparison/generated_vocabulary.py",
-                "Backend Architecture/aether-backend/services/silver/generated_ownership.py",
-                "packages/shared/intelligence-projections_generated.ts",
-                "Backend Architecture/aether-backend/shared/intelligence_projections/generated_registry.py",
-                "packages/shared/lenses_generated.ts",
-                "Backend Architecture/aether-backend/shared/projection_engine/generated_lenses.py",
-                "packages/shared/outcome-types_generated.ts",
-                "Backend Architecture/aether-backend/shared/measurement/generated_outcome_types.py",
-            ],
-            name="Unified-platform generated contracts — no uncommitted diff",
-            results=results,
-            stop_on_failure=stop,
+            remediation="fix the generator failure, then rerun make repo-doctor-fix", cwd=generation_root,
         )
 
-    run(
-        [sys.executable, "scripts/sync_docs.py"],
-        name="Sync generated docs (REPO-INDEX, AUTOMATION)",
-        results=results,
-        stop_on_failure=stop,
-        remediation="fix scripts/sync_docs.py or stale inputs, then rerun make docs-fix",
-    )
-
-    if args.ci or args.check:
-        _check_clean(
-            ["docs/REPO-INDEX.md", "docs/AUTOMATION.md"],
-            name="Synced docs (REPO-INDEX, AUTOMATION) — no uncommitted diff",
+        run(
+            [sys.executable, "scripts/generate_ml_manifest.py"],
+            name="Regenerate ML implementation manifest (docs/_generated/ml-implementation-manifest.json)",
             results=results,
             stop_on_failure=stop,
+            remediation="fix common/model_registry.py or common/feature_contracts.py, then rerun make repo-doctor-fix", cwd=generation_root,
         )
+
+        run(
+            [sys.executable, "scripts/generate_platform_contracts.py"],
+            name="Regenerate unified-platform contract artifacts (platform registries)",
+            results=results,
+            stop_on_failure=stop,
+            remediation="fix packages/shared/contracts/*-registry.json or the generator, then rerun make repo-doctor-fix", cwd=generation_root,
+        )
+
+        if args.ci or args.check:
+            _check_clean(
+                ["docs/_generated"],
+                name="Generated artifacts — no uncommitted diff",
+                results=results,
+                stop_on_failure=stop, cwd=generation_root,
+            )
+            _check_clean(
+                [
+                    "packages/shared/temporal-policy.ts",
+                    "Backend Architecture/aether-backend/shared/temporal/generated_policy.py",
+                    "packages/shared/interaction-contract.ts",
+                    "Backend Architecture/aether-backend/shared/product/generated_vocabulary.py",
+                    "packages/shared/context-capsule.ts",
+                    "Backend Architecture/aether-backend/shared/context_capsule/generated_taxonomy.py",
+                    "packages/shared/graph-mutation.ts",
+                    "Backend Architecture/aether-backend/shared/graph/generated_mutation_taxonomy.py",
+                    "packages/shared/filter-fields.ts",
+                    "Backend Architecture/aether-backend/shared/exploration/generated_fields.py",
+                    "packages/shared/surface-capabilities.ts",
+                    "Backend Architecture/aether-backend/shared/exploration/generated_surfaces.py",
+                    "packages/shared/comparison-contract.ts",
+                    "Backend Architecture/aether-backend/services/intelligence/comparison/generated_vocabulary.py",
+                    "Backend Architecture/aether-backend/services/silver/generated_ownership.py",
+                    "packages/shared/intelligence-projections_generated.ts",
+                    "Backend Architecture/aether-backend/shared/intelligence_projections/generated_registry.py",
+                    "packages/shared/lenses_generated.ts",
+                    "Backend Architecture/aether-backend/shared/projection_engine/generated_lenses.py",
+                    "packages/shared/outcome-types_generated.ts",
+                    "Backend Architecture/aether-backend/shared/measurement/generated_outcome_types.py",
+                ],
+                name="Unified-platform generated contracts — no uncommitted diff",
+                results=results,
+                stop_on_failure=stop, cwd=generation_root,
+            )
+
+        run(
+            [sys.executable, "scripts/sync_docs.py"],
+            name="Sync generated docs (REPO-INDEX, AUTOMATION)",
+            results=results,
+            stop_on_failure=stop,
+            remediation="fix scripts/sync_docs.py or stale inputs, then rerun make docs-fix", cwd=generation_root,
+        )
+
+        if args.ci or args.check:
+            _check_clean(
+                ["docs/REPO-INDEX.md", "docs/AUTOMATION.md"],
+                name="Synced docs (REPO-INDEX, AUTOMATION) — no uncommitted diff",
+                results=results,
+                stop_on_failure=stop, cwd=generation_root,
+            )
+
 
     docs_gates = [
         ([sys.executable, "scripts/validate_docs.py"], "Docs version drift validation", "python scripts/bump_version.py <canonical-version>"),

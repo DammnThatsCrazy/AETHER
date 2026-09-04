@@ -16,8 +16,9 @@ variable "deployment_profile" {
   }
 }
 
-# No default: every plan must pin the exact digest approved by the release
-# manifest. terraform-promote.yml passes these as explicit -var inputs.
+# Backend releases are always pinned to an immutable digest. The optional ML
+# digest is profile-gated below because staging and production-lean run ML
+# inline and do not provision a dedicated ML image.
 variable "backend_image_digest" {
   type        = string
   description = "Immutable backend image digest selected by the release manifest"
@@ -29,10 +30,14 @@ variable "backend_image_digest" {
 
 variable "ml_image_digest" {
   type        = string
-  description = "Immutable optional ML serving image digest selected by the release manifest"
+  description = "Immutable ML serving digest; optional when the selected profile runs ML inline"
+  default     = ""
   validation {
-    condition     = can(regex("^sha256:[0-9a-f]{64}$", var.ml_image_digest))
-    error_message = "ml_image_digest must be an immutable sha256 digest."
+    condition = var.ml_image_digest != "" ? can(regex("^sha256:[0-9a-f]{64}$", var.ml_image_digest)) : contains(
+      ["staging", "production-lean", "demo", "preview"],
+      var.deployment_profile,
+    )
+    error_message = "ml_image_digest is required for production-scale and enterprise-isolated profiles and must be an immutable sha256 digest when provided."
   }
 }
 
@@ -77,6 +82,16 @@ variable "staging_state" {
   }
 }
 
+variable "staging_listener_target_group_arn" {
+  type        = string
+  description = "Optional maintenance target group ARN used during a reviewed staging backend target-group replacement transition"
+  default     = ""
+  validation {
+    condition     = var.staging_listener_target_group_arn == "" || can(regex("^arn:aws:elasticloadbalancing:[^:]+:[0-9]{12}:targetgroup/", var.staging_listener_target_group_arn))
+    error_message = "staging_listener_target_group_arn must be empty or an ELB target-group ARN."
+  }
+}
+
 variable "aws_region" {
   type        = string
   description = "AWS region to deploy resources into"
@@ -87,6 +102,34 @@ variable "project" {
   type        = string
   description = "Project name used for resource naming and tagging"
   default     = "AETHER"
+}
+
+variable "ecr_repository_encryption_types" {
+  type        = map(string)
+  default     = {}
+  description = "Optional per-repository ECR encryption overrides. Defaults to KMS for every repository."
+
+  validation {
+    condition = alltrue([
+      for repository, encryption_type in var.ecr_repository_encryption_types :
+      contains(["aether-backend", "aether-ml-serving", "aether-kyber", "aether-aether"], repository) && contains(["KMS", "AES256"], encryption_type)
+    ])
+    error_message = "ECR encryption overrides must target a reviewed repository and use KMS or AES256."
+  }
+}
+
+variable "ecr_repository_tag_mutabilities" {
+  type        = map(string)
+  default     = {}
+  description = "Optional per-repository ECR tag mutability overrides. Defaults to MUTABLE."
+
+  validation {
+    condition = alltrue([
+      for repository, mutability in var.ecr_repository_tag_mutabilities :
+      contains(["aether-backend", "aether-ml-serving", "aether-kyber", "aether-aether"], repository) && contains(["MUTABLE", "IMMUTABLE"], mutability)
+    ])
+    error_message = "ECR mutability overrides must target a reviewed repository and use MUTABLE or IMMUTABLE."
+  }
 }
 
 # --------------------------------------------------------------------------
@@ -167,6 +210,12 @@ variable "aurora_backup_retention_days" {
   type        = number
   description = "Automated backup retention in days."
   default     = 7
+}
+
+variable "aurora_express_mode" {
+  type        = bool
+  description = "Use AWS-managed encryption for Aurora instead of a customer-managed KMS key. Required for AWS Free-tier accounts."
+  default     = false
 }
 
 # --------------------------------------------------------------------------
@@ -324,6 +373,12 @@ variable "enable_credential_kms" {
   EOT
 }
 
+variable "kms_key_admin_role_arns" {
+  type        = list(string)
+  description = "Role ARNs that must retain explicit lockout-safe administrative control of the provider-credential CMK."
+  default     = []
+}
+
 # --------------------------------------------------------------------------
 # Neptune
 # --------------------------------------------------------------------------
@@ -384,4 +439,10 @@ variable "aether_app_url" {
 variable "kyber_app_url" {
   type        = string
   description = "Public URL of the Kyber operator console (e.g. https://kyber.aether.io)"
+}
+
+variable "enable_social_connections" {
+  type        = bool
+  description = "Enable optional social identity-provider connections. Keep false until provider credentials and Auth0 management scopes are approved."
+  default     = true
 }

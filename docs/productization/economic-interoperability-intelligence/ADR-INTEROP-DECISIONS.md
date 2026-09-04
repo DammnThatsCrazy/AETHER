@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/services/interop/correlation.py
   - Backend Architecture/aether-backend/services/interop/providers/layerzero_v2.py
 canonical_owner: platform@aether
-last_synced_commit: "41c79d4"
+last_synced_commit: "4e6fdad"
 ---
 
 # Interoperability Intelligence — Domain Decisions

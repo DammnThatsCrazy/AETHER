@@ -69,8 +69,10 @@ module "vpc" {
 module "ecr" {
   source = "./modules/ecr"
 
-  environment = var.environment
-  project     = var.project
+  environment                 = var.environment
+  project                     = var.project
+  repository_encryption_types = var.ecr_repository_encryption_types
+  repository_tag_mutabilities = var.ecr_repository_tag_mutabilities
 }
 
 # ---------------------------------------------------------------------------
@@ -111,8 +113,9 @@ module "kms_credentials" {
   source = "./modules/kms_credentials"
   count  = var.enable_credential_kms ? 1 : 0
 
-  environment = var.environment
-  project     = var.project
+  environment         = var.environment
+  project             = var.project
+  key_admin_role_arns = var.kms_key_admin_role_arns
 }
 
 # ---------------------------------------------------------------------------
@@ -174,9 +177,13 @@ module "aurora" {
   db_name      = var.db_name
   min_acu      = var.aurora_min_acu
   max_acu      = var.aurora_max_acu
+  # Staging uses the provider-supported Serverless v2 auto-pause field. Warm
+  # production profiles leave this null and keep their configured floor.
+  auto_pause_seconds = var.environment == "staging" ? 300 : null
 
   backup_retention_days = var.aurora_backup_retention_days
   deletion_protection   = var.environment == "production"
+  express_mode          = var.aurora_express_mode
 }
 
 # ---------------------------------------------------------------------------
@@ -332,7 +339,8 @@ module "alb" {
   # modules/ecs, so they need the same gate as the service that registers with
   # them. Without it a lean plan still creates a forbidden, permanently empty
   # dedicated-ML target group.
-  enable_dedicated_ml = local.enable_dedicated_ml
+  enable_dedicated_ml               = local.enable_dedicated_ml
+  staging_listener_target_group_arn = var.staging_listener_target_group_arn
 }
 
 # ---------------------------------------------------------------------------
@@ -532,9 +540,10 @@ module "monitoring" {
   # the monitoring module enables the Aurora ACU alarm and dashboard widget.
   # aurora_max_acu follows the profile so the max-ACU alarm threshold tracks
   # the capacity the cluster was actually given.
-  aurora_cluster_id = module.aurora.cluster_identifier
-  aurora_max_acu    = var.aurora_max_acu
-  alb_arn_suffix    = module.alb.alb_arn_suffix
+  aurora_cluster_id           = module.aurora.cluster_identifier
+  aurora_max_acu              = var.aurora_max_acu
+  enable_aurora_observability = true
+  alb_arn_suffix              = module.alb.alb_arn_suffix
 
   # Alarm gating: a profile that provisions no Redis/Kafka/Neptune/dedicated ML
   # must not create alarms whose dimensions point at nothing — they would sit
@@ -553,9 +562,10 @@ module "monitoring" {
   # a profile that swaps Redis for DynamoDB and Kafka for SQS and then ships no
   # alarms for DynamoDB or SQS has removed its own observability, which is the
   # failure mode the cost policy is most likely to cause.
-  dynamodb_cache_table_name = module.dynamodb_cache.table_name
-  sqs_queue_name            = local.sqs_queue_name
-  sqs_dlq_name              = local.sqs_dlq_name
+  dynamodb_cache_table_name           = module.dynamodb_cache.table_name
+  enable_dynamodb_cache_observability = local.enable_dynamodb_cache
+  sqs_queue_name                      = local.sqs_queue_name
+  sqs_dlq_name                        = local.sqs_dlq_name
 
   # A permanently-failed role inside a still-running consolidated task keeps
   # the ECS service at steady state, so the orchestrator never replaces it.
@@ -601,9 +611,10 @@ module "auth0" {
   aether_logout_urls   = [var.aether_app_url]
   aether_web_origins   = [var.aether_app_url]
 
-  kyber_callback_urls = ["${var.kyber_app_url}/callback"]
-  kyber_logout_urls   = [var.kyber_app_url]
-  kyber_web_origins   = [var.kyber_app_url]
+  kyber_callback_urls       = ["${var.kyber_app_url}/callback"]
+  kyber_logout_urls         = [var.kyber_app_url]
+  kyber_web_origins         = [var.kyber_app_url]
+  enable_social_connections = var.enable_social_connections
 }
 
 # ---------------------------------------------------------------------------
@@ -630,7 +641,7 @@ resource "aws_s3_bucket" "static_frontend" {
 
   tags = {
     Name    = lower("${var.project}-${var.environment}-${each.key}-static")
-    Purpose = "Immutable static SPA origin (${each.key})"
+    Purpose = "immutable-static-spa-origin-${each.key}"
   }
 }
 

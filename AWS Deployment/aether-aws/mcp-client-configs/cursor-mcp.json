@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "aether-tfmcp": {
+      "type": "streamable-http",
+      "url": "https://<ALB_DNS_NAME>/mcp",
+      "headers": {
+        "Authorization": "Bearer <TOKEN>"
+      }
+    }
+  }
+}

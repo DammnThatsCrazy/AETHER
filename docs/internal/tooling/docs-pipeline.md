@@ -20,13 +20,23 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "5fd634ba"
+last_synced_commit: "0e789921"
 ---
 
 # Documentation Pipeline
 
 > Internal reference for the tooling that keeps Aether's documentation
 > honest. Not customer-facing.
+
+The same drift-is-a-build-failure discipline governs the multidimensional
+readiness model: `make readiness-validate` (`scripts/validate_readiness_model.py`)
+is a sibling fail-closed gate, and `make readiness-artifacts` regenerates its
+committed outputs. Those readiness targets live in the root `Makefile` alongside
+the docs-pipeline targets described here.
+
+Repo Health scopes its concurrency group by event type and branch. Push and
+pull-request runs therefore retain independent evidence instead of canceling
+one another before the required PR gate reports its result.
 
 ## Why this exists
 
@@ -64,7 +74,7 @@ This page is `I`.
 | `scripts/validate_docs.py` | Version-drift check across package manifests, changelogs, doc headers. |
 | `scripts/validate_frontmatter.py` | Validates every `docs/**/*.{md,mdx}` against `docs_schema.json`. Fails on invalid **or** missing frontmatter. |
 | `scripts/validate_contracts.py` | Cross-checks the generated artifacts: every event's consent purpose + family must exist in the canonical contracts. Catches cross-file drift the per-file generators can't. |
-| `scripts/docs_drift.py` | For each page with `source_files:`, verifies the paths exist (fatal if not) and — when `last_synced_commit:` is set — flags staleness. `--update` **selectively** re-stamps only docs whose source files have actually changed since `last_synced_commit` (clean docs are skipped to avoid mass `last_synced_commit` conflicts on every rebase). False-positive prevention: `doc_reviewed_after_sources()` suppresses stale warnings when a doc and its source files were both updated in the same commit range — but a doc commit whose only change is the `last_synced_commit` line is a restamp, not a review, and does **not** count. Known-stale docs pending genuine review live in `config/docs_review_backlog.yaml`: their staleness is reported without failing `--strict`, an unlisted stale doc still fails, a listed doc that is no longer stale fails until its entry is removed (shrink-only), and `--update` refuses to stamp them. The sync-managed pages (`REPO-INDEX.md`, `AUTOMATION.md`) are excluded from drift checks and stamping; their freshness is enforced by repo-doctor's diff-after-sync check instead. |
+| `scripts/docs_drift.py` | For each page with `source_files:`, verifies the paths exist (fatal if not) and — when `last_synced_commit:` is set — flags staleness. `--update` **selectively** re-stamps only docs whose source files have actually changed since `last_synced_commit` (clean docs are skipped to avoid mass `last_synced_commit` conflicts on every rebase). False-positive prevention: `doc_reviewed_after_sources()` suppresses stale warnings when a doc and its source files were both updated in the same commit range. For an unresolvable pre-squash stamp, the checker finds the newest first-parent source boundary and accepts it only when that same boundary changed the authored doc; synthetic pull-request merge commits are inspected with `diff-tree -m`. A doc commit whose only change is the `last_synced_commit` line is a restamp, not a review, and does **not** count. A reviewed source commit that intentionally needs no prose change is recorded with a `reviewed_source_commits` receipt containing a resolvable commit and non-empty reason; the checker verifies that each receipt touches a declared source and covers every newer source commit, making this an auditable review record rather than a bypass. Known-stale docs pending genuine review live in `config/docs_review_backlog.yaml`: their staleness is reported without failing `--strict`, an unlisted stale doc still fails, a listed doc that is no longer stale fails until its entry is removed (shrink-only), and `--update` refuses to stamp them. The sync-managed pages (`REPO-INDEX.md`, `AUTOMATION.md`) are excluded from drift checks and stamping; their freshness is enforced by repo-doctor's diff-after-sync check instead. |
 | `scripts/sync_docs.py` | Regenerates `docs/REPO-INDEX.md` and `docs/AUTOMATION.md` from the live tree. |
 | `scripts/docs_extract/run_all.py` | Runs every generator (see below). |
 
@@ -106,6 +116,8 @@ make repo-doctor-fix      # regenerate generated docs + sync
 make docs-check           # docs/version/frontmatter/drift only (fast gate)
 make ci-check             # CI-safe full path — fails on any generated diff
 make docs-fix             # regenerate and sync docs only
+make test-fast BASE=<ref> # bounded local evidence; reports stronger follow-up lane
+make test-pr BASE=<ref>   # affected-domain PR verification selection
 
 # Deployment-profile enforcement (profile class, parity, cost policy, doctor)
 make validate-profile-config    # deployment-profile matrix + founding-tenant posture
@@ -209,6 +221,25 @@ Two ways to remediate:
 Don't blanket-stamp without checking. The whole point of the gate is
 to force a human eye on every change a doc claims to describe.
 
+### Reviewed source receipts
+
+Some source changes are intentionally orthogonal to a page even though the
+source path is shared by that page's `source_files` declaration. In that case,
+review the page and add a frontmatter receipt such as:
+
+```yaml
+reviewed_source_commits:
+  - commit: "54eaac5d"
+    reason: "Reviewed the staging bootstrap change; this fraud-network page is unaffected."
+```
+
+The drift checker resolves each receipt, proves that its commit touched a
+declared source, and requires coverage for every newer source commit. Receipts
+must not be used for a behavior change: update the page's authored content and
+stamp it normally when the documented behavior moved. This makes the decision
+durable across squash merges without turning `last_synced_commit` into an
+unreviewed exemption.
+
 ### Selective stamping
 
 `--update` checks each doc before stamping: only docs whose source
@@ -219,3 +250,8 @@ cleared only by a genuine content review plus removal of its registry
 entry. This prevents the 60+ `last_synced_commit` conflicts that arise
 when both branches run a bulk-stamp pass and then rebase — conflicts
 only appear where sources genuinely diverged.
+
+The restamp-only check is deliberately narrow: only a changed frontmatter
+assignment consisting solely of `last_synced_commit:` and a hexadecimal commit
+ID counts as a restamp. A mention of that field in authored prose or a table is
+a real content change, so it still requires review and a fresh sync stamp.

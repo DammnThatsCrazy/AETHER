@@ -11,20 +11,40 @@ source_files:
   - config/terraform_resource_contracts.yaml
   - AWS Deployment/aether-aws/terraform/profiles.tf
   - AWS Deployment/aether-aws/terraform/main.tf
+  - AWS Deployment/aether-aws/terraform/modules/alb/main.tf
+  - AWS Deployment/aether-aws/terraform/modules/aurora/main.tf
+  - AWS Deployment/aether-aws/terraform/modules/ecr/main.tf
+  - AWS Deployment/aether-aws/terraform/modules/secrets/main.tf
+  - AWS Deployment/aether-aws/terraform/modules/secrets/rotation.tf
   - AWS Deployment/aether-aws/terraform/variables.tf
   - scripts/release/check_profile_config.py
   - scripts/release/check_profile_parity.py
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
+last_synced_commit: "7fd8fcb"
 ---
 
 # Deployment Profiles
+
+Staging uses inline ML and therefore does not require an ML image digest;
+remote-ML profiles do. Its apply role is scoped to staging and is the only
+profile-specific administrator named in staging KMS key policies.
+Aurora and the pay-per-use DynamoDB cache are present in every cloud Terraform
+profile, so their alarms and dashboard widgets are selected by static root
+profile flags. They never use resource-derived cluster or table IDs to decide
+Terraform cardinality, which keeps state-import and plan-only runs resolvable
+before those resources exist in state.
 
 Aether declares eight deployment profiles, from a zero-backend local mock to a
 contractually isolated enterprise deployment. `config/deployment_profiles.yaml`
 is the canonical matrix — backend selectors, cost policy and numeric budgets —
 and `scripts/release/check_profile_config.py` validates it.
+
+Each Terraform environment entrypoint uses the same parse-safe provider and
+variable block shape. Changes to those entrypoints are treated as deployment
+profile changes: they must keep all profile plan tests and the cost/topology
+contracts green before promotion.
 
 Four of the eight are **cloud profiles**: `staging`, `production-lean`,
 `production-scale`, `enterprise-isolated`. Six of the eight are
@@ -92,6 +112,35 @@ key id for `CREDENTIAL_KMS_KEY_ID`.
 | `production-lean` | production | **yes** | yes (USD 150 / 200) | `consolidated` — 2 tasks | **0** |
 | `production-scale` | production | **yes** | no | `dedicated` — 9 services | 1 (`single`) |
 | `enterprise-isolated` | enterprise | **yes** | no | `dedicated` — 9 services | 3 (`ha`) |
+
+### Immutable release digest requirements
+
+Every selectable profile requires an immutable `backend_image_digest` from the
+approved release manifest. `ml_image_digest` is required for the dedicated
+`production-scale` and `enterprise-isolated` profiles. The lean, staging, demo,
+and preview profiles may leave the ML digest empty when `remote_ml` is disabled,
+because those profiles run inline ML and do not start a dedicated ML service.
+The Terraform promotion workflow enforces this distinction and rejects an empty
+ML digest for profiles that declare dedicated remote ML.
+
+Staging is not considered runnable merely because its Terraform plan is green.
+The lifecycle rehearsal also requires a verified `AetherStagingLifecycle` role,
+an awake lease written before apply, and an effective apply-policy simulation
+for every mutating AWS action. ECR repository ownership is classified before
+planning: a canonical-but-tainted repository is repaired with the explicit
+untaint path, a remote repository absent from state uses the confirmation-gated
+import path, and ambiguous or cross-profile ownership stops the run. Any state
+change invalidates the previous plan and requires a new reviewed plan for the
+same immutable release digest.
+
+The staging apply contract also checks the AWS account plan before mutation.
+Free-plan accounts are permitted when the reviewed plan uses express mode
+(AWS-managed Aurora encryption with no customer-managed KMS key); a plan
+containing customer-managed Aurora KMS resources on a free account fails
+closed. Paid accounts may proceed after the normal policy and cost gates. State
+reconciliation can import pre-existing Secrets Manager metadata only after
+verifying the exact staging CMK and `AWSCURRENT` version; values are populated
+through the separate secure bootstrap and are never read by CI.
 
 ---
 
@@ -165,6 +214,34 @@ key id for `CREDENTIAL_KMS_KEY_ID`.
 
 ## `staging`
 
+### Apply contract
+
+Staging applies consume the exact reviewed Terraform plan; they do not
+re-plan on the apply runner. The apply job must receive the dedicated staging
+AWS role and, when Auth0 resources are present, the three Auth0 provider
+credentials as process environment variables. Static SPA origins use
+S3-safe, lowercase hyphenated tag values, and runtime log metric filters with
+dimensions omit a CloudWatch default value. These details are part of the
+staging profile's apply contract and are covered by the provider-input and
+Terraform profile checks before a wake is authorized.
+
+The profile's customer-managed KMS keys are tagged with `Environment = staging`.
+The Secrets Manager key policy permits only same-account Secrets Manager use and
+regional CloudWatch Logs use, constrained by `kms:ViaService`, caller account,
+and the AETHER staging log namespace; it does not grant services unrestricted
+key access. ECR and Aurora keys carry the same environment tag so the reviewed
+staging apply policy can scope grants to staging resources. These tags and
+service conditions are part of the Terraform profile shape and must remain
+covered by the profile plan and cost/topology gates before promotion.
+
+The release pipeline creates `aether-backend` before Terraform can adopt the
+repository. It is therefore an intentional staging exception: that repository
+is immutable and AES-256 encrypted, while `aether-ml-serving`, `aether-kyber`,
+and `aether-aether` remain mutable and use the staging customer-managed KMS
+key. ECR encryption cannot be changed after creation, so the reconciliation
+workflow validates this split and imports the existing backend without a
+delete/recreate plan.
+
 | | |
 |---|---|
 | **Purpose** | Release rehearsal. Wakes for validation, proves a release, returns to zero. |
@@ -197,6 +274,18 @@ key id for `CREDENTIAL_KMS_KEY_ID`.
 | **Limitations** | Never applied, never billed, never load-tested. First application of the consolidated shape **destroys seven ECS services** — see [Migration hazards](#migration-hazards). Shares `environment = "production"` with the other two production-class profiles and therefore needs its own AWS account. |
 | **Promotion path** | → `production-scale` on observed, sustained load. Trigger table in [AWS Lean Production](AWS-LEAN-PRODUCTION.md). |
 
+
+**tfmcp (opt-in).** `production-lean` supports an optional Terraform MCP server
+via `enable_tfmcp_in_lean = true` in the profile tfvars. When enabled, one
+Fargate task (512 CPU / 1024 MiB, `public_ip` egress) serves the MCP protocol
+over Streamable HTTP on port 8080 behind the shared ALB at `/mcp*`. The task
+role grants scoped Terraform state access, an apply policy covering the resource
+classes this root manages, and Secrets Manager reads for the auth token and
+GitHub PAT. The endpoint uses the configured `domain_name` (cert-backed HTTPS)
+when set. Enabling tfmcp raises the lean fixed baseline by roughly USD 18/month;
+the USD 200 hard ceiling is exceeded and must be reviewed as a cost-policy
+exception. See [AWS Deployment](AWS-DEPLOYMENT.md#tfmcp--terraform-mcp-server)
+and `AWS Deployment/aether-aws/terraform/modules/tfmcp`.
 ## `production-scale`
 
 | | |
@@ -565,6 +654,27 @@ make collect-deployment-evidence      # materialise release-evidence/ with its c
 ```
 
 ## See also
+
+### Staging state reconciliation
+
+If a staging resource exists in AWS but is absent from the reviewed Terraform
+state, reconcile state before generating a replacement plan. The guarded
+`Reconcile staging Terraform state` workflow accepts only the exact
+`aether-staging-backend` target-group ARN, imports only
+`module.alb.aws_lb_target_group.backend[0]`, and refuses deletes or replacements.
+After an import, discard the old binary plan and produce a fresh staging plan
+and checksum before any apply.
+
+If state still contains the pre-split, unindexed address
+`module.alb.aws_lb_target_group.backend`, do not use the reconciliation workflow
+first. Dispatch the confirmation-gated
+`.github/workflows/terraform-state-migrate.yml` workflow with the affected
+profile and `MIGRATE-TARGET-GROUP`. That workflow performs only the reviewed
+state-address move (staging to `backend[0]`, production-class profiles to
+`backend_replacement[0]`) and shares the promotion concurrency group so it
+cannot race a plan or apply. Once it succeeds, discard any prior plan and run a
+new plan-only promotion to regenerate the reviewed plan, inventory, checksum,
+and expiry before applying.
 
 - [AWS Lean Production](AWS-LEAN-PRODUCTION.md) — the `production-lean` profile in depth
 - [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md) — the staging lifecycle procedure

@@ -147,9 +147,28 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - uses: aws-actions/amazon-ecr-login@v2
         id: ecr
+      - name: Reuse existing immutable backend image when present
+        id: existing-backend
+        env:
+          AWS_REGION: ${{ env.AWS_REGION }}
+        run: |
+          set -euo pipefail
+          if digest=$(aws ecr describe-images \
+            --repository-name aether-backend \
+            --image-ids imageTag="${GITHUB_SHA}" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text 2>/dev/null) && [ -n "$digest" ] && [ "$digest" != "None" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "digest=$digest" >> "$GITHUB_OUTPUT"
+            echo "Immutable backend tag ${GITHUB_SHA} already exists; reusing ${digest}."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No existing immutable backend tag for ${GITHUB_SHA}; building it."
+          fi
       - uses: docker/setup-buildx-action@v3
       - name: Build backend by commit
         id: backend
+        if: steps.existing-backend.outputs.exists != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -158,6 +177,16 @@ jobs:
           tags: ${{ steps.ecr.outputs.registry }}/aether-backend:${{ github.sha }}
           cache-from: type=gha,scope=backend
           cache-to: type=gha,scope=backend,mode=max
+      - name: Resolve backend image digest
+        id: backend-digest
+        env:
+          EXISTING_DIGEST: ${{ steps.existing-backend.outputs.digest }}
+          BUILT_DIGEST: ${{ steps.backend.outputs.digest }}
+        run: |
+          set -euo pipefail
+          digest="${EXISTING_DIGEST:-${BUILT_DIGEST:-}}"
+          test -n "$digest"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - name: Build static frontends (per-app Auth0 client and endpoints)
         # Each SPA is built with its own Auth0 client ID and API endpoints.
         # AETHER_AUTH0_CLIENT_ID / KYBER_AUTH0_CLIENT_ID come from the
@@ -173,6 +202,20 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
+          # The frontends import @aether/shared from the local workspace.
+          # npm ci installs dependencies but does not build that workspace,
+          # so compile it before the per-app TypeScript/Vite builds.
+          npm run build --workspace @aether/shared
+          # The frontends also import @aether/web, whose package exports point
+          # at its Rollup output under packages/web/dist. Build it after the
+          # shared contracts and fail early if the published entrypoints are
+          # missing instead of letting Vite report a misleading package-entry
+          # resolution error.
+          npm run build --workspace @aether/web
+          test -f packages/web/dist/aether.esm.js
+          test -f packages/web/dist/aether.cjs.js
+          test -f packages/web/dist/health/index.js
+          test -f packages/web/dist/react.js
           VITE_AUTH0_CLIENT_ID="$AETHER_AUTH0_CLIENT_ID" \
             VITE_API_BASE_URL="$AETHER_API_BASE_URL" \
             npm --workspace frontend/aether run build
@@ -188,7 +231,7 @@ jobs:
       - name: Create commit-bound release manifest
         id: manifest
         env:
-          BACKEND_DIGEST: ${{ steps.backend.outputs.digest }}
+          BACKEND_DIGEST: ${{ steps.backend-digest.outputs.digest }}
           REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
           set -euo pipefail
@@ -312,9 +355,14 @@ jobs:
     needs: [build, acquire-release, delivery-armed]
     # NOT ARMED WITHOUT THE DEPLOY ROLE: skip the deploy when the role is
     # absent, and do not let a skipped build (also armed-gated) count as a
-    # success path into a real deployment.
+    # success path into a real deployment. Staging also stays asleep by
+    # default: the deploy role may exist for release builds, but ECS mutation
+    # requires the explicit STAGING_RUNTIME_ENABLED repository variable. This
+    # keeps the low-cost/asleep staging posture from turning a main push into
+    # an attempted runtime rollout before Terraform has provisioned services.
     if: >-
       always() && !cancelled() && needs.delivery-armed.outputs.armed == 'true'
+      && (github.event_name == 'workflow_dispatch' || vars.STAGING_RUNTIME_ENABLED == 'true')
       && ((needs.build.result == 'success' && needs.acquire-release.result == 'skipped')
           || (needs.acquire-release.result == 'success' && needs.build.result == 'skipped'))
     runs-on: ubuntu-latest
@@ -361,11 +409,48 @@ jobs:
           mapfile -t SERVICES < <(python -c "import yaml; print(*yaml.safe_load(open('runtime_deployment.yaml'))['profiles']['$PROFILE']['services'], sep='\n')")
           test "${#SERVICES[@]}" -gt 0 || { echo "::error::profile $PROFILE declares no services"; exit 1; }
           printf '%s\n' "${SERVICES[@]}" | grep -qx api || { echo "::error::profile $PROFILE declares no api service"; exit 1; }
+          # Deployment is only valid after the reviewed staging apply has
+          # opened an awake lease.  A deploy-role secret alone is not evidence
+          # that Terraform created the cluster; fail closed before any ECS
+          # mutation when the lease is absent or unreadable.
+          if [ "$TARGET_ENV" = staging ]; then
+            lease_json=$(aws ssm get-parameter --name /aether/staging/lifecycle/awake-until \
+              --query 'Parameter.Value' --output text 2> >(sed 's/[[:cntrl:]]//g' >&2)) || {
+              echo '::error::staging apply/wake evidence is unavailable: cannot read the awake lease; refusing ECS mutation'
+              exit 1
+            }
+            assert_lease() {
+              LEASE_VALUE="$1" python3 -c 'import json,os,sys; from datetime import datetime,timezone; raw=os.environ.get("LEASE_VALUE",""); doc=json.loads(raw); since=datetime.fromisoformat(doc["awake_since"].replace("Z","+00:00")); until=datetime.fromisoformat(doc["awake_until"].replace("Z","+00:00")); now=datetime.now(timezone.utc); max_hours=12 if isinstance(doc.get("extensions",0),int) and doc.get("extensions",0)>0 else 8; bad=(until<=now or since>now or until<=since or (until-since).total_seconds()>max_hours*3600 or (now-since).total_seconds()>40*3600 or not isinstance(doc.get("extensions",0),int) or doc.get("extensions",0)<0); sys.exit("::error::staging awake lease is invalid or outside TTL limits; refusing ECS mutation" if bad else 0)'
+            }
+            assert_lease "$lease_json"
+          fi
           # api first: the packaged migrations must land before any service
           # adopts the new image (expand-before-rollout).
           ORDERED=(api)
           for s in "${SERVICES[@]}"; do [ "$s" = api ] || ORDERED+=("$s"); done
-          aws ecs describe-clusters --clusters "$CLUSTER" --query 'failures' --output text | grep -q '^None$\|^$'
+          cluster_failures=$(aws ecs describe-clusters --clusters "$CLUSTER" \
+            --query 'failures' --output json 2> >(sed 's/[[:cntrl:]]//g' >&2)) || {
+            echo "::error::unable to inspect ECS cluster $CLUSTER; staging apply may not have completed"
+            exit 1
+          }
+          if [ "$(jq 'length' <<<"$cluster_failures")" -ne 0 ]; then
+            echo "::error::ECS cluster $CLUSTER is unavailable; refusing ECS mutation"
+            jq -c . <<<"$cluster_failures"
+            exit 1
+          fi
+          for role in "${SERVICES[@]}"; do
+            service="AETHER-${TARGET_ENV}-$([ "$role" = api ] && echo backend || echo "$role")"
+            service_check=$(aws ecs describe-services --cluster "$CLUSTER" --services "$service" \
+              --query 'failures' --output json 2> >(sed 's/[[:cntrl:]]//g' >&2)) || {
+              echo "::error::unable to inspect required ECS service $service; refusing ECS mutation"
+              exit 1
+            }
+            if [ "$(jq 'length' <<<"$service_check")" -ne 0 ]; then
+              echo "::error::required ECS service $service is unavailable; refusing ECS mutation"
+              jq -c . <<<"$service_check"
+              exit 1
+            fi
+          done
           for role in "${ORDERED[@]}"; do
             # Canonical service-key -> ECS service mapping: the api service is
             # served by the Terraform-provisioned "-backend" service; every
@@ -379,8 +464,18 @@ jobs:
               .containerDefinitions[0].image=$image |
               .containerDefinitions[0].environment=((.containerDefinitions[0].environment // []) | map(select(.name != "AETHER_ROLE"))) + [{name:"AETHER_ROLE",value:$role}] |
               del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' task.json > rendered.json
+            if [ "$TARGET_ENV" = staging ]; then
+              lease_json=$(aws ssm get-parameter --name /aether/staging/lifecycle/awake-until --query 'Parameter.Value' --output text)
+              assert_lease "$lease_json"
+            fi
             revision=$(aws ecs register-task-definition --cli-input-json file://rendered.json --query 'taskDefinition.taskDefinitionArn' --output text)
             if [ "$role" = api ]; then
+              # Re-read immediately before the first runtime mutation; a lease
+              # can expire while image/task-definition inspection is running.
+              if [ "$TARGET_ENV" = staging ]; then
+                lease_json=$(aws ssm get-parameter --name /aether/staging/lifecycle/awake-until --query 'Parameter.Value' --output text)
+                assert_lease "$lease_json"
+              fi
               # Apply the packaged migrations with the exact release image before
               # any service rollout. The migration archive digest is bound to this
               # image by the verified release manifest; /v1/ready re-verifies
@@ -395,6 +490,10 @@ jobs:
               migration_exit=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$migration_task" --query 'tasks[0].containers[0].exitCode' --output text)
               test "$migration_exit" = "0" || { echo "::error::packaged migration task failed (exit $migration_exit)"; exit 1; }
               printf 'migrations %s %s\n' "$migration_task" "$IMAGE" >> deployment-evidence.txt
+            fi
+            if [ "$TARGET_ENV" = staging ]; then
+              lease_json=$(aws ssm get-parameter --name /aether/staging/lifecycle/awake-until --query 'Parameter.Value' --output text)
+              assert_lease "$lease_json"
             fi
             aws ecs update-service --cluster "$CLUSTER" --service "$service" --task-definition "$revision" >/dev/null
             aws ecs wait services-stable --cluster "$CLUSTER" --services "$service"

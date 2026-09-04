@@ -5,129 +5,392 @@
     {
       "id": "canonical_version",
       "name": "pyproject.toml version",
-      "source_globs": ["pyproject.toml"],
-      "required_changed_globs": ["package.json", "packages/**/package.json", "frontend/**/package.json", "Data Ingestion Layer/**/package.json", "Data Lake Architecture/**/package.json", "docs/**/*.md", "packages/ios/**", "packages/android/**"],
-      "required_commands": ["python scripts/bump_version.py --check", "python scripts/validate_docs.py", "python scripts/validate_sdk_release_alignment.py"],
+      "source_globs": [
+        "pyproject.toml"
+      ],
+      "required_changed_globs": [
+        "package.json",
+        "packages/**/package.json",
+        "frontend/**/package.json",
+        "Data Ingestion Layer/**/package.json",
+        "Data Lake Architecture/**/package.json",
+        "docs/**/*.md",
+        "packages/ios/**",
+        "packages/android/**"
+      ],
+      "required_commands": [
+        "python scripts/bump_version.py --check",
+        "python scripts/validate_docs.py",
+        "python scripts/validate_sdk_release_alignment.py"
+      ],
       "remediation": "Run python scripts/bump_version.py <version>, then make repo-doctor-fix."
     },
     {
       "id": "backend_routes",
       "name": "backend route added/changed",
-      "source_globs": ["Backend Architecture/**/routes/**/*.py", "Backend Architecture/**/routers/**/*.py", "Backend Architecture/**/main.py", "Backend Architecture/**/api/**/*.py"],
-      "required_changed_globs": ["docs/_generated/**", "docs/REPO-INDEX.md", "docs/BACKEND-API.md", "docs/source-of-truth/**", "packages/shared/**", "frontend/shared/**", "frontend/kyber/**", "tests/**"],
-      "required_commands": ["python scripts/docs_extract/run_all.py", "python scripts/validate_contracts.py", "npm run typecheck", "python -m pytest tests/ -v --tb=short"],
+      "source_globs": [
+        "Backend Architecture/**/routes/**/*.py",
+        "Backend Architecture/**/routers/**/*.py",
+        "Backend Architecture/**/main.py",
+        "Backend Architecture/**/api/**/*.py"
+      ],
+      "required_changed_globs": [
+        "docs/_generated/**",
+        "docs/REPO-INDEX.md",
+        "docs/BACKEND-API.md",
+        "docs/source-of-truth/**",
+        "packages/shared/**",
+        "frontend/shared/**",
+        "frontend/kyber/**",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/docs_extract/run_all.py",
+        "python scripts/validate_contracts.py",
+        "npm run typecheck",
+        "python -m pytest tests/ -v --tb=short"
+      ],
       "remediation": "Regenerate docs, update API docs/contracts/client types, and add or update route tests."
     },
     {
       "id": "event_schema",
       "name": "event schema changed",
-      "source_globs": ["packages/shared/events.ts", "schemas/**", "contracts/**", "Backend Architecture/**/events/**/*.py"],
-      "required_changed_globs": ["docs/_generated/**", "docs/source-of-truth/**", "docs/SDK-API-CONTRACTS.md", "packages/shared/**", "packages/web/**", "packages/react-native/**", "tests/**"],
-      "required_commands": ["python scripts/validate_contracts.py", "python scripts/validate_sdk_release_alignment.py", "npm run typecheck"],
+      "source_globs": [
+        "packages/shared/events.ts",
+        "schemas/**",
+        "contracts/**",
+        "Backend Architecture/**/events/**/*.py"
+      ],
+      "required_changed_globs": [
+        "docs/_generated/**",
+        "docs/source-of-truth/**",
+        "docs/SDK-API-CONTRACTS.md",
+        "packages/shared/**",
+        "packages/web/**",
+        "packages/react-native/**",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/validate_contracts.py",
+        "python scripts/validate_sdk_release_alignment.py",
+        "npm run typecheck"
+      ],
       "remediation": "Update contract docs, SDK types, validation fixtures, generated docs, and tests."
     },
     {
       "id": "consent_tenant_auth",
       "name": "consent/tenant/auth behavior changed",
-      "source_globs": ["Backend Architecture/**/auth/**/*.py", "Backend Architecture/**/tenant/**/*.py", "Backend Architecture/**/consent/**/*.py", "packages/shared/consent.ts", "packages/web/src/consent/**", "tests/**/tenant*.py", "tests/**/auth*.py"],
-      "required_changed_globs": ["docs/source-of-truth/**", "docs/**/*CONSENT*.md", "docs/**/*AUTH*.md", "packages/shared/**", "packages/web/**", "tests/**"],
-      "required_commands": ["python scripts/validate_contracts.py", "python scripts/docs_drift.py --strict", "python -m pytest tests/ -v --tb=short"],
+      "source_globs": [
+        "Backend Architecture/**/auth/**/*.py",
+        "Backend Architecture/**/tenant/**/*.py",
+        "Backend Architecture/**/consent/**/*.py",
+        "packages/shared/consent.ts",
+        "packages/web/src/consent/**",
+        "tests/**/tenant*.py",
+        "tests/**/auth*.py"
+      ],
+      "required_changed_globs": [
+        "docs/source-of-truth/**",
+        "docs/**/*CONSENT*.md",
+        "docs/**/*AUTH*.md",
+        "packages/shared/**",
+        "packages/web/**",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/validate_contracts.py",
+        "python scripts/docs_drift.py --strict",
+        "python -m pytest tests/ -v --tb=short"
+      ],
       "remediation": "Update source-linked docs, contract validators, SDK consent surfaces, and behavior tests."
     },
     {
       "id": "sdk_public_api",
       "name": "SDK public method changed",
-      "source_globs": ["packages/web/src/index.ts", "packages/web/src/**/*.ts", "packages/react-native/src/index.tsx", "packages/react-native/src/**/*.ts", "packages/shared/index.ts", "packages/shared/*.ts", "!packages/**/*.test.ts", "!packages/**/*.spec.ts", "!packages/**/*.test.tsx", "!packages/**/*.spec.tsx"],
-      "required_changed_globs": ["packages/**/src/index.ts", "packages/**/src/index.tsx", "packages/**/package.json", "packages/**/dist/**/*.d.ts", "docs/SDK*.md", "docs/_generated/**", "tests/**", "scripts/validate_ts_public_exports.py"],
-      "required_commands": ["python scripts/validate_ts_public_exports.py", "python scripts/validate_sdk_release_alignment.py", "npm run typecheck", "npm run build", "npm test"],
+      "source_globs": [
+        "packages/web/src/index.ts",
+        "packages/web/src/**/*.ts",
+        "packages/react-native/src/index.tsx",
+        "packages/react-native/src/**/*.ts",
+        "packages/shared/index.ts",
+        "packages/shared/*.ts",
+        "!packages/**/*.test.ts",
+        "!packages/**/*.spec.ts",
+        "!packages/**/*.test.tsx",
+        "!packages/**/*.spec.tsx"
+      ],
+      "required_changed_globs": [
+        "packages/**/src/index.ts",
+        "packages/**/src/index.tsx",
+        "packages/**/package.json",
+        "packages/**/dist/**/*.d.ts",
+        "docs/SDK*.md",
+        "docs/_generated/**",
+        "tests/**",
+        "scripts/validate_ts_public_exports.py"
+      ],
+      "required_commands": [
+        "python scripts/validate_ts_public_exports.py",
+        "python scripts/validate_sdk_release_alignment.py",
+        "npm run typecheck",
+        "npm run build",
+        "npm test"
+      ],
       "remediation": "Export public types from package barrels, regenerate declarations, update SDK docs, and add package-root import tests."
     },
     {
       "id": "package_public_type",
       "name": "package public type changed",
-      "source_globs": ["packages/**/*.ts", "packages/**/*.tsx", "!packages/**/*.test.ts", "!packages/**/*.spec.ts", "!packages/**/*.test.tsx", "!packages/**/*.spec.tsx"],
-      "required_changed_globs": ["packages/**/src/index.ts", "packages/**/src/index.tsx", "packages/shared/index.ts", "packages/**/dist/**/*.d.ts", "tests/**"],
-      "required_commands": ["python scripts/validate_ts_public_exports.py", "npm run typecheck", "npm run build"],
+      "source_globs": [
+        "packages/**/*.ts",
+        "packages/**/*.tsx",
+        "!packages/**/*.test.ts",
+        "!packages/**/*.spec.ts",
+        "!packages/**/*.test.tsx",
+        "!packages/**/*.spec.tsx"
+      ],
+      "required_changed_globs": [
+        "packages/**/src/index.ts",
+        "packages/**/src/index.tsx",
+        "packages/shared/index.ts",
+        "packages/**/dist/**/*.d.ts",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/validate_ts_public_exports.py",
+        "npm run typecheck",
+        "npm run build"
+      ],
       "remediation": "Update barrel exports and declaration outputs with the source change."
     },
     {
       "id": "profile360",
       "name": "Profile 360 route/model changed",
-      "source_globs": ["**/*profile360*", "**/*Profile360*", "**/*profile-360*"],
-      "required_changed_globs": ["docs/**", "frontend/kyber/**", "packages/shared/**", "tests/**"],
-      "required_commands": ["python scripts/validate_contracts.py", "npm run typecheck", "python -m pytest tests/ -v --tb=short"],
+      "source_globs": [
+        "**/*profile360*",
+        "**/*Profile360*",
+        "**/*profile-360*"
+      ],
+      "required_changed_globs": [
+        "docs/**",
+        "frontend/kyber/**",
+        "packages/shared/**",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/validate_contracts.py",
+        "npm run typecheck",
+        "python -m pytest tests/ -v --tb=short"
+      ],
       "remediation": "Update Profile 360 docs, frontend types, tests, and Kyber-adjacent surfaces where applicable."
     },
     {
       "id": "kyber_operator",
       "name": "Kyber operator route/model changed",
-      "source_globs": ["frontend/kyber/**", "Backend Architecture/**/*operator*", "Backend Architecture/**/*kyber*"],
-      "required_changed_globs": ["docs/**", "frontend/kyber/**", "packages/shared/**", "tests/**", "Backend Architecture/**/tests/**"],
-      "required_commands": ["npm run typecheck", "npm run build", "python -m pytest tests/ -v --tb=short"],
+      "source_globs": [
+        "frontend/kyber/**",
+        "Backend Architecture/**/*operator*",
+        "Backend Architecture/**/*kyber*"
+      ],
+      "required_changed_globs": [
+        "docs/**",
+        "frontend/kyber/**",
+        "packages/shared/**",
+        "tests/**",
+        "Backend Architecture/**/tests/**"
+      ],
+      "required_commands": [
+        "npm run typecheck",
+        "npm run build",
+        "python -m pytest tests/ -v --tb=short"
+      ],
       "remediation": "Update Kyber operator docs, frontend types, and route/model tests."
     },
     {
       "id": "generated_docs_source",
       "name": "generated docs source changed",
-      "source_globs": ["scripts/docs_extract/**", "scripts/sync_docs.py", "scripts/validate_docs.py"],
-      "required_changed_globs": ["docs/_generated/**", "docs/REPO-INDEX.md", "docs/AUTOMATION.md", "tests/**"],
-      "required_commands": ["python scripts/docs_extract/run_all.py", "python scripts/sync_docs.py", "git diff --exit-code -- docs/_generated docs/REPO-INDEX.md docs/AUTOMATION.md"],
+      "source_globs": [
+        "scripts/docs_extract/**",
+        "scripts/sync_docs.py",
+        "scripts/validate_docs.py"
+      ],
+      "required_changed_globs": [
+        "docs/_generated/**",
+        "docs/REPO-INDEX.md",
+        "docs/AUTOMATION.md",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/docs_extract/run_all.py",
+        "python scripts/sync_docs.py",
+        "git diff --exit-code -- docs/_generated docs/REPO-INDEX.md docs/AUTOMATION.md"
+      ],
       "remediation": "Regenerate and commit docs/_generated plus sync-managed docs, and add/update generator tests."
     },
     {
       "id": "source_linked_docs",
       "name": "docs source-linked content changed",
-      "source_globs": ["docs/**/*.md", "!docs/_generated/**", "!docs/REPO-INDEX.md", "!docs/AUTOMATION.md"],
-      "required_changed_globs": ["docs/**/*.md"],
-      "required_commands": ["python scripts/validate_frontmatter.py", "python scripts/docs_drift.py --strict"],
+      "source_globs": [
+        "docs/**/*.md",
+        "!docs/_generated/**",
+        "!docs/REPO-INDEX.md",
+        "!docs/AUTOMATION.md"
+      ],
+      "required_changed_globs": [
+        "docs/**/*.md"
+      ],
+      "required_commands": [
+        "python scripts/validate_frontmatter.py",
+        "python scripts/docs_drift.py --strict"
+      ],
       "remediation": "Validate frontmatter and stamp source-linked docs only after review."
     },
     {
       "id": "jobs_platform",
       "name": "durable jobs platform changed",
-      "source_globs": ["Backend Architecture/**/services/jobs/**", "Backend Architecture/**/jobs_repo.py"],
-      "required_changed_globs": ["docs/source-of-truth/JOBS_PLATFORM.md", "docs/_generated/**", "docs/REPO-INDEX.md", "tests/**"],
-      "required_commands": ["python scripts/docs_extract/run_all.py", "python scripts/docs_drift.py --strict", "python -m pytest tests/ -v --tb=short"],
-      "remediation": "Review/restamp JOBS_PLATFORM.md (source-linked) and jobs-platform tests, then regenerate docs. Do not move agent-runtime execution onto this platform — the boundary is deliberate."
+      "source_globs": [
+        "Backend Architecture/**/services/jobs/**",
+        "Backend Architecture/**/jobs_repo.py"
+      ],
+      "required_changed_globs": [
+        "docs/source-of-truth/JOBS_PLATFORM.md",
+        "docs/_generated/**",
+        "docs/REPO-INDEX.md",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/docs_extract/run_all.py",
+        "python scripts/docs_drift.py --strict",
+        "python -m pytest tests/ -v --tb=short"
+      ],
+      "remediation": "Review/restamp JOBS_PLATFORM.md (source-linked) and jobs-platform tests, then regenerate docs. Do not move agent-runtime execution onto this platform \u2014 the boundary is deliberate."
     },
     {
       "id": "import_engine",
       "name": "tenant import engine changed",
-      "source_globs": ["Backend Architecture/**/services/imports/**", "Backend Architecture/**/imports_repo.py", "Backend Architecture/**/import_files.py", "Backend Architecture/**/import_projector.py"],
-      "required_changed_globs": ["packages/shared/imports.ts", "docs/runbooks/IMPORT_FAILURES.md", "docs/_generated/**", "tests/**"],
-      "required_commands": ["python scripts/validate_contracts.py", "python scripts/docs_drift.py --strict", "python -m pytest tests/ -v --tb=short"],
-      "remediation": "Keep the imports contract twin (packages/shared/imports.ts ↔ services/imports/contracts.py) in sync, review the IMPORT_FAILURES runbook, and update import tests; regenerate docs."
+      "source_globs": [
+        "Backend Architecture/**/services/imports/**",
+        "Backend Architecture/**/imports_repo.py",
+        "Backend Architecture/**/import_files.py",
+        "Backend Architecture/**/import_projector.py"
+      ],
+      "required_changed_globs": [
+        "packages/shared/imports.ts",
+        "docs/runbooks/IMPORT_FAILURES.md",
+        "docs/_generated/**",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/validate_contracts.py",
+        "python scripts/docs_drift.py --strict",
+        "python -m pytest tests/ -v --tb=short"
+      ],
+      "remediation": "Keep the imports contract twin (packages/shared/imports.ts \u2194 services/imports/contracts.py) in sync, review the IMPORT_FAILURES runbook, and update import tests; regenerate docs."
     },
     {
       "id": "measurement_integrity",
       "name": "measurement integrity plane changed",
-      "source_globs": ["Backend Architecture/**/shared/measurement/**", "Backend Architecture/**/measurement_results_repo.py"],
-      "required_changed_globs": ["packages/shared/contracts/metric-registry.json", "packages/shared/measurement-contract.ts", "docs/_generated/metric-registry-table.md", "docs/runbooks/MEASUREMENT_RESTATEMENT.md", "tests/**"],
-      "required_commands": ["python scripts/generate_contracts.py --check", "python scripts/docs_drift.py --strict", "python -m pytest tests/ -v --tb=short"],
+      "source_globs": [
+        "Backend Architecture/**/shared/measurement/**",
+        "Backend Architecture/**/measurement_results_repo.py"
+      ],
+      "required_changed_globs": [
+        "packages/shared/contracts/metric-registry.json",
+        "packages/shared/measurement-contract.ts",
+        "docs/_generated/metric-registry-table.md",
+        "docs/runbooks/MEASUREMENT_RESTATEMENT.md",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/generate_contracts.py --check",
+        "python scripts/docs_drift.py --strict",
+        "python -m pytest tests/ -v --tb=short"
+      ],
       "remediation": "Regenerate the metric registry contract (make generate-contracts) so the TS/Py/doc mirrors match, review MEASUREMENT_RESTATEMENT, and update measurement tests."
     },
     {
       "id": "workflow_check_command",
       "name": "workflow/check command changed",
-      "source_globs": [".github/workflows/**", "Makefile", "scripts/repo_doctor.py", "scripts/validate_consistency_ownership.py", "scripts/validate_ts_public_exports.py", "scripts/validate_frontend_data_truth.py"],
-      "required_changed_globs": ["Makefile", ".github/workflows/**", "docs/AUTOMATION.md", "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md", "tests/**"],
-      "required_commands": ["make docs-check", "make repo-doctor", "make ci-check", "python scripts/validate_frontend_data_truth.py", "python -m pytest tests/unit/test_repo_doctor_cli.py tests/unit/test_validate_frontend_data_truth.py -q"],
+      "source_globs": [
+        ".github/workflows/**",
+        "Makefile",
+        "scripts/repo_doctor.py",
+        "scripts/validate_consistency_ownership.py",
+        "scripts/validate_ts_public_exports.py",
+        "scripts/validate_frontend_data_truth.py"
+      ],
+      "required_changed_globs": [
+        "Makefile",
+        ".github/workflows/**",
+        "docs/AUTOMATION.md",
+        "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",
+        "tests/**"
+      ],
+      "required_commands": [
+        "make docs-check",
+        "make repo-doctor",
+        "make ci-check",
+        "python scripts/validate_frontend_data_truth.py",
+        "python -m pytest tests/unit/test_repo_doctor_cli.py tests/unit/test_validate_frontend_data_truth.py -q"
+      ],
       "remediation": "Keep Makefile, workflows, docs, repo_doctor, and parser tests synchronized."
     },
     {
       "id": "deployment_profiles",
       "name": "deployment profile / Terraform topology changed",
-      "source_globs": ["AWS Deployment/aether-aws/terraform/**", "config/deployment_profiles.yaml", "config/runtime_deployment.yaml", "config/terraform_resource_contracts.yaml", "config/aws_price_book.yaml"],
-      "required_changed_globs": ["AWS Deployment/aether-aws/terraform/tests/**", "tests/fixtures/terraform_plans/**", "tests/unit/test_terraform_plan_policy.py", "tests/unit/test_terraform_resource_contracts.py", "tests/unit/test_cost_model.py", "tests/unit/test_runtime_topology.py", "tests/unit/test_runtime_execution_groups.py", "scripts/release/check_terraform_plan_policy.py", "scripts/release/check_cost_model.py", "scripts/release/check_delivery_topology.py", "docs/DEPLOYMENT-PROFILES.md", "docs/AWS-LEAN-PRODUCTION.md", "docs/COST-OPTIMIZATION.md"],
-      "required_commands": ["make test-terraform-profiles", "make validate-terraform-profile-policy", "make validate-cost-model", "make validate-delivery-topology", "make test-runtime-topology"],
-      "remediation": "A profile change is a plan-shape change. Re-run the provider-mocked plan tests for all four profiles, re-check the plan against config/terraform_resource_contracts.yaml and the numeric budget in config/aws_price_book.yaml, re-validate the delivery/role topology, and update the profile docs. Regenerate any stale plan fixture under tests/fixtures/terraform_plans/ rather than relaxing an assertion."
+      "source_globs": [
+        "AWS Deployment/aether-aws/terraform/**",
+        "!AWS Deployment/aether-aws/terraform/environments/**",
+        "!AWS Deployment/aether-aws/terraform/bootstrap/**",
+        "!AWS Deployment/aether-aws/terraform/**/*.md",
+        "config/deployment_profiles.yaml",
+        "config/runtime_deployment.yaml",
+        "config/terraform_resource_contracts.yaml",
+        "config/aws_price_book.yaml"
+      ],
+      "required_changed_globs": [
+        "config/aws_price_book.yaml",
+        "AWS Deployment/aether-aws/terraform/tests/**",
+        "tests/fixtures/terraform_plans/**",
+        "tests/unit/test_terraform_plan_policy.py",
+        "tests/unit/test_terraform_resource_contracts.py",
+        "tests/unit/test_cost_model.py",
+        "tests/unit/test_runtime_topology.py",
+        "tests/unit/test_runtime_execution_groups.py",
+        "scripts/release/check_terraform_plan_policy.py",
+        "scripts/release/check_cost_model.py",
+        "scripts/release/check_delivery_topology.py",
+        "docs/DEPLOYMENT-PROFILES.md",
+        "docs/AWS-LEAN-PRODUCTION.md",
+        "docs/COST-OPTIMIZATION.md",
+        "docs/AWS-DEPLOYMENT.md"
+      ],
+      "required_commands": [
+        "make test-terraform-profiles",
+        "make validate-terraform-profile-policy",
+        "make validate-cost-model",
+        "make validate-delivery-topology",
+        "make test-runtime-topology"
+      ],
+      "remediation": "A profile or price-book change must pass the cost-model gate. For plan-shape changes, re-run the provider-mocked plan tests for all four profiles, re-check the plan against config/terraform_resource_contracts.yaml and the numeric budget in config/aws_price_book.yaml, re-validate the delivery/role topology, and update the profile docs. A price-book-only classification is self-owned by config/aws_price_book.yaml and must retain explicit entries plus cost-model test coverage. Regenerate any stale plan fixture under tests/fixtures/terraform_plans/ rather than relaxing an assertion."
     },
     {
       "id": "computation_substrate",
       "name": "computation substrate changed",
-      "source_globs": ["Backend Architecture/**/shared/computation/**", "Backend Architecture/**/services/computation/**"],
-      "required_changed_globs": ["config/computation_inventory.yaml", "docs/source-of-truth/COMPUTATION_SUBSTRATE.md", "Backend Architecture/**/tests/computation/**", "tests/**"],
-      "required_commands": ["python scripts/validate_computation_substrate.py", "python scripts/generate_computation_registry.py"],
+      "source_globs": [
+        "Backend Architecture/**/shared/computation/**",
+        "Backend Architecture/**/services/computation/**"
+      ],
+      "required_changed_globs": [
+        "config/computation_inventory.yaml",
+        "docs/source-of-truth/COMPUTATION_SUBSTRATE.md",
+        "Backend Architecture/**/tests/computation/**",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/validate_computation_substrate.py",
+        "python scripts/generate_computation_registry.py"
+      ],
       "remediation": "Regenerate the registry twin (python scripts/generate_computation_registry.py), keep config/computation_inventory.yaml in sync, review docs/source-of-truth/COMPUTATION_SUBSTRATE.md, and update tests under Backend Architecture/aether-backend/tests/computation."
     },
     {

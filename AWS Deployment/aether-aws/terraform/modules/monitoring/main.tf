@@ -157,8 +157,11 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
   ok_actions        = [aws_sns_topic.alerts.arn]
 
   metric_query {
-    id          = "error_rate"
-    expression  = "100 * errors / MAX([errors, 1])"
+    id = "error_rate"
+    # CloudWatch metric math MAX() accepts scalar operands, not a mixed
+    # time-series/scalar array. Use IF to avoid a divide-by-zero result while
+    # retaining a real percentage when ALB request data exists.
+    expression  = "IF(requests > 0, 100 * errors / requests, 0)"
     label       = "5xx Error Rate (%)"
     return_data = true
   }
@@ -167,6 +170,19 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
     id = "errors"
     metric {
       metric_name = "HTTPCode_ELB_5XX_Count"
+      namespace   = "AWS/ApplicationELB"
+      period      = 60
+      stat        = "Sum"
+      dimensions = {
+        LoadBalancer = var.alb_arn_suffix
+      }
+    }
+  }
+
+  metric_query {
+    id = "requests"
+    metric {
+      metric_name = "RequestCount"
       namespace   = "AWS/ApplicationELB"
       period      = 60
       stat        = "Sum"
@@ -188,7 +204,10 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
 # --------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "aurora_max_acu" {
-  count               = var.aurora_cluster_id == "" ? 0 : 1
+  # Resource-derived outputs are unknown while Terraform is importing an
+  # unrelated address, so they must never determine resource cardinality.
+  # The root chooses this static profile input whenever it provisions Aurora.
+  count               = var.enable_aurora_observability ? 1 : 0
   alarm_name          = "${var.project}-${var.environment}-aurora-max-acu"
   comparison_operator = "GreaterThanOrEqualToThreshold"
   evaluation_periods  = 2 # 2 × 5-min periods = 10 min sustained
@@ -248,7 +267,9 @@ resource "aws_cloudwatch_metric_alarm" "ml_drift" {
 # --------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "dynamodb_cache_throttled" {
-  count               = var.dynamodb_cache_table_name == "" ? 0 : 1
+  # Imports must remain graph-resolvable before this module's DynamoDB table
+  # output is known. The root supplies this static profile decision.
+  count               = var.enable_dynamodb_cache_observability ? 1 : 0
   alarm_name          = "${var.project}-${var.environment}-dynamodb-cache-throttled"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
@@ -520,7 +541,7 @@ locals {
           { stat = spec.stat }
         ]]
       }
-    } if var.aurora_cluster_id != ""
+    } if var.enable_aurora_observability
   ]
 
   # The dedicated aether-ml ECS service only exists when the profile enables
@@ -797,14 +818,14 @@ resource "aws_cloudwatch_log_metric_filter" "runtime_role_unhealthy" {
   pattern = "\"[run_role]\" \"UNHEALTHY (restarts exhausted)\""
 
   metric_transformation {
-    name          = "RuntimeRoleUnhealthy"
-    namespace     = "Aether/Runtime"
-    value         = "1"
-    default_value = "0"
-    unit          = "Count"
-    dimensions = {
-      Service = "$.service"
-    }
+    name      = "RuntimeRoleUnhealthy"
+    namespace = "Aether/Runtime"
+    value     = "1"
+    unit      = "Count"
+    # The supervisor marker is an unstructured text line, not a JSON log
+    # event. CloudWatch rejects dimensions on filters whose pattern cannot
+    # extract JSON fields, so keep this metric aggregate and let the log-group
+    # name identify the affected runtime service.
   }
 }
 

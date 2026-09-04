@@ -287,6 +287,34 @@ async def review_queue(request: Request, queue_type: str | None = Query(None)):
     return APIResponse(data=data).to_dict()
 
 
+class ReviewResolveRequest(BaseModel):
+    disposition: str = Field(description="approve | reject")
+
+
+@kyber_router.post("/review-queue/{item_id}/resolve")
+async def resolve_review_item(item_id: str, body: ReviewResolveRequest, request: Request):
+    """Operator disposition for a ``graph_promotion_candidate`` review item.
+
+    ``approve`` promotes the deferred pair's canonical edge into the graph
+    (through the governed projector seam) and marks the item approved;
+    ``reject`` marks it rejected without projecting. Consent is re-checked
+    fail-closed on approval. Same Kyber operator authz as the other kyber
+    semantic routes.
+    """
+    require_operator(request)
+    disposition = (body.disposition or "").strip().lower()
+    normalized = {"approve": "approve", "approved": "approve", "reject": "reject", "rejected": "reject"}
+    action = normalized.get(disposition)
+    if action is None:
+        raise HTTPException(status_code=400, detail="disposition must be approve or reject")
+    result = await get_semantic_service().resolve_promotion_candidate(
+        tenant_id(request), item_id, action
+    )
+    if result is None:
+        raise NotFoundError("SemanticReviewItem")
+    return APIResponse(data=result).to_dict()
+
+
 @campaign_router.get("/{campaign_id}/semantic-impact")
 async def campaign_semantic_impact(campaign_id: str, request: Request):
     require_read_access(request)

@@ -37,3 +37,9 @@ variable "enable_dedicated_ml" {
   description = "Create the aether-ml-serving target group and the /v1/ml/* listener rule"
   default     = false
 }
+
+variable "staging_listener_target_group_arn" {
+  type        = string
+  description = "Maintenance target group ARN during a reviewed staging backend replacement transition"
+  default     = ""
+}

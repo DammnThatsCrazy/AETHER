@@ -1,0 +1,28 @@
+version: 1
+required_assertion_classes: [data_correctness, tenant_isolation, permissions, observability, evidence, readiness]
+journeys:
+  tenant_activation:
+    owner: shiki
+    implementation_status: BLOCKED
+    blocker: clean-baseline executable journey has not been implemented
+    assertions: [data_correctness, tenant_isolation, permissions, observability, evidence, readiness, profile_assigned, credentials_validated, manifest_compiled]
+  first_graph:
+    owner: graph
+    implementation_status: BLOCKED
+    blocker: clean-baseline executable journey has not been implemented
+    assertions: [data_correctness, tenant_isolation, permissions, observability, evidence, readiness, batch_validated, idempotent, persisted, identity_resolved]
+  first_insight:
+    owner: intelligence
+    implementation_status: BLOCKED
+    blocker: clean-baseline executable journey has not been implemented
+    assertions: [data_correctness, tenant_isolation, permissions, observability, evidence, readiness, finding_created, confidence_recorded, tenant_visible]
+  investigation:
+    owner: investigations
+    implementation_status: BLOCKED
+    blocker: clean-baseline executable journey has not been implemented
+    assertions: [data_correctness, tenant_isolation, permissions, observability, evidence, readiness, snapshot_created, evidence_chain_complete, decision_audited, export_authorized]
+  recovery:
+    owner: platform
+    implementation_status: BLOCKED
+    blocker: clean-baseline executable journey has not been implemented
+    assertions: [data_correctness, tenant_isolation, permissions, observability, evidence, readiness, degradation_typed, blocker_visible, retry_or_replay_recorded, readiness_restored]

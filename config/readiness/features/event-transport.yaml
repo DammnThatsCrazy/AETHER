@@ -1,0 +1,159 @@
+# Feature readiness record — see config/readiness/schema.json.
+feature_id: event-transport
+title: Event Transport (Outbox + SNS/SQS)
+owning_system: aether
+summary: >-
+  Durable outbox relay and canonical event bus (SNS/SQS in cloud profiles,
+  in-memory locally). Runtime-integrated and verified. Production/scale evidence
+  requires the cloud event backend to be provisioned (infrastructure activation).
+
+scope:
+  id: event-transport-v1
+  version: 1
+  title: V1 Canonical Event Transport
+  target: founding-tenant-production
+  included:
+    - durable outbox relay
+    - canonical event bus publish/consume
+    - retry + idempotent delivery
+  excluded:
+    - cross-region replication
+  deferred: []
+  release_profile_applicability: [local, staging, production-lean]
+
+repository_ceiling:
+  type: INFRASTRUCTURE_TURNKEY
+  achieved: true
+  remaining_after_ceiling:
+    - Provision the cloud SNS/SQS backend
+  remaining_is_repository_controlled: false
+  evidence:
+    - config/deployment_profiles.yaml
+    - config/capability_matrix.yaml
+
+implementation:
+  state: TURNKEY
+  denominator: in-scope repository controls for event transport
+  controls:
+    - id: outbox-relay
+      description: Durable outbox relay worker
+      weight: 34
+      satisfied: true
+    - id: bus-publish
+      description: Canonical event publish with retry
+      weight: 33
+      satisfied: true
+    - id: idempotent-consume
+      description: Idempotent consumer delivery
+      weight: 33
+      satisfied: true
+  remaining_work: []
+
+productionization:
+  denominator: in-scope productionization controls
+  controls:
+    - id: retry-replay
+      description: Retry + replay behavior with dead-letter handling
+      weight: 34
+      satisfied: true
+    - id: observability
+      description: Delivery metrics + lag dashboards
+      weight: 33
+      satisfied: true
+    - id: backpressure
+      description: Backpressure + capacity limits
+      weight: 33
+      satisfied: true
+  remaining_work: []
+
+activation:
+  state: INFRASTRUCTURE_WAITING
+  blockers:
+    - type: INFRASTRUCTURE_WAITING
+      description: Cloud SNS/SQS backend must be provisioned for cloud profiles.
+      owner: platform-ops
+      required_action: Apply the event-backend Terraform for the target profile.
+      source_code_change_expected: false
+      affected_environments: [staging, production, scale]
+      affected_release_profiles: [staging, pilot, production-lean, production-scale]
+      evidence_required: applied topic/queue ARNs + a credentialed publish/consume run
+
+dependencies:
+  hard: []
+  soft: []
+
+environment_evidence:
+  local:
+    state: VERIFIED
+    credentialed: false
+  ci:
+    state: VERIFIED
+    credentialed: false
+  staging:
+    state: BLOCKED_EXTERNAL
+    credentialed: true
+  production:
+    state: NOT_ATTEMPTED
+    credentialed: true
+  scale:
+    state: NOT_ATTEMPTED
+    credentialed: true
+
+operational_ownership:
+  team: platform
+  technical_owner: platform-eventing
+  operational_owner: platform-ops
+  escalation: pagerduty:platform
+  runbook: docs/runbooks/event-transport.md
+  dashboards: [grafana:eventing]
+  alerts: [pagerduty:eventing]
+  service_level_target: 99.9% delivery
+  recovery_objective: RTO 15m / RPO 1m
+
+business_readiness:
+  applicable: false
+  controls: []
+
+confidence:
+  level: MODERATE
+  reasons:
+    - offline + replay tests pass
+  evidence_gaps:
+    - cloud event backend not yet provisioned; no credentialed run
+
+release_profiles:
+  local:
+    participation: required
+    implementation_floor: VERIFIED
+    productionization_required: false
+    environment_gate: local
+    business_gate: false
+  staging:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: staging
+    business_gate: false
+  pilot:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: pilot
+    business_gate: false
+  production-lean:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: production
+    business_gate: false
+  production-scale:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: scale
+    business_gate: false
+
+historical:
+  historical_maturity_index: 4
+  historical_maturity_index_scale: "0-5"
+  historical_maturity_index_authoritative: false

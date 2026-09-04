@@ -170,9 +170,9 @@ resource "aws_iam_role" "replication" {
 }
 
 resource "aws_iam_role_policy" "replication" {
-  count  = var.enable_replication ? 1 : 0
-  name   = "ml-artifacts-replication"
-  role   = aws_iam_role.replication[0].id
+  count = var.enable_replication ? 1 : 0
+  name  = "ml-artifacts-replication"
+  role  = aws_iam_role.replication[0].id
 
   policy = jsonencode({
     Version = "2012-10-17"

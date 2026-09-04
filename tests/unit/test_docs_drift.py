@@ -146,6 +146,41 @@ def test_check_doc_stale_when_commits_after_sync(dd, tmp_path, monkeypatch):
     assert "abc1234" in r["stale_detail"]
 
 
+def test_check_doc_accepts_explicit_review_receipts(dd, tmp_path, monkeypatch):
+    """A reviewed but intentionally unchanged page may record its receipt."""
+    monkeypatch.setattr(dd, "commits_touching_after", lambda declared, paths: ["source123"])
+    monkeypatch.setattr(dd, "doc_reviewed_after_sources", lambda *args: False)
+    monkeypatch.setattr(dd, "reviewed_source_commits_cover", lambda *args: True)
+    p = tmp_path / "doc.md"
+    p.write_text(
+        "---\n"
+        "title: T\n"
+        "source_files:\n"
+        "  - README.md\n"
+        "last_synced_commit: abc1234\n"
+        "reviewed_source_commits:\n"
+        "  - commit: source123\n"
+        "    reason: source change is orthogonal\n"
+        "---\n"
+        "body\n"
+    )
+    r = dd.check_doc(p)
+    assert r["stale"] is False
+
+
+def test_reviewed_source_receipts_require_resolved_source_commit(dd, monkeypatch):
+    """Receipt validation is fail-closed when a marker cannot be resolved."""
+    monkeypatch.setattr(dd, "resolve_commit", lambda sha: None if sha == "missing1" else "a" * 40)
+    monkeypatch.setattr(dd, "is_ancestor", lambda *args: True)
+    monkeypatch.setattr(dd, "commit_touches_paths", lambda *args: True)
+    assert dd.reviewed_source_commits_cover(
+        "b" * 7,
+        [{"commit": "missing1", "reason": "reviewed"}],
+        ["README.md"],
+        ["source123"],
+    ) is False
+
+
 def test_commits_touching_after_returns_none_for_unknown_sha(dd):
     """An unresolvable declared SHA must be distinguishable from "no drift".
 
@@ -157,6 +192,62 @@ def test_commits_touching_after_returns_none_for_unknown_sha(dd):
     """
     result = dd.commits_touching_after("zzzzzzz", ["README.md"])
     assert result is None
+
+
+def test_check_doc_accepts_unresolvable_stamp_when_squash_tip_reviews_source_and_doc(
+    dd, tmp_path, monkeypatch
+):
+    """A squash merge may erase the stamped branch SHA, but the final tip can
+    still contain the source change and the reviewed doc change together."""
+    monkeypatch.setattr(dd, "commits_touching_after", lambda declared, paths: None)
+    monkeypatch.setattr(dd, "squash_merge_reviewed_at_tip", lambda doc, sources: True)
+    p = tmp_path / "doc.md"
+    p.write_text(
+        "---\n"
+        "title: T\n"
+        "source_files:\n"
+        "  - README.md\n"
+        "last_synced_commit: vanished123\n"
+        "---\n"
+        "body\n"
+    )
+    r = dd.check_doc(p)
+    assert r["stale"] is False
+
+
+def test_commit_touches_paths_supports_merge_commit_boundaries(dd, tmp_path, monkeypatch):
+    """The final PR merge commit must be inspectable as a review boundary."""
+    calls = []
+
+    class Result:
+        returncode = 0
+        stdout = "docs/CICD.md\n.github/workflows/repo-health.yml\n"
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        return Result()
+
+    monkeypatch.setattr(dd.subprocess, "run", fake_run)
+    assert dd.commit_touches_paths("merge-sha", [".github/workflows/repo-health.yml"])
+    assert "-m" in calls[0]
+
+
+def test_unresolvable_stamp_uses_latest_first_parent_source_boundary(dd, monkeypatch):
+    """A synthetic PR merge can point back to its squash merge ancestor."""
+    calls = []
+
+    class Result:
+        returncode = 0
+        stdout = "squash-boundary\n"
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        return Result()
+
+    monkeypatch.setattr(dd.subprocess, "run", fake_run)
+    monkeypatch.setattr(dd, "commit_touches_paths", lambda sha, paths: True)
+    assert dd.squash_merge_reviewed_at_tip("docs/CICD.md", [".github/workflows/"])
+    assert calls[0][:5] == ["git", "log", "--first-parent", "-1", "--format=%H"]
 
 
 def test_commits_touching_after_returns_empty_for_no_paths(dd):
@@ -304,6 +395,68 @@ def test_restamp_only_commit_is_not_review(dd, tmp_path, monkeypatch):
     monkeypatch.setattr(dd, "ROOT", repo)
     assert dd._commit_is_restamp_only(restamp_sha, "doc.md") is True
     assert dd._commit_is_restamp_only(content_sha, "doc.md") is False
+
+
+def test_doc_content_mentioning_stamp_field_is_not_restamp_only(dd, tmp_path, monkeypatch):
+    """A prose/table edit mentioning the stamp field is still a review."""
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    env = {
+        "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+        "PATH": os.environ["PATH"],
+    }
+    def git(*args):
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, env=env)
+    git("init", "-q")
+    doc = repo / "doc.md"
+    doc.write_text("---\nlast_synced_commit: \"aaa\"\n---\nold\n")
+    git("add", "doc.md")
+    git("commit", "-qm", "initial")
+    doc.write_text("---\nlast_synced_commit: \"aaa\"\n---\nTable mentions last_synced_commit: as metadata.\n")
+    git("commit", "-aqm", "document stamp behavior")
+    monkeypatch.setattr(dd, "ROOT", repo)
+    sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True,
+        capture_output=True, text=True, env=env,
+    ).stdout.strip()
+    assert dd._commit_is_restamp_only(sha, "doc.md") is False
+
+
+def test_receipt_only_commit_is_not_treated_as_content_review(dd, tmp_path, monkeypatch):
+    """A metadata-only review receipt must go through receipt validation."""
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    env = {
+        "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+        "PATH": os.environ["PATH"],
+    }
+    def git(*args):
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, env=env)
+    git("init", "-q")
+    doc = repo / "doc.md"
+    doc.write_text(
+        "---\ntitle: T\nreviewed_source_commits:\n  - commit: abc1234\n    reason: old\n---\nbody\n",
+        encoding="utf-8",
+    )
+    git("add", "doc.md")
+    git("commit", "-qm", "initial")
+    doc.write_text(
+        "---\ntitle: T\nreviewed_source_commits:\n  - commit: def5678\n    reason: new\n---\nbody\n",
+        encoding="utf-8",
+    )
+    git("commit", "-aqm", "receipt only")
+    monkeypatch.setattr(dd, "ROOT", repo)
+    sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True,
+        capture_output=True, text=True, env=env,
+    ).stdout.strip()
+    assert dd._commit_is_receipt_only(sha, "doc.md") is True
 
 
 def test_backlog_loader_rejects_anonymous_entries(dd, tmp_path):

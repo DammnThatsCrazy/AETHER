@@ -1,0 +1,159 @@
+# Feature readiness record — see config/readiness/schema.json.
+# Migration-derived from scripts/production_status.py (legacy area: 'measurement integrity plane'). The 0-5 maturity score is decomposed across the model's
+# independent dimensions; an external blocker never reduces implementation.
+feature_id: measurement-integrity
+title: Measurement Integrity Plane
+owning_system: aether
+summary: 'Immutable measurement-results store: every result carries a value_state (observed/estimated/insufficient_data/not_applicable/missing_inputs/degraded)
+  so a metric is never a bare 0 on.'
+scope:
+  id: measurement-integrity-v1
+  version: 1
+  title: Measurement Integrity Plane V1
+  target: founding-tenant-production
+  included:
+  - contracts-and-schemas
+  - core-behavior
+  - runtime-wiring
+  - persistence-and-migrations
+  - authorization-and-tenant-isolation
+  excluded: []
+  deferred: []
+repository_ceiling:
+  type: VERIFIED
+  achieved: true
+  remaining_after_ceiling:
+  - None — repository-controlled work complete
+  remaining_is_repository_controlled: false
+  evidence:
+  - Backend Architecture/aether-backend/shared/measurement/
+  - Backend Architecture/aether-backend/shared/measurement/value_states.py
+  - Backend Architecture/aether-backend/shared/measurement/registry.py
+implementation:
+  state: VERIFIED
+  denominator: in-scope repository controls (migration-derived)
+  controls:
+  - id: contracts-and-schemas
+    description: contracts and schemas
+    weight: 20
+    satisfied: true
+  - id: core-behavior
+    description: core behavior
+    weight: 20
+    satisfied: true
+  - id: runtime-wiring
+    description: runtime wiring
+    weight: 20
+    satisfied: true
+  - id: persistence-and-migrations
+    description: persistence and migrations
+    weight: 20
+    satisfied: true
+  - id: authorization-and-tenant-isolation
+    description: authorization and tenant isolation
+    weight: 20
+    satisfied: true
+  remaining_work: []
+productionization:
+  denominator: in-scope productionization controls (migration-derived)
+  controls:
+  - id: security-controls
+    description: security controls
+    weight: 25
+    satisfied: true
+  - id: observability-metrics-logs
+    description: observability metrics logs
+    weight: 25
+    satisfied: true
+  - id: reliability-idempotency-retry
+    description: reliability idempotency retry
+    weight: 25
+    satisfied: true
+  - id: ci-and-release-gates
+    description: ci and release gates
+    weight: 25
+    satisfied: true
+  remaining_work: []
+activation:
+  state: NO_EXTERNAL_BLOCKER
+  blockers: []
+dependencies:
+  hard:
+  - feature_id: measurement-attribution
+    state: SATISFIED
+    prevents:
+    - release
+  soft: []
+environment_evidence:
+  local:
+    state: VERIFIED
+    credentialed: false
+  ci:
+    state: VERIFIED
+    credentialed: false
+  staging:
+    state: NOT_ATTEMPTED
+    credentialed: true
+  production:
+    state: NOT_ATTEMPTED
+    credentialed: true
+operational_ownership:
+  team: measurement
+  technical_owner: measurement
+  operational_owner: platform-ops
+  escalation: pagerduty:measurement
+  runbook: docs/runbooks/MEASUREMENT_RESTATEMENT.md
+  dashboards:
+  - grafana:measurement
+  alerts:
+  - pagerduty:measurement
+  service_level_target: per founding-tenant SLO
+  recovery_objective: RTO 30m / RPO 5m
+business_readiness:
+  applicable: false
+  controls: []
+confidence:
+  level: MODERATE
+  reasons:
+  - 'repository evidence: Backend Architecture/aether-backend/shared/measurement/'
+  evidence_gaps:
+  - not yet exercised in credentialed staging/production
+release_profiles:
+  local:
+    participation: required
+    implementation_floor: VERIFIED
+    productionization_required: false
+    environment_gate: local
+    business_gate: false
+  staging:
+    participation: required
+    implementation_floor: VERIFIED
+    productionization_required: true
+    environment_gate: staging
+    business_gate: false
+  pilot:
+    participation: experimental
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: pilot
+    business_gate: false
+  production-lean:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: production
+    business_gate: false
+  production-scale:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: scale
+    business_gate: false
+historical:
+  historical_maturity_index: 4
+  historical_maturity_index_scale: 0-5
+  historical_maturity_index_authoritative: false
+  migration_derived: true
+  legacy_area: measurement integrity plane
+  note: Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is
+    a proxy pending per-capability SME review.

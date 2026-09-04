@@ -1,0 +1,255 @@
+# Reviewed contract for the staging Terraform plan role.
+#
+# The plan role is strictly read-only: it must never create, modify, or
+# delete AWS resources.  These actions are the minimum set Terraform
+# requires to refresh state and produce a plan for the staging profile.
+#
+# The bootstrap/console attachment must resolve the account-specific
+# ARNs and preserve these scopes. Unknown actions fail validation rather
+# than being silently added to the role.
+version: 1
+profile: staging
+role: AetherStagingPlan
+region: us-east-1
+statements:
+  # ----- ECR (module.ecr) -----
+  - sid: ReadStagingRepositories
+    actions:
+      - ecr:DescribeRepositories
+      - ecr:ListTagsForResource
+    resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
+    scope: staging-name-prefix
+  - sid: ReadStagingRepositoryPolicies
+    actions:
+      - ecr:GetRepositoryPolicy
+    resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
+    scope: staging-name-prefix
+  - sid: ReadStagingRepositoryLifecycle
+    actions:
+      - ecr:GetLifecyclePolicy
+    resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
+    scope: staging-name-prefix
+  - sid: ReadStagingRepositoryScanning
+    actions:
+      - ecr:DescribeImageScanFindings
+      - ecr:GetImageScanningConfiguration
+    resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
+    scope: staging-name-prefix
+
+  # ----- KMS (module.secrets, module.kms_credentials) -----
+  - sid: DiscoverStagingKmsAliases
+    actions:
+      - kms:ListAliases
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: ReadStagingKeyMetadata
+    actions:
+      - kms:DescribeKey
+      - kms:GetKeyPolicy
+      - kms:ListResourceTags
+    resource: arn:aws:kms:us-east-1:${account_id}:key/*
+    scope: staging-kms-resource-tag
+    conditions:
+      aws:ResourceTag/Environment: staging
+  - sid: ReadStagingKeyRotation
+    actions:
+      - kms:GetKeyRotationStatus
+    resource: '*'
+    scope: staging-kms-resource-tag
+    conditions:
+      aws:ResourceTag/Environment: staging
+
+  # ----- Secrets Manager (module.secrets) -----
+  - sid: ReadStagingSecrets
+    actions:
+      - secretsmanager:DescribeSecret
+      - secretsmanager:GetResourcePolicy
+      - secretsmanager:ListSecretVersionIds
+    resource: arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*
+    scope: staging-name-prefix
+  - sid: ReadStagingSecretTags
+    actions:
+      - secretsmanager:ListSecrets
+    resource: '*'
+    scope: global-read-required-by-api
+
+  # ----- ECS (module.ecs) -----
+  - sid: ReadStagingEcsServices
+    actions:
+      - ecs:DescribeServices
+      - ecs:DescribeTaskDefinition
+      - ecs:DescribeClusters
+      - ecs:ListServices
+      - ecs:ListTagsForResource
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: ReadStagingAutoScaling
+    actions:
+      - application-autoscaling:DescribeScalableTargets
+      - application-autoscaling:DescribeScalingPolicies
+    resource: '*'
+    scope: global-read-required-by-api
+
+  # ----- IAM roles read (module.ecs, module.ml_drift_lambda) -----
+  - sid: ReadStagingTaskRoles
+    actions:
+      - iam:GetRole
+      - iam:GetRolePolicy
+      - iam:ListAttachedRolePolicies
+      - iam:ListRolePolicies
+      - iam:ListInstanceProfilesForRole
+    resource:
+      - arn:aws:iam::${account_id}:role/AETHER-staging-*
+      - arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS
+    scope: staging-name-prefix
+  - sid: ReadServiceLinkedRole
+    actions:
+      - iam:GetRole
+    resource: arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS
+    scope: ecs-service-linked-role-only
+  - sid: VerifyTerraformStateAccess
+    actions:
+      - iam:SimulatePrincipalPolicy
+    resource: '*'
+    scope: policy-verification-only
+
+  # ----- ALB (module.alb) -----
+  - sid: ReadStagingLoadBalancers
+    actions:
+      - elasticloadbalancing:DescribeLoadBalancers
+      - elasticloadbalancing:DescribeLoadBalancerAttributes
+      - elasticloadbalancing:DescribeListeners
+      - elasticloadbalancing:DescribeListenerCertificates
+      - elasticloadbalancing:DescribeTargetGroups
+      - elasticloadbalancing:DescribeTargetGroupAttributes
+      - elasticloadbalancing:DescribeTags
+      - elasticloadbalancing:DescribeRules
+    resource: '*'
+    scope: global-read-required-by-api
+
+  # ----- VPC (module.vpc) -----
+  - sid: ReadStagingVpcResources
+    actions:
+      - ec2:DescribeVpcs
+      - ec2:DescribeSubnets
+      - ec2:DescribeSecurityGroups
+      - ec2:DescribeSecurityGroupRules
+      - ec2:DescribeRouteTables
+      - ec2:DescribeInternetGateways
+      - ec2:DescribeNatGateways
+      - ec2:DescribeAddresses
+      - ec2:DescribeVpcAttribute
+      - ec2:DescribeNetworkInterfaces
+      - ec2:DescribeFlowLogs
+      - ec2:DescribeNetworkAcls
+      - ec2:DescribeVpcEndpoints
+      - ec2:GetSecurityGroupsForVpc
+    resource: '*'
+    scope: global-read-required-by-api
+
+  # ----- S3 (module.s3) -----
+  - sid: ReadStagingBuckets
+    actions:
+      - s3:GetBucketPolicy
+      - s3:GetBucketAcl
+      - s3:GetBucketCORS
+      - s3:GetBucketWebsite
+      - s3:GetBucketVersioning
+      - s3:GetBucketLogging
+      - s3:GetBucketLocation
+      - s3:GetBucketTagging
+      - s3:GetEncryptionConfiguration
+      - s3:GetLifecycleConfiguration
+      - s3:GetReplicationConfiguration
+      - s3:GetBucketPublicAccessBlock
+      - s3:GetBucketObjectLockConfiguration
+      - s3:ListBucket
+    resource: arn:aws:s3:::aether-staging-*
+    scope: staging-name-prefix
+
+  # ----- Aurora (module.aurora) -----
+  - sid: ReadStagingRdsResources
+    actions:
+      - rds:DescribeDBClusters
+      - rds:DescribeDBSubnetGroups
+      - rds:DescribeDBClusterParameterGroups
+      - rds:DescribeDBClusterParameters
+      - rds:DescribeDBInstances
+      - rds:ListTagsForResource
+    resource: '*'
+    scope: global-read-required-by-api
+
+  # ----- DynamoDB (module.dynamodb_cache) -----
+  - sid: ReadStagingDynamoResources
+    actions:
+      - dynamodb:DescribeTable
+      - dynamodb:DescribeContinuousBackups
+      - dynamodb:DescribeTimeToLive
+      - dynamodb:ListTagsOfResource
+    resource: arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*
+    scope: staging-name-prefix
+
+  # ----- SSM Parameters (lifecycle lease, outputs) -----
+  - sid: ReadStagingParameters
+    actions:
+      - ssm:GetParameter
+      - ssm:GetParameters
+      - ssm:DescribeParameters
+      - ssm:ListTagsForResource
+    resource: arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*
+    scope: staging-name-prefix
+
+  # ----- SNS (module.monitoring) -----
+  - sid: ReadStagingNotifications
+    actions:
+      - sns:GetTopicAttributes
+      - sns:ListTagsForResource
+      - sns:GetSubscriptionAttributes
+    resource:
+      - arn:aws:sns:us-east-1:${account_id}:aether-staging-*
+      - arn:aws:sns:us-east-1:${account_id}:AETHER-staging-*
+    scope: project-staging-name-prefix
+
+  # ----- CloudWatch (module.monitoring) -----
+  - sid: ReadStagingAlarms
+    actions:
+      - cloudwatch:DescribeAlarms
+      - cloudwatch:ListTagsForResource
+    resource: '*'
+    scope: global-read-required-by-api
+
+  # ----- Lambda (module.ml_drift_lambda, module.secrets) -----
+  - sid: ReadStagingLambdaFunctions
+    actions:
+      - lambda:GetFunction
+      - lambda:GetPolicy
+      - lambda:ListTags
+      - lambda:GetFunctionConfiguration
+    resource:
+      - arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift
+      - arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation
+    scope: staging-name-prefix
+
+  # ----- CloudWatch Logs -----
+  - sid: ReadStagingLogGroups
+    actions:
+      - logs:DescribeLogGroups
+      - logs:ListTagsForResource
+    resource: '*'
+    scope: global-read-required-by-api
+
+  # ----- EventBridge (module.ml_drift_lambda) -----
+  - sid: ReadStagingEventRules
+    actions:
+      - events:DescribeRule
+      - events:ListTargetsByRule
+      - events:ListTagsForResource
+    resource: arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*
+    scope: staging-name-prefix
+
+  # ----- Account-level read (used by preflight) -----
+  - sid: ReadAccountFreeTierPlan
+    actions:
+      - freetier:GetAccountPlanState
+    resource: '*'
+    scope: global-read-required-by-api

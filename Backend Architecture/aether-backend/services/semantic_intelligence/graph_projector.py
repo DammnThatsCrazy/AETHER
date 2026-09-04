@@ -58,19 +58,29 @@ Governance / safety:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from config.settings import settings
 from shared.common.common import utc_now
 from shared.graph.edge_properties import build_edge_properties
-from shared.graph.graph import Edge, EdgeType, _InMemoryGraphBackend, get_graph_client
+from shared.graph.graph import (
+    Edge,
+    EdgeType,
+    Vertex,
+    VertexType,
+    _InMemoryGraphBackend,
+    get_graph_client,
+)
 from shared.graph.mutation_gateway import GraphMutationGateway
-from shared.graph.mutation_intents import edge_intent, revocation_intent
+from shared.graph.mutation_intents import edge_intent, revocation_intent, vertex_intent
 from shared.logger.logger import get_logger, metrics
 
 from . import reducers
 from .repositories.base_fact_repo import SemanticFactRepository
+from .repositories.review_queue_repo import SemanticReviewQueueRepository
 
 logger = get_logger("aether.semantic.graph_projector")
 
@@ -84,14 +94,51 @@ SEMANTIC_EDGE_TYPE = EdgeType.SEMANTIC_RELATES_TO
 
 
 # The semantic reducer's stable, deterministic pair identity (see
-# ``reducers.relationship_ref``). Reused as the edge's ``source_event_id`` /
-# ``correlation_id`` so every replica computing the same Gold row derives the
-# same idempotency key.
+# ``reducers.relationship_ref``). Reused as the edge's ``correlation_id`` so
+# every replica computing the same Gold row derives the same correlation.
 def _relationship_ref_of(data: dict[str, Any], source: str, target: str) -> str:
     rel = data.get("relationship_ref")
     if rel:
         return str(rel)
     return f"rel:{source}->{target}"
+
+
+# The salient Gold fields whose change constitutes a genuine content revision of
+# a projected relationship edge — the recomputed values a graph consumer reads.
+# ``computed_at`` is deliberately EXCLUDED: it is wall-clock and changes on every
+# recompute even when nothing else did, so folding it in would churn an unchanged
+# edge on every sweep and break replica determinism.
+_RELATIONSHIP_CONTENT_FIELDS = (
+    "stance_alignment",
+    "trust_signal",
+    "interaction_quality",
+    "influence_direction",
+    "confidence",
+    "reducer_version",
+)
+
+
+def _content_revision(data: dict[str, Any], fields: tuple[str, ...]) -> str:
+    """Deterministic short digest of the salient Gold ``fields``.
+
+    Folded into the projected edge/vertex identity so a RECOMPUTED Gold row with
+    the SAME endpoints but CHANGED content yields a NEW identity (re-projected),
+    while unchanged content yields the SAME identity (skipped, no churn). Pure
+    over the field values — no wall-clock, no randomness — so every replica
+    computing the same revision derives the same digest (idempotency-key /
+    gateway-dedup convergence across replicas).
+    """
+    parts = [f"{key}={data.get(key)!r}" for key in fields]
+    return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
+
+
+# Auto-projection confidence floor for the consent/quality promotion policy
+# (``graph_promotion_review_enabled``). An edge whose bounded confidence is below
+# this is deferred to the review queue instead of auto-projected. Kept simple and
+# honest: a single bounded-confidence predicate, env-overridable.
+_AUTO_PROJECT_MIN_CONFIDENCE = float(
+    os.getenv("SEMANTIC_GRAPH_AUTO_PROJECT_MIN_CONFIDENCE", "0.5")
+)
 
 
 # Explicit full-set read bound for the per-tenant Gold sweep.
@@ -121,6 +168,9 @@ class ProjectionReport:
     projected: int = 0
     skipped_existing: int = 0
     revoked: int = 0
+    deferred_review: int = 0
+    vertices_projected: int = 0
+    vertices_skipped_existing: int = 0
     failed: int = 0
     errors: list[str] = field(default_factory=list)
 
@@ -131,6 +181,9 @@ class ProjectionReport:
             "projected": self.projected,
             "skipped_existing": self.skipped_existing,
             "revoked": self.revoked,
+            "deferred_review": self.deferred_review,
+            "vertices_projected": self.vertices_projected,
+            "vertices_skipped_existing": self.vertices_skipped_existing,
             "failed": self.failed,
             "errors": self.errors[:10],
         }
@@ -171,6 +224,16 @@ def edge_from_relationship(tenant_id: str, data: dict[str, Any]) -> Optional[Edg
     if _UNKNOWN_SUBJECT in (source, target):
         return None
     rel_ref = _relationship_ref_of(data, source, target)
+    # Fold the Gold row's CONTENT into the edge identity: a recomputed row with
+    # the same endpoints but changed salient content yields a new
+    # ``source_event_id`` component -> new ``idempotency_key`` -> the sweep
+    # re-projects it (and reconciliation revokes the stale prior key), while
+    # unchanged content keeps the same key and is skipped. The changed key also
+    # avoids the enforce-mode gateway/ledger dedup (keyed on idempotency_key), so
+    # a genuine content change is never suppressed. ``correlation_id`` stays the
+    # bare pair ref for traceability.
+    content_rev = _content_revision(data, _RELATIONSHIP_CONTENT_FIELDS)
+    identity_ref = f"{rel_ref}@{content_rev}"
     props = build_edge_properties(
         tenant_id=tenant_id,
         edge_type=SEMANTIC_EDGE_TYPE,
@@ -181,8 +244,9 @@ def edge_from_relationship(tenant_id: str, data: dict[str, Any]) -> Optional[Edg
         provenance="semantic_relationship_gold",
         valid_from=str(data.get("valid_from") or utc_now().isoformat()),
         confidence=_bounded_confidence(data.get("confidence")),
-        source_event_id=rel_ref,
+        source_event_id=identity_ref,
         correlation_id=rel_ref,
+        content_revision=content_rev,
     )
     semantic: dict[str, Any] = {
         # camelCase alias the overlay / read paths expect, in addition to the
@@ -295,20 +359,32 @@ async def _list_projected_edges_for_tenant(graph_client: Any, tenant_id: str) ->
 
 
 async def _revoke_projection(
-    gateway: GraphMutationGateway, tenant_id: str, source: str, target: str
+    gateway: GraphMutationGateway,
+    tenant_id: str,
+    source: str,
+    target: str,
+    *,
+    mode_override: Optional[str] = None,
 ) -> None:
-    """Soft-revoke one tenant's projected edge through the gateway (never direct)."""
-    await gateway.apply(
-        revocation_intent(
-            from_vertex_id=source,
-            to_vertex_id=target,
-            edge_type=SEMANTIC_EDGE_TYPE,
-            reason="gold_relationship_removed",
-            tenant_id=tenant_id,
-            actor_kind="system",
-            actor_id="semantic_graph_projector",
-        )
+    """Soft-revoke one tenant's projected edge through the gateway (never direct).
+
+    ``mode_override`` is only forwarded when set, so the default call path stays
+    byte-identical to the pre-override signature for foreign callers (e.g. the
+    privacy erasure handler) that pass a gateway which does not accept the kwarg.
+    """
+    intent = revocation_intent(
+        from_vertex_id=source,
+        to_vertex_id=target,
+        edge_type=SEMANTIC_EDGE_TYPE,
+        reason="gold_relationship_removed",
+        tenant_id=tenant_id,
+        actor_kind="system",
+        actor_id="semantic_graph_projector",
     )
+    if mode_override is not None:
+        await gateway.apply(intent, mode_override=mode_override)
+    else:
+        await gateway.apply(intent)
 
 
 async def _reconcile_projections(
@@ -317,6 +393,8 @@ async def _reconcile_projections(
     tenant_id: str,
     expected: dict[tuple[str, str], Edge],
     report: ProjectionReport,
+    *,
+    mode_override: Optional[str] = None,
 ) -> None:
     """Revoke the tenant's stale projected edges against the current Gold set.
 
@@ -338,7 +416,9 @@ async def _reconcile_projections(
         expected_edge = expected.get((source, target))
         if expected_edge is None:
             # No Gold row for this pair — every live projection is stale.
-            await _revoke_projection(gateway, tenant_id, source, target)
+            await _revoke_projection(
+                gateway, tenant_id, source, target, mode_override=mode_override
+            )
             report.revoked += len(edges)
             continue
         expected_key = str(expected_edge.properties.get("idempotency_key") or "")
@@ -352,7 +432,9 @@ async def _reconcile_projections(
             continue
         # Stale / legacy / duplicate projection(s): revoke so the sweep
         # re-projects exactly one canonical edge below.
-        await _revoke_projection(gateway, tenant_id, source, target)
+        await _revoke_projection(
+            gateway, tenant_id, source, target, mode_override=mode_override
+        )
         report.revoked += len(edges)
 
 
@@ -362,6 +444,155 @@ def _tenant_project_lock(tenant_id: str) -> asyncio.Lock:
         lock = asyncio.Lock()
         _TENANT_PROJECT_LOCKS[tenant_id] = lock
     return lock
+
+
+# ── Consent/quality promotion policy ─────────────────────────────────────────
+
+
+def _auto_project_ok(data: dict[str, Any]) -> bool:
+    """Auto-project predicate for the promotion policy (simple + honest).
+
+    An edge auto-projects when its bounded confidence clears
+    ``_AUTO_PROJECT_MIN_CONFIDENCE`` and the Gold row is not explicitly flagged
+    low-trust. Otherwise the sweep defers it to the review queue instead of
+    projecting. Only consulted when ``graph_promotion_review_enabled`` is on.
+    """
+    if data.get("low_trust") is True:
+        return False
+    return _bounded_confidence(data.get("confidence")) >= _AUTO_PROJECT_MIN_CONFIDENCE
+
+
+async def _enqueue_promotion_review(
+    tenant_id: str, edge: Edge, data: dict[str, Any]
+) -> None:
+    """Enqueue one ``graph_promotion_candidate`` review item (tenant-scoped)."""
+    source, target = edge.from_vertex_id, edge.to_vertex_id
+    rel_ref = _relationship_ref_of(data, source, target)
+    await SemanticReviewQueueRepository().enqueue(
+        tenant_id,
+        "graph_promotion_candidate",
+        subject_ref=rel_ref,
+        source_event_id=rel_ref,
+        payload={
+            "source_ref": source,
+            "target_ref": target,
+            "reason": "below_auto_project_confidence"
+            if data.get("low_trust") is not True
+            else "low_trust_flagged",
+            "confidence": _bounded_confidence(data.get("confidence")),
+        },
+    )
+
+
+# ── Entity Gold as governed vertices ─────────────────────────────────────────
+
+# Salient entity Gold fields whose change constitutes a new vertex content
+# revision — mirrors ``_RELATIONSHIP_CONTENT_FIELDS`` for the edge path.
+_ENTITY_CONTENT_FIELDS = (
+    "semantic_summary",
+    "dominant_stance",
+    "confidence",
+    "observation_count",
+    "reducer_version",
+)
+
+
+def _entity_vertex_id(tenant_id: str, entity_ref: str) -> str:
+    """Deterministic, tenant-scoped vertex id for an entity Gold projection.
+
+    The tenant is folded into the id so two tenants sharing an ``entity_ref``
+    never upsert onto the same vertex — the same tenant-isolation guarantee the
+    edge path carries on its properties.
+    """
+    return f"sem_entity:{tenant_id}:{entity_ref}"
+
+
+def _dominant_stance(data: dict[str, Any]) -> Optional[str]:
+    dist = data.get("stance_distribution")
+    if isinstance(dist, dict) and dist:
+        return str(max(dist.items(), key=lambda kv: (kv[1], kv[0]))[0])
+    return None
+
+
+def vertex_from_entity(tenant_id: str, data: dict[str, Any]) -> Optional[Vertex]:
+    """Build the governed vertex for one ``gold_entity_semantic_state`` row.
+
+    Carries the tenant (``tenantId`` + ``tenant_id``) and only the salient Gold
+    signal — entity ref, semantic summary, dominant stance, bounded confidence,
+    observation count — never raw content. The vertex id is deterministic and
+    tenant-scoped so recomputation upserts the same vertex; a ``content_revision``
+    property lets the sweep skip an unchanged vertex. Returns ``None`` for a
+    missing / degenerate entity ref.
+    """
+    entity_ref = str(data.get("entity_ref") or data.get("subject_ref") or "").strip()
+    if not entity_ref or entity_ref == _UNKNOWN_SUBJECT:
+        return None
+    dominant = _dominant_stance(data)
+    enriched = {**data, "dominant_stance": dominant}
+    props: dict[str, Any] = {
+        # Both tenant spellings: ``tenantId`` for the overlay/read paths and the
+        # canonical ``tenant_id`` the ledger/digest resolve on.
+        "tenantId": tenant_id,
+        "tenant_id": tenant_id,
+        "entity_ref": entity_ref,
+        "semantic_summary": data.get("semantic_summary"),
+        "dominant_stance": dominant,
+        "confidence": _bounded_confidence(data.get("confidence")),
+        "observation_count": data.get("observation_count"),
+        "provenance": "semantic_entity_gold",
+        "content_revision": _content_revision(enriched, _ENTITY_CONTENT_FIELDS),
+    }
+    props = {k: v for k, v in props.items() if v is not None}
+    return Vertex(
+        vertex_type=VertexType.ENTITY,
+        vertex_id=_entity_vertex_id(tenant_id, entity_ref),
+        properties=props,
+    )
+
+
+async def _project_tenant_vertices(
+    graph_client: Any,
+    gateway: GraphMutationGateway,
+    tenant_id: str,
+    report: ProjectionReport,
+    mode_override: Optional[str],
+) -> None:
+    """Upsert one governed vertex per entity Gold row through the gateway.
+
+    Idempotent + tenant-scoped like the edge path: a vertex whose live
+    projection already carries the same ``content_revision`` (and this tenant) is
+    skipped; otherwise it is upserted via ``vertex_intent(..., 'node_versioned')``
+    so the gateway governs the write (never a direct ``upsert_vertex``).
+    """
+    repo = SemanticFactRepository(reducers._GOLD_ENTITY_TABLE, mode="gold")
+    rows = await repo.list_by_tenant(tenant_id, limit=_GOLD_RELATIONSHIP_READ_LIMIT)
+    for data in rows:
+        vertex = vertex_from_entity(tenant_id, data)
+        if vertex is None:
+            continue
+        try:
+            existing = await graph_client.get_vertex(vertex.vertex_id)
+            if (
+                existing is not None
+                and _tenant_of(existing.properties or {}) == tenant_id
+                and str((existing.properties or {}).get("content_revision") or "")
+                == str(vertex.properties.get("content_revision") or "")
+            ):
+                report.vertices_skipped_existing += 1
+                continue
+            await gateway.apply(
+                vertex_intent(
+                    vertex,
+                    operation="node_versioned",
+                    tenant_id=tenant_id,
+                ),
+                mode_override=mode_override,
+            )
+            report.vertices_projected += 1
+        except Exception as exc:  # noqa: BLE001 — isolate one vertex's failure
+            report.failed += 1
+            report.errors.append(f"vertex {vertex.vertex_id}: {exc}")
+            metrics.increment("semantic_graph_projection_error_total")
 
 
 async def project_tenant(
@@ -386,23 +617,29 @@ async def project_tenant(
     gw = gateway or GraphMutationGateway(graph_client=graph_client)
     repo = SemanticFactRepository(reducers._GOLD_RELATIONSHIP_TABLE, mode="gold")
     report = ProjectionReport(tenant_id=tenant_id)
+    # Force the gateway mode ladder for the projector's own writes when the
+    # deployment set it (`''` -> None -> inherit the global mode).
+    mode_override = settings.semantic.graph_projector_gateway_mode or None
+    review_enabled = settings.semantic.graph_promotion_review_enabled
 
     async with _tenant_project_lock(tenant_id):
         rows = await repo.list_by_tenant(tenant_id, limit=_GOLD_RELATIONSHIP_READ_LIMIT)
         expected: dict[tuple[str, str], Edge] = {}
-        edges_to_write: list[Edge] = []
+        edges_to_write: list[tuple[Edge, dict[str, Any]]] = []
         for data in rows:
             edge = edge_from_relationship(tenant_id, data)
             if edge is None:
                 continue
             report.relationships_seen += 1
             expected[(edge.from_vertex_id, edge.to_vertex_id)] = edge
-            edges_to_write.append(edge)
+            edges_to_write.append((edge, data))
         # Revoke stale / removed / duplicate projections first, then project the
         # current Gold set so each surviving pair ends with exactly one canonical
         # edge (the sweep's idempotency-key check is what "keeps" it).
-        await _reconcile_projections(graph_client, gw, tenant_id, expected, report)
-        for edge in edges_to_write:
+        await _reconcile_projections(
+            graph_client, gw, tenant_id, expected, report, mode_override=mode_override
+        )
+        for edge, data in edges_to_write:
             idem_key = str(edge.properties.get("idempotency_key") or "")
             try:
                 if await _already_projected(
@@ -414,6 +651,14 @@ async def project_tenant(
                 ):
                     report.skipped_existing += 1
                     continue
+                # Consent/quality promotion policy (flag-gated): an edge failing
+                # the auto-project predicate is deferred to the review queue
+                # instead of auto-projected. Flag OFF (default) -> auto-project
+                # every edge, unchanged behavior.
+                if review_enabled and not _auto_project_ok(data):
+                    await _enqueue_promotion_review(tenant_id, edge, data)
+                    report.deferred_review += 1
+                    continue
                 await gw.apply(
                     edge_intent(
                         edge,
@@ -422,17 +667,109 @@ async def project_tenant(
                         subject_kind="entity",
                         subject_id=edge.to_vertex_id,
                         causality_class="observed_sequence",
-                    )
+                    ),
+                    mode_override=mode_override,
                 )
                 report.projected += 1
             except Exception as exc:  # noqa: BLE001 — isolate one edge's failure
                 report.failed += 1
                 report.errors.append(f"{edge.from_vertex_id}->{edge.to_vertex_id}: {exc}")
                 metrics.increment("semantic_graph_projection_error_total")
+
+        # Entity Gold as governed VERTICES (flag-gated; edges-only when off).
+        if settings.semantic.graph_vertex_projection_enabled:
+            await _project_tenant_vertices(
+                graph_client, gw, tenant_id, report, mode_override
+            )
     if report.projected:
         metrics.increment("semantic_graph_edges_projected_total", report.projected)
     if report.revoked:
         metrics.increment("semantic_graph_edges_revoked_total", report.revoked)
+    if report.vertices_projected:
+        metrics.increment(
+            "semantic_graph_vertices_projected_total", report.vertices_projected
+        )
+    return report
+
+
+async def project_pair(
+    tenant_id: str,
+    source_ref: str,
+    target_ref: str,
+    *,
+    gateway: Optional[GraphMutationGateway] = None,
+    graph_client: Optional[Any] = None,
+) -> ProjectionReport:
+    """Project exactly one relationship pair's canonical edge through the gateway.
+
+    Public seam the review-approval route calls: it reads that ONE pair's current
+    ``gold_relationship_semantic_state`` row and projects exactly that one
+    canonical edge (same ``edge_from_relationship`` + gateway write path as the
+    sweep), BYPASSING the promotion review policy — approval already decided the
+    edge should be promoted. A stale (different-key / legacy) live projection for
+    the pair is revoked first so the pair ends with exactly one canonical edge;
+    an already-current edge is skipped (no churn). Tenant-scoped throughout.
+    """
+    graph_client = graph_client or get_graph_client()
+    gw = gateway or GraphMutationGateway(graph_client=graph_client)
+    repo = SemanticFactRepository(reducers._GOLD_RELATIONSHIP_TABLE, mode="gold")
+    report = ProjectionReport(tenant_id=tenant_id)
+    mode_override = settings.semantic.graph_projector_gateway_mode or None
+    rel_ref = reducers.relationship_ref(source_ref, target_ref)
+
+    rows = await repo.list_by_tenant(
+        tenant_id, subject=rel_ref, limit=_GOLD_RELATIONSHIP_READ_LIMIT
+    )
+    data = next(
+        (
+            r
+            for r in rows
+            if str(r.get("source_ref") or "") == source_ref
+            and str(r.get("target_ref") or "") == target_ref
+        ),
+        None,
+    )
+    if data is None:
+        return report
+    edge = edge_from_relationship(tenant_id, data)
+    if edge is None:
+        return report
+    report.relationships_seen += 1
+    idem_key = str(edge.properties.get("idempotency_key") or "")
+
+    async with _tenant_project_lock(tenant_id):
+        if await _already_projected(
+            graph_client, tenant_id, source_ref, target_ref, idem_key
+        ):
+            report.skipped_existing += 1
+            return report
+        # A stale live projection (different key — e.g. approving recomputed
+        # content) is superseded so the pair ends with exactly one canonical edge.
+        existing = await graph_client.get_edges(source_ref, edge_type=SEMANTIC_EDGE_TYPE)
+        stale = [
+            e
+            for e in existing
+            if e.to_vertex_id == target_ref
+            and not (e.properties or {}).get("revoked")
+            and _tenant_of(e.properties or {}) == tenant_id
+        ]
+        if stale:
+            await _revoke_projection(
+                gw, tenant_id, source_ref, target_ref, mode_override=mode_override
+            )
+            report.revoked += len(stale)
+        await gw.apply(
+            edge_intent(
+                edge,
+                operation="edge_created",
+                tenant_id=tenant_id,
+                subject_kind="entity",
+                subject_id=edge.to_vertex_id,
+                causality_class="observed_sequence",
+            ),
+            mode_override=mode_override,
+        )
+        report.projected += 1
     return report
 
 

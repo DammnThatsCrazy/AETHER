@@ -9,7 +9,7 @@
 # =============================================================================
 
 .DEFAULT_GOAL := help
-.PHONY: setup setup-dev setup-minimal \
+.PHONY: setup setup-dev setup-minimal doctor generate change-plan test-fast test-pr test-integration test-regression test-release build-artifact validate-delivery-profile validate-delivery-registries validate-release-evidence validate-golden-journeys deploy-staging staging-migrate test-golden-journeys \
         test test-security test-ml test-coverage \
         ml-validate ml-test ml-test-unit ml-test-integration ml-test-security \
         ml-train-smoke ml-artifact-verify ml-docs-check ml-container-build ml-ci \
@@ -311,6 +311,60 @@ GATE_PY := $(shell test -x $(VENV_PY) && echo $(VENV_PY) || echo python)
 repo-doctor: ## Validate full repo consistency (no mutations)
 	$(GATE_PY) scripts/repo_doctor.py --check
 
+doctor: repo-doctor ## Read-only repository and delivery-spine validation
+	$(GATE_PY) scripts/validate_makefile.py
+
+generate: docs-fix ## Explicitly regenerate repository-owned derived surfaces
+
+change-plan: ## Create a ChangePlan (CHANGE_ID, TITLE, and OWNER are required)
+	@test -n "$(CHANGE_ID)" -a -n "$(TITLE)" -a -n "$(OWNER)" || (echo "CHANGE_ID, TITLE, and OWNER are required"; exit 2)
+	$(GATE_PY) scripts/change_plan.py --create "$(CHANGE_ID)" --title "$(TITLE)" --owner "$(OWNER)"
+
+build-artifact: ## Record immutable ReleaseCandidate metadata (requires CANDIDATE_ID, PROFILE, COMPONENTS)
+	@test -n "$(CANDIDATE_ID)" -a -n "$(PROFILE)" -a -n "$(COMPONENTS)" || (echo "CANDIDATE_ID, PROFILE, and COMPONENTS are required"; exit 2)
+	$(GATE_PY) scripts/artifact_builder.py --candidate-id "$(CANDIDATE_ID)" --profile "$(PROFILE)" $(foreach component,$(COMPONENTS),--component "$(component)") $(foreach lockfile,$(LOCKFILES),--lockfile "$(lockfile)") --output "$(or $(OUTPUT),release-evidence/$(CANDIDATE_ID).json)"
+
+validate-delivery-profile: ## Validate a deployable frontend manifest and selected fallbacks (requires MANIFEST)
+	@test -n "$(MANIFEST)" || (echo "MANIFEST is required"; exit 2)
+	$(GATE_PY) scripts/validate_delivery_profiles.py "$(MANIFEST)" $(foreach fallback,$(ACTIVE_FALLBACKS),--active-fallback "$(fallback)")
+
+validate-delivery-registries: ## Validate fallback implementation bindings and golden-journey execution status
+	$(GATE_PY) scripts/validate_delivery_registries.py
+
+validate-golden-journeys: ## Validate ownership/assertions for all five journey definitions
+	$(GATE_PY) scripts/release/evidence_bundle.py --check-registry
+
+validate-release-evidence: ## Validate a canonical evidence bundle (requires EVIDENCE_BUNDLE)
+	@test -n "$(EVIDENCE_BUNDLE)" || (echo "EVIDENCE_BUNDLE is required"; exit 2)
+	$(GATE_PY) scripts/release/evidence_bundle.py "$(EVIDENCE_BUNDLE)" $(if $(KYBER_OUTPUT),--kyber-output "$(KYBER_OUTPUT)")
+
+deploy-staging: ## Orchestrate fail-closed staging lifecycle (requires CANDIDATE, PROFILE, OUTPUT; set DRY_RUN=1 to plan)
+	@test -n "$(CANDIDATE)" -a -n "$(PROFILE)" -a -n "$(OUTPUT)" || (echo "CANDIDATE, PROFILE, and OUTPUT are required"; exit 2)
+	$(GATE_PY) scripts/delivery_orchestrator.py staging --candidate "$(CANDIDATE)" --profile "$(PROFILE)" --output "$(OUTPUT)" $(if $(DRY_RUN),--dry-run) $(if $(PREFLIGHT_COMMAND),--preflight-command "$(PREFLIGHT_COMMAND)") $(if $(DEPLOY_COMMAND),--deploy-command "$(DEPLOY_COMMAND)") $(if $(MIGRATION_COMMAND),--migration-command "$(MIGRATION_COMMAND)") $(if $(ACTIVATION_COMMAND),--tenant-activation-command "$(ACTIVATION_COMMAND)") $(if $(JOURNEYS_COMMAND),--journeys-command "$(JOURNEYS_COMMAND)")
+
+staging-migrate: ## Rehearse a migration with evidence (requires MIGRATION_METADATA and OUTPUT)
+	@test -n "$(MIGRATION_METADATA)" -a -n "$(OUTPUT)" || (echo "MIGRATION_METADATA and OUTPUT are required"; exit 2)
+	$(GATE_PY) scripts/delivery_orchestrator.py migration --metadata "$(MIGRATION_METADATA)" --output "$(OUTPUT)" $(if $(DRY_RUN),--dry-run) $(if $(MIGRATION_COMMAND),--command "$(MIGRATION_COMMAND)") $(if $(VALIDATION_COMMAND),--validation-command "$(VALIDATION_COMMAND)")
+
+test-golden-journeys: ## Execute or honestly block the five registered golden journeys
+	@test -n "$(PROFILE)" -a -n "$(OUTPUT)" || (echo "PROFILE and OUTPUT are required"; exit 2)
+	$(GATE_PY) scripts/delivery_orchestrator.py journeys --profile "$(PROFILE)" --output "$(OUTPUT)" $(if $(DRY_RUN),--dry-run)
+
+test-fast: ## Execute the change-aware fast lane (BASE defaults to HEAD)
+	$(GATE_PY) scripts/check_router.py --base "$(or $(BASE),HEAD)" --lane fast --execute
+
+test-pr: ## Execute the change-aware PR lane
+	$(GATE_PY) scripts/check_router.py --base "$(or $(BASE),HEAD)" --lane pr --execute
+
+test-integration: ## Execute the selected integration lane
+	$(GATE_PY) scripts/check_router.py --base "$(or $(BASE),HEAD)" --lane integration --execute
+
+test-regression: ## Execute the selected regression lane
+	$(GATE_PY) scripts/check_router.py --base "$(or $(BASE),HEAD)" --lane regression --execute
+
+test-release: ## Execute the selected release lane
+	$(GATE_PY) scripts/check_router.py --base "$(or $(BASE),HEAD)" --lane release --execute
+
 repo-doctor-fix: ## Regenerate generated docs + sync, then validate
 	$(GATE_PY) scripts/repo_doctor.py --fix
 
@@ -563,8 +617,41 @@ exploration-readiness: ## Exploration fabric contract + registry + planner gates
 		tests/contracts/test_surface_capability_parity.py \
 		tests/unit/exploration -q -o addopts=""
 
-production-status: ## Readiness scorecard + blockers + live consistency checks (advisory)
+production-status: ## Historical maturity index (0-5, non-authoritative) + live consistency checks (advisory)
 	python scripts/production_status.py
+
+# ---------------------------------------------------------------------------
+# Multidimensional readiness (authoritative). Separates what is built, what is
+# runtime-integrated, what is verified, what is productionized, what is waiting
+# on external activation, and what has been proven per environment. The
+# per-profile hard-gate disposition — never a blended percentage — is the
+# authoritative release signal. See docs/readiness/READINESS-MODEL.md.
+# ---------------------------------------------------------------------------
+.PHONY: readiness-status readiness-validate readiness-validate-strict feature-readiness profile-readiness readiness-artifacts readiness-migrate
+
+readiness-status: ## Multidimensional readiness overview (text; --format json/markdown supported by the script)
+	python scripts/readiness_status.py
+
+readiness-validate: ## Fail-closed readiness-model validation (honesty rules + dependency graph + scope locks)
+	python scripts/validate_readiness_model.py
+
+readiness-validate-strict: ## Readiness-model validation; warnings fail too
+	python scripts/validate_readiness_model.py --strict
+
+feature-readiness: ## Status card for one feature: make feature-readiness FEATURE=<feature-id>
+	python scripts/readiness_status.py --feature $(FEATURE)
+
+profile-readiness: ## Release-profile report: make profile-readiness PROFILE=<profile-id>
+	python scripts/readiness_status.py --profile $(PROFILE)
+
+readiness-artifacts: ## Regenerate readiness artifacts (artifacts/readiness/*.json) + generated docs
+	python scripts/validate_readiness_model.py --update-locks
+	python scripts/readiness_status.py --emit-artifacts
+	python scripts/readiness_status.py --emit-docs
+	python scripts/migrate_readiness_data.py --write
+
+readiness-migrate: ## Legacy readiness migration report (production_status -> multidimensional model)
+	python scripts/migrate_readiness_data.py --write
 
 credentialless-certification: ## Provider certification matrix + honest CredentialReadiness states (report; exit 0)
 	python scripts/credentialless_certification.py
@@ -856,7 +943,7 @@ runtime-readiness-gate: ## Validate durable backend, explicit runtime-role, and 
 
 integration-durable: ## Run the production-shaped durable integration suite (requires Docker)
 	docker compose -f deploy/integration/docker-compose.durable.yml config --quiet
-	docker compose -f deploy/integration/docker-compose.durable.yml run --rm api python -m pytest tests/integration/test_batch_endpoint.py -q
+	docker compose -f deploy/integration/docker-compose.durable.yml run --rm integration-tests python -m pytest tests/integration/test_batch_endpoint.py -q -p no:cacheprovider
 
 integration-faults: ## Run durable outbox/storage crash, replay, and lifecycle fault tests (requires Docker)
 	docker compose -f deploy/integration/docker-compose.durable.yml config --quiet

@@ -32,6 +32,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -175,6 +176,115 @@ def is_ancestor(older: str, newer: str) -> bool:
     ).returncode == 0
 
 
+def commit_touches_paths(sha: str, paths: list[str]) -> bool:
+    """Return True when ``sha`` changes at least one path in ``paths``.
+
+    A squash merge produces a new commit that contains the net changes from
+    the review branch, while the branch's stamped SHA disappears from the
+    target branch.  This helper lets the drift check recognize that final
+    commit as the review boundary when it changed both the documented source
+    and the source-linked doc together.
+    """
+    if not paths:
+        return False
+    result = subprocess.run(
+        # `-m` makes this work for GitHub's synthetic PR merge commit too.
+        # Without it, diff-tree reports no paths for a merge commit and the
+        # squash/merge-safe boundary is treated as unverifiable even when the
+        # final merge contains both the source and its reviewed document.
+        ["git", "diff-tree", "-m", "--no-commit-id", "--name-only", "-r", sha, "--", *paths],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def resolve_commit(sha: str) -> str | None:
+    """Resolve a frontmatter commit marker to a full commit SHA."""
+    if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{7,40}", sha):
+        return None
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", f"{sha}^{{commit}}"],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    if result.returncode != 0:
+        return None
+    resolved = result.stdout.strip()
+    return resolved if re.fullmatch(r"[0-9a-f]{40}", resolved) else None
+
+
+def reviewed_source_commits_cover(
+    declared: str,
+    receipts: Any,
+    source_paths: list[str],
+    newer: list[str],
+) -> bool:
+    """Return True when explicit review receipts cover every newer source commit.
+
+    A receipt is not a free-form exemption: its commit must resolve, be a
+    descendant of the declared stamp, touch a declared source, and be one of
+    the exact commits reported by the drift query. A non-empty reason makes the
+    review decision auditable in the document itself.
+    """
+    if not isinstance(receipts, list) or not newer:
+        return False
+    newer_full: set[str] = set()
+    for short_sha in newer:
+        resolved = resolve_commit(short_sha)
+        if resolved is None:
+            return False
+        newer_full.add(resolved)
+    declared_full = resolve_commit(declared)
+    if declared_full is None:
+        return False
+    covered: set[str] = set()
+    for receipt in receipts:
+        if not isinstance(receipt, dict):
+            return False
+        marker = receipt.get("commit")
+        reason = receipt.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            return False
+        resolved = resolve_commit(marker)
+        if resolved is None or resolved not in newer_full:
+            continue
+        if not is_ancestor(declared_full, resolved):
+            return False
+        if not commit_touches_paths(resolved, source_paths):
+            return False
+        covered.add(resolved)
+    return covered == newer_full
+
+
+def squash_merge_reviewed_at_tip(doc_rel: str, source_paths: list[str]) -> bool:
+    """Recognize a reviewed source/doc pair collapsed by a squash merge.
+
+    The pre-merge ``last_synced_commit`` can be unreachable after squash
+    merging.  It is safe to accept that boundary only when the current tip
+    changed both the source and the doc; otherwise an unknown stamp remains a
+    strict failure.
+    """
+    # A pull_request workflow commonly checks out a synthetic merge commit.
+    # That tip may contain only the PR's follow-up changes, while the actual
+    # squash merge that changed the source and authored doc is its first-parent
+    # ancestor. Find the newest source-changing first-parent boundary and prove
+    # that the same boundary changed this doc too. This avoids accepting an
+    # arbitrary old merge merely because it once touched the same paths.
+    source_tip = subprocess.run(
+        ["git", "log", "--first-parent", "-1", "--format=%H", "HEAD", "--", *source_paths],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    if source_tip.returncode != 0:
+        return False
+    sha = source_tip.stdout.strip()
+    return bool(sha) and commit_touches_paths(sha, source_paths) and commit_touches_paths(sha, [doc_rel])
+
+
 def _commit_is_restamp_only(sha: str, doc_rel: str) -> bool:
     """True when the commit's change to this doc touches only its stamp line.
 
@@ -196,7 +306,48 @@ def _commit_is_restamp_only(sha: str, doc_rel: str) -> bool:
         if (line.startswith("+") or line.startswith("-"))
         and not line.startswith(("+++", "---"))
     ]
-    return bool(changed) and all("last_synced_commit" in line for line in changed)
+    # Do not use substring matching: authored prose or tables commonly mention
+    # ``last_synced_commit`` while making a real documentation change. Only an
+    # actual frontmatter assignment is a mechanical restamp.
+    import re
+
+    stamp_line = re.compile(r'^[+-]\s*last_synced_commit:\s*["\']?[0-9a-f]+["\']?\s*$')
+    return bool(changed) and all(stamp_line.match(line) for line in changed)
+
+
+def _commit_is_receipt_only(sha: str, doc_rel: str) -> bool:
+    """True when a doc commit changes only its review-receipt metadata.
+
+    Receipt entries are evidence for a source review, not authored prose. They
+    must therefore be validated by ``reviewed_source_commits_cover`` rather
+    than silently counting as a normal content review. A commit that changes
+    the body (or any other frontmatter) remains a genuine doc review.
+    """
+    before = subprocess.run(
+        ["git", "show", f"{sha}^:{doc_rel}"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    after = subprocess.run(
+        ["git", "show", f"{sha}:{doc_rel}"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if before.returncode != 0 or after.returncode != 0:
+        return False
+    before_fm = extract_frontmatter(before.stdout)
+    after_fm = extract_frontmatter(after.stdout)
+    if before_fm is None or after_fm is None:
+        return False
+    before_body = before.stdout[before.stdout.find("\n---", 4) + 4 :]
+    after_body = after.stdout[after.stdout.find("\n---", 4) + 4 :]
+    if before_body != after_body:
+        return False
+    before_receipts = before_fm.pop("reviewed_source_commits", None)
+    after_receipts = after_fm.pop("reviewed_source_commits", None)
+    return before_fm == after_fm and before_receipts != after_receipts
 
 
 def doc_reviewed_after_sources(declared: str, doc_path: Path, source_paths: list[str]) -> bool:
@@ -225,7 +376,12 @@ def doc_reviewed_after_sources(declared: str, doc_path: Path, source_paths: list
         return False
     doc_commits = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
     latest_doc = next(
-        (sha for sha in doc_commits if not _commit_is_restamp_only(sha, doc_rel)),
+        (
+            sha
+            for sha in doc_commits
+            if not _commit_is_restamp_only(sha, doc_rel)
+            and not _commit_is_receipt_only(sha, doc_rel)
+        ),
         None,
     )
     if not latest_doc:
@@ -269,14 +425,27 @@ def check_doc(path: Path) -> dict:
         present_sources = [s for s in sources if (ROOT / s).exists()]
         newer = commits_touching_after(declared, present_sources)
         if newer is None:
-            stale = True
-            detail = (
-                f"last_synced_commit={declared} cannot be resolved in this "
-                "clone, so review recency is unverifiable. Re-review the doc "
-                "against its source_files and restamp with a commit that "
-                "exists on the branch."
-            )
+            if not squash_merge_reviewed_at_tip(str(rel), present_sources):
+                stale = True
+                detail = (
+                    f"last_synced_commit={declared} cannot be resolved in this "
+                    "clone, so review recency is unverifiable. Re-review the doc "
+                    "against its source_files and restamp with a commit that "
+                    "exists on the branch."
+                )
         elif newer and not doc_reviewed_after_sources(declared, path, present_sources):
+            if reviewed_source_commits_cover(
+                declared,
+                fm.get("reviewed_source_commits"),
+                present_sources,
+                newer,
+            ):
+                return {
+                    "path": str(rel),
+                    "missing_paths": missing,
+                    "stale": False,
+                    "stale_detail": None,
+                }
             stale = True
             detail = (
                 f"last_synced_commit={declared}; sources have been modified "
