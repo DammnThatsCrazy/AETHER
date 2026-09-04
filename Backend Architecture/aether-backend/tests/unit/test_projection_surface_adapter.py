@@ -1,9 +1,9 @@
 """ProjectionSurfaceAdapter (S6) — 360 projection surfaces through the S1 engine.
 
 The exploration fabric's migration seam maps the projection-backed 360 surfaces
-(outcome360 / economic360 / infrastructure360 / temporal360 / population360) onto
-their intelligence projections and executes them through the S1 engine's
-fail-isolated executor.
+(outcome360 / economic360 / infrastructure360 / temporal360 / population360 /
+geographic360) onto their intelligence projections and executes them through
+the S1 engine's fail-isolated executor.
 Under test: surface→projection mapping, typed-section composition into an
 AdapterResult carrying digest + per-section state, tenant isolation, and the
 content-free fail-closed degradation path (missing provider / invalid lens
@@ -59,6 +59,7 @@ from services.exploration.adapters.graph import GraphSurfaceAdapter  # noqa: E40
 from services.exploration.adapters.profile import ProfileSurfaceAdapter  # noqa: E402
 from services.exploration.adapters.projection import (  # noqa: E402
     Economic360SurfaceAdapter,
+    Geographic360SurfaceAdapter,
     Infrastructure360SurfaceAdapter,
     Outcome360SurfaceAdapter,
     Population360SurfaceAdapter,
@@ -73,6 +74,7 @@ _OUTPUT_SECTIONS = {
     "infrastructure360": ("summary", "state", "deployments", "evidence", "findings"),
     "temporal360": ("summary", "state", "timeline", "evidence", "findings"),
     "population360": ("summary", "state", "timeline", "evidence", "findings"),
+    "geographic360": ("summary", "state", "timeline", "evidence", "findings"),
 }
 
 # Projection dependencies (registry graph, flat closure) registered so clean
@@ -80,7 +82,8 @@ _OUTPUT_SECTIONS = {
 # profile360/relationship360 (plus their own transitive deps: outcome360 and
 # relationship360 both require temporal360); infrastructure360 and temporal360
 # (the root of the contextual cluster) have none. population360 declares
-# projectionDependencies profile360/relationship360/temporal360.
+# projectionDependencies profile360/relationship360/temporal360. geographic360
+# declares projectionDependencies profile360/temporal360.
 _DEPS = {
     "outcome360": ("temporal360",),
     "economic360": (
@@ -92,6 +95,7 @@ _DEPS = {
     "infrastructure360": (),
     "temporal360": (),
     "population360": ("profile360", "relationship360", "temporal360"),
+    "geographic360": ("profile360", "temporal360"),
 }
 
 
@@ -222,6 +226,7 @@ def test_surfaces_map_to_their_projection_ids() -> None:
         (Infrastructure360SurfaceAdapter, "infrastructure360"),
         (Temporal360SurfaceAdapter, "temporal360"),
         (Population360SurfaceAdapter, "population360"),
+        (Geographic360SurfaceAdapter, "geographic360"),
     ):
         adapter = cls()
         assert adapter.surface_id == surface
@@ -229,18 +234,20 @@ def test_surfaces_map_to_their_projection_ids() -> None:
 
 
 def test_registered_surfaces_do_not_shadow_owned_ones() -> None:
-    # The five 360 surfaces are now available...
+    # The six 360 projection surfaces are now available...
     assert isinstance(get_adapter("outcome360"), Outcome360SurfaceAdapter)
     assert isinstance(get_adapter("economic360"), Economic360SurfaceAdapter)
     assert isinstance(get_adapter("infrastructure360"), Infrastructure360SurfaceAdapter)
     assert isinstance(get_adapter("temporal360"), Temporal360SurfaceAdapter)
     assert isinstance(get_adapter("population360"), Population360SurfaceAdapter)
+    assert isinstance(get_adapter("geographic360"), Geographic360SurfaceAdapter)
     for surface in (
         "outcome360",
         "economic360",
         "infrastructure360",
         "temporal360",
         "population360",
+        "geographic360",
     ):
         assert surface in available_surfaces()
 
@@ -273,6 +280,13 @@ def test_registered_surfaces_do_not_shadow_owned_ones() -> None:
     assert not isinstance(get_adapter("cluster360"), Population360SurfaceAdapter)
     assert get_adapter("comparison_workbench") is None
 
+    # geographic360 never shadows its WHERE sibling: geo keeps its graph-plane
+    # GeoSurfaceAdapter (country buckets) while geographic360 owns the dedicated
+    # projection-depth surface over canonical location facts.
+    assert get_adapter("geographic360").surface_id == "geographic360"
+    assert isinstance(get_adapter("geo"), GeoSurfaceAdapter)
+    assert not isinstance(get_adapter("geo"), Geographic360SurfaceAdapter)
+
 
 # ---------------------------------------------------------------------------
 # Composition through a fresh-registry stub provider
@@ -287,6 +301,7 @@ def test_registered_surfaces_do_not_shadow_owned_ones() -> None:
         (Infrastructure360SurfaceAdapter, "infrastructure360"),
         (Temporal360SurfaceAdapter, "temporal360"),
         (Population360SurfaceAdapter, "population360"),
+        (Geographic360SurfaceAdapter, "geographic360"),
     ],
 )
 async def test_projection_surface_composes_typed_sections(cls, surface) -> None:

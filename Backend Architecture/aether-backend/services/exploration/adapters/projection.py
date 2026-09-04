@@ -1,9 +1,9 @@
 """Projection-surface adapter — the S1 migration seam for 360 surfaces.
 
 Exploration surfaces whose backing plane is an intelligence projection
-(outcome360 / economic360 / infrastructure360 / temporal360 / population360) run
-through this adapter: it maps one registered exploration surface to its
-projection id (here equal by name) and
+(outcome360 / economic360 / infrastructure360 / temporal360 / population360 /
+geographic360) run through this adapter: it maps one registered exploration
+surface to its projection id (here equal by name) and
 executes the projection through the S1 engine
 (:class:`ProjectionRuntime <shared.projection_engine.runtime.ProjectionRuntime>`
 → :class:`ProjectionExecutor` → the fail-isolated
@@ -27,9 +27,9 @@ ADR-010 posture:
 
 The generic adapter is intentionally NOT registered: only the thin per-surface
 subclasses for 360 surfaces that previously had no dedicated exploration adapter
-(outcome360 / economic360 / infrastructure360 / temporal360 / population360) join
-the surface registry, so an already-owned surface (profile360, campaign360, ...)
-is never shadowed.
+(outcome360 / economic360 / infrastructure360 / temporal360 / population360 /
+geographic360) join the surface registry, so an already-owned surface
+(profile360, campaign360, geo, ...) is never shadowed.
 """
 
 from __future__ import annotations
@@ -246,8 +246,23 @@ class Population360SurfaceAdapter(ProjectionSurfaceAdapter):
     surface_id = "population360"
 
 
+class Geographic360SurfaceAdapter(ProjectionSurfaceAdapter):
+    """geographic360 exploration surface → the geographic360 projection.
+
+    The context-360 WHERE leaf (Phase 4): it owns its own ``geographic360``
+    surface rather than shadowing ``geo`` (already owned by the graph-plane
+    ``GeoSurfaceAdapter`` — an already-owned surface is never shadowed) or
+    ``outcome360`` / ``profile360`` geography (owned elsewhere). ``geo`` keeps
+    its country-bucket adapter; ``geographic360`` is the projection-depth WHERE
+    surface over canonical location facts (precision never exceeds evidence).
+    """
+
+    surface_id = "geographic360"
+
+
 __all__ = [
     "Economic360SurfaceAdapter",
+    "Geographic360SurfaceAdapter",
     "Infrastructure360SurfaceAdapter",
     "Outcome360SurfaceAdapter",
     "Population360SurfaceAdapter",
