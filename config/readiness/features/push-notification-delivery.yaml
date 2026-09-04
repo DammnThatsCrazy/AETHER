@@ -1,0 +1,185 @@
+# Feature readiness record — see config/readiness/schema.json.
+# Migrated from reports/mobile-productization/external-blockers.json (apns/fcm/
+# web-push/email). externally_blocked != implementation-incomplete.
+feature_id: push-notification-delivery
+title: Push Notification Delivery
+owning_system: aether
+summary: >-
+  APNs / FCM / Web Push / SES delivery adapters with provider-shaped local fakes
+  and a canonical credential contract. Code-complete and runtime-wired; each
+  provider needs only a credential + provider account to activate — no source
+  change.
+
+scope:
+  id: push-notification-delivery-v1
+  version: 1
+  title: V1 Multi-Provider Push Delivery
+  target: credential-turnkey-delivery
+  included:
+    - APNs adapter
+    - FCM adapter
+    - Web Push adapter
+    - SES email adapter
+    - provider-shaped local fakes
+    - credential contracts
+  excluded:
+    - live provider rehearsal (requires accounts)
+  deferred: []
+  release_profile_applicability: [local, staging, production-lean]
+
+repository_ceiling:
+  type: CREDENTIAL_TURNKEY
+  achieved: true
+  remaining_after_ceiling:
+    - Insert provider credentials
+    - Register provider/developer accounts
+  remaining_is_repository_controlled: false
+  evidence:
+    - config/credential_contracts.yaml
+    - reports/mobile-productization/external-blockers.json
+
+implementation:
+  state: TURNKEY
+  denominator: in-scope delivery adapters + fakes + contracts
+  controls:
+    - id: apns-adapter
+      description: APNs delivery adapter + provider-shaped fake
+      weight: 25
+      satisfied: true
+      evidence: ["Backend Architecture/aether-backend/services/delivery/adapters/apns.py"]
+    - id: fcm-adapter
+      description: FCM delivery adapter + provider-shaped fake
+      weight: 25
+      satisfied: true
+    - id: web-push-adapter
+      description: Web Push (VAPID) adapter + fake
+      weight: 25
+      satisfied: true
+    - id: email-adapter
+      description: SES/SMTP email adapter + fake
+      weight: 25
+      satisfied: true
+  remaining_work: []
+
+productionization:
+  denominator: in-scope productionization controls
+  controls:
+    - id: retry
+      description: Retry + backoff on transient provider errors
+      weight: 25
+      satisfied: true
+    - id: idempotency
+      description: Idempotent send (dedupe on message id)
+      weight: 25
+      satisfied: true
+    - id: observability
+      description: Delivery + bounce metrics and logs
+      weight: 25
+      satisfied: true
+    - id: consent
+      description: Consent enforcement before send
+      weight: 25
+      satisfied: true
+  remaining_work: []
+
+activation:
+  state: CREDENTIAL_WAITING
+  blockers:
+    - type: CREDENTIAL_WAITING
+      description: APNs/.p8, FCM service account, VAPID keypair, SES creds needed.
+      owner: tenant / platform-ops
+      required_action: Insert provider secrets; run credentials-preflight.
+      source_code_change_expected: false
+      affected_environments: [staging, production]
+      affected_release_profiles: [staging, pilot, production-lean, production-scale]
+      evidence_required: live provider accept + delivery receipt in a rehearsal
+    - type: ACCOUNT_WAITING
+      description: Apple Developer + Firebase/Google + SES verified domain required.
+      owner: tenant
+      required_action: Register provider accounts and verify sender domain.
+      source_code_change_expected: false
+      affected_environments: [staging, production]
+      affected_release_profiles: [staging, pilot, production-lean, production-scale]
+      evidence_required: provider account ids bound in the credential registry
+
+dependencies:
+  hard:
+    - feature_id: identity-resolution
+      state: SATISFIED
+      prevents: [release]
+      note: Notifications target resolved identities.
+  soft: []
+
+environment_evidence:
+  local:
+    state: VERIFIED
+    credentialed: false
+    verification_method: provider-shaped fake acceptance tests
+  ci:
+    state: VERIFIED
+    credentialed: false
+  staging:
+    state: BLOCKED_EXTERNAL
+    credentialed: true
+  production:
+    state: NOT_ATTEMPTED
+    credentialed: true
+
+operational_ownership:
+  team: mobile-platform
+  technical_owner: delivery
+  operational_owner: platform-ops
+  escalation: pagerduty:mobile-platform
+  runbook: docs/runbooks/push-delivery.md
+  dashboards: [grafana:delivery]
+  alerts: [pagerduty:delivery]
+  service_level_target: 99% accepted sends
+  recovery_objective: RTO 30m / RPO 5m
+
+business_readiness:
+  applicable: false
+  controls: []
+
+confidence:
+  level: MODERATE
+  reasons:
+    - provider-shaped fakes exercise decode + mapping
+  evidence_gaps:
+    - no live provider rehearsal yet (accounts required)
+
+release_profiles:
+  local:
+    participation: required
+    implementation_floor: VERIFIED
+    productionization_required: false
+    environment_gate: local
+    business_gate: false
+  staging:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: staging
+    business_gate: false
+  pilot:
+    participation: experimental
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: pilot
+    business_gate: false
+  production-lean:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: production
+    business_gate: false
+  production-scale:
+    participation: experimental
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: scale
+    business_gate: false
+
+historical:
+  historical_maturity_index: 3
+  historical_maturity_index_scale: "0-5"
+  historical_maturity_index_authoritative: false

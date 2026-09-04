@@ -49,6 +49,51 @@ resource "aws_lb" "this" {
 # --------------------------------------------------------------------------
 
 resource "aws_lb_target_group" "backend" {
+  count = var.environment == "staging" ? 1 : 0
+
+  # Keep the deterministic name across profiles. If a staging rehearsal is
+  # interrupted after AWS creates this target group but before state persists,
+  # reconcile it through the reviewed import-only workflow before reapplying.
+  name        = "${lower(var.project)}-${var.environment}-backend"
+  port        = 8000
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip"
+
+  health_check {
+    path                = "/v1/health"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
+    interval            = 30
+    timeout             = 5
+    matcher             = "200"
+  }
+
+  deregistration_delay = 30
+
+  tags = {
+    Name    = "${var.project}-${var.environment}-backend-tg"
+    Service = "backend"
+  }
+
+  lifecycle {
+    # The deterministic staging name is also the import/reconcile identity.
+    # Replacements must not ask AWS for a second target group with that same
+    # name. The listener still references this group, so fail closed on a
+    # ForceNew change; a reviewed listener-detach transition must precede any
+    # intentional replacement.
+    create_before_destroy = false
+  }
+}
+
+# Production-class profiles keep replacement-before-destroy for availability.
+# This is a separate resource because Terraform lifecycle meta-arguments must
+# be literal: interpolating var.environment here is rejected before planning.
+resource "aws_lb_target_group" "backend_replacement" {
+  count = var.environment != "staging" ? 1 : 0
+
   name        = "${lower(var.project)}-${var.environment}-backend"
   port        = 8000
   protocol    = "HTTP"
@@ -76,6 +121,10 @@ resource "aws_lb_target_group" "backend" {
   lifecycle {
     create_before_destroy = true
   }
+}
+
+locals {
+  backend_target_group = var.environment == "staging" ? aws_lb_target_group.backend[0] : aws_lb_target_group.backend_replacement[0]
 }
 
 # --------------------------------------------------------------------------
@@ -154,7 +203,7 @@ resource "aws_lb_listener" "https" {
   # Default: send everything to backend
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.backend.arn
+    target_group_arn = var.environment == "staging" && var.staging_listener_target_group_arn != "" ? var.staging_listener_target_group_arn : local.backend_target_group.arn
   }
 
   tags = {

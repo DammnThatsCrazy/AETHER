@@ -60,6 +60,7 @@ _ENV_VAR_TO_SECRET_PATH: dict[str, str] = {
     "WATERMARK_SECRET_KEY": "watermark-secret-key",
     "CANARY_SECRET_SEED": "canary-secret-seed",
     "EXTRACTION_CANARY_SEED": "extraction-canary-seed",
+    "SDK_CONFIG_SECRET": "sdk-config-secret",
     "ORACLE_SIGNER_PRIVATE_KEY": "oracle-signer-private-key",
     "GRAFANA_ADMIN_PASSWORD": "grafana-admin-password",
     "STRIPE_SECRET_KEY": "stripe-secret-key",
@@ -77,6 +78,7 @@ _AUTO_GENERATED = {
     "WATERMARK_SECRET_KEY",
     "CANARY_SECRET_SEED",
     "EXTRACTION_CANARY_SEED",
+    "SDK_CONFIG_SECRET",
     "ORACLE_SIGNER_PRIVATE_KEY",
     "GRAFANA_ADMIN_PASSWORD",
 }
@@ -106,6 +108,7 @@ def _generate_all() -> dict[str, str]:
         "WATERMARK_SECRET_KEY": secrets.token_urlsafe(32),
         "CANARY_SECRET_SEED": secrets.token_urlsafe(32),
         "EXTRACTION_CANARY_SEED": secrets.token_urlsafe(32),
+        "SDK_CONFIG_SECRET": secrets.token_urlsafe(48),
         "ORACLE_SIGNER_PRIVATE_KEY": _generate_eth_private_key(),
         "GRAFANA_ADMIN_PASSWORD": secrets.token_urlsafe(24),
     }

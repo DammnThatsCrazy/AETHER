@@ -85,6 +85,36 @@ class SemanticEventConsumer:
         self._subject_resolver = SemanticSubjectResolver()
         self._actor_resolver = SemanticActorResolver()
 
+    async def _emit(
+        self,
+        topic: Topic,
+        tenant_id: str,
+        payload: dict[str, Any],
+        *,
+        correlation_id: str = "",
+    ) -> None:
+        """Best-effort outbound domain-event emission.
+
+        A missing producer (e.g. the replay path constructs the consumer without
+        one) is a no-op, and a producer failure is caught + logged — an emission
+        must NEVER break the classification pipeline or trigger a DLQ. Payloads
+        carry only identifiers and model/reducer versions, never raw content.
+        """
+        if self._producer is None:
+            return
+        try:
+            await self._producer.publish(
+                Event(
+                    topic=topic,
+                    tenant_id=tenant_id,
+                    source_service="semantic_intelligence",
+                    correlation_id=correlation_id,
+                    payload=payload,
+                )
+            )
+        except Exception:
+            logger.exception("semantic event emit failed topic=%s", topic.value)
+
     async def on_validated_event(self, event: Event) -> None:
         payload = event.payload or {}
         tenant_id = event.tenant_id or payload.get("tenant_id", "")
@@ -107,22 +137,61 @@ class SemanticEventConsumer:
             sem_payload["subject_resolution_confidence"] = subject.confidence
 
             if subject.needs_review and subject.review_queue:
-                await service.enqueue_review(
+                review_item = await service.enqueue_review(
                     tenant_id,
                     subject.review_queue,
                     subject_ref=subject.ref,
                     source_event_id=sem_payload.get("source_event_id"),
                     payload={"method": subject.method, "event_type": event_type},
                 )
+                await self._emit(
+                    Topic.SEMANTIC_REVIEW_ENQUEUED,
+                    tenant_id,
+                    {
+                        "tenant_id": tenant_id,
+                        "review_item_id": review_item.get("id"),
+                        "queue_type": subject.review_queue,
+                        "subject_ref": subject.ref,
+                        "source_event_id": sem_payload.get("source_event_id"),
+                        "resolution_method": subject.method,
+                        "event_type": event_type,
+                    },
+                    correlation_id=event.correlation_id,
+                )
             # A cross-tenant reference is quarantined, never classified against.
             if subject.review_queue == "cross_tenant_reference":
                 eligibility = Eligibility.QUARANTINE
 
-            await service.classify_and_persist(sem_payload, tenant_id, eligibility=eligibility)
+            obs, sentiments = await service.classify_and_persist(
+                sem_payload, tenant_id, eligibility=eligibility
+            )
+
+            # An observation was persisted (classified / abstained / quarantined /
+            # consent-restricted — all terminal states carry a status, never raw
+            # content).
+            await self._emit(
+                Topic.SEMANTIC_OBSERVED,
+                tenant_id,
+                {
+                    "tenant_id": tenant_id,
+                    "observation_id": obs.observation_id,
+                    "source_event_id": obs.source_event_id,
+                    "subject_ref": obs.primary_subject_ref,
+                    "actor_ref": obs.actor_ref,
+                    "status": obs.status.value,
+                    "stance": obs.stance.value,
+                    "confidence": obs.classification_confidence,
+                    "model_id": obs.model_id,
+                    "model_version": obs.model_version,
+                    "sentiment_count": len(sentiments),
+                },
+                correlation_id=event.correlation_id,
+            )
 
             # Refresh durable Gold state (weighted reducer).
             if subject.ref != "unknown_subject" and eligibility is not Eligibility.QUARANTINE:
                 from .reducers import (
+                    REDUCER_VERSION,
                     recompute_campaign_impact,
                     recompute_entity_sentiment,
                     recompute_entity_state,
@@ -133,6 +202,22 @@ class SemanticEventConsumer:
                 campaign_id = sem_payload.get("campaign_id")
                 if campaign_id:
                     await recompute_campaign_impact(tenant_id, campaign_id)
+
+                # Gold semantic + sentiment state was recomputed for the subject.
+                await self._emit(
+                    Topic.SEMANTIC_STATE_RECOMPUTED,
+                    tenant_id,
+                    {
+                        "tenant_id": tenant_id,
+                        "subject_ref": subject.ref,
+                        "source_event_id": obs.source_event_id,
+                        "campaign_id": campaign_id,
+                        "reducer_version": REDUCER_VERSION,
+                        "model_id": obs.model_id,
+                        "model_version": obs.model_version,
+                    },
+                    correlation_id=event.correlation_id,
+                )
         except Exception:
             logger.exception("semantic classification failed for event %s", payload.get("event_id"))
             raise  # triggers DLQ in EventConsumer; persistence is idempotent on retry

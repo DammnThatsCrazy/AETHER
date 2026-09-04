@@ -9,7 +9,7 @@ terraform {
   required_version = ">= 1.7.0"
 
   required_providers {
-    aws = { source = "hashicorp/aws"; version = "~> 5.40" }
+    aws = { source = "hashicorp/aws", version = "~> 5.40" }
   }
 
   backend "s3" {
@@ -35,13 +35,31 @@ provider "aws" {
 
 # -- Variables --------------------------------------------------------
 
-variable "environment"        { type = string; default = "demo" }
-variable "aws_region"         { type = string; default = "us-east-1" }
-variable "image_tag"          { type = string; default = "latest" }
-variable "ecr_registry"       { type = string }
-variable "monthly_budget_usd" { type = number; default = 2500 }
-variable "acm_cert_arn"       { type = string; default = "" }
-variable "hosted_zone_id"     { type = string; default = "" }
+variable "environment" {
+  type    = string
+  default = "demo"
+}
+variable "aws_region" {
+  type    = string
+  default = "us-east-1"
+}
+variable "image_tag" {
+  type    = string
+  default = "latest"
+}
+variable "ecr_registry" { type = string }
+variable "monthly_budget_usd" {
+  type    = number
+  default = 2500
+}
+variable "acm_cert_arn" {
+  type    = string
+  default = ""
+}
+variable "hosted_zone_id" {
+  type    = string
+  default = ""
+}
 
 # ===================================================================
 # LAYER 1: NETWORK  (VPC 10.3.0.0/16, single NAT gateway)
@@ -55,11 +73,11 @@ module "vpc" {
 }
 
 module "vpc_endpoints" {
-  source              = "../../modules/vpc_endpoints"
-  environment         = var.environment
-  vpc_id              = module.vpc.vpc_id
-  private_subnet_ids  = module.vpc.private_subnet_ids
-  route_table_ids     = module.vpc.private_route_table_ids
+  source             = "../../modules/vpc_endpoints"
+  environment        = var.environment
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+  route_table_ids    = module.vpc.private_route_table_ids
 }
 
 # ===================================================================
@@ -226,9 +244,9 @@ resource "aws_route53_record" "demo_playground_dns" {
 # OUTPUTS
 # ===================================================================
 
-output "ecs_cluster"       { value = module.ecs.cluster_name }
-output "rds_endpoint"      { value = module.rds.cluster_endpoint }
-output "vpc_id"            { value = module.vpc.vpc_id }
-output "api_endpoint"      { value = "https://demo.aether.io" }
-output "playground_url"    { value = "http://${aws_s3_bucket_website_configuration.demo_playground.website_endpoint}" }
-output "alb_dns"           { value = module.ecs.alb_dns_name }
+output "ecs_cluster" { value = module.ecs.cluster_name }
+output "rds_endpoint" { value = module.rds.cluster_endpoint }
+output "vpc_id" { value = module.vpc.vpc_id }
+output "api_endpoint" { value = "https://demo.aether.io" }
+output "playground_url" { value = "http://${aws_s3_bucket_website_configuration.demo_playground.website_endpoint}" }
+output "alb_dns" { value = module.ecs.alb_dns_name }

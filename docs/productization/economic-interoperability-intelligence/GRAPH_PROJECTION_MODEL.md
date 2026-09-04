@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/graph/relationship_layers.py
   - packages/shared/graph-contract.ts
 canonical_owner: platform@aether
-last_synced_commit: "15b8889"
+last_synced_commit: "c19b048f"
 ---
 
 # Graph Projection Model
@@ -46,6 +46,12 @@ Cross-domain rules:
   vertex has no ownership history from another import, and no active edge still
   references it. Pre-existing or shared vertices are retained.
 
+Administrative rehearsal cleanup is separate from import rollback and is
+tenant-scoped: `GraphClient.delete_tenant_data` removes projection vertices and
+tenant-tagged edges for both `tenantId` and legacy `tenant_id`, including edges
+to shared endpoints. It fails closed on a backend error and never removes
+unscoped/system graph data.
+
 ## Tenant scoping on reads
 
 The tenant a vertex or edge belongs to is resolved through
@@ -60,8 +66,9 @@ tenant" rather than as a wildcard.
 
 Per-tenant reads use `GraphClient.get_vertices_for_tenant(tenant_id, limit)`,
 which puts the predicate **inside** the query — Neptune
-`.has(TENANT_PROPERTY, t).limit(n)`, in-memory filter-then-slice — so the cap
-bounds that tenant's rows. `get_all_vertices(limit)` remains for genuinely
+`.has(TENANT_PROPERTY, t).limit(n)`, Postgres `WHERE tenant_id = $1 ... LIMIT`
+(the tenant is denormalised to an indexed column via `tenant_of`), in-memory
+filter-then-slice — so the cap bounds that tenant's rows. `get_all_vertices(limit)` remains for genuinely
 global reads and applies its cap to the whole graph; using it to answer a
 per-tenant question truncates silently, because the tenant's rows may sort past
 the cap and never reach the filter. `scripts/validate_graph_scoped_reads.py` is

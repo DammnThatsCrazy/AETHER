@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/alembic/versions/20260708_stablecoin_intelligence.py
   - Backend Architecture/aether-backend/alembic/versions/20260708_interop_intelligence.py
 canonical_owner: platform@aether
-last_synced_commit: "41c79d4"
+last_synced_commit: "4e6fdad"
 ---
 
 # Migration and Backfill

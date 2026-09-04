@@ -61,3 +61,40 @@ class IdentityMetrics:
             "identity_signal_type_distribution",
             labels={"signal_type": signal_type},
         )
+
+    # ── Identity assurance / verification metrics ──────────────────────────
+
+    def record_verification_challenge(self, method: str) -> None:
+        _metrics.increment(
+            "identity_verification_challenge_total", labels={"method": method}
+        )
+
+    def record_verification_success(self, method: str) -> None:
+        _metrics.increment(
+            "identity_verification_success_total", labels={"method": method}
+        )
+
+    def record_verification_failure(self, reason: str) -> None:
+        _metrics.increment(
+            "identity_verification_failure_total", labels={"reason": reason}
+        )
+
+    def record_verification_expired(self) -> None:
+        _metrics.increment("identity_verification_expired_total")
+
+    def record_evidence_active(self, evidence_type: str) -> None:
+        _metrics.increment(
+            "identity_verification_evidence_active_total",
+            labels={"evidence_type": evidence_type},
+        )
+
+    def record_evidence_revoked(self, evidence_type: str) -> None:
+        _metrics.increment(
+            "identity_verification_evidence_revoked_total",
+            labels={"evidence_type": evidence_type},
+        )
+
+    def record_resolution_replay(self, result: str) -> None:
+        _metrics.increment(
+            "identity_resolution_replay_total", labels={"result": result}
+        )

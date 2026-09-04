@@ -20,6 +20,12 @@ variable "task_role_arns" {
   default     = []
 }
 
+variable "key_admin_role_arns" {
+  type        = list(string)
+  description = "Deployment/admin role ARNs explicitly allowed to manage the CMK policy and key lifecycle."
+  default     = []
+}
+
 variable "deletion_window_in_days" {
   type        = number
   description = "KMS CMK deletion window in days. 30 mirrors the secrets and RDS CMKs."

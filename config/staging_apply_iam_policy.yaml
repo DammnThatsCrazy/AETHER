@@ -1,0 +1,380 @@
+# Reviewed contract for the staging Terraform apply role.
+#
+# This is intentionally a contract, not an automatically attached broad IAM
+# policy. The bootstrap/console attachment must resolve the account-specific
+# ARNs and preserve these scopes. Unknown actions fail validation rather than
+# being silently added to the role.
+version: 1
+profile: staging
+role: AetherStagingDeploy
+region: us-east-1
+statements:
+  - sid: ConfigureStagingBuckets
+    actions:
+      - s3:PutEncryptionConfiguration
+      - s3:PutLifecycleConfiguration
+    resource: arn:aws:s3:::aether-staging-*
+    scope: staging-name-prefix
+  - sid: TagStagingRepositories
+    actions:
+      - ecr:TagResource
+    resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
+    scope: staging-name-prefix
+  - sid: ReadStagingRepositoryTags
+    actions:
+      - ecr:ListTagsForResource
+    resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
+    scope: staging-name-prefix
+  - sid: InspectStagingRepositories
+    actions:
+      - ecr:DescribeRepositories
+    resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
+    scope: staging-name-prefix
+  - sid: ConfigureStagingRepositoryScanning
+    actions:
+      - ecr:PutImageScanningConfiguration
+    resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
+    scope: staging-name-prefix
+  - sid: ManageStagingEcrLifecyclePolicies
+    actions:
+      - ecr:GetLifecyclePolicy
+      - ecr:PutLifecyclePolicy
+    resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
+    scope: staging-name-prefix
+  - sid: ManageStagingEcrRepositoryPolicies
+    actions:
+      - ecr:GetRepositoryPolicy
+      - ecr:SetRepositoryPolicy
+      - ecr:DeleteRepositoryPolicy
+    resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
+    scope: staging-name-prefix
+  - sid: TagStagingSecrets
+    actions:
+      - secretsmanager:TagResource
+    resource: arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*
+    scope: staging-name-prefix
+  - sid: VerifyStagingSecretVersions
+    actions:
+      - secretsmanager:DescribeSecret
+      - secretsmanager:GetResourcePolicy
+    resource: arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*
+    scope: staging-name-prefix
+  - sid: ManageStagingSecrets
+    actions:
+      - secretsmanager:CreateSecret
+      - secretsmanager:UpdateSecret
+      - secretsmanager:DeleteSecret
+    resource: arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*
+    scope: staging-name-prefix
+  - sid: ConfigureStagingSecretRotation
+    actions:
+      - secretsmanager:RotateSecret
+    resource: arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*
+    scope: staging-name-prefix
+  - sid: TagStagingParameters
+    actions:
+      - ssm:AddTagsToResource
+      - ssm:ListTagsForResource
+    resource: arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*
+    scope: staging-name-prefix
+  - sid: CreateStagingKmsKeys
+    actions:
+      - kms:CreateKey
+    resource: '*'
+    scope: staging-kms-request-tag
+    conditions:
+      aws:RequestTag/Environment: staging
+  - sid: TagStagingKmsKeys
+    actions:
+      - kms:TagResource
+    resource: arn:aws:kms:us-east-1:${account_id}:key/*
+    scope: staging-kms-resource-tag
+    conditions:
+      aws:ResourceTag/Environment: staging
+  - sid: TagStagingKmsKeysOnCreate
+    actions:
+      - kms:TagResource
+    resource: arn:aws:kms:us-east-1:${account_id}:key/*
+    scope: staging-kms-request-tag
+    conditions:
+      aws:RequestTag/Environment: staging
+  - sid: CreateStagingKmsAliasResource
+    actions:
+      - kms:CreateAlias
+    resource: arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*
+    scope: staging-kms-alias-prefix
+    conditions:
+      kms:RequestAlias: alias/aether-staging-*
+    condition_operators:
+      kms:RequestAlias: StringLike
+  - sid: CreateStagingKmsAliasTarget
+    actions:
+      - kms:CreateAlias
+    resource: arn:aws:kms:us-east-1:${account_id}:key/*
+    scope: staging-kms-resource-tag
+    conditions:
+      aws:ResourceTag/Environment: staging
+  - sid: DiscoverStagingKmsAliases
+    actions:
+      - kms:ListAliases
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: CreateStagingKmsGrants
+    actions:
+      - kms:CreateGrant
+    resource: arn:aws:kms:us-east-1:${account_id}:key/*
+    scope: staging-kms-resource-tag
+    conditions:
+      aws:ResourceTag/Environment: staging
+  - sid: UpdateStagingKmsPolicies
+    actions:
+      - kms:PutKeyPolicy
+    resource: arn:aws:kms:us-east-1:${account_id}:key/*
+    scope: staging-kms-resource-tag
+    conditions:
+      aws:ResourceTag/Environment: staging
+  - sid: UseStagingKmsKeysForEncryptedResources
+    actions:
+      - kms:GenerateDataKey
+      - kms:Decrypt
+    resource: arn:aws:kms:us-east-1:${account_id}:key/*
+    scope: staging-kms-resource-tag
+    conditions:
+      aws:ResourceTag/Environment: staging
+  - sid: ReadStagingBucketEncryption
+    actions:
+      - s3:GetEncryptionConfiguration
+      - s3:GetReplicationConfiguration
+    resource: arn:aws:s3:::aether-staging-*
+    scope: staging-name-prefix
+  - sid: DiscoverVpcSecurityGroupsForStagingAlb
+    actions:
+      - ec2:GetSecurityGroupsForVpc
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: ReadAccountFreeTierPlan
+    actions:
+      - freetier:GetAccountPlanState
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: ReadStagingKeyRotation
+    actions:
+      - kms:GetKeyRotationStatus
+    resource: '*'
+    scope: staging-kms-resource-tag
+    conditions:
+      aws:ResourceTag/Environment: staging
+  - sid: ReadStagingKeyMetadata
+    actions:
+      - kms:DescribeKey
+      - kms:GetKeyPolicy
+      - kms:ListResourceTags
+    resource: arn:aws:kms:us-east-1:${account_id}:key/*
+    scope: staging-kms-resource-tag
+    conditions:
+      aws:ResourceTag/Environment: staging
+  - sid: ScheduleDeletionForReviewedStagingKeys
+    actions:
+      - kms:ScheduleKeyDeletion
+    resource: '*'
+    scope: staging-kms-resource-tag
+    conditions:
+      aws:ResourceTag/Environment: staging
+      kms:ScheduleKeyDeletionPendingWindowInDays: "30"
+  - sid: ModifyStagingTargetGroups
+    actions:
+      - elasticloadbalancing:ModifyTargetGroupAttributes
+    resource: arn:aws:elasticloadbalancing:us-east-1:${account_id}:targetgroup/aether-staging-*
+    scope: staging-name-prefix
+  - sid: DiscoverStagingTargetGroups
+    actions:
+      - elasticloadbalancing:DescribeTargetGroups
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: DiscoverStagingLoadBalancers
+    actions:
+      - elasticloadbalancing:DescribeLoadBalancers
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: DiscoverStagingListeners
+    actions:
+      - elasticloadbalancing:DescribeListeners
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: VerifyTerraformStateAccess
+    actions:
+      - iam:SimulatePrincipalPolicy
+    resource: '*'
+    scope: policy-verification-only
+  - sid: ModifyStagingLoadBalancers
+    actions:
+      - elasticloadbalancing:ModifyLoadBalancerAttributes
+    resource: arn:aws:elasticloadbalancing:us-east-1:${account_id}:loadbalancer/app/aether-staging-*
+    scope: staging-name-prefix
+  - sid: ReadStagingDynamoTags
+    actions:
+      - dynamodb:ListTagsOfResource
+    resource: arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*
+    scope: staging-name-prefix
+  - sid: ConfigureStagingNotifications
+    actions:
+      - sns:SetTopicAttributes
+      - sns:DeleteTopic
+      - sns:Subscribe
+    resource:
+      - arn:aws:sns:us-east-1:${account_id}:aether-staging-*
+      - arn:aws:sns:us-east-1:${account_id}:AETHER-staging-*
+    scope: project-staging-name-prefix
+  - sid: EnsureEcsServiceLinkedRole
+    actions:
+      - iam:CreateServiceLinkedRole
+    resource: '*'
+    conditions:
+      iam:AWSServiceName: ecs.amazonaws.com
+    scope: ecs-service-linked-role-only
+  - sid: ReadEcsServiceLinkedRole
+    actions:
+      - iam:GetRole
+    resource: arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS
+    scope: ecs-service-linked-role-only
+  - sid: PassOnlyStagingEcsTaskRole
+    actions:
+      - iam:PassRole
+    resource: arn:aws:iam::${account_id}:role/AETHER-staging-ecs-task-role
+    conditions:
+      iam:PassedToService:
+        - ecs-tasks.amazonaws.com
+    scope: staging-name-prefix
+  - sid: PassOnlyStagingEcsExecutionRole
+    actions:
+      - iam:PassRole
+    resource: arn:aws:iam::${account_id}:role/AETHER-staging-ecs-execution-role
+    conditions:
+      iam:PassedToService:
+        - ecs-tasks.amazonaws.com
+    scope: staging-name-prefix
+  - sid: PassOnlyStagingFlowLogsRole
+    actions:
+      - iam:PassRole
+    resource: arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role
+    conditions:
+      iam:PassedToService:
+        - vpc-flow-logs.amazonaws.com
+    scope: staging-flow-logs-role
+  - sid: PassOnlyStagingDriftLambdaRole
+    actions:
+      - iam:PassRole
+    resource: arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda
+    conditions:
+      iam:PassedToService:
+        - lambda.amazonaws.com
+    scope: staging-drift-lambda-role
+  - sid: TagOnlyStagingDriftLambda
+    actions:
+      - lambda:TagResource
+    resource:
+      - arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift
+      - arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation
+    conditions:
+      aws:RequestTag/Environment: staging
+    scope: staging-name-prefix
+  - sid: DiscoverStagingDriftRuleTargets
+    actions:
+      - events:ListTargetsByRule
+    resource: arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*
+    scope: staging-name-prefix
+  - sid: CreateStagingLogGroups
+    actions:
+      - logs:CreateLogGroup
+    resource: arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*
+    scope: staging-name-prefix
+  - sid: TagStagingLogGroups
+    actions:
+      - logs:TagResource
+    resource: arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*
+    scope: staging-name-prefix
+  - sid: DiscoverStagingLogGroups
+    actions:
+      - logs:DescribeLogGroups
+    resource: '*'
+    scope: global-read-required-by-api
+  - sid: ManageStagingLogGroupLifecycle
+    actions:
+      - logs:PutRetentionPolicy
+      - logs:DeleteLogGroup
+    resource: arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*
+    scope: staging-name-prefix
+  - sid: ManageStagingLambdaFunctions
+    actions:
+      - lambda:CreateFunction
+      - lambda:GetFunction
+      - lambda:UpdateFunctionCode
+      - lambda:UpdateFunctionConfiguration
+      - lambda:DeleteFunction
+      - lambda:AddPermission
+      - lambda:RemovePermission
+      - lambda:GetPolicy
+      - lambda:ListTags
+    resource:
+      - arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift
+      - arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation
+    scope: staging-name-prefix
+  - sid: ManageStagingLambdaRoles
+    actions:
+      - iam:CreateRole
+      - iam:GetRole
+      - iam:DeleteRole
+      - iam:TagRole
+      - iam:PutRolePolicy
+      - iam:GetRolePolicy
+      - iam:DeleteRolePolicy
+      - iam:AttachRolePolicy
+      - iam:DetachRolePolicy
+      - iam:ListAttachedRolePolicies
+      - iam:ListRolePolicies
+      - iam:ListInstanceProfilesForRole
+    resource:
+      - arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda
+      - arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation
+    scope: staging-lambda-roles
+  - sid: PassOnlyStagingRotationLambdaRole
+    actions:
+      - iam:PassRole
+    resource: arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation
+    conditions:
+      iam:PassedToService:
+        - lambda.amazonaws.com
+    scope: staging-rotation-role
+  - sid: ManageStagingEventRules
+    actions:
+      - events:PutRule
+      - events:DeleteRule
+      - events:DescribeRule
+      - events:PutTargets
+      - events:RemoveTargets
+      - events:TagResource
+    resource: arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*
+    scope: staging-name-prefix
+
+# The provider errors below are deliberately not represented as AWS IAM
+# actions: Auth0 permissions are governed by the Auth0 management API and must
+# be supplied through the apply job's AUTH0_* environment variables.
+external_provider_requirements:
+  - provider: auth0
+    required_scopes:
+      - create:resource_servers
+      - read:resource_servers
+      - update:resource_servers
+      - delete:resource_servers
+      - create:connections
+      - create:clients
+      - create:client_grants
+      - read:client_grants
+      - update:client_grants
+      - delete:client_grants
+      - read:clients
+      - read:connections
+      - update:connections
+      - update:clients
+      - delete:clients
+      - delete:connections

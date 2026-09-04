@@ -33,6 +33,12 @@ variable "aurora_cluster_id" {
   default     = ""
 }
 
+variable "enable_aurora_observability" {
+  type        = bool
+  description = "Whether Aurora alarms and dashboard widgets are present. This must be a static profile decision, not one inferred from a resource-derived cluster identifier."
+  default     = false
+}
+
 variable "aurora_max_acu" {
   type        = number
   description = "Aurora max ACU configured on the cluster (used to compute the max-ACU alarm threshold)"
@@ -141,6 +147,12 @@ variable "dynamodb_cache_table_name" {
   type        = string
   description = "DynamoDB cache table name (the lean profile's ElastiCache replacement). Empty string disables the cache throttle alarm."
   default     = ""
+}
+
+variable "enable_dynamodb_cache_observability" {
+  type        = bool
+  description = "Whether the DynamoDB cache alarm is present. This must be a static profile decision, not one inferred from a resource-derived table name."
+  default     = false
 }
 
 variable "sqs_queue_name" {

@@ -1,0 +1,892 @@
+name: Reconcile staging Terraform state
+
+# This is a deliberately manual, import-only escape hatch for resources that
+# already exist in the staging account but are absent from the reviewed state.
+# It never deletes, replaces, or applies Terraform resources. Importing changes
+# state, so the reviewed plan must be regenerated after this workflow succeeds.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_group_arn:
+        description: "Exact ARN of the existing aether-staging-backend target group"
+        required: false
+        type: string
+      ecr_repository_names:
+        description: "Comma-separated existing Terraform ECR names (aether-backend,aether-ml-serving,aether-kyber,aether-aether)"
+        required: false
+        type: string
+      untaint_ecr_repository_names:
+        description: "Comma-separated staging ECR names already in state but marked tainted; clears taint only"
+        required: false
+        type: string
+      staging_ecr_kms_key_arn:
+        description: "Exact reviewed staging ECR KMS key ARN; required for KMS-encrypted repositories"
+        required: false
+        type: string
+      staging_secret_names:
+        description: "Comma-separated existing aether/* Secrets Manager keys to import (approved staging allow-list only)"
+        required: false
+        type: string
+      staging_secrets_kms_key_arn:
+        description: "Exact reviewed staging Secrets Manager CMK ARN; required when importing staging secrets"
+        required: false
+        type: string
+      confirm_staging_import:
+        description: "Type IMPORT-STAGING to authorize this import-only action"
+        required: true
+        type: string
+      backend_image_digest:
+        description: "Approved immutable backend digest (sha256:...) for module validation"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  # Serialize with non-production Terraform promotions so the ownership
+  # inventory and import cannot race demo/preview repository creation.
+  group: terraform-nonprod-shared
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  TF_DIR: AWS Deployment/aether-aws/terraform
+
+jobs:
+  import-backend-target-group:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # State ownership changes require the protected Terraform approval
+    # boundary, not the application rehearsal environment.
+    environment: staging-terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install policy validation dependency
+        run: python -m pip install --disable-pip-version-check pyyaml
+
+      - name: Validate the reviewed Terraform state access contract
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          set -euo pipefail
+          python3 "${GITHUB_WORKSPACE}/scripts/release/check_terraform_state_access_policy.py" \
+            --manifest "${GITHUB_WORKSPACE}/config/terraform_state_access_policy.yaml" \
+            --terraform-root .
+
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-providers-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: terraform-providers-${{ runner.os }}-
+
+      - name: Configure Terraform provider cache
+        run: echo "TF_PLUGIN_CACHE_DIR=${HOME}/.terraform.d/plugin-cache" >> "$GITHUB_ENV"
+
+      - name: Require the protected state-write role
+        env:
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test -n "${AWS_TERRAFORM_APPLY_ROLE_ARN:-}" || {
+            echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN is required because reconciliation writes Terraform state'; exit 1;
+          }
+          case "$AWS_TERRAFORM_APPLY_ROLE_ARN" in
+            arn:aws:iam::*:role/*) ;;
+            *) echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
+          esac
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # Imports and untaints persist state; use the protected write role,
+          # never the read-only planning role.
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Verify effective Terraform state permissions
+        env:
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+          TF_STATE_KEY: profiles/staging/terraform.tfstate
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          python3 scripts/release/verify_terraform_state_role.py \
+            --role-arn "$AWS_TERRAFORM_APPLY_ROLE_ARN" \
+            --bucket "$TF_STATE_BUCKET" \
+            --lock-table "$TF_LOCK_TABLE" \
+            --state-key "$TF_STATE_KEY" \
+            --account-id "$account_id"
+
+      - name: Validate staging-only import request
+        env:
+          CONFIRM: ${{ inputs.confirm_staging_import }}
+          TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
+          ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
+          UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
+          STAGING_ECR_KMS_KEY_ARN: ${{ inputs.staging_ecr_kms_key_arn }}
+          STAGING_SECRET_NAMES: ${{ inputs.staging_secret_names }}
+          STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRM" = "IMPORT-STAGING" || {
+            echo "::error::Refusing import: confirmation must be IMPORT-STAGING"; exit 1;
+          }
+          test -n "$TARGET_GROUP_ARN$ECR_REPOSITORY_NAMES$UNTAINT_ECR_REPOSITORY_NAMES$STAGING_SECRET_NAMES" || {
+            echo '::error::Refusing reconciliation: provide target_group_arn, ecr_repository_names, untaint_ecr_repository_names, or staging_secret_names'; exit 1;
+          }
+          normalize_repositories() {
+            printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
+          }
+          normalized_imports="$(normalize_repositories "$ECR_REPOSITORY_NAMES")"
+          if [ -n "$TARGET_GROUP_ARN" ]; then
+            case "$TARGET_GROUP_ARN" in
+              arn:aws:elasticloadbalancing:us-east-1:*:targetgroup/aether-staging-backend/*) ;;
+              *) echo "::error::Refusing import: ARN is not the us-east-1 aether-staging-backend target group"; exit 1 ;;
+            esac
+            name="$(aws elbv2 describe-target-groups \
+              --target-group-arns "$TARGET_GROUP_ARN" \
+              --query 'TargetGroups[0].TargetGroupName' --output text)"
+            test "$name" = "aether-staging-backend" || {
+              echo "::error::Refusing import: AWS target group name is '$name', expected aether-staging-backend"; exit 1;
+            }
+          fi
+
+          if [ -n "$ECR_REPOSITORY_NAMES" ]; then
+            account_id="$(aws sts get-caller-identity --query Account --output text)"
+            needs_kms_key=false
+            IFS=',' read -ra repositories <<< "$normalized_imports"
+            for raw in "${repositories[@]}"; do
+              repository="$(printf '%s' "$raw" | xargs)"
+              case "$repository" in
+                aether-backend|aether-ml-serving|aether-kyber|aether-aether) ;;
+                *) echo "::error::Refusing import: '$repository' is not a reviewed Terraform ECR repository"; exit 1 ;;
+              esac
+              found="$(aws ecr describe-repositories --repository-names "$repository" \
+                --query 'repositories[0].repositoryName' --output text)"
+              test "$found" = "$repository" || {
+                echo "::error::Refusing import: ECR repository '$repository' was not found"; exit 1;
+              }
+              encryption_type="$(aws ecr describe-repositories --repository-names "$repository" \
+                --query 'repositories[0].encryptionConfiguration.encryptionType' --output text)"
+              encryption_key="$(aws ecr describe-repositories --repository-names "$repository" \
+                --query 'repositories[0].encryptionConfiguration.kmsKey' --output text)"
+              if [ "$repository" = "aether-backend" ]; then
+                test "$encryption_type" = AES256 || {
+                  echo "::error::Refusing import: staging backend must remain the reviewed AES256 repository; found '$encryption_type'"; exit 1;
+                }
+              else
+                needs_kms_key=true
+                test "$encryption_type" = KMS || {
+                  echo "::error::Refusing import: ECR repository '$repository' must use the reviewed staging KMS key"; exit 1;
+                }
+                test -n "$STAGING_ECR_KMS_KEY_ARN" || {
+                  echo '::error::Refusing ECR import: staging_ecr_kms_key_arn is required for KMS repositories'; exit 1;
+                }
+                test "$encryption_key" = "$STAGING_ECR_KMS_KEY_ARN" || {
+                  echo "::error::Refusing import: ECR repository '$repository' is not encrypted with the reviewed staging KMS key"; exit 1;
+                }
+              fi
+            done
+            if [ "$needs_kms_key" = true ]; then
+              expected_key_prefix="arn:aws:kms:us-east-1:${account_id}:key/"
+              case "$STAGING_ECR_KMS_KEY_ARN" in
+                "$expected_key_prefix"*) ;;
+                *) echo '::error::Refusing ECR import: KMS key must be a us-east-1 key in the staging account'; exit 1 ;;
+              esac
+              key_environment="$(aws kms list-resource-tags --key-id "$STAGING_ECR_KMS_KEY_ARN" \
+                --query 'Tags[?TagKey==`Environment`].TagValue | [0]' --output text)"
+              test "$key_environment" = staging || {
+                echo "::error::Refusing ECR import: KMS key Environment tag is '$key_environment', expected staging"; exit 1;
+              }
+            fi
+          fi
+          if [ -n "$UNTAINT_ECR_REPOSITORY_NAMES" ]; then
+            test -n "$STAGING_ECR_KMS_KEY_ARN" || {
+              echo '::error::Refusing ECR taint repair: staging_ecr_kms_key_arn is required'; exit 1;
+            }
+            account_id="$(aws sts get-caller-identity --query Account --output text)"
+            case "$STAGING_ECR_KMS_KEY_ARN" in
+              arn:aws:kms:us-east-1:${account_id}:key/*) ;;
+              *) echo '::error::Refusing ECR taint repair: KMS key must be a us-east-1 key in the staging account'; exit 1 ;;
+            esac
+            key_environment="$(aws kms list-resource-tags --key-id "$STAGING_ECR_KMS_KEY_ARN" \
+              --query 'Tags[?TagKey==`Environment`].TagValue | [0]' --output text)"
+            test "$key_environment" = staging || {
+              echo "::error::Refusing ECR taint repair: KMS key Environment tag is '$key_environment', expected staging"; exit 1;
+            }
+            normalized_untaints="$(normalize_repositories "$UNTAINT_ECR_REPOSITORY_NAMES")"
+            IFS=',' read -ra repositories <<< "$normalized_untaints"
+            for raw in "${repositories[@]}"; do
+              repository="$(printf '%s' "$raw" | xargs)"
+              case ",$normalized_imports," in
+                *,${repository},*) echo "::error::Refusing reconciliation: '$repository' cannot be both imported and untainted"; exit 1 ;;
+              esac
+              case "$repository" in
+                aether-ml-serving|aether-kyber|aether-aether) ;;
+                aether-backend)
+                  echo '::error::Refusing ECR taint repair: aether-backend is AES256 and is reconciled through import, not KMS taint repair'; exit 1 ;;
+                *) echo "::error::Refusing ECR taint repair: '$repository' is not a reviewed staging repository"; exit 1 ;;
+              esac
+              found="$(aws ecr describe-repositories --repository-names "$repository" \
+                --query 'repositories[0].repositoryName' --output text)"
+              test "$found" = "$repository" || {
+                echo "::error::Refusing ECR taint repair: ECR repository '$repository' was not found"; exit 1;
+              }
+              encryption_type="$(aws ecr describe-repositories --repository-names "$repository" \
+                --query 'repositories[0].encryptionConfiguration.encryptionType' --output text)"
+              encryption_key="$(aws ecr describe-repositories --repository-names "$repository" \
+                --query 'repositories[0].encryptionConfiguration.kmsKey' --output text)"
+              test "$encryption_type" = KMS && test "$encryption_key" = "$STAGING_ECR_KMS_KEY_ARN" || {
+                echo "::error::Refusing ECR taint repair: repository '$repository' does not match the reviewed staging KMS key"; exit 1;
+              }
+            done
+          fi
+
+      - name: Validate existing staging secret metadata before state mutation
+        if: inputs.staging_secret_names != ''
+        env:
+          STAGING_SECRET_NAMES: ${{ inputs.staging_secret_names }}
+          STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
+        run: |
+          set -euo pipefail
+          test -n "$STAGING_SECRETS_KMS_KEY_ARN" || {
+            echo '::error::staging_secrets_kms_key_arn is required when importing staging secrets'; exit 1;
+          }
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          case "$STAGING_SECRETS_KMS_KEY_ARN" in
+            arn:aws:kms:us-east-1:${account_id}:key/*) ;;
+            *) echo '::error::staging_secrets_kms_key_arn must be a us-east-1 CMK in the current staging account'; exit 1 ;;
+          esac
+          key_arn="$(aws kms describe-key --key-id "$STAGING_SECRETS_KMS_KEY_ARN" --query 'KeyMetadata.Arn' --output text)"
+          test "$key_arn" = "$STAGING_SECRETS_KMS_KEY_ARN" || {
+            echo '::error::staging secrets CMK could not be resolved to the supplied ARN'; exit 1;
+          }
+          key_environment="$(aws kms list-resource-tags --key-id "$STAGING_SECRETS_KMS_KEY_ARN" \
+            --query 'Tags[?TagKey==`Environment`].TagValue | [0]' --output text)"
+          test "$key_environment" = staging || {
+            echo "::error::staging secrets CMK Environment tag is '$key_environment', expected staging"; exit 1;
+          }
+          alias_metadata_file="$(mktemp)"
+          aws kms list-aliases \
+            --query "Aliases[?AliasName=='alias/aether-staging-secrets'] | [0]" \
+            --output json >"$alias_metadata_file" || {
+              rm -f "$alias_metadata_file"
+              echo '::error::could not inspect the reviewed staging secrets KMS alias'; exit 1;
+            }
+          alias_target_key_id="$(jq -r '.TargetKeyId // empty' "$alias_metadata_file")"
+          alias_target_arn=""
+          if [ -n "$alias_target_key_id" ]; then
+            alias_target_arn="$(aws kms describe-key --key-id "$alias_target_key_id" \
+              --query 'KeyMetadata.Arn' --output text)"
+            test "$alias_target_arn" = "$STAGING_SECRETS_KMS_KEY_ARN" || {
+              rm -f "$alias_metadata_file"
+              echo '::error::existing staging secrets KMS alias targets a different CMK'; exit 1;
+            }
+          elif [ -n "$(jq -r '.AliasArn // empty' "$alias_metadata_file")" ]; then
+            rm -f "$alias_metadata_file"
+            echo '::error::staging secrets KMS alias metadata has no target key'; exit 1;
+          else
+            echo 'The staging secrets KMS alias is absent remotely; reconciliation will leave it for the fresh reviewed plan to create.'
+          fi
+          rm -f "$alias_metadata_file"
+          normalize_secret_names() {
+            printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//; s#^aether/##' | awk 'NF' | paste -sd, -
+          }
+          normalized_secrets="$(normalize_secret_names "$STAGING_SECRET_NAMES")"
+          test -n "$normalized_secrets" || {
+            echo '::error::staging_secret_names must contain at least one secret key'; exit 1;
+          }
+          IFS=',' read -ra secrets <<< "$normalized_secrets"
+          for name in "${secrets[@]}"; do
+            case "$name" in
+              jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token|jwt-secret-previous|byok-encryption-key-previous) ;;
+              *) echo "::error::Refusing secret import: '$name' is not a reviewed staging secret"; exit 1 ;;
+            esac
+            describe_file="$(mktemp)"
+            aws secretsmanager describe-secret --secret-id "aether/$name" --output json >"$describe_file" || {
+              rm -f "$describe_file"
+              echo "::error::required staging secret aether/$name was not found or is not readable"; exit 1;
+            }
+            actual_name="$(jq -r '.Name // empty' "$describe_file")"
+            test "$actual_name" = "aether/$name" || {
+              rm -f "$describe_file"
+              echo "::error::secret metadata name '$actual_name' does not match aether/$name"; exit 1;
+            }
+            actual_kms="$(jq -r '.KmsKeyId // empty' "$describe_file")"
+            test "$actual_kms" = "$STAGING_SECRETS_KMS_KEY_ARN" || {
+              rm -f "$describe_file"
+              echo "::error::secret aether/$name is encrypted with a different CMK; refusing silent re-encryption"; exit 1;
+            }
+            jq -e 'any((.VersionIdsToStages // {})[]; index("AWSCURRENT") != null)' "$describe_file" >/dev/null || {
+              rm -f "$describe_file"
+              echo "::error::secret aether/$name has no AWSCURRENT version; populate it through the secure secret bootstrap before import"; exit 1;
+            }
+            jq -e '(.DeletedDate // null) == null' "$describe_file" >/dev/null || {
+              rm -f "$describe_file"
+              echo "::error::secret aether/$name is pending deletion; restore or replace it before import"; exit 1;
+            }
+            rm -f "$describe_file"
+          done
+          echo 'Validated staging secret names, CMK ownership, and AWSCURRENT metadata without reading plaintext values.'
+
+      - name: Initialize the staging state backend
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+        run: |
+          set -euo pipefail
+          bash "${GITHUB_WORKSPACE}/scripts/release/terraform_init_retry.sh" -input=false \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
+            -backend-config="key=profiles/staging/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true"
+
+      - name: Verify imported repositories use the state-managed ECR key
+        if: inputs.ecr_repository_names != '' || inputs.untaint_ecr_repository_names != ''
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
+          UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
+          STAGING_ECR_KMS_KEY_ARN: ${{ inputs.staging_ecr_kms_key_arn }}
+        run: |
+          set -euo pipefail
+          kms_repositories="$(printf '%s\n%s' "$ECR_REPOSITORY_NAMES" "$UNTAINT_ECR_REPOSITORY_NAMES" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | grep -Ev '^(|aether-backend)$' | sort -u || true)"
+          [ -n "$kms_repositories" ] || exit 0
+          managed_key_arn="$(terraform state show -no-color 'module.ecr.aws_kms_key.ecr' \
+            | sed -n 's/^[[:space:]]*arn[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+          test -n "$managed_key_arn" || {
+            echo '::error::Refusing ECR import: the Terraform-managed staging ECR KMS key is not in state'; exit 1;
+          }
+          test "$managed_key_arn" = "$STAGING_ECR_KMS_KEY_ARN" || {
+            echo '::error::Refusing ECR import: supplied KMS key does not match module.ecr.aws_kms_key.ecr in staging state'; exit 1;
+          }
+
+      - name: Refuse if an import target is already managed
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
+          ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
+          UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+        run: |
+          set -euo pipefail
+          state_list_file="$(mktemp)"
+          # Capture the complete list before matching. Piping Terraform into
+          # grep -q under pipefail lets grep close early, which causes the
+          # Terraform output wrapper to receive EPIPE and falsely reports a
+          # present state address as absent.
+          terraform state list >"$state_list_file"
+          if [ -n "$TARGET_GROUP_ARN" ] && grep -Fxq 'module.alb.aws_lb_target_group.backend[0]' "$state_list_file"; then
+            managed_target_group_arn="$(terraform state show -no-color 'module.alb.aws_lb_target_group.backend[0]' \
+              | sed -n 's/^[[:space:]]*arn[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+            test "$managed_target_group_arn" = "$TARGET_GROUP_ARN" || {
+              echo '::error::Refusing import: canonical staging target-group state points to a different ARN'; exit 1;
+            }
+            echo '::notice::Staging target group is already at the canonical state address; retry is a verified no-op.'
+          fi
+          # The address check above is not sufficient: a prior partial import
+          # could have recorded the same remote object under another address.
+          # Refuse that case rather than creating two state owners for one ARN.
+          state_snapshot_file=""
+          state_dir=""
+          cleanup_state_artifacts() {
+            if [ -n "${state_snapshot_file:-}" ]; then
+              rm -f "$state_snapshot_file"
+            fi
+            if [ -n "${state_dir:-}" ]; then
+              rm -rf "$state_dir"
+            fi
+          }
+          trap cleanup_state_artifacts EXIT
+          state_snapshot_file="$(mktemp)"
+          if ! terraform state pull >"$state_snapshot_file"; then
+            echo '::error::Refusing import: could not read staging state to verify remote-object ownership'
+            exit 1
+          fi
+          normalize_repositories() {
+            printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
+          }
+          normalized_imports="$(normalize_repositories "$ECR_REPOSITORY_NAMES")"
+          normalized_untaints="$(normalize_repositories "$UNTAINT_ECR_REPOSITORY_NAMES")"
+          if [ -n "$TARGET_GROUP_ARN" ] \
+            && ! grep -Fxq 'module.alb.aws_lb_target_group.backend[0]' "$state_list_file" \
+            && grep -Fq -- "$TARGET_GROUP_ARN" "$state_snapshot_file"; then
+            echo '::error::Refusing import: target-group ARN already appears elsewhere in staging state'
+            exit 1
+          fi
+          if [ -n "$normalized_imports$normalized_untaints" ]; then
+            IFS=',' read -ra repositories <<< "$normalized_imports,$normalized_untaints"
+            for raw in "${repositories[@]}"; do
+              repository="$(printf '%s' "$raw" | xargs)"
+              [ -n "$repository" ] || continue
+              address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
+              if [[ ",$normalized_imports," == *",$repository,"* ]]; then
+                if grep -Fxq "$address" "$state_list_file"; then
+                  canonical_name="$(terraform state show -no-color "$address" \
+                    | sed -n 's/^[[:space:]]*name[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+                  test "$canonical_name" = "$repository" || {
+                    echo "::error::Refusing import: canonical state address $address points to '$canonical_name', expected '$repository'"; exit 1;
+                  }
+                  canonical_status="$(jq -r --arg repository "$repository" '
+                    .resources[]?
+                    | select(.type == "aws_ecr_repository")
+                    | .instances[]?
+                    | select(.attributes.name? == $repository)
+                    | .status // "managed"
+                  ' "$state_snapshot_file" | head -n 1)"
+                  test "${canonical_status:-managed}" = managed || {
+                    echo "::error::Refusing import: canonical ECR repository '$repository' has state status '${canonical_status}', use the explicit untaint path after review"; exit 1;
+                  }
+                  echo "::notice::ECR repository '$repository' is already at the canonical staging address; retry is a verified no-op."
+                  continue
+                fi
+                # A prior interrupted run may have recorded the repository at
+                # a legacy address. That is recoverable only when there is one
+                # unambiguous owner; the adoption step below moves that owner
+                # to the reviewed module address after all collision checks.
+                owners="$(while IFS= read -r candidate; do
+                  case "$candidate" in
+                    *aws_ecr_repository.*)
+                      if terraform state show -no-color "$candidate" 2>/dev/null \
+                        | grep -Eq "^[[:space:]]*name[[:space:]]*=[[:space:]]*\"${repository}\"[[:space:]]*$"; then
+                        printf '%s\n' "$candidate"
+                      fi
+                      ;;
+                  esac
+                done < "$state_list_file")"
+                owner_count="$(printf '%s\n' "$owners" | awk 'NF' | wc -l | tr -d ' ')"
+                if [ "$owner_count" -gt 1 ]; then
+                  echo "::error::Refusing import: ECR repository '$repository' has multiple staging state owners"; exit 1
+                fi
+                if [ "$owner_count" -eq 1 ]; then
+                  echo "::notice::ECR repository '$repository' has one legacy staging owner; it will be adopted at $address"
+                fi
+              fi
+            done
+          fi
+          # Validate every untaint target before any import or untaint mutation.
+          # An untaint request is allowed to be staging-owned at its canonical
+          # address, but must not have a second staging state owner for the
+          # same remote repository.
+          if [ -n "$normalized_untaints" ]; then
+            IFS=',' read -ra repositories <<< "$normalized_untaints"
+            staging_ecr_addresses="$(grep 'aws_ecr_repository' "$state_list_file" || true)"
+            for repository in "${repositories[@]}"; do
+              address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
+              grep -Fxq "$address" <<<"$staging_ecr_addresses" || {
+                echo "::error::Refusing ECR taint repair: $address is not in staging state"; exit 1;
+              }
+              canonical_name="$(terraform state show -no-color "$address" \
+                | sed -n 's/^[[:space:]]*name[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+              test "$canonical_name" = "$repository" || {
+                echo "::error::Refusing ECR taint repair: canonical state address $address points to '$canonical_name', expected '$repository'"; exit 1;
+              }
+              taint_status="$(jq -r --arg repository "$repository" '
+                .resources[]?
+                | select(.module == "module.ecr" and .type == "aws_ecr_repository" and .name == "this")
+                | .instances[]?
+                | select((.index_key? == $repository) or (.attributes.name? == $repository))
+                | .status // "managed"
+              ' "$state_snapshot_file" | head -n 1)"
+              test "$taint_status" = "tainted" || {
+                echo "::error::Refusing ECR taint repair: canonical state address $address is not tainted (status '$taint_status')"; exit 1;
+              }
+              while IFS= read -r candidate; do
+                [ -n "$candidate" ] || continue
+                [ "$candidate" = "$address" ] && continue
+                if terraform state show -no-color "$candidate" 2>/dev/null \
+                  | grep -Eq "^[[:space:]]*name[[:space:]]*=[[:space:]]*\"${repository}\"[[:space:]]*$"; then
+                  echo "::error::Refusing ECR taint repair: repository '$repository' has another staging state owner at $candidate"; exit 1
+                fi
+              done <<< "$staging_ecr_addresses"
+            done
+          fi
+          # Shared repository names can be referenced by the non-production
+          # demo and preview profiles. Inspect every shared-account state key
+          # before assigning ownership to staging, rather than creating a
+          # second Terraform owner that could later destroy another profile's
+          # repository.
+          state_dir="$(mktemp -d)"
+          # Staging is the intended owner for an untaint repair and its local
+          # state was already checked above. Only inspect the other shared
+          # profiles here so a staging-owned repository is not rejected.
+          for profile in demo preview; do
+            key="profiles/${profile}/terraform.tfstate"
+            state_file="$state_dir/${profile}.json"
+            error_file="$state_dir/${profile}.err"
+            if aws s3api get-object --bucket "$TF_STATE_BUCKET" --key "$key" "$state_file" \
+              >/dev/null 2>"$error_file"; then
+              if [ -n "$TARGET_GROUP_ARN" ] && jq -e --arg arn "$TARGET_GROUP_ARN" \
+                'any(.resources[]?; any(.instances[]?.attributes.arn?; . == $arn))' "$state_file" >/dev/null; then
+                echo "::error::Refusing import: target-group ARN already appears in ${profile} state"; exit 1
+              fi
+              if [ -n "$normalized_imports$normalized_untaints" ]; then
+                IFS=',' read -ra repositories <<< "$normalized_imports,$normalized_untaints"
+                for raw in "${repositories[@]}"; do
+                  repository="$(printf '%s' "$raw" | xargs)"
+                  [ -n "$repository" ] || continue
+                  if jq -e --arg repository "$repository" \
+                    'any(.resources[]?; .type == "aws_ecr_repository" and any(.instances[]?.attributes.name?; . == $repository))' \
+                    "$state_file" >/dev/null; then
+                    echo "::error::Refusing import: ECR repository '$repository' already appears in ${profile} state"; exit 1
+                  fi
+                done
+              fi
+            else
+              if ! grep -Eq 'NoSuchKey|NotFound|404' "$error_file"; then
+                cat "$error_file"; exit 1
+              fi
+            fi
+          done
+
+      - name: Validate import prerequisites before state adoption
+        if: inputs.ecr_repository_names != ''
+        env:
+          BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
+          TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
+          TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
+          TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
+          AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+          AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
+          TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
+          TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$BACKEND_IMAGE_DIGEST" || { echo '::error::backend_image_digest is required'; exit 1; }
+          printf '%s' "$BACKEND_IMAGE_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
+            echo '::error::backend_image_digest must be an immutable sha256 digest'; exit 1;
+          }
+          for required in \
+            TF_VAR_acm_certificate_arn \
+            TF_VAR_domain_name \
+            TF_VAR_alert_email \
+            AUTH0_DOMAIN \
+            AUTH0_CLIENT_ID \
+            AUTH0_CLIENT_SECRET \
+            TF_VAR_aether_app_url \
+            TF_VAR_kyber_app_url; do
+            test -n "${!required:-}" || {
+              echo "::error::${required} is required before state adoption"; exit 1;
+            }
+          done
+
+      - name: Adopt uniquely-owned legacy ECR state addresses
+        if: inputs.ecr_repository_names != ''
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
+        run: |
+          set -euo pipefail
+          normalize_repositories() {
+            printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
+          }
+          normalized_imports="$(normalize_repositories "$ECR_REPOSITORY_NAMES")"
+          [ -n "$normalized_imports" ] || exit 0
+          IFS=',' read -ra repositories <<< "$normalized_imports"
+          state_snapshot_file="$(mktemp)"
+          adoptions_file="$(mktemp)"
+          terraform state pull >"$state_snapshot_file"
+          state_list_file="$(mktemp)"
+          terraform state list >"$state_list_file"
+          cleanup_state_snapshot() {
+            rm -f "$state_snapshot_file" "$adoptions_file" "$state_list_file"
+          }
+          trap cleanup_state_snapshot EXIT
+          # First validate every candidate and record the complete adoption
+          # set. No state move is allowed until all candidates are known to be
+          # healthy and uniquely owned, preventing a later bad entry from
+          # leaving an earlier repository partially migrated.
+          for repository in "${repositories[@]}"; do
+            address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
+            if grep -Fxq "$address" "$state_list_file"; then
+              continue
+            fi
+            owners="$(while IFS= read -r candidate; do
+              case "$candidate" in
+                *aws_ecr_repository.*)
+                  if terraform state show -no-color "$candidate" 2>/dev/null \
+                    | grep -Eq "^[[:space:]]*name[[:space:]]*=[[:space:]]*\"${repository}\"[[:space:]]*$"; then
+                    printf '%s\n' "$candidate"
+                  fi
+                  ;;
+              esac
+            done < "$state_list_file")"
+            owner_count="$(printf '%s\n' "$owners" | awk 'NF' | wc -l | tr -d ' ')"
+            case "$owner_count" in
+              0)
+                echo "No existing staging state owner for '$repository'; import will create the canonical address."
+                ;;
+              1)
+                owner="$(printf '%s\n' "$owners" | awk 'NF { print; exit }')"
+                legacy_status="$(jq -r --arg repository "$repository" '
+                  .resources[]?
+                  | select(.type == "aws_ecr_repository")
+                  | .instances[]?
+                  | select(.attributes.name? == $repository)
+                  | .status // "managed"
+                ' "$state_snapshot_file" | head -n 1)"
+                if [ "${legacy_status:-managed}" != "managed" ]; then
+                  echo "::error::Refusing adoption: ECR repository '$repository' legacy owner $owner has state status '${legacy_status}', use the explicit untaint path after review"; exit 1
+                fi
+                printf '%s\t%s\n' "$owner" "$address" >> "$adoptions_file"
+                ;;
+              *)
+                echo "::error::Refusing adoption: ECR repository '$repository' has multiple staging state owners"; exit 1
+                ;;
+            esac
+          done
+          if [ -s "$adoptions_file" ]; then
+            while IFS=$'\t' read -r owner address; do
+              echo "Adopting the uniquely-owned legacy address $owner as $address"
+              terraform state mv -lock-timeout=5m "$owner" "$address"
+            done < "$adoptions_file"
+          fi
+
+      - name: Import only the known staging resources
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
+          ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
+          UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
+          STAGING_SECRET_NAMES: ${{ inputs.staging_secret_names }}
+          STAGING_SECRETS_KMS_KEY_ARN: ${{ inputs.staging_secrets_kms_key_arn }}
+          BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
+          TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
+          TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
+          TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
+          # The root includes Auth0 resources even when this workflow imports
+          # only an AWS address. The provider obtains these from the runner
+          # environment so they never enter Terraform variables or state.
+          AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+          AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
+          TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
+          TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$BACKEND_IMAGE_DIGEST" || { echo '::error::backend_image_digest is required'; exit 1; }
+          printf '%s' "$BACKEND_IMAGE_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
+            echo '::error::backend_image_digest must be an immutable sha256 digest'; exit 1;
+          }
+          for required in \
+            TF_VAR_acm_certificate_arn \
+            TF_VAR_domain_name \
+            TF_VAR_alert_email \
+            AUTH0_DOMAIN \
+            AUTH0_CLIENT_ID \
+            AUTH0_CLIENT_SECRET \
+            TF_VAR_aether_app_url \
+            TF_VAR_kyber_app_url; do
+            test -n "${!required:-}" || {
+              echo "::error::${required} is required for the root module during import"; exit 1;
+            }
+          done
+          state_list_file="$(mktemp)"
+          trap 'rm -f "$state_list_file"' EXIT
+          terraform state list >"$state_list_file"
+          if [ -n "$TARGET_GROUP_ARN" ]; then
+            target_group_address='module.alb.aws_lb_target_group.backend[0]'
+            if grep -Fxq "$target_group_address" "$state_list_file"; then
+              echo 'Staging target group is already at the canonical address; no import needed.'
+            else
+              terraform import -input=false \
+                -var-file=profiles/staging.tfvars \
+                -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
+                "$target_group_address" "$TARGET_GROUP_ARN"
+            fi
+            terraform state list >"$state_list_file"
+          fi
+          if [ -n "$ECR_REPOSITORY_NAMES" ]; then
+            normalize_repositories() {
+              printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
+            }
+            normalized_imports="$(normalize_repositories "$ECR_REPOSITORY_NAMES")"
+            IFS=',' read -ra repositories <<< "$normalized_imports"
+            for raw in "${repositories[@]}"; do
+              repository="$(printf '%s' "$raw" | xargs)"
+              address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
+              if grep -Fxq "$address" "$state_list_file"; then
+                echo "ECR repository '$repository' is already at the canonical staging address; no import needed."
+                continue
+              fi
+              terraform import -input=false \
+                -var-file=profiles/staging.tfvars \
+                -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
+                "module.ecr.aws_ecr_repository.this[\"${repository}\"]" "$repository"
+            done
+            terraform state list >"$state_list_file"
+          fi
+          if [ -n "$UNTAINT_ECR_REPOSITORY_NAMES" ]; then
+            normalize_repositories() {
+              printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
+            }
+            normalized_untaints="$(normalize_repositories "$UNTAINT_ECR_REPOSITORY_NAMES")"
+            IFS=',' read -ra repositories <<< "$normalized_untaints"
+            for raw in "${repositories[@]}"; do
+              repository="$(printf '%s' "$raw" | xargs)"
+              address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
+              grep -Fxq "$address" "$state_list_file" || {
+                echo "::error::Refusing ECR taint repair: $address is not in staging state"; exit 1;
+              }
+              terraform untaint "$address"
+            done
+            echo "Cleared taint only for the explicitly reviewed staging ECR repositories. Generate a fresh reviewed plan before any apply."
+          fi
+          if [ -n "$STAGING_SECRET_NAMES" ]; then
+            normalize_secret_names() {
+              printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//; s#^aether/##' | awk 'NF' | paste -sd, -
+            }
+            normalized_secrets="$(normalize_secret_names "$STAGING_SECRET_NAMES")"
+            IFS=',' read -ra secrets <<< "$normalized_secrets"
+            kms_address='module.secrets.aws_kms_key.secrets'
+            alias_address='module.secrets.aws_kms_alias.secrets'
+            if grep -Fxq "$kms_address" "$state_list_file"; then
+              state_kms_arn="$(terraform state show -no-color "$kms_address" \
+                | sed -n 's/^[[:space:]]*arn[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+              test "$state_kms_arn" = "$STAGING_SECRETS_KMS_KEY_ARN" || {
+                echo '::error::canonical staging secrets KMS key state points to a different ARN'; exit 1;
+              }
+            else
+              terraform import -input=false \
+                -var-file=profiles/staging.tfvars \
+                -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
+                "$kms_address" "$STAGING_SECRETS_KMS_KEY_ARN"
+            fi
+            alias_metadata_file="$(mktemp)"
+            aws kms list-aliases \
+              --query "Aliases[?AliasName=='alias/aether-staging-secrets'] | [0]" \
+              --output json >"$alias_metadata_file" || {
+              rm -f "$alias_metadata_file"
+              echo '::error::could not inspect the reviewed staging secrets KMS alias'; exit 1;
+            }
+            alias_arn="$(jq -r '.AliasArn // empty' "$alias_metadata_file")"
+            alias_target_key_id="$(jq -r '.TargetKeyId // empty' "$alias_metadata_file")"
+            if grep -Fxq "$alias_address" "$state_list_file"; then
+              state_alias_name="$(terraform state show -no-color "$alias_address" \
+                | sed -n 's/^[[:space:]]*name[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+              test "$state_alias_name" = 'alias/aether-staging-secrets' || {
+                rm -f "$alias_metadata_file"
+                echo '::error::canonical staging secrets KMS alias points to an unexpected name'; exit 1;
+              }
+            elif [ -n "$alias_arn" ]; then
+              test -n "$alias_target_key_id" || {
+                rm -f "$alias_metadata_file"
+                echo '::error::staging secrets KMS alias metadata has no target key'; exit 1;
+              }
+              alias_target_arn="$(aws kms describe-key --key-id "$alias_target_key_id" \
+                --query 'KeyMetadata.Arn' --output text)"
+              test "$alias_target_arn" = "$STAGING_SECRETS_KMS_KEY_ARN" || {
+                rm -f "$alias_metadata_file"
+                echo '::error::existing staging secrets KMS alias targets a different CMK'; exit 1;
+              }
+              terraform import -input=false \
+                -var-file=profiles/staging.tfvars \
+                -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
+                "$alias_address" 'alias/aether-staging-secrets'
+            else
+              echo 'The staging secrets KMS alias is absent remotely; leaving its Terraform address unmanaged so the fresh reviewed plan can create it.'
+            fi
+            rm -f "$alias_metadata_file"
+            terraform state list >"$state_list_file"
+            for name in "${secrets[@]}"; do
+              case "$name" in
+                jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token)
+                  address="module.secrets.aws_secretsmanager_secret.this[\"${name}\"]" ;;
+                jwt-secret-previous) address='module.secrets.aws_secretsmanager_secret.jwt_secret_previous' ;;
+                byok-encryption-key-previous) address='module.secrets.aws_secretsmanager_secret.byok_key_previous' ;;
+                *) echo "::error::Refusing secret import: '$name' is not a reviewed staging secret"; exit 1 ;;
+              esac
+              if grep -Fxq "$address" "$state_list_file"; then
+                state_secret_name="$(terraform state show -no-color "$address" \
+                  | sed -n 's/^[[:space:]]*name[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' | head -n 1)"
+                test "$state_secret_name" = "aether/$name" || {
+                  echo "::error::canonical state address $address points to '$state_secret_name', expected aether/$name"; exit 1;
+                }
+                echo "Secret aether/$name is already at the canonical staging address; no import needed."
+              else
+                terraform import -input=false \
+                  -var-file=profiles/staging.tfvars \
+                  -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
+                  "$address" "aether/$name"
+              fi
+              terraform state list >"$state_list_file"
+            done
+            echo 'Imported only the reviewed staging secret metadata; no secret values were read or written.'
+          fi
+
+      - name: Emit reconciled state checksum
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          TARGET_GROUP_ARN: ${{ inputs.target_group_arn }}
+          ECR_REPOSITORY_NAMES: ${{ inputs.ecr_repository_names }}
+          UNTAINT_ECR_REPOSITORY_NAMES: ${{ inputs.untaint_ecr_repository_names }}
+          STAGING_SECRET_NAMES: ${{ inputs.staging_secret_names }}
+        run: |
+          set -euo pipefail
+          state_list_file="$(mktemp)"
+          trap 'rm -f "$state_list_file"' EXIT
+          terraform state list >"$state_list_file"
+          if [ -n "${TARGET_GROUP_ARN:-}" ]; then
+            grep -Fx 'module.alb.aws_lb_target_group.backend[0]' "$state_list_file"
+          fi
+          if [ -n "${ECR_REPOSITORY_NAMES:-}" ]; then
+            normalize_repositories() {
+              printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
+            }
+            normalized_imports="$(normalize_repositories "$ECR_REPOSITORY_NAMES")"
+            IFS=',' read -ra repositories <<< "$normalized_imports"
+            for raw in "${repositories[@]}"; do
+              repository="$(printf '%s' "$raw" | xargs)"
+              grep -Fx "module.ecr.aws_ecr_repository.this[\"${repository}\"]" "$state_list_file"
+            done
+          fi
+          if [ -n "${UNTAINT_ECR_REPOSITORY_NAMES:-}" ]; then
+            normalize_repositories() {
+              printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//' | awk 'NF' | sort -u | paste -sd, -
+            }
+            normalized_untaints="$(normalize_repositories "$UNTAINT_ECR_REPOSITORY_NAMES")"
+            IFS=',' read -ra repositories <<< "$normalized_untaints"
+            for raw in "${repositories[@]}"; do
+              repository="$(printf '%s' "$raw" | xargs)"
+              grep -Fx "module.ecr.aws_ecr_repository.this[\"${repository}\"]" "$state_list_file"
+            done
+          fi
+          if [ -n "${STAGING_SECRET_NAMES:-}" ]; then
+            normalize_secret_names() {
+              printf '%s' "$1" | tr ',' '\n' | sed 's/^ *//; s/ *$//; s#^aether/##' | awk 'NF' | paste -sd, -
+            }
+            normalized_secrets="$(normalize_secret_names "$STAGING_SECRET_NAMES")"
+            grep -Fx 'module.secrets.aws_kms_key.secrets' "$state_list_file"
+            grep -Fx 'module.secrets.aws_kms_alias.secrets' "$state_list_file"
+            IFS=',' read -ra secrets <<< "$normalized_secrets"
+            for name in "${secrets[@]}"; do
+              case "$name" in
+                jwt-secret|byok-encryption-key|stripe-secret-key|stripe-webhook-secret|oracle-signer-private-key|watermark-secret-key|canary-secret-seed|extraction-canary-seed|sdk-config-secret|first-admin-bootstrap-token)
+                  address="module.secrets.aws_secretsmanager_secret.this[\"${name}\"]" ;;
+                jwt-secret-previous) address='module.secrets.aws_secretsmanager_secret.jwt_secret_previous' ;;
+                byok-encryption-key-previous) address='module.secrets.aws_secretsmanager_secret.byok_key_previous' ;;
+                *) echo "::error::Refusing checksum: '$name' is not a reviewed staging secret"; exit 1 ;;
+              esac
+              grep -Fx "$address" "$state_list_file"
+            done
+          fi
+          terraform state pull > reconciled-staging-state.json
+          sha256sum reconciled-staging-state.json | tee reconciled-staging-state.sha256
+          rm -f reconciled-staging-state.json
+          echo 'Import completed. Generate and review a fresh staging plan before any apply.'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reconciled-staging-state-${{ github.run_id }}
+          path: ${{ env.TF_DIR }}/reconciled-staging-state.sha256
+          retention-days: 7

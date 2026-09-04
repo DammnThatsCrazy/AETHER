@@ -19,12 +19,22 @@ from typing import Optional
 # Fallback HMAC key used when no env var is set (test/local only).
 _DEFAULT_HMAC_KEY = b"aether-identity-hash-key-default"
 
+# Fallback key for verification proof secrets — a SEPARATE key domain from the
+# identifier-hashing key so a proof secret's digest can never collide with an
+# identifier hash even under the same raw input (test/local only).
+_DEFAULT_VERIFICATION_KEY = b"aether-identity-verification-token-key-default"
+
 
 def _hmac_key() -> bytes:
     raw = os.getenv("IDENTITY_HASH_KEY", "")
     if raw:
         return raw.encode()
     return _DEFAULT_HMAC_KEY
+
+
+def _verification_hmac_key() -> bytes:
+    raw = os.getenv("IDENTITY_VERIFICATION_TOKEN_KEY", "")
+    return raw.encode() if raw else _DEFAULT_VERIFICATION_KEY
 
 
 def hash_value(value: str, scope: str = "") -> str:
@@ -37,6 +47,23 @@ def hash_value(value: str, scope: str = "") -> str:
         return ""
     msg = f"{scope}:{value}" if scope else value
     return hmac.new(_hmac_key(), msg.encode(), hashlib.sha256).hexdigest()
+
+
+def hash_verification_token(token: str, scope: str = "") -> str:
+    """HMAC-SHA256 digest of a verification OTP/magic-link secret, under a key
+    domain SEPARATE from identifier hashing so proof secrets and identifier
+    hashes can never collide."""
+    if not token:
+        return ""
+    msg = f"{scope}:{token}" if scope else token
+    return hmac.new(_verification_hmac_key(), msg.encode(), hashlib.sha256).hexdigest()
+
+
+def verify_token_digest(token: str, expected_digest: str, scope: str = "") -> bool:
+    """Constant-time comparison of a presented token against a stored digest."""
+    if not token or not expected_digest:
+        return False
+    return hmac.compare_digest(hash_verification_token(token, scope), expected_digest)
 
 
 def hash_email(email: str, tenant_id: str) -> str:

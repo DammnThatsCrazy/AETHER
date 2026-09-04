@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/identity/resolver.py
   - Backend Architecture/aether-backend/services/identity/repository.py
 canonical_owner: identity@aether
-last_synced_commit: 0adc1534d28d00a7aa98aaffb61c50698e8d33cb
+last_synced_commit: 4764707
 ---
 # Identity Resolution
 
@@ -63,8 +63,8 @@ Resolution evidence is scored and bucketed into confidence tiers:
 
 | Tier | Approximate Score | Meaning |
 |------|-------------------|---------|
-| `deterministic` | 1.0 | Hard evidence: authenticated `user_id`, verified `email_hash`, verified wallet signature proof. |
-| `strong` | ~0.85–0.99 | Strong continuity signals: same anonymous install ID, same session continuity across platforms. |
+| `deterministic` | 1.0 | Hard evidence: authenticated `user_id`, `external_id`, **verified email ownership** (`email_ownership_verified`), verified wallet signature proof. |
+| `strong` | ~0.85–0.99 | Strong but not proven: an **observed** `email_hash`/`phone_hash`, same anonymous install ID, session continuity across platforms. An observed email address is strong evidence of the same identity — it is **not** proof the subject controls the mailbox. |
 | `probable` | ~0.60–0.84 | Medium evidence: same campaign path, journey path, `org_id` co-occurrence. |
 | `weak` | ~0.01–0.59 | Soft signals: device fingerprint, IP proximity, timing correlation. |
 | `blocked` | N/A | Signal disqualified; see reason codes below. |
@@ -80,8 +80,9 @@ signal.
 | Signal | Enum value | Typical tier |
 |--------|-----------|--------------|
 | Authenticated user ID | `user_id` | deterministic |
-| Verified email hash | `email_hash` | deterministic |
-| Verified phone hash | `phone_hash` | deterministic |
+| Verified email ownership | `email_ownership_verified` | deterministic |
+| Observed email hash | `email_hash` | strong |
+| Observed phone hash | `phone_hash` | strong |
 | Verified wallet signature | `wallet_signature_verified` | deterministic |
 | Anonymous install ID | `anonymous_id` | strong |
 | Mobile install ID | `mobile_install_id` | strong |
@@ -109,7 +110,11 @@ Every resolution decision is annotated with a reason code for auditability:
 | `same_user_id` | Matching authenticated user ID across signals. |
 | `same_external_id` | Matching external system identifier. |
 | `same_verified_wallet` | Matching wallet address with verified signature proof. |
-| `same_email_hash` | Matching hashed email across signals. |
+| `same_verified_email` | Matching email with **verified ownership** proof (deterministic). |
+| `verified_email_evidence` | Verified-email ownership authorised a deterministic merge of compatible fragments. |
+| `conflicting_verified_identifier` | Verified ownership spans candidates carrying contradictory deterministic identifiers; routed to review. |
+| `resolution_replay` | Decision produced by an asynchronous resolution replay (new evidence reconciling history). |
+| `same_email_hash` | Matching hashed email across signals (observed only, not proof of control). |
 | `same_phone_hash` | Matching hashed phone across signals. |
 | `same_anonymous_id` | Matching anonymous install/browser ID. |
 | `same_session_id` | Same session ID observed across events. |
@@ -128,6 +133,54 @@ Every resolution decision is annotated with a reason code for auditability:
 | `manual_operator_merge` | Operator-initiated merge via `/v1/identity/merge`. |
 | `manual_operator_split` | Operator-initiated split via `/v1/identity/split`. |
 | `new_entity` | No prior entity found; fresh `canonical_entity_id` created. |
+
+---
+
+## Identity assurance: verification evidence
+
+The resolver distinguishes an **observed** identifier from a **verified** one.
+Observation ("this event carried `user@example.com`") is strong evidence but is
+not proof the subject controls the mailbox; a client-supplied `email_verified`
+flag is **never** trusted as proof and is discarded during signal extraction.
+Ownership/control is established only by backend-owned verification and recorded
+as durable evidence.
+
+- **Challenges** (`identity_verification_challenges`) — short-lived OTP or
+  scanner-safe magic-link proofs. High-entropy secrets are stored only as an
+  HMAC digest under a key domain separate from identifier hashing; challenges
+  are single-use (`issued → validated → consumed`), expiry- and attempt-bounded,
+  and tenant-scoped. A magic-link `GET` only *validates* (never creates
+  evidence); a subsequent explicit `POST /consume` performs the one-time
+  consumption, so enterprise mail scanners cannot forge ownership.
+- **Evidence** (`identity_verification_evidence`) — the durable fact produced
+  when a proof succeeds (or a trusted OIDC/SSO `email_verified` claim is
+  validated server-side). Evidence carries the identifier hash, method, issuer,
+  assurance level, challenge/event provenance, policy version, and status
+  (`active`/`revoked`/`expired`). It records *why* two identities may resolve
+  together; it is revocable and never silently deleted.
+
+Verified email ownership emits the `email_ownership_verified` signal, scored
+**deterministic**. It still requires identity-linking consent, and a suppressed
+email hash blocks resolution regardless of assurance level. When verified
+ownership spans multiple candidate entities, the resolver merges them only if
+they carry no contradictory deterministic identifier (e.g. two different
+`user_id`s) — otherwise it opens a conflict for review. The surviving
+`canonical_entity_id` is the **oldest** active subject (by first-seen), never the
+largest or most recent.
+
+## Resolution replay and revision
+
+New evidence can arrive after the fact. `services/identity/resolution_replay.py`
+re-runs the **existing** resolver for the affected identifier component — it is
+not a second matcher and adds no scoring of its own. Replay is asynchronous,
+tenant- and component-scoped, and idempotent on
+`{tenant_id}:{trigger_id}:{policy_version}`, so a duplicate verification
+callback can never double-merge.
+
+Each identity topology change increments a monotonic `resolution_revision` on the
+surviving subject and is carried on the `IDENTITY_MERGED` event, giving
+downstream derived surfaces (Profile360, analytics, journeys, attribution,
+caches) a clean signal for detecting and restating stale identity state.
 
 ---
 
@@ -251,6 +304,18 @@ All routes are under prefix `/v1/identity`.
 | `POST` | `/v1/identity/suppress` | write | Create a suppression rule to permanently block an identifier hash from being used in identity linking. |
 | `DELETE` | `/v1/identity/suppress/{suppression_id}` | write | Revoke an active suppression rule. |
 | `GET` | `/v1/identity/suppressions` | read | List active suppression rules for this tenant. |
+
+### Email verification and evidence
+
+| Method | Path | Permission | Description |
+|--------|------|-----------|-------------|
+| `POST` | `/v1/identity/verification/email/challenges` | write | Issue an email verification challenge (`otp` or `magic_link`). The raw secret is delivered out-of-band. |
+| `POST` | `/v1/identity/verification/email/challenges/{challenge_id}/verify` | write | Verify an OTP code; on success produces `email_ownership_verified` evidence. |
+| `GET` | `/v1/identity/verification/email/callback` | write | Scanner-safe magic-link landing — validates the token only; never consumes or creates evidence. |
+| `POST` | `/v1/identity/verification/email/challenges/{challenge_id}/consume` | write | One-time consumption of a validated magic link; produces evidence. |
+| `POST` | `/v1/identity/verification/oidc` | write | Validate a trusted OIDC/SSO `email_verified` claim (issuer allowlist + audience) into evidence. |
+| `GET` | `/v1/identity/entities/{canonical_entity_id}/evidence` | read | List verification evidence for an entity (operator-facing, redacted). |
+| `POST` | `/v1/identity/evidence/{evidence_id}/revoke` | write | Revoke verification evidence; triggers resolution replay. |
 
 ### SIWX session binding
 

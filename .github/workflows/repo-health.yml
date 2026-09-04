@@ -11,7 +11,10 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: repo-health-${{ github.head_ref || github.ref_name }}
+  # Push and pull_request events for the same branch are independent
+  # evidence. Keep them in separate groups so a branch push cannot cancel the
+  # PR's required checks before they report their result.
+  group: repo-health-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 env:

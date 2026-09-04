@@ -32,6 +32,7 @@ from .models import (
     REASON_SAME_USER_ID,
     REASON_SAME_EXTERNAL_ID,
     REASON_SAME_VERIFIED_WALLET,
+    REASON_SAME_VERIFIED_EMAIL,
     REASON_SAME_EMAIL_HASH,
     REASON_SAME_PHONE_HASH,
     REASON_SAME_ANONYMOUS_ID,
@@ -99,6 +100,7 @@ _SIGNAL_WEIGHTS: dict[IdentitySignalType, float] = {
     IdentitySignalType.USER_ID:                    1.00,
     IdentitySignalType.EXTERNAL_ID:                1.00,
     IdentitySignalType.WALLET_SIGNATURE_VERIFIED:  0.95,
+    IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED:   1.00,
     IdentitySignalType.COMMERCE_CUSTOMER_ID:       0.90,
     IdentitySignalType.PAYMENT_CUSTOMER_ID:        0.90,
     IdentitySignalType.ACCOUNT_ID:                 0.88,
@@ -123,6 +125,7 @@ _REASON_BY_SIGNAL: dict[IdentitySignalType, str] = {
     IdentitySignalType.USER_ID:                    REASON_SAME_USER_ID,
     IdentitySignalType.EXTERNAL_ID:                REASON_SAME_EXTERNAL_ID,
     IdentitySignalType.WALLET_SIGNATURE_VERIFIED:  REASON_SAME_VERIFIED_WALLET,
+    IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED:   REASON_SAME_VERIFIED_EMAIL,
     IdentitySignalType.EMAIL_HASH:                 REASON_SAME_EMAIL_HASH,
     IdentitySignalType.PHONE_HASH:                 REASON_SAME_PHONE_HASH,
     IdentitySignalType.ANONYMOUS_ID:               REASON_SAME_ANONYMOUS_ID,
@@ -145,6 +148,9 @@ _REASON_BY_SIGNAL: dict[IdentitySignalType, str] = {
 
 CONSENT_REQUIRED_SIGNALS: frozenset[IdentitySignalType] = frozenset({
     IdentitySignalType.EMAIL_HASH,
+    # Verified email ownership still requires identity-linking consent before it
+    # may stitch entities together (blueprint §40).
+    IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED,
     IdentitySignalType.PHONE_HASH,
     IdentitySignalType.DEVICE_FINGERPRINT,
     IdentitySignalType.BROWSER_ID,
@@ -258,6 +264,7 @@ def _tier_for_score(
         IdentitySignalType.USER_ID,
         IdentitySignalType.EXTERNAL_ID,
         IdentitySignalType.WALLET_SIGNATURE_VERIFIED,
+        IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED,
         IdentitySignalType.COMMERCE_CUSTOMER_ID,
         IdentitySignalType.PAYMENT_CUSTOMER_ID,
     }

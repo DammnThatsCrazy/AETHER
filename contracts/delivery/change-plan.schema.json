@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.olympuslabs.io/contracts/delivery/change-plan/v1",
+  "title": "Aether ChangePlan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "change_id", "title", "owner", "domains", "paths", "contracts", "surfaces", "risk_level", "risk_classes", "migrations", "security_sensitive", "deployment_impact", "required_checks", "deferred_checks", "rollback_notes"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "change_id": {"type": "string", "minLength": 1},
+    "title": {"type": "string", "minLength": 1},
+    "owner": {"type": "string", "minLength": 1},
+    "domains": {"type": "array", "items": {"type": "string"}, "minItems": 1, "uniqueItems": true},
+    "paths": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "contracts": {"type": "object", "required": ["changed", "consumed"], "properties": {"changed": {"type": "array", "items": {"type": "string"}}, "consumed": {"type": "array", "items": {"type": "string"}}}, "additionalProperties": false},
+    "surfaces": {"type": "array", "items": {"type": "string"}},
+    "risk_level": {"enum": ["low", "medium", "high", "critical"]},
+    "risk_classes": {"type": "array", "items": {"type": "string"}},
+    "migrations": {"type": "boolean"},
+    "security_sensitive": {"type": "boolean"},
+    "deployment_impact": {"type": "boolean"},
+    "required_checks": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "deferred_checks": {"type": "array", "items": {"type": "string"}},
+    "rollback_notes": {"type": "string", "minLength": 1}
+  }
+}

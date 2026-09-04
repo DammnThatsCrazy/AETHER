@@ -11,7 +11,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "41c79d4"
+last_synced_commit: "4e6fdad"
 ---
 # Migration Guide: Aether SDK v6.x to v7.0.0
 

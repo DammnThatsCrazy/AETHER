@@ -38,6 +38,10 @@ on:
         options: [awake, asleep]
         default: awake
         required: false
+      staging_listener_target_group_arn:
+        description: "Optional existing maintenance target-group ARN for a reviewed staging backend replacement transition"
+        type: string
+        required: false
       plan_run_id:
         description: Plan workflow run ID (required for apply)
         type: string
@@ -49,7 +53,11 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: terraform-${{ inputs.profile }}
+  # Staging, demo, and preview share an account and globally named ECR
+  # repositories. Serialize those profiles with reconciliation to make the
+  # ownership check and import decision atomic; production profiles retain
+  # independent concurrency.
+  group: ${{ (inputs.profile == 'staging' || inputs.profile == 'demo' || inputs.profile == 'preview') && 'terraform-nonprod-shared' || format('terraform-{0}', inputs.profile) }}
   cancel-in-progress: false
 env:
   AWS_REGION: us-east-1
@@ -73,9 +81,25 @@ jobs:
       AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
       TF_VAR_aether_app_url: ${{ secrets.TF_AETHER_APP_URL }}
       TF_VAR_kyber_app_url: ${{ secrets.TF_KYBER_APP_URL }}
+      # The custom KMS key policy must name the protected staging apply role as
+      # an explicit administrator. Keep the value in the encrypted secret
+      # store; the ARN is non-sensitive, but the repository variable was never
+      # guaranteed to exist and produced a key policy that AWS rejected as
+      # lockout-unsafe.
+      TF_VAR_kms_key_admin_role_arns: '${{ inputs.profile == ''staging'' && format(''["{0}"]'', secrets.AWS_TERRAFORM_APPLY_ROLE_ARN) || ''[]'' }}'
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
+
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-providers-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: terraform-providers-${{ runner.os }}-
+
+      - name: Configure Terraform provider cache
+        run: echo "TF_PLUGIN_CACHE_DIR=${HOME}/.terraform.d/plugin-cache" >> "$GITHUB_ENV"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -83,13 +107,20 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check pyyaml
-      # Fail closed when the remote-plan credential set is incomplete. This is
-      # the same set that gates infrastructure.yml's remote-plan job: if those
-      # remote plans were skipped for missing credentials, no reviewed plan can
-      # be produced here either, so promotion cannot proceed.
+      - name: Validate the reviewed Terraform state access contract
+        run: |
+          set -euo pipefail
+          python scripts/release/check_terraform_state_access_policy.py \
+            --manifest config/terraform_state_access_policy.yaml \
+            --terraform-root "${TF_DIR}"
+      # Fail closed when the plan credential set is incomplete. The apply role
+      # is deliberately not part of this check: a plan must be runnable without
+      # mutation credentials. The protected apply job has its own complete
+      # apply-credential check below, immediately before assuming that role.
       - name: Require the complete remote-plan credential set
         env:
           AWS_TERRAFORM_PLAN_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
           TF_ACM_CERTIFICATE_ARN: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
@@ -127,18 +158,58 @@ jobs:
             echo "::error::Reviewed Terraform promotion requires the complete remote-plan credential set. Missing ${missing_list%, }."
             exit 1
           fi
+          if [ "${{ inputs.action }}" = "apply" ] && [ -z "${AWS_TERRAFORM_APPLY_ROLE_ARN:-}" ]; then
+            echo '::error::Reviewed Terraform apply requires AWS_TERRAFORM_APPLY_ROLE_ARN.'
+            exit 1
+          fi
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
           aws-region: us-east-1
+      - name: Verify the assumed plan role matches the encrypted secret
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::assumed plan role account does not match AWS_TERRAFORM_PLAN_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = "$expected_role_path" || { echo '::error::assumed role does not match AWS_TERRAFORM_PLAN_ROLE_ARN'; exit 1; }
+          if [ "$PROFILE" = staging ]; then
+            test "$caller_role_path" = AetherStagingPlan || { echo '::error::staging plan job assumed an unexpected IAM role'; exit 1; }
+            echo 'Verified staging plan credentials resolve to AetherStagingPlan in the expected account.'
+          else
+            echo "Verified ${PROFILE} plan credentials resolve to the encrypted role ARN in the expected account."
+          fi
       - name: Require immutable image digests
         env:
+          PROFILE: ${{ inputs.profile }}
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
         run: |
           set -euo pipefail
           test -n "$BACKEND_IMAGE_DIGEST" || { echo '::error::backend_image_digest is required for plan'; exit 1; }
-          test -n "$ML_IMAGE_DIGEST" || { echo '::error::ml_image_digest is required for plan'; exit 1; }
+          case "${PROFILE}" in
+            production-scale|enterprise-isolated)
+              test -n "$ML_IMAGE_DIGEST" || { echo '::error::ml_image_digest is required for dedicated-ML profiles'; exit 1; } ;;
+            staging|production-lean|demo|preview)
+              # These profiles run ML inline; an empty ML digest is intentional.
+              : ;;
+            *)
+              echo "::error::unsupported profile ${PROFILE}"; exit 1 ;;
+          esac
+      - name: Record reviewed maintenance listener input
+        env:
+          STAGING_LISTENER_TARGET_GROUP_ARN: ${{ inputs.staging_listener_target_group_arn }}
+        working-directory: AWS Deployment/aether-aws/terraform
+        run: printf '%s\n' "$STAGING_LISTENER_TARGET_GROUP_ARN" > reviewed.staging-listener-target-group-arn
       - name: Create immutable reviewed plan
         working-directory: AWS Deployment/aether-aws/terraform
         env:
@@ -146,6 +217,7 @@ jobs:
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
           STAGING_STATE: ${{ inputs.staging_state }}
+          STAGING_LISTENER_TARGET_GROUP_ARN: ${{ inputs.staging_listener_target_group_arn }}
           COMMIT_SHA: ${{ github.sha }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
@@ -156,12 +228,18 @@ jobs:
           # commit without racing terraform's own lockfile maintenance.
           sha256sum .terraform.lock.hcl | cut -d' ' -f1 > reviewed.lock.sha256
           printf '%s\n' "profiles/${PROFILE}/terraform.tfstate" > reviewed.state-key
-          terraform init -input=false \
+          bash "${GITHUB_WORKSPACE}/scripts/release/terraform_init_retry.sh" -input=false \
             -backend-config="bucket=${TF_STATE_BUCKET}" \
             -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
             -backend-config="key=profiles/${PROFILE}/terraform.tfstate" \
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true"
+          state_list_file="$(mktemp)"
+          terraform state list >"$state_list_file"
+          if grep -Fxq 'module.alb.aws_lb_target_group.backend' "$state_list_file"; then
+            echo '::error::legacy backend target-group state address remains; run the confirmation-gated terraform-state-migrate workflow and regenerate the reviewed plan'
+            exit 1
+          fi
           terraform validate
           # staging_state is recorded alongside the plan so a reviewer can see
           # which shape was approved. It is load-bearing, not decorative: apply
@@ -178,19 +256,39 @@ jobs:
             -var "backend_image_digest=${BACKEND_IMAGE_DIGEST}" \
             -var "ml_image_digest=${ML_IMAGE_DIGEST}" \
             -var "staging_state=${STAGING_STATE}" \
+            -var "staging_listener_target_group_arn=${STAGING_LISTENER_TARGET_GROUP_ARN}" \
             -out=reviewed.tfplan
+          terraform show -json reviewed.tfplan > plan-raw.json
+          if [ "$PROFILE" = staging ] && jq -e '
+            any(.resource_changes[]?;
+              .address == "module.alb.aws_lb_target_group.backend[0]" and
+              ((.change.actions // []) | (index("delete") != null and index("create") != null)))
+          ' plan-raw.json >/dev/null; then
+            if [ -z "$STAGING_LISTENER_TARGET_GROUP_ARN" ]; then
+              echo '::error::staging target-group replacement requires staging_listener_target_group_arn so the listener is detached before deletion'
+              exit 1
+            fi
+          fi
           # SECRET HYGIENE: `terraform show -json` does NOT redact `sensitive = true`
           # ROOT VARIABLES -- TF_VAR_auth0_management_client_secret would appear
           # verbatim in the top-level `variables` block of an uploaded artifact.
           # The raw document is written to a name outside the uploaded
           # `reviewed.*` glob, sanitised into reviewed.tfplan.json, and deleted.
-          terraform show -json reviewed.tfplan > plan-raw.json
           python "${GITHUB_WORKSPACE}/scripts/release/sanitize_terraform_plan_json.py" \
             plan-raw.json reviewed.tfplan.json
           rm -f plan-raw.json
           # The human-readable rendering redacts sensitive values itself and
           # never prints root variables at all.
           terraform show -no-color reviewed.tfplan > reviewed.tfplan.txt
+          # archive_file materializes the Lambda package while planning. Carry
+          # the exact bytes with the reviewed plan so apply never reconstructs
+          # a different ZIP (or fails because the apply runner lacks it).
+          if [ -f drift_lambda.zip ]; then
+            cp drift_lambda.zip reviewed.drift_lambda.zip
+          fi
+          if [ -f rotate_secret.zip ]; then
+            cp rotate_secret.zip reviewed.rotate_secret.zip
+          fi
           sha256sum reviewed.tfplan > reviewed.tfplan.sha256
           printf '%s\n' "$COMMIT_SHA" > reviewed.commit
           printf '%s\n' "$PROFILE" > reviewed.profile
@@ -304,6 +402,7 @@ jobs:
           AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+          TF_STATE_KEY: profiles/${{ inputs.profile }}/terraform.tfstate
         run: |
           set -euo pipefail
           test -n "$AWS_TERRAFORM_APPLY_ROLE_ARN" || { echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN required'; exit 1; }
@@ -345,6 +444,7 @@ jobs:
         id: reviewed
         env:
           PROFILE: ${{ inputs.profile }}
+          STAGING_LISTENER_TARGET_GROUP_ARN: ${{ inputs.staging_listener_target_group_arn }}
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}/reviewed-plan"
@@ -360,6 +460,10 @@ jobs:
               exit 1
             fi
           done
+          if [ ! -f reviewed.staging-listener-target-group-arn ]; then
+            echo '::error::reviewed plan is missing maintenance listener input evidence'
+            exit 1
+          fi
 
           # The recorded wake/sleep shape must be one of the two legal tokens.
           # A plan whose staging_state cannot be named is a plan nobody reviewed
@@ -373,6 +477,27 @@ jobs:
           reviewed_profile="$(cat reviewed.profile)"
           if [ "$reviewed_profile" != "$PROFILE" ]; then
             echo "::error::plan was reviewed for ${reviewed_profile}, dispatched for ${PROFILE}"
+            exit 1
+          fi
+
+          reviewed_listener_arn="$(cat reviewed.staging-listener-target-group-arn)"
+          if [ "$PROFILE" = staging ]; then
+            # The reviewed artifact is authoritative. Lifecycle callers may
+            # omit this optional input; when they do, carry the exact value
+            # forward from the artifact instead of comparing it to an empty
+            # dispatch input. A supplied value is still checked strictly so
+            # a caller can never override the reviewed listener transition.
+            if [ -n "${STAGING_LISTENER_TARGET_GROUP_ARN:-}" ] \
+              && [ "$reviewed_listener_arn" != "$STAGING_LISTENER_TARGET_GROUP_ARN" ]; then
+              echo '::error::maintenance listener ARN differs between reviewed plan and apply dispatch'
+              exit 1
+            fi
+            if [ -n "$reviewed_listener_arn" ] && ! grep -Fq "$reviewed_listener_arn" reviewed.tfplan.json; then
+              echo '::error::reviewed plan does not select the dispatched maintenance target group ARN'
+              exit 1
+            fi
+          elif [ -n "$reviewed_listener_arn" ]; then
+            echo '::error::maintenance listener ARN is only valid for staging'
             exit 1
           fi
 
@@ -413,6 +538,7 @@ jobs:
           {
             printf 'commit=%s\n' "$reviewed_commit"
             printf 'terraform_version=%s\n' "$reviewed_tf_version"
+            printf 'listener_target_group_arn=%s\n' "$reviewed_listener_arn"
           } >> "$GITHUB_OUTPUT"
       # Bind the apply to the plan's OWN commit, not the dispatch ref. The ref
       # may have moved since review; github.sha says nothing about which code
@@ -435,6 +561,16 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ steps.reviewed.outputs.terraform_version }}
+
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-providers-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: terraform-providers-${{ runner.os }}-
+
+      - name: Configure Terraform provider cache
+        run: echo "TF_PLUGIN_CACHE_DIR=${HOME}/.terraform.d/plugin-cache" >> "$GITHUB_ENV"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -442,18 +578,272 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check pyyaml
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
-          aws-region: us-east-1
-      - name: Stage the reviewed plan into the reviewed working tree
+      - name: Stage the reviewed plan before any AWS prerequisite mutation
         working-directory: AWS Deployment/aether-aws/terraform
         run: |
           set -euo pipefail
           cp "${RUNNER_TEMP}/reviewed-plan"/reviewed.* .
+          # Preserve the archive_file output from the plan run verbatim. The
+          # binary plan records its checksum; recreating this ZIP at apply time
+          # would be nondeterministic and can invalidate the exact plan.
+          if [ -f reviewed.drift_lambda.zip ]; then
+            cp reviewed.drift_lambda.zip drift_lambda.zip
+          fi
+          if [ -f reviewed.rotate_secret.zip ]; then
+            cp reviewed.rotate_secret.zip rotate_secret.zip
+          fi
+          if jq -e 'any(.resource_changes[]?; (.address // "") | contains("ml_drift_lambda"))' reviewed.tfplan.json >/dev/null \
+            && [ ! -s drift_lambda.zip ]; then
+            echo '::error::reviewed plan contains ml_drift_lambda but its exact package was not carried into apply'
+            exit 1
+          fi
+          if jq -e 'any(.resource_changes[]?; (.address // "") | contains("secrets") and contains("rotation"))' reviewed.tfplan.json >/dev/null \
+            && [ ! -s rotate_secret.zip ]; then
+            echo '::error::reviewed plan contains secret rotation resources but its exact package was not carried into apply'
+            exit 1
+          fi
+      - name: Validate AWS and external-provider apply inputs
+        env:
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+          AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          python scripts/release/check_provider_apply_inputs.py \
+            --inventory "${TF_DIR}/reviewed.resources.json" \
+            --verify-auth0-scopes
+      - name: Validate the reviewed Terraform state access contract
+        run: |
+          set -euo pipefail
+          python scripts/release/check_terraform_state_access_policy.py \
+            --manifest config/terraform_state_access_policy.yaml \
+            --terraform-root "${TF_DIR}"
+      - name: Validate the reviewed staging apply IAM contract
+        if: inputs.profile == 'staging'
+        run: |
+          set -euo pipefail
+          python scripts/release/check_staging_apply_policy.py \
+            --manifest config/staging_apply_iam_policy.yaml \
+            --profile staging
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Verify the assumed apply role matches the encrypted secret
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::assumed apply role account does not match AWS_TERRAFORM_APPLY_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = "$expected_role_path" || { echo '::error::assumed role does not match AWS_TERRAFORM_APPLY_ROLE_ARN'; exit 1; }
+          if [ "$PROFILE" = staging ]; then
+            test "$caller_role_path" = AetherStagingDeploy || { echo '::error::staging apply job assumed an unexpected IAM role'; exit 1; }
+            echo 'Verified staging apply credentials resolve to AetherStagingDeploy in the expected account.'
+          else
+            echo "Verified ${PROFILE} apply credentials resolve to the encrypted role ARN in the expected account."
+          fi
+      - name: Verify effective Terraform state permissions
+        env:
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+          TF_STATE_KEY: profiles/${{ inputs.profile }}/terraform.tfstate
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          python scripts/release/verify_terraform_state_role.py \
+            --role-arn "$AWS_TERRAFORM_APPLY_ROLE_ARN" \
+            --bucket "$TF_STATE_BUCKET" \
+            --lock-table "$TF_LOCK_TABLE" \
+            --state-key "$TF_STATE_KEY" \
+            --account-id "$account_id"
+      - name: Verify effective staging apply policy
+        if: inputs.profile == 'staging'
+        env:
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          python scripts/release/verify_effective_staging_apply_policy.py \
+            --role-arn "$AWS_TERRAFORM_APPLY_ROLE_ARN" \
+            --manifest config/staging_apply_iam_policy.yaml
+      - name: Verify required staging secrets have current versions
+        if: inputs.profile == 'staging'
+        run: |
+          set -euo pipefail
+          # Terraform creates the named Secrets Manager resources, but never
+          # invents their values. ECS will reject a task definition that
+          # references a stub without an AWSCURRENT version, so fail before
+          # any apply mutation and direct the operator to the secure bootstrap
+          # procedure. Values are never read or printed here.
+          required_secrets=(
+            jwt-secret
+            byok-encryption-key
+            stripe-secret-key
+            stripe-webhook-secret
+            oracle-signer-private-key
+            watermark-secret-key
+            canary-secret-seed
+            extraction-canary-seed
+            sdk-config-secret
+          )
+          for name in "${required_secrets[@]}"; do
+            describe_file="$(mktemp)"
+            if ! aws secretsmanager describe-secret \
+              --secret-id "aether/${name}" \
+              --output json >"$describe_file" 2>/tmp/staging-secret.err; then
+              cat /tmp/staging-secret.err >&2
+              echo "::error::required staging secret aether/${name} is not present or is not readable"
+              exit 1
+            fi
+            if ! python - "$describe_file" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              payload = json.load(handle)
+          if payload.get("DeletedDate") is not None:
+              raise SystemExit("secret is pending deletion")
+          versions = payload.get("VersionIdsToStages") or {}
+          if not any("AWSCURRENT" in stages for stages in versions.values()):
+              raise SystemExit(1)
+          PY
+            then
+              echo "::error::required staging secret aether/${name} has no AWSCURRENT version; bootstrap/import its value before apply"
+              exit 1
+            fi
+            rm -f "$describe_file"
+          done
+          echo 'Verified all ECS-mounted staging secrets exist with an AWSCURRENT version; values were not read.'
+      - name: Validate reviewed staging maintenance target group
+        if: inputs.profile == 'staging'
+        env:
+          # Use the value verified from the reviewed artifact. The lifecycle
+          # dispatcher intentionally does not need to duplicate this optional
+          # plan input, preventing empty-input false failures.
+          MAINTENANCE_TG_ARN: ${{ steps.reviewed.outputs.listener_target_group_arn }}
+        run: |
+          set -euo pipefail
+          # The listener ARN is only a maintenance target during an actual
+          # backend target-group replacement. Normal staging plans record the
+          # existing backend target group for provenance; do not misclassify
+          # that ordinary ARN as a maintenance transition.
+          if ! jq -e '
+            any(.resource_changes[]?;
+              .address == "module.alb.aws_lb_target_group.backend[0]" and
+              ((.change.actions // []) | (index("delete") != null and index("create") != null)))
+          ' "${RUNNER_TEMP}/reviewed-plan/reviewed.tfplan.json" >/dev/null; then
+            exit 0
+          fi
+          if [ -z "$MAINTENANCE_TG_ARN" ]; then
+            exit 0
+          fi
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          case "$MAINTENANCE_TG_ARN" in
+            arn:aws:elasticloadbalancing:us-east-1:${account_id}:targetgroup/aether-staging-maintenance*) ;;
+            *)
+              echo '::error::maintenance target group must be an existing us-east-1 target group in this account named aether-staging-maintenance*'
+              exit 1
+              ;;
+          esac
+          tg_json="$(aws elbv2 describe-target-groups --target-group-arns "$MAINTENANCE_TG_ARN" --output json)" || {
+            echo '::error::maintenance target group ARN does not exist or is not readable'
+            exit 1
+          }
+          tg_name="$(jq -r '.TargetGroups[0].TargetGroupName // empty' <<<"$tg_json")"
+          tg_vpc="$(jq -r '.TargetGroups[0].VpcId // empty' <<<"$tg_json")"
+          tg_type="$(jq -r '.TargetGroups[0].TargetType // empty' <<<"$tg_json")"
+          [ -n "$tg_name" ] && [ "$tg_name" = aether-staging-maintenance ] || [[ "$tg_name" == aether-staging-maintenance-* ]] || {
+            echo '::error::maintenance target group has an unexpected name'
+            exit 1
+          }
+          [[ "$tg_type" = ip || "$tg_type" = instance ]] || {
+            echo '::error::maintenance target group is not ALB-compatible (expected ip or instance target type)'
+            exit 1
+          }
+          alb_vpc="$(aws elbv2 describe-load-balancers --names aether-staging-alb --query 'LoadBalancers[0].VpcId' --output text)"
+          [ -n "$alb_vpc" ] && [ "$alb_vpc" != None ] && [ "$tg_vpc" = "$alb_vpc" ] || {
+            echo '::error::maintenance target group is not in the staging ALB VPC'
+            exit 1
+          }
+          echo "Validated reviewed maintenance target group $MAINTENANCE_TG_ARN in VPC $tg_vpc"
+      - name: Refuse unsupported free-plan Aurora topology before mutation
+        if: inputs.profile == 'staging'
+        run: |
+          set -euo pipefail
+          # AWS Free accounts can create Aurora only through Express Configuration.
+          # The full staging topology uses a customer-managed KMS key, which
+          # the Express API does not represent. Express mode
+          # (aurora_express_mode = true) uses AWS-managed encryption and is
+          # compatible with Free accounts.
+          plan_type="$(aws freetier get-account-plan-state --query 'accountPlanType' --output text 2>/tmp/freetier.err)" || {
+            cat /tmp/freetier.err >&2
+            echo '::error::Unable to determine the AWS account plan; refusing staging apply until the Free Tier plan check succeeds.'
+            exit 1
+          }
+          uses_cmk="$(jq '[.resource_changes[]? | select(.address | startswith("module.aurora.aws_kms_key.")) | select(.change.actions != ["delete"])] | length' \
+            "${RUNNER_TEMP}/reviewed-plan/reviewed.tfplan.json")"
+          case "$plan_type" in
+            PAID)
+              echo 'AWS account plan is PAID; Aurora topology is eligible to proceed.'
+              ;;
+            FREE)
+              if [ "$uses_cmk" -gt 0 ]; then
+                echo '::error::AWS Free plan cannot apply a staging Aurora topology with a customer-managed KMS key. Set aurora_express_mode = true in the staging profile or upgrade the account plan.'
+                exit 1
+              fi
+              echo 'AWS account plan is FREE; reviewed plan uses express mode (AWS-managed encryption). Eligible to proceed.'
+              ;;
+            *)
+              echo "::error::AWS account plan returned an unsupported value '$plan_type'; refusing staging apply."
+              exit 1
+              ;;
+          esac
+      - name: Require live listener detachment before target-group replacement
+        if: inputs.profile == 'staging'
+        env:
+          MAINTENANCE_TG_ARN: ${{ steps.reviewed.outputs.listener_target_group_arn }}
+        run: |
+          set -euo pipefail
+          if ! jq -e '
+            any(.resource_changes[]?;
+              .address == "module.alb.aws_lb_target_group.backend[0]" and
+              ((.change.actions // []) | (index("delete") != null and index("create") != null)))
+          ' "${RUNNER_TEMP}/reviewed-plan/reviewed.tfplan.json" >/dev/null; then
+            exit 0
+          fi
+          [ -n "$MAINTENANCE_TG_ARN" ] || {
+            echo '::error::replacement plan has no maintenance target group'
+            exit 1
+          }
+          alb_arn="$(aws elbv2 describe-load-balancers --names aether-staging-alb --query 'LoadBalancers[0].LoadBalancerArn' --output text)"
+          [ -n "$alb_arn" ] && [ "$alb_arn" != None ] || {
+            echo '::error::cannot verify the staging ALB before a destructive target-group replacement'
+            exit 1
+          }
+          listener_arn="$(aws elbv2 describe-listeners --load-balancer-arn "$alb_arn" --query 'Listeners[?Port==`443`].ListenerArn | [0]' --output text)"
+          [ -n "$listener_arn" ] && [ "$listener_arn" != None ] || {
+            echo '::error::cannot verify the staging HTTPS listener before target-group replacement'
+            exit 1
+          }
+          current_tg="$(aws elbv2 describe-listeners --listener-arns "$listener_arn" --query 'Listeners[0].DefaultActions[0].TargetGroupArn' --output text)"
+          if [ "$current_tg" != "$MAINTENANCE_TG_ARN" ]; then
+            echo '::error::staging HTTPS listener is not already detached to the reviewed maintenance target group; apply a detach-only plan first'
+            exit 1
+          fi
+          echo 'Verified live staging HTTPS listener is detached to the reviewed maintenance target group.'
       # Re-run at the reviewed commit: the reports in the artifact are evidence,
       # not proof. The policy and cost rules that ship with the reviewed code
-      # must still pass against the reviewed plan at apply time.
+      # must pass before any AWS prerequisite mutation.
       - name: Re-validate the reviewed plan against policy and cost model
         env:
           PROFILE: ${{ inputs.profile }}
@@ -469,6 +859,98 @@ jobs:
               --inventory "${TF_DIR}/reviewed.resources.json" \
               --out-dir "artifacts/cost-${PROFILE}"
           fi
+      - name: Check ECR collisions before account-level role bootstrap
+        if: inputs.profile == 'staging' || inputs.profile == 'demo' || inputs.profile == 'preview'
+        working-directory: AWS Deployment/aether-aws/terraform
+        env:
+          PROFILE: ${{ inputs.profile }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+          TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+        run: |
+          set -euo pipefail
+          # The immutable delivery build creates the shared ECR repositories
+          # before Terraform runs. A repository that exists remotely but is
+          # absent from this profile's state would otherwise fail halfway
+          # through apply, after unrelated resources have already mutated.
+          # Refuse before any mutation and route the exact repository names
+          # through a separate, confirmation-gated state reconciliation.
+          # This is deliberately before the ECS service-linked-role step: a
+          # rejected collision must not leave an account-level IAM mutation.
+          bash "${GITHUB_WORKSPACE}/scripts/release/terraform_init_retry.sh" -input=false \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
+            -backend-config="key=profiles/${PROFILE}/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true"
+          ecr_creates="$(jq -r '
+            .resource_changes[]?
+            | select((.address // "") | startswith("module.ecr.aws_ecr_repository.this["))
+            | select((.change.actions // []) | index("create") != null)
+            | (.address | split("[")[1] | gsub("\\\""; "") | rtrimstr("]"))
+          ' reviewed.tfplan.json)"
+          while IFS= read -r repository; do
+            [ -n "$repository" ] || continue
+            state_address="module.ecr.aws_ecr_repository.this[\"${repository}\"]"
+            state_list_file="$(mktemp)"
+            terraform state list >"$state_list_file"
+            if grep -Fxq "$state_address" "$state_list_file"; then
+              continue
+            fi
+            set +e
+            existing_repository="$(aws ecr describe-repositories \
+              --repository-names "$repository" \
+              --query 'repositories[0].repositoryName' --output text 2>/tmp/ecr.err)"
+            lookup_rc=$?
+            set -e
+            if [ "$lookup_rc" -ne 0 ]; then
+              if grep -Eiq 'RepositoryNotFoundException|not found|does not exist' /tmp/ecr.err; then
+                existing_repository=""
+              else
+                cat /tmp/ecr.err >&2
+                echo "::error::unable to verify ECR repository ${repository}; refusing to apply on an inconclusive AWS response"
+                exit 1
+              fi
+            fi
+            if [ -n "$existing_repository" ] && [ "$existing_repository" != None ]; then
+              if [ "$PROFILE" = staging ]; then
+                echo "::error::ECR repository ${repository} already exists outside Terraform state; run the confirmation-gated staging state reconciliation and create a fresh reviewed plan before applying"
+              else
+                echo "::error::ECR repository ${repository} already exists outside ${PROFILE} Terraform state; resolve shared ECR ownership and create a fresh reviewed plan before applying"
+              fi
+              exit 1
+            fi
+          done <<< "$ecr_creates"
+      - name: Ensure the ECS service-linked role exists before capacity providers
+        # Every selectable profile provisions the ECS capacity-provider
+        # resource. Bootstrap the account-level service-linked role before
+        # Terraform touches that resource; each profile's protected apply role
+        # must carry the same narrowly scoped CreateServiceLinkedRole/GetRole
+        # contract. If it does not, fail here before any profile resource is
+        # mutated rather than discovering the gap mid-apply.
+        run: |
+          set -euo pipefail
+          # ECS creates this service-linked role lazily, but capacity-provider
+          # updates can race that creation and fail mid-apply. Create it
+          # idempotently before Terraform starts; an existing role is fine.
+          if ! aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com >/tmp/ecs-slr.out 2>/tmp/ecs-slr.err; then
+            # AWS has returned all of these variants across regions/provider
+            # versions for an already-present service-linked role. Treat only
+            # those explicit idempotency responses as success; fail closed on
+            # permission, throttling, or any other error.
+            if ! grep -Eiq 'InvalidInput.*already exists|EntityAlreadyExists|has been taken' /tmp/ecs-slr.err; then
+              cat /tmp/ecs-slr.err >&2
+              exit 1
+            fi
+          fi
+          for attempt in 1 2 3 4 5 6; do
+            aws iam get-role --role-name AWSServiceRoleForECS >/dev/null 2>&1 && exit 0
+            sleep 5
+          done
+          echo '::error::AWSServiceRoleForECS was not visible after idempotent creation'
+          exit 1
+      # Re-run at the reviewed commit: the reports in the artifact are evidence,
+      # not proof. The policy and cost rules that ship with the reviewed code
+      # must still pass against the reviewed plan at apply time.
       - name: Apply the exact approved plan (never re-plan)
         working-directory: AWS Deployment/aether-aws/terraform
         env:
@@ -477,6 +959,9 @@ jobs:
           REVIEWED_COMMIT: ${{ steps.reviewed.outputs.commit }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
           TF_LOCK_TABLE: ${{ secrets.TF_LOCK_TABLE }}
+          AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
+          AUTH0_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
         run: |
           set -euo pipefail
           test "$(cat reviewed.profile)" = "$PROFILE"
@@ -488,16 +973,102 @@ jobs:
           test "$(cat reviewed.lock.sha256)" = "$(sha256sum .terraform.lock.hcl | cut -d' ' -f1)"
           test "$(cat reviewed.terraform-version)" = "$(terraform version -json | jq -r '.terraform_version')"
           test "$(date -u +%s)" -lt "$(date -u -d "$(cat reviewed.expires-utc)" +%s)"
-          terraform init -input=false \
+          if [ "$PROFILE" = staging ] && jq -e '
+            any(.resource_changes[]?;
+              .address == "module.alb.aws_lb_target_group.backend[0]" and
+              ((.change.actions // []) | (index("delete") != null and index("create") != null)))
+          ' reviewed.tfplan.json >/dev/null; then
+            test -n "$(cat reviewed.staging-listener-target-group-arn)" || {
+              echo '::error::reviewed staging replacement has no maintenance listener transition target'
+              exit 1
+            }
+          fi
+          bash "${GITHUB_WORKSPACE}/scripts/release/terraform_init_retry.sh" -input=false \
             -backend-config="bucket=${TF_STATE_BUCKET}" \
             -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
             -backend-config="key=profiles/${PROFILE}/terraform.tfstate" \
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true"
+          state_list_file="$(mktemp)"
+          terraform state list >"$state_list_file"
+          if grep -Fxq 'module.alb.aws_lb_target_group.backend' "$state_list_file"; then
+            echo '::error::legacy backend target-group state address remains; run the confirmation-gated terraform-state-migrate workflow and create a fresh plan'
+            exit 1
+          fi
+          if [ "$PROFILE" = staging ]; then
+            # A partially completed rehearsal can leave the deterministic
+            # target group in AWS while its state entry is absent. Refuse
+            # before any mutation and route recovery through the reviewed
+            # import-only workflow instead of allowing a mid-apply collision.
+            # An update plan already proves the target is in the reviewed prior
+            # state; perform the AWS collision lookup only for a create action.
+            if jq -e '
+              any(.resource_changes[]?;
+                .address == "module.alb.aws_lb_target_group.backend[0]" and
+                ((.change.actions // []) | index("create") != null))
+            ' reviewed.tfplan.json >/dev/null; then
+              set +e
+              existing_tg="$(aws elbv2 describe-target-groups \
+                --names aether-staging-backend \
+                --query 'TargetGroups[0].TargetGroupArn' --output text 2>/tmp/target-group.err)"
+              lookup_rc=$?
+              set -e
+              if [ "$lookup_rc" -ne 0 ]; then
+                if grep -Eiq 'TargetGroupNotFound|not found|does not exist' /tmp/target-group.err; then
+                  existing_tg=""
+                else
+                  cat /tmp/target-group.err >&2
+                  echo '::error::unable to verify aether-staging-backend; refusing to apply on an inconclusive AWS response'
+                  exit 1
+                fi
+              fi
+              if [ -n "$existing_tg" ] && [ "$existing_tg" != None ] \
+                && ! grep -Fxq 'module.alb.aws_lb_target_group.backend[0]' "$state_list_file"; then
+                echo '::error::aether-staging-backend already exists outside Terraform state; run the import-only staging-state-reconcile workflow and create a fresh plan before applying'
+                exit 1
+              fi
+            fi
+
+          fi
           terraform apply -input=false reviewed.tfplan | tee reviewed.apply.txt
           sha256sum reviewed.apply.txt > reviewed.apply.sha256
+          # The ALB hostname is assigned by AWS at apply time, but it is not the
+          # HTTPS endpoint: the certificate is issued for var.domain_name. Keep
+          # the raw ALB name as evidence, then publish the configured backend
+          # hostname for the lifecycle smoke tests. DNS is managed outside this
+          # Terraform root, so do not fail a completed apply just because the
+          # operator-managed hostname has not propagated to the new ALB yet.
+          # The lifecycle workflow performs the fail-closed DNS check immediately
+          # before readiness, the lease, and any rehearsal requests.
+          alb_dns="$(terraform output -raw alb_dns)"
+          case "$alb_dns" in
+            ''|*://*|*/*|*' '*|*'"'*)
+              echo '::error::terraform output alb_dns is empty or is not a host name'; exit 1 ;;
+          esac
+          backend_url="$(terraform output -raw backend_url)"
+          backend_host="$(python - "$backend_url" <<'PY'
+          import sys
+          from urllib.parse import urlparse
+
+          url = sys.argv[1]
+          parsed = urlparse(url)
+          host = parsed.hostname or ""
+          if parsed.scheme != "https" or parsed.path not in ("", "/") or not host:
+              raise SystemExit("terraform output backend_url is not a certificate-covered HTTPS host")
+          print(host)
+          PY
+          )"
+          case "$backend_host" in
+            ''|*://*|*/*|*' '*|*'"'*)
+              echo '::error::terraform output backend_url produced an invalid host'; exit 1 ;;
+          esac
+          printf '%s\n' "$backend_host" > reviewed.api-host
+          printf '%s\n' "$alb_dns" > reviewed.alb-dns
       - uses: actions/upload-artifact@v4
         with:
           name: terraform-apply-evidence-${{ github.run_id }}
-          path: AWS Deployment/aether-aws/terraform/reviewed.apply.*
+          path: |
+            AWS Deployment/aether-aws/terraform/reviewed.apply.*
+            AWS Deployment/aether-aws/terraform/reviewed.api-host
+            AWS Deployment/aether-aws/terraform/reviewed.alb-dns
           if-no-files-found: error

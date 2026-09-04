@@ -11,16 +11,99 @@ source_files:
   - AWS Deployment/aether-aws/main.py
   - AWS Deployment/aether-aws/terraform/
   - AWS Deployment/aether-aws/config/
+  - scripts/release/verify_terraform_state_role.py
+  - .github/workflows/terraform-promote.yml
+  - .github/workflows/staging-state-reconcile.yml
+  - .github/workflows/staging-lifecycle.yml
+  - .github/workflows/staging-ttl-guard.yml
+  - scripts/release/verify_effective_staging_apply_policy.py
+  - config/staging_apply_iam_policy.yaml
+  - config/staging_lifecycle_iam_policy.yaml
+  - scripts/release/check_staging_lifecycle_policy.py
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "126d2320"
+last_synced_commit: "6a11394"
 ---
 
 # AWS Deployment — Infrastructure Reference
 
 Internal reference for Aether's AWS infrastructure as the Terraform in this
 repository actually defines it.
+
+Staging applies use a dedicated least-privilege role covering state locking,
+staging-only tagging, KMS administration, and the explicit apply-role ARN;
+cleanup remains bounded by the staging lifecycle guard. The apply contract also
+checks ECR ownership before mutation: an existing repository that is not in
+the reviewed Terraform state is a hard stop, so shared repositories are never
+silently adopted or replaced, and that collision check runs before the
+account-level ECS service-linked role bootstrap. Secrets, ECR, and Aurora CMKs carry the staging
+environment tag; the Secrets Manager and regional CloudWatch Logs service
+principals are constrained by ViaService, caller account, and encryption
+context rather than broad key access. The pre-apply verifier compares the
+attached policy statements with the reviewed staging manifest, including
+resource coverage, conditions, and explicit Deny statements, before any
+Terraform mutation.
+
+The staging ECR repositories have one deliberate pre-existing exception:
+`aether-backend` is an immutable AES-256 repository created by the release
+pipeline before Terraform state ownership. Its encryption cannot be changed
+after creation, so staging Terraform declares that exact shape and the
+import-only reconciliation workflow adopts it without replacement. The other
+three staging ECR repositories remain mutable and use the staging KMS key.
+Before clearing a taint, reconciliation also verifies that the canonical
+Terraform address stores the same repository name requested by the operator;
+an address that points at a different repository, or is no longer tainted, is
+refused before state is mutated. Duplicate-owner inspection tolerates
+human-formatted Terraform state output spacing. The reconciliation workflow
+snapshots the complete Terraform address list before performing membership
+checks. This avoids `EPIPE` races caused by piping Terraform through an
+early-exiting `grep -q` under `pipefail`, which could otherwise make an
+already-managed staging resource look absent and trigger a false import or
+taint-repair failure.
+
+The reviewed Terraform promotion writes a secret-free `reviewed.api-host`
+evidence file after an apply. This is the configured `domain_name` hostname
+covered by the ACM certificate, not the raw `*.elb.amazonaws.com` ALB name.
+Because the DNS edge is managed outside this Terraform root, promotion publishes
+both values without making a completed apply fail while the operator-managed
+hostname propagates to a new ALB. The staging lifecycle consumes both evidence
+files and performs a fail-closed DNS check immediately before readiness, the
+awake lease, and HTTPS rehearsal requests: the configured hostname must resolve
+to the exact operator-managed CNAME target recorded by the deployment contract.
+An address-intersection or raw-ALB-IP match is not sufficient and is intentionally
+rejected. The raw ALB name is retained separately as diagnostic evidence, and
+neither value is a manually maintained GitHub variable that can be required
+before the first load balancer exists. The same lifecycle creates run-scoped
+rehearsal tenants and
+API keys after wake, masks those keys in the runner, and deletes or deactivates
+every marker-recorded tenant during its always-run cleanup. The only durable
+rehearsal credential is the encrypted staging admin bootstrap key, which is
+supplied out of band and never generated or echoed by CI.
+
+The lifecycle and apply contracts are intentionally separate. `AetherStagingPlan`
+owns remote plan and state-lock access, while `AetherStagingDeploy` owns only the
+reviewed staging apply actions and must be verified by the effective-policy
+simulator before a mutation. `AetherStagingLifecycle` owns the bounded awake
+lease, ECS inspection/update, migration-task execution, static publication,
+autoscaling-floor cleanup, and evidence collection; it cannot create IAM roles,
+read application secret values, or mutate non-staging resources. The checked-in
+IAM manifests are validated against the workflow action inventory so adding a
+new lifecycle AWS call without its least-privilege grant fails CI before a
+rehearsal can start. State reconciliation is always followed by a fresh plan;
+no plan generated before an import or untaint may be reused.
+
+The apply manifest also covers ECR scan configuration and the account-plan
+probe used by the staging free-plan guard. On a free AWS account, the guard
+checks the reviewed plan for customer-managed KMS resources; express mode
+(`aurora_express_mode = true`) uses AWS-managed encryption and passes the
+guard, while a plan containing customer-managed Aurora KMS keys fails closed
+before any Terraform mutation. Existing Secrets Manager
+objects are reconciled by metadata only: exact names, the staging CMK, and an
+`AWSCURRENT` version are checked before state import; no secret value is read
+or written by that workflow. The ECS module uses `lookup()` for secret ARN
+references so that `terraform import` can evaluate the full configuration
+graph while secrets are imported incrementally.
 
 ## Scope — three different things live under `AWS Deployment/`
 
@@ -82,9 +165,16 @@ cd "AWS Deployment/aether-aws/terraform"
 terraform plan -var-file=profiles/production-lean.tfvars -out=tfplan
 ```
 
-`backend_image_digest` and `ml_image_digest` have no defaults and are validated
-against `^sha256:[0-9a-f]{64}$`: every plan pins the exact digests approved by
-the release manifest.
+`backend_image_digest` is always required and is validated against
+`^sha256:[0-9a-f]{64}$`. `ml_image_digest` is required for the dedicated
+production-scale and enterprise-isolated profiles; lean, staging, demo, and
+preview profiles may leave it empty when `remote_ml` is disabled. Every digest
+that is supplied is still pinned to the exact release-manifest value.
+
+The apply preflight verifies the selected profile's exact Terraform state key
+(`profiles/<profile>/terraform.tfstate`) against the assumed role. It does not
+probe a synthetic object path or broaden access beyond the reviewed state
+prefix.
 
 ### Account and environment topology
 
@@ -200,7 +290,7 @@ deliberately not scaled.
 
 | Store | Provisioned on | Notes |
 |---|---|---|
-| Aurora Serverless v2 Postgres + writer | **all profiles** | Database, graph and analytics of record. Isolated subnets, customer-managed KMS key, AWS-managed master password rotation into `aether/db-password`. |
+| Aurora Serverless v2 Postgres + writer | **all profiles** | Database, graph and analytics of record. Isolated subnets, customer-managed KMS key (or AWS-managed in express mode), AWS-managed master password rotation into `aether/db-password`. |
 | DynamoDB cache table | **all profiles** | Read/write autoscaling, TTL-backed. |
 | SNS fanout topic → per-role SQS queues + DLQs | **all profiles** | One queue per role, so a consolidated task binds one queue per hosted role. |
 | S3 object lake, log archive, SPA origins | **all profiles** | Public access blocked, SSE configured. |
@@ -250,8 +340,8 @@ Seventeen module directories exist under `terraform/modules/`. Modules marked
 | `vpc` | VPC, three subnet tiers, security groups, flow logs, NAT per `nat_mode` | always; NAT and the redis/msk/neptune SGs gated |
 | `ecr` | 4 private ECR repositories with lifecycle policies | always |
 | `secrets` | Secrets Manager stubs (KMS-encrypted), rotation Lambda | always |
-| `kms_credentials` | Customer-managed KMS CMK + alias for provider-credential envelope encryption (surfaced as `CREDENTIAL_KMS_KEY_ID`); least-privilege `Encrypt`/`Decrypt`/`GenerateDataKey` grant bound to the five-key encryption context, attached to the ECS task role | always; disabled only by `enable_credential_kms = false`, which the throwaway `terraform test` apply run passes so its teardown can delete every created resource (the key carries `prevent_destroy`) |
-| `aurora` | Aurora Serverless v2 cluster + writer, KMS | always |
+| `kms_credentials` | Customer-managed KMS CMK + alias for provider-credential envelope encryption (surfaced as `CREDENTIAL_KMS_KEY_ID`); least-privilege `Encrypt`/`Decrypt`/`GenerateDataKey` grant bound to the five-key encryption context, attached to the ECS task role. The apply role is **not** injected into the CMK key policy by default; the account-root statement remains the lockout-safe administrator. The reviewed staging identity policy permits key-rotation status and a separate 30-day key-deletion request, both constrained to staging-tagged keys. Supplying `kms_key_admin_role_arns` is an explicit, separately reviewed administrative grant; removing the role from the plan-time principal list therefore does not remove root authority or task-role cryptographic access. | always; disabled only by `enable_credential_kms = false`, which the throwaway `terraform test` apply run passes so its teardown can delete every created resource (the key carries `prevent_destroy`) |
+| `aurora` | Aurora Serverless v2 cluster + writer, KMS (skipped in express mode) | always |
 | `dynamodb_cache` | DynamoDB cache table with read/write autoscaling | always |
 | `sqs` | SNS fanout topic, shared + per-role SQS queues, DLQs | always |
 | `alb` | Internet-facing ALB, HTTP→HTTPS redirect, backend target group | always; **gated** ML target group + `/v1/ml/*` rule |
@@ -264,7 +354,71 @@ Seventeen module directories exist under `terraform/modules/`. Modules marked
 | `neptune` | Neptune cluster + instances, IAM auth, KMS | **gated** — scale / enterprise |
 | `rds` | Legacy RDS Postgres | **never** — superseded by Aurora |
 | `s3` | — | **not instantiated by this root** |
+| `tfmcp` | tfmcp MCP server (ECS Fargate, IAM, Secrets, ALB rule) | **gated** — production-scale / enterprise (default); production-lean opt-in via `enable_tfmcp_in_lean` |
 | `vpc_endpoints` | — | **not instantiated by this root** |
+
+### tfmcp — Terraform MCP server
+
+`modules/tfmcp` deploys [tfmcp](https://github.com/nwiizo/tfmcp) v0.2.2 as an
+optional ECS Fargate service serving the MCP protocol over Streamable HTTP on
+port 8080. It lets Aether's agentic workflow (Claude Code, Codex, Cursor) plan,
+apply and inspect state against this Terraform root with profile awareness, IAM
+scoping and CloudWatch audit logging.
+
+**Gate.** On `production-scale` and `enterprise-isolated` the module is
+provisioned by default. On `production-lean` it is opt-in via
+`enable_tfmcp_in_lean = true` in the profile tfvars. It is not provisioned on
+`staging`, `demo` or `preview`. The gate is expressed as
+`local.enable_tfmcp = local.scale || local.enterprise || (local.lean && var.enable_tfmcp_in_lean)`
+in `profiles.tf`; the root `main.tf` module call passes that local, not the raw
+root variable (whose default is `false` and which no profile sets).
+
+**Image.** The tfmcp binary is built by
+`AWS Deployment/aether-aws/build-tfmcp.sh` into a dedicated ECR repository
+(`aether-tfmcp`) managed by `terraform/modules/ecr`. The task definition pins
+the immutable `sha256` digest (`var.tfmcp_image_digest`). The runtime image
+includes the Aether Terraform configuration via `docker-entrypoint.sh`, so the
+container can plan and apply against the live root without an external git clone
+at runtime. `AETHER_REPO_REF` is still honored as a fallback ref for the
+embedded git clone path.
+
+**IAM.** The task role grants:
+- Scoped Terraform state access — S3 `ListBucket` constrained to the configured
+  `terraform_state_key` prefix, object-level `GetObject`/`PutObject`/`DeleteObject`
+  on that exact key, DynamoDB lock-table access, and a conditional KMS statement
+  that is entirely omitted when `terraform_state_kms_key_arn` is empty.
+- A separate `tfmcp_apply` policy with mutation actions scoped to the resource
+  classes this root manages (ECS service/task-definition, ALB listener rules and
+  target groups, DynamoDB tables, RDS instances/clusters, SQS/SNS,
+  S3 buckets/objects, ECR repositories/images, CloudWatch alarms/dashboards/logs,
+  KMS keys/aliases/grants) plus IAM read-only; IAM writes, Organizations and
+  Billing are explicitly denied.
+- `secretsmanager:GetSecretValue` on the auth-token and GitHub-PAT secrets,
+  attached both to the task role (for in-process secret reads) and to the ECS
+  execution role (for container secret injection).
+
+Secrets are stored as raw strings (`secret_string = var.tfmcp_auth_token != "" ? var.tfmcp_auth_token : random_password.tfmcp_auth_token[0].result`), not JSON-wrapped, so ECS `valueFrom` injects the token directly. The auth token is generated by a `random_password` resource when left empty, so it stays stable across applies rather than rotating on every evaluation via `uuid()`.
+
+**Networking.** The target group uses `target_type = "ip"` (Fargate + awsvpc),
+the health check hits `GET /` on port 8080 via `curl` (the runtime image
+installs `ca-certificates` and `curl`; `pgrep` is not available), the ECS
+service depends on the listener rule so the target group is associated before
+tasks are scheduled, `ignore_changes = [desired_count]` is not set so operators
+can scale the service to zero, and `assign_public_ip` is driven by the profile's
+egress mode (`var.assign_public_ip`) rather than hardcoded to `true`.
+
+**Endpoint.** The `mcp_endpoint_url` output uses the configured
+`var.domain_name` (cert-backed HTTPS) when set, falling back to the ALB DNS name
+otherwise — the ALB DNS name is not covered by the custom ACM certificate and
+clients following it would fail TLS hostname verification.
+
+**Cost.** One 512 CPU / 1024 MiB Fargate task at us-east-1 Fargate rates is
+roughly USD 18.02/month, raising the `production-lean` fixed baseline from the
+pre-tfmcp USD 187.13 to approximately USD 205.15. Enabling tfmcp in lean
+therefore exceeds the USD 200 hard ceiling and must be reviewed as a cost-policy
+exception; re-run `scripts/release/check_cost_model.py` and confirm the total
+before applying. The two uncapped profiles already carry no budget block.
+
 
 ### Observability
 
@@ -341,6 +495,106 @@ the reviewed commit.
 Operator procedure: [Deployment Runbook](DEPLOYMENT-RUNBOOK.md). Staging's
 wake/validate/sleep cycle: [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md).
 
+### Staging apply prerequisites and collision safety
+
+The staging apply role is deliberately narrower than a general administrator.
+Its checked-in contract is `config/staging_apply_iam_policy.yaml`; the apply
+workflow validates that manifest before assuming the role and re-validates the
+resolved plan immediately before mutation. The staging promotion workflow also creates (or
+waits for) the ECS service-linked role before capacity-provider operations and
+verifies the Auth0 management token has every scope required by the reviewed
+Auth0 resources. These checks fail closed; a missing external-provider scope
+or service prerequisite is a blocked apply, not a partial deployment.
+
+Terraform backend access is a separate reviewed contract in
+`config/terraform_state_access_policy.yaml`. The confirmation-gated state
+migration workflow and the apply role may read/write only profile state objects,
+read the state-bucket metadata it needs, and lock the dedicated Terraform lock
+table; the policy checker rejects wildcard actions or resources and derives the
+bucket/table names from the canonical backend configuration. Before any apply
+or state migration, the workflow also runs
+`scripts/release/verify_terraform_state_role.py` through IAM policy simulation
+against the assumed role, so a checked-in manifest cannot be mistaken for an
+attached/effective permission. The verifier accepts the canonical backend pair
+and the explicitly reviewed, account-qualified staging pair already in use;
+both are still checked by IAM simulation against the assumed role. Plan-only
+runs do not use this write policy.
+
+Every selectable apply profile also bootstraps the account-level ECS
+service-linked role before Terraform creates capacity providers. Each protected
+profile apply role must therefore carry the reviewed, least-privilege
+`CreateServiceLinkedRole` (restricted to `ecs.amazonaws.com`) and `GetRole`
+permissions; a missing grant fails before any profile resource is changed.
+
+The lifecycle role's migration-task grant is constrained twice: task-definition
+resources are limited to the staging prefix and the `ecs:cluster` condition
+must equal `AETHER-staging`. This prevents a staging task definition from being
+run on another cluster even if a caller supplies a different cluster name.
+
+The backend target group keeps the stable
+`aether-staging-backend` identity used by the import-only reconciliation
+workflow and remains at the stable state address
+`module.alb.aws_lb_target_group.backend[0]`. If a workspace still has the
+unindexed legacy address, the promotion plan fails closed; run the explicit,
+confirmation-gated `terraform-state-migrate.yml` state-only workflow first.
+Staging migrates to the indexed staging address, while production-class
+profiles migrate to
+`module.alb.aws_lb_target_group.backend_replacement[0]`. Staging intentionally disables
+`create_before_destroy`: AWS cannot create a replacement with that deterministic
+name while the old group exists, and the listener still points at the existing
+group. A ForceNew staging change must
+therefore use a separately reviewed listener-detach/replacement/reattach
+transition; an ordinary apply fails closed instead of risking a listener
+cutover or an in-use target-group deletion.
+
+For an intentional ForceNew change, use three reviewed plans: first set
+`staging_listener_target_group_arn` to an existing maintenance target group and
+apply so the HTTPS listener is detached from the backend; then replace the
+backend while that ARN remains selected; finally clear the variable and apply
+again to reattach the listener. Before the destructive middle step, the
+promotion workflow verifies the live HTTPS listener already points at that
+validated maintenance target; otherwise it fails closed and asks for the
+detach-only apply first. The normal promotion workflow never invents a
+maintenance target group or performs this transition implicitly.
+An interrupted run must use `staging-state-reconcile.yml` to import the
+existing group or an exact reviewed ECR repository, and produce a fresh
+reviewed plan. If a repository already exists in staging state at a legacy
+Terraform address, the workflow adopts it only when exactly one staging owner
+is found, moving that state entry to the reviewed canonical module address;
+the complete digest, provider, and root-module input contract is validated
+before that move, and every candidate is checked before any move begins. Tainted
+or otherwise non-managed legacy instances fail closed instead of being carried
+forward. An already-canonical healthy entry is a verified retry no-op, while
+mismatched or ambiguous/cross-profile ownership still fails closed. If an
+existing ECR repository is already at the canonical address but marked tainted
+after an interrupted replacement, use the workflow's explicit
+`untaint_ecr_repository_names` input instead. That input clears taint only after
+the repository's live encryption and KMS key match both the reviewed staging
+configuration and the Terraform-managed ECR KMS key in state; it uses
+Terraform's top-level `untaint` command and never imports, deletes, or applies a
+repository. Both import and untaint paths verify that the repository is not
+owned by demo or preview state; staging is the intended owner for an untaint
+repair and its canonical address is checked for duplicate staging owners before
+any state mutation. Comma-separated targets are normalized and deduplicated,
+and every requested untaint target is validated up front so a later invalid
+entry cannot leave a partial repair. Both import and untaint mutations run under
+the protected `AWS_TERRAFORM_APPLY_ROLE_ARN` state-write role; the read-only
+plan role is never used to persist reconciliation changes. Comma-separated
+targets are normalized and deduplicated before the mutation loop. ECR imports additionally require
+matching the reviewed staging KMS key. The workflow validates
+`config/terraform_state_access_policy.yaml` and simulates the assumed role's
+effective bucket/table permissions before any state mutation. The import runner carries the same Auth0 provider environment
+as a normal remote plan, because Terraform configures every root provider even
+when importing a single AWS address. Aurora alarms and dashboard widgets are
+likewise selected by a static profile flag rather than an unresolved cluster
+output, keeping state-only imports graph-resolvable. This applies to both
+Aurora and DynamoDB monitoring; table and cluster outputs are alarm dimensions,
+not cardinality gates. One exit cleanup removes every temporary state snapshot
+created by the import ownership checks. The apply workflow refuses to adopt an
+unmanaged group or repository. The uncapped production profiles retain
+replacement-before-destroy behavior for availability and use separate
+accounts when their names would otherwise collide.
+
 ## Post-deploy steps
 
 1. **Confirm the SNS email subscription.** AWS sends a confirmation to
@@ -401,8 +655,8 @@ What the live root implements:
 - No secret values in Terraform state or code; all secrets fetched from Secrets
   Manager at container start-up.
 - Data stores in isolated subnets with no default route.
-- Customer-managed KMS keys for Aurora and Secrets; per-store KMS on
-  ElastiCache, MSK and Neptune where provisioned.
+- Customer-managed KMS keys for Aurora (unless express mode) and Secrets;
+  per-store KMS on ElastiCache, MSK and Neptune where provisioned.
 - ECS tasks use dedicated IAM roles with least-privilege policies scoped to the
   queues, tables and secrets the selected profile actually provisions.
 - ALB enforces TLS 1.3 minimum (`ELBSecurityPolicy-TLS13-1-2-2021-06`).
@@ -475,6 +729,7 @@ out of that tree. The live root is
 
 ## See also
 
+- [Setup From Zero](../AWS%20Deployment/aether-aws/SETUP.md) — the guided from-scratch procedure that provisions the state backend and drives the live root
 - [Deployment Profiles](DEPLOYMENT-PROFILES.md)
 - [AWS Lean Production](AWS-LEAN-PRODUCTION.md)
 - [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md)

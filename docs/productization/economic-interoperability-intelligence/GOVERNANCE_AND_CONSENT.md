@@ -38,6 +38,12 @@ fail-closed Kyber-operator gate (a workforce session, the
 `kyber:operator` grant, or the operator tenant allowlist);
 Aether tenants including `Role.ADMIN` are denied.
 
+Credential revocation is durable: when a tenant is deactivated, its API-key
+rows are marked `revoked` before the tenant is marked inactive, and the shared
+API-key validator refuses to rehydrate a revoked row after a Redis cache miss.
+This keeps the durable auth record authoritative during cache restarts and
+prevents a deactivated tenant from regaining access through fallback lookup.
+
 ## DSR
 
 Delete scopes `stablecoin_facts` / `derivatives_facts` / `interop_facts`

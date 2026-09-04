@@ -28,8 +28,13 @@ on:
           - full-rehearsal
         default: validate
         required: true
+      confirm_runtime_wake:
+        description: "Explicitly authorize starting staging ECS services (required for apply-wake/full-rehearsal)"
+        type: boolean
+        default: false
+        required: false
       ml_image_digest:
-        description: Immutable ML serving image digest (sha256:...) — required for any wake or sleep plan
+        description: "Immutable ML serving image digest (sha256:...) — required only for profiles with remote_ml: true"
         type: string
         required: false
       backend_image_digest:
@@ -42,6 +47,10 @@ on:
         required: false
       release_manifest_checksum:
         description: Approved sha256 of release.json (required for full-rehearsal)
+        type: string
+        required: false
+      intended_release_sha:
+        description: "Merged-main SHA the approved delivery run must contain (defaults to this workflow revision)"
         type: string
         required: false
       plan_run_id:
@@ -65,6 +74,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: staging-lifecycle
@@ -90,6 +100,13 @@ jobs:
     name: Select the staging profile
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Validate cleanup credentials before any lifecycle path that inspects or
+    # mutates staging can dispatch. plan-wake is plan-only and delegates to the
+    # reviewed Terraform plan workflow, so it intentionally needs no lifecycle
+    # role and remains usable with only plan credentials.
+    permissions:
+      contents: read
+      id-token: write
     outputs:
       profile: ${{ steps.route.outputs.profile }}
       plan_wake: ${{ steps.route.outputs.plan_wake }}
@@ -108,18 +125,34 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check pyyaml
+      - name: Validate lifecycle IAM action contract
+        run: python3 scripts/release/check_staging_lifecycle_policy.py
 
       - name: Resolve the staging profile from canonical configuration
         env:
           ACTION: ${{ inputs.action }}
+          CONFIRM_RUNTIME_WAKE: ${{ inputs.confirm_runtime_wake }}
         run: |
           set -euo pipefail
           test -f "${TF_DIR}/profiles/${STAGING_PROFILE}.tfvars" \
             || { echo "::error::no tfvars for profile ${STAGING_PROFILE}"; exit 1; }
           python - <<'PY'
           import os, sys, yaml
+          class UniqueLoader(yaml.SafeLoader):
+              pass
+          def construct_mapping(loader, node, deep=False):
+              mapping = {}
+              for key_node, value_node in node.value:
+                  key = loader.construct_object(key_node, deep=deep)
+                  if key in mapping:
+                      raise yaml.constructor.ConstructorError(
+                          None, None, f"duplicate YAML key: {key}", key_node.start_mark)
+                  mapping[key] = loader.construct_object(value_node, deep=deep)
+              return mapping
+          UniqueLoader.add_constructor(
+              yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, construct_mapping)
           profile = os.environ["STAGING_PROFILE"]
-          deploy = (yaml.safe_load(open("config/deployment_profiles.yaml")) or {}).get("profiles") or {}
+          deploy = (yaml.load(open("config/deployment_profiles.yaml"), Loader=UniqueLoader) or {}).get("profiles") or {}
           cfg = deploy.get(profile)
           if not cfg:
               sys.exit(f"::error::config/deployment_profiles.yaml declares no {profile} profile")
@@ -129,13 +162,75 @@ jobs:
               sys.exit(f"::error::{profile} does not declare wake_sleep: true")
           if not (cfg.get("budget") or {}).get("hard_monthly_spend"):
               sys.exit(f"::error::{profile} declares no hard_monthly_spend budget ceiling")
-          runtime = (yaml.safe_load(open("config/runtime_deployment.yaml")) or {}).get("profiles") or {}
+          runtime = (yaml.load(open("config/runtime_deployment.yaml"), Loader=UniqueLoader) or {}).get("profiles") or {}
           state = ((runtime.get(profile) or {}).get("staging_state") or {}).get("states") or {}
           for required in ("awake", "asleep"):
               if required not in state:
                   sys.exit(f"::error::runtime_deployment.yaml declares no staging_state.{required}")
           print(f"staging profile resolved: {profile}")
           PY
+
+      - name: Preflight lifecycle and apply credentials
+        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
+        env:
+          ACTION: ${{ inputs.action }}
+          AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          AWS_TERRAFORM_APPLY_ROLE_ARN: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          CONFIRM_RUNTIME_WAKE: ${{ inputs.confirm_runtime_wake }}
+        run: |
+          set -euo pipefail
+          role="${AWS_STAGING_LIFECYCLE_ROLE_ARN:-}"
+          if [ -z "$role" ]; then
+            echo '::error::AWS_STAGING_LIFECYCLE_ROLE_ARN is required before any staging lifecycle action; without it cleanup cannot prove zero or stop cost.'
+            exit 1
+          fi
+          case "$role" in
+            arn:aws:iam::????????????:role/*) ;;
+            *) echo '::error::AWS_STAGING_LIFECYCLE_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
+          esac
+          case "$ACTION" in
+            apply-wake|apply-sleep|full-rehearsal)
+              test -n "${AWS_TERRAFORM_APPLY_ROLE_ARN:-}" \
+                || { echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN is required before a staging apply path'; exit 1; }
+              case "$AWS_TERRAFORM_APPLY_ROLE_ARN" in
+                arn:aws:iam::????????????:role/*) ;;
+                *) echo '::error::AWS_TERRAFORM_APPLY_ROLE_ARN is not a concrete IAM role ARN'; exit 1 ;;
+              esac
+              ;;
+          esac
+          if { [ "$ACTION" = apply-wake ] || [ "$ACTION" = full-rehearsal ]; } \
+            && [ "$CONFIRM_RUNTIME_WAKE" != true ]; then
+            echo '::error::runtime wake is disabled by default; set confirm_runtime_wake=true for an explicit staging wake authorization'
+            exit 1
+          fi
+
+      - name: Verify lifecycle role assumption before dispatch
+        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
+        env:
+          AWS_STAGING_LIFECYCLE_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Confirm lifecycle credentials are usable
+        if: inputs.action != 'validate' && inputs.action != 'plan-wake'
+        env:
+          EXPECTED_ROLE_ARN: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          caller_json="$(aws sts get-caller-identity --output json)"
+          expected_account="${EXPECTED_ROLE_ARN#arn:aws:iam::}"
+          expected_account="${expected_account%%:*}"
+          expected_role_path="${EXPECTED_ROLE_ARN#*:role/}"
+          caller_account="$(jq -r .Account <<<"$caller_json")"
+          caller_role_path="$(jq -r .Arn <<<"$caller_json")"
+          caller_role_path="${caller_role_path#*:assumed-role/}"
+          caller_role_path="${caller_role_path%/*}"
+          test "$caller_account" = "$expected_account" || { echo '::error::assumed lifecycle role account does not match AWS_STAGING_LIFECYCLE_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = "$expected_role_path" || { echo '::error::assumed role does not match AWS_STAGING_LIFECYCLE_ROLE_ARN'; exit 1; }
+          test "$caller_role_path" = AetherStagingLifecycle || { echo '::error::lifecycle job assumed an unexpected IAM role'; exit 1; }
+          echo 'Verified lifecycle credentials resolve to AetherStagingLifecycle in the expected account.'
 
       - name: Route the lifecycle action
         id: route
@@ -145,6 +240,7 @@ jobs:
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
           RELEASE_RUN_ID: ${{ inputs.release_run_id }}
           RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
+          INTENDED_RELEASE_SHA: ${{ inputs.intended_release_sha || github.sha }}
           PLAN_RUN_ID: ${{ inputs.plan_run_id }}
           PLAN_CHECKSUM: ${{ inputs.plan_checksum }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
@@ -167,10 +263,21 @@ jobs:
             *) echo "::error::unknown lifecycle action '${ACTION}'"; exit 1 ;;
           esac
 
-          # A plan needs the immutable ML digest; terraform-promote refuses without it.
+          # Dedicated remote-ML profiles need an immutable ML digest. Inline-ML
+          # profiles (including staging) intentionally have no serving image.
           if [ "$plan_wake" = true ] || [ "$plan_sleep" = true ]; then
-            test -n "$ML_IMAGE_DIGEST" \
-              || { echo '::error::ml_image_digest is required for any wake or sleep plan'; exit 1; }
+            remote_ml="$(python - <<'PY'
+          import os, yaml
+          profiles = (yaml.safe_load(open("config/runtime_deployment.yaml")) or {}).get("profiles") or {}
+          print(str((profiles.get(os.environ["STAGING_PROFILE"]) or {}).get("remote_ml", False)).lower())
+          PY
+            )"
+            if [ "$remote_ml" = true ]; then
+              test -n "$ML_IMAGE_DIGEST" \
+                || { echo '::error::ml_image_digest is required for profiles with remote_ml: true'; exit 1; }
+            elif [ -n "$ML_IMAGE_DIGEST" ]; then
+              echo "Inline-ML profile $STAGING_PROFILE ignores the optional ML digest."
+            fi
           fi
           # Validating or applying without producing a plan here means an existing
           # reviewed plan must be named explicitly.
@@ -212,6 +319,32 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
+  # Full-rehearsal bootstrap credentials are checked before any apply-wake
+  # dispatch. Plan-only runs remain usable without them. The ALB hostname is
+  # captured from the reviewed apply output after wake, and the rehearsal and
+  # isolation keys are generated per run; only the bootstrap admin key is a
+  # durable external input.
+  # ---------------------------------------------------------------------------
+  preflight-rehearsal-inputs:
+    name: Preflight full-rehearsal smoke inputs
+    needs: [select-profile]
+    if: needs.select-profile.outputs.rehearse == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    permissions:
+      contents: read
+    env:
+      STAGING_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
+    steps:
+      - name: Require the bootstrap admin key
+        run: |
+          set -euo pipefail
+          test -n "${STAGING_ADMIN_API_KEY:-}" \
+            || { echo '::error::STAGING_ADMIN_API_KEY is required as the one-time staging bootstrap credential before a full rehearsal'; exit 1; }
+          echo 'Staging bootstrap credential is present; ALB and test keys are created or resolved after the reviewed wake.'
+
+  # ---------------------------------------------------------------------------
   # Phase 2 — credentialed wake plan, produced by the reviewed promotion workflow.
   # ---------------------------------------------------------------------------
   wake-plan:
@@ -222,7 +355,7 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read
-      actions: read
+      actions: write
     outputs:
       plan_run_id: ${{ steps.dispatch.outputs.plan_run_id }}
       plan_checksum: ${{ steps.verify.outputs.plan_checksum }}
@@ -251,6 +384,7 @@ jobs:
           RELEASE_RUN_ID: ${{ inputs.release_run_id }}
           RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
+          INTENDED_RELEASE_SHA: ${{ inputs.intended_release_sha || github.sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
@@ -263,6 +397,7 @@ jobs:
           run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RELEASE_RUN_ID}")"
           run_path="$(jq -r '.path' <<<"$run_json")"
           run_conclusion="$(jq -r '.conclusion' <<<"$run_json")"
+          run_head_sha="$(jq -r '.head_sha' <<<"$run_json")"
           if [ "$run_path" != "$DELIVERY_WORKFLOW_PATH" ]; then
             echo "::error::release run ${RELEASE_RUN_ID} belongs to ${run_path}, not the delivery workflow"
             exit 1
@@ -271,9 +406,13 @@ jobs:
             echo "::error::release run ${RELEASE_RUN_ID} concluded ${run_conclusion}, not success"
             exit 1
           fi
+          test "$run_head_sha" = "$INTENDED_RELEASE_SHA" \
+            || { echo "::error::release run ${RELEASE_RUN_ID} head ${run_head_sha} is not intended release ${INTENDED_RELEASE_SHA}"; exit 1; }
           cd "${RUNNER_TEMP}/release"
           test -s release.json || { echo '::error::release run produced no release.json'; exit 1; }
           sha="$(python -c "import json; print(json.load(open('release.json'))['commit_sha'])")"
+          test "$sha" = "$INTENDED_RELEASE_SHA" \
+            || { echo "::error::release manifest commit ${sha} is not intended release ${INTENDED_RELEASE_SHA}"; exit 1; }
           python "${GITHUB_WORKSPACE}/scripts/release/release_manifest.py" release.json \
             --expected-sha "$sha" --checksum "$RELEASE_MANIFEST_CHECKSUM"
           digest="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['digest'])")"
@@ -290,7 +429,7 @@ jobs:
       - name: Dispatch the reviewed wake plan and wait for it
         id: dispatch
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
           STAGING_STATE: awake
           BACKEND_IMAGE_DIGEST: ${{ steps.release.outputs.backend_image_digest }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
@@ -299,7 +438,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${GH_TOKEN:-}" \
-            || { echo '::error::WORKFLOW_DISPATCH_TOKEN is required to dispatch the reviewed promotion workflow'; exit 1; }
+            || { echo '::error::no GitHub Actions token is available to dispatch the reviewed promotion workflow'; exit 1; }
           # Run IDs increase monotonically per repository, so anything created
           # after this watermark and on our ref is a candidate for our dispatch.
           before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
@@ -546,7 +685,11 @@ jobs:
           env = os.environ["STAGING_ENV"]
           runtime = (yaml.safe_load(open("config/runtime_deployment.yaml")) or {}).get("profiles") or {}
           pcfg = runtime.get(profile) or {}
-          services = pcfg.get("services") or {}
+          services = pcfg.get("services")
+          if not isinstance(services, dict) or not services:
+              sys.exit(f"::error::runtime_deployment.yaml profile {profile} has no services mapping")
+          if len(set(services)) != len(services):
+              sys.exit(f"::error::runtime_deployment.yaml profile {profile} has duplicate service keys")
           states = (pcfg.get("staging_state") or {}).get("states") or {}
           multiplier = (states.get(state) or {}).get("desired_count_multiplier")
           if multiplier is None:
@@ -603,22 +746,50 @@ jobs:
   # ---------------------------------------------------------------------------
   wake-apply:
     name: Apply the exact reviewed wake plan
-    needs: [select-profile, wake-plan, wake-validate]
+    needs: [select-profile, wake-plan, wake-validate, preflight-rehearsal-inputs]
     if: >-
-      !cancelled()
+      always()
+      && !cancelled()
       && needs.select-profile.outputs.apply_wake == 'true'
       && needs.wake-plan.result != 'failure'
       && needs.wake-validate.result == 'success'
+      && (needs.select-profile.outputs.rehearse != 'true'
+          || needs.preflight-rehearsal-inputs.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 240
     permissions:
       contents: read
-      actions: read
+      actions: write
       id-token: write
+    outputs:
+      apply_run_id: ${{ steps.dispatch.outputs.apply_run_id }}
+      api_host: ${{ steps.outputs.outputs.api_host }}
+      alb_dns: ${{ steps.outputs.outputs.alb_dns }}
     steps:
-      - name: Dispatch the reviewed apply for the verified wake plan
+      - uses: actions/checkout@v4
+      # Establish the bounded lease before any apply dispatch. If the apply
+      # starts services but readiness later fails, the TTL guard is already
+      # armed and the fail-safe sleep job has a concrete deadline to enforce.
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Open the bounded awake lease before apply
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
+          AWAKE_HOURS: ${{ needs.select-profile.outputs.awake_hours }}
+        run: |
+          set -euo pipefail
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          deadline="$(date -u -d "+${AWAKE_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ)"
+          lease="$(printf '{"awake_since":"%s","awake_until":"%s","extensions":0}' "$now" "$deadline")"
+          aws ssm put-parameter --name "$AWAKE_LEASE_PARAM" \
+            --type String --overwrite --value "$lease" \
+            --description "staging awake window (UTC); enforced by staging-ttl-guard"
+          echo "staging awake lease armed before apply: since ${now}, expires ${deadline}"
+      - name: Dispatch the reviewed apply for the verified wake plan
+        id: dispatch
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
           PLAN_RUN_ID: ${{ needs.wake-validate.outputs.plan_run_id }}
           PLAN_CHECKSUM: ${{ needs.wake-validate.outputs.plan_checksum }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
@@ -626,7 +797,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${GH_TOKEN:-}" \
-            || { echo '::error::WORKFLOW_DISPATCH_TOKEN is required to dispatch the reviewed promotion workflow'; exit 1; }
+            || { echo '::error::no GitHub Actions token is available to dispatch the reviewed promotion workflow'; exit 1; }
           # Both values come from the verification job, never straight from a
           # dispatch input: an apply here can only promote a plan this workflow
           # has already downloaded, checksummed and policy-validated.
@@ -675,11 +846,68 @@ jobs:
             echo "::error::reviewed apply run ${run_id} concluded ${conclusion}"
             exit 1
           fi
+          printf 'apply_run_id=%s\n' "$run_id" >> "$GITHUB_OUTPUT"
 
+      # The promotion wait may include a protected-environment approval and
+      # can exceed the default one-hour OIDC session. Re-assume the lifecycle
+      # role before any follow-up AWS reads or lease writes so a successful
+      # promotion cannot be reported as a failed rehearsal on expired creds.
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_STAGING_LIFECYCLE_ROLE_ARN }}
           aws-region: us-east-1
+
+      - name: Capture the applied certificate-covered API hostname
+        id: outputs
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
+          APPLY_RUN_ID: ${{ steps.dispatch.outputs.apply_run_id }}
+        run: |
+          set -euo pipefail
+          test -n "$APPLY_RUN_ID" || { echo '::error::reviewed apply run id was not recorded'; exit 1; }
+          evidence_dir="${RUNNER_TEMP}/terraform-apply-evidence"
+          rm -rf "$evidence_dir"
+          gh run download "$APPLY_RUN_ID" \
+            --name "terraform-apply-evidence-${APPLY_RUN_ID}" \
+            --dir "$evidence_dir"
+          api_file="$(find "$evidence_dir" -type f -name 'reviewed.api-host' -print -quit)"
+          test -n "$api_file" || { echo '::error::reviewed apply did not publish reviewed.api-host'; exit 1; }
+          alb_file="$(find "$evidence_dir" -type f -name 'reviewed.alb-dns' -print -quit)"
+          test -n "$alb_file" || { echo '::error::reviewed apply did not publish reviewed.alb-dns'; exit 1; }
+          api_host="$(tr -d '\r\n' < "$api_file")"
+          alb_dns="$(tr -d '\r\n' < "$alb_file")"
+          case "$api_host" in
+            ''|*://*|*/*|*' '*|*'"'*)
+              echo '::error::applied API output is empty or is not a host name'; exit 1 ;;
+          esac
+          case "$alb_dns" in
+            ''|*://*|*/*|*' '*|*'"'*)
+              echo '::error::applied ALB output is empty or is not a host name'; exit 1 ;;
+          esac
+          printf 'api_host=%s\n' "$api_host" >> "$GITHUB_OUTPUT"
+          printf 'alb_dns=%s\n' "$alb_dns" >> "$GITHUB_OUTPUT"
+          echo 'Certificate-covered API hostname captured for the rehearsal.'
+
+      - name: Verify API DNS points to the applied load balancer
+        env:
+          API_HOST: ${{ steps.outputs.outputs.api_host }}
+          ALB_DNS: ${{ steps.outputs.outputs.alb_dns }}
+        run: |
+          set -euo pipefail
+          # ALB A records are elastic and can rotate between two resolver
+          # calls. Verify the stable operator-managed CNAME target instead of
+          # comparing transient IP intersections, then let the HTTPS probe
+          # below validate that the endpoint is actually serving.
+          normalize_name() { printf '%s' "$1" | sed 's/\\.$//'; }
+          api_cname="$(dig +short CNAME "$API_HOST" | sed -n '1p' | sed 's/\\.$//')"
+          alb_name="$(normalize_name "$ALB_DNS")"
+          test -n "$api_cname" || {
+            echo "::error::certificate-covered API hostname ${API_HOST} has no CNAME record"; exit 1;
+          }
+          test "$api_cname" = "$alb_name" || {
+            echo "::error::${API_HOST} CNAME is ${api_cname}, not the applied ALB ${alb_name}"; exit 1;
+          }
+          echo "verified ${API_HOST} CNAME targets the applied ALB ${ALB_DNS}"
 
       - name: Wait for staging infrastructure readiness
         run: |
@@ -699,37 +927,50 @@ jobs:
           aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
             --query 'services[].[serviceName,desiredCount,runningCount]' --output text
 
-      # The awake lease is what staging-ttl-guard.yml enforces. It is written only
-      # after a successful wake, and it always carries absolute UTC timestamps.
+      # Refresh the bounded lease after a successful wake so the deadline is
+      # measured from actual readiness while preserving the pre-apply guard.
       #
       # `awake_since` is the ORIGINAL wake. Extensions granted by the TTL guard
       # move `awake_until` but never `awake_since`, so the guard's total awake
       # ceiling is measured from the moment staging actually came up rather than
       # from the most recent extension. Without it, N sequential extensions buy
       # unbounded awake time.
-      - name: Open the awake lease
+      - name: Refresh the awake lease after readiness
         env:
           AWAKE_HOURS: ${{ needs.select-profile.outputs.awake_hours }}
         run: |
           set -euo pipefail
-          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          lease="$(aws ssm get-parameter --name "$AWAKE_LEASE_PARAM" \
+            --query 'Parameter.Value' --output text)"
+          lease_since="$(jq -er '.awake_since // empty' <<<"$lease")"
+          lease_extensions="$(jq -er '.extensions // 0' <<<"$lease")"
+          test -n "$lease_since" || { echo '::error::pre-apply lease has no awake_since anchor'; exit 1; }
+          case "$lease_extensions" in
+            ''|*[!0-9]*) echo '::error::pre-apply lease has invalid extensions'; exit 1 ;;
+          esac
           deadline="$(date -u -d "+${AWAKE_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ)"
-          lease="$(printf '{"awake_since":"%s","awake_until":"%s","extensions":0}' "$now" "$deadline")"
+          ceiling="$(date -u -d "${lease_since} +${MAX_AWAKE_HOURS_CAP} hours" +%Y-%m-%dT%H:%M:%SZ)"
+          if [ "$(date -u -d "$deadline" +%s)" -gt "$(date -u -d "$ceiling" +%s)" ]; then
+            deadline="$ceiling"
+          fi
+          refreshed_lease="$(printf '{"awake_since":"%s","awake_until":"%s","extensions":%s}' \
+            "$lease_since" "$deadline" "$lease_extensions")"
           aws ssm put-parameter --name "$AWAKE_LEASE_PARAM" \
-            --type String --overwrite --value "$lease" \
+            --type String --overwrite --value "$refreshed_lease" \
             --description "staging awake window (UTC); enforced by staging-ttl-guard"
-          echo "staging awake lease: since ${now}, expires ${deadline}"
+          echo "staging awake lease refreshed: since ${lease_since}, expires ${deadline}, extensions ${lease_extensions}"
 
   # ---------------------------------------------------------------------------
   # Phase 5 — the rehearsal itself.
   # ---------------------------------------------------------------------------
   rehearse:
     name: Full staging rehearsal
-    needs: [select-profile, wake-plan, wake-validate, wake-apply]
+    needs: [select-profile, wake-plan, wake-validate, wake-apply, preflight-rehearsal-inputs]
     if: >-
       !cancelled()
       && needs.select-profile.outputs.rehearse == 'true'
       && needs.wake-apply.result == 'success'
+      && needs.preflight-rehearsal-inputs.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 180
     environment: staging
@@ -738,7 +979,9 @@ jobs:
       actions: read
       id-token: write
     env:
-      ALB_DNS_NAME: ${{ vars.ALB_DNS_NAME }}
+      # Kept under the legacy variable name for the existing probe scripts;
+      # the value is the certificate-covered API hostname, not *.elb.amazonaws.com.
+      ALB_DNS_NAME: ${{ needs.wake-apply.outputs.api_host }}
       BACKEND_IMAGE_DIGEST: ${{ needs.wake-plan.outputs.backend_image_digest }}
     steps:
       - uses: actions/checkout@v4
@@ -764,10 +1007,13 @@ jobs:
       - name: Verify the exact immutable application artifact is what staging runs
         env:
           RELEASE_MANIFEST_CHECKSUM: ${{ inputs.release_manifest_checksum }}
+          INTENDED_RELEASE_SHA: ${{ inputs.intended_release_sha || github.sha }}
         run: |
           set -euo pipefail
           cd "${RUNNER_TEMP}/release"
           sha="$(python -c "import json; print(json.load(open('release.json'))['commit_sha'])")"
+          test "$sha" = "$INTENDED_RELEASE_SHA" \
+            || { echo "::error::release manifest commit ${sha} is not intended release ${INTENDED_RELEASE_SHA}"; exit 1; }
           python "${GITHUB_WORKSPACE}/scripts/release/release_manifest.py" release.json \
             --expected-sha "$sha" --checksum "$RELEASE_MANIFEST_CHECKSUM"
           python - <<'PY'
@@ -806,6 +1052,72 @@ jobs:
             fi
           done
           echo "staging runs the approved immutable release"
+
+      - name: Revalidate awake lease before static publication
+        # Static publication mutates the staging origins. Re-check the lease
+        # immediately before the first S3 write so an expired wake window cannot
+        # overwrite or delete staging content.
+        env:
+          MIN_LEASE_SECONDS: "300"
+        run: |
+          set -euo pipefail
+          lease="$(aws ssm get-parameter --name "$AWAKE_LEASE_PARAM" --query 'Parameter.Value' --output text)"
+          until="$(jq -r '.awake_until // empty' <<<"$lease")"
+          test -n "$until" || { echo '::error::awake lease is missing before static publication'; exit 1; }
+          now="$(date -u +%s)"; deadline="$(date -u -d "$until" +%s)"
+          test "$((deadline - now))" -ge "$MIN_LEASE_SECONDS" \
+            || { echo '::error::awake lease lacks five minutes for static publication'; exit 1; }
+
+      - name: Publish and verify the approved static SPA artifacts
+        # Static publication is part of the exact-release rehearsal, not an
+        # assumption about whatever happens to remain in the buckets.
+        env:
+          RELEASE_MANIFEST_SHA256: ${{ inputs.release_manifest_checksum }}
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/release"
+          mkdir -p "${GITHUB_WORKSPACE}/artifacts/rehearsal"
+          python - <<'PY'
+          import hashlib, json, pathlib, sys
+          m = json.load(open("release.json"))
+          for key in ("aether_spa", "kyber_spa"):
+              a = m["artifacts"][key]
+              got = "sha256:" + hashlib.sha256(pathlib.Path(a["file"]).read_bytes()).hexdigest()
+              if got != a["digest"]:
+                  sys.exit(f"::error::{key} digest mismatch before publication")
+          PY
+          for app in aether kyber; do
+            archive_key="${app}_spa"
+            archive="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['${archive_key}']['file'])")"
+            expected="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['${archive_key}']['digest'])")"
+            test -s "$archive"
+            dist="${GITHUB_WORKSPACE}/artifacts/rehearsal/dist-${app}"
+            rm -rf "$dist"; mkdir -p "$dist"
+            tar -xzf "$archive" -C "$dist"
+            bucket_var="$(echo "${app}_static_bucket" | tr '[:lower:]' '[:upper:]')"
+            bucket="$(aws ssm get-parameter --name "/aether/${STAGING_ENV}/${bucket_var}" --query 'Parameter.Value' --output text)"
+            aws s3 sync "$dist" "s3://${bucket}" --delete --cache-control 'public,max-age=31536000,immutable' --exclude index.html
+            aws s3 cp "$dist/index.html" "s3://${bucket}/index.html" --cache-control 'no-cache,no-store,must-revalidate'
+            verify="${RUNNER_TEMP}/verify-${app}"; rm -rf "$verify"; mkdir -p "$verify"
+            aws s3 sync "s3://${bucket}" "$verify" --delete
+            diff -qr "$dist" "$verify" >/dev/null || { echo "::error::published ${app} SPA differs from approved artifact"; exit 1; }
+            printf '%s=%s\n' "$app" "$expected" >> "${GITHUB_WORKSPACE}/artifacts/rehearsal/static-publication.txt"
+          done
+          printf 'manifest_sha256=%s\n' "$RELEASE_MANIFEST_SHA256" >> "${GITHUB_WORKSPACE}/artifacts/rehearsal/static-publication.txt"
+
+      - name: Revalidate awake lease before migration mutation
+        # Revalidate immediately before the first mutating rehearsal action.
+        # The wake lease may have expired while image verification ran.
+        env:
+          MIN_LEASE_SECONDS: "300"
+        run: |
+          set -euo pipefail
+          lease="$(aws ssm get-parameter --name "$AWAKE_LEASE_PARAM" --query 'Parameter.Value' --output text)"
+          until="$(jq -r '.awake_until // empty' <<<"$lease")"
+          test -n "$until" || { echo '::error::awake lease is missing before migration mutation'; exit 1; }
+          now="$(date -u +%s)"; deadline="$(date -u -d "$until" +%s)"
+          test "$((deadline - now))" -ge "$MIN_LEASE_SECONDS" \
+            || { echo '::error::awake lease lacks five minutes for the next staging mutation'; exit 1; }
 
       - name: Run migrations and verify the resulting revision
         run: |
@@ -861,19 +1173,113 @@ jobs:
               || { echo "::error::${app} SPA origin has no index.html"; exit 1; }
           done
 
-      - name: Create the isolated rehearsal tenant and verify tenant isolation
+      - name: Bootstrap run-scoped rehearsal tenants and API keys
         env:
-          REHEARSAL_TENANT_API_KEY: ${{ secrets.STAGING_REHEARSAL_TENANT_API_KEY }}
-          ISOLATION_PEER_API_KEY: ${{ secrets.STAGING_ISOLATION_PEER_API_KEY }}
+          ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${ALB_DNS_NAME:-}" || { echo '::error::wake apply did not expose an ALB hostname'; exit 1; }
+          test -n "${ADMIN_API_KEY:-}" || { echo '::error::STAGING_ADMIN_API_KEY is required to bootstrap rehearsal tenants'; exit 1; }
+          mkdir -p artifacts/rehearsal
+          python - <<'PY'
+          import json, os, re, sys, urllib.error, urllib.request, uuid
+
+          base = f"https://{os.environ['ALB_DNS_NAME']}"
+          tenant_pattern = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
+          marker_path = "artifacts/rehearsal/bootstrap-marker.json"
+          marker = {"run_scoped": True, "tenant_ids": []}
+
+          def save_marker():
+              with open(marker_path, "w", encoding="utf-8") as handle:
+                  json.dump(marker, handle, indent=2)
+
+          def call(method, path, body=None, expect=None):
+              data = json.dumps(body).encode() if body is not None else None
+              request = urllib.request.Request(base + path, data=data, method=method)
+              request.add_header("Accept", "application/json")
+              request.add_header("X-API-Key", os.environ["ADMIN_API_KEY"])
+              if data:
+                  request.add_header("Content-Type", "application/json")
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      status, payload = response.status, response.read()
+              except urllib.error.HTTPError as error:
+                  status, payload = error.code, error.read()
+              if expect is not None and status not in expect:
+                  sys.exit(f"::error::{method} {path} returned {status}; expected {sorted(expect)}")
+              try:
+                  return status, json.loads(payload or b"{}")
+              except ValueError:
+                  return status, {}
+
+          def extract(node, *names):
+              if not isinstance(node, dict):
+                  return None
+              for name in names:
+                  value = node.get(name)
+                  if value:
+                      return value
+              for nested_name in ("data", "tenant"):
+                  nested = node.get(nested_name)
+                  value = extract(nested, *names)
+                  if value:
+                      return value
+              return None
+
+          def create_tenant(label):
+              _, payload = call("POST", "/v1/admin/tenants", body={
+                  "name": f"Aether staging {label} {os.environ['GITHUB_RUN_ID']}",
+                  "plan": "free",
+                  "contact_email": f"aether-staging-{label.lower()}-{uuid.uuid4().hex}@staging.invalid",
+                  "settings": {"lifecycle": "run-scoped-rehearsal"},
+              }, expect={200, 201})
+              tenant_id = extract(payload, "tenant_id", "id")
+              if not isinstance(tenant_id, str) or not tenant_pattern.fullmatch(tenant_id):
+                  sys.exit(f"::error::admin tenant bootstrap returned no valid tenant id for {label}")
+              marker["tenant_ids"].append(tenant_id)
+              save_marker()
+              return tenant_id
+
+          def create_key(tenant_id, label, permissions):
+              _, payload = call("POST", f"/v1/admin/tenants/{tenant_id}/api-keys", body={
+                  "name": f"staging-rehearsal-{label.lower()}-{os.environ['GITHUB_RUN_ID']}",
+                  "tier": "free",
+                  "permissions": permissions,
+              }, expect={200, 201})
+              key = extract(payload, "api_key")
+              if not isinstance(key, str) or not re.fullmatch(r"ak_[A-Za-z0-9]{24}", key):
+                  sys.exit(f"::error::admin key bootstrap returned no valid key for {label}")
+              print(f"::add-mask::{key}")
+              return key
+
+          save_marker()
+          mine_id = create_tenant("Primary")
+          mine_key = create_key(mine_id, "Primary", [
+              "read", "write", "ingest", "analytics", "analytics:export",
+              "consent:manage", "billing",
+          ])
+          peer_id = create_tenant("Isolation")
+          peer_key = create_key(peer_id, "Isolation", ["read"])
+          if mine_id == peer_id:
+              sys.exit("::error::run-scoped rehearsal tenants must be distinct")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"REHEARSAL_TENANT_API_KEY={mine_key}\n")
+              env.write(f"ISOLATION_PEER_API_KEY={peer_key}\n")
+              env.write(f"REHEARSAL_TENANT_ID={mine_id}\n")
+              env.write(f"ISOLATION_PEER_TENANT_ID={peer_id}\n")
+          print(f"bootstrapped run-scoped tenants {mine_id} and {peer_id}")
+          PY
+
+      - name: Create the isolated rehearsal tenant and verify tenant isolation
         run: |
           set -euo pipefail
           test -n "${REHEARSAL_TENANT_API_KEY:-}" \
-            || { echo '::error::STAGING_REHEARSAL_TENANT_API_KEY is required'; exit 1; }
+            || { echo '::error::run-scoped rehearsal API key was not bootstrapped'; exit 1; }
           test -n "${ISOLATION_PEER_API_KEY:-}" \
-            || { echo '::error::STAGING_ISOLATION_PEER_API_KEY is required'; exit 1; }
+            || { echo '::error::run-scoped isolation API key was not bootstrapped'; exit 1; }
           mkdir -p artifacts/rehearsal
           python - <<'PY'
-          import json, os, sys, urllib.error, urllib.request, uuid
+          import json, os, re, sys, urllib.error, urllib.request, uuid
 
           base = f"https://{os.environ['ALB_DNS_NAME']}"
 
@@ -897,15 +1303,30 @@ jobs:
               except ValueError:
                   return status, {}
 
-          # The registration path is exercised end to end; the tenant it creates is
-          # only activated by an emailed OTP, so the data-plane tenant is the
-          # dedicated rehearsal credential below.
-          call("POST", "/v1/auth/register", body={
+          # The public registration path is exercised end to end. In the current
+          # backend contract it is POST /v1/tenants and may return a pending,
+          # contained tenant; the data-plane tenant is the dedicated rehearsal
+          # credential below, so no registration response is trusted as a key.
+          _registration_status, registration = call("POST", "/v1/tenants", body={
               "name": "Aether staging rehearsal",
-              "email": f"rehearsal-{uuid.uuid4().hex}@staging.invalid",
-              "password": uuid.uuid4().hex + "Aa1!",
+              "contact_email": f"rehearsal-{uuid.uuid4().hex}@staging.invalid",
               "plan_tier": "P1",
+              "settings": {"lifecycle": "run-scoped-rehearsal"},
           }, expect={200, 201})
+          # Persist only a secret-free marker and a narrowly validated tenant ID.
+          # Never upload the registration response: it may contain user fields,
+          # tokens, or other provider-controlled data. Cleanup runs in a later
+          # always() step and must still be able to remove this temporary tenant
+          # when a subsequent isolation assertion fails.
+          registration_node = registration.get("data", registration)
+          registration_tenant_id = registration_node.get("tenant_id") or (registration_node.get("tenant") or {}).get("tenant_id")
+          registration_user = registration_node.get("user") or {}
+          registration_tenant_id = registration_tenant_id or registration_user.get("tenant_id") or (registration_user.get("tenant") or {}).get("tenant_id")
+          if registration_tenant_id is not None:
+              if not isinstance(registration_tenant_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", registration_tenant_id):
+                  sys.exit("::error::registration response exposed an invalid tenant_id; refusing unsafe cleanup")
+          json.dump({"registration_completed": True, "tenant_id": registration_tenant_id},
+                    open("artifacts/rehearsal/registration-marker.json", "w"))
 
           _, mine = call("GET", "/v1/me", key=os.environ["REHEARSAL_TENANT_API_KEY"], expect={200})
           _, peer = call("GET", "/v1/me", key=os.environ["ISOLATION_PEER_API_KEY"], expect={200})
@@ -931,20 +1352,22 @@ jobs:
           # Unauthenticated access is refused (fail-closed).
           call("GET", "/v1/me", expect={401, 403})
 
-          json.dump({"tenant_id": mine_id, "peer_tenant_id": peer_id},
+          json.dump({"tenant_id": mine_id, "peer_tenant_id": peer_id,
+                     "registration_completed": True},
                     open("artifacts/rehearsal/tenant.json", "w"))
           print(f"isolated rehearsal tenant {mine_id}, peer {peer_id}")
           PY
 
       - name: Capability checks (auth, consent, ingestion, queue, graph, analytics, ML)
         env:
-          REHEARSAL_TENANT_API_KEY: ${{ secrets.STAGING_REHEARSAL_TENANT_API_KEY }}
+          SMOKE_ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
         run: |
           set -euo pipefail
           python scripts/staging_capability_matrix.py --json > artifacts/rehearsal/capability-matrix.json
           python scripts/smoke_test.py \
             --base-url "https://${ALB_DNS_NAME}" \
             --api-key "$REHEARSAL_TENANT_API_KEY" \
+            --admin-api-key "$SMOKE_ADMIN_API_KEY" \
             --timeout 20 \
             | tee artifacts/rehearsal/smoke.txt
           python - <<'PY'
@@ -1038,9 +1461,6 @@ jobs:
           PY
 
       - name: Synthetic-seed exclusion and empty-state checks
-        env:
-          REHEARSAL_TENANT_API_KEY: ${{ secrets.STAGING_REHEARSAL_TENANT_API_KEY }}
-          ISOLATION_PEER_API_KEY: ${{ secrets.STAGING_ISOLATION_PEER_API_KEY }}
         run: |
           set -euo pipefail
           # The staging profile must ship no compiled-in synthetic dataset.
@@ -1083,8 +1503,6 @@ jobs:
           PY
 
       - name: Baseline load test
-        env:
-          REHEARSAL_TENANT_API_KEY: ${{ secrets.STAGING_REHEARSAL_TENANT_API_KEY }}
         run: |
           set -euo pipefail
           python scripts/load_smoke.py \
@@ -1095,8 +1513,6 @@ jobs:
             | tee artifacts/rehearsal/load.txt
 
       - name: Failure and retry checks
-        env:
-          REHEARSAL_TENANT_API_KEY: ${{ secrets.STAGING_REHEARSAL_TENANT_API_KEY }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -1153,8 +1569,13 @@ jobs:
           family="${current%:*}"
           revision="${current##*:}"
           if [ "$revision" -le 1 ]; then
-            echo '::error::no earlier task revision exists to roll back to'
-            exit 1
+            # The first approved staging deployment has no prior revision.
+            # Record that rollback is not applicable rather than failing a
+            # healthy first run or pretending that a rollback occurred.
+            printf 'status=not_applicable\nreason=first approved staging revision; no earlier task definition exists\ncurrent=%s\n' \
+              "$current" > artifacts/rehearsal/rollback.txt
+            echo '::notice::rollback rehearsal not applicable for the first approved staging revision'
+            exit 0
           fi
           previous="${family}:$((revision - 1))"
           aws ecs update-service --cluster "$STAGING_CLUSTER" --service "$service" \
@@ -1182,13 +1603,21 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts/rehearsal
-          aws ecs describe-services --cluster "$STAGING_CLUSTER" \
-            --services $(aws ecs list-services --cluster "$STAGING_CLUSTER" --query 'serviceArns[]' --output text) \
-            > artifacts/rehearsal/ecs-services.json 2>/dev/null || true
+          if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
+            --query 'serviceArns[]' --output text)"; then
+            echo '::error::unable to enumerate staging ECS services; evidence is incomplete'
+            exit 1
+          fi
+          mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
+          test "${#services[@]}" -gt 0 || {
+            echo '::error::staging ECS service enumeration returned no services; evidence is incomplete'; exit 1;
+          }
+          aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
+            > artifacts/rehearsal/ecs-services.json
           aws logs describe-log-groups --log-group-name-prefix "/aether/${STAGING_ENV}" \
-            > artifacts/rehearsal/log-groups.json 2>/dev/null || true
+            > artifacts/rehearsal/log-groups.json
           aws cloudwatch list-metrics --namespace AETHER \
-            > artifacts/rehearsal/metrics.json 2>/dev/null || true
+            > artifacts/rehearsal/metrics.json
           cp -f "${RUNNER_TEMP}/release/release.json" artifacts/rehearsal/release.json 2>/dev/null || true
           python scripts/release/check_cost_model.py \
             --profile "$PROFILE" \
@@ -1202,27 +1631,89 @@ jobs:
           ADMIN_API_KEY: ${{ secrets.STAGING_ADMIN_API_KEY }}
         run: |
           set -euo pipefail
-          if [ ! -s artifacts/rehearsal/tenant.json ]; then
-            echo 'no rehearsal tenant was created; nothing to remove'
+          if [ ! -s artifacts/rehearsal/bootstrap-marker.json ] && [ ! -s artifacts/rehearsal/registration-marker.json ]; then
+            echo 'no run-scoped tenant was created; nothing to remove'
             exit 0
           fi
           test -n "${ADMIN_API_KEY:-}" \
-            || { echo '::error::STAGING_ADMIN_API_KEY is required to remove the rehearsal tenant'; exit 1; }
-          tenant_id="$(python -c "import json; print(json.load(open('artifacts/rehearsal/tenant.json'))['tenant_id'])")"
-          status="$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE \
-            -H "X-API-Key: ${ADMIN_API_KEY}" \
-            "https://${ALB_DNS_NAME}/v1/admin/tenants/${tenant_id}")"
-          if [ "$status" = 200 ] || [ "$status" = 204 ]; then
-            echo "rehearsal tenant ${tenant_id} deleted"
-            exit 0
-          fi
-          echo "delete returned ${status}; falling back to deactivation"
-          status="$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
-            -H "X-API-Key: ${ADMIN_API_KEY}" \
-            "https://${ALB_DNS_NAME}/v1/admin/tenants/${tenant_id}/deactivate")"
-          test "$status" = 200 || test "$status" = 204 \
-            || { echo "::error::rehearsal tenant ${tenant_id} was neither deleted nor expired (${status})"; exit 1; }
-          echo "rehearsal tenant ${tenant_id} expired"
+            || { echo '::error::STAGING_ADMIN_API_KEY is required to remove run-scoped rehearsal tenants'; exit 1; }
+          python - <<'PY'
+          import json, os, re, subprocess, sys
+
+          pattern = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
+          ids = []
+          bootstrap = "artifacts/rehearsal/bootstrap-marker.json"
+          if os.path.exists(bootstrap):
+              marker = json.load(open(bootstrap, encoding="utf-8"))
+              if marker.get("run_scoped") is not True or not isinstance(marker.get("tenant_ids"), list):
+                  sys.exit("::error::bootstrap marker is not a trusted run-scoped marker; refusing tenant cleanup")
+              ids.extend(marker["tenant_ids"])
+          registration = "artifacts/rehearsal/registration-marker.json"
+          if os.path.exists(registration):
+              value = json.load(open(registration, encoding="utf-8")).get("tenant_id")
+              if value:
+                  ids.append(value)
+          unique = []
+          for value in ids:
+              if not isinstance(value, str) or not pattern.fullmatch(value):
+                  sys.exit("::error::tenant marker contains an invalid id; refusing unsafe cleanup")
+              if value not in unique:
+                  unique.append(value)
+          if not unique:
+              print("no validated run-scoped tenant ids were recorded; refusing to guess")
+              raise SystemExit(0)
+          failures = []
+          base = f"https://{os.environ['ALB_DNS_NAME']}"
+          def request(method, path):
+              response = os.path.join(
+                  "artifacts/rehearsal",
+                  "cleanup-" + path.rsplit("/", 1)[-1] + ".json",
+              )
+              completed = subprocess.run([
+                  "curl", "-sS", "-o", response, "-w", "%{http_code}", "-X", method,
+                  "-H", f"X-API-Key: {os.environ['ADMIN_API_KEY']}", base + path,
+              ], check=False, capture_output=True, text=True)
+              if completed.returncode != 0:
+                  return None, None, f"curl exit {completed.returncode}"
+              try:
+                  body = json.load(open(response, encoding="utf-8"))
+              except (OSError, ValueError):
+                  body = None
+              return completed.stdout.strip(), body, None
+
+          for tenant_id in unique:
+              status, payload, error = request("DELETE", f"/v1/admin/tenants/{tenant_id}")
+              if error:
+                  failures.append(f"{tenant_id}: delete {error}")
+                  continue
+              deleted = ((payload or {}).get("data") or {}).get("deleted") or {}
+              if status == "200" and deleted.get("cleanup_complete") is True:
+                  print(f"run-scoped rehearsal tenant {tenant_id} deleted")
+                  continue
+              if status in {"200", "204"}:
+                  failures.append(
+                      f"{tenant_id}: delete returned {status} without a verified cleanup_complete receipt"
+                  )
+                  continue
+              delete_status = status
+              print(f"delete returned {delete_status}; falling back to deactivation")
+              status, payload, error = request("POST", f"/v1/admin/tenants/{tenant_id}/deactivate")
+              if error:
+                  failures.append(f"{tenant_id}: deactivation {error}")
+                  continue
+              deactivated = (payload or {}).get("data") or {}
+              if status != "200" or deactivated.get("status") != "inactive":
+                  failures.append(f"{tenant_id}: delete returned {delete_status}, deactivation returned {status}")
+                  continue
+              if "api_keys_revoked" not in deactivated or "keys_evicted" not in deactivated:
+                  failures.append(
+                      f"{tenant_id}: deactivation returned no credential-invalidation receipt"
+                  )
+                  continue
+              print(f"run-scoped rehearsal tenant {tenant_id} expired")
+          if failures:
+              sys.exit("::error::run-scoped rehearsal cleanup incomplete; all tenants were attempted: " + "; ".join(failures))
+          PY
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -1246,7 +1737,7 @@ jobs:
     timeout-minutes: 240
     permissions:
       contents: read
-      actions: read
+      actions: write
       id-token: write
     outputs:
       cleanup_result: ${{ steps.report.outputs.cleanup_result }}
@@ -1332,7 +1823,7 @@ jobs:
         id: sleep-plan
         if: steps.already.outputs.asleep != 'true'
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
           ML_IMAGE_DIGEST: ${{ inputs.ml_image_digest }}
           BACKEND_IMAGE_DIGEST: ${{ needs.wake-plan.outputs.backend_image_digest || inputs.backend_image_digest }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
@@ -1340,7 +1831,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${GH_TOKEN:-}" \
-            || { echo '::error::WORKFLOW_DISPATCH_TOKEN is required to dispatch the reviewed promotion workflow'; exit 1; }
+            || { echo '::error::no GitHub Actions token is available to dispatch the reviewed promotion workflow'; exit 1; }
           before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
             --jq '.workflow_runs[0].id // 0')"
           gh workflow run "$PROMOTE_WORKFLOW" --ref "$REF_NAME" \
@@ -1446,7 +1937,9 @@ jobs:
           env = os.environ["STAGING_ENV"]
           runtime = (yaml.safe_load(open("config/runtime_deployment.yaml")) or {}).get("profiles") or {}
           pcfg = runtime.get(profile) or {}
-          services = pcfg.get("services") or {}
+          services = pcfg.get("services")
+          if not isinstance(services, dict) or not services:
+              sys.exit(f"::error::runtime_deployment.yaml profile {profile} has no services mapping")
           states = (pcfg.get("staging_state") or {}).get("states") or {}
           multiplier = (states.get(state) or {}).get("desired_count_multiplier")
           if multiplier is None:
@@ -1493,7 +1986,7 @@ jobs:
         id: sleep-apply
         if: needs.select-profile.outputs.apply_sleep == 'true' && steps.sleep-verify.outputs.plan_checksum != ''
         env:
-          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ secrets.WORKFLOW_DISPATCH_TOKEN || github.token }}
           PLAN_RUN_ID: ${{ steps.sleep-plan.outputs.plan_run_id }}
           PLAN_CHECKSUM: ${{ steps.sleep-verify.outputs.plan_checksum }}
           PROMOTE_TIMEOUT_MINUTES: ${{ inputs.promote_timeout_minutes }}
@@ -1501,7 +1994,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${GH_TOKEN:-}" \
-            || { echo '::error::WORKFLOW_DISPATCH_TOKEN is required to dispatch the reviewed promotion workflow'; exit 1; }
+            || { echo '::error::no GitHub Actions token is available to dispatch the reviewed promotion workflow'; exit 1; }
           test -n "$PLAN_RUN_ID" || { echo '::error::no verified sleep plan_run_id'; exit 1; }
           test -n "$PLAN_CHECKSUM" || { echo '::error::no verified sleep plan_checksum'; exit 1; }
           before_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${PROMOTE_WORKFLOW}/runs?per_page=1" \
@@ -1664,8 +2157,21 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          aws ssm delete-parameter --name "$AWAKE_LEASE_PARAM" >/dev/null 2>&1 \
-            || echo 'no awake lease to close'
+          # Only an explicit ParameterNotFound is a benign already-closed
+          # lease. AccessDenied, throttling, and other AWS failures must stay
+          # visible so cleanup cannot report success while state is unknown.
+          delete_output="$(mktemp)"
+          if aws ssm delete-parameter --name "$AWAKE_LEASE_PARAM" >"$delete_output" 2>&1; then
+            echo 'awake lease removed'
+          elif grep -q 'ParameterNotFound' "$delete_output"; then
+            echo 'no awake lease to close'
+          else
+            cat "$delete_output"
+            echo '::error::could not remove the staging awake lease; cleanup state is unknown'
+            rm -f "$delete_output"
+            exit 1
+          fi
+          rm -f "$delete_output"
 
       - name: Report cleanup outcome
         id: report
@@ -1751,7 +2257,7 @@ jobs:
   # ---------------------------------------------------------------------------
   outcome:
     name: Lifecycle outcome (never masks a failure)
-    needs: [select-profile, wake-plan, wake-validate, wake-apply, rehearse, sleep]
+    needs: [select-profile, wake-plan, wake-validate, preflight-rehearsal-inputs, wake-apply, rehearse, sleep]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -1761,6 +2267,7 @@ jobs:
           SELECT_RESULT: ${{ needs.select-profile.result }}
           WAKE_PLAN_RESULT: ${{ needs.wake-plan.result }}
           WAKE_VALIDATE_RESULT: ${{ needs.wake-validate.result }}
+          PREFLIGHT_RESULT: ${{ needs.preflight-rehearsal-inputs.result }}
           WAKE_APPLY_RESULT: ${{ needs.wake-apply.result }}
           REHEARSE_RESULT: ${{ needs.rehearse.result }}
           SLEEP_RESULT: ${{ needs.sleep.result }}
@@ -1772,7 +2279,8 @@ jobs:
           set -euo pipefail
           failed=()
           for phase in select-profile:"$SELECT_RESULT" wake-plan:"$WAKE_PLAN_RESULT" \
-                       wake-validate:"$WAKE_VALIDATE_RESULT" wake-apply:"$WAKE_APPLY_RESULT" \
+                       wake-validate:"$WAKE_VALIDATE_RESULT" preflight-rehearsal-inputs:"$PREFLIGHT_RESULT" \
+                       wake-apply:"$WAKE_APPLY_RESULT" \
                        rehearse:"$REHEARSE_RESULT" sleep:"$SLEEP_RESULT"
           do
             case "${phase##*:}" in

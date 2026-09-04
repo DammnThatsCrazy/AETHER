@@ -10,7 +10,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/certification/readiness.py
   - Backend Architecture/aether-backend/shared/certification/checks.py
 canonical_owner: platform@aether
-last_synced_commit: "71d96f6"
+last_synced_commit: "4e6fdad"
 ---
 
 # Credential-Waiting Promotion Guide

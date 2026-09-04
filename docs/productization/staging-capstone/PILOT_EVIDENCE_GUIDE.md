@@ -19,6 +19,17 @@ treats "tested against in-memory/local fallbacks" as at most release-ready (4)
 and NEVER production-ready (5). A score only advances on recorded pilot evidence
 against real infrastructure — this guide defines what that evidence is.
 
+> **Readiness signal (2026-08 update).** The 0-5 rubric referenced here comes
+> from `scripts/production_status.py`, now labelled a **historical maturity
+> index** and **non-authoritative** for release eligibility. In the
+> multidimensional model (`config/readiness_model.yaml`) the evidence classes
+> below map to **environment evidence** (per-environment `VERIFIED`/`FAILED`/…)
+> and **evidence confidence**, which are tracked independently of
+> repository-controlled implementation completion. Credentialed pilot/staging
+> evidence advances environment evidence and confidence — never implementation
+> completion, which is already complete when a capability is `TURNKEY`. See
+> `docs/readiness/READINESS-MODEL.md`.
+
 ## Evidence classes (map to `ReadinessDimensions`)
 
 1. **Replay evidence** — recorded provider fixtures + a passing conformance

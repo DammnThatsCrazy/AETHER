@@ -1,0 +1,252 @@
+# =============================================================================
+# Aether — Multidimensional Readiness Model (canonical vocabulary + registry)
+#
+# WHY THIS FILE EXISTS
+# --------------------
+# A single readiness percentage collapses independent facts — is it built, is it
+# wired into the runtime, is it verified, is it productionized, is it waiting on
+# a credential, has it been proven in an environment — into one misleading
+# number. A connector that is fully built, runtime-wired, tested, and needs only
+# a secret is NOT "50% implemented" because the secret has not been pasted in.
+#
+# This model separates those facts into independent dimensions and forbids an
+# external blocker (a missing credential, unprovisioned infrastructure, an
+# absent provider account) from ever reducing repository-controlled
+# implementation completion. Missing external activation is recorded as an
+# activation blocker and an environment-evidence gap, never as unfinished code.
+#
+# CONSUMERS
+# ---------
+#   scripts/lib/readiness_model.py         model + evaluator (pure stdlib)
+#   scripts/validate_readiness_model.py    fail-closed validator
+#   scripts/readiness_status.py            human/machine status + profile reports
+#   scripts/migrate_readiness_data.py      legacy migration + report
+#   config/readiness/schema.json           JSON Schema for a feature record
+#   config/readiness/features/*.yaml       the feature records themselves
+#
+# This file is DATA. It defines the closed vocabularies (state enums), the
+# release-profile registry with each profile's default hard-gate requirements,
+# and the environment list. Individual feature records may tighten a profile's
+# floor but may never invent a state outside these enums.
+# =============================================================================
+
+schema_version: 1
+canonical_source: config/readiness_model.yaml
+model_version: 1
+
+# ---------------------------------------------------------------------------
+# Dimension 1 — Implementation completion (repository-controlled ONLY).
+# Never includes credentials, cloud accounts, provider approval, or live
+# traffic. Ordered progression; rank is used for "at least X" floor gates.
+# ---------------------------------------------------------------------------
+implementation_states:
+  - id: NOT_STARTED
+    rank: 0
+    description: No repository-controlled functional work exists.
+  - id: SCAFFOLDED
+    rank: 10
+    description: Contracts/skeletons exist; behavior is not implemented.
+  - id: IMPLEMENTED
+    rank: 20
+    description: The functional implementation exists.
+  - id: RUNTIME_INTEGRATED
+    rank: 30
+    description: The real application path can reach and use it.
+  - id: VERIFIED
+    rank: 40
+    description: Required repository-controlled tests and gates pass.
+  - id: TURNKEY
+    rank: 50
+    description: >-
+      All repository-controlled work is complete; activation requires no
+      source-code modification.
+
+# ---------------------------------------------------------------------------
+# Repository-controlled ceilings. A ceiling is the highest state the repository
+# alone can reach for this capability; everything above it is external.
+# ---------------------------------------------------------------------------
+ceilings:
+  - id: CODE_COMPLETE
+    min_state: IMPLEMENTED
+    description: The code is complete but not necessarily runtime-wired.
+  - id: RUNTIME_INTEGRATED
+    min_state: RUNTIME_INTEGRATED
+    description: The real runtime path reaches the implementation.
+  - id: VERIFIED
+    min_state: VERIFIED
+    description: Repository-controlled verification passes.
+  - id: CREDENTIAL_TURNKEY
+    min_state: TURNKEY
+    description: Complete; activation needs only a credential/secret.
+  - id: INFRASTRUCTURE_TURNKEY
+    min_state: TURNKEY
+    description: Complete; activation needs only infrastructure to be applied.
+  - id: RELEASE_TURNKEY
+    min_state: TURNKEY
+    description: Complete; activation needs only external release/config actions.
+  - id: LIVE_VERIFIED
+    min_state: TURNKEY
+    description: >-
+      Ceiling reaches beyond the repository: requires credentialed live
+      environment evidence to achieve.
+  - id: SCALE_VERIFIED
+    min_state: TURNKEY
+    description: >-
+      Ceiling reaches beyond the repository: requires production-load evidence
+      to achieve.
+
+# ---------------------------------------------------------------------------
+# Dimension 3 — External activation. Conditions outside source control. A
+# feature may carry several simultaneously. `source_code_change_expected: true`
+# is the ONLY activation blocker that is allowed to reflect back into
+# implementation completion (because it means repository work remains).
+# ---------------------------------------------------------------------------
+activation_states:
+  - NO_EXTERNAL_BLOCKER
+  - CREDENTIAL_WAITING
+  - INFRASTRUCTURE_WAITING
+  - ACCOUNT_WAITING
+  - REGISTRATION_WAITING
+  - DNS_WAITING
+  - EXTERNAL_APPROVAL_WAITING
+  - AUDIT_WAITING
+  - LIVE_DATA_WAITING
+  - ENVIRONMENT_ACCESS_WAITING
+  - ENVIRONMENT_VALIDATION_PENDING
+
+# ---------------------------------------------------------------------------
+# Dimension 4 — Environment evidence. Tracked independently per environment.
+# ---------------------------------------------------------------------------
+environment_states:
+  - NOT_APPLICABLE
+  - NOT_ATTEMPTED
+  - BLOCKED_EXTERNAL
+  - FAILED
+  - VERIFIED
+  - EXPIRED
+
+environments:
+  - local
+  - ci
+  - integration
+  - preview
+  - demo
+  - staging
+  - pilot
+  - production
+  - scale
+
+# Environments whose VERIFIED evidence requires credentialed execution. Offline
+# evidence (local, ci) may never be presented as proof for these.
+credentialed_environments: [integration, staging, pilot, production, scale]
+
+# ---------------------------------------------------------------------------
+# Dimension — Evidence confidence. NOT implementation completion.
+# ---------------------------------------------------------------------------
+confidence_levels:
+  - UNPROVEN
+  - LOW
+  - MODERATE
+  - HIGH
+  - VERY_HIGH
+
+# ---------------------------------------------------------------------------
+# Release-profile dispositions. Determined by hard gates, never by averaging.
+# ---------------------------------------------------------------------------
+dispositions:
+  - NOT_IN_PROFILE
+  - DISABLED_INTENTIONALLY
+  - BLOCKED_BY_CODE
+  - BLOCKED_BY_PRODUCTIONIZATION
+  - BLOCKED_BY_DEPENDENCY
+  - READY_TO_ACTIVATE
+  - READY_TO_VALIDATE
+  - TECHNICALLY_RELEASE_ELIGIBLE
+  - BUSINESS_READINESS_PENDING
+  - PILOT_ELIGIBLE
+  - PRODUCTION_ELIGIBLE
+  - LIVE_VERIFIED
+  - SCALE_VERIFIED
+
+# Per-profile participation states declared by a feature record.
+profile_participation_states:
+  - required          # the profile depends on it; must be release-bearing
+  - experimental      # present in the profile but not load-bearing
+  - disabled_intentionally
+  - not_in_release
+
+# ---------------------------------------------------------------------------
+# Release-profile registry. Each profile declares the DEFAULT hard-gate
+# requirements a feature must satisfy to be release-bearing in it. A feature
+# record may tighten these per profile but never loosen the implementation
+# floor below the profile default. `deployment_profile` links to a key in
+# config/deployment_profiles.yaml where one exists.
+# ---------------------------------------------------------------------------
+release_profiles:
+  local:
+    title: Local development
+    deployment_profile: local
+    implementation_floor: VERIFIED
+    productionization_required: false
+    # The environment whose evidence gates readiness beyond activation.
+    environment_gate: local
+    business_gate: false
+  staging:
+    title: Staging
+    deployment_profile: staging
+    # Staging is the environment where a VERIFIED capability is validated toward
+    # turnkey/production — you enter staging at VERIFIED and use staging evidence
+    # to progress. Production profiles still require TURNKEY (no source change to
+    # activate). A record may tighten this floor but never loosen it.
+    implementation_floor: VERIFIED
+    productionization_required: true
+    environment_gate: staging
+    business_gate: false
+  pilot:
+    title: Pilot
+    deployment_profile: production-lean
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: pilot
+    business_gate: true
+  production-lean:
+    title: Production (lean)
+    deployment_profile: production-lean
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: production
+    business_gate: true
+  production-scale:
+    title: Production (scale)
+    deployment_profile: production-scale
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: scale
+    business_gate: true
+
+# ---------------------------------------------------------------------------
+# Percentage rules (enforced by scripts/validate_readiness_model.py). Every
+# percentage is a weighted control coverage with an explicit denominator. These
+# flags document the invariants the validator enforces; see the validator for
+# the authoritative checks.
+# ---------------------------------------------------------------------------
+percentage_rules:
+  every_percent_names_its_denominator: true
+  only_in_scope_requirements_count: true
+  external_requirements_never_reduce_implementation: true
+  disabled_is_not_failed: true
+  missing_evidence_affects_confidence_not_implementation: true
+  turnkey_requires_no_source_change: true
+  no_global_blended_authoritative_score: true
+
+# Relationship to the retired scalar score. The 0-5 average previously emitted
+# by scripts/production_status.py is preserved there but relabelled
+# `historical_maturity_index` and is explicitly non-authoritative for release
+# eligibility. This model is the authoritative readiness signal.
+legacy:
+  historical_maturity_index_source: scripts/production_status.py
+  authoritative: false
+  note: >-
+    The historical 0-5 maturity average blended independent conditions and must
+    not determine release eligibility. Use the per-dimension states and the
+    per-profile disposition here instead.

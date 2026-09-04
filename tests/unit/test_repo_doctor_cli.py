@@ -29,6 +29,49 @@ def test_docs_only_requires_execution_mode() -> None:
         repo_doctor.parse_args(["--docs-only"])
 
 
+def test_readonly_generation_workspace_preserves_source_checkout(tmp_path, monkeypatch) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    subprocess = __import__("subprocess")
+    subprocess.run(["git", "init", "-q"], cwd=source, check=True)
+    (source / "tracked.txt").write_text("committed\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=source, check=True)
+    subprocess.run(["git", "-c", "user.name=T", "-c", "user.email=t@invalid", "commit", "-qm", "base"], cwd=source, check=True)
+    (source / "tracked.txt").write_text("working\n", encoding="utf-8")
+    monkeypatch.setattr(repo_doctor, "ROOT", source)
+
+    with repo_doctor.readonly_generation_workspace(True) as mirror:
+        assert mirror != source
+        assert (mirror / "tracked.txt").read_text(encoding="utf-8") == "working\n"
+        (mirror / "tracked.txt").write_text("generated\n", encoding="utf-8")
+
+    assert (source / "tracked.txt").read_text(encoding="utf-8") == "working\n"
+
+
+def test_readonly_generation_workspace_cleans_up_after_failure(tmp_path, monkeypatch) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    subprocess = __import__("subprocess")
+    subprocess.run(["git", "init", "-q"], cwd=source, check=True)
+    (source / "tracked.txt").write_text("committed\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=source, check=True)
+    subprocess.run(
+        ["git", "-c", "user.name=T", "-c", "user.email=t@invalid", "commit", "-qm", "base"],
+        cwd=source, check=True,
+    )
+    temp_root = tmp_path / "doctor-workspaces"
+    temp_root.mkdir()
+    monkeypatch.setattr(repo_doctor, "ROOT", source)
+    monkeypatch.setattr(repo_doctor.tempfile, "tempdir", str(temp_root))
+
+    with pytest.raises(RuntimeError, match="generator failed"):
+        with repo_doctor.readonly_generation_workspace(True) as mirror:
+            assert mirror.exists()
+            raise RuntimeError("generator failed")
+
+    assert list(temp_root.iterdir()) == []
+
+
 def test_shared_pkg_build_step_present_in_source() -> None:
     """repo_doctor.py must contain the pre-typecheck packages/shared build step.
 

@@ -9,7 +9,7 @@ since_version: "8.12.0"
 source_files:
   - reports/economic-interoperability-intelligence/current-state-audit.md
 canonical_owner: platform@aether
-last_synced_commit: "41c79d4"
+last_synced_commit: "4e6fdad"
 ---
 
 # Repo Truth and Gap Matrix

@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "99736fed"
+last_synced_commit: "4764707"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -52,6 +52,19 @@ metered per-service for billing (see `OverageCalculator`).
 
 **Feature gating** rejects requests for services outside the tenant's
 plan with HTTP 403 and a structured `required_plan` upgrade message.
+
+### Administrative tenant cleanup
+
+`DELETE /v1/admin/tenants/{tenant_id}` is a fail-closed destructive operation.
+It revokes durable API keys before deleting rows, verifies auth-cache eviction,
+revokes contained public-ingest identifiers, and removes tenant-scoped
+rehearsal data from consent/DSR, ingestion, analytics, profile, and graph
+projection stores before removing the tenant row. A successful response
+includes a `cleanup_complete` receipt; a partial cleanup raises an error so the
+caller can retry without mistaking an orphaned credential or projection for a
+completed deletion. Billing and immutable security-audit evidence are retained
+under policy. The deactivation endpoint uses the same credential invalidation
+order but retains data for recovery.
 
 ### Response Headers
 
@@ -204,6 +217,16 @@ mapping status.
 | `/v1/admin/kyber/revops/product-mappings` | GET | Product/price mapping catalog and mapping completeness without secrets |
 
 ### Admin tenant lifecycle (admin permission required)
+
+Deactivation and hard deletion revoke every active credential owned by the
+tenant, including durable API-key rows and contained `public_ingest_identifier`
+records created by the registration path. Deactivation marks durable API keys
+revoked before evicting their Redis entries or marking the tenant inactive; the
+validator also refuses to rehydrate a revoked row after a cache miss. Hard
+deletion revokes those identifiers before removing the tenant row; deactivation
+performs the same revocation even when the tenant is already inactive. Both
+responses report the number of API keys and public-ingest identifiers revoked so
+operators can verify cleanup.
 
 | Endpoint | Method | Purpose |
 |---|---|---|

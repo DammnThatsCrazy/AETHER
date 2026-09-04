@@ -14,6 +14,15 @@ last_synced_commit: "00fdcbc"
 
 # Release Readiness
 
+> **Readiness signal (2026-08 update).** The `X/5` scores in the scorecard below
+> come from `scripts/production_status.py`, now labelled a **historical maturity
+> index** and **non-authoritative** for release eligibility (it blends
+> independent conditions into one scalar). The authoritative signal is the
+> multidimensional model in `config/readiness_model.yaml` — per-dimension states
+> plus a per-release-profile hard-gate disposition. See
+> `docs/readiness/READINESS-MODEL.md` and `make readiness-status`. The scores
+> here are retained as a narrative snapshot only.
+
 ## Recommendation: **READY FOR CONTROLLED STAGING** — NOT production-ready
 
 All code paths are production-shaped, gated OFF by default, and green on

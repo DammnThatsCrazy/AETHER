@@ -98,6 +98,8 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check pyyaml
+      - name: Validate lifecycle IAM action contract
+        run: python3 scripts/release/check_staging_lifecycle_policy.py
 
       # NOT ARMED WITHOUT THE LIFECYCLE ROLE. When the role is absent the guard
       # has no credential to read the lease or enforce the TTL, so it is a NO-OP
@@ -199,11 +201,24 @@ jobs:
           fi
           awake_tasks="$(python -c "import json;d=json.load(open('artifacts/ttl-guard/services.json'));print(sum(max(s['desired'], s['running']+s['pending']) for s in d))")"
 
-          # A missing lease reads as an empty string, which is treated as expired
-          # below. `|| true` covers ParameterNotFound only; the value itself is
-          # then validated, so an unreadable lease can never look live.
-          lease="$(aws ssm get-parameter --name "$AWAKE_LEASE_PARAM" \
-            --query Parameter.Value --output text 2>/dev/null || echo '')"
+          # Only an explicit ParameterNotFound means the environment has no
+          # lease. AccessDenied, throttling, and other read failures leave live
+          # state unknown and must fail closed rather than being interpreted as
+          # an expired lease.
+          lease_output="$(mktemp)"
+          if aws ssm get-parameter --name "$AWAKE_LEASE_PARAM" \
+              --query Parameter.Value --output text >"$lease_output" 2>&1; then
+            lease="$(cat "$lease_output")"
+          elif grep -q 'ParameterNotFound' "$lease_output"; then
+            lease=''
+          else
+            cat "$lease_output"
+            echo 'state_known=false' >> "$GITHUB_OUTPUT"
+            echo '::error::could not read the staging awake lease; live lease state is UNKNOWN'
+            rm -f "$lease_output"
+            exit 1
+          fi
+          rm -f "$lease_output"
           if [ "$lease" = None ]; then
             lease=''
           fi
@@ -428,8 +443,21 @@ jobs:
             printf 'autoscaling_floor_zeroed=%s at=%s\n' \
               "$target" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> artifacts/ttl-guard/actions.log
           done
-          aws ssm delete-parameter --name "$AWAKE_LEASE_PARAM" >/dev/null 2>&1 \
-            || echo 'no awake lease to close'
+          # Only an explicit ParameterNotFound is a benign already-closed
+          # lease. AccessDenied, throttling, and other AWS failures must stay
+          # visible so cleanup cannot report success while state is unknown.
+          delete_output="$(mktemp)"
+          if aws ssm delete-parameter --name "$AWAKE_LEASE_PARAM" >"$delete_output" 2>&1; then
+            echo 'awake lease removed'
+          elif grep -q 'ParameterNotFound' "$delete_output"; then
+            echo 'no awake lease to close'
+          else
+            cat "$delete_output"
+            echo '::error::could not remove the staging awake lease; cleanup state is unknown'
+            rm -f "$delete_output"
+            exit 1
+          fi
+          rm -f "$delete_output"
           printf 'scaled=%s\n' "$scaled" >> "$GITHUB_OUTPUT"
 
       - name: Verify staging is back at zero

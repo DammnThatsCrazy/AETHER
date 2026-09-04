@@ -563,6 +563,16 @@ class TrustPlaneConfig:
         "LEGACY_TENANT_REGISTRATION_ENABLED", not _TRUST_DEFAULT_ON
     )
 
+    # One-time, staging-only first-admin bootstrap.  This is deliberately
+    # disabled by default and requires a high-entropy operator token plus an
+    # allowlisted contact address when enabled.  The token is injected from
+    # Secrets Manager at runtime; it is never committed or logged.
+    first_admin_bootstrap_enabled: bool = _env_bool(
+        "FIRST_ADMIN_BOOTSTRAP_ENABLED", False
+    )
+    first_admin_bootstrap_token: str = _env("FIRST_ADMIN_BOOTSTRAP_TOKEN", "")
+    first_admin_bootstrap_email: str = _env("FIRST_ADMIN_BOOTSTRAP_EMAIL", "")
+
     # Session lifetimes (minutes). Conservative defaults; override per env.
     session_idle_minutes: int = _env_int("SESSION_IDLE_MINUTES", 60)
     session_absolute_minutes: int = _env_int("SESSION_ABSOLUTE_MINUTES", 12 * 60)
@@ -798,6 +808,20 @@ class SemanticIntelligenceConfig:
     reconciler_enabled: bool = _env_bool("SEMANTIC_RECONCILER_ENABLED", False)
     retention_enabled: bool = _env_bool("SEMANTIC_RETENTION_ENABLED", False)
     graph_projector_enabled: bool = _env_bool("SEMANTIC_GRAPH_PROJECTOR_ENABLED", False)
+    # Force the mutation-gateway mode ladder for the graph projector's own writes
+    # ('' = inherit the global temporal_observatory.mutation_gateway_mode). Lets
+    # the projector ledger its projections regardless of the global rollout stage.
+    graph_projector_gateway_mode: str = _env("SEMANTIC_GRAPH_PROJECTOR_GATEWAY_MODE", "")
+    # Also project entity Gold as governed graph VERTICES (edges-only when off).
+    graph_vertex_projection_enabled: bool = _env_bool(
+        "SEMANTIC_GRAPH_VERTEX_PROJECTION_ENABLED", False
+    )
+    # Gate auto-projection on a consent/quality policy: an edge failing the
+    # auto-project predicate is deferred to the review queue instead of projected
+    # (off = auto-project every edge, the existing behavior).
+    graph_promotion_review_enabled: bool = _env_bool(
+        "SEMANTIC_GRAPH_PROMOTION_REVIEW_ENABLED", False
+    )
     classifier_provider: str = _env("SEMANTIC_CLASSIFIER_PROVIDER", "deterministic")
     shadow_provider: str = _env("SEMANTIC_SHADOW_PROVIDER", "")
     canary_tenants: list[str] = field(
@@ -1832,6 +1856,25 @@ class Settings:
                 "JWT_SECRET must be set in non-local environments. "
                 "Generate one with: python scripts/generate_secrets.py"
             )
+
+        # ── First-admin bootstrap ────────────────────────────────────────────
+        # This escape hatch is intentionally narrow: it can only be enabled in
+        # staging, and both the operator token and allowlisted address must be
+        # present.  Production must never boot with this path enabled.
+        bootstrap = self.trust_plane
+        if bootstrap.first_admin_bootstrap_enabled:
+            if self.env != Environment.STAGING:
+                raise RuntimeError(
+                    "FIRST_ADMIN_BOOTSTRAP_ENABLED is only permitted in staging"
+                )
+            if len(bootstrap.first_admin_bootstrap_token) < 32:
+                raise RuntimeError(
+                    "FIRST_ADMIN_BOOTSTRAP_TOKEN must be at least 32 characters"
+                )
+            if not bootstrap.first_admin_bootstrap_email.strip():
+                raise RuntimeError(
+                    "FIRST_ADMIN_BOOTSTRAP_EMAIL must be set when first-admin bootstrap is enabled"
+                )
 
         # ── Database URL ──────────────────────────────────────────────────────
         if _is_non_local and not _env("DATABASE_URL"):

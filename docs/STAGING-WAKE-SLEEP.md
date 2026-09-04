@@ -81,8 +81,14 @@ takes exactly six values.
 | `apply-sleep` | `sleep` (plan + verify + apply) | Return staging to zero. |
 | `full-rehearsal` | all of the above plus `rehearse` | The complete cycle. |
 
+The ML digest is profile-dependent. Staging, demo, preview, and
+`production-lean` run inline ML (`remote_ml: false`) and must leave this input
+empty. Only profiles with a dedicated remote ML service require the immutable
+serving-image digest.
+
 ```bash
-# Wake for a manual investigation
+# Wake for a manual investigation (remote-ML profiles only; omit the ML input
+# for staging and other inline-ML profiles)
 gh workflow run staging-lifecycle.yml \
   -f action=plan-wake \
   -f ml_image_digest=sha256:<64hex> \
@@ -114,7 +120,7 @@ gh workflow run staging-lifecycle.yml \
 | Input | Default | Constraint |
 |---|---|---|
 | `action` | `validate` | one of the six above |
-| `ml_image_digest` | — | required for any wake or sleep **plan** |
+| `ml_image_digest` | — | required for wake or sleep **plans** only when the selected profile has `remote_ml: true`; optional for inline-ML profiles such as staging |
 | `backend_image_digest` | — | ignored when `release_run_id` is supplied |
 | `release_run_id` | — | required for `full-rehearsal`; must be a successful `.github/workflows/deploy.yml` run |
 | `release_manifest_checksum` | — | required for `full-rehearsal` |
@@ -180,7 +186,7 @@ reviewed-plan machinery as a production apply.
 7. **Wait for readiness**: `aws ecs describe-clusters`, then
    `aws ecs wait services-stable` across every service in the cluster. Zero
    services after a wake is an error.
-8. **Open the awake lease.**
+8. **Arm the awake lease before apply, then refresh it after readiness.**
 
 ### Aurora resume
 
@@ -201,12 +207,14 @@ see the rejected lever in [Cost Optimization](COST-OPTIMIZATION.md#rejected-leve
 
 The lease is one SSM Parameter Store `String` at
 `/aether/staging/lifecycle/awake-until` holding an **absolute UTC deadline**
-(`%Y-%m-%dT%H:%M:%SZ`), written as `now + max_awake_hours` after a successful
-wake apply and stable services.
+(`%Y-%m-%dT%H:%M:%SZ`). `wake-apply` writes `now + max_awake_hours` before it
+dispatches the reviewed apply, so a failed or abandoned apply is still bounded.
+After the services become ready, the workflow refreshes the deadline from the
+same original `awake_since`; the refresh never resets the total-awake clock.
 
 | Actor | Effect on the lease |
 |---|---|
-| `staging-lifecycle.yml` → `wake-apply` | writes `now + max_awake_hours` (1–8 h, default 4) |
+| `staging-lifecycle.yml` → `wake-apply` | arms `now + max_awake_hours` before apply, then refreshes it after readiness (1–8 h, default 4) |
 | `staging-ttl-guard.yml` mode `extend` | **overwrites** with `now + extend_hours` (1–4 h); does not add to the existing deadline |
 | `staging-lifecycle.yml` → `sleep` | deletes it (`always()`) |
 | `staging-ttl-guard.yml` enforcement | deletes it after scaling to zero |
@@ -279,46 +287,78 @@ Steps, in order, with what each proves:
    ECS service's task definition image must equal the manifest's
    `backend_image.uri`. Staging is proven to be running the exact artifact
    under review, not a rebuild of it.
-2. **Migrations.** A one-off Fargate task is launched from the
+2. **Static publication.** The lease is revalidated with at least five minutes
+   remaining, then the approved `aether_spa` and `kyber_spa` archives are
+   unpacked and synchronized into their staging S3 origins with `aws s3 sync
+   --delete`. `index.html` is uploaded with no-cache headers, every object is
+   read back, and the bucket contents are compared byte-for-byte with the
+   release artifact. This is a real staging mutation: it requires the scoped
+   S3 write permission and fails closed if the lease expires or publication
+   differs from the approved digest.
+3. **Migrations.** A one-off Fargate task is launched from the
    `AETHER-staging-backend` task definition with `RUN_MIGRATIONS=1`
    (`alembic upgrade head`), awaited with `aws ecs wait tasks-stopped`, and
    required to exit 0. The resulting revision is then verified over HTTP: a 200
    from `/v1/ready` whose body mentions `alembic` or `migration`.
    On a `public_ip` profile the run-task network configuration needs
    `assignPublicIp=ENABLED` — there is no NAT to egress through.
-3. **Readiness and frontend availability.** `/v1/health` and `/v1/ready` must
+4. **Readiness and frontend availability.** `/v1/health` and `/v1/ready` must
    both return 200. For each of `aether` and `kyber`, the static bucket name is
    read from SSM (`/aether/staging/AETHER_STATIC_BUCKET`,
    `/aether/staging/KYBER_STATIC_BUCKET`) and `index.html` must exist.
-4. **Tenant isolation.** A fresh rehearsal tenant is registered. Its
-   `tenant_id` must differ from the isolation peer's. A cross-tenant read of
-   the peer's consent records must return 401/403/404 — a 200 is a breach and
-   fails the run. An unauthenticated `/v1/me` must fail closed.
-5. **Capability checks.** `scripts/staging_capability_matrix.py --json`,
-   `scripts/smoke_test.py`, then explicit probes for auth, consent/privacy
+   Before apply, the promotion workflow verifies that every ECS-mounted
+   Secrets Manager name has an `AWSCURRENT` version. Terraform creates the
+   encrypted secret stubs but never invents their values; bootstrap or import
+   those values through the secure operator procedure before a wake. The check
+   reads metadata only and never uploads or prints secret material.
+5. **Tenant isolation.** The run uses the encrypted staging admin bootstrap
+   key to create two fresh, free, run-scoped tenants and one API key for each.
+   The raw keys are masked and held only in the runner environment; they are
+   never committed or uploaded. Their `tenant_id` values must differ. A
+   cross-tenant read of the peer's consent records must return 401/403/404 — a
+   200 is a breach and fails the run. An unauthenticated `/v1/me` must fail
+   closed.
+6. **Capability checks.** `scripts/staging_capability_matrix.py --json`,
+   `scripts/smoke_test.py` (the tenant key covers data-plane checks and the
+   encrypted `STAGING_ADMIN_API_KEY` is supplied only to the two admin
+   diagnostics probes), then explicit probes for auth, consent/privacy
    (records, retention manifest, DSR), ingestion, **queue-worker drain**
    (polls analytics for the ingested event for up to 300 s; failure to drain is
    reported as the `lean-worker` execution group not draining — this is the
    check that proves consolidation actually works), graph, analytics, and
    inline ML (`/v1/ml/models`, since staging runs `remote_ml: false`).
-6. **Synthetic-seed exclusion and empty state.**
+7. **Synthetic-seed exclusion and empty state.**
    `scripts/validate_frontend_data_truth.py`, plus a probe that an unknown
    subject returns no records, plus a scan of the response for the markers
    `demo`, `synthetic`, `sample-tenant`, `lorem`.
-7. **Baseline load.** `scripts/load_smoke.py --users 10 --duration 60`.
-8. **Failure and retry.** A malformed ingest payload must be a 4xx — a 5xx is a
+8. **Baseline load.** `scripts/load_smoke.py --users 10 --duration 60`.
+9. **Failure and retry.** A malformed ingest payload must be a 4xx — a 5xx is a
    server error and a 2xx means it was accepted. A duplicate event must not
    produce a 5xx.
-9. **Rollback rehearsal.** Refuses to run outside the `AETHER-staging` cluster.
+10. **Rollback rehearsal.** Refuses to run outside the `AETHER-staging` cluster.
    Rolls `AETHER-staging-backend` back to the previous task-definition revision,
    waits for stability, asserts the rollback took effect and `/v1/health` is
-   200, then restores the current revision and waits again. Requires at least
-   revision 2 to exist.
-10. **Evidence collection.** ECS service state, log groups, CloudWatch metrics,
+   200, then restores the current revision and waits again. On the first
+   approved revision there is no earlier task definition, so the step records
+   `not_applicable` instead of fabricating a rollback; every later revision must
+   execute and verify both rollback and roll-forward.
+11. **Evidence collection.** ECS service state, log groups, CloudWatch metrics,
     `release.json`, and a cost-model run. Every command is `|| true`, so this
     step never fails the rehearsal.
-11. **Tenant cleanup.** `DELETE /v1/admin/tenants/{id}`, falling back to
-    `POST .../deactivate`. Neither succeeding is an error.
+12. **Tenant cleanup.** Every run-scoped tenant recorded by the bootstrap or
+    registration marker is removed with `DELETE /v1/admin/tenants/{id}`, falling
+    back to `POST .../deactivate`. Both admin paths revoke durable API keys,
+    invalidate and verify the Redis auth-cache entries, and revoke contained
+    public ingest identifiers before deleting or deactivating the tenant. A
+    successful DELETE must return a `cleanup_complete` receipt after erasing
+    every rehearsal surface (consent/DSR and propagation indexes, feed and SDK
+    Bronze/Silver/Gold records, analytics, profiles, and graph projection);
+    billing and security-audit evidence retained by policy is detached rather
+    than silently claimed erased. Marker IDs are validated and cleanup refuses
+    to guess when a marker is malformed or absent. Cleanup attempts every
+    recorded tenant even if one delete and its deactivation fallback fail, then
+    fails the step with the complete list of failures; neither operation may
+    silently succeed with an unknown state.
 
 ## Sleep
 
@@ -405,7 +445,7 @@ bundle.
 | Artifact | Contents | Retention |
 |---|---|---|
 | `staging-wake-plan-validation-<run_id>` | `artifacts/wake-plan-policy.txt`, `artifacts/wake-plan-cost.txt`, `artifacts/profile-resource-inventory.json` | 14 days |
-| `staging-rehearsal-<run_id>` | everything under `artifacts/rehearsal/` — `migrations.txt`, `ready.json`, `tenant.json`, `capability-matrix.json`, `capabilities.json`, `smoke.txt`, `data-truth.txt`, `load.json`, `load.txt`, `rollback.txt`, `ecs-services.json`, `log-groups.json`, `metrics.json`, `release.json`, `cost.txt` | 30 days |
+| `staging-rehearsal-<run_id>` | everything under `artifacts/rehearsal/` — `bootstrap-marker.json`, `registration-marker.json`, `static-publication.txt`, `migrations.txt`, `ready.json`, `tenant.json`, `capability-matrix.json`, `capabilities.json`, `smoke.txt`, `data-truth.txt`, `load.json`, `load.txt`, `rollback.txt`, `ecs-services.json`, `log-groups.json`, `metrics.json`, `release.json`, `cost.txt` | 30 days |
 | `staging-lifecycle-evidence-<run_id>` | `artifacts/sleep-plan-policy.txt`, `artifacts/sleep/desired-counts.json`, `artifacts/sleep/autoscaling.json`, `artifacts/evidence.sha256`, `artifacts/evidence.sha256.sha256` | 30 days |
 | `staging-ttl-guard-<run_id>` | `services.json`, `services-after.json`, `actions.log` | 30 days |
 
@@ -442,7 +482,8 @@ intervention required.
 
 ### Staging is still awake and money is running
 
-1. Dispatch `staging-lifecycle.yml -f action=apply-sleep -f ml_image_digest=...`.
+1. Dispatch `staging-lifecycle.yml -f action=apply-sleep` (add
+   `-f ml_image_digest=...` only when the selected profile has `remote_ml: true`).
    This is the correct path: it goes through a reviewed plan and leaves
    Terraform state consistent.
 2. If that cannot run (promotion credentials broken, approval unavailable),

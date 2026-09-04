@@ -249,7 +249,12 @@ def test_every_action_is_actually_routed_to_work():
 def test_lifecycle_and_guard_are_shaped_like_the_repo_expects():
     for name in (LIFECYCLE, TTL_GUARD):
         doc = _workflow_yaml(name)
-        assert doc["permissions"] == {"contents": "read"}, f"{name} top-level permissions"
+        expected_permissions = (
+            {"contents": "read", "actions": "write"}
+            if name == LIFECYCLE
+            else {"contents": "read"}
+        )
+        assert doc["permissions"] == expected_permissions, f"{name} top-level permissions"
         assert doc["concurrency"]["group"], f"{name} has no concurrency group"
         assert doc["concurrency"]["cancel-in-progress"] is False, (
             f"{name} may cancel a lifecycle run mid-mutation"
@@ -305,6 +310,34 @@ def test_every_terraform_mutation_is_a_dispatch_of_the_reviewed_workflow():
     assert doc["env"]["PROMOTE_WORKFLOW_PATH"] == PROMOTE_PATH
 
 
+def test_every_promotion_dispatch_job_can_dispatch_workflows():
+    """Job-level permissions must not override the dispatch capability.
+
+    The lifecycle grants actions: write at the workflow level, but GitHub job
+    permissions replace (rather than merge with) that declaration. Keeping
+    this assertion next to the dispatch-structure checks prevents a future
+    job-level actions: read from turning every wake/apply/sleep handoff into
+    an opaque HTTP 403.
+    """
+    doc = _workflow_yaml(LIFECYCLE)
+    for job_name, _step in _dispatch_steps(doc):
+        permissions = doc["jobs"][job_name].get("permissions") or {}
+        assert permissions.get("actions") == "write", (
+            f"{job_name} dispatches terraform-promote but lacks actions: write"
+        )
+
+
+def test_every_promotion_dispatch_job_has_a_workspace_checkout():
+    """The gh CLI requires the checked-out workspace even for API dispatches."""
+    doc = _workflow_yaml(LIFECYCLE)
+    for job_name, _step in _dispatch_steps(doc):
+        uses = [str(step.get("uses", "")) for step in _steps(doc, job_name)]
+        assert any(use.startswith("actions/checkout@") for use in uses), (
+            f"{job_name} dispatches terraform-promote without a checkout; "
+            "gh cannot run from the runner workspace"
+        )
+
+
 def test_no_apply_is_dispatched_without_a_verified_plan_run_and_checksum():
     doc = _workflow_yaml(LIFECYCLE)
     applies = []
@@ -355,6 +388,7 @@ def test_the_full_reviewed_evidence_set_is_verified_before_any_apply_dispatch():
         "select-profile",
         "wake-plan",
         "wake-validate",
+        "preflight-rehearsal-inputs",
     ]
     assert "needs.wake-validate.result == 'success'" in str(doc["jobs"]["wake-apply"]["if"]), (
         "wake-apply can run without a successful validation"
@@ -513,6 +547,13 @@ def test_full_rehearsal_runs_every_declared_phase():
     assert "/v1/ready" in script, "the migration revision is never verified"
 
 
+def test_first_staging_revision_records_rollback_as_not_applicable():
+    script = _job_script(_workflow_yaml(LIFECYCLE), "rehearse")
+    assert "status=not_applicable" in script
+    assert "first approved staging revision" in script
+    assert "no earlier task revision exists to roll back to" not in script
+
+
 def test_the_rehearsal_verifies_the_running_image_is_the_approved_digest():
     script = _job_script(_workflow_yaml(LIFECYCLE), "rehearse")
     assert "not the approved ${image_uri}" in script, (
@@ -530,9 +571,167 @@ def test_the_rehearsal_tenant_is_always_removed():
         "the rehearsal tenant survives a failed rehearsal"
     )
     run = step["run"]
-    assert "-X DELETE" in run
+    assert 'request("DELETE"' in run
     assert "/deactivate" in run, "there is no expiry fallback when delete is refused"
-    assert "was neither deleted nor expired" in run
+    assert "cleanup incomplete; all tenants were attempted" in run
+
+
+def test_rehearsal_bootstraps_run_scoped_credentials_and_cleans_only_marked_tenants():
+    doc = _workflow_yaml(LIFECYCLE)
+    script = _job_script(doc, "rehearse")
+    assert "intended_release_sha" in _referenced_text(doc)
+    assert ".head_sha" in script or ".head_sha" in _job_script(doc, "wake-plan")
+    names = [s.get("name") for s in _steps(doc, "rehearse")]
+    assert names.index("Revalidate awake lease before static publication") < names.index(
+        "Publish and verify the approved static SPA artifacts"
+    )
+    assert "Publish and verify the approved static SPA artifacts" in names
+    assert "aws s3 sync" in script
+    cleanup = next(
+        s for s in _steps(doc, "rehearse")
+        if s.get("name") == "Delete or expire the rehearsal tenant"
+    )["run"]
+    assert "bootstrap-marker.json" in cleanup
+    assert "registration-marker.json" in cleanup
+    assert "run_scoped" in cleanup
+    assert "refusing unsafe cleanup" in cleanup
+    assert 'request("DELETE"' in cleanup
+    assert 'request("POST"' in cleanup
+    assert "failures = []" in cleanup
+    assert "all tenants were attempted" in cleanup
+    assert "Bootstrap run-scoped rehearsal tenants and API keys" in names
+    assert 'call("POST", "/v1/tenants", body=' in script
+    assert '"contact_email":' in script
+    assert '"password":' not in script
+    assert '"/v1/auth/register"' not in script
+    assert "STAGING_REHEARSAL_TENANT_API_KEY" not in script
+    assert "STAGING_ISOLATION_PEER_API_KEY" not in script
+    assert 'json.dump(registration' not in script
+    assert 'json.dump({"registration_completed": True, "tenant_id": registration_tenant_id}' in script
+
+
+def test_full_rehearsal_inputs_are_derived_after_wake_not_precreated():
+    doc = _workflow_yaml(LIFECYCLE)
+    workflow = _workflow(LIFECYCLE)
+    preflight = doc["jobs"]["preflight-rehearsal-inputs"]
+    assert set(preflight.get("env", {})) == {"STAGING_ADMIN_API_KEY"}
+    assert "vars.ALB_DNS_NAME" not in workflow
+    assert "secrets.STAGING_REHEARSAL_TENANT_API_KEY" not in workflow
+    assert "secrets.STAGING_ISOLATION_PEER_API_KEY" not in workflow
+    assert "needs.wake-apply.outputs.api_host" in workflow
+    wake_apply = doc["jobs"]["wake-apply"]
+    assert wake_apply["outputs"]["api_host"] == "${{ steps.outputs.outputs.api_host }}"
+    wake_script = _job_script(doc, "wake-apply")
+    assert "gh run download" in wake_script
+    assert "reviewed.api-host" in wake_script
+
+
+def test_promotion_publishes_certificate_covered_api_host_and_raw_alb_evidence():
+    doc = _workflow_yaml(PROMOTE_WORKFLOW)
+    apply_script = _job_script(doc, "apply")
+    assert 'terraform output -raw alb_dns' in apply_script
+    assert 'terraform output -raw backend_url' in apply_script
+    assert 'reviewed.api-host' in apply_script
+    assert 'reviewed.alb-dns' in apply_script
+    upload = next(
+        s for s in _steps(doc, "apply")
+        if str(s.get("uses", "")).startswith("actions/upload-artifact")
+    )
+    assert "reviewed.api-host" in upload["with"]["path"]
+    assert "reviewed.alb-dns" in upload["with"]["path"]
+
+
+def test_promotion_does_not_fail_after_apply_on_external_dns_propagation():
+    """Terraform must publish DNS evidence; lifecycle owns the fail-closed check."""
+    promote = _workflow_yaml(PROMOTE_WORKFLOW)
+    apply_script = _job_script(promote, "apply")
+    assert "terraform apply -input=false reviewed.tfplan" in apply_script
+    assert "reviewed.api-host" in apply_script
+    assert "reviewed.alb-dns" in apply_script
+    assert "backend hostname does not resolve to the applied ALB" not in apply_script
+
+    lifecycle = _workflow_yaml(LIFECYCLE)
+    wake_apply = lifecycle["jobs"]["wake-apply"]
+    assert wake_apply["outputs"]["alb_dns"] == "${{ steps.outputs.outputs.alb_dns }}"
+    steps = wake_apply["steps"]
+    names = [step.get("name", "") for step in steps]
+    dns_index = names.index("Verify API DNS points to the applied load balancer")
+    readiness_index = names.index("Wait for staging infrastructure readiness")
+    assert dns_index < readiness_index
+    dns_step = steps[dns_index]
+    assert dns_step["env"] == {
+        "API_HOST": "${{ steps.outputs.outputs.api_host }}",
+        "ALB_DNS": "${{ steps.outputs.outputs.alb_dns }}",
+    }
+    # ALB A records are elastic; the lifecycle gate verifies the stable CNAME
+    # target before the HTTPS readiness probe.
+    assert "dig +short CNAME" in dns_step["run"]
+    assert 'api_cname="$(dig +short CNAME "$API_HOST"' in dns_step["run"]
+    assert "not the applied ALB" in dns_step["run"]
+
+
+def test_deactivation_revokes_durable_api_keys_before_marking_inactive():
+    source = (
+        ROOT
+        / "Backend Architecture"
+        / "aether-backend"
+        / "services"
+        / "auth"
+        / "routes.py"
+    ).read_text(encoding="utf-8")
+    revoke_start = source.index("async def _revoke_tenant_api_keys")
+    deactivate_start = source.index("async def deactivate_tenant")
+    inactive_start = source.index(
+        'if tenant_rec.get("status") == "inactive"', deactivate_start
+    )
+    update_start = source.index(
+        'await _repo.update(tenant_id, {"status": "inactive"})', deactivate_start
+    )
+    assert "await _key_repo.update" in source[revoke_start:inactive_start]
+    assert '"status": "revoked"' in source[revoke_start:inactive_start]
+    assert source.index("revoked = await _revoke_tenant_api_keys", deactivate_start) < inactive_start
+    assert revoke_start < update_start
+    assert '"api_keys_revoked": revoked' in source
+
+
+def test_diagnostics_use_an_explicit_admin_smoke_credential():
+    """Tenant data-plane keys must not be silently given admin diagnostics access."""
+    doc = _workflow_yaml(LIFECYCLE)
+    script = _job_script(doc, "rehearse")
+    assert "SMOKE_ADMIN_API_KEY" in script
+    assert "STAGING_ADMIN_API_KEY" in _referenced_text(doc)
+    assert '--admin-api-key "$SMOKE_ADMIN_API_KEY"' in script
+
+    smoke = (ROOT / "scripts" / "smoke_test.py").read_text(encoding="utf-8")
+    assert "--admin-api-key" in smoke
+    assert "diagnostics_api_key" in smoke
+    assert 'args.admin_api_key or args.api_key' in smoke
+
+
+def test_cleanup_requires_a_complete_erasure_receipt_and_declares_all_rehearsal_surfaces():
+    doc = _workflow_yaml(LIFECYCLE)
+    cleanup = next(
+        s for s in _steps(doc, "rehearse")
+        if s.get("name") == "Delete or expire the rehearsal tenant"
+    )["run"]
+    assert "cleanup_complete" in cleanup
+    for surface in (
+        "consent_records",
+        "dsr_propagation_records",
+        "bronze_feeds",
+        "bronze_sdk_events",
+        "silver_sdk_events",
+        "gold_sdk_events",
+        "analytics_events",
+        "analytics_sessions",
+        "profiles",
+        "tenant_graph",
+    ):
+        assert surface in (
+            (ROOT / "Backend Architecture" / "aether-backend" / "services" / "auth" / "routes.py")
+            .read_text(encoding="utf-8")
+        ), f"cleanup does not name the {surface} surface"
+    assert "cleanup_complete receipt" in cleanup
 
 
 # ---------------------------------------------------------------------------
@@ -585,6 +784,7 @@ def test_sleep_never_suppresses_the_original_failure():
         "SELECT_RESULT",
         "WAKE_PLAN_RESULT",
         "WAKE_VALIDATE_RESULT",
+        "PREFLIGHT_RESULT",
         "WAKE_APPLY_RESULT",
         "REHEARSE_RESULT",
         "SLEEP_RESULT",
@@ -744,6 +944,9 @@ def test_ttl_guard_extension_hours_are_range_checked():
 
 def test_ttl_guard_treats_a_missing_or_unreadable_lease_as_expired():
     run = _guard_step("state")["run"]
+    assert "ParameterNotFound" in run
+    assert "state_known=false" in run
+    assert "|| echo ''" not in run
     script = _embedded_python(run)
     assert '"expired": True' in script, "the guard does not default to expired"
     assert script.count('out["expired"] = False') == 2, (
@@ -820,13 +1023,39 @@ def test_ttl_extensions_are_bounded_from_the_original_wake_not_the_latest_extend
 def test_the_wake_lease_records_the_original_wake_time():
     """The guard's total-awake ceiling is unenforceable without it."""
     doc = _workflow_yaml(LIFECYCLE)
-    step = next(s for s in _steps(doc, "wake-apply") if s.get("name") == "Open the awake lease")
+    step = next(
+        s
+        for s in _steps(doc, "wake-apply")
+        if s.get("name") == "Open the bounded awake lease before apply"
+    )
     run = step["run"]
     assert '"awake_since":"%s"' in run and '"awake_until":"%s"' in run
     assert '"extensions":0' in run
     assert "put-parameter" in run and "$AWAKE_LEASE_PARAM" in run
     # The lease the lifecycle writes is one the guard actually accepts.
     assert _run_lease_script(_lease(0, 4))["expired"] is False
+
+
+def test_wake_apply_refresh_preserves_lease_anchor_and_reassumes_credentials():
+    """A long protected promotion cannot reset the TTL ceiling or expire creds."""
+    doc = _workflow_yaml(LIFECYCLE)
+    steps = _steps(doc, "wake-apply")
+    names = [step.get("name", "") for step in steps]
+    dispatch_index = names.index("Dispatch the reviewed apply for the verified wake plan")
+    capture_index = names.index("Capture the applied certificate-covered API hostname")
+    credential_steps = [
+        i for i, step in enumerate(steps)
+        if str(step.get("uses", "")).startswith("aws-actions/configure-aws-credentials")
+    ]
+    assert len(credential_steps) >= 2, "wake-apply must re-assume credentials after promotion wait"
+    assert any(dispatch_index < i < capture_index for i in credential_steps)
+    refresh = next(s for s in steps if s.get("name") == "Refresh the awake lease after readiness")
+    run = refresh["run"]
+    assert "ssm get-parameter" in run
+    assert '"$lease_since" "$deadline" "$lease_extensions"' in run
+    assert '"$refreshed_lease"' in run
+    assert '"${lease_since} +${MAX_AWAKE_HOURS_CAP} hours"' in run
+    assert '"extensions":0' not in run
 
 
 def test_an_unexpired_lease_is_not_killed_mid_rehearsal():
@@ -1072,7 +1301,7 @@ def test_the_ttl_guard_never_reports_asleep_on_an_unreadable_environment():
     state = _guard_step("state")["run"]
     assert 'if ! services_raw="$(aws ecs list-services' in state
     assert "state_known=false" in state
-    assert state.count("state_known=false") == 2, (
+    assert state.count("state_known=false") == 3, (
         "an unreadable-state path no longer publishes state_known=false"
     )
     assert "will not be reported as asleep" in state

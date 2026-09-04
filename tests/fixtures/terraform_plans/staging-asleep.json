@@ -13,6 +13,9 @@
     },
     "aws_region": {
       "value": "us-east-1"
+    },
+    "aurora_express_mode": {
+      "value": true
     }
   },
   "planned_values": {
@@ -186,17 +189,6 @@
         {
           "address": "module.aurora",
           "resources": [
-            {
-              "address": "module.aurora.aws_kms_key.aurora",
-              "mode": "managed",
-              "type": "aws_kms_key",
-              "name": "aurora",
-              "provider_name": "registry.terraform.io/hashicorp/aws",
-              "schema_version": 0,
-              "values": {
-                "enable_key_rotation": true
-              }
-            },
             {
               "address": "module.aurora.aws_db_subnet_group.aurora",
               "mode": "managed",
@@ -1281,29 +1273,6 @@
         "before": null,
         "after": {
           "name": "aether-aurora"
-        },
-        "after_unknown": {
-          "arn": true,
-          "id": true
-        },
-        "before_sensitive": false,
-        "after_sensitive": {}
-      },
-      "module_address": "module.aurora"
-    },
-    {
-      "address": "module.aurora.aws_kms_key.aurora",
-      "mode": "managed",
-      "type": "aws_kms_key",
-      "name": "aurora",
-      "provider_name": "registry.terraform.io/hashicorp/aws",
-      "change": {
-        "actions": [
-          "create"
-        ],
-        "before": null,
-        "after": {
-          "enable_key_rotation": true
         },
         "after_unknown": {
           "arn": true,

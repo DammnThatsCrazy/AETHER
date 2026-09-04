@@ -13,7 +13,12 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: "99736fed"
+last_synced_commit: "f4ba474e"
+reviewed_source_commits:
+  - commit: "7ba83380"
+    reason: "Reviewed the Kyber component-test synchronization change; frontend architecture and runtime contracts are unaffected."
+  - commit: "f4ba474e"
+    reason: "Reviewed the Kyber empty-state test timing correction; data-bearing pages must await response-backed populated or empty state before asserting content."
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -113,6 +118,11 @@ and error/unavailable. Permission or capability-disabled is separate where
 applicable. A request failure never becomes an empty array, a healthy status, a
 zero metric, or example records. Missing evidence renders unavailable or
 insufficient-sample.
+
+Component tests follow the same boundary: they wait for a response-backed
+populated or successful-empty value before asserting page content. Shell
+headings can render during the loading state and are not proof that the data
+request completed.
 
 Demo records are created only by the versioned backend seed engine. Normal
 frontend/backend startup never seeds, and demo disclosure is driven by backend

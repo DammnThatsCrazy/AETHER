@@ -1,0 +1,159 @@
+# Feature readiness record — see config/readiness/schema.json.
+# Migration-derived from scripts/production_status.py (legacy area: 'Neptune relationships (H2H/H2A/A2H/A2A)'). The 0-5 maturity score is decomposed across the model's
+# independent dimensions; an external blocker never reduces implementation.
+feature_id: graph-relationships
+title: Graph Relationships
+owning_system: aether
+summary: All EdgeType values exhaustively mapped to H2H/H2A/A2H/A2A (or EXCLUDED) — unknown edges fail
+  closed in staging/production (UnknownEdgeTypeError).
+scope:
+  id: graph-relationships-v1
+  version: 1
+  title: Graph Relationships V1
+  target: founding-tenant-production
+  included:
+  - contracts-and-schemas
+  - core-behavior
+  - runtime-wiring
+  - persistence-and-migrations
+  - authorization-and-tenant-isolation
+  excluded: []
+  deferred: []
+repository_ceiling:
+  type: VERIFIED
+  achieved: true
+  remaining_after_ceiling:
+  - None — repository-controlled work complete
+  remaining_is_repository_controlled: false
+  evidence:
+  - Backend Architecture/aether-backend/shared/graph/graph.py
+  - Backend Architecture/aether-backend/shared/graph/relationship_layers.py
+  - Backend Architecture/aether-backend/shared/graph/write_validator.py
+implementation:
+  state: VERIFIED
+  denominator: in-scope repository controls (migration-derived)
+  controls:
+  - id: contracts-and-schemas
+    description: contracts and schemas
+    weight: 20
+    satisfied: true
+  - id: core-behavior
+    description: core behavior
+    weight: 20
+    satisfied: true
+  - id: runtime-wiring
+    description: runtime wiring
+    weight: 20
+    satisfied: true
+  - id: persistence-and-migrations
+    description: persistence and migrations
+    weight: 20
+    satisfied: true
+  - id: authorization-and-tenant-isolation
+    description: authorization and tenant isolation
+    weight: 20
+    satisfied: true
+  remaining_work: []
+productionization:
+  denominator: in-scope productionization controls (migration-derived)
+  controls:
+  - id: security-controls
+    description: security controls
+    weight: 25
+    satisfied: true
+  - id: observability-metrics-logs
+    description: observability metrics logs
+    weight: 25
+    satisfied: true
+  - id: reliability-idempotency-retry
+    description: reliability idempotency retry
+    weight: 25
+    satisfied: true
+  - id: ci-and-release-gates
+    description: ci and release gates
+    weight: 25
+    satisfied: true
+  remaining_work: []
+activation:
+  state: NO_EXTERNAL_BLOCKER
+  blockers: []
+dependencies:
+  hard:
+  - feature_id: identity-resolution
+    state: SATISFIED
+    prevents:
+    - release
+  soft: []
+environment_evidence:
+  local:
+    state: VERIFIED
+    credentialed: false
+  ci:
+    state: VERIFIED
+    credentialed: false
+  staging:
+    state: NOT_ATTEMPTED
+    credentialed: true
+  production:
+    state: NOT_ATTEMPTED
+    credentialed: true
+operational_ownership:
+  team: graph
+  technical_owner: graph
+  operational_owner: platform-ops
+  escalation: pagerduty:graph
+  runbook: docs/runbooks/CAMPAIGN-360-GRAPH-DISAGREES-WITH-TOTALS.md
+  dashboards:
+  - grafana:graph
+  alerts:
+  - pagerduty:graph
+  service_level_target: per founding-tenant SLO
+  recovery_objective: RTO 30m / RPO 5m
+business_readiness:
+  applicable: false
+  controls: []
+confidence:
+  level: MODERATE
+  reasons:
+  - 'repository evidence: Backend Architecture/aether-backend/shared/graph/graph.py'
+  evidence_gaps:
+  - not yet exercised in credentialed staging/production
+release_profiles:
+  local:
+    participation: required
+    implementation_floor: VERIFIED
+    productionization_required: false
+    environment_gate: local
+    business_gate: false
+  staging:
+    participation: required
+    implementation_floor: VERIFIED
+    productionization_required: true
+    environment_gate: staging
+    business_gate: false
+  pilot:
+    participation: experimental
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: pilot
+    business_gate: false
+  production-lean:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: production
+    business_gate: false
+  production-scale:
+    participation: required
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: scale
+    business_gate: false
+historical:
+  historical_maturity_index: 4
+  historical_maturity_index_scale: 0-5
+  historical_maturity_index_authoritative: false
+  migration_derived: true
+  legacy_area: Neptune relationships (H2H/H2A/A2H/A2A)
+  note: Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is
+    a proxy pending per-capability SME review.

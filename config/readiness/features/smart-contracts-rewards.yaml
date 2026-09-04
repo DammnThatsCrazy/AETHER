@@ -1,0 +1,160 @@
+# Feature readiness record — see config/readiness/schema.json.
+# Migration-derived from scripts/production_status.py (legacy area: 'smart contracts / proofs / rewards'). The 0-5 maturity score is decomposed across the model's
+# independent dimensions; an external blocker never reduces implementation.
+feature_id: smart-contracts-rewards
+title: Smart Contracts & Rewards
+owning_system: aether
+summary: 'A6 reward enablement complete: 7-table PostgreSQL schema (campaigns, rules, decisions, action_payloads,
+  proofs, receipts, audit_log), 37-endpoint tenant API, RewardPolicyEngine with 12-gate fail-fast.'
+scope:
+  id: smart-contracts-rewards-v1
+  version: 1
+  title: Smart Contracts & Rewards V1
+  target: observation-pilot
+  included:
+  - contracts-and-schemas
+  - core-behavior
+  - runtime-wiring
+  - persistence-and-migrations
+  - authorization-and-tenant-isolation
+  excluded: []
+  deferred: []
+repository_ceiling:
+  type: RELEASE_TURNKEY
+  achieved: true
+  remaining_after_ceiling:
+  - Complete the external security audit / certification.
+  remaining_is_repository_controlled: false
+  evidence:
+  - Smart Contracts/contracts/AnalyticsRewards.sol
+  - Smart Contracts/test/AnalyticsRewards.test.js
+  - .github/workflows/smart-contract-analysis.yml
+implementation:
+  state: TURNKEY
+  denominator: in-scope repository controls (migration-derived)
+  controls:
+  - id: contracts-and-schemas
+    description: contracts and schemas
+    weight: 20
+    satisfied: true
+  - id: core-behavior
+    description: core behavior
+    weight: 20
+    satisfied: true
+  - id: runtime-wiring
+    description: runtime wiring
+    weight: 20
+    satisfied: true
+  - id: persistence-and-migrations
+    description: persistence and migrations
+    weight: 20
+    satisfied: true
+  - id: authorization-and-tenant-isolation
+    description: authorization and tenant isolation
+    weight: 20
+    satisfied: true
+  remaining_work: []
+productionization:
+  denominator: in-scope productionization controls (migration-derived)
+  controls:
+  - id: security-controls
+    description: security controls
+    weight: 25
+    satisfied: true
+  - id: observability-metrics-logs
+    description: observability metrics logs
+    weight: 25
+    satisfied: true
+  - id: reliability-idempotency-retry
+    description: reliability idempotency retry
+    weight: 25
+    satisfied: true
+  - id: ci-and-release-gates
+    description: ci and release gates
+    weight: 25
+    satisfied: true
+  remaining_work: []
+activation:
+  state: AUDIT_WAITING
+  blockers:
+  - type: AUDIT_WAITING
+    description: Smart Contracts & Rewards activation waits on an external audit condition.
+    owner: external-auditor
+    required_action: Complete the external security audit / certification.
+    source_code_change_expected: false
+    affected_environments:
+    - staging
+    - production
+    affected_release_profiles:
+    - staging
+    - pilot
+    evidence_required: signed external audit report
+dependencies:
+  hard: []
+  soft: []
+environment_evidence:
+  local:
+    state: VERIFIED
+    credentialed: false
+  ci:
+    state: VERIFIED
+    credentialed: false
+  staging:
+    state: BLOCKED_EXTERNAL
+    credentialed: true
+  production:
+    state: NOT_APPLICABLE
+operational_ownership:
+  team: smart-contracts
+  technical_owner: smart-contracts
+  operational_owner: platform-ops
+  escalation: pagerduty:smart-contracts
+  runbook: docs/runbooks/EVM_DEPLOY_EMERGENCY_RUNBOOK.md
+  dashboards:
+  - grafana:smart-contracts
+  alerts:
+  - pagerduty:smart-contracts
+  service_level_target: per founding-tenant SLO
+  recovery_objective: RTO 30m / RPO 5m
+business_readiness:
+  applicable: false
+  controls: []
+confidence:
+  level: MODERATE
+  reasons:
+  - 'repository evidence: Smart Contracts/contracts/AnalyticsRewards.sol'
+  evidence_gaps:
+  - credentialed environment execution not yet performed
+release_profiles:
+  local:
+    participation: required
+    implementation_floor: VERIFIED
+    productionization_required: false
+    environment_gate: local
+    business_gate: false
+  staging:
+    participation: experimental
+    implementation_floor: VERIFIED
+    productionization_required: true
+    environment_gate: staging
+    business_gate: false
+  pilot:
+    participation: experimental
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: pilot
+    business_gate: false
+  production-lean:
+    participation: not_in_release
+    note: Excluded from the founding-tenant release scope (see config/founding_tenant_release.yaml).
+  production-scale:
+    participation: not_in_release
+    note: Excluded from the founding-tenant release scope (see config/founding_tenant_release.yaml).
+historical:
+  historical_maturity_index: 4
+  historical_maturity_index_scale: 0-5
+  historical_maturity_index_authoritative: false
+  migration_derived: true
+  legacy_area: smart contracts / proofs / rewards
+  note: Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is
+    a proxy pending per-capability SME review.

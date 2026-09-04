@@ -281,6 +281,13 @@ kyber_routes:
     capability: kyber.platform.health.read
     disclosure: D1
     action_class: 0
+  # Disposition of a graph_promotion_candidate: approve promotes the deferred
+  # pair's canonical edge into the graph (governed projector write path), reject
+  # closes it without projecting — a bounded, tenant-scoped graph-projection act.
+  - route: "POST /v1/kyber/semantic/review-queue/{item_id}/resolve"
+    capability: kyber.command.rebuild
+    disclosure: D4
+    action_class: 3
   - route: "GET /v1/kyber/jobs/timeline"
     capability: kyber.platform.health.read
     disclosure: D1

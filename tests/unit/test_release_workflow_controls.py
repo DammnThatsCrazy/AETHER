@@ -22,7 +22,13 @@ SANITISER = "scripts/release/sanitize_terraform_plan_json.py"
 
 # Workflows held to `set -euo pipefail` by THIS file. deploy.yml belongs here
 # because it is the one workflow that mutates ECS on a push to main.
-STRICT_BASH_WORKFLOWS = ("infrastructure.yml", APPLY_WORKFLOW, "deploy.yml")
+STRICT_BASH_WORKFLOWS = (
+    "infrastructure.yml",
+    APPLY_WORKFLOW,
+    "deploy.yml",
+    "staging-state-reconcile.yml",
+    "terraform-state-migrate.yml",
+)
 # Held to the identical rule by tests/unit/test_staging_lifecycle_controls.py.
 STRICT_BASH_ELSEWHERE = ("staging-lifecycle.yml", "staging-ttl-guard.yml")
 
@@ -408,8 +414,10 @@ def test_terraform_promote_passes_inputs_via_env_blocks():
 
 def test_terraform_promote_uses_remote_backend_in_plan_and_apply():
     workflow = _workflow("terraform-promote.yml")
-    assert workflow.count('-backend-config="bucket=${TF_STATE_BUCKET}"') == 2
-    assert workflow.count('-backend-config="key=profiles/${PROFILE}/terraform.tfstate"') == 2
+    # The staging collision guard initializes the same remote backend before
+    # the account-level ECS role bootstrap, in addition to plan and apply.
+    assert workflow.count('-backend-config="bucket=${TF_STATE_BUCKET}"') == 3
+    assert workflow.count('-backend-config="key=profiles/${PROFILE}/terraform.tfstate"') == 3
     versions = (ROOT / "AWS Deployment/aether-aws/terraform/versions.tf").read_text(
         encoding="utf-8"
     )
@@ -450,6 +458,21 @@ def test_founding_release_gate_requires_durable_suites_or_hosted_evidence():
     assert "--release-mode" in gate
     # No bare, always-exit-0 evidence call on the hosted path.
     assert "collect_evidence.py --release-mode" in gate
+
+
+def test_durable_integration_uses_read_only_repository_test_runner():
+    compose = (ROOT / "deploy/integration/docker-compose.durable.yml").read_text(encoding="utf-8")
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert "integration-tests:" in compose
+    assert "source: ../.." in compose
+    assert "target: /workspace" in compose
+    assert "working_dir: /workspace" in compose
+    assert "entrypoint: []" in compose
+    assert "AUTHORITATIVE_CONSENT_ENFORCEMENT_ENABLED: \"false\"" in compose
+    assert "TENANT_COMPLIANCE_POLICY_ENABLED: \"false\"" in compose
+    assert "tests/integration/test_batch_endpoint.py" in makefile
+    assert "run --rm integration-tests" in makefile
 
 
 # ---------------------------------------------------------------------------
@@ -743,6 +766,11 @@ def test_promotion_cannot_proceed_when_remote_plan_credentials_are_missing():
     assert "AWS_TERRAFORM_PLAN_ROLE_ARN" in guard["env"]
     assert '[ -z "${!name-}" ]' in guard["run"]
     assert "exit 1" in guard["run"]
+    # Plan-only promotion must remain runnable without mutation credentials;
+    # apply enforces its apply-role requirement in the protected apply job.
+    assert "AWS_TERRAFORM_APPLY_ROLE_ARN \\\n" not in guard["run"]
+    assert guard["run"].count("AWS_TERRAFORM_APPLY_ROLE_ARN") == 2
+    assert '"${{ inputs.action }}" = "apply"' in guard["run"]
     # The guard runs before any AWS credential is assumed or plan is produced.
     names = [s.get("name", "") for s in _steps(promote, "plan")]
     uses = [str(s.get("uses", "")) for s in _steps(promote, "plan")]
@@ -783,7 +811,12 @@ def test_promotion_plan_records_the_full_plan_provenance():
         assert statement in plan_script, f"the reviewed plan no longer records {field}"
     # The lockfile digest is taken from the checked-out tree, before init can
     # touch it, so apply can compare it against the same commit's git content.
-    assert plan_script.index("sha256sum .terraform.lock.hcl") < plan_script.index("terraform init")
+    # Provider installation is routed through the shared retry/lockfile guard;
+    # keep the provenance assertion tied to that wrapper rather than a raw init
+    # command so transient registry failures cannot bypass verification.
+    assert plan_script.index("sha256sum .terraform.lock.hcl") < plan_script.index(
+        "terraform_init_retry.sh"
+    )
     # Reports retained alongside the plan: the policy validator's canonical
     # inventory becomes the reviewed resource inventory.
     assert (

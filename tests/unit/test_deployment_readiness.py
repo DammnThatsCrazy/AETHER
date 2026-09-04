@@ -1151,6 +1151,9 @@ def test_the_six_reported_numbers_are_the_ones_this_repo_earns():
     assert measured == {
         "overall": (60, 0),
         "production-lean": (45, 0),
+        # The guarded first-admin bootstrap is code-complete, but it does not
+        # create external rehearsal evidence; the real staging score remains
+        # 75/100 until a credentialed wake produces that evidence.
         "staging": (75, 0),
     }, measured
     # Verified is zero for a reason that is stated, not merely absent.

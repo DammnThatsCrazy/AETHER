@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/services/derivatives/state_machines.py
   - Backend Architecture/aether-backend/services/interop/correlation.py
 canonical_owner: platform@aether
-last_synced_commit: "41c79d4"
+last_synced_commit: "4e6fdad"
 ---
 
 # Execution State

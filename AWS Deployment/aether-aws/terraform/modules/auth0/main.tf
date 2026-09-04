@@ -77,6 +77,14 @@ resource "auth0_connection" "database" {
     disable_signup         = false
     requires_username      = false
   }
+
+  # Auth0 returns the current options on read. Ignore that provider-owned
+  # normalization so a staging M2M token does not need the separate
+  # update:connections_options scope just to converge an already-created
+  # connection.
+  lifecycle {
+    ignore_changes = [options]
+  }
 }
 
 # --------------------------------------------------------------------------
@@ -88,6 +96,10 @@ resource "auth0_client" "aether" {
   description     = "AETHER customer-facing web application"
   app_type        = "spa"
   oidc_conformant = true
+  # Rotating refresh tokens require the refresh_token grant to be enabled.
+  # Keep the grant explicit so a fresh tenant can be created without an
+  # Auth0 400 after the client is otherwise configured.
+  grant_types = ["authorization_code", "refresh_token"]
 
   callbacks           = var.aether_callback_urls
   allowed_logout_urls = var.aether_logout_urls
@@ -129,6 +141,7 @@ resource "auth0_client" "kyber" {
   description     = "AETHER operator console"
   app_type        = "spa"
   oidc_conformant = true
+  grant_types     = ["authorization_code", "refresh_token"]
 
   callbacks           = var.kyber_callback_urls
   allowed_logout_urls = var.kyber_logout_urls
@@ -168,6 +181,7 @@ resource "auth0_connection_clients" "kyber_db" {
 # --------------------------------------------------------------------------
 
 resource "auth0_connection" "google" {
+  count    = var.enable_social_connections ? 1 : 0
   name     = "aether-${var.environment}-google"
   strategy = "google-oauth2"
 
@@ -176,14 +190,20 @@ resource "auth0_connection" "google" {
     client_secret = var.google_client_secret
     scopes        = ["email", "profile"]
   }
+
+  lifecycle {
+    ignore_changes = [options]
+  }
 }
 
 resource "auth0_connection_clients" "google_aether" {
-  connection_id   = auth0_connection.google.id
+  count           = var.enable_social_connections ? 1 : 0
+  connection_id   = auth0_connection.google[0].id
   enabled_clients = [auth0_client.aether.id, auth0_client.kyber.id]
 }
 
 resource "auth0_connection" "apple" {
+  count    = var.enable_social_connections ? 1 : 0
   name     = "aether-${var.environment}-apple"
   strategy = "apple"
 
@@ -193,14 +213,20 @@ resource "auth0_connection" "apple" {
     team_id       = var.apple_team_id
     key_id        = var.apple_key_id
   }
+
+  lifecycle {
+    ignore_changes = [options]
+  }
 }
 
 resource "auth0_connection_clients" "apple_aether" {
-  connection_id   = auth0_connection.apple.id
+  count           = var.enable_social_connections ? 1 : 0
+  connection_id   = auth0_connection.apple[0].id
   enabled_clients = [auth0_client.aether.id]
 }
 
 resource "auth0_connection" "twitter" {
+  count    = var.enable_social_connections ? 1 : 0
   name     = "aether-${var.environment}-twitter"
   strategy = "twitter"
 
@@ -208,14 +234,20 @@ resource "auth0_connection" "twitter" {
     consumer_key    = var.twitter_consumer_key
     consumer_secret = var.twitter_consumer_secret
   }
+
+  lifecycle {
+    ignore_changes = [options]
+  }
 }
 
 resource "auth0_connection_clients" "twitter_aether" {
-  connection_id   = auth0_connection.twitter.id
+  count           = var.enable_social_connections ? 1 : 0
+  connection_id   = auth0_connection.twitter[0].id
   enabled_clients = [auth0_client.aether.id]
 }
 
 resource "auth0_connection" "microsoft" {
+  count    = var.enable_social_connections ? 1 : 0
   name     = "aether-${var.environment}-microsoft"
   strategy = "windowslive"
 
@@ -225,10 +257,15 @@ resource "auth0_connection" "microsoft" {
     strategy_version = 2
     scopes           = ["signin", "graph_user"]
   }
+
+  lifecycle {
+    ignore_changes = [options]
+  }
 }
 
 resource "auth0_connection_clients" "microsoft_aether" {
-  connection_id   = auth0_connection.microsoft.id
+  count           = var.enable_social_connections ? 1 : 0
+  connection_id   = auth0_connection.microsoft[0].id
   enabled_clients = [auth0_client.aether.id]
 }
 
@@ -239,6 +276,7 @@ resource "auth0_connection_clients" "microsoft_aether" {
 # --------------------------------------------------------------------------
 
 resource "auth0_connection" "slack" {
+  count    = var.enable_social_connections ? 1 : 0
   name     = "aether-${var.environment}-slack"
   strategy = "oauth2"
 
@@ -266,9 +304,14 @@ resource "auth0_connection" "slack" {
       JS
     }
   }
+
+  lifecycle {
+    ignore_changes = [options]
+  }
 }
 
 resource "auth0_connection_clients" "slack_aether" {
-  connection_id   = auth0_connection.slack.id
+  count           = var.enable_social_connections ? 1 : 0
+  connection_id   = auth0_connection.slack[0].id
   enabled_clients = [auth0_client.aether.id]
 }

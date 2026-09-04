@@ -1312,6 +1312,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/FIRST-ADMIN-BOOTSTRAP.md",
+      "title": "AETHER First-Admin Bootstrap",
+      "slug": "operations/first-admin-bootstrap",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/FLOW-OF-FUNDS-TRACE.md",
       "title": "Flow of Funds Trace",
       "slug": "flow-of-funds-trace",
@@ -5942,6 +5958,23 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/readiness/READINESS-MODEL.md",
+      "title": "Multidimensional Readiness Model",
+      "slug": "readiness/readiness-model",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "architect",
+        "exec",
+        "security"
+      ],
+      "status": "stable",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/readiness/STAGING_READINESS_DOSSIER.md",
       "title": "Staging Readiness Dossier",
       "slug": "readiness/staging-readiness-dossier",
@@ -7524,6 +7557,24 @@
       "status": "stable",
       "since_version": "8.10.0",
       "canonical_owner": "graph@aether"
+    },
+    {
+      "path": "docs/source-of-truth/VERIFICATION_SPINE.md",
+      "title": "Verification and Release Spine",
+      "slug": "source-of-truth/verification-spine",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "dev",
+        "dev-senior",
+        "ops",
+        "architect"
+      ],
+      "status": "active",
+      "since_version": "8.9.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/staging-activation-runbook.md",

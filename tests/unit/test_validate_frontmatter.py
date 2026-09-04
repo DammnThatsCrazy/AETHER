@@ -91,6 +91,9 @@ def test_full_payload_validates(vf, schema):
         "estimated_read_minutes": 5,
         "toc_depth": 3,
         "last_synced_commit": "abc1234",
+        "reviewed_source_commits": [
+            {"commit": "def5678", "reason": "Reviewed; no behavior change."}
+        ],
     }
     vf.validate_frontmatter(payload, schema)  # no raise
 
@@ -163,6 +166,24 @@ def test_flag_must_be_screaming_snake(vf, schema):
 def test_last_synced_commit_must_be_hex(vf, schema):
     payload = _minimal_valid_payload() | {"last_synced_commit": "not-a-sha"}
     with pytest.raises(vf.ValidationError, match="last_synced_commit"):
+        vf.validate_frontmatter(payload, schema)
+
+
+def test_reviewed_source_receipt_requires_commit_and_reason(vf, schema):
+    payload = _minimal_valid_payload() | {
+        "reviewed_source_commits": [{"commit": "abc1234"}],
+    }
+    with pytest.raises(vf.ValidationError, match="missing required key 'reason'"):
+        vf.validate_frontmatter(payload, schema)
+
+
+def test_reviewed_source_receipt_rejects_unknown_fields(vf, schema):
+    payload = _minimal_valid_payload() | {
+        "reviewed_source_commits": [
+            {"commit": "abc1234", "reason": "reviewed", "owner": "ops"}
+        ],
+    }
+    with pytest.raises(vf.ValidationError, match="unknown key 'owner'"):
         vf.validate_frontmatter(payload, schema)
 
 

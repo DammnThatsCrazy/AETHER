@@ -14,7 +14,7 @@ source_files:
   - Backend Architecture/aether-backend/services/imports/kyber_routes.py
   - Backend Architecture/aether-backend/repositories/imports_repo.py
   - Backend Architecture/aether-backend/shared/graph/graph.py
-last_synced_commit: "afde8d7d"
+last_synced_commit: "c19b048f"
 ---
 
 # Runbook — Tenant Import Failures
@@ -33,6 +33,13 @@ committed | partially_committed`. Terminal: `committed`, `partially_committed`,
 commit stages every row to Bronze (`BronzeRepository("tenant_import")`, tagged by
 commit id) and to the graph (entity/identifier/resource vertices + relationship
 edges, each carrying `import_commit_id`).
+
+If a staging rehearsal is being torn down after an import-related probe, do
+not use the import rollback path as a substitute for tenant deletion. The
+admin cleanup operation removes only graph projection vertices and edges owned
+by the run-scoped tenant (including legacy `tenant_id` edge tags) and leaves
+unscoped/system vertices and append-only import or audit evidence intact. A
+backend error is a hard stop; rerun cleanup after the graph backend is healthy.
 
 The **authoritative** lifecycle is the import-session FSM (`lifecycle_state`:
 `CREATED → UPLOADED → VALIDATING → VALIDATED → NORMALIZING → COMMITTING →

@@ -171,6 +171,11 @@ def extract_signals(
     props: dict[str, Any] = event.get("properties") or {}
 
     # Email (raw — caller must hash)
+    # SECURITY: a client-supplied ``email_verified`` / ``emailVerified`` flag is
+    # NOT trusted here and is explicitly discarded — observed email only ever
+    # becomes an EMAIL_HASH signal. EMAIL_OWNERSHIP_VERIFIED is emitted solely by
+    # the verification pipeline (server-issued evidence), never from event props.
+    _ = props.get("email_verified", props.get("emailVerified"))  # discarded on purpose
     email_raw = props.get("email") or ""
     if email_raw:
         normalized_email = normalize_email(email_raw)

@@ -11,10 +11,16 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import dataclasses
 from typing import Any
 
 import pytest
 
+from config.settings import settings
+from repositories.graph_mutation_ledger import (
+    GraphMutationLedgerRepository,
+    reset_graph_ledger_memory,
+)
 from repositories.repos import reset_in_memory_stores
 from services.semantic_intelligence import graph_projector as projector_mod
 from services.semantic_intelligence import service as service_mod
@@ -22,15 +28,22 @@ from services.semantic_intelligence.engine import classify_event, get_store, set
 from services.semantic_intelligence.graph_projector import (
     SEMANTIC_EDGE_TYPE,
     edge_from_relationship,
+    project_pair,
     project_tenant,
+    vertex_from_entity,
 )
 from services.semantic_intelligence.repositories.base_fact_repo import (
     SemanticFactRepository,
 )
+from services.semantic_intelligence.repositories.review_queue_repo import (
+    SemanticReviewQueueRepository,
+)
 from services.semantic_intelligence.service import SemanticIntelligenceService
 from services.semantic_intelligence.store import DurableSemanticSentimentStore
 from shared.graph.edge_properties import make_edge_idempotency_key
-from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex
+from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
+from shared.graph.mutation_gateway import GraphMutationGateway
+from shared.graph.mutation_intents import edge_intent
 from shared.graph.write_validator import GraphWriteValidator
 
 TENANT = "tenant_projector"
@@ -181,13 +194,20 @@ async def test_projected_edge_is_canonical_and_passes_strict_validation():
         "confidence",
     ):
         assert props.get(key) not in (None, ""), f"missing required edge property {key!r}"
-    # Stable, deterministic edge identity derived from the Gold row's natural key.
+    # Stable, deterministic edge identity derived from the Gold row's natural key
+    # PLUS a content revision (folded into the source_event_id component) so a
+    # recomputed row with changed content re-projects. correlation_id keeps the
+    # bare pair ref for traceability.
+    rel_ref = f"rel:{SOURCE}->{TARGET}"
+    assert props["source_event_id"].startswith(f"{rel_ref}@")
+    assert props.get("correlation_id") == rel_ref
+    assert props.get("content_revision")
     assert props["idempotency_key"] == make_edge_idempotency_key(
         TENANT,
         EdgeType.SEMANTIC_RELATES_TO,
         SOURCE,
         TARGET,
-        source_event_id=f"rel:{SOURCE}->{TARGET}",
+        source_event_id=props["source_event_id"],
     )
     assert props["actor_kind"] == "system"
     assert props["actor_id"] == "semantic_graph_projector"
@@ -419,10 +439,12 @@ async def test_project_once_continues_past_tenant_sweep_failure():
     original_reconcile = projector_mod._reconcile_projections
     original_get_graph_client = projector_mod.get_graph_client
 
-    async def flaky_reconcile(graph_client, gateway, tenant_id, expected, report):
+    async def flaky_reconcile(graph_client, gateway, tenant_id, expected, report, **kwargs):
         if tenant_id == TENANT:
             raise RuntimeError("reconciliation list failed for TENANT")
-        return await original_reconcile(graph_client, gateway, tenant_id, expected, report)
+        return await original_reconcile(
+            graph_client, gateway, tenant_id, expected, report, **kwargs
+        )
 
     projector_mod._reconcile_projections = flaky_reconcile
     # project_once uses the process-wide get_graph_client(); point it at the
@@ -583,3 +605,370 @@ class _NeptuneLikeBackend:
             and (vertex_type is None or v.vertex_type == vertex_type)
         ]
         return matched[:limit]
+
+
+# ── Helpers for the follow-up items (#7 / #1 / #2 / #6) ──────────────────────
+
+
+async def _upsert_relationship_content(
+    tenant: str,
+    source: str,
+    target: str,
+    *,
+    stance_alignment: float = 0.5,
+    trust_signal: float = 0.5,
+    interaction_quality: str = "positive",
+    influence_direction: str = "source_to_target",
+    confidence: float = 0.7,
+) -> None:
+    """Upsert one gold relationship row with explicit salient content.
+
+    The idempotency key is fixed on the pair, so re-upserting the SAME pair with
+    changed content overwrites the prior Gold row (gold-mode LWW) — the recompute
+    shape the versioned-reprojection path must observe.
+    """
+    repo = SemanticFactRepository("gold_relationship_semantic_state", mode="gold")
+    rel = f"rel:{source}->{target}"
+    await repo.upsert(
+        {
+            "id": f"raw_{tenant}_{source}_{target}",
+            "tenant_id": tenant,
+            "subject_ref": rel,
+            "occurred_at": "2026-01-01T00:00:00+00:00",
+            "idempotency_key": f"gold_relationship:{tenant}:{rel}:test",
+            "data": {
+                "source_ref": source,
+                "target_ref": target,
+                "relationship_ref": rel,
+                "relationship_layer": "EXCLUDED",
+                "stance_alignment": stance_alignment,
+                "trust_signal": trust_signal,
+                "interaction_quality": interaction_quality,
+                "influence_direction": influence_direction,
+                "confidence": confidence,
+                "reducer_version": "weighted-reducer.v1",
+                "valid_from": "2026-01-01T00:00:00+00:00",
+            },
+        }
+    )
+
+
+async def _seed_entity_gold(
+    tenant: str,
+    entity_ref: str,
+    *,
+    confidence: float = 0.8,
+    observation_count: int = 3,
+    summary: str = "3 weighted observations",
+) -> None:
+    """Seed one gold_entity_semantic_state row directly."""
+    repo = SemanticFactRepository("gold_entity_semantic_state", mode="gold")
+    await repo.upsert(
+        {
+            "id": f"ess_{tenant}_{entity_ref}",
+            "tenant_id": tenant,
+            "subject_ref": entity_ref,
+            "occurred_at": "2026-01-01T00:00:00+00:00",
+            "idempotency_key": f"gold_entity:{tenant}:{entity_ref}:test",
+            "data": {
+                "entity_ref": entity_ref,
+                "subject_ref": entity_ref,
+                "semantic_summary": summary,
+                "stance_distribution": {"supportive": 0.7, "opposed": 0.3},
+                "confidence": confidence,
+                "observation_count": observation_count,
+                "reducer_version": "weighted-reducer.v1",
+            },
+        }
+    )
+
+
+def _enforce_projector(monkeypatch, **flags) -> None:
+    """Pin settings.semantic flags for the duration of a test."""
+    monkeypatch.setattr(
+        settings,
+        "semantic",
+        dataclasses.replace(settings.semantic, **flags),
+    )
+
+
+# ── #7 mode_override on the gateway ──────────────────────────────────────────
+
+
+async def test_gateway_mode_override_forces_ledger_when_global_off():
+    # apply(..., mode_override='enforce') writes a ledger row even though the
+    # global mutation_gateway_mode is 'off' (the default in this test env).
+    reset_graph_ledger_memory()
+    assert settings.temporal_observatory.mutation_gateway_mode == "off"
+    await _upsert_relationship_content(TENANT, SOURCE, TARGET)
+    repo = SemanticFactRepository("gold_relationship_semantic_state", mode="gold")
+    data = (await repo.list_by_tenant(TENANT))[0]
+    edge = edge_from_relationship(TENANT, data)
+    assert edge is not None
+    client = await _graph()
+    gw = GraphMutationGateway(graph_client=client)
+
+    outcome = await gw.apply(
+        edge_intent(
+            edge,
+            operation="edge_created",
+            tenant_id=TENANT,
+            subject_kind="entity",
+            subject_id=TARGET,
+        ),
+        mode_override="enforce",
+    )
+
+    assert outcome.mode == "enforce"
+    assert outcome.applied and outcome.ledger_recorded
+    rows = await GraphMutationLedgerRepository().list_records(TENANT)
+    assert len(rows) == 1
+    assert rows[0]["operation"] == "edge_created"
+    reset_graph_ledger_memory()
+
+
+async def test_gateway_mode_override_none_behaves_as_today():
+    # apply(..., mode_override=None) is the off-mode byte-identical path: the
+    # edge is projected but NO ledger row is written (global mode is 'off').
+    reset_graph_ledger_memory()
+    await _upsert_relationship_content(TENANT, SOURCE, TARGET)
+    repo = SemanticFactRepository("gold_relationship_semantic_state", mode="gold")
+    data = (await repo.list_by_tenant(TENANT))[0]
+    edge = edge_from_relationship(TENANT, data)
+    client = await _graph()
+    gw = GraphMutationGateway(graph_client=client)
+
+    outcome = await gw.apply(
+        edge_intent(edge, operation="edge_created", tenant_id=TENANT),
+        mode_override=None,
+    )
+
+    assert outcome.mode == "off"
+    assert outcome.applied and not outcome.ledger_recorded
+    assert await GraphMutationLedgerRepository().list_records(TENANT) == []
+    # The edge still reached the graph (off-mode direct projection).
+    assert len(await _semantic_edges(client, SOURCE)) == 1
+    reset_graph_ledger_memory()
+
+
+async def test_projector_gateway_mode_setting_forces_ledger(monkeypatch):
+    # settings.semantic.graph_projector_gateway_mode='enforce' makes the projector
+    # ledger its projections regardless of the (off) global mode.
+    reset_graph_ledger_memory()
+    _enforce_projector(monkeypatch, graph_projector_gateway_mode="enforce")
+    await _seed_relationship(TENANT, SOURCE, TARGET)
+    client = await _graph()
+
+    report = await project_tenant(TENANT, graph_client=client)
+
+    assert report.projected == 1
+    rows = await GraphMutationLedgerRepository().list_records(TENANT)
+    assert any(r["operation"] == "edge_created" for r in rows)
+    reset_graph_ledger_memory()
+
+
+# ── #1 Versioned re-projection of updated Gold ───────────────────────────────
+
+
+async def test_recompute_to_different_content_replaces_edge(monkeypatch):
+    # A recomputed Gold row with the SAME endpoints but CHANGED content re-projects:
+    # the stale edge is revoked and exactly one new canonical edge carries the new
+    # content. Enforce mode records the change in the ledger.
+    reset_graph_ledger_memory()
+    _enforce_projector(monkeypatch, graph_projector_gateway_mode="enforce")
+    await _upsert_relationship_content(
+        TENANT, SOURCE, TARGET, stance_alignment=0.5, confidence=0.7
+    )
+    client = await _graph()
+
+    first = await project_tenant(TENANT, graph_client=client)
+    assert first.projected == 1
+    live = [e for e in await _semantic_edges(client, SOURCE) if not e.properties.get("revoked")]
+    assert len(live) == 1
+    original_key = live[0].properties["idempotency_key"]
+    original_rev = live[0].properties["content_revision"]
+
+    # Recompute the SAME pair to DIFFERENT content.
+    await _upsert_relationship_content(
+        TENANT, SOURCE, TARGET, stance_alignment=-0.9, confidence=0.2,
+        interaction_quality="negative",
+    )
+    second = await project_tenant(TENANT, graph_client=client)
+
+    # Old edge revoked, new canonical edge projected.
+    assert second.revoked == 1
+    assert second.projected == 1
+    live = [e for e in await _semantic_edges(client, SOURCE) if not e.properties.get("revoked")]
+    assert len(live) == 1
+    assert live[0].properties["idempotency_key"] != original_key
+    assert live[0].properties["content_revision"] != original_rev
+    assert float(live[0].properties["stance_alignment"]) == -0.9
+    # The genuine content change was NOT suppressed by enforce-mode dedup.
+    rows = await GraphMutationLedgerRepository().list_records(TENANT)
+    assert sum(1 for r in rows if r["operation"] == "edge_created") == 2
+    reset_graph_ledger_memory()
+
+
+async def test_recompute_to_identical_content_skips():
+    # Recompute to IDENTICAL content -> same identity -> skipped_existing, still
+    # exactly one edge, no revoke, no churn.
+    await _upsert_relationship_content(TENANT, SOURCE, TARGET)
+    client = await _graph()
+
+    first = await project_tenant(TENANT, graph_client=client)
+    assert first.projected == 1
+
+    # Re-upsert identical content and re-project.
+    await _upsert_relationship_content(TENANT, SOURCE, TARGET)
+    second = await project_tenant(TENANT, graph_client=client)
+
+    assert second.projected == 0
+    assert second.skipped_existing == 1
+    assert second.revoked == 0
+    live = [e for e in await _semantic_edges(client, SOURCE) if not e.properties.get("revoked")]
+    assert len(live) == 1
+
+
+# ── #2 Entity Gold as governed vertices ──────────────────────────────────────
+
+
+async def test_entity_gold_projected_as_vertex(monkeypatch):
+    # Flag on: an entity Gold row becomes a governed vertex through the gateway,
+    # tenant-scoped, carrying salient signal but no raw content.
+    _enforce_projector(monkeypatch, graph_vertex_projection_enabled=True)
+    await _seed_relationship(TENANT, SOURCE, TARGET)
+    await _seed_entity_gold(TENANT, TARGET)
+    client = await _graph()
+
+    report = await project_tenant(TENANT, graph_client=client)
+
+    assert report.vertices_projected == 1
+    vid = projector_mod._entity_vertex_id(TENANT, TARGET)
+    vertex = await client.get_vertex(vid)
+    assert vertex is not None
+    assert vertex.vertex_type == VertexType.ENTITY
+    assert vertex.properties.get("tenantId") == TENANT
+    assert vertex.properties.get("entity_ref") == TARGET
+    assert vertex.properties.get("dominant_stance") == "supportive"
+    assert "content_revision" in vertex.properties
+
+
+async def test_entity_vertex_projection_is_idempotent(monkeypatch):
+    _enforce_projector(monkeypatch, graph_vertex_projection_enabled=True)
+    await _seed_entity_gold(TENANT, TARGET)
+    client = await _graph()
+
+    first = await project_tenant(TENANT, graph_client=client)
+    second = await project_tenant(TENANT, graph_client=client)
+
+    assert first.vertices_projected == 1
+    assert second.vertices_projected == 0
+    assert second.vertices_skipped_existing == 1
+
+
+async def test_entity_vertex_projection_is_tenant_scoped(monkeypatch):
+    _enforce_projector(monkeypatch, graph_vertex_projection_enabled=True)
+    await _seed_entity_gold(TENANT, TARGET)
+    await _seed_entity_gold(OTHER_TENANT, TARGET)
+    client = await _graph()
+
+    await project_tenant(TENANT, graph_client=client)
+
+    # Only TENANT's vertex exists (distinct ids per tenant); OTHER_TENANT untouched.
+    assert await client.get_vertex(projector_mod._entity_vertex_id(TENANT, TARGET)) is not None
+    assert await client.get_vertex(projector_mod._entity_vertex_id(OTHER_TENANT, TARGET)) is None
+
+
+async def test_vertex_projection_off_by_default():
+    # Flag OFF (default): no vertices projected, edges-only behavior.
+    await _seed_relationship(TENANT, SOURCE, TARGET)
+    await _seed_entity_gold(TENANT, TARGET)
+    client = await _graph()
+
+    report = await project_tenant(TENANT, graph_client=client)
+
+    assert report.vertices_projected == 0
+    assert await client.get_vertex(projector_mod._entity_vertex_id(TENANT, TARGET)) is None
+
+
+def test_vertex_from_entity_skips_degenerate():
+    assert vertex_from_entity(TENANT, {"entity_ref": ""}) is None
+    assert vertex_from_entity(TENANT, {"entity_ref": "unknown_subject"}) is None
+
+
+# ── #6 Consent/quality promotion policy + project_pair seam ───────────────────
+
+
+async def test_low_confidence_pair_deferred_to_review(monkeypatch):
+    # Flag on: a low-confidence pair is deferred to the review queue, NOT projected.
+    _enforce_projector(monkeypatch, graph_promotion_review_enabled=True)
+    await _upsert_relationship_content(TENANT, SOURCE, TARGET, confidence=0.1)
+    client = await _graph()
+
+    report = await project_tenant(TENANT, graph_client=client)
+
+    assert report.projected == 0
+    assert report.deferred_review == 1
+    assert len(await _semantic_edges(client, SOURCE)) == 0
+    # A graph_promotion_candidate review item was enqueued, tenant-scoped.
+    items = await SemanticReviewQueueRepository().list_open(
+        TENANT, "graph_promotion_candidate"
+    )
+    assert len(items) == 1
+    assert items[0]["payload"]["source_ref"] == SOURCE
+    assert items[0]["payload"]["target_ref"] == TARGET
+
+
+async def test_high_confidence_pair_still_auto_projected(monkeypatch):
+    # Flag on but a high-confidence pair clears the predicate: auto-projected.
+    _enforce_projector(monkeypatch, graph_promotion_review_enabled=True)
+    await _upsert_relationship_content(TENANT, SOURCE, TARGET, confidence=0.9)
+    client = await _graph()
+
+    report = await project_tenant(TENANT, graph_client=client)
+
+    assert report.projected == 1
+    assert report.deferred_review == 0
+    assert len(await _semantic_edges(client, SOURCE)) == 1
+
+
+async def test_review_flag_off_auto_projects_everything():
+    # Flag OFF (default): even a low-confidence pair is auto-projected (unchanged).
+    await _upsert_relationship_content(TENANT, SOURCE, TARGET, confidence=0.1)
+    client = await _graph()
+
+    report = await project_tenant(TENANT, graph_client=client)
+
+    assert report.projected == 1
+    assert report.deferred_review == 0
+
+
+async def test_project_pair_projects_single_edge(monkeypatch):
+    # project_pair projects exactly that one pair's canonical edge (bypassing the
+    # review policy — approval already decided), and is idempotent on re-call.
+    _enforce_projector(monkeypatch, graph_promotion_review_enabled=True)
+    # Low confidence: the sweep would defer it, but explicit approval projects it.
+    await _upsert_relationship_content(TENANT, SOURCE, TARGET, confidence=0.1)
+    await _upsert_relationship_content(TENANT, SOURCE, "prod_other", confidence=0.1)
+    client = await _graph()
+
+    report = await project_pair(TENANT, SOURCE, TARGET, graph_client=client)
+
+    assert report.projected == 1
+    live = [e for e in await _semantic_edges(client, SOURCE) if not e.properties.get("revoked")]
+    assert [e.to_vertex_id for e in live] == [TARGET]
+
+    # Re-approving the same pair is a no-op (already projected).
+    again = await project_pair(TENANT, SOURCE, TARGET, graph_client=client)
+    assert again.projected == 0
+    assert again.skipped_existing == 1
+
+
+async def test_project_pair_missing_pair_is_noop(monkeypatch):
+    _enforce_projector(monkeypatch, graph_promotion_review_enabled=True)
+    client = await _graph()
+
+    report = await project_pair(TENANT, SOURCE, "never_seeded", graph_client=client)
+
+    assert report.projected == 0
+    assert report.relationships_seen == 0

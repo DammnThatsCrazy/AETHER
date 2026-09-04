@@ -1,0 +1,163 @@
+# Feature readiness record — see config/readiness/schema.json.
+# Migration-derived from scripts/production_status.py (legacy area: 'payment rail observability'). The 0-5 maturity score is decomposed across the model's
+# independent dimensions; an external blocker never reduces implementation.
+feature_id: payment-rail-observability
+title: Payment Rail Observability
+owning_system: aether
+summary: Five named adapters (Privy, Stripe crypto onramp, Coinbase, MoonPay, Bridge) with real HMAC webhook
+  verification (per-provider scheme, constant-time), recursive sensitive-field stripping.
+scope:
+  id: payment-rail-observability-v1
+  version: 1
+  title: Payment Rail Observability V1
+  target: observation-pilot
+  included:
+  - contracts-and-schemas
+  - core-behavior
+  - runtime-wiring
+  - persistence-and-migrations
+  - authorization-and-tenant-isolation
+  excluded: []
+  deferred: []
+repository_ceiling:
+  type: RUNTIME_INTEGRATED
+  achieved: true
+  remaining_after_ceiling:
+  - Connect a live provider and open a validated live-data window.
+  remaining_is_repository_controlled: true
+  evidence:
+  - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/
+  - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/sync_worker.py
+  - docs/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md
+implementation:
+  state: RUNTIME_INTEGRATED
+  denominator: in-scope repository controls (migration-derived)
+  controls:
+  - id: contracts-and-schemas
+    description: contracts and schemas
+    weight: 20
+    satisfied: true
+  - id: core-behavior
+    description: core behavior
+    weight: 20
+    satisfied: true
+  - id: runtime-wiring
+    description: runtime wiring
+    weight: 20
+    satisfied: true
+  - id: persistence-and-migrations
+    description: persistence and migrations
+    weight: 20
+    satisfied: true
+  - id: authorization-and-tenant-isolation
+    description: authorization and tenant isolation
+    weight: 20
+    satisfied: false
+  remaining_work:
+  - complete repository-controlled verification + hardening
+productionization:
+  denominator: in-scope productionization controls (migration-derived)
+  controls:
+  - id: security-controls
+    description: security controls
+    weight: 25
+    satisfied: true
+  - id: observability-metrics-logs
+    description: observability metrics logs
+    weight: 25
+    satisfied: true
+  - id: reliability-idempotency-retry
+    description: reliability idempotency retry
+    weight: 25
+    satisfied: false
+  - id: ci-and-release-gates
+    description: ci and release gates
+    weight: 25
+    satisfied: false
+  remaining_work:
+  - reliability idempotency retry
+  - ci and release gates
+activation:
+  state: LIVE_DATA_WAITING
+  blockers:
+  - type: LIVE_DATA_WAITING
+    description: Payment Rail Observability activation waits on an external live data condition.
+    owner: tenant / provider
+    required_action: Connect a live provider and open a validated live-data window.
+    source_code_change_expected: false
+    affected_environments:
+    - staging
+    - production
+    affected_release_profiles:
+    - staging
+    - pilot
+    evidence_required: captured live provider run
+dependencies:
+  hard: []
+  soft: []
+environment_evidence:
+  local:
+    state: VERIFIED
+    credentialed: false
+  ci:
+    state: NOT_ATTEMPTED
+    credentialed: false
+  staging:
+    state: BLOCKED_EXTERNAL
+    credentialed: true
+  production:
+    state: NOT_APPLICABLE
+operational_ownership:
+  team: financial-platform
+  technical_owner: financial-platform
+  operational_owner: platform-ops
+  escalation: pagerduty:financial-platform
+  runbook: docs/runbooks/PAYMENT_RAILS_RUNBOOK.md
+  dashboards:
+  - grafana:financial-platform
+  alerts:
+  - pagerduty:financial-platform
+  service_level_target: per founding-tenant SLO
+  recovery_objective: RTO 30m / RPO 5m
+business_readiness:
+  applicable: false
+  controls: []
+confidence:
+  level: LOW
+  reasons:
+  - 'repository evidence: Backend Architecture/aether-backend/services/integrations/providers/payment_rails/'
+  evidence_gaps:
+  - credentialed environment execution not yet performed
+release_profiles:
+  local:
+    participation: required
+    implementation_floor: VERIFIED
+    productionization_required: false
+    environment_gate: local
+    business_gate: false
+  staging:
+    participation: experimental
+    implementation_floor: VERIFIED
+    productionization_required: true
+    environment_gate: staging
+    business_gate: false
+  pilot:
+    participation: experimental
+    implementation_floor: TURNKEY
+    productionization_required: true
+    environment_gate: pilot
+    business_gate: false
+  production-lean:
+    participation: not_in_release
+    note: Excluded from the founding-tenant release scope (see config/founding_tenant_release.yaml).
+  production-scale:
+    participation: not_in_release
+    note: Excluded from the founding-tenant release scope (see config/founding_tenant_release.yaml).
+historical:
+  historical_maturity_index: 3
+  historical_maturity_index_scale: 0-5
+  historical_maturity_index_authoritative: false
+  migration_derived: true
+  legacy_area: payment rail observability
+  note: Derived from scripts/production_status.py; the 0-5 score is decomposed across dimensions and is
+    a proxy pending per-capability SME review.

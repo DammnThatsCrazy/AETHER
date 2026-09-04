@@ -93,6 +93,13 @@ def _strong_autolink_enabled() -> bool:
         return flag.strip().lower() in {"1", "true", "yes", "on"}
     return True
 
+
+def _verified_email_merge_enabled() -> bool:
+    """Verified-email deterministic merge. Deterministic evidence is safe by
+    default; a kill switch can disable it operationally (blueprint §22/§66/§8)."""
+    flag = os.getenv("AETHER_IDENTITY_VERIFIED_EMAIL_MERGE", "1")
+    return flag.strip().lower() in {"1", "true", "yes", "on"}
+
 # Signals that must be hashed before persistence
 _HASH_ON_INGEST: dict[IdentitySignalType, str] = {
     IdentitySignalType.EMAIL_HASH: "email",
@@ -304,6 +311,14 @@ class IdentityResolutionService:
             is_suppressed = await self._repo.check_suppression(
                 tenant_id, sig_type.value, sig_hash
             )
+            # A suppression on the observed email hash also suppresses the
+            # verified-ownership signal for the SAME hash — the identifier is
+            # forbidden from linking identities regardless of assurance level
+            # (blueprint §41).
+            if not is_suppressed and sig_type == IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED:
+                is_suppressed = await self._repo.check_suppression(
+                    tenant_id, IdentitySignalType.EMAIL_HASH.value, sig_hash
+                )
             if is_suppressed:
                 suppressed_types.append(sig_type)
                 self._metrics.record_blocked("suppression")
@@ -340,6 +355,14 @@ class IdentityResolutionService:
             entity_ids = await self._repo.find_subjects_by_alias(
                 tenant_id, sig_type, sig_hash
             )
+            if sig_type == IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED:
+                # hash_email() yields the SAME hash for the observed EMAIL_HASH
+                # alias and the verified evidence identifier, so verified email
+                # must also discover entities that carry only the observed alias.
+                observed_ids = await self._repo.find_subjects_by_alias(
+                    tenant_id, IdentitySignalType.EMAIL_HASH, sig_hash
+                )
+                entity_ids = list(dict.fromkeys([*entity_ids, *observed_ids]))
             if entity_ids:
                 matching_types.append(sig_type)
                 for eid in entity_ids:
@@ -348,6 +371,20 @@ class IdentityResolutionService:
 
         # ── 6. Check for conflicting strong aliases ───────────────────────
         has_conflict = len(existing_entity_ids) > 1 and _has_strong_signal(matching_types)
+        verified_present = any(
+            t in {
+                IdentitySignalType.EMAIL_OWNERSHIP_VERIFIED,
+                IdentitySignalType.WALLET_SIGNATURE_VERIFIED,
+            }
+            for t in matching_types
+        )
+        if verified_present and len(existing_entity_ids) > 1:
+            # Verified ownership can merge fragments; but only if they carry no
+            # CONTRADICTORY deterministic identifier. Re-derive the conflict flag
+            # from the candidate entities' deterministic aliases.
+            has_conflict = await self._has_deterministic_conflict(
+                tenant_id, existing_entity_ids
+            )
 
         # ── 7. Apply merge policy ─────────────────────────────────────────
         # Strong (probabilistic) auto-linking is OFF by default in staging/
@@ -364,8 +401,22 @@ class IdentityResolutionService:
             has_conflict=has_conflict,
             existing_entity_ids=existing_entity_ids,
             auto_link_strong=_strong_autolink_enabled(),
+            verified_present=verified_present,
+            auto_merge_verified=_verified_email_merge_enabled(),
         )
         policy_result = evaluate(policy_ctx)
+
+        # Verified evidence may collapse ALL compatible candidates — when the
+        # policy authorized a multi-candidate merge but could not pick a target,
+        # choose the deterministic survivor here (blueprint §25).
+        if (
+            getattr(policy_result, "merge_all_candidates", False)
+            and not policy_result.merge_target_entity_id
+            and existing_entity_ids
+        ):
+            policy_result.merge_target_entity_id = await self._pick_survivor(
+                tenant_id, existing_entity_ids
+            )
 
         # ── 8. Create or fetch canonical entity ───────────────────────────
         canonical_entity_id: str
@@ -483,6 +534,9 @@ class IdentityResolutionService:
             # (Topic.IDENTITY_MERGED). Emit the same event here so restatement fires
             # for auto-merges too.
             if auto_merged_from_ids:
+                # Bump the survivor's resolution revision once per auto-merge so
+                # downstream consumers can detect the identity was restated.
+                await self._bump_resolution_revision(tenant_id, canonical_entity_id)
                 await self._publish_identity_merged(
                     tenant_id=tenant_id,
                     canonical_entity_id=canonical_entity_id,
@@ -652,6 +706,9 @@ class IdentityResolutionService:
             return
         reason = reason_codes[0] if reason_codes else "auto_merge"
         tier_value = getattr(confidence_tier, "value", confidence_tier)
+        resolution_revision = await self._current_resolution_revision(
+            tenant_id, canonical_entity_id
+        )
         for from_id in merged_from_ids:
             try:
                 await producer.publish(Event(
@@ -667,6 +724,7 @@ class IdentityResolutionService:
                         "confidence": confidence,
                         "confidence_tier": tier_value,
                         "auto_merge": True,
+                        "resolution_revision": resolution_revision,
                         "source_event_ids": [event_id] if event_id else [],
                     },
                 ))
@@ -721,6 +779,104 @@ class IdentityResolutionService:
             confidence_tier=policy_result.confidence_tier,
         )
 
+    # ── Verified-ownership merge helpers ──────────────────────────────────
+
+    async def _has_deterministic_conflict(
+        self, tenant_id: str, entity_ids: list[str]
+    ) -> bool:
+        """True iff candidate entities carry CONTRADICTORY deterministic ids.
+
+        Verified ownership only authorizes a merge when the fragments are
+        compatible. If two candidates carry different user_id / external_id /
+        verified-wallet hashes, merging would fuse distinct real identities —
+        that is a conflict, routed to review instead (blueprint §41). Revoked
+        aliases are ignored. Fail-safe: any error returns False so a lookup
+        failure never fabricates a conflict.
+        """
+        deterministic_types = {
+            IdentitySignalType.USER_ID,
+            IdentitySignalType.EXTERNAL_ID,
+            IdentitySignalType.WALLET_SIGNATURE_VERIFIED,
+        }
+        try:
+            by_type: dict[IdentitySignalType, set[str]] = {}
+            for eid in entity_ids:
+                aliases = await self._repo.get_aliases_for_entity(tenant_id, eid)
+                for a in aliases:
+                    if a.get("revoked_at"):
+                        continue
+                    try:
+                        at = IdentitySignalType(a.get("alias_type"))
+                    except (ValueError, TypeError):
+                        continue
+                    if at not in deterministic_types:
+                        continue
+                    by_type.setdefault(at, set()).add(a.get("alias_value_hash") or "")
+            return any(len(hashes) >= 2 for hashes in by_type.values())
+        except Exception as exc:  # noqa: BLE001 - never fabricate a conflict
+            logger.warning("deterministic conflict check failed: %s", exc)
+            return False
+
+    async def _pick_survivor(
+        self, tenant_id: str, entity_ids: list[str]
+    ) -> str:
+        """Choose the survivor for a verified multi-candidate merge.
+
+        Deterministic and identity-fair (blueprint §25): the OLDEST entity wins
+        by (first_seen_at, created_at) ascending, tie-broken by entity_id — never
+        by size, revenue, or recency. Fail-safe to the lexicographically smallest
+        id if subject lookups fail.
+        """
+        try:
+            scored: list[tuple[str, str, str]] = []
+            for eid in entity_ids:
+                row = await self._repo.get_subject_by_canonical_entity_id(tenant_id, eid)
+                first_seen = (row or {}).get("first_seen_at") or "~"
+                created = (row or {}).get("created_at") or "~"
+                scored.append((first_seen, created, eid))
+            scored.sort(key=lambda t: (t[0], t[1], t[2]))
+            return scored[0][2] if scored else sorted(entity_ids)[0]
+        except Exception as exc:  # noqa: BLE001 - deterministic fallback
+            logger.warning("survivor selection failed: %s", exc)
+            return sorted(entity_ids)[0]
+
+    async def _bump_resolution_revision(
+        self, tenant_id: str, canonical_entity_id: str
+    ) -> int:
+        """Increment the survivor subject's monotonic resolution revision.
+
+        Bumped once per successful merge/split so downstream consumers can
+        detect an entity's identity was restated. Best-effort and fail-safe:
+        a read/write failure is logged and swallowed (never breaks resolution).
+        """
+        try:
+            row = await self._repo.get_subject_by_canonical_entity_id(
+                tenant_id, canonical_entity_id
+            )
+            if row is None:
+                return 0
+            current = int(row.get("resolution_revision") or 0) + 1
+            row["resolution_revision"] = current
+            await self._repo._subjects.update(row["id"], row)
+            return current
+        except Exception as exc:  # noqa: BLE001 - revision bump must never break resolution
+            logger.warning(
+                "resolution_revision bump failed for %s: %s", canonical_entity_id, exc
+            )
+            return 0
+
+    async def _current_resolution_revision(
+        self, tenant_id: str, canonical_entity_id: str
+    ) -> int:
+        """Read the current resolution revision for a canonical entity (0 default)."""
+        try:
+            row = await self._repo.get_subject_by_canonical_entity_id(
+                tenant_id, canonical_entity_id
+            )
+            return int((row or {}).get("resolution_revision") or 0)
+        except Exception:  # noqa: BLE001
+            return 0
+
     # ── Operator actions ──────────────────────────────────────────────────
 
     async def operator_merge(
@@ -767,6 +923,7 @@ class IdentityResolutionService:
             tenant_id, secondary_entity_id, primary_entity_id
         )
         self._metrics.record_merge(tenant_id=tenant_id)
+        await self._bump_resolution_revision(tenant_id, primary_entity_id)
 
         decision_obj = IdentityResolutionDecision(
             tenant_id=tenant_id,
@@ -839,6 +996,8 @@ class IdentityResolutionService:
             tenant_id, original_entity_id
         )
         self._metrics.record_split(tenant_id=tenant_id)
+        await self._bump_resolution_revision(tenant_id, original_entity_id)
+        await self._bump_resolution_revision(tenant_id, new_entity_id)
 
         return {
             "allowed": True,
@@ -1281,6 +1440,8 @@ class IdentityResolutionService:
             mode=mode,
         )
         self._metrics.record_split(tenant_id=tenant_id)
+        await self._bump_resolution_revision(tenant_id, entity_id)
+        await self._bump_resolution_revision(tenant_id, resulting_entity_id)
 
         return {
             "allowed": True,
