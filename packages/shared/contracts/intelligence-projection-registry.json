@@ -1058,7 +1058,7 @@
       "id": "population360",
       "displayName": "Population 360",
       "projectionKind": "context_360",
-      "implementationState": "in_flight",
+      "implementationState": "implemented",
       "implementationBlueprint": "docs/blueprints/population360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
@@ -1103,8 +1103,7 @@
         "relative"
       ],
       "surfaceIds": [
-        "comparison_workbench",
-        "cluster360"
+        "population360"
       ],
       "capabilityKeys": [
         "population360.read",
@@ -1146,25 +1145,17 @@
           "/v1/population"
         ],
         "surfaceIds": [
-          "comparison_workbench",
-          "cluster360"
+          "population360"
         ],
         "services": [
           "Backend Architecture/aether-backend/services/population"
         ],
-        "migrationMode": "adapter",
+        "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/population360.md"
       },
       "deprecatedReason": null,
       "successorId": null,
-      "pendingAuthority": [
-        {
-          "id": "grouping_membership",
-          "kind": "spine",
-          "reason": "canonical grouping/membership contract not yet formalized",
-          "resolvesInProjection": "population360"
-        }
-      ],
+      "pendingAuthority": [],
       "pendingReference": []
     },
     {

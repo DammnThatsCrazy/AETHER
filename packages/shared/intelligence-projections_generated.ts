@@ -910,7 +910,7 @@ export const intelligenceProjectionDefinitions: Record<
     id: 'population360',
     displayName: 'Population 360',
     projectionKind: 'context_360',
-    implementationState: 'in_flight',
+    implementationState: 'implemented',
     implementationBlueprint: 'docs/blueprints/population360.md',
     ownsCanonicalTruth: false,
     subjectKinds: ['cluster', 'entity', 'population'],
@@ -921,7 +921,7 @@ export const intelligenceProjectionDefinitions: Record<
     inputRefs: ['EntityRef', 'GraphResult', 'GraphSnapshotRef', 'PageRequest', 'TimeRangeFilter'],
     outputSections: ['evidence', 'findings', 'state', 'summary', 'timeline'],
     supportedTemporalModes: ['relative', 'window'],
-    surfaceIds: ['cluster360', 'comparison_workbench'],
+    surfaceIds: ['population360'],
     capabilityKeys: ['population360.explore', 'population360.read'],
     metricRefs: [],
     graphMutationPolicy: 'read_only',
@@ -956,21 +956,14 @@ export const intelligenceProjectionDefinitions: Record<
     },
     legacyBindings: {
       routes: ['/v1/population'],
-      surfaceIds: ['cluster360', 'comparison_workbench'],
+      surfaceIds: ['population360'],
       services: ['Backend Architecture/aether-backend/services/population'],
-      migrationMode: 'adapter',
+      migrationMode: 'converged',
       migrationBlueprint: 'docs/blueprints/population360.md'
     },
     deprecatedReason: null,
     successorId: null,
-    pendingAuthority: [
-      {
-        id: 'grouping_membership',
-        kind: 'spine',
-        reason: 'canonical grouping/membership contract not yet formalized',
-        resolvesInProjection: 'population360'
-      }
-    ],
+    pendingAuthority: [],
     pendingReference: []
   },
   profile360: {
@@ -1390,14 +1383,6 @@ export const pendingAuthorities: Partial<
       kind: 'spine',
       reason: 'context-capsule plane not yet formalized',
       resolvesInProjection: 'geographic360'
-    }
-  ],
-  population360: [
-    {
-      id: 'grouping_membership',
-      kind: 'spine',
-      reason: 'canonical grouping/membership contract not yet formalized',
-      resolvesInProjection: 'population360'
     }
   ],
 };

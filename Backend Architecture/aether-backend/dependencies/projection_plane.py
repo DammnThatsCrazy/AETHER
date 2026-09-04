@@ -19,18 +19,26 @@ listed here is not live (the phase-1 enforcement note in
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Type-only: resolves the ``ProviderRegistry`` forward reference below
+    # without importing the registry at module import time (the runtime import
+    # stays deferred inside the registration function).
+    from shared.intelligence_projections.registry import ProviderRegistry
 
 logger = logging.getLogger(__name__)
 
 # The plane's implemented projections, in registration order. When a follow-up
 # vertical slice flips a row to ``implemented`` (e.g. risk360 / fraud360 /
-# geographic360 / population360), add its provider module below and extend this
-# tuple in the same change.
+# geographic360), add its provider module below and extend this tuple in the
+# same change.
 IMPLEMENTED_PROJECTION_IDS: tuple[str, ...] = (
     "economic360",
     "outcome360",
     "infrastructure360",
     "temporal360",
+    "population360",
 )
 
 
@@ -74,12 +82,16 @@ def register_implemented_projection_providers(
     from services.temporal360.provider import (
         register_provider as _register_temporal360,
     )
+    from services.population360.provider import (
+        register_provider as _register_population360,
+    )
 
     for pid, register in (
         ("economic360", _register_economic360),
         ("outcome360", _register_outcome360),
         ("infrastructure360", _register_infrastructure360),
         ("temporal360", _register_temporal360),
+        ("population360", _register_population360),
     ):
         if registry.get(pid) is None:
             register(registry)

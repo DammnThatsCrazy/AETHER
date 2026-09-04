@@ -161,18 +161,22 @@ AUTHORITY_INDEX = frozenset(
     }
 )
 
-# RESOLVED spines only. journey_continuity, context_capsule_semantics,
-# grouping_membership and reconciled_control_plane are deliberately ABSENT —
-# they are pending, declared per-projection via pendingAuthority until the
-# spine plane formalizes them. graph_history_replay WAS pending (temporal360
-# T2.1) and is formalized here now that the knowledge-time reconstruction
-# authority exists (shared/graph replay_state + services/temporal360).
+# RESOLVED spines only. journey_continuity, context_capsule_semantics and
+# reconciled_control_plane are deliberately ABSENT — they are pending, declared
+# per-projection via pendingAuthority until the spine plane formalizes them.
+# graph_history_replay WAS pending (temporal360 T2.1) and grouping_membership
+# WAS pending (population360 P3.1) — each is formalized here now that its
+# authority exists: the knowledge-time reconstruction (shared/graph
+# replay_state + services/temporal360) and the governed membership contract
+# (MEMBER_OF-via-gateway PopulationMembershipGovernor, append-only
+# population_definition_versions, DSR coverage — services/population).
 SPINE_INDEX = frozenset(
     {
         "contract_spine",
         "identity_resolution",
         "evidence_provenance",
         "graph_history_replay",
+        "grouping_membership",
         "temporal_kernel",
         "relationship_fidelity",
         "upr",

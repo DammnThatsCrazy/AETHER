@@ -21,6 +21,7 @@ EXPECTED_SOURCES: dict[str, str] = {
     "outcome360": "services/measurement/outcome",
     "infrastructure360": "services/infrastructure",
     "temporal360": "services/temporal360",
+    "population360": "services/population360",
 }
 
 
