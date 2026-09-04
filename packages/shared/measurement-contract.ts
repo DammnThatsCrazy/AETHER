@@ -14,11 +14,15 @@
 | 'campaign_ltv'
 | 'campaign_roas'
 | 'campaign_spend'
+| 'claim_retention_rate'
+| 'citation_retention_rate'
+| 'contradiction_rate'
 | 'conversion_rate'
 | 'costs'
 | 'email_click_rate'
 | 'email_open_rate'
 | 'email_reply_rate'
+| 'evidence_retention_rate'
 | 'exposure'
 | 'gross_value'
 | 'journey_completion_rate'
@@ -26,9 +30,12 @@
 | 'machine_event_rate'
 | 'margin'
 | 'net_value'
+| 'omission_rate'
 | 'refunds'
 | 'revenue'
+| 'semantic_drift'
 | 'touchpoints'
+| 'unsupported_addition_rate'
         ;
 
       /** Definition of a single measurable metric. */
@@ -96,6 +103,36 @@
   minSample: 1,
 },
 {
+  name: 'claim_retention_rate',
+  version: '1',
+  unit: 'ratio',
+  description: 'Share of source claims retained across an information transformation chain.',
+  lower: 0,
+  upper: 1,
+  allowsProbability: false,
+  minSample: 1,
+},
+{
+  name: 'citation_retention_rate',
+  version: '1',
+  unit: 'ratio',
+  description: 'Share of source citations retained across an information transformation chain.',
+  lower: 0,
+  upper: 1,
+  allowsProbability: false,
+  minSample: 1,
+},
+{
+  name: 'contradiction_rate',
+  version: '1',
+  unit: 'ratio',
+  description: 'Share of source claims contradicted across an information transformation chain.',
+  lower: 0,
+  upper: 1,
+  allowsProbability: false,
+  minSample: 1,
+},
+{
   name: 'conversion_rate',
   version: '1',
   unit: 'ratio',
@@ -144,6 +181,16 @@
   upper: 1,
   allowsProbability: false,
   minSample: 30,
+},
+{
+  name: 'evidence_retention_rate',
+  version: '1',
+  unit: 'ratio',
+  description: 'Share of source evidence references retained across an information transformation chain.',
+  lower: 0,
+  upper: 1,
+  allowsProbability: false,
+  minSample: 1,
 },
 {
   name: 'exposure',
@@ -216,6 +263,16 @@
   minSample: 1,
 },
 {
+  name: 'omission_rate',
+  version: '1',
+  unit: 'ratio',
+  description: 'Share of source claims omitted across an information transformation chain.',
+  lower: 0,
+  upper: 1,
+  allowsProbability: false,
+  minSample: 1,
+},
+{
   name: 'refunds',
   version: '1',
   unit: 'usd',
@@ -236,12 +293,32 @@
   minSample: 1,
 },
 {
+  name: 'semantic_drift',
+  version: '1',
+  unit: 'ratio',
+  description: 'Normalized semantic drift between source and derived information.',
+  lower: 0,
+  upper: 1,
+  allowsProbability: false,
+  minSample: 1,
+},
+{
   name: 'touchpoints',
   version: '1',
   unit: 'count',
   description: 'Distinct marketing touchpoints observed in the window.',
   lower: 0,
   upper: null,
+  allowsProbability: false,
+  minSample: 1,
+},
+{
+  name: 'unsupported_addition_rate',
+  version: '1',
+  unit: 'ratio',
+  description: 'Share of added claims lacking supporting citation across an information transformation chain.',
+  lower: 0,
+  upper: 1,
   allowsProbability: false,
   minSample: 1,
 },

@@ -35,6 +35,9 @@ from shared.intelligence_projections.generated_registry import (
     PROJECTION_SUBJECT_KINDS,
 )
 
+# Consolidated claim-state authority (single vocabulary claims render against).
+from shared.contracts_models.epistemic import EpistemicStatus
+
 # Reused canonical primitives (single-monolith reuse — never redefined here).
 from services.operational_intelligence.models import (
     ContractModel,
@@ -126,7 +129,16 @@ class ProjectionSection(ProjectionContract):
 
 
 class ClaimEnvelope(ProjectionContract):
-    """One claim a projection makes about its subject, backed by evidence refs."""
+    """One claim a projection makes about its subject, backed by evidence refs.
+
+    ``claimState`` carries the consolidated :class:`EpistemicStatus` for the
+    claim so a derived/inferred claim can never render as a factual declaration.
+    Optional: absent means the provider did not classify the claim, which a UI
+    must treat as unclassified — never as factual. Message/transport facts are
+    capped at ``observed``; a recipient-knowledge or author-intent claim is a
+    structurally different object (the information/knowledge layer) and can
+    never be granted a factual state by a delivery/engagement fact alone.
+    """
 
     id: str
     kind: str
@@ -134,6 +146,7 @@ class ClaimEnvelope(ProjectionContract):
     evidenceRefs: list[EvidenceRef]
     claims: list[str]
     confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    claimState: Optional[EpistemicStatus] = None
 
 
 class ProjectionDegradation(ProjectionContract):

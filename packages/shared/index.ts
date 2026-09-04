@@ -79,6 +79,7 @@ export * from './value';
 export * from './ingestion-contract';
 export * from './problem-details';
 export * from './dimension-state';
+export * from './epistemic-status';
 export * from './temporal';
 export * from './temporal-policy';
 export * from './exploration-contract';

@@ -460,10 +460,10 @@ Canonical contract plane (single source of truth, codegen twins via
 
 A **360** is an intelligence projection over canonical Aether truth — it is
 never a competing system of record. The intelligence projection plane owns the
-single canonical registry (19 projections, six of which — `outcome360`,
-`economic360`, `infrastructure360`, the context-360 time leaf `temporal360`,
-the context-360 WHO/SET leaf `population360` and the context-360 WHERE leaf
-`geographic360` — are now implemented native
+single canonical registry (19 projections, seven of which — `outcome360`,
+`economic360`, `infrastructure360`, `communication360`, the context-360 time leaf
+`temporal360`, the context-360 WHO/SET leaf `population360` and the context-360
+WHERE leaf `geographic360` — are now implemented native
 providers) and the shared request/context/result contracts (TS + Python) that
 every future 360 provider implements against. `implementationState` is repo metadata describing
 how far a projection has been converged onto the plane (`in_flight` = an
@@ -474,8 +474,9 @@ fail-isolated provider protocol
 projection degrades its own result, never the plane. P0 shipped the plane as a
 library with no projection route; projection routes land only as classified
 legacy bindings per vertical slice — the read-only `/v1/infrastructure` (every
-route a GET, no generic catch-all) is the first. The implemented providers are
-registered at boot — `main.py`'s lifespan calls
+route a GET, no generic catch-all) was the first, and the read-only
+`/v1/communication360` surface follows the same template. The implemented
+providers are registered at boot — `main.py`'s lifespan calls
 `dependencies.projection_plane.register_implemented_projection_providers` — so a
 projection surface answers live instead of degrading to `provider_unavailable`
 (a provider is not live until registered at this mount; the enforcement note is

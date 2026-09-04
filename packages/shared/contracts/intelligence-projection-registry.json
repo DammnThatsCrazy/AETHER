@@ -617,7 +617,7 @@
       "id": "communication360",
       "displayName": "Communication 360",
       "projectionKind": "sequence_360",
-      "implementationState": "in_flight",
+      "implementationState": "implemented",
       "implementationBlueprint": "docs/blueprints/communication360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
@@ -675,7 +675,14 @@
       "metricRefs": [
         "email_open_rate",
         "email_click_rate",
-        "email_reply_rate"
+        "email_reply_rate",
+        "claim_retention_rate",
+        "citation_retention_rate",
+        "contradiction_rate",
+        "evidence_retention_rate",
+        "omission_rate",
+        "semantic_drift",
+        "unsupported_addition_rate"
       ],
       "graphMutationPolicy": "read_only",
       "requiresEvidence": true,
@@ -721,7 +728,7 @@
         "services": [
           "Backend Architecture/aether-backend/services/comms"
         ],
-        "migrationMode": "adapter",
+        "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/communication360.md"
       },
       "deprecatedReason": null,
