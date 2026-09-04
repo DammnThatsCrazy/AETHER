@@ -56,6 +56,7 @@ from services.geographic360.capsule_semantics import (
     CAPSULE_LOCATION_PROVIDER,
     normalise_capsule_fact_row,
 )
+from shared.temporal.instant import coerce_utc_lenient
 from shared.intelligence_projections.contracts import (
     ClaimEnvelope,
     ProjectionContext,
@@ -160,9 +161,17 @@ def _iso_aware(value: Optional[str]) -> str:
 
 
 def _parse_utc_iso(value: str) -> datetime:
-    """Parse a UTC ISO string to an aware datetime (tolerant of both offsets)."""
-    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    """Parse a UTC ISO string to an aware datetime via the temporal kernel.
+
+    Location-fact instants are canonical UTC ISO. The kernel is the only
+    sanctioned place allowed to attach an assumed UTC timezone to a naive
+    value (``coerce_utc_lenient``), so the naive fallback never attaches one
+    locally (temporal-integrity gate).
+    """
+    parsed = coerce_utc_lenient(value)
+    if parsed is None:
+        raise ValueError(f"unparseable UTC ISO instant: {value!r}")
+    return parsed
 
 
 def _age_days(value: str, now: datetime) -> float:
