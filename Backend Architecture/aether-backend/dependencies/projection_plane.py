@@ -39,6 +39,7 @@ IMPLEMENTED_PROJECTION_IDS: tuple[str, ...] = (
     "infrastructure360",
     "temporal360",
     "population360",
+    "geographic360",
 )
 
 
@@ -85,6 +86,9 @@ def register_implemented_projection_providers(
     from services.population360.provider import (
         register_provider as _register_population360,
     )
+    from services.geographic360.provider import (
+        register_provider as _register_geographic360,
+    )
 
     for pid, register in (
         ("economic360", _register_economic360),
@@ -92,6 +96,7 @@ def register_implemented_projection_providers(
         ("infrastructure360", _register_infrastructure360),
         ("temporal360", _register_temporal360),
         ("population360", _register_population360),
+        ("geographic360", _register_geographic360),
     ):
         if registry.get(pid) is None:
             register(registry)

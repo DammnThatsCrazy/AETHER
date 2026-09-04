@@ -109,4 +109,3 @@ flowchart LR
 |---|---|---|---|---|
 | `connection360` | authority | `reconciled_control_plane` | harness control-plane rollup (PR #529) merged; reconciled control-plane spine not yet formalized as a projection-plane authority | `connection360` |
 | `episode360` | authority | `journey_continuity` | journey continuity plane not yet formalized | `episode360` |
-| `geographic360` | authority | `context_capsule_semantics` | context-capsule plane not yet formalized | `geographic360` |

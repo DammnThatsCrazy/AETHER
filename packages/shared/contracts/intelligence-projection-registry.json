@@ -949,7 +949,7 @@
       "id": "geographic360",
       "displayName": "Geographic 360",
       "projectionKind": "context_360",
-      "implementationState": "in_flight",
+      "implementationState": "implemented",
       "implementationBlueprint": "docs/blueprints/geographic360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
@@ -992,7 +992,7 @@
         "relative"
       ],
       "surfaceIds": [
-        "geo"
+        "geographic360"
       ],
       "capabilityKeys": [
         "geographic360.read",
@@ -1034,24 +1034,17 @@
           "/v1/geo"
         ],
         "surfaceIds": [
-          "geo"
+          "geographic360"
         ],
         "services": [
           "Backend Architecture/aether-backend/services/geo"
         ],
-        "migrationMode": "adapter",
+        "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/geographic360.md"
       },
       "deprecatedReason": null,
       "successorId": null,
-      "pendingAuthority": [
-        {
-          "id": "context_capsule_semantics",
-          "kind": "spine",
-          "reason": "context-capsule plane not yet formalized",
-          "resolvesInProjection": "geographic360"
-        }
-      ],
+      "pendingAuthority": [],
       "pendingReference": []
     },
     {

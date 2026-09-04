@@ -640,7 +640,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "id": "geographic360",
         "displayName": "Geographic 360",
         "projectionKind": "context_360",
-        "implementationState": "in_flight",
+        "implementationState": "implemented",
         "implementationBlueprint": "docs/blueprints/geographic360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("entity", "population", "source"),
@@ -651,7 +651,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "inputRefs": ("EntityRef", "GraphSnapshotRef", "PageRequest", "TimeRangeFilter"),
         "outputSections": ("evidence", "findings", "state", "summary", "timeline"),
         "supportedTemporalModes": ("compare", "relative", "window"),
-        "surfaceIds": ("geo",),
+        "surfaceIds": ("geographic360",),
         "capabilityKeys": ("geographic360.explore", "geographic360.read"),
         "metricRefs": [],
         "graphMutationPolicy": "read_only",
@@ -686,21 +686,14 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         },
         "legacyBindings": {
             "routes": ("/v1/geo",),
-            "surfaceIds": ("geo",),
+            "surfaceIds": ("geographic360",),
             "services": ("Backend Architecture/aether-backend/services/geo",),
-            "migrationMode": "adapter",
+            "migrationMode": "converged",
             "migrationBlueprint": "docs/blueprints/geographic360.md"
         },
         "deprecatedReason": None,
         "successorId": None,
-        "pendingAuthority": [
-            {
-                "id": "context_capsule_semantics",
-                "kind": "spine",
-                "reason": "context-capsule plane not yet formalized",
-                "resolvesInProjection": "geographic360"
-            }
-        ],
+        "pendingAuthority": [],
         "pendingReference": []
     },
     "infrastructure360": {
@@ -1279,7 +1272,7 @@ PROJECTION_SURFACE_MAP: dict[str, tuple] = {
     "episode360": ("journeys", "timeline"),
     "execution360": ("timeline",),
     "fraud360": ("graph",),
-    "geographic360": ("geo",),
+    "geographic360": ("geographic360",),
     "infrastructure360": ("infrastructure360",),
     "outcome360": ("campaign360", "outcome360"),
     "population360": ("population360",),
@@ -1330,14 +1323,6 @@ PENDING_AUTHORITIES: dict[str, list] = {
             "kind": "spine",
             "reason": "journey continuity plane not yet formalized",
             "resolvesInProjection": "episode360"
-        }
-    ],
-    "geographic360": [
-        {
-            "id": "context_capsule_semantics",
-            "kind": "spine",
-            "reason": "context-capsule plane not yet formalized",
-            "resolvesInProjection": "geographic360"
         }
     ],
 }
