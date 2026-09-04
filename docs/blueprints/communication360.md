@@ -24,6 +24,18 @@ then flipped in the phase-6 gate. The governing specification is the full Day-1
 blueprint captured in
 [docs/source-of-truth/COMMUNICATION_360.md](../source-of-truth/COMMUNICATION_360.md).
 
+> **Status (2026-09-03):** Phases 2–6 shipped on `feat/communication-360`;
+> `communication360` is flipped in-lane to `implementationState: "implemented"` /
+> `legacyBindings.migrationMode: "converged"` — `ownsCanonicalTruth` stays
+> `false`, `graphMutationPolicy` stays `read_only`, the projection validator is
+> zero-pending clean, the seven §71 fidelity metrics are absorbed into the
+> metric registry, and the read-only `/v1/communication360` route surface is
+> classified (`config/route_registry.yaml`) but not mounted in `main.py`
+> (`AETHER_COMMUNICATION360_ENABLED`, default OFF). The canonical
+> `make release-gate` runs post-merge (program decision #8); the authoritative
+> per-phase record is the
+> [program ledger](../plans/COMMUNICATION_360_PHASES.md).
+
 ---
 
 ## What it is
@@ -54,19 +66,20 @@ connector → silver dispatcher → `silver_comms_facts` → campaign resolver �
 measurement → attribution → graph projection → state) with agent-side
 observation layers (`services/agent_comm_observability`,
 `services/agentic_observability`) and adapter surfaces on profile360 and campaign
-routes — but `communication360` is only a registered `in_flight` row whose
-blueprint file does not exist. Nothing states what the *Communication360 surface*
-is relative to canonical truth, and the blueprint's central distinctions —
-**message is not information**, **sender is not author/principal**, **delivery is
-not knowledge** — are unexpressed in canonical objects. Without a declared
-authority boundary and an explicit epistemic contract, comms analytics drift
-toward transcript dashboards that re-answer questions the canonical planes
-already answer, and inferred "who knew what" escapes the "inference is not fact"
-discipline. This slice lands `communication360` as a first-class projection: a
-real provider implementing the `IntelligenceProjectionProvider` protocol that
-reads the same canonical sources the routes already read, plus the new
-information/knowledge contracts, fail-isolated, tenant-scoped, and
-epistemically honest.
+routes — but when this program began, `communication360` was only a registered
+`in_flight` row whose blueprint file did not exist, nothing stated what the
+*Communication360 surface* was relative to canonical truth, and the blueprint's
+central distinctions — **message is not information**,
+**sender is not author/principal**, **delivery is not knowledge** — were
+unexpressed in canonical objects. Without a declared authority boundary and an
+explicit epistemic contract, comms analytics drift toward transcript dashboards
+that re-answer questions the canonical planes already answer, and inferred "who
+knew what" escapes the "inference is not fact" discipline. This slice lands
+`communication360` as a first-class projection: a real provider implementing the
+`IntelligenceProjectionProvider` protocol that reads the same canonical sources
+the routes already read, plus the new information/knowledge contracts,
+fail-isolated, tenant-scoped, and epistemically honest — shipped across program
+phases 2–6 and flipped in-lane (status note above).
 
 ## How it works
 
@@ -132,14 +145,18 @@ primitives only.
 
 ### Metric absorption
 
-`metricRefs` already names `email_open_rate`, `email_click_rate`,
-`email_reply_rate`. Before the flip the communication metric set is absorbed
-into `metric-registry.json` (and the hand-authored
-`shared/measurement/registry.py` mirror) field-for-field — including the
-information-fidelity metrics the new information layer supports — clearing any
-`pendingReference` rows whose `resolvesInProjection` is `communication360`, and
-the provider surfaces them in `summary` metrics. Honestly-missing metrics stay
-`missing`, never `0`.
+`metricRefs` names `email_open_rate`, `email_click_rate`, `email_reply_rate`
+plus the seven §71 information-fidelity metrics the new information layer
+supports (`claim_retention_rate`, `citation_retention_rate`,
+`evidence_retention_rate`, `semantic_drift`, `omission_rate`,
+`unsupported_addition_rate`, `contradiction_rate`) — each registered
+field-for-field in `metric-registry.json` and the hand-authored
+`shared/measurement/registry.py` mirror with a parity test (registry 20→27,
+Phase 5). §71's `constraint_retention_rate` has no producer in the slice and is
+deliberately not registered (program decision #7); the parity-test docstring
+records the gap rather than stamping it. All `pendingReference` rows whose
+`resolvesInProjection` is `communication360` cleared — the row is zero-pending.
+Honestly-missing metrics stay `missing`, never `0`.
 
 ### Zero-pending declaration
 
@@ -181,10 +198,14 @@ the program decision log.
   `used`, from agent observability). A recipient-knowledge or author-intent claim
   is a structurally different object backed by its own observation — never
   granted by a delivery/action state.
-- **R5 — authority verdict (decision-log #2 resolved).** The new information-layer
-  facts land under a **new canonical authority** (provisional, ratified at the
-  Phase-3 registration review). The `communication360` row's `canonicalAuthorities`
-  stay read authorities; `ownsCanonicalTruth` stays `false`.
+- **R5 — authority verdict (decision-log #2 resolved/ratified).** The
+  information-layer facts land under the **existing `communication_facts` read
+  authority** — no new `AUTHORITY_INDEX` authority was added. The Phase-3
+  migration registers the `communication360_facts` store as an instance of that
+  authority, and the row's five `canonicalAuthorities`
+  (`communication_facts`/`campaign_touchpoints`/`entities`/`outcomes`/`evidence`)
+  all resolve in the platform `AUTHORITY_INDEX` (validator-clean); `SPINE_INDEX`
+  is unchanged (spine-plane rows only). `ownsCanonicalTruth` stays `false`.
 
 ## What it means for the graph
 
@@ -205,11 +226,15 @@ This slice follows the canonical vertical-slice checklist —
 (registry row zero-pending + converged, shared-contract conformance, runtime
 provider, evidence, tenant isolation, `read_only` graph policy, targeted tests,
 source-linked review, and `make ci-check` green). Because the convergence spans
-program phases, the `implemented` flip additionally requires the canonical
+program phases, the `implemented` flip required the canonical
 communication modeling and vocabulary (phase 2), the domain contracts and metric
-absorption (phase 3), a real provider + exploration adapter (phase 4), the
-information-fidelity/knowledge/authority path (phase 5), and resolution +
-downstream surfaces (phase 6).
+absorption (phase 3), a real provider + read surface (phase 4; an exploration
+adapter was deliberately not added — the row's `surfaceIds`
+`timeline`/`profile360` already exist and a bespoke surface would contradict the
+registry), the information-fidelity/knowledge/authority path (phase 5), and
+resolution + downstream read surface (phase 6). All six landed in-lane on
+2026-09-03 (see the status note and program ledger); the canonical
+`make release-gate` runs post-merge (program decision #8).
 
 ## Test surface
 
@@ -224,6 +249,8 @@ downstream surfaces (phase 6).
 * Epistemic tests — a delivered message can never render as recipient knowledge;
   a sender can never render as the author without evidence; no unexplained
   traffic-light rendering.
-* Fidelity/authority tests — constraint/claim retention and semantic drift over
-  agent communications; delegation `authorization_state` per agent-mediated
-  communication; determinism + run reproducibility on `computation_runs`.
+* Fidelity/authority tests — claim/citation/evidence retention, semantic drift,
+  omission/contradiction and unsupported-addition rates over an
+  `InformationTransformation` lineage; delegation-outcome → authority-state
+  evaluation per agent-mediated communication (never a silent grant);
+  determinism + run reproducibility on `computation_runs`.
