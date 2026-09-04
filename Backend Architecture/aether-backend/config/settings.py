@@ -223,6 +223,18 @@ class CommsConfig:
 
 
 # ---------------------------------------------------------------------------
+# Communication360 projection — rollout gate (Phase 3, OFF by default)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Communication360Config:
+    """Communication360 projection rollout gate — default OFF; see
+    docs/plans/COMMUNICATION_360_PHASES.md Phase 3.
+    """
+    enabled: bool = _env_bool("AETHER_COMMUNICATION360_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
 # Tenant Activation — turnkey activation state (flag-gated OFF by default)
 # ---------------------------------------------------------------------------
 
@@ -1683,6 +1695,9 @@ class Settings:
 
     # Communications Intelligence
     comms: CommsConfig = field(default_factory=CommsConfig)
+
+    # Communication360 projection (canonical convergence — default OFF)
+    communication360: Communication360Config = field(default_factory=Communication360Config)
 
     # Tenant Activation
     activation: ActivationConfig = field(default_factory=ActivationConfig)
