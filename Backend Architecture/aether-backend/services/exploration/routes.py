@@ -26,7 +26,14 @@ from shared.auth.auth import TenantContext
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError, utc_now
 from shared.logger.logger import get_logger, metrics
 
-from shared.exploration.models import ExplorationAnchor, ExplorationContextV1
+from shared.contracts_models.filters import FilterExpression, FilterGroup
+from shared.exploration.models import (
+    ExplorationAnchor,
+    ExplorationContextV1,
+    ExplorationOperation,
+    PivotSpec,
+    TemporalSelection,
+)
 from services.exploration import service as exploration_service
 from services.exploration.store import ExplorationViewRepository
 from services.client_sync.emitter import enqueue_sync_change
@@ -107,6 +114,47 @@ class ViewUpsertRequest(_ContextRequest):
 class LinkResolveRequest(_ContextRequest):
     to: str
     focus: Optional[ExplorationAnchor] = None
+
+
+class SessionCreateRequest(_ContextRequest):
+    session_id: Optional[str] = None
+
+
+class SessionOperationRequest(BaseModel):
+    """Apply one operation to an existing session.
+
+    ``filter_delta`` carries a ``FilterGroup`` (for FILTER_ADD) or a
+    ``{"fields": [...]}`` list of field ids (for FILTER_REMOVE).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    operation: ExplorationOperation
+    pivot: Optional[PivotSpec] = None
+    lens_ids: Optional[list[str]] = None
+    temporal: Optional[TemporalSelection] = None
+    focus: Optional[ExplorationAnchor] = None
+    filter_delta: Optional[dict] = None
+    temporal_mode: Optional[str] = None
+
+
+def _filter_group_from_delta(filter_delta: Optional[dict]) -> Optional[FilterGroup]:
+    """Coerce a route ``filter_delta`` into a canonical ``FilterGroup``.
+
+    FILTER_ADD sends a ``FilterGroup`` shape; FILTER_REMOVE sends a
+    ``{"fields": [...]}`` list whose leaf fields identify what to remove.
+    """
+    if not filter_delta:
+        return None
+    if "logic" in filter_delta:
+        return FilterGroup.model_validate(filter_delta)
+    fields = filter_delta.get("fields")
+    if isinstance(fields, list) and fields:
+        return FilterGroup(
+            logic="AND",
+            expressions=[FilterExpression(field=str(f), op="eq") for f in fields],
+        )
+    return None
 
 
 # ── Validate / Query / Facets ─────────────────────────────────────────────────
@@ -261,5 +309,82 @@ async def resolve_link(request: Request, payload: LinkResolveRequest) -> APIResp
             "applicability": result["applicability"],
             "adapter_available": result["adapter_available"],
             "warnings": result["warnings"],
+        }
+    )
+
+
+# ── Exploration sessions + operations (S5) ────────────────────────────────────
+
+@router.post("/sessions")
+async def create_session(
+    request: Request, payload: SessionCreateRequest
+) -> APIResponse:
+    tenant = _tenant(request, "write")
+    context = _bind_scope(payload.context, tenant)
+    session = await exploration_service.create_session(
+        context, tenant_id=tenant.tenant_id, session_id=payload.session_id
+    )
+    metrics.increment("exploration_sessions_total")
+    return APIResponse(data={"session": session.model_dump(mode="json")})
+
+
+@router.get("/sessions")
+async def list_sessions(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> APIResponse:
+    tenant = _tenant(request, "read")
+    rows = await exploration_service.list_sessions(
+        tenant.tenant_id, limit=limit, offset=offset
+    )
+    return APIResponse(data={"sessions": rows})
+
+
+@router.get("/sessions/{session_id}")
+async def get_session(request: Request, session_id: str) -> APIResponse:
+    tenant = _tenant(request, "read")
+    session = await exploration_service.load_session(tenant.tenant_id, session_id)
+    if session is None:
+        raise NotFoundError("exploration session")
+    return APIResponse(data={"session": session.model_dump(mode="json")})
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(request: Request, session_id: str) -> APIResponse:
+    tenant = _tenant(request, "write")
+    deleted = await exploration_service.delete_session(tenant.tenant_id, session_id)
+    if not deleted:
+        raise NotFoundError("exploration session")
+    metrics.increment("exploration_sessions_deleted_total")
+    return APIResponse(data={"deleted": session_id})
+
+
+@router.post("/sessions/{session_id}/operations")
+async def apply_session_operation(
+    request: Request, session_id: str, payload: SessionOperationRequest
+) -> APIResponse:
+    tenant = _tenant(request, "write")
+    result = await exploration_service.execute_operation(
+        None,
+        payload.operation,
+        tenant_id=tenant.tenant_id,
+        request=request,
+        session_id=session_id,
+        pivot=payload.pivot,
+        lens_ids=payload.lens_ids,
+        temporal=payload.temporal,
+        filter_group=_filter_group_from_delta(payload.filter_delta),
+        focus=payload.focus,
+        temporal_mode=payload.temporal_mode,
+    )
+    metrics.increment(
+        "exploration_operations_total", labels={"operation": payload.operation}
+    )
+    session = await exploration_service.load_session(tenant.tenant_id, session_id)
+    return APIResponse(
+        data={
+            "result": result.model_dump(mode="json"),
+            "session": session.model_dump(mode="json") if session else None,
         }
     )

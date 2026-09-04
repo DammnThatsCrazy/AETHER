@@ -1,10 +1,11 @@
 """Intelligence Projection Registry schema tests (P0.2, group 1).
 
 Loads the REAL ``packages/shared/contracts/intelligence-projection-registry.json``
-and asserts the structural invariants the validation core enforces: 18
+and asserts the structural invariants the validation core enforces: 19
 projections, unique lower_snake ids, every required per-entry field present,
-``ownsCanonicalTruth is False`` for all, all ``in_flight`` with zero
-``implemented``, consistent vocab enums, well-formed pending declarations,
+``ownsCanonicalTruth is False`` for all, exactly the three 360 vertical slices
+``implemented`` (outcome360 / economic360 / infrastructure360) with the rest
+``in_flight``, consistent vocab enums, well-formed pending declarations,
 canonical authorities within AUTHORITY_INDEX, hard dependencies within
 SPINE_INDEX or declared pending, and well-formed projection-plane capability
 keys. Finally asserts ``validate_registry_schema`` agrees with all of the above
@@ -54,6 +55,7 @@ _EXPECTED_IDS = frozenset(
         "fraud360",
         "source360",
         "connection360",
+        "infrastructure360",
     }
 )
 
@@ -165,9 +167,9 @@ def _entry(pid: str, **overrides: object) -> dict:
     return base
 
 
-def test_registry_has_18_projections() -> None:
+def test_registry_has_19_projections() -> None:
     projections = _projections()
-    assert len(projections) == 18
+    assert len(projections) == 19
     assert {p["id"] for p in projections} == _EXPECTED_IDS
 
 
@@ -192,10 +194,22 @@ def test_owns_canonical_truth_false_for_all() -> None:
         )
 
 
-def test_all_in_flight_zero_implemented() -> None:
+def test_implementation_states_match_slice_program() -> None:
+    # Exactly the three 360 vertical slices are implemented; everything else
+    # stays in_flight. No registered/deprecated rows, and the implemented set is
+    # honest (each has zero pending + converged bindings — proven by the
+    # dependency-DAG gate in the order-resilience suite).
     states = {p["implementationState"] for p in _projections()}
-    assert states == {"in_flight"}
-    assert all(p["implementationState"] != "implemented" for p in _projections())
+    assert states == {"in_flight", "implemented"}
+    implemented = {
+        p["id"] for p in _projections() if p["implementationState"] == "implemented"
+    }
+    assert implemented == {"outcome360", "economic360", "infrastructure360"}
+    assert all(
+        p["implementationState"] == "in_flight"
+        for p in _projections()
+        if p["id"] not in implemented
+    )
 
 
 def test_vocab_enums_consistent() -> None:

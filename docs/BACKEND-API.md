@@ -1471,6 +1471,64 @@ Unified economic observability across Web2, Web3, agentic (x402), and campaign r
 
 ---
 
+### Intelligence Projection Plane (v8.12.0)
+
+A **360** is an intelligence projection over canonical Aether truth — never a
+competing system of record. The plane is a fail-isolated `ProviderRegistry` of
+`IntelligenceProjectionProvider`s over the shared
+`ProjectionRequest`/`ProjectionContext`/`ProjectionResult` contracts (TS +
+Python). Three 360s are implemented native providers (`outcome360`,
+`economic360`, `infrastructure360`); the rest are `in_flight`. `implementationState`
+is repo metadata, **not** readiness. `infrastructure360` is the first projection
+to expose a classified public route (read-only, every route a GET, tenant-scoped
+from the authenticated tenant, capability-gated on `infrastructure360.read`):
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/infrastructure/{subject_kind}/{subject_id}` | Run the infrastructure360 projection for the requesting tenant (summary / state / deployments / evidence / findings sections; `subject_kind` ∈ `deployment` \| `infrastructure`) |
+| GET | `/v1/infrastructure/health` | Plane probe: provider registered + contract-compatible (`availability()` only) |
+
+**Permissions:** `read` + the projection's `infrastructure360.read` capability key
+(fail-closed). The provider reads the `infrastructure_facts` /
+`infrastructure_state` / `deployments` authorities; the projection is
+`graphMutationPolicy: read_only` — there is no write path.
+
+---
+
+### Exploration Fabric — Sessions & Operations (v8.12.0)
+
+The Exploration Fabric (`/v1/explore`) is the context-preserving
+query/filter/presentation workbench over every analytical surface. Its
+validate/query/facets/views/links endpoints and the per-surface adapter model
+are documented in `docs/source-of-truth/EXPLORATION_FABRIC.md`; this section
+covers the **sessions + operations** surface, added over the S1 projection
+engine. An `ExplorationSession` persists one tenant-scoped exploration —
+surface, seed `ExplorationContextV1`, op history, and current context — and
+every submitted filter stays accounted for (no silent drops). Flag-gated inside
+every handler via `AETHER_EXPLORATION_ENABLED` (default OFF): when the flag is
+off the surface answers 404, indistinguishable from an unmounted route.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/explore/sessions` | Create a session from a seed `ExplorationContextV1` (optional client-supplied `session_id`); returns the persisted `ExplorationSession` |
+| GET | `/v1/explore/sessions` | List the tenant's sessions (`limit` ≤ 500, `offset` pagination) |
+| GET | `/v1/explore/sessions/{session_id}` | Load one session (404 when absent) |
+| DELETE | `/v1/explore/sessions/{session_id}` | Delete one session (404 when absent) |
+| POST | `/v1/explore/sessions/{session_id}/operations` | Apply one operation to the session; returns `{result, session}` — `result` carries the post-op context, op status (`applied` \| `rejected` \| `degraded`), and, for projection surfaces, the S1 engine composition summary |
+
+**Operation vocabulary:** `OPEN` \| `PIVOT` \| `EXPAND` \| `COLLAPSE` \|
+`FILTER_ADD` \| `FILTER_REMOVE` \| `LENS_ADD` \| `TIME_TRAVEL` \| `DRILL_DOWN`
+\| `RESET` \| `SAVE` \| `LOAD`. Operations are PURE context transforms over the
+session's `current_context` (which may carry a lens set / engine temporal
+mode); `SAVE`/`LOAD` are session-repository operations handled by the service
+layer.
+
+**Permissions:** `write` for create/delete/apply-operation, `read` for
+list/load — both behind the feature flag. All session ids are
+tenant-qualified: a caller can only reach its own tenant's sessions.
+
+---
+
 ### Population Intelligence Service (v8.5.0)
 
 Macro-to-micro group intelligence. Supports segments, cohorts, clusters, communities, batches, archetypes, anomaly groups, lookalike groups, risk groups, and lifecycle groups.

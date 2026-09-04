@@ -50,6 +50,11 @@ Every authored page carries **YAML frontmatter** (schema:
 `source_files:` it derives from. Tooling reads that metadata to
 validate, regenerate, and drift-check the corpus.
 
+`section:` draws from a fixed enum in the schema. The `blueprints` section
+registers the implementation-blueprint category that the intelligence-projection
+registry's `implementationBlueprint` convention points at
+(`docs/blueprints/<id>.md` per projection).
+
 ## The three tiers
 
 `visibility:` routes every page to exactly one surface:

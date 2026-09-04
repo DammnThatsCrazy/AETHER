@@ -12,6 +12,7 @@ import { Campaign360Conversions } from '@kyber/features/measurement/campaign360/
 import { Campaign360Attribution } from '@kyber/features/measurement/campaign360/campaign-360-attribution';
 import { Campaign360Graph } from '@kyber/features/measurement/campaign360/campaign-360-graph';
 import { Campaign360Quality } from '@kyber/features/measurement/campaign360/campaign-360-quality';
+import { ProjectionSurfacePanel } from '@kyber/features/projection-360';
 import type { Campaign360OverviewParams } from '@kyber/features/measurement/use-campaign-360';
 
 const TABS = [
@@ -24,6 +25,8 @@ const TABS = [
   { value: 'attribution', label: 'Attribution' },
   { value: 'graph', label: 'Graph' },
   { value: 'quality', label: 'Quality' },
+  { value: 'outcome360', label: 'Outcome 360' },
+  { value: 'economic360', label: 'Economic 360' },
 ];
 
 type AnyRecord = Record<string, unknown>;
@@ -166,6 +169,14 @@ export function Campaign360Page() {
 
         <TabsContent value="quality">
           <Campaign360Quality params={overviewParams} />
+        </TabsContent>
+
+        <TabsContent value="outcome360">
+          <ProjectionSurfacePanel surface="outcome360" focus={{ kind: 'campaign', id: campaignId }} />
+        </TabsContent>
+
+        <TabsContent value="economic360">
+          <ProjectionSurfacePanel surface="economic360" focus={{ kind: 'campaign', id: campaignId }} />
         </TabsContent>
       </Tabs>
     </PageWrapper>

@@ -117,10 +117,12 @@ def _result(**overrides: object) -> ProjectionResult:
 # ---------------------------------------------------------------------------
 
 def test_section_state_covers_exactly_the_generated_states() -> None:
-    # The 6 section states are generated; SectionState must match exactly.
-    assert len(PROJECTION_SECTION_STATES) == 6
+    # The 8 section states are generated (6 P0 + A8's suppressed/stale);
+    # SectionState must match exactly.
+    assert len(PROJECTION_SECTION_STATES) == 8
     assert set(get_args(SectionState)) == set(PROJECTION_SECTION_STATES)
     assert tuple(get_args(SectionState)) == PROJECTION_SECTION_STATES
+    assert {"suppressed", "stale"} <= set(PROJECTION_SECTION_STATES)
 
 
 def test_projection_id_derived_from_generated_ids() -> None:
@@ -137,7 +139,9 @@ def test_projection_subject_kind_matches_generated_registry() -> None:
             }
         )
     )
-    assert len(expected) == 9  # entity/relationship/campaign/episode/population/source/connection/cluster/agent
+    # 11 kinds: entity/relationship/campaign/episode/population/source/
+    # connection/cluster/agent (P0) + deployment/infrastructure (Infrastructure360).
+    assert len(expected) == 11
     assert tuple(get_args(ProjectionSubjectKind)) == expected
 
 

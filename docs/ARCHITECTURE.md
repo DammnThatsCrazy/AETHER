@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: "15f7e1da"
+last_synced_commit: "99736fed"
 ---
 # Aether vNext — Architecture Guide
 
@@ -460,15 +460,21 @@ Canonical contract plane (single source of truth, codegen twins via
 
 A **360** is an intelligence projection over canonical Aether truth — it is
 never a competing system of record. The intelligence projection plane owns the
-single canonical registry (18 projections) and the shared request/context/result
-contracts (TS + Python) that every future 360 provider implements against.
-`implementationState` is repo metadata describing how far a projection has been
-converged onto the plane (`in_flight` = an existing implementation that is not
-yet a native provider) — it is NOT a readiness signal and is never surfaced as
-`production_ready`. The runtime is a fail-isolated provider protocol
+single canonical registry (19 projections, three of which — `outcome360`,
+`economic360`, `infrastructure360` — are now implemented native providers) and
+the shared request/context/result contracts (TS + Python) that every future 360
+provider implements against. `implementationState` is repo metadata describing
+how far a projection has been converged onto the plane (`in_flight` = an
+existing implementation that is not yet a native provider) — it is NOT a
+readiness signal and is never surfaced as `production_ready`. The runtime is a
+fail-isolated provider protocol
 (`shared/intelligence_projections/provider.py` + `registry.py`): one broken
-projection degrades its own result, never the plane. P0 mounts no projection
-route — the plane is a library; app wiring lands with the first real provider.
+projection degrades its own result, never the plane. P0 shipped the plane as a
+library with no projection route; projection routes land only as classified
+legacy bindings per vertical slice — the read-only `/v1/infrastructure` (every
+route a GET, no generic catch-all) is the first. Exploration surfaces compose
+over the engine through projection-backed surface adapters
+(`services/exploration/adapters/projection.py`).
 The design decision is [ADR-010](decisions/ADR-010-intelligence-projection-plane.md);
 the source-of-truth is
 [INTELLIGENCE_PROJECTION_ARCHITECTURE.md](source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md).

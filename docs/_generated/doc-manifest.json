@@ -4029,6 +4029,54 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/blueprints/economic360.md",
+      "title": "Economic360 Vertical Slice Blueprint",
+      "slug": "blueprints/economic360",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/blueprints/infrastructure360.md",
+      "title": "Infrastructure360 Vertical Slice Blueprint",
+      "slug": "blueprints/infrastructure360",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/blueprints/outcome360.md",
+      "title": "Outcome360 Vertical Slice Blueprint",
+      "slug": "blueprints/outcome360",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/brand-system/README.md",
       "title": "Olympus Labs / Aether / Kyber Brand System",
       "slug": "architecture/brand-system",
@@ -7340,6 +7388,20 @@
       "path": "docs/source-of-truth/PRODUCT_INTELLIGENCE.md",
       "title": "Product & Experience Intelligence Source of Truth",
       "status": "stable"
+    },
+    {
+      "path": "docs/source-of-truth/PROJECTION_ENGINE_ARCHITECTURE.md",
+      "title": "Projection Engine Architecture",
+      "slug": "source-of-truth/projection-engine-architecture",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0"
     },
     {
       "path": "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",

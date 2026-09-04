@@ -55,6 +55,10 @@ export interface ProjectionRequest {
   includeSections?: string[];
   /** Include claim envelopes in the result. */
   includeClaims?: boolean;
+  /** Projection-engine (A8) extension: ordered lens ids to compose over the projection. Strictly optional. */
+  lensIds?: string[];
+  /** Projection-engine (A8) extension: registry-surface temporal mode ("window" | "as_of" | "compare" | "relative"). Strictly optional. */
+  temporalMode?: string;
 }
 
 /** Dependency state of a sibling projection this projection depends on. */
@@ -95,6 +99,18 @@ export interface ClaimEnvelope {
   confidence?: number;
 }
 
+/** Engine-level (A8) degradation summary for a projection result. */
+export interface ProjectionDegradation {
+  /** "none" | "partial" | "full" */
+  level: 'none' | 'partial' | 'full';
+  /** Engine-computed, content-free with respect to provider diagnostics. */
+  reasons: string[];
+  /** Lens ids that conflicted during composition, if any. */
+  conflictedLenses?: string[];
+  /** Projection dependencies that could not be satisfied. */
+  missingDependencies?: string[];
+}
+
 /** The result of running a projection over canonical Aether truth. */
 export interface ProjectionResult {
   projectionId: ProjectionId;
@@ -110,4 +126,14 @@ export interface ProjectionResult {
   page?: PageInfo;
   /** Human-readable reasons the result is degraded, if any. */
   degradedReasons: string[];
+  /** Projection-engine (A8) extension: deterministic content digest. Strictly optional. */
+  digest?: string;
+  /** Projection-engine (A8) extension: composed lens ids, in application order. Strictly optional. */
+  lensIds?: string[];
+  /** Projection-engine (A8) extension: dispatched registry-surface temporal mode. Strictly optional. */
+  temporalMode?: string;
+  /** Projection-engine (A8) extension: degradation summary. Strictly optional. */
+  degradation?: ProjectionDegradation;
+  /** Projection-engine (A8) extension: section ids suppressed by lens conflict / policy. Strictly optional. */
+  suppressedSections?: string[];
 }
