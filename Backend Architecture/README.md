@@ -4,6 +4,23 @@
 
 Aether Backend is a unified API gateway that mounts 31 domain-specific microservices onto a single FastAPI application. It provides real-time data ingestion, identity resolution, analytics, ML model serving, autonomous agent orchestration, campaign management, consent/DSR compliance, notifications, traffic source tracking, fraud detection, multi-touch attribution, automated reward distribution with oracle-signed proofs, multi-chain automation, diagnostics, BYOK provider gateway with automatic failover, profile 360 intelligence, population omniview, expectation engine, behavioral continuity & friction analysis, RWA intelligence graph, Web3 coverage (registry-first chain/protocol/app/domain intelligence), cross-domain TradFi/Web2 graph (accounts, instruments, trades, compliance), and multi-tenant administration -- all behind a single versioned API surface with 246 endpoints.
 
+## Deprecated orphaned root-level modules (do not extend)
+
+The canonical implementation for this tree is the Python monolith under
+`aether-backend/`. The following root-level siblings of `aether-backend/` are
+**orphaned dead legacy** (un-deployed, un-wired, superseded) and must not be
+extended:
+
+`auth.py` `cache.py` `common.py` `events.py` `graph.py` `limiter.py` `logger.py`
+`repos.py` `routes.py` `settings.py` `migrations/` `mnt/`
+`services/delegation/` `services/journey-service/` `services/web3/`
+
+**No new code may be added to any of these paths — do not extend them.** Route new
+work into the canonical `aether-backend/` tree. Registration status and the full
+gap ledger are tracked in
+`docs/productization/sdk-universal-ingestion-alignment/REPO_TRUTH_AND_GAP_MATRIX.md`.
+Physical removal is deferred to a later phase.
+
 ---
 
 ## Table of Contents

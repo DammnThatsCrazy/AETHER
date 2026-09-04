@@ -1,3 +1,12 @@
+> **DEPRECATED — do not extend.**
+> This tree is an **un-deployed legacy duplicate**. The deployed, authoritative
+> implementation is the Python monolith at `Backend Architecture/aether-backend/`
+> (build + ingress evidence: root `docker-compose.yml`, `deploy`, `terraform`,
+> `config/runtime_deployment.yaml`). No new code may be added here; route work into
+> the canonical tree. Banner added by the SDK + Universal Ingestion Alignment
+> program (Phase 0) — see `docs/productization/sdk-universal-ingestion-alignment/`.
+> Physical removal is deferred to a later phase.
+
 # Aether Data Lake Architecture v8.12.0
 
 A distributed data warehouse and lakehouse backend for the Aether behavioral analytics platform. The system ingests, processes, and serves high-volume event data through a medallion architecture (Bronze / Silver / Gold), providing real-time streaming, batch ETL, GDPR governance, and ML feature serving across multi-tenant workspaces.
