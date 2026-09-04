@@ -6848,3 +6848,28 @@ policies:
     allow_historical_table_storage: true
     requires_consent_invalidation: false
     requires_permission_hash: false
+
+  # ---------------------------------------------------------------------------
+  # Communication360 canonical facts — tenant-scoped JSONB fact store for the
+  # communication360 read-only projection (comms silver path + ratified
+  # information/knowledge/participant authorities). Mirrors the comms
+  # silver-facts policy; consent invalidation applies because rows reference
+  # participants/identities.
+  # ---------------------------------------------------------------------------
+
+  - resource_type: communication360_facts
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: true
+    requires_permission_hash: false
