@@ -51,6 +51,9 @@ _EXPECTED_SURFACES = {
     "economic360",
     "connection360",
     "infrastructure360",
+    "temporal360",
+    "population360",
+    "geographic360",
 }
 
 

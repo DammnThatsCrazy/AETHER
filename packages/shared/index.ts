@@ -96,6 +96,7 @@ export * from './imports';
 // by scripts/generate_platform_contracts.py)
 export * from './interaction-contract';
 export * from './context-capsule';
+export * from './location-registry';
 export * from './graph-mutation';
 export * from './filter-fields';
 export * from './surface-capabilities';

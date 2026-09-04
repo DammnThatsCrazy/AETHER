@@ -640,7 +640,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "id": "geographic360",
         "displayName": "Geographic 360",
         "projectionKind": "context_360",
-        "implementationState": "in_flight",
+        "implementationState": "implemented",
         "implementationBlueprint": "docs/blueprints/geographic360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("entity", "population", "source"),
@@ -651,7 +651,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "inputRefs": ("EntityRef", "GraphSnapshotRef", "PageRequest", "TimeRangeFilter"),
         "outputSections": ("evidence", "findings", "state", "summary", "timeline"),
         "supportedTemporalModes": ("compare", "relative", "window"),
-        "surfaceIds": ("geo",),
+        "surfaceIds": ("geographic360",),
         "capabilityKeys": ("geographic360.explore", "geographic360.read"),
         "metricRefs": [],
         "graphMutationPolicy": "read_only",
@@ -686,21 +686,14 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         },
         "legacyBindings": {
             "routes": ("/v1/geo",),
-            "surfaceIds": ("geo",),
+            "surfaceIds": ("geographic360",),
             "services": ("Backend Architecture/aether-backend/services/geo",),
-            "migrationMode": "adapter",
+            "migrationMode": "converged",
             "migrationBlueprint": "docs/blueprints/geographic360.md"
         },
         "deprecatedReason": None,
         "successorId": None,
-        "pendingAuthority": [
-            {
-                "id": "context_capsule_semantics",
-                "kind": "spine",
-                "reason": "context-capsule plane not yet formalized",
-                "resolvesInProjection": "geographic360"
-            }
-        ],
+        "pendingAuthority": [],
         "pendingReference": []
     },
     "infrastructure360": {
@@ -827,7 +820,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "id": "population360",
         "displayName": "Population 360",
         "projectionKind": "context_360",
-        "implementationState": "in_flight",
+        "implementationState": "implemented",
         "implementationBlueprint": "docs/blueprints/population360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("cluster", "entity", "population"),
@@ -838,7 +831,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "inputRefs": ("EntityRef", "GraphResult", "GraphSnapshotRef", "PageRequest", "TimeRangeFilter"),
         "outputSections": ("evidence", "findings", "state", "summary", "timeline"),
         "supportedTemporalModes": ("relative", "window"),
-        "surfaceIds": ("cluster360", "comparison_workbench"),
+        "surfaceIds": ("population360",),
         "capabilityKeys": ("population360.explore", "population360.read"),
         "metricRefs": [],
         "graphMutationPolicy": "read_only",
@@ -873,21 +866,14 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         },
         "legacyBindings": {
             "routes": ("/v1/population",),
-            "surfaceIds": ("cluster360", "comparison_workbench"),
+            "surfaceIds": ("population360",),
             "services": ("Backend Architecture/aether-backend/services/population",),
-            "migrationMode": "adapter",
+            "migrationMode": "converged",
             "migrationBlueprint": "docs/blueprints/population360.md"
         },
         "deprecatedReason": None,
         "successorId": None,
-        "pendingAuthority": [
-            {
-                "id": "grouping_membership",
-                "kind": "spine",
-                "reason": "canonical grouping/membership contract not yet formalized",
-                "resolvesInProjection": "population360"
-            }
-        ],
+        "pendingAuthority": [],
         "pendingReference": []
     },
     "profile360": {
@@ -1194,7 +1180,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "id": "temporal360",
         "displayName": "Temporal 360",
         "projectionKind": "context_360",
-        "implementationState": "in_flight",
+        "implementationState": "implemented",
         "implementationBlueprint": "docs/blueprints/temporal360.md",
         "ownsCanonicalTruth": False,
         "subjectKinds": ("entity", "relationship"),
@@ -1205,7 +1191,7 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         "inputRefs": ("GraphResult", "GraphSnapshotRef", "PageRequest", "TimeRangeFilter"),
         "outputSections": ("evidence", "findings", "state", "summary", "timeline"),
         "supportedTemporalModes": ("as_of", "compare", "relative", "window"),
-        "surfaceIds": ("temporal_observatory", "timeline"),
+        "surfaceIds": ("temporal360",),
         "capabilityKeys": ("temporal360.explore", "temporal360.read"),
         "metricRefs": [],
         "graphMutationPolicy": "read_only",
@@ -1240,21 +1226,14 @@ INTELLIGENCE_PROJECTION_DEFINITIONS: dict[str, dict] = {
         },
         "legacyBindings": {
             "routes": ("/v1/graph", "/v1/preferences"),
-            "surfaceIds": ("temporal_observatory", "timeline"),
+            "surfaceIds": ("temporal360",),
             "services": ("Backend Architecture/aether-backend/shared/temporal",),
-            "migrationMode": "adapter",
+            "migrationMode": "converged",
             "migrationBlueprint": "docs/blueprints/temporal360.md"
         },
         "deprecatedReason": None,
         "successorId": None,
-        "pendingAuthority": [
-            {
-                "id": "graph_history_replay",
-                "kind": "spine",
-                "reason": "bitemporal ledger exists; graph-history replay API not yet built",
-                "resolvesInProjection": "temporal360"
-            }
-        ],
+        "pendingAuthority": [],
         "pendingReference": []
     },
 }
@@ -1293,16 +1272,16 @@ PROJECTION_SURFACE_MAP: dict[str, tuple] = {
     "episode360": ("journeys", "timeline"),
     "execution360": ("timeline",),
     "fraud360": ("graph",),
-    "geographic360": ("geo",),
+    "geographic360": ("geographic360",),
     "infrastructure360": ("infrastructure360",),
     "outcome360": ("campaign360", "outcome360"),
-    "population360": ("cluster360", "comparison_workbench"),
+    "population360": ("population360",),
     "profile360": ("profile360",),
     "relationship360": ("graph", "profile360"),
     "risk360": ("comparison_workbench", "graph"),
     "social360": ("profile360",),
     "source360": ("campaign360",),
-    "temporal360": ("temporal_observatory", "timeline"),
+    "temporal360": ("temporal360",),
 }
 
 # projection id -> capability keys (sorted).
@@ -1344,30 +1323,6 @@ PENDING_AUTHORITIES: dict[str, list] = {
             "kind": "spine",
             "reason": "journey continuity plane not yet formalized",
             "resolvesInProjection": "episode360"
-        }
-    ],
-    "geographic360": [
-        {
-            "id": "context_capsule_semantics",
-            "kind": "spine",
-            "reason": "context-capsule plane not yet formalized",
-            "resolvesInProjection": "geographic360"
-        }
-    ],
-    "population360": [
-        {
-            "id": "grouping_membership",
-            "kind": "spine",
-            "reason": "canonical grouping/membership contract not yet formalized",
-            "resolvesInProjection": "population360"
-        }
-    ],
-    "temporal360": [
-        {
-            "id": "graph_history_replay",
-            "kind": "spine",
-            "reason": "bitemporal ledger exists; graph-history replay API not yet built",
-            "resolvesInProjection": "temporal360"
         }
     ],
 }

@@ -159,6 +159,39 @@
       "supportsSelectionSets": true,
       "supportsSavedViews": true,
       "supportsExport": true
+    },
+    {
+      "surfaceId": "temporal360",
+      "supportedFieldCategories": ["entity", "time", "truth"],
+      "supportedTemporalModes": ["window", "as_of", "compare", "relative"],
+      "supportedViews": ["timeline", "table"],
+      "supportsFacets": true,
+      "supportsComparison": true,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": true,
+      "supportsExport": true
+    },
+    {
+      "surfaceId": "population360",
+      "supportedFieldCategories": ["entity", "graph", "time", "truth"],
+      "supportedTemporalModes": ["window", "relative"],
+      "supportedViews": ["table", "timeline", "comparison"],
+      "supportsFacets": true,
+      "supportsComparison": true,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": true,
+      "supportsExport": true
+    },
+    {
+      "surfaceId": "geographic360",
+      "supportedFieldCategories": ["entity", "time", "geography", "truth"],
+      "supportedTemporalModes": ["window", "compare", "relative"],
+      "supportedViews": ["map", "table"],
+      "supportsFacets": true,
+      "supportsComparison": true,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": true,
+      "supportsExport": true
     }
   ]
 }

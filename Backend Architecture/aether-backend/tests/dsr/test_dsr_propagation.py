@@ -39,9 +39,12 @@ async def test_open_request_creates_all_component_steps_pending():
 
     status = await svc.status(request_id, tenant_id="t1")
     components = status["components"]
-    # One step per §3.11 component, in the canonical order.
+    # One step per §3.11 component, in the canonical order. The length is
+    # derived from the registry tuple (not a hard-coded count) so adding a
+    # governed component — e.g. the population360 P3.3 artifacts that grew this
+    # from 26 to 29 — can never drift this assertion silently.
     assert [c["component"] for c in components] == list(DSR_COMPONENTS)
-    assert len(components) == 26
+    assert len(components) == len(DSR_COMPONENTS)
     assert all(c["status"] == "pending" for c in components)
     # A freshly-opened request rolls up to pending, never completed.
     assert status["overall"] == "pending"
@@ -251,15 +254,25 @@ async def test_overall_status_helper_precedence():
 
 
 async def test_status_constants_match_spec():
-    assert len(DSR_COMPONENTS) == 26
-    # The mobile-plane + kyber device-plane components are registered at the
-    # tail (order preserved).
-    assert DSR_COMPONENTS[-3:] == (
+    # Order is pinned by tail membership, not a hard-coded length, so governed
+    # components appended by later programs (population360 P3.3 grew this from
+    # 26 to 29, and geographic360 G4.5-C3 appended ``location_facts`` to reach
+    # 30) extend these slices rather than silently breaking a count. The
+    # geographic-plane store (G4.5-C3) is the newest tail member; the
+    # population-plane artifacts (P3.3), the mobile-plane + kyber device-plane
+    # components sit just before it, in stable order.
+    assert DSR_COMPONENTS[-1:] == ("location_facts",)
+    assert DSR_COMPONENTS[-4:-1] == (
+        "population_memberships",
+        "population_snapshots",
+        "populations",
+    )
+    assert DSR_COMPONENTS[-7:-4] == (
         "kyber_trusted_devices",
         "kyber_webauthn_credentials",
         "kyber_device_proof_keys",
     )
-    assert DSR_COMPONENTS[-6:-3] == (
+    assert DSR_COMPONENTS[-10:-7] == (
         "continuation_records",
         "mobile_installations",
         "client_sync_records",

@@ -545,6 +545,70 @@ class GraphMutationLedgerRepository:
         )
         return [_normalize_row(dict(r)) for r in rows]
 
+    async def list_records_known_as_of(
+        self,
+        tenant_id: str,
+        as_of: str,
+        aggregate_id: Optional[str] = None,
+        limit: int = 1000,
+    ) -> list[dict]:
+        """The ledger prefix "closed at" the knowledge instant ``as_of``.
+
+        Rows whose mutation was recorded at or before ``as_of`` (system time —
+        when Aether knew), in ledger order, joined with the after-version
+        ``payload``. This is the replay input behind ``graph_history_replay``
+        (temporal360 T2.1): :func:`replay_state` over the returned prefix
+        reconstructs the graph state Aether actually had at ``as_of`` — a
+        ``KNOWN_THEN`` answer. Read-only; never mutates the ledger.
+
+        ``as_of`` must be an ISO-8601 instant; an unparseable ``as_of`` yields
+        an empty prefix (callers validate the boundary before reading).
+        """
+        cutoff = _to_dt(as_of)
+        if cutoff is None:
+            return []
+        pool = await get_pool()
+        if pool is None:
+            rows = []
+            for r in _MEM_LEDGER.values():
+                if r["tenant_id"] != tenant_id:
+                    continue
+                if aggregate_id is not None and r["aggregate_id"] != aggregate_id:
+                    continue
+                recorded = _to_dt(r.get("recorded_at"))
+                if recorded is None or recorded > cutoff:
+                    continue
+                rows.append(
+                    dict(
+                        r,
+                        payload=(
+                            _MEM_VERSIONS.get(r.get("after_version_id") or "") or {}
+                        ).get("payload"),
+                    )
+                )
+            rows.sort(key=lambda r: r["ledger_offset"])
+            return [_normalize_row(r) for r in rows[:limit]]
+        await self._ensure_schema(pool)
+        conditions = "l.tenant_id = $1"
+        args: list[Any] = [tenant_id]
+        if aggregate_id is not None:
+            conditions += f" AND l.aggregate_id = ${len(args) + 1}"
+            args.append(aggregate_id)
+        conditions += f" AND l.recorded_at <= ${len(args) + 1}::timestamptz"
+        args.append(cutoff)
+        rows = await pool.fetch(
+            f"""
+            SELECT l.*, v.payload AS payload
+            FROM graph_mutation_ledger l
+            LEFT JOIN graph_fact_versions v ON v.version_id = l.after_version_id
+            WHERE {conditions}
+            ORDER BY l.ledger_offset
+            LIMIT {int(limit)}
+            """,
+            *args,
+        )
+        return [_normalize_row(dict(r)) for r in rows]
+
     async def list_fact_versions(
         self,
         tenant_id: str,

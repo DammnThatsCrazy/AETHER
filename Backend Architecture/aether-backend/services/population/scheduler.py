@@ -34,11 +34,14 @@ async def take_snapshot(tenant_id: str) -> dict:
 
     snapshot_records = []
     for pop in populations:
-        member_count = await membership_repo.count(filters={"population_id": pop["id"]})
+        # Count *active* memberships only (population360 P3.1/P3.3): a left/erased
+        # member must not inflate a snapshot or the materialised member_count.
+        member_count = await membership_repo.count_active_members(pop["id"])
         record = {
             "population_id": pop["id"],
             "population_name": pop.get("name", ""),
             "population_type": pop.get("population_type", ""),
+            "definition_version": pop.get("definition_version", "1"),
             "member_count": member_count,
             "tenant_id": tenant_id,
             "snapshot_at": now,

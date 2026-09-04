@@ -218,10 +218,7 @@ class Outcome360Provider:
                 state=availability,
                 title=_SECTION_TITLES["summary"],
                 content={
-                    "subject": {
-                        "kind": request.subject.kind,
-                        "id": request.subject.id,
-                    },
+                    "subject": request.subject.model_dump(),
                     "tenantId": request.tenantId,
                     "outcomeCount": len(outcomes),
                     "stateDistribution": _state_distribution(outcomes),

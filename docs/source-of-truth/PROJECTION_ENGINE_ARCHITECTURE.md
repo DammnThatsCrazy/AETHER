@@ -267,9 +267,10 @@ scope (tenant id is server-authoritative). Operations: `SET_TEMPORAL`,
 ## Cross-360 composition (S6)
 
 `composition.py` layers the engine onto MULTI-360 orchestration: running two or
-three 360 providers over the SAME tenant-scoped subject and returning a
-deterministic composite (`CompositionResult`) while every member projection
-stays fail-isolated. Four public entry points:
+three 360 providers — or, for the context family, all three context leaves —
+over the SAME tenant-scoped subject and returning a deterministic composite
+(`CompositionResult`) while every member projection stays fail-isolated. Five
+public entry points:
 
 * `compose_economic_outcome` — economic360 + outcome360 (value view).
 * `compose_outcome_infrastructure` — outcome360 + infrastructure360
@@ -278,11 +279,25 @@ stays fail-isolated. Four public entry points:
   (condition → economic effect seam).
 * `compose_operational_value_triangle` — infrastructure condition → outcome →
   economic effect, running all three.
+* `compose_context_triad` — the Context Intelligence 360 family composition:
+  geographic360 (WHERE) × temporal360 (WHEN) × population360 (WHO/cohort).
+  Spatiotemporal analysis is *composition of the three projections, never a
+  fourth backend* — this entry point is that composition. The three context
+  overlays intersect on the `entity` subject kind (temporal:
+  campaign/entity/episode/relationship/source; geographic: entity/population/
+  source; population: cluster/entity/population), so an entity subject composes
+  all three; a population/source/cluster subject drops whichever member lens
+  cannot apply as a typed `CAPABILITY_MISSING` conflict while the survivors
+  compose. Cross-360 monetary metrics stay on the canonical value/FX seam
+  (`FINANCIAL_VALUE_SEMANTICS.md` rule 8) — a composite takes member content
+  pre-priced, never re-priced by geography or population.
 
 Each member is named by the registry 360 id it serves and mapped to its real
-engine overlay lens (`economic` / `outcome` / `infrastructure`, defined in
-`generated_lenses.py` — never hardcoded ids outside that generated
-vocabulary). The composition forms ONE `LensSet` whose base is the engine
+engine overlay lens (`economic` / `outcome` / `infrastructure` for the
+operational-value family; `temporal` / `geographic` / `population` for the
+context family, all defined in `generated_lenses.py` — never hardcoded ids
+outside that generated vocabulary). The composition forms ONE `LensSet` whose
+base is the engine
 default (`standard`) and whose overlays are the member lenses, then composes it
 over the subject kind with `compose_lenses` — so identity / idempotence /
 order stability come from the shared algebra. A member lens that cannot apply

@@ -568,6 +568,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.provider_gateway = provider_gateway
         logger.info("Provider Gateway initialised")
 
+    # Intelligence Projection Plane (plane-live seam): register the plane's
+    # implemented providers on the global projection_registry at boot. Provider
+    # modules never auto-register at import — this lifespan startup is the
+    # production call site that makes projection surfaces answer live instead
+    # of degrading to provider_unavailable.
+    from dependencies.projection_plane import register_implemented_projection_providers
+
+    register_implemented_projection_providers()
+    logger.info("Intelligence Projection Plane: implemented providers registered")
+
     # Credential-encryption fail-closed validation: staging/production must run
     # the approved KMS envelope cipher with a key id (never the local cipher).
     from services.providers.credentials.startup import CredentialCipherStartupValidator
@@ -1471,6 +1481,15 @@ def create_app() -> FastAPI:
         logger.info("Exploration Fabric mounted (/v1/explore)")
     else:
         logger.info("Exploration Fabric disabled (AETHER_EXPLORATION_ENABLED=false)")
+
+    # Infrastructure 360 — classified read-only routes (the infrastructure360
+    # vertical-slice precedent). Mounted unconditionally; the router resolves
+    # the infrastructure360 provider from the plane registry populated at
+    # lifespan startup above.
+    from services.infrastructure.routes import router as infrastructure_router
+
+    app.include_router(infrastructure_router, tags=["Infrastructure 360"])
+    logger.info("Infrastructure 360 mounted (/v1/infrastructure)")
 
     if settings.continuation.enabled:
         from services.continuation.routes import router as continuation_router

@@ -12,7 +12,7 @@ source_files:
 canonical_owner: graph@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "c19b048f"
+last_synced_commit: "f543a085"
 ---
 # Unified On-Chain Intelligence Graph v8.12.0
 
@@ -82,6 +82,54 @@ durable `gold_relationship_semantic_state` projections and writes one directed
 `SEMANTIC_RELATES_TO` edge per relationship (`source_ref -> target_ref`) into
 the graph **through the canonical `GraphMutationGateway`** — never a direct
 graph write. See [Semantic relationship overlay](#semantic-relationship-overlay).
+
+A third, governed path makes **population membership a first-class graph fact**
+(population360 P3.1 — `services/population/governance.py`): every join/leave is
+written as a directed `MEMBER_OF` edge (`entity -> population`) through the same
+canonical `GraphMutationGateway`, never a bare table write. The gateway
+close-and-appends into the bitemporal ledger, so a membership history is
+reconstructable and digest-verifiable like any other canonical fact. The
+population-membership table row is only the *materialized current state* the
+governed path maintains after a successful edge write.
+
+These membership edges carry the provenance keys now declared on the canonical
+optional-edge vocabulary (`shared/graph/edge_properties.py`
+`OPTIONAL_EDGE_PROPERTIES`, population360 P3.1):
+`membership_state` (`active|left|expired`), `definition_version` (the immutable
+population-definition version the membership was computed under),
+`membership_basis` (`rule|graph|ml_model|similarity|manual|inferred`),
+`population_type` (a `PopulationType` value), and `evidence_refs` (the
+`EvidenceRef` ids grounding the fact). A **leave is a state transition — a
+governed soft-revoke of the `MEMBER_OF` edge (`edge_expired`) — never a hard
+delete**, so the append-only membership and definition ledgers stay intact and
+rebuildable. Consent/policy is evaluated at the write boundary itself
+(population360 P3.2, server-authoritative `services.consent.authority`), and a
+data-subject erasure runs governed leaves through this same path (see
+[DSR Cascade](#dsr-cascade-art-17-erasure)).
+
+A fourth, governed surface carries **canonical location facts as typed graph
+edges** (geographic360 G4.2). The location primitive resolves through a single
+new authority — `packages/shared/contracts/location-registry.json` +
+`shared/geo/models.py` (`LocationFact` with role/precision/coordinates/
+provenance; `Place`/`Region`/`Jurisdiction`) — and reaches the graph through
+three new evidence-carrying edge kinds classified to the non-canonical
+`EXCLUDED` layer (Python-only, like `SEMANTIC_RELATES_TO`; unclassified edges
+still error in staging/prod): `LOCATED_AT` (subject -> `REGION`, the resolved
+located-at region at declared precision), `OBSERVED_IN` (subject -> `PLACE`, a
+single observation at a named venue), and `UNDER_JURISDICTION` (subject ->
+`JURISDICTION`, the governing policy scope kept distinct from the observation
+that locates a subject). `services/geo/location_edges.py` is the one assembly
+surface: it fails closed on unknown vocabulary and on a `precise`/`coarse_cell`
+claim the fact's evidence cannot support (precision never exceeds evidence),
+and emits one edge per resolution target carrying the geographic provenance
+keys now declared on the canonical optional-edge vocabulary
+(`shared/graph/edge_properties.py` `OPTIONAL_EDGE_PROPERTIES`, geographic360
+G4.2): `location_role`, `precision_class` (`country|region|city|coarse_cell|
+precise`), `precision_state` (`full|precision_reduced|suppressed` — a downgrade
+is always typed, never a silent coarsening), `region_type`, `coarse_cell`, and
+the `EvidenceRef`s grounding the fact. Assembly is pure; the governed write
+path (consent, vertex materialisation, soft-revoke `edge_expired` leaves) and
+the geographic360 projection read land with the ingestion/DSR plane (G4.5).
 
 ## Architecture Layers
 
@@ -323,6 +371,15 @@ When a Data Subject Request is received:
 - `PAYMENT` vertices involving the user: **deleted**
 - `ACTION_RECORD` vertices produced by user-owned agents: **deleted**
 - `CONTRACT` vertices: **pseudonymized** (deployer field hashed; on-chain data is immutable)
+- Population memberships: **governed leave, not delete** — every active
+  `MEMBER_OF` edge is soft-revoked (`edge_expired`) via
+  `PopulationMembershipGovernor.remove_membership`, the membership row
+  transitions to `left`, and each affected population's `member_count` is
+  recomputed (population360 P3.3, `services/consent/erasure_jobs.py::_erase_population_plane`).
+  The erasure marks the three population dsr_propagation components
+  (`population_memberships` / `population_snapshots` / `populations`) with real
+  receipts — only memberships carry subject identity; snapshots and population
+  objects are tenant artifacts and report honest zero rows.
 - All existing H2H vertices: handled by existing DSR cascade (unchanged)
 
 ### Audit Actions (14 new)
@@ -661,7 +718,7 @@ Controlled by `IG_SEMANTIC_ZOOM` feature flag.
 
 ### Bitemporal Replay and Comparison
 
-**Replay** — `POST /v1/graph/replay` with `as_of: "2026-01-01T00:00:00Z"` returns the graph as it existed at that point in time. The result set is materially different (different nodes, different edges) — not just a timestamp label change.
+**Replay** — `POST /v1/graph/replay` with `as_of: "2026-01-01T00:00:00Z"` returns the graph as it existed at that point in time. Replay is a **knowledge-time** reconstruction (the `graph_history_replay` authority, temporal360 T2.1): the append-only mutation ledger is replayed as of τ (rows with `recorded_at <= τ`, applied in ledger insertion order — never re-sorted by wall-clock), rebuilding the vertices/edges Aether actually had at τ (`KNOWN_THEN`). The reconstruction is digest-verifiable (the same prefix always yields the same sha256) and strictly read-side — it never writes canonical state. Late-arriving rows recorded at `recorded_at <= τ` but appended later are honored idempotently; erased subjects stay terminal-tombstoned (never resurrected, so a KNOWN_THEN answer before an erasure remains a faithful audit record). Revoked edges remain in the canonical edge list flagged `revoked: true` — live reads filter them while the replay keeps the full audit trail intact. The result set is materially different (different nodes, different edges) — not just a timestamp label change.
 
 **Comparison** — `POST /v1/graph/compare` with `as_of` and `compare_to` returns:
 - `added_nodes` — nodes that appeared between the two snapshots

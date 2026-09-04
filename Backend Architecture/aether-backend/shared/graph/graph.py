@@ -186,6 +186,15 @@ class VertexType:
     SOCIAL_PROFILE_NODE = "SocialProfileNode"         # aggregated cross-platform identity
     LOCATION_SUMMARY = "LocationSummary"              # city-level aggregated access
 
+    # ── Geographic360 — location resolution targets (additive) ─────────
+    # Canonical location-fact targets resolved by services/geo from the
+    # location registry / LocationFact model surface. They back the
+    # EXCLUDED-layer located/observed/jurisdiction edges — no canonical
+    # RelationshipLayer bucket membership required (like Source nodes).
+    PLACE = "Place"
+    REGION = "Region"
+    JURISDICTION = "Jurisdiction"
+
     # ── Unified Entity Categories (Web2 + Web3, domain-agnostic) ─────
     # These replace domain-specific names. Aliases below preserve backward compat.
     GOVERNANCE_ORG = "GovernanceOrg"      # DAO, NGO, cooperative, government body
@@ -549,6 +558,16 @@ class EdgeType:
     PRIMARY_LOCATION = "PRIMARY_LOCATION"            # Entity → LocationSummary (>50% sessions)
     SECONDARY_LOCATION = "SECONDARY_LOCATION"        # Entity → LocationSummary (5-50%)
     ACCESSED_FROM = "ACCESSED_FROM"                  # Entity → LocationSummary (generic)
+
+    # ── Geographic360 — canonical location-fact edges (EXCLUDED layer) ─
+    # Evidence-carrying WHERE edges written via the GraphMutationGateway
+    # (the projection is read_only; the location facts these edges carry are
+    # governed writes). Classified EXCLUDED (Python-only, like
+    # SEMANTIC_RELATES_TO): domain location facts, not human/agent
+    # interaction-layer edges.
+    LOCATED_AT = "LOCATED_AT"                  # subject → Place|Region (resolved, declared precision)
+    OBSERVED_IN = "OBSERVED_IN"                # subject/source → Region|coarse_cell (one observation)
+    UNDER_JURISDICTION = "UNDER_JURISDICTION"  # subject → Jurisdiction (governing policy scope)
 
     # ── Unified entity specialization (domain-agnostic) ─────────────────
     IS_GOVERNANCE_ORG = "IS_GOVERNANCE_ORG"         # Entity → GovernanceOrg

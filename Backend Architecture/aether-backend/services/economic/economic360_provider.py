@@ -359,7 +359,7 @@ class Economic360Provider:
 
         content: dict[str, Any] = {
             "tenantId": request.tenantId,
-            "subject": {"kind": request.subject.kind, "id": request.subject.id},
+            "subject": request.subject.model_dump(),
             "total_usd": rollup.get("total_usd"),  # None preserved — never 0
             "native_currency": rollup.get("native_currency"),
             "native_total": rollup.get("native_total"),
@@ -557,7 +557,7 @@ class Economic360Provider:
     ) -> list[ClaimEnvelope]:
         """Evidence-grounded claims (requiresEvidence: every claim is grounded)."""
         claims: list[ClaimEnvelope] = []
-        subject = ProjectionSubject(kind=request.subject.kind, id=request.subject.id)
+        subject = request.subject  # canonical subject — never re-derived
 
         total_usd = rollup.get("total_usd")
         if total_usd is not None:
