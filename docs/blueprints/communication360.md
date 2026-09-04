@@ -148,6 +148,44 @@ becomes a **zero-pending** row eligible for `implementationState: "implemented"`
 and `legacyBindings.migrationMode: "converged"` once the orchestrator flips it.
 `ownsCanonicalTruth` stays structurally `false`.
 
+## Ratified canonical model (Phase 2)
+
+Phase 2 establishes the single claim vocabulary and ratifies the canonical model
+the Phase-3 contracts compile against. These decisions are recorded here and in
+the program decision log.
+
+- **R1 — one claim-state authority.** The consolidated `EpistemicStatus` (15
+  values in `shared/contracts_models/epistemic.py`; TS twin
+  `packages/shared/epistemic-status.ts`, parity-tested) is the single authority
+  a claim may carry. `ClaimEnvelope` now has an optional typed
+  `claimState: EpistemicStatus` — absent means *unclassified*, never factual.
+  `shared/contracts_models/epistemic_communication.py` reconciles the comms
+  vocabularies (`CommunicationState`, agent-observability `ActionStatus`) onto it
+  with keys as literals and a parity test: a delivery/engagement/agent-action
+  fact is at most `observed` and never escalates into
+  `verified`/`resolved`/`causally_supported`.
+- **R2 — message ≠ information.** The information layer is separate canonical
+  objects — `Information`/`InformationRef` (an addressable unit of content),
+  message-level `Claim` binding, `InformationTransfer`, `InformationTransformation`
+  — not fields bolted onto `silver_comms_facts`. A delivered message is not
+  collapsed into "the content was known".
+- **R3 — sender ≠ author ≠ principal.** Roles render via a temporal-validity role
+  matrix (role, participant, `valid_from`/`valid_to`) over
+  actor/author/generator/editor/approver/sender/presented_sender/principal/
+  delegator/beneficiary/accountable_party, reusing `services/identity`
+  `EntityType` and `services/delegation` grant semantics — never a single
+  `from` attribute.
+- **R4 — delivery ≠ knowledge.** Two typed state families with no cross-ladder
+  inference: message lifecycle/delivery (`CommunicationState` ladder) versus
+  knowledge/interpretation state (`ingested`/`parsed`/`included_in_context`/
+  `used`, from agent observability). A recipient-knowledge or author-intent claim
+  is a structurally different object backed by its own observation — never
+  granted by a delivery/action state.
+- **R5 — authority verdict (decision-log #2 resolved).** The new information-layer
+  facts land under a **new canonical authority** (provisional, ratified at the
+  Phase-3 registration review). The `communication360` row's `canonicalAuthorities`
+  stay read authorities; `ownsCanonicalTruth` stays `false`.
+
 ## What it means for the graph
 
 Communication360 projects *over* the graph's communication truth — the comms

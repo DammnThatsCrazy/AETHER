@@ -127,7 +127,7 @@ may be pulled forward into the Phase-4 brief).
 | Phase | What ships | Entry criteria | Exit criteria | Status |
 | --- | --- | --- | --- | --- |
 | **1** — Blueprints + source of truth | `docs/plans/COMMUNICATION_360_PHASES.md` (this plan), `docs/source-of-truth/COMMUNICATION_360.md` (the full Day-1 blueprint captured as SoT, with a reconciliation header), and `docs/blueprints/communication360.md` (vertical-slice blueprint over the real seams: registry row, silver path, migration plan) | Master blueprint reviewed; audit (§1) accepted; program scope approved | Registry blueprint ref for `communication360` resolves to a real file; docs consistent; no behavior change | PLANNED — this milestone |
-| **2** — Communication vocabulary + canonical modeling | One epistemic/claim vocabulary for communication onto the shared `EpistemicStatus`/claim lineage so a derived/inferred "constraint dropped" or "agent sent" observation can never render as a factual claim; canonical modeling decisions for the **information layer** (`InformationRef`/`Information`, `InformationTransfer`, message-level `Claim` binding, `InformationTransformation`) and the role matrix (participant/principal/delegation roles with temporal validity); convergence debt (any duplicate primitive deletes) | Phase 1 landed; modeling decisions recorded | Vocabulary single-sourced with parity tests; canonical information/role model ratified against the shipped silver path; `make ci-check` green | PLANNED |
+| **2** — Communication vocabulary + canonical modeling | One epistemic/claim vocabulary for communication onto the shared `EpistemicStatus`/claim lineage so a derived/inferred "constraint dropped" or "agent sent" observation can never render as a factual claim; canonical modeling decisions for the **information layer** (`InformationRef`/`Information`, `InformationTransfer`, message-level `Claim` binding, `InformationTransformation`) and the role matrix (participant/principal/delegation roles with temporal validity); convergence debt (any duplicate primitive deletes) | Phase 1 landed; modeling decisions recorded | Vocabulary single-sourced with parity tests; canonical information/role model ratified against the shipped silver path; `make ci-check` green | SHIPPED — 2026-09-03 |
 | **3** — Canonical comms contracts + storage + registries | Domain contract modules (e.g. `services/communication360/`): `InformationTransfer` + transfer sub-kinds; canonical `CommunicationMessage`/`CommunicationPayload`/`Segment` over the silver path; `Conversation`/`ProviderThread`/`Matter`; `CommunicationAct`/`Request`/`Commitment`/`ResponseExpectation`; `KnowledgeState`/`Interpretation`/`ContextInclusion`; participant/principal bindings referencing `services/identity` + `services/delegation` — never re-declared primitives. Storage via tenant-scoped JSONB repos (or Alembic) + run references onto `computation_runs`; dimension/registry seeds; `AETHER_COMMUNICATION360_ENABLED` flag (default OFF) | Phase 2 landed; reuse inventory accepted | Contracts import zero duplicate primitives; storage tenant-scoped; every new `EdgeType` has a layer entry; registries seeded with alignment tests; `make docs-check` green (projection still `in_flight`) | PLANNED |
 | **4** — Provider + projection convergence (core wiring) | `Communication360Provider` implementing `IntelligenceProjectionProvider` (`projection_id: communication360`, `sequence_360`), reading the shipped comms silver path + the new canonical facts; per-projection `surface-capability` row; exploration adapter so `/v1/explore` with the comms lens returns real projections; `read_only` graph posture enforced; metric absorption of the row's `metricRefs`; registration seam; honest degradation while sibling projections (profile360/relationship360/episode360/outcome360) are still `in_flight` | Phase 3 landed; contracts stable | Enabled flag-on: provider + adapter tests green; projection returns valid sections with dependency degradation (never crashes, never fabricates); `make ci-check` green | PLANNED |
 | **5** — Information fidelity + knowledge/interpretation + authority | Information/claim extraction + transformation tracking (retention, semantic drift, omission/contradiction rates); `KnowledgeState`/`Interpretation`/`ContextInclusion` ingestion from agentic observability events; delegation-scope evaluation (`authorization_state`) reusing `services/delegation`; findings-candidate materiality over the fidelity metrics | Phase 4 landed | Fidelity pipeline over real agent-communication events with reproducible-run tests; authority scope evaluated per agent-mediated communication; findings path materiality-tested | PLANNED |
@@ -154,7 +154,10 @@ may be pulled forward into the Phase-4 brief).
 
 Canonical `EntityRef`/`EvidenceRef`/`InvestigationCase` (OI models),
 `TemporalEnvelope` + bitemporal kernel + `KNOWN_THEN`/`KNOWN_NOW`,
-`EpistemicStatus`/claim vocabulary (`shared/contracts_models` on this lineage),
+`EpistemicStatus`/claim vocabulary (`shared/contracts_models/epistemic.py` —
+**not** present on base `fced2960`; adopted byte-identical onto this lane in
+Phase 2 from the Risk/Fraud sibling's consolidation so all 360 lanes share one
+authority),
 `MeasurementResult`/`CanonicalResult` + metric registry + `ValueState`, model
 registry, `new_run_id()` + `computation_runs` + `context_hash`,
 `GraphMutationGateway` (read-only for communication360), `GraphClient`/traversal,
@@ -172,9 +175,10 @@ Noesis intents, Kyber operator conventions.
 | --- | --- | --- |
 | 2026-09-03 | kickoff | Program plan authored on `feat/communication-360`; branch rooted at `fced2960` (the implemented-360-plane lineage, shared with the Risk/Fraud + context-intelligence siblings) after confirming `origin/main` lacks the 360 foundation; audit (§1) maps the master blueprint to repository reality; `communication360` confirmed as an `in_flight` convergence target over the shipped comms substrate, not greenfield; phases not yet started |
 | 2026-09-03 | 1 | SHIPPED — `docs/plans/COMMUNICATION_360_PHASES.md`, `docs/source-of-truth/COMMUNICATION_360.md` (full Day-1 blueprint as SoT), and `docs/blueprints/communication360.md` authored; registry blueprint ref for `communication360` resolves to a real file; docs manifest + REPO-INDEX synced; `make docs-check` green (46/0) and `make ci-check` green (63/0, `ANTHROPIC_*` env stripped); no behavior change — registry row stays `in_flight` |
+| 2026-09-03 | 2 | SHIPPED — vocabulary + canonical modeling. Audit found **no `EpistemicStatus` on base `fced2960`** (Phase-1 reuse-inventory claim corrected); adopted the Risk/Fraud consolidated `EpistemicStatus` (15 values) **byte-identical** onto this lane (`shared/contracts_models/epistemic.py` + `packages/shared/epistemic-status.ts` + `packages/shared/index.ts` barrel + `tests/contracts/test_epistemic_status_parity.py`, 7/7 green) so all 360 lanes share one authority; added `shared/contracts_models/epistemic_communication.py` mapping `CommunicationState` (15) + `ActionStatus` (5) onto it — keys as literals, service-free module — with `tests/contracts/test_epistemic_communication_parity.py` (6/6: totality + no-escalation band invariants); `ClaimEnvelope` gained optional typed `claimState: EpistemicStatus` in PY + TS twins (round-trip test, projection-contract tests 34/0); ratified canonical model R1–R5 recorded in `docs/blueprints/communication360.md` and decision-log #1/#2 marked RESOLVED; convergence-debt audit found no in-remit duplicate primitive to delete (cross-lane entity-kind vocabularies are outside this slice); registry row stays `in_flight` |
 
 When a phase lands, its row is updated here; the phase map in §2 carries the
-current status. As of this row Phase 1 has shipped; Phases 2–6 are planned.
+current status. As of this row Phases 1–2 have shipped; Phases 3–6 are planned.
 
 ## 5. Decision log and deferred scope
 
@@ -185,12 +189,22 @@ current status. As of this row Phase 1 has shipped; Phases 2–6 are planned.
    X", "recipient did not receive") must carry the shared `EpistemicStatus`
    vocabulary so a derived/inferred condition can never render as a factual
    claim. Confirm the mapping onto the shipped silver path in Phase 2.
+   **RESOLVED (Phase 2, 2026-09-03):** `EpistemicStatus` (15 values) was not on
+   base `fced2960`; it is adopted byte-identical from the Risk/Fraud sibling and
+   `ClaimEnvelope` now carries an optional typed `claimState: EpistemicStatus`.
+   `shared/contracts_models/epistemic_communication.py` maps `CommunicationState`
+   + agent-observability `ActionStatus` onto it (keys as literals, totality +
+   no-escalation parity tests). A message/agent fact is capped at `observed`.
 2. **Information layer home.** The new `Information`/`InformationRef`/
    `InformationTransfer`/`Claim`-binding contracts are canonical spine objects
    consumed by the read-only projection (`ownsCanonicalTruth` stays `false` on
    the row) — they are not owned by the projection itself. Whether they register
    as a new canonical authority (extending `AUTHORITY_INDEX`) or fold under an
    existing one is decided in Phase 2.
+   **RESOLVED (Phase 2, 2026-09-03, R5):** the information-layer facts land under
+   a **new canonical authority** — provisional, ratified at the Phase-3
+   registration review. The `communication360` row's `canonicalAuthorities` stay
+   read authorities.
 3. **Edges.** Add domain `EdgeType`s only where a real graph gap exists, each
    with its mandatory `relationship_layers` entry; do not add bare
    `SENT`/`RECEIVED`/`CONTAINS` members (lifecycle states + domain edges carry

@@ -59,6 +59,7 @@ from shared.intelligence_projections import (  # noqa: E402
 from shared.intelligence_projections.generated_registry import (  # noqa: E402
     INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
 )
+from shared.contracts_models.epistemic import EpistemicStatus  # noqa: E402
 from services.operational_intelligence.models import (  # noqa: E402
     EvidenceRef,
     TimeRangeFilter,
@@ -272,6 +273,49 @@ def test_result_contract_version_round_trips() -> None:
     assert reloaded.sections[0].state == "available"
     assert reloaded.claims[0].evidenceRefs[0].id == "ev_1"
     assert reloaded.claims[0].subject.kind == "entity"
+
+
+def test_claim_envelope_claim_state_defaults_none_and_round_trips() -> None:
+    """ClaimEnvelope.claimState is an optional typed EpistemicStatus.
+
+    Defaults to None (a provider that does not classify a claim leaves it
+    unclassified — never factual) and survives a dump/reload round-trip when a
+    provider sets it.
+    """
+    unclassified = ClaimEnvelope(
+        id="claim_0",
+        kind="observation",
+        subject=_subject(),
+        evidenceRefs=[EvidenceRef(id="ev_0", type="event", source="s1")],
+        claims=["message delivered"],
+    )
+    assert unclassified.claimState is None
+
+    derived = ClaimEnvelope(
+        id="claim_1",
+        kind="inference",
+        subject=_subject(),
+        evidenceRefs=[EvidenceRef(id="ev_1", type="event", source="s1")],
+        claims=["recipient likely saw the message"],
+        claimState=EpistemicStatus.INFERRED,
+    )
+    result = ProjectionResult(
+        projectionId="profile360",
+        tenantId="tenant-a",
+        contractVersion=INTELLIGENCE_PROJECTIONS_CONTRACT_VERSION,
+        generatedAt="2026-08-23T12:00:00Z",
+        sections=[
+            ProjectionSection(id="summary", state="available", title="Summary"),
+        ],
+        claims=[unclassified, derived],
+        dependencyState=[],
+        degradedReasons=[],
+    )
+
+    dumped = result.model_dump()
+    reloaded = ProjectionResult(**dumped)
+    assert reloaded.claims[0].claimState is None
+    assert reloaded.claims[1].claimState is EpistemicStatus.INFERRED
 
 
 def test_context_builds_with_dependency_state() -> None:
