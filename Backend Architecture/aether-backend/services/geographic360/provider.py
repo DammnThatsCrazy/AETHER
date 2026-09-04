@@ -35,13 +35,14 @@ Read-only, fail-isolated, tenant-scoped, evidence-grounded, and honest:
   as warnings when hit so a bounded list never pretends to be complete.
 
 Canonical reads happen only through the injected :class:`Geographic360Reader`
-seam. There is deliberately no repository query in the default
-:class:`GeographicLocationReader` yet: the location write path (and the DSR
-eraser over location facts) lands in G4.5, so until then no owned row can exist
-for any subject and the default view is an honest ``missing``. Injected readers
-exercise the full projection semantics in tests. Imports of any backing store
-stay inside reader implementations so importing this module never requires a
-database.
+seam. Since G4.5 the default :class:`GeographicLocationReader` is store-backed:
+it reads a subject's active facts from the canonical ``location_facts`` store
+(:class:`~services.geo.location_facts.LocationFactRepository` — in-memory local
+/ asyncpg prod) and maps each onto the projection posture, so a subject with
+recorded facts projects them and a subject with none reads as an honest
+``missing`` (never a fabricated read). Injected readers exercise the full
+projection semantics in tests. Imports of any backing store stay inside reader
+implementations so importing this module never requires a database.
 """
 
 from __future__ import annotations
@@ -233,6 +234,63 @@ class GeographicView:
     missing_reason: Optional[str]
 
 
+def _row_from_stored_fact(stored: dict) -> LocationRow:
+    """Map one stored ``LocationFact`` JSONB row onto the render shape.
+
+    ``LocationFact`` nests a single ``region`` / ``place`` / ``jurisdiction`` /
+    ``coordinate``; the render :class:`LocationRow` carries flat labels the
+    provider composes. The mapping lifts labels without inventing any:
+
+    * a ``city`` region type lifts its ``name`` to ``city`` (and keeps the
+      parent admin code in ``geo_reference`` as the row's ``region_code``);
+    * ``country`` / ``continent`` region granularity contributes no admin
+      labels (so a country-only fact never renders "US, US");
+    * any other region type contributes ``name`` / ``geo_reference`` as
+      region labels;
+    * the coordinate VALUE is never echoed — only its presence flag.
+    """
+    region = stored.get("region") or {}
+    place = stored.get("place") or {}
+    jurisdiction = stored.get("jurisdiction") or {}
+    region_type = region.get("region_type")
+    country = region.get("country_code") or place.get("country_code")
+    city: Optional[str] = None
+    region_name: Optional[str] = None
+    region_code: Optional[str] = None
+    if region_type == "city":
+        city = region.get("name")
+        region_code = region.get("geo_reference")
+    elif region_type not in ("country", "continent"):
+        region_name = region.get("name")
+        region_code = region.get("geo_reference")
+    elif not country:
+        # A country granularity whose name IS the country code (a capsule
+        # observation resolved to country only) carries it as the country.
+        country = region.get("name")
+    return LocationRow(
+        location_id=stored.get("location_id") or stored.get("id"),
+        role=stored.get("role") or "observed_presence",
+        precision_class=stored.get("precision_class") or "country",
+        region_type=region_type,
+        country_code=country,
+        region_name=region_name,
+        region_code=region_code,
+        city=city,
+        place_name=place.get("name"),
+        jurisdiction_name=jurisdiction.get("name"),
+        jurisdiction_kind=jurisdiction.get("kind"),
+        coarse_cell=stored.get("coarse_cell") or place.get("coarse_cell"),
+        coordinate_present=bool(stored.get("coordinate"))
+        or bool((place or {}).get("coordinate")),
+        precision_state=stored.get("precision_state") or STATE_FULL,
+        observed_at=stored.get("observed_at"),
+        valid_from=stored.get("valid_from"),
+        valid_to=stored.get("valid_to"),
+        provider=stored.get("provider"),
+        source_observation_id=stored.get("source_observation_id"),
+    )
+
+
 # ── Canonical read seam (injected in tests; registry-backed in production) ────
 
 
@@ -246,31 +304,78 @@ class Geographic360Reader(Protocol):
 
 
 class GeographicLocationReader:
-    """Default reader — the honest-missing authority until G4.5 wires reads.
+    """Default reader — store-backed over canonical location facts (G4.5).
 
-    There is deliberately no repository query here yet: the location-fact write
-    path (and its DSR eraser) land in G4.5, so no owned row can exist for any
-    subject. The view stays an honest ``missing`` for in-kind subjects; injected
-    readers exercise the full projection semantics in tests. A subject kind this
-    plane does not own is reported as such (never a fabricated read).
+    Reads a subject's active facts through
+    :class:`~services.geo.location_facts.LocationFactRepository` and maps each
+    stored fact onto the projection posture, oldest -> newest. A subject kind
+    this plane does not own is reported as such (never a fabricated read), and
+    an in-kind subject the store has no active fact for still reads as an
+    honest ``missing`` — only a subject with recorded facts projects a posture.
+    Backing-store imports stay inside the read so importing this module never
+    requires a database. ``repository`` is an optional test seam (defaults to
+    the canonical singleton, resolved lazily per read).
     """
+
+    def __init__(self, repository: Optional[Any] = None) -> None:
+        self._repository = repository
+
+    async def _resolve_repo(self) -> Any:
+        if self._repository is None:
+            # Deferred import keeps module import free of store dependencies.
+            from services.geo.location_facts import location_fact_repo
+
+            self._repository = location_fact_repo
+        return self._repository
 
     async def view(
         self, *, tenant_id: str, subject_kind: str, subject_id: str
     ) -> GeographicView:
         if subject_kind not in GEOGRAPHIC_SUBJECT_KINDS:
-            reason = f"subject kind {subject_kind!r} is not a geographic360 subject"
-        else:
-            reason = (
-                "the geographic location authority has no recorded location "
-                "facts for this subject"
+            return GeographicView(
+                kind=subject_kind,
+                id=subject_id,
+                posture=None,
+                missing_reason=(
+                    f"subject kind {subject_kind!r} is not a geographic360 subject"
+                ),
             )
+        repo = await self._resolve_repo()
+        rows = await repo.active_facts_for_subject(tenant_id, subject_kind, subject_id)
+        if not rows:
+            return GeographicView(
+                kind=subject_kind,
+                id=subject_id,
+                posture=None,
+                missing_reason=(
+                    "the geographic location authority has no recorded location "
+                    "facts for this subject"
+                ),
+            )
+        rows = [self._normalise_stored_row(row) for row in rows]
+        facts = tuple(_row_from_stored_fact(row) for row in rows)
+        posture = GeographicPosture(
+            subject_type=subject_kind,
+            subject_id=subject_id,
+            facts=facts,
+        )
         return GeographicView(
             kind=subject_kind,
             id=subject_id,
-            posture=None,
-            missing_reason=reason,
+            posture=posture,
+            missing_reason=None,
         )
+
+    def _normalise_stored_row(self, stored: dict) -> dict:
+        """Normalise one stored fact before it becomes posture evidence.
+
+        Subclasses (and the G4.5 capsule authority) override or extend this to
+        enforce provenance invariants (e.g. a context-capsule-derived fact never
+        renders finer than ``coarse_cell`` and never echoes a coordinate). The
+        base pass-through keeps the default reader exactly honest about whatever
+        the canonical store records.
+        """
+        return stored
 
 
 # ── Precision rendering (evidence-honest, downgrade-explicit) ────────────────
@@ -445,8 +550,8 @@ class Geographic360Provider:
         *,
         render_cap: Optional[str] = RENDER_CAP_NONE,
     ) -> None:
-        # Injected canonical reader (test seam); default is honest-missing until
-        # the G4.5 location write path lands.
+        # Injected canonical reader (test seam); the default is the G4.5
+        # store-backed reader over canonical location facts.
         self._reader = reader if reader is not None else GeographicLocationReader()
         # Surface/tenant render cap — the exact→city→metro downgrade boundary.
         # Default: no extra cap (evidence-limited only). Never rewritten per

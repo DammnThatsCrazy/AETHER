@@ -2,10 +2,11 @@
 
 Sibling of ``services/population360`` / ``services/temporal360``: the
 ``geographic360`` context_360 projection (contextual WHERE) and its precision /
-privacy posture. The provider is a pure read over location facts surfaced
-through the injected :class:`Geographic360Reader` seam; the location write path
-that feeds those reads lands with the context-capsule authority in G4.5, so the
-default reader answers an honest missing until then.
+privacy posture. The provider is a pure read over canonical location facts
+surfaced through the injected :class:`Geographic360Reader` seam. Since G4.5 the
+default :class:`GeographicLocationReader` is store-backed over the canonical
+``location_facts`` store (``services.geo.location_facts``), so a subject with
+recorded facts projects them and one with none reads an honest ``missing``.
 """
 
 from services.geographic360.provider import (

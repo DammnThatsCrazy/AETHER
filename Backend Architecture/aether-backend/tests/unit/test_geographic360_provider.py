@@ -16,7 +16,9 @@ Pins the geographic360 provider contract (blueprint test surface):
 * missing-authority honest degradation (never raises), tenant isolation
   (fail-closed), registration gates (success / duplicate / version-mismatch /
   unknown id), read-only graph policy, no auto-register at import;
-* the default reader is honest-missing until the G4.5 location write path lands.
+* the default reader is store-backed (G4.5): an empty store reads as an honest
+  missing and out-of-kind subjects are reported as such; the full store-backed
+  read of recorded facts is pinned in ``test_geographic360_location_store.py``.
 """
 
 from __future__ import annotations
@@ -611,7 +613,9 @@ async def test_out_of_kind_subject_is_reported_not_fabricated():
 
 
 @pytest.mark.asyncio
-async def test_default_reader_is_honest_missing_until_write_path_lands():
+async def test_default_reader_is_honest_missing_when_store_has_no_facts():
+    # Store-backed (G4.5): the default reader queries the canonical store, so an
+    # in-kind subject with no recorded fact still reads as an honest missing.
     reader = GeographicLocationReader()
     view = await reader.view(tenant_id=TENANT, subject_kind="entity",
                              subject_id="ent-portland")
