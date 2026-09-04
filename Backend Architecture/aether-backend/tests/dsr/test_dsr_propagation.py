@@ -256,20 +256,23 @@ async def test_overall_status_helper_precedence():
 async def test_status_constants_match_spec():
     # Order is pinned by tail membership, not a hard-coded length, so governed
     # components appended by later programs (population360 P3.3 grew this from
-    # 26 to 29) extend these slices rather than silently breaking a count. The
-    # population-plane artifacts (P3.3) are the newest tail members; the
-    # mobile-plane + kyber device-plane components sit just before them.
-    assert DSR_COMPONENTS[-3:] == (
+    # 26 to 29, and geographic360 G4.5-C3 appended ``location_facts`` to reach
+    # 30) extend these slices rather than silently breaking a count. The
+    # geographic-plane store (G4.5-C3) is the newest tail member; the
+    # population-plane artifacts (P3.3), the mobile-plane + kyber device-plane
+    # components sit just before it, in stable order.
+    assert DSR_COMPONENTS[-1:] == ("location_facts",)
+    assert DSR_COMPONENTS[-4:-1] == (
         "population_memberships",
         "population_snapshots",
         "populations",
     )
-    assert DSR_COMPONENTS[-6:-3] == (
+    assert DSR_COMPONENTS[-7:-4] == (
         "kyber_trusted_devices",
         "kyber_webauthn_credentials",
         "kyber_device_proof_keys",
     )
-    assert DSR_COMPONENTS[-9:-6] == (
+    assert DSR_COMPONENTS[-10:-7] == (
         "continuation_records",
         "mobile_installations",
         "client_sync_records",

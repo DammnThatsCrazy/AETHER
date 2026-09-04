@@ -43,6 +43,15 @@ receipts — leaves for ``population_memberships``, and honest zero receipts for
 the aggregate ``population_snapshots`` and tenant-owned ``populations`` rows.
 These components are appended to ``DSR_COMPONENTS`` (29 total) so every erasure
 request seeds a pending step for each from birth.
+
+The geographic-intelligence plane closes the same defect for the canonical
+``location_facts`` store (geographic360 G4.5-C3): a subject's recorded location
+facts are erased as *governed soft-revokes* (``lifecycle_state`` ``active`` ->
+``revoked`` + ``revoked_at`` stamp — never a hard delete, so provenance stays
+audit-visible while the fact becomes invisible to reads) and the
+``location_facts`` component is marked with the store's own revoke count.
+Appending the component grows ``DSR_COMPONENTS`` to 30, so every erasure
+request seeds a pending step for it from birth.
 """
 
 from __future__ import annotations
@@ -105,6 +114,20 @@ POPULATION_RECORDS_COMPONENT = "populations"
 # membership. This actor stamps the membership-edge revocation and ledger rows.
 POPULATION_ERASURE_ACTOR = "dsr_erasure_job"
 POPULATION_ERASURE_LEAVE_REASON = "dsr_erasure"
+
+# The geographic-plane dsr_propagation component (geographic360 G4.5-C3). The
+# canonical ``location_facts`` store held subject location facts that no
+# pre-G4.5 registry component touched, so they survived an erasure the DSR
+# record reported as completed. This handler now erases the geographic plane:
+#   location_facts → governed soft-revoke for every ACTIVE location fact of the
+#                    subject (lifecycle_state -> ``revoked`` + stamp — never a
+#                    hard delete), receipt = the store's own revoke count
+LOCATION_FACTS_COMPONENT = "location_facts"
+
+# The geographic-plane erasure executes a governed soft-revoke per active fact.
+# This actor/reason stamp the revoke envelope (mirrors the population plane).
+LOCATION_FACT_ERASURE_ACTOR = "dsr_erasure_job"
+LOCATION_FACT_ERASURE_REASON = "dsr_erasure"
 
 
 def _kyber_device_eraser(repo_cls: type) -> Any:
@@ -224,6 +247,34 @@ async def _erase_population_plane(tenant_id: str, entity_id: str) -> dict[str, i
         POPULATION_SNAPSHOT_COMPONENT: 0,
         POPULATION_RECORDS_COMPONENT: 0,
     }
+
+
+async def _erase_location_plane(tenant_id: str, entity_id: str) -> dict[str, int]:
+    """Governed geographic-plane erasure for one data subject (G4.5-C3).
+
+    Erases every *active* location fact the subject holds as a **governed
+    soft-revoke** (``services.geo.location_facts`` — ``lifecycle_state``
+    ``active`` -> ``revoked`` + ``revoked_by``/``revoke_reason``/``revoked_at``
+    stamp, never a hard delete). The soft-revoke keeps the fact audit-visible
+    while making it invisible to every geographic360 read, which is exactly the
+    honesty the projection relies on — the DSR receipt is the store's OWN count
+    of governed revokes executed for this subject within this tenant.
+
+    Subject-kind note: a DSR names a *data subject*, which the geographic store
+    records as subject_type ``entity`` (the ``population``/``source`` kinds hold
+    no subject personal data). ``revoke_facts_for_subject`` is tenant-scoped and
+    fail-closed across tenants, so one tenant's erasure never touches another's.
+    """
+    from services.geo.location_facts import location_fact_repo
+
+    revoked = await location_fact_repo.revoke_facts_for_subject(
+        tenant_id,
+        "entity",
+        entity_id,
+        actor_id=LOCATION_FACT_ERASURE_ACTOR,
+        reason=LOCATION_FACT_ERASURE_REASON,
+    )
+    return {LOCATION_FACTS_COMPONENT: revoked}
 
 
 def register_consent_erasure_handler() -> None:
@@ -457,6 +508,45 @@ def register_consent_erasure_handler() -> None:
                             component,
                             exc_info=True,
                         )
+
+            # ── Geographic-intelligence plane (geographic360 G4.5-C3) ────────
+            # The canonical ``location_facts`` store was not among the pre-G4.5
+            # registry components, so a subject's recorded location facts
+            # silently survived an erasure the DSR record reported as completed.
+            # This handler now performs a governed soft-revoke for every active
+            # fact the subject holds (``active`` -> ``revoked`` + stamp) and
+            # marks the ``location_facts`` component with the store's OWN revoke
+            # count. One isolated try/except mirrors the population plane: a
+            # failure marks the component ``failed`` and keeps the job retryable
+            # (the governed revokes are idempotent).
+            try:
+                location_receipt = await _erase_location_plane(
+                    ctx.tenant_id, user_id
+                )
+                await dsr_propagation_service.mark_step(
+                    propagation_request_id,
+                    LOCATION_FACTS_COMPONENT,
+                    "completed",
+                    tenant_id=ctx.tenant_id,
+                    records_impacted=location_receipt[LOCATION_FACTS_COMPONENT],
+                    audit_event_id=ctx.job_id,
+                )
+            except Exception as exc:  # noqa: BLE001 — isolate the geographic plane
+                errors.append(f"geographic: {exc}")
+                try:
+                    await dsr_propagation_service.mark_step(
+                        propagation_request_id,
+                        LOCATION_FACTS_COMPONENT,
+                        "failed",
+                        tenant_id=ctx.tenant_id,
+                        audit_event_id=ctx.job_id,
+                    )
+                except Exception:  # noqa: BLE001 — never let marking abort
+                    logger.warning(
+                        "failed to mark geographic DSR component %s failed",
+                        LOCATION_FACTS_COMPONENT,
+                        exc_info=True,
+                    )
 
         if dsr_id:
             repo = ConsentRepository()
