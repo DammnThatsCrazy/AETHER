@@ -893,10 +893,17 @@ def gen_location_registry_ts(reg: dict) -> str:
         "regionTypes", "RegionType", reg["regionTypes"],
         "Region-type hierarchy (not US-only), continent down to locality.",
     )
-    lines += _ts_const_array(
-        "locationPrecisionClasses", "LocationPrecisionClass", reg["precisionClasses"],
-        "Coarsest-to-finest precision ladder (aligned to context-capsule).",
+    # Precision classes are single-sourced on the context-capsule twin: the
+    # ladder is SHARED (validate_location_registry enforces equality against
+    # context-capsule-registry.json), so re-exporting context-capsule's
+    # declarations here keeps exactly one declaration in the shared barrel —
+    # `export *` of both twins would otherwise collide (TS2308). Any direct
+    # importer of this module still resolves the same names.
+    lines.append(
+        "export { locationPrecisionClasses, type LocationPrecisionClass } "
+        "from './context-capsule';"
     )
+    lines.append("")
     lines += _ts_const_array(
         "coordinateSystems", "CoordinateSystem", reg["coordinateSystems"],
         "Coordinate reference systems a LocationFact may carry.",

@@ -36,15 +36,7 @@ export const regionTypes = [
 ] as const;
 export type RegionType = typeof regionTypes[number];
 
-/** Coarsest-to-finest precision ladder (aligned to context-capsule). */
-export const locationPrecisionClasses = [
-  'country',
-  'region',
-  'city',
-  'coarse_cell',
-  'precise',
-] as const;
-export type LocationPrecisionClass = typeof locationPrecisionClasses[number];
+export { locationPrecisionClasses, type LocationPrecisionClass } from './context-capsule';
 
 /** Coordinate reference systems a LocationFact may carry. */
 export const coordinateSystems = ['wgs84'] as const;

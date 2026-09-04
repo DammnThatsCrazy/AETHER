@@ -6,10 +6,14 @@
 `packages/shared/contracts/location-registry.json`;
 `shared/geo/models.py` is the hand-authored model surface (`LocationFact` with
 role + precision + coordinates + provenance; `Place`/`Region`/`Jurisdiction`).
-This test fails on vocabulary drift, on a broken lower_snake/unique/empty
-registry, on a precision ladder that diverges from the context-capsule
-taxonomy, if the TS module leaves the barrel, and on privacy regressions
-(coordinates exist only on location facts — never on the context capsule).
+The precision ladder is SHARED with the context-capsule registry (validated
+equal), so on TS the location twin re-exports ``locationPrecisionClasses`` /
+``LocationPrecisionClass`` from ``./context-capsule`` — one declaration in the
+shared barrel. This test fails on vocabulary drift, on a broken
+lower_snake/unique/empty registry, on a precision ladder that diverges from the
+context-capsule taxonomy, if the TS module leaves the barrel, and on privacy
+regressions (coordinates exist only on location facts — never on the context
+capsule).
 """
 from __future__ import annotations
 
@@ -42,6 +46,7 @@ from shared.geo.models import (  # noqa: E402
 )
 
 TS_PATH = REPO_ROOT / "packages" / "shared" / "location-registry.ts"
+CAPSULE_TS_PATH = REPO_ROOT / "packages" / "shared" / "context-capsule.ts"
 REGISTRY_PATH = REPO_ROOT / "packages" / "shared" / "contracts" / "location-registry.json"
 CAPSULE_REGISTRY_PATH = (
     REPO_ROOT / "packages" / "shared" / "contracts" / "context-capsule-registry.json"
@@ -50,10 +55,10 @@ CAPSULE_REGISTRY_PATH = (
 _IDENT = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
-def _const_array(name: str) -> list[str]:
-    text = TS_PATH.read_text(encoding="utf-8")
+def _const_array(name: str, path: Path = TS_PATH) -> list[str]:
+    text = path.read_text(encoding="utf-8")
     m = re.search(rf"{name}[^\[]*\[(.*?)\]\s*as const", text, re.S)
-    assert m, f"const array {name!r} not found in location-registry.ts"
+    assert m, f"const array {name!r} not found in {path.name}"
     return re.findall(r"'([a-z_0-9]+)'", m.group(1))
 
 
@@ -90,7 +95,21 @@ def test_region_types_parity():
 
 
 def test_precision_classes_parity():
-    assert set(_const_array("locationPrecisionClasses")) == set(LOCATION_PRECISION_CLASSES)
+    """Precision ladder parity follows the TS single-source indirection.
+
+    location-registry.ts re-exports ``locationPrecisionClasses`` /
+    ``LocationPrecisionClass`` from ``./context-capsule`` (the two registry JSONs
+    are validated equal in ``test_precision_ladder_aligned_to_context_capsule``),
+    so the twin check reads the declaring context-capsule.ts array.
+    """
+    text = TS_PATH.read_text(encoding="utf-8")
+    assert (
+        "export { locationPrecisionClasses, type LocationPrecisionClass } "
+        "from './context-capsule';" in text
+    )
+    assert set(_const_array("locationPrecisionClasses", CAPSULE_TS_PATH)) == set(
+        LOCATION_PRECISION_CLASSES
+    )
 
 
 def test_coordinate_systems_parity():
