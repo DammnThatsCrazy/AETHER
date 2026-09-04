@@ -52,6 +52,10 @@ from datetime import datetime, timezone
 from typing import Any, Optional, Protocol
 
 # Lightweight plane imports — always importable.
+from services.geographic360.capsule_semantics import (
+    CAPSULE_LOCATION_PROVIDER,
+    normalise_capsule_fact_row,
+)
 from shared.intelligence_projections.contracts import (
     ClaimEnvelope,
     ProjectionContext,
@@ -315,6 +319,13 @@ class GeographicLocationReader:
     Backing-store imports stay inside the read so importing this module never
     requires a database. ``repository`` is an optional test seam (defaults to
     the canonical singleton, resolved lazily per read).
+
+    Since G4.5 every stored row whose ``provider`` is the capsule authority
+    (:data:`~services.geographic360.capsule_semantics.CAPSULE_LOCATION_PROVIDER`)
+    passes through the ``context_capsule_semantics`` read guard
+    (:func:`~services.geographic360.capsule_semantics.normalise_capsule_fact_row`)
+    in :meth:`_normalise_stored_row` — a capsule-derived fact can never render
+    finer than ``coarse_cell`` and never echoes a coordinate.
     """
 
     def __init__(self, repository: Optional[Any] = None) -> None:
@@ -369,12 +380,17 @@ class GeographicLocationReader:
     def _normalise_stored_row(self, stored: dict) -> dict:
         """Normalise one stored fact before it becomes posture evidence.
 
-        Subclasses (and the G4.5 capsule authority) override or extend this to
-        enforce provenance invariants (e.g. a context-capsule-derived fact never
-        renders finer than ``coarse_cell`` and never echoes a coordinate). The
-        base pass-through keeps the default reader exactly honest about whatever
-        the canonical store records.
+        Rows recorded by the capsule authority
+        (``provider == context_capsule``) are routed through the
+        ``context_capsule_semantics`` read guard, which strips any coordinate
+        and clamps a ``precise``-over-claim down to what the labels carry (a
+        capsule has no coordinate, so it can never ground ``precise``). Any
+        other provenance passes through untouched — the reader is exactly honest
+        about whatever the canonical store records. Subclasses may extend this
+        seam for their own provenance invariants.
         """
+        if stored.get("provider") == CAPSULE_LOCATION_PROVIDER:
+            return normalise_capsule_fact_row(stored)
         return stored
 
 
