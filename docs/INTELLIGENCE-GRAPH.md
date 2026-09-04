@@ -107,6 +107,30 @@ rebuildable. Consent/policy is evaluated at the write boundary itself
 data-subject erasure runs governed leaves through this same path (see
 [DSR Cascade](#dsr-cascade-art-17-erasure)).
 
+A fourth, governed surface carries **canonical location facts as typed graph
+edges** (geographic360 G4.2). The location primitive resolves through a single
+new authority — `packages/shared/contracts/location-registry.json` +
+`shared/geo/models.py` (`LocationFact` with role/precision/coordinates/
+provenance; `Place`/`Region`/`Jurisdiction`) — and reaches the graph through
+three new evidence-carrying edge kinds classified to the non-canonical
+`EXCLUDED` layer (Python-only, like `SEMANTIC_RELATES_TO`; unclassified edges
+still error in staging/prod): `LOCATED_AT` (subject -> `REGION`, the resolved
+located-at region at declared precision), `OBSERVED_IN` (subject -> `PLACE`, a
+single observation at a named venue), and `UNDER_JURISDICTION` (subject ->
+`JURISDICTION`, the governing policy scope kept distinct from the observation
+that locates a subject). `services/geo/location_edges.py` is the one assembly
+surface: it fails closed on unknown vocabulary and on a `precise`/`coarse_cell`
+claim the fact's evidence cannot support (precision never exceeds evidence),
+and emits one edge per resolution target carrying the geographic provenance
+keys now declared on the canonical optional-edge vocabulary
+(`shared/graph/edge_properties.py` `OPTIONAL_EDGE_PROPERTIES`, geographic360
+G4.2): `location_role`, `precision_class` (`country|region|city|coarse_cell|
+precise`), `precision_state` (`full|precision_reduced|suppressed` — a downgrade
+is always typed, never a silent coarsening), `region_type`, `coarse_cell`, and
+the `EvidenceRef`s grounding the fact. Assembly is pure; the governed write
+path (consent, vertex materialisation, soft-revoke `edge_expired` leaves) and
+the geographic360 projection read land with the ingestion/DSR plane (G4.5).
+
 ## Architecture Layers
 
 | Layer | Name | Description | Key Components |
