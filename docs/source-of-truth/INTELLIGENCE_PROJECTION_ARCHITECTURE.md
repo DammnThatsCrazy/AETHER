@@ -60,10 +60,11 @@ The Aether backend is a **fully built platform**: every one of the nineteen
 projections already maps to shipped, mounted work. None is greenfield. The
 registry therefore records **honest state** per projection — `in_flight`
 (existing implementation, not yet converged onto the projection plane) — with
-`legacyBindings` resolving to the real routes, surfaces, and services. Five
+`legacyBindings` resolving to the real routes, surfaces, and services. Six
 360 vertical slices (`outcome360`, `economic360`, `infrastructure360`, and the
-context-360 leaves `temporal360`, `population360`) are now **`implemented`**: a
-real `IntelligenceProjectionProvider` registered in the `ProviderRegistry`, zero
+context-360 leaves `temporal360`, `population360`, `geographic360`) are now
+**`implemented`**: a real `IntelligenceProjectionProvider` registered in the
+`ProviderRegistry`, zero
 pending refs, zero unresolved refs, and `legacyBindings.migrationMode ==
 "converged"`. New work (missing surfaces,
 missing metrics, unformalized spines, native providers, any future projection)
@@ -71,15 +72,17 @@ is declared **pending** and slots in additively. This table is the truthful
 inventory; the authoritative machine-readable copy is
 `packages/shared/contracts/intelligence-projection-registry.json`.
 
-### Existing surfaces (16) — `packages/shared/contracts/surface-capability-registry.json`
+### Existing surfaces (17) — `packages/shared/contracts/surface-capability-registry.json`
 
 `graph`, `profile360`, `campaign360`, `cluster360`, `geo`, `journeys`,
 `timeline`, `product_intelligence`, `temporal_observatory`,
 `comparison_workbench`, `outcome360`, `economic360`, `connection360`,
-`infrastructure360`, `temporal360`, `population360`. Temporal modes:
+`infrastructure360`, `temporal360`, `population360`, `geographic360`.
+Temporal modes:
 `window|as_of|compare|relative`.
 The implemented projection surfaces (`outcome360`, `economic360`,
-`connection360`, `infrastructure360`, `temporal360`, `population360`) exist so
+`connection360`, `infrastructure360`, `temporal360`, `population360`,
+`geographic360`) exist so
 every projection's `surfaceIds` resolves and the implemented providers are
 routable on `/v1/explore/query` through a thin projection-surface adapter
 (following the `temporal_observatory` precedent — surfaces without
@@ -98,7 +101,7 @@ adapters/pages are legal; `infrastructure360` additionally owns the read-only
 | communication360 | sequence_360 | `/v1/comms`, `/v1/contact`, `/v1/delivery`, `/v1/notifications`; `services/comms/repository` feeds profile summary | timeline, profile360 | metricRefs: `email_open_rate`/`click`/`reply` resolve |
 | execution360 | sequence_360 | `/v1/agents/{id}/execute`, `/v1/agent/runs`, `/v1/jobs`, `/v1/flows`, `/v1/computations` | timeline | — |
 | temporal360 | context_360 | **`implemented`** (T2.4) — `Temporal360Provider` in `services/temporal360/`; the `graph_history_replay` spine resolved by a read-side knowledge-time reconstruction (`shared/graph replay_state` + ledger-prefix reads, `services/temporal360/history_replay.py`); reads bitemporal `as_of`/`compare` | temporal360 | — (zero pending; `converged`, `docs/blueprints/temporal360.md`) |
-| geographic360 | context_360 | `/v1/geo`; `geo` surface | geo | spine `context_capsule_semantics` |
+| geographic360 | context_360 | **`implemented`** (G4.5) — `Geographic360Provider` in `services/geographic360/` over governed location facts (`LocationFactRepository`, table `location_facts`, in-memory/asyncpg); reads canonical `location_facts` (`geo` legacy service); `context_capsule_semantics` spine resolved (`services/geographic360/capsule_semantics.py`); DSR coverage — `location_facts` revoke | geographic360 | — (zero pending; `converged`, `docs/blueprints/geographic360.md`; `projectionDependencies profile360/temporal360` remain `in_flight` → region/posture lenses degrade, never lie) |
 | population360 | context_360 | **`implemented`** (P3.5) — `Population360Provider` in `services/population360/` over governed membership (`PopulationMembershipGovernor`, MEMBER_OF-via-gateway, append-only `population_definition_versions`, DSR coverage — `services/population`); `grouping_membership` spine resolved | population360 | — (zero pending; `converged`, `docs/blueprints/population360.md`; `projectionDependencies profile360/relationship360` remain `in_flight` → demographic lens / relationship semantics degrade, never lie) |
 | cluster360 | operational_workbench | `/v1/clusters`; `cluster360` surface + tenant page | cluster360, graph | — |
 | outcome360 | measurement_360 | **`implemented`** (S2) — `Outcome360Provider` in `services/measurement/outcome/`; reads outcome ledger + measurement engine (`gold_materializer`, `journey_compiler`); reads canonical `outcome_facts`/`measurement_contract`/`graph`/`evidence` | campaign360, outcome360 | — (zero pending; `migrationMode: converged`, `docs/blueprints/outcome360.md`) |
@@ -112,19 +115,19 @@ adapters/pages are legal; `infrastructure360` additionally owns the read-only
 
 **Tetris mechanics.** Existing pieces (all 19) sit on the board with their
 real coordinates (routes → `legacyBindings`, surfaces → `surfaceIds`, metrics
-→ `metricRefs`). The five 360 vertical slices dropped into place without
+→ `metricRefs`). The six 360 vertical slices dropped into place without
 disturbing placed pieces: `outcome360`/`economic360` flipped to `implemented`
 (their metric pending refs were absorbed once `metric-registry.json` gained the
 economic metric set); `infrastructure360` landed as a new piece; and the
 context-360 leaves followed their spine-formalization path — `graph_history_replay`
-(temporal360, T2.1→T2.4) and `grouping_membership` (population360,
-P3.1→P3.5) were built, then each formalized into the validator `SPINE_INDEX` so
-its row's `hardDependency` resolves through the spine rather than a pending
-declaration. Still-queued pieces — the unformalized spines (`journey_continuity`,
-`context_capsule_semantics`, `reconciled_control_plane` — declared
-`pendingAuthority`), native providers for the remaining `in_flight`
-projections, and any future projection — drop into place when their slot opens,
-without moving or deleting placed pieces.
+(temporal360, T2.1→T2.4), `grouping_membership` (population360, P3.1→P3.5), and
+`context_capsule_semantics` (geographic360, G4.5) were built, then each
+formalized into the validator `SPINE_INDEX` so its row's `hardDependency`
+resolves through the spine rather than a pending declaration. Still-queued
+pieces — the unformalized spines (`journey_continuity`,
+`reconciled_control_plane` — declared `pendingAuthority`), native providers for
+the remaining `in_flight` projections, and any future projection — drop into
+place when their slot opens, without moving or deleting placed pieces.
 
 ## 3. Registry ownership + generated artifacts
 
@@ -160,7 +163,7 @@ rows stay byte-stable.
 |---|---|
 | **Silver projector-ownership registry** | Separate authority. Projectors WRITE Silver; projections READ Gold. The projector registry is never a canonical authority of a projection (validator forbids it; it may appear only as an input ref). |
 | **Graph Mutation Gateway** | The write path. Projections default `read_only`; `canonical_gateway_only` projections write only via `GraphMutationGateway.apply(MutationIntent)` (`off\|shadow\|enforce`, `replay_ledger()` digest). |
-| **Exploration Fabric** | Surface join. Projections JOIN `surface-capability-registry.json`; `surfaceIds ⊆` the surface registry. The projection registry never defines surfaces. S6 migration seam — the implemented 360 surfaces (`outcome360`/`economic360`/`infrastructure360`, then the context-360 `temporal360` at T2.3 and `population360` at P3.5) surface in exploration through `services/exploration/adapters/projection.py::ProjectionSurfaceAdapter`, which maps the surface to its projection id and runs the projection through the S1 engine for the tenant-scoped subject, reshaping the engine result into the exploration `AdapterResult` envelope (digest, per-section state, degradation; fail-isolated + content-free, `populated=False` on a missing provider). Registered only for 360s that previously had no adapter — an already-owned surface is never shadowed. |
+| **Exploration Fabric** | Surface join. Projections JOIN `surface-capability-registry.json`; `surfaceIds ⊆` the surface registry. The projection registry never defines surfaces. S6 migration seam — the implemented 360 surfaces (`outcome360`/`economic360`/`infrastructure360`, then the context-360 `temporal360` at T2.3, `population360` at P3.5 and `geographic360` at G4.5) surface in exploration through `services/exploration/adapters/projection.py::ProjectionSurfaceAdapter`, which maps the surface to its projection id and runs the projection through the S1 engine for the tenant-scoped subject, reshaping the engine result into the exploration `AdapterResult` envelope (digest, per-section state, degradation; fail-isolated + content-free, `populated=False` on a missing provider). Registered only for 360s that previously had no adapter — an already-owned surface is never shadowed. |
 | **Readiness vocabulary** | No parallel ladder. `implementationState` never maps to readiness; `readiness.py` maps it to presentation-only tokens and is asserted to never emit a certification token or `production_ready`. |
 | **Measurement plane** | An authority (`shared/measurement`, computation substrate). `metricRefs` resolve against `metric-registry.json`; economic/outcome metrics not yet in the registry stay in `pendingReference`. |
 | **UPR** | An authority (`services/provider_runtime/`). `connection360`/`source360` read connections/credentials/health from it; the `ProviderRegistry` mirrors the UPR `ProviderRegistry` shape. |

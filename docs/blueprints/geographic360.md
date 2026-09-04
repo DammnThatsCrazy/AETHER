@@ -43,9 +43,11 @@ preserved (parity-tested); coordinates live **only** in the new location
 contract this slice introduces.
 
 The registry already names its authorities: `context_capsules`,
-`geo_observations`, `locations`, `entity_graph`, `temporal`; surface `geo`;
-legacy binding `services/geo`; `hardDependencies: [temporal_kernel,
-context_capsule_semantics]`; `projectionDependencies: [profile360, temporal360]`.
+`geo_observations`, `locations`, `entity_graph`, `temporal`; a dedicated
+`geographic360` surface (G4.4b — `geo` stays owned by its graph-plane adapter,
+never shadowed); legacy binding `services/geo`; `hardDependencies:
+[temporal_kernel, context_capsule_semantics]`; `projectionDependencies:
+[profile360, temporal360]`.
 
 ## Why
 
@@ -92,6 +94,15 @@ exactly one new canonical geography authority and no second geography registry:
   (`shared/credentials/interface.py` + `shared/providers/base.py`). MaxMind
   GeoLite2 local files remain the air-gapped default; no new external dependency
   is required to converge.
+* **The governed store ships with the flip (G4.5).** The one repository over
+  these facts is `services/geo/location_facts.py::LocationFactRepository`
+  (table `location_facts`, the shared `BaseRepository` — in-memory dicts under
+  `AETHER_ENV=local`, asyncpg JSONB in production). `record` is the *internal*
+  write boundary (repositories only; deliberately no public route or consent
+  surface); `active_facts_for_subject` reads tenant-scoped; and
+  `revoke_facts_for_subject` is the governed soft-revoke (`active` → `revoked`,
+  stamped, never a hard delete) the DSR eraser drives. The provider's default
+  reader is store-backed rather than honest-`missing`.
 
 ### New graph vocabulary
 
@@ -133,14 +144,30 @@ never crash, never fabricate, never leak exception detail. `requiresDimensionSta
 
 `geographic360` declares `projectionDependencies: [profile360, temporal360]` and
 `hardDependencies: [temporal_kernel, context_capsule_semantics]`. Sibling rows
-that are still `in_flight` compute as `missing` at the registry level and the
-provider **degrades honestly**: until `temporal360` lands, location-history
-windows render from live graph truth with valid-time provenance only
-(`supportedTemporalModes: [window, compare, relative]` — note: no `as_of`), and
-region/jurisdiction interpretation over profile provenance lifts when
-`profile360` lands. The `context_capsule_semantics` pending authority formalizes
-the capsule→location reading this projection consumes — it resolves in this row,
-in the same phase that defines the primitive.
+compute as `missing` at the registry level while `in_flight`, and the provider
+**degrades honestly** and never fabricates a dependency it does not have:
+
+* `temporal360` has landed (Phase 2, now `implemented`), so its
+  `dependencyState` is no longer `missing`. geographic360's own
+  `supportedTemporalModes` stay `[window, compare, relative]` (no `as_of`): the
+  WHERE leaf renders a location-history window over canonical location facts with
+  valid-time provenance and deliberately does **not** perform knowledge-time
+  reconstruction (that belongs to the `temporal360` dep, which only projections
+  declaring `as_of`/`known_then` modes consume).
+* `profile360` remains `in_flight`, so region/jurisdiction interpretation over
+  profile provenance degrades to a typed `missing` state until canonical profile
+  facts exist — it lifts when `profile360` lands and is never fabricated
+  meanwhile.
+* `context_capsule_semantics` — the authority this row resolves — ships in G4.5
+  at `services/geographic360/capsule_semantics.py`: the pure rule set mapping one
+  privacy-shaped capsule `LocationObservation` to a canonical geographic reading
+  (the write-side `capsule_location_fact` builder plus the read-boundary guard
+  `normalise_capsule_fact_row`, applied by the provider's reader seam to every
+  capsule-provenance row). At the flip the row's `pendingAuthority` is emptied
+  and `context_capsule_semantics` is formalized into the validator `SPINE_INDEX`,
+  so the now-zero-pending row's `hardDependency` still resolves — the designed
+  spine-formalization step (mirroring `grouping_membership` at P3.5), not a
+  validator weakening.
 
 ### No redefinition
 
@@ -167,12 +194,13 @@ This slice follows the canonical vertical-slice checklist —
 [docs/source-of-truth/INTELLIGENCE_PROJECTION_VERTICAL_SLICE_CHECKLIST.md](../../docs/source-of-truth/INTELLIGENCE_PROJECTION_VERTICAL_SLICE_CHECKLIST.md)
 (registry row zero-pending + converged, shared-contract conformance, runtime
 provider, evidence, tenant isolation, `read_only` graph policy, targeted tests,
-source-linked review, and `make ci-check` green). The `implemented` flip
-additionally requires the location registry + `shared/geo` models (G4.1), the
-graph edge vocabulary (G4.2), a vault-backed `GeocodingProvider` (G4.3), and the
-provider + surface-capability block (G4.4) to be live, and the population-tables
-erasure gap for location facts closed via a `DSR_COMPONENT` (G4.5). Flipping to
-`implemented` makes **no** `production_ready` claim.
+source-linked review, and `make ci-check` green). The `implemented` flip is
+gated on the prerequisites having **shipped**: the location registry + `shared/geo`
+models (G4.1), the graph edge vocabulary (G4.2), a vault-backed
+`GeocodingProvider` (G4.3), the provider + surface-capability block (G4.4), and
+— in G4.5 — the canonical `location_facts` store, the `context_capsule_semantics`
+authority, and the `DSR_COMPONENT` closing the location-facts erasure gap.
+Flipping to `implemented` makes **no** `production_ready` claim.
 
 ## Test surface
 
