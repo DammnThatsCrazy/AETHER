@@ -27,7 +27,9 @@ Modules:
 * :mod:`~services.communication360.knowledge` — knowledge / interpretation /
   context-inclusion mapping (R4, observed-capped);
 * :mod:`~services.communication360.authority` — delegation-outcome →
-  authority-state evaluation.
+  authority-state evaluation;
+* :mod:`~services.communication360.routes` — the read-only ``/v1/communication360``
+  FastAPI router (all GET, tenant-scoped, ``communication360.read``-gated).
 
 The blueprint is ``docs/blueprints/communication360.md``; the program ledger is
 ``docs/plans/COMMUNICATION_360_PHASES.md``.
@@ -63,12 +65,25 @@ from services.communication360.contracts import (  # noqa: F401
     ResponseExpectation,
 )
 
+from services.communication360.provider import (  # noqa: F401
+    Communication360Provider,
+    register_provider,
+)
+from services.communication360.routes import (  # noqa: F401
+    EXPLORE_CAPABILITY,
+    PROJECTION_ID,
+    READ_CAPABILITY,
+    create_router,
+    router,
+)
+
 __all__ = [
     "AgentConsumptionState",
     "AuthorityEvaluation",
     "AuthorityState",
     "CapabilityState",
     "Commitment",
+    "Communication360Provider",
     "CommunicationAct",
     "CommunicationActType",
     "CommunicationContract",
@@ -78,6 +93,7 @@ __all__ = [
     "ContextInclusionRecord",
     "Conversation",
     "ConversationState",
+    "EXPLORE_CAPABILITY",
     "Information",
     "InformationRef",
     "InformationTransformation",
@@ -85,10 +101,15 @@ __all__ = [
     "KnowledgeStateRecord",
     "Matter",
     "MessageClaimBinding",
+    "PROJECTION_ID",
     "ParticipantBinding",
     "ProviderCapability",
     "ProviderThread",
+    "READ_CAPABILITY",
     "Request",
     "ResolutionRecord",
     "ResponseExpectation",
+    "create_router",
+    "register_provider",
+    "router",
 ]
