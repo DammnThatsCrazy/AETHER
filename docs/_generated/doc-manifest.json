@@ -5322,6 +5322,21 @@
       "canonical_owner": "backend@aether"
     },
     {
+      "path": "docs/plans/DATA_EXCHANGE_PHASES.md",
+      "title": "Data Exchange Plane — Day-1 Implementation Program",
+      "slug": "plans/data-exchange-phases",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "canonical_owner": "backend@aether"
+    },
+    {
       "path": "docs/plans/UNIVERSAL_INTELLIGENCE_GRAPH_IMPLEMENTATION.md",
       "title": "Universal Intelligence Graph — Implementation Ledger",
       "slug": "plans/universal-intelligence-graph-implementation",
