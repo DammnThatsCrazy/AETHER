@@ -14,6 +14,7 @@
 // =============================================================================
 
 import type { PageRequest, EvidenceRef, TimeRangeFilter, PageInfo } from './operational-intelligence';
+import type { EpistemicStatus } from './epistemic-status';
 import {
   intelligenceProjectionIds,
   intelligenceProjectionImplementationStates,
@@ -97,6 +98,14 @@ export interface ClaimEnvelope {
   evidenceRefs: EvidenceRef[];
   claims: string[];
   confidence?: number;
+  /**
+   * Consolidated claim state (see './epistemic-status'). Absent means
+   * unclassified — never factual. Message/transport facts are capped at
+   * 'observed'; a recipient-knowledge or author-intent claim is a structurally
+   * different object and can never be granted a factual state by a
+   * delivery/engagement fact alone.
+   */
+  claimState?: EpistemicStatus;
 }
 
 /** Engine-level (A8) degradation summary for a projection result. */
