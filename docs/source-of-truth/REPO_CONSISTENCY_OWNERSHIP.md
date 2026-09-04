@@ -37,6 +37,7 @@ The machine-readable owner map is `docs/source-of-truth/repo_consistency_ownersh
 | docs source-linked content changed | frontmatter validation, drift validation, reviewed sync stamp |
 | durable jobs platform changed | `JOBS_PLATFORM.md` review/restamp, generated docs, jobs tests |
 | tenant import engine changed | imports contract twin, `IMPORT_FAILURES.md`, generated docs, import tests |
+| data exchange plane changed | data-exchange contract twin (`packages/shared/data-exchange.ts`), `DATA_EXCHANGE_PHASES.md` plan, this ownership doc, generated docs, data exchange parity/tests |
 | measurement integrity plane changed | metric registry contract (TS/Py/doc mirrors), `MEASUREMENT_RESTATEMENT.md`, measurement tests |
 | computation substrate changed | `config/computation_inventory.yaml`, `COMPUTATION_SUBSTRATE.md`, regenerated registry twin, substrate tests |
 | intelligence projection architecture changed | generated projection artifacts (TS/Py/doc mirrors), SOT docs, `REPO-INDEX.md`/`AUTOMATION.md`, `packages/shared/index.ts`, projection tests |

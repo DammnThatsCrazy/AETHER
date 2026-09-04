@@ -288,6 +288,27 @@
       "remediation": "Keep the imports contract twin (packages/shared/imports.ts \u2194 services/imports/contracts.py) in sync, review the IMPORT_FAILURES runbook, and update import tests; regenerate docs."
     },
     {
+      "id": "data_exchange_plane",
+      "name": "data exchange plane changed",
+      "source_globs": [
+        "Backend Architecture/**/services/data_exchange/**",
+        "packages/shared/data-exchange.ts"
+      ],
+      "required_changed_globs": [
+        "packages/shared/data-exchange.ts",
+        "docs/plans/DATA_EXCHANGE_PHASES.md",
+        "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",
+        "docs/_generated/**",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/validate_contracts.py",
+        "python scripts/docs_drift.py --strict",
+        "python -m pytest tests/contracts/test_data_exchange_parity.py -q"
+      ],
+      "remediation": "Keep the data exchange contract twin (packages/shared/data-exchange.ts \u2194 services/data_exchange/contracts.py) in sync, refresh the DATA_EXCHANGE_PHASES plan, and update the data exchange tests; regenerate docs."
+    },
+    {
       "id": "measurement_integrity",
       "name": "measurement integrity plane changed",
       "source_globs": [
