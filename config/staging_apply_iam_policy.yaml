@@ -472,6 +472,7 @@ statements:
       - elasticloadbalancing:DescribeTargetGroupAttributes
       - elasticloadbalancing:DescribeTags
       - elasticloadbalancing:DescribeRules
+      - elasticloadbalancing:DescribeListenerAttributes
     resource: '*'
     scope: staging-write-required-by-api
   # ----- Aurora (module.aurora) -----
@@ -562,6 +563,10 @@ statements:
       - s3:GetBucketTagging
       - s3:GetBucketPublicAccessBlock
       - s3:GetBucketObjectLockConfiguration
+      - s3:GetAccelerateConfiguration
+      - s3:GetBucketRequestPayment
+      - s3:GetBucketNotification
+      - s3:GetBucketOwnershipControls
       - s3:ListBucket
     resource: arn:aws:s3:::aether-staging-*
     scope: staging-name-prefix
