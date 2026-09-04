@@ -13,7 +13,7 @@ canonical_owner: platform@aether
 
 ## Phase 0 (current) — convergence bedrock
 
-Branch `feat/sdk-universal-ingestion` (base `71c37d0d`, tracking `origin/main`).
+Branch `feat/sdk-universal-ingestion` (based on `5f0585ce` = `origin/main` head at landing, which carried the 360 program #593).
 Make the canonical architecture authoritative *and enforced* without yet building
 the big missing pieces. This page + `TARGET_ARCHITECTURE.md` +
 `REPO_TRUTH_AND_GAP_MATRIX.md` are the governed home for the program.
