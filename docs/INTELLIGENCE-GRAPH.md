@@ -83,6 +83,30 @@ durable `gold_relationship_semantic_state` projections and writes one directed
 the graph **through the canonical `GraphMutationGateway`** — never a direct
 graph write. See [Semantic relationship overlay](#semantic-relationship-overlay).
 
+A third, governed path makes **population membership a first-class graph fact**
+(population360 P3.1 — `services/population/governance.py`): every join/leave is
+written as a directed `MEMBER_OF` edge (`entity -> population`) through the same
+canonical `GraphMutationGateway`, never a bare table write. The gateway
+close-and-appends into the bitemporal ledger, so a membership history is
+reconstructable and digest-verifiable like any other canonical fact. The
+population-membership table row is only the *materialized current state* the
+governed path maintains after a successful edge write.
+
+These membership edges carry the provenance keys now declared on the canonical
+optional-edge vocabulary (`shared/graph/edge_properties.py`
+`OPTIONAL_EDGE_PROPERTIES`, population360 P3.1):
+`membership_state` (`active|left|expired`), `definition_version` (the immutable
+population-definition version the membership was computed under),
+`membership_basis` (`rule|graph|ml_model|similarity|manual|inferred`),
+`population_type` (a `PopulationType` value), and `evidence_refs` (the
+`EvidenceRef` ids grounding the fact). A **leave is a state transition — a
+governed soft-revoke of the `MEMBER_OF` edge (`edge_expired`) — never a hard
+delete**, so the append-only membership and definition ledgers stay intact and
+rebuildable. Consent/policy is evaluated at the write boundary itself
+(population360 P3.2, server-authoritative `services.consent.authority`), and a
+data-subject erasure runs governed leaves through this same path (see
+[DSR Cascade](#dsr-cascade-art-17-erasure)).
+
 ## Architecture Layers
 
 | Layer | Name | Description | Key Components |
@@ -323,6 +347,15 @@ When a Data Subject Request is received:
 - `PAYMENT` vertices involving the user: **deleted**
 - `ACTION_RECORD` vertices produced by user-owned agents: **deleted**
 - `CONTRACT` vertices: **pseudonymized** (deployer field hashed; on-chain data is immutable)
+- Population memberships: **governed leave, not delete** — every active
+  `MEMBER_OF` edge is soft-revoked (`edge_expired`) via
+  `PopulationMembershipGovernor.remove_membership`, the membership row
+  transitions to `left`, and each affected population's `member_count` is
+  recomputed (population360 P3.3, `services/consent/erasure_jobs.py::_erase_population_plane`).
+  The erasure marks the three population dsr_propagation components
+  (`population_memberships` / `population_snapshots` / `populations`) with real
+  receipts — only memberships carry subject identity; snapshots and population
+  objects are tenant artifacts and report honest zero rows.
 - All existing H2H vertices: handled by existing DSR cascade (unchanged)
 
 ### Audit Actions (14 new)

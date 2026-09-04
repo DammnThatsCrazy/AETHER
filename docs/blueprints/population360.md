@@ -38,8 +38,8 @@ It is NOT a competing population store, NOT a second cohort/segment system, and
 NOT a demographics backend. Demographics are a governed **human lens** of this
 projection over canonical profile facts — there is **no `Demographic360`** and no
 `Spatiotemporal360` (standing rule 6). Membership is a first-class **governed
-graph fact**, not a table row: the pending authority this slice resolves is
-`grouping_membership`, making membership versioned, bitemporal, evidence-carrying,
+graph fact**, not a table row: this slice resolves the `grouping_membership`
+authority (P3.1–P3.3), making membership versioned, bitemporal, evidence-carrying,
 consent-gated, and erasure-covered.
 
 The registry names its authorities: `population_definitions`,
@@ -65,9 +65,10 @@ evidence, consent, and erasure guarantees as every other canonical fact.
 
 ## How it works
 
-### The `grouping_membership` authority (the pending authority this slice resolves)
+### The `grouping_membership` authority (resolved by this slice)
 
-The row declares a single `pendingAuthority`:
+The row declared `hardDependencies: [contract_spine, grouping_membership]` and a
+single `pendingAuthority` — `grouping_membership` began as that declaration:
 
 ```json
 { "id": "grouping_membership", "kind": "spine",
@@ -75,26 +76,51 @@ The row declares a single `pendingAuthority`:
   "resolvesInProjection": "population360" }
 ```
 
-Phase 3 formalizes membership as a first-class graph fact written **through the
-graph mutation gateway** — not as a standalone table row:
+Phase 3 resolves that authority by converging membership onto the graph as a
+first-class governed fact written **through the graph mutation gateway** — not a
+standalone table row:
 
-* **Membership is a `MEMBER_OF` edge with provenance.** Definition version,
-  membership state, and evidence refs are carried on the membership
-  record/edge vocabulary (`definition_version` immutable, `membership_state`,
-  `evidence_refs`), which today the canonical edge property vocabulary does not
-  support and which the slice adds in the same phase.
-* **Bitemporal close-and-append.** Joins and leaves are appended facts with
-  valid-time and knowledge-time (via the gateway ledger), never in-place
-  idempotent updates; a membership history is reconstructable.
+* **Membership is a `MEMBER_OF` edge with provenance.** Every join writes a
+  `MEMBER_OF` edge (`entity -> population`) through `GraphMutationGateway`, and a
+  leave is a soft-revoke (`edge_expired`), never a hard delete. Membership
+  provenance keys — `definition_version`, `membership_state`, `membership_basis`,
+  `population_type`, `evidence_refs` — ride on both the edge and the ledger
+  record via the canonical optional-edge vocabulary
+  (`services/population/governance.py` `PopulationMembershipGovernor` +
+  `shared/graph/edge_properties.py`). The `population_memberships` table row is
+  only the current-state materialisation the governed path maintains.
+* **Close-and-append.** Joins and leaves are appended facts through the gateway
+  ledger, never in-place idempotent updates; reads surface active memberships
+  only (`MembershipRepository.count_active_members` /
+  `active_memberships_for_subject`).
 * **Definition versioning is immutable.** A population definition is a versioned
-  contract; recomputing a definition produces a new version and a documented
-  transition, never a silent redefinition of the old cohort.
+  contract: `PopulationDefinitionRepository` maintains an append-only
+  `population_definition_versions` ledger with a deterministic per-version id
+  (a version publishes at most once), and `revise_definition` is the only
+  definition-change path — it refuses an identical no-op revision and advances
+  the current projection only through a documented, supersedes-chained version
+  (`services/population/registry.py`).
 * **Consent is enforced where membership is written** (standing rule 8) — the
-  same consent/policy evaluation graph writes receive applies at membership
-  compute/write time, not merely a tenant `write` permission.
-* **Erasure is not a dead end** (standing rule 7) — the population tables and the
-  membership facts gain `DSR_COMPONENT` coverage in `services/dsr_propagation/`
-  in this same phase.
+  governor evaluates consent for the member subject under the population's
+  declared `consent_purpose` before any edge/row/ledger write; a denial raises
+  `MembershipConsentDeniedError` and the batch route preflights the whole cohort
+  so no partial join lands. A leave is always honored (a revoked subject can
+  still exit a cohort).
+* **Erasure is not a dead end** (standing rule 7) — the population artifacts
+  gained `DSR_COMPONENT` coverage (`population_memberships`,
+  `population_snapshots`, `populations`; `services/dsr_propagation/models.py`
+  26 -> 29), and the consent erasure handler executes a **governed leave** for
+  every active membership the subject holds and recomputes each affected
+  population's materialised `member_count` from active memberships
+  (`services/consent/erasure_jobs.py`).
+* **Tenant isolation on every route** — every group-by-id population route
+  resolves through a tenant-ownership guard (404 on foreign-or-missing ids),
+  matching the campaign/entities guard (`services/population/routes.py`).
+
+At P3.5 the row's `pendingAuthority` is emptied and `grouping_membership` is
+formalized into the validator `SPINE_INDEX`, so the now-zero-pending row's
+`hardDependency` still resolves — the designed spine-formalization step
+(mirroring `graph_history_replay` at T2.4), not a validator weakening.
 
 The provider projects snapshots, deltas, overlap, transitions, and composition
 over that governed membership — never a parallel cohort store. The human
@@ -120,15 +146,27 @@ exception detail. `requiresEvidence`, `requiresDimensionState`,
 ### Dependency story (profile360 / relationship360 / temporal360)
 
 `population360` declares `projectionDependencies: [profile360, relationship360,
-temporal360]`. Sibling rows still `in_flight` compute as `missing` at the registry
-level and the provider **degrades honestly**: until `temporal360` lands (Phase 2,
-its declared upstream), membership timelines render from live graph truth with
-valid-time provenance only (`supportedTemporalModes: [window, relative]`); the
-demographic lens lifts when `profile360` lands; relationship-derived cohort
-semantics lift when `relationship360` lands. The projection still returns a valid
-`ProjectionResult` with `dependencyState` echoed from the registry. Population360
-is itself the dependency that `cluster360` (and risk/fraud population subjects)
-consume — flipping it raises those surfaces out of `missing`.
+temporal360]`. Sibling rows compute as `missing` at the registry level while
+`in_flight`, and the provider **degrades honestly** and never fabricates a
+dependency it does not have:
+
+* `temporal360` has landed (Phase 2, now `implemented`), so the temporal
+  dependency reads live and its `dependencyState` is no longer `missing`.
+  population360's own `supportedTemporalModes` stay `[window, relative]` — the
+  provider renders those from governed membership current state and the
+  snapshot history directly, and deliberately does **not** perform knowledge-time
+  reconstruction (that belongs to the `temporal360` dep, which only projections
+  declaring `as_of`/`known_then` modes consume).
+* `profile360` remains `in_flight`, so the human **demographic lens** degrades to
+  a typed `missing` state until canonical profile facts exist — it lifts when
+  `profile360` lands and is never fabricated meanwhile.
+* `relationship360` remains `in_flight`; relationship-derived cohort semantics
+  degrade honestly until it lands.
+
+The projection still returns a valid `ProjectionResult` with `dependencyState`
+echoed from the registry. Population360 is itself the dependency that
+`cluster360` (and risk/fraud population subjects) consume — flipping it raises
+those surfaces out of `missing`.
 
 ### No redefinition
 
@@ -157,11 +195,11 @@ This slice follows the canonical vertical-slice checklist —
 [docs/source-of-truth/INTELLIGENCE_PROJECTION_VERTICAL_SLICE_CHECKLIST.md](../../docs/source-of-truth/INTELLIGENCE_PROJECTION_VERTICAL_SLICE_CHECKLIST.md)
 (registry row zero-pending + converged, shared-contract conformance, runtime
 provider, evidence, tenant isolation, `read_only` graph policy, targeted tests,
-source-linked review, and `make ci-check` green). The `implemented` flip
-additionally requires governed membership edges through the gateway (P3.1),
-immutable definition versioning + write-time consent (P3.2), `DSR_COMPONENT`
-coverage for the population artifacts (P3.3), and the provider + demographic lens
-(P3.4) to be live — with the `implemented` flip still carrying **no**
+source-linked review, and `make ci-check` green). The `implemented` flip is
+gated on the prerequisites having **shipped**: governed membership edges through
+the gateway (P3.1), immutable definition versioning + write-time consent (P3.2),
+`DSR_COMPONENT` coverage for the population artifacts (P3.3), and the provider +
+demographic lens (P3.4) — with the `implemented` flip still carrying **no**
 `production_ready` claim.
 
 ## Test surface
