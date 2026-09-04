@@ -31,6 +31,7 @@ Contract version: `1.0.0`
 | `infrastructure360` | `entity`, `time`, `graph`, `risk`, `truth` | `window`, `as_of`, `compare`, `relative` | `table`, `graph`, `map` | yes | yes | yes | yes | yes |
 | `journeys` | `entity`, `time`, `device`, `campaign`, `truth` | `window`, `relative` | `flow`, `table`, `timeline` | yes | yes | yes | yes | yes |
 | `outcome360` | `entity`, `time`, `geography`, `campaign`, `economic`, `truth` | `window`, `compare`, `relative` | `table`, `graph` | yes | yes | yes | yes | yes |
+| `population360` | `entity`, `graph`, `time`, `truth` | `window`, `relative` | `table`, `timeline`, `comparison` | yes | yes | yes | yes | yes |
 | `product_intelligence` | `entity`, `time`, `device`, `campaign`, `economic`, `truth` | `window`, `compare`, `relative` | `table`, `timeline`, `flow` | yes | yes | yes | yes | yes |
 | `profile360` | `entity`, `time`, `geography`, `device`, `campaign`, `economic`, `risk`, `truth` | `window`, `as_of`, `relative` | `table`, `timeline` | no | yes | no | no | yes |
 | `temporal360` | `entity`, `time`, `truth` | `window`, `as_of`, `compare`, `relative` | `timeline`, `table` | yes | yes | yes | yes | yes |

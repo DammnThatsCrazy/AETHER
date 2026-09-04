@@ -1,8 +1,8 @@
 """ProjectionSurfaceAdapter (S6) — 360 projection surfaces through the S1 engine.
 
 The exploration fabric's migration seam maps the projection-backed 360 surfaces
-(outcome360 / economic360 / infrastructure360 / temporal360) onto their
-intelligence projections and executes them through the S1 engine's
+(outcome360 / economic360 / infrastructure360 / temporal360 / population360) onto
+their intelligence projections and executes them through the S1 engine's
 fail-isolated executor.
 Under test: surface→projection mapping, typed-section composition into an
 AdapterResult carrying digest + per-section state, tenant isolation, and the
@@ -53,6 +53,7 @@ from services.exploration.adapters import (  # noqa: E402
     available_surfaces,
 )
 from services.exploration.adapters.campaign import CampaignSurfaceAdapter  # noqa: E402
+from services.exploration.adapters.cluster import ClusterSurfaceAdapter  # noqa: E402
 from services.exploration.adapters.geo import GeoSurfaceAdapter  # noqa: E402
 from services.exploration.adapters.graph import GraphSurfaceAdapter  # noqa: E402
 from services.exploration.adapters.profile import ProfileSurfaceAdapter  # noqa: E402
@@ -60,6 +61,7 @@ from services.exploration.adapters.projection import (  # noqa: E402
     Economic360SurfaceAdapter,
     Infrastructure360SurfaceAdapter,
     Outcome360SurfaceAdapter,
+    Population360SurfaceAdapter,
     Temporal360SurfaceAdapter,
 )
 from services.exploration.adapters.timeline import TimelineSurfaceAdapter  # noqa: E402
@@ -70,13 +72,15 @@ _OUTPUT_SECTIONS = {
     "economic360": ("summary", "state", "evidence", "outcomes", "findings"),
     "infrastructure360": ("summary", "state", "deployments", "evidence", "findings"),
     "temporal360": ("summary", "state", "timeline", "evidence", "findings"),
+    "population360": ("summary", "state", "timeline", "evidence", "findings"),
 }
 
 # Projection dependencies (registry graph, flat closure) registered so clean
 # runs are un-degraded: outcome360 -> temporal360; economic360 -> outcome360/
 # profile360/relationship360 (plus their own transitive deps: outcome360 and
 # relationship360 both require temporal360); infrastructure360 and temporal360
-# (the root of the contextual cluster) have none.
+# (the root of the contextual cluster) have none. population360 declares
+# projectionDependencies profile360/relationship360/temporal360.
 _DEPS = {
     "outcome360": ("temporal360",),
     "economic360": (
@@ -87,6 +91,7 @@ _DEPS = {
     ),
     "infrastructure360": (),
     "temporal360": (),
+    "population360": ("profile360", "relationship360", "temporal360"),
 }
 
 
@@ -216,6 +221,7 @@ def test_surfaces_map_to_their_projection_ids() -> None:
         (Economic360SurfaceAdapter, "economic360"),
         (Infrastructure360SurfaceAdapter, "infrastructure360"),
         (Temporal360SurfaceAdapter, "temporal360"),
+        (Population360SurfaceAdapter, "population360"),
     ):
         adapter = cls()
         assert adapter.surface_id == surface
@@ -223,12 +229,19 @@ def test_surfaces_map_to_their_projection_ids() -> None:
 
 
 def test_registered_surfaces_do_not_shadow_owned_ones() -> None:
-    # The four 360 surfaces are now available...
+    # The five 360 surfaces are now available...
     assert isinstance(get_adapter("outcome360"), Outcome360SurfaceAdapter)
     assert isinstance(get_adapter("economic360"), Economic360SurfaceAdapter)
     assert isinstance(get_adapter("infrastructure360"), Infrastructure360SurfaceAdapter)
     assert isinstance(get_adapter("temporal360"), Temporal360SurfaceAdapter)
-    for surface in ("outcome360", "economic360", "infrastructure360", "temporal360"):
+    assert isinstance(get_adapter("population360"), Population360SurfaceAdapter)
+    for surface in (
+        "outcome360",
+        "economic360",
+        "infrastructure360",
+        "temporal360",
+        "population360",
+    ):
         assert surface in available_surfaces()
 
     # ...and temporal360 never steals timeline / temporal_observatory from
@@ -252,7 +265,12 @@ def test_registered_surfaces_do_not_shadow_owned_ones() -> None:
     assert not isinstance(get_adapter("timeline"), Temporal360SurfaceAdapter)
     assert get_adapter("temporal_observatory") is None
 
-    # A non-360 surface this adapter does not own stays absent (honest not-available).
+    # population360 never shadows its nearest siblings either: cluster360 keeps
+    # its ClusterSurfaceAdapter and comparison_workbench stays absent (a
+    # deferred surface) — the fabric answers an honest not-available there.
+    assert isinstance(get_adapter("cluster360"), ClusterSurfaceAdapter)
+    assert get_adapter("population360").surface_id == "population360"
+    assert not isinstance(get_adapter("cluster360"), Population360SurfaceAdapter)
     assert get_adapter("comparison_workbench") is None
 
 
@@ -268,6 +286,7 @@ def test_registered_surfaces_do_not_shadow_owned_ones() -> None:
         (Economic360SurfaceAdapter, "economic360"),
         (Infrastructure360SurfaceAdapter, "infrastructure360"),
         (Temporal360SurfaceAdapter, "temporal360"),
+        (Population360SurfaceAdapter, "population360"),
     ],
 )
 async def test_projection_surface_composes_typed_sections(cls, surface) -> None:

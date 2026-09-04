@@ -1,9 +1,9 @@
 """Projection-surface adapter — the S1 migration seam for 360 surfaces.
 
 Exploration surfaces whose backing plane is an intelligence projection
-(outcome360 / economic360 / infrastructure360 / temporal360) run through this
-adapter: it maps one registered exploration surface to its projection id (here
-equal by name) and
+(outcome360 / economic360 / infrastructure360 / temporal360 / population360) run
+through this adapter: it maps one registered exploration surface to its
+projection id (here equal by name) and
 executes the projection through the S1 engine
 (:class:`ProjectionRuntime <shared.projection_engine.runtime.ProjectionRuntime>`
 → :class:`ProjectionExecutor` → the fail-isolated
@@ -27,9 +27,9 @@ ADR-010 posture:
 
 The generic adapter is intentionally NOT registered: only the thin per-surface
 subclasses for 360 surfaces that previously had no dedicated exploration adapter
-(outcome360 / economic360 / infrastructure360 / temporal360) join the surface
-registry, so an already-owned surface (profile360, campaign360, ...) is never
-shadowed.
+(outcome360 / economic360 / infrastructure360 / temporal360 / population360) join
+the surface registry, so an already-owned surface (profile360, campaign360, ...)
+is never shadowed.
 """
 
 from __future__ import annotations
@@ -234,10 +234,23 @@ class Temporal360SurfaceAdapter(ProjectionSurfaceAdapter):
     surface_id = "temporal360"
 
 
+class Population360SurfaceAdapter(ProjectionSurfaceAdapter):
+    """population360 exploration surface → the population360 projection.
+
+    The context-360 WHO/SET leaf (Phase 3): it owns its own ``population360``
+    surface rather than shadowing ``comparison_workbench`` (deferred, no
+    adapter) or ``cluster360`` (already owned by ``ClusterSurfaceAdapter`` —
+    an already-owned surface is never shadowed).
+    """
+
+    surface_id = "population360"
+
+
 __all__ = [
     "Economic360SurfaceAdapter",
     "Infrastructure360SurfaceAdapter",
     "Outcome360SurfaceAdapter",
+    "Population360SurfaceAdapter",
     "ProjectionSurfaceAdapter",
     "Temporal360SurfaceAdapter",
 ]

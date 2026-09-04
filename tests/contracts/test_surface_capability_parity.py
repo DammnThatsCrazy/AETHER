@@ -52,6 +52,7 @@ _EXPECTED_SURFACES = {
     "connection360",
     "infrastructure360",
     "temporal360",
+    "population360",
 }
 
 

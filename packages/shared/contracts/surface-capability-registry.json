@@ -170,6 +170,17 @@
       "supportsSelectionSets": true,
       "supportsSavedViews": true,
       "supportsExport": true
+    },
+    {
+      "surfaceId": "population360",
+      "supportedFieldCategories": ["entity", "graph", "time", "truth"],
+      "supportedTemporalModes": ["window", "relative"],
+      "supportedViews": ["table", "timeline", "comparison"],
+      "supportsFacets": true,
+      "supportsComparison": true,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": true,
+      "supportsExport": true
     }
   ]
 }
