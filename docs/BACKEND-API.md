@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "99736fed"
+last_synced_commit: "15764a60"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -1454,21 +1454,26 @@ A **360** is an intelligence projection over canonical Aether truth — never a
 competing system of record. The plane is a fail-isolated `ProviderRegistry` of
 `IntelligenceProjectionProvider`s over the shared
 `ProjectionRequest`/`ProjectionContext`/`ProjectionResult` contracts (TS +
-Python). Three 360s are implemented native providers (`outcome360`,
-`economic360`, `infrastructure360`); the rest are `in_flight`. `implementationState`
-is repo metadata, **not** readiness. `infrastructure360` is the first projection
-to expose a classified public route (read-only, every route a GET, tenant-scoped
-from the authenticated tenant, capability-gated on `infrastructure360.read`):
+Python). Four 360s are implemented native providers (`outcome360`,
+`economic360`, `infrastructure360`, `communication360`); the rest are `in_flight`.
+`implementationState` is repo metadata, **not** readiness. `infrastructure360`
+was the first projection to expose a classified public route, and
+`communication360` follows the same read-only route template (every route a GET,
+tenant-scoped from the authenticated tenant, capability-gated):
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/v1/infrastructure/{subject_kind}/{subject_id}` | Run the infrastructure360 projection for the requesting tenant (summary / state / deployments / evidence / findings sections; `subject_kind` ∈ `deployment` \| `infrastructure`) |
 | GET | `/v1/infrastructure/health` | Plane probe: provider registered + contract-compatible (`availability()` only) |
+| GET | `/v1/communication360/{subject_kind}/{subject_id}` | Run the communication360 projection for the requesting tenant (information-fidelity / knowledge / authority / resolution engines over the comms canonical facts; read-only) |
+| GET | `/v1/communication360/health` | Plane probe: provider registered + contract-compatible (`availability()` only) |
 
-**Permissions:** `read` + the projection's `infrastructure360.read` capability key
-(fail-closed). The provider reads the `infrastructure_facts` /
-`infrastructure_state` / `deployments` authorities; the projection is
-`graphMutationPolicy: read_only` — there is no write path.
+**Permissions:** `read` + the projection's `infrastructure360.read` / `communication360.read`
+capability key (fail-closed). The infrastructure360 provider reads the
+`infrastructure_facts` / `infrastructure_state` / `deployments` authorities; the
+communication360 provider reads the `communication360_facts` store over the comms
+silver path and the ratified information / knowledge / participant authorities.
+Both projections are `graphMutationPolicy: read_only` — there is no write path.
 
 ---
 
