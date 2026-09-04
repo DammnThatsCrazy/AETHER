@@ -32,16 +32,46 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Request, Query
 
-from dependencies.providers import get_producer
-from shared.common.common import APIResponse, NotFoundError, utc_now
+from dependencies.providers import get_graph, get_producer
+from shared.common.common import (
+    APIResponse,
+    BadRequestError,
+    ForbiddenError,
+    NotFoundError,
+    utc_now,
+)
 from shared.events.events import Event, Topic
 from shared.events.producer import EventProducer
+from shared.graph.graph import GraphClient
 from shared.logger.logger import get_logger, metrics
-from services.population.models import PopulationCreate, MembershipAdd, PopulationType
-from services.population.registry import population_repo, membership_repo
+from services.population.governance import (
+    MembershipConsentDeniedError,
+    PopulationMembershipGovernor,
+)
+from services.population.models import (
+    DefinitionRevision,
+    MembershipAdd,
+    PopulationCreate,
+    PopulationType,
+)
+from services.population.registry import definition_repo, membership_repo, population_repo
 
 logger = get_logger("aether.service.population")
 router = APIRouter(prefix="/v1/population", tags=["Population Intelligence"])
+
+
+async def _require_owned_group(population_id: str, tenant_id: str) -> dict:
+    """Fetch a population group, enforcing tenant ownership (IDOR guard).
+
+    Population rows are tenant-scoped, but ``population_repo.find_by_id`` is a
+    global lookup; a caller who knows another tenant's ``population_id`` must
+    not be able to read or mutate that group through these routes. Returns 404
+    (not 403) so a foreign group id is indistinguishable from a missing one.
+    """
+    group = await population_repo.find_by_id(population_id)
+    if group is None or group.get("tenant_id") != tenant_id:
+        raise NotFoundError("Population group")
+    return group
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -136,8 +166,60 @@ async def create_group(body: PopulationCreate, request: Request):
         source_tag=body.source_tag,
         tenant_id=tenant.tenant_id,
         metadata=body.metadata,
+        consent_purpose=body.consent_purpose,
     )
     return APIResponse(data=result).to_dict()
+
+
+@router.post("/groups/{population_id}/definition-revision")
+async def revise_group_definition(
+    population_id: str,
+    body: DefinitionRevision,
+    request: Request,
+):
+    """Publish a NEW immutable population-definition version (P3.2).
+
+    Definitions are versioned contracts: this endpoint appends a new immutable
+    version (the previous definition stays reconstructable in the version
+    ledger) and advances the population's current definition, with the required
+    ``reason`` documenting the transition. It refuses an identical no-op
+    revision. Memberships are never silently reinterpreted: old cohorts keep
+    the version they were computed against.
+    """
+    request.state.tenant.require_permission("write")
+    tenant_id = request.state.tenant.tenant_id
+    group = await _require_owned_group(population_id, tenant_id)
+
+    created_by = getattr(request.state.tenant, "user_id", "") or "population_api"
+    updated, version = await population_repo.revise_definition(
+        group,
+        body.definition,
+        reason=body.reason,
+        created_by=created_by,
+    )
+    metrics.increment("population_definition_revision", labels={"type": group.get("population_type", "")})
+    return APIResponse(data={
+        "population": updated,
+        "definition_version": version["definition_version"],
+        "supersedes_version": version["supersedes_version"],
+        "definition_hash": version["definition_hash"],
+        "reason": version["reason"],
+    }).to_dict()
+
+
+@router.get("/groups/{population_id}/definition-history")
+async def group_definition_history(population_id: str, request: Request):
+    """Immutable definition-version history, oldest -> newest (P3.2)."""
+    request.state.tenant.require_permission("read")
+    tenant_id = request.state.tenant.tenant_id
+    await _require_owned_group(population_id, tenant_id)
+
+    history = await definition_repo.history(population_id)
+    return APIResponse(data={
+        "population_id": population_id,
+        "definition_versions": history,
+        "count": len(history),
+    }).to_dict()
 
 
 @router.get("/groups/{population_id}")
@@ -145,14 +227,11 @@ async def get_group(population_id: str, request: Request):
     """Get group details including definition, metadata, and member count."""
     request.state.tenant.require_permission("read")
 
-    group = await population_repo.find_by_id(population_id)
-    if not group:
-        raise NotFoundError("Population group")
+    tenant_id = request.state.tenant.tenant_id
+    group = await _require_owned_group(population_id, tenant_id)
 
-    # Get current member count
-    members = await membership_repo.get_members(population_id, limit=1)
-    member_count = await membership_repo.count(filters={"population_id": population_id})
-    group["member_count"] = member_count
+    # Get current *active* member count (governed materialisation, P3.1)
+    group["member_count"] = await membership_repo.count_active_members(population_id)
 
     return APIResponse(data=group).to_dict()
 
@@ -182,30 +261,62 @@ async def add_members(
     population_id: str,
     body: MembershipAdd,
     request: Request,
+    graph: GraphClient = Depends(get_graph),
     producer: EventProducer = Depends(get_producer),
 ):
-    """Add members to a group with basis, confidence, and provenance."""
+    """Add members to a group through the governed membership path (P3.1).
+
+    Membership is a graph fact: each join is written as a ``MEMBER_OF`` edge
+    (entity -> population) through the mutation gateway with provenance
+    (``definition_version`` / ``membership_state`` / ``evidence_refs`` on the
+    edge and ledger vocabulary), and the population-membership table row is
+    materialised after the edge write. There is no direct table-write path.
+    """
     tenant = request.state.tenant
     tenant.require_permission("write")
 
-    # Verify group exists
-    group = await population_repo.find_by_id(population_id)
-    if not group:
-        raise NotFoundError("Population group")
+    # Verify the group exists AND belongs to this tenant (IDOR guard).
+    group = await _require_owned_group(population_id, tenant.tenant_id)
 
-    count = await membership_repo.add_members_batch(
-        population_id=population_id,
-        entity_ids=body.entity_ids,
-        entity_type=body.entity_type,
-        basis=body.basis,
-        confidence=body.confidence,
-        reason=body.reason,
-        source_tag=body.source_tag,
-        tenant_id=tenant.tenant_id,
-    )
+    governor = PopulationMembershipGovernor(graph_client=graph)
 
-    # Update member count on group
-    total = await membership_repo.count(filters={"population_id": population_id})
+    # Preflight consent for EVERY requested member (P3.2) so a batch never
+    # partially lands: a denied subject aborts the whole request before any
+    # edge, ledger row, or materialised membership is written.
+    for entity_id in body.entity_ids:
+        try:
+            await governor.assert_membership_allowed(
+                population=group,
+                entity_id=entity_id,
+                tenant_id=tenant.tenant_id,
+            )
+        except MembershipConsentDeniedError as exc:
+            raise ForbiddenError(
+                f"Membership denied by consent for entity {exc.entity_id}",
+                details={
+                    "reason_code": exc.reason_code,
+                    "purpose": exc.purpose,
+                    "entity_id": exc.entity_id,
+                },
+            ) from exc
+
+    added = 0
+    for entity_id in body.entity_ids:
+        row = await governor.add_membership(
+            population=group,
+            entity_id=entity_id,
+            entity_type=body.entity_type,
+            basis=body.basis,
+            confidence=body.confidence,
+            reason=body.reason,
+            source_tag=body.source_tag,
+            tenant_id=tenant.tenant_id,
+        )
+        if row:
+            added += 1
+
+    # Recompute the materialised member count over *active* memberships.
+    total = await membership_repo.count_active_members(population_id)
     await population_repo.update(population_id, {"member_count": total})
 
     for entity_id in body.entity_ids:
@@ -218,6 +329,8 @@ async def add_members(
                 "population_id": population_id,
                 "population_type": group.get("population_type", ""),
                 "basis": body.basis,
+                "membership_state": "active",
+                "definition_version": group.get("definition_version", "1"),
                 "confidence": body.confidence,
                 "source_tag": body.source_tag,
             },
@@ -226,7 +339,48 @@ async def add_members(
     metrics.increment("population_members_added", labels={"type": group.get("population_type", "")})
     return APIResponse(data={
         "population_id": population_id,
-        "members_added": count,
+        "members_added": added,
+        "total_members": total,
+    }).to_dict()
+
+
+@router.delete("/groups/{population_id}/members/{entity_id}")
+async def remove_member(
+    population_id: str,
+    entity_id: str,
+    request: Request,
+    reason: str = Query("membership_left", description="Leave reason (recorded on the edge revocation)"),
+    graph: GraphClient = Depends(get_graph),
+):
+    """Remove a member through the governed membership path (P3.1).
+
+    A leave is a governed soft-revoke of the ``MEMBER_OF`` edge
+    (``edge_expired`` — never a hard delete) and a ``membership_state=left``
+    transition on the materialised row, so membership history stays
+    reconstructable from the ledger.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+
+    # Verify the group exists AND belongs to this tenant (IDOR guard).
+    group = await _require_owned_group(population_id, tenant.tenant_id)
+
+    governor = PopulationMembershipGovernor(graph_client=graph)
+    row = await governor.remove_membership(
+        population=group,
+        entity_id=entity_id,
+        reason=reason,
+        tenant_id=tenant.tenant_id,
+    )
+
+    total = await membership_repo.count_active_members(population_id)
+    await population_repo.update(population_id, {"member_count": total})
+
+    return APIResponse(data={
+        "population_id": population_id,
+        "entity_id": entity_id,
+        "removed": bool(row),
+        "membership_state": (row or {}).get("membership_state", "left"),
         "total_members": total,
     }).to_dict()
 
@@ -239,9 +393,7 @@ async def group_intelligence(population_id: str, request: Request):
     """
     request.state.tenant.require_permission("read")
 
-    group = await population_repo.find_by_id(population_id)
-    if not group:
-        raise NotFoundError("Population group")
+    group = await _require_owned_group(population_id, request.state.tenant.tenant_id)
 
     members = await membership_repo.get_members(population_id, limit=500)
 
@@ -277,10 +429,9 @@ async def compare_groups(
     """Compare two groups: member overlap, feature differences, basis distribution."""
     request.state.tenant.require_permission("read")
 
-    pop_a = await population_repo.find_by_id(group_a)
-    pop_b = await population_repo.find_by_id(group_b)
-    if not pop_a or not pop_b:
-        raise NotFoundError("One or both groups not found")
+    tenant_id = request.state.tenant.tenant_id
+    pop_a = await _require_owned_group(group_a, tenant_id)
+    pop_b = await _require_owned_group(group_b, tenant_id)
 
     members_a = await membership_repo.get_members(group_a, limit=1000)
     members_b = await membership_repo.get_members(group_b, limit=1000)
@@ -309,9 +460,13 @@ async def entity_memberships(entity_id: str, request: Request):
     """Get all groups an entity belongs to with confidence and basis."""
     request.state.tenant.require_permission("read")
 
-    memberships = await membership_repo.get_populations_for_entity(entity_id)
+    tenant_id = request.state.tenant.tenant_id
+    memberships = [
+        m for m in await membership_repo.get_populations_for_entity(entity_id)
+        if m.get("tenant_id") == tenant_id
+    ]
 
-    # Enrich with group names
+    # Enrich with group names (group ownership already enforced per row).
     enriched = []
     for m in memberships:
         group = await population_repo.find_by_id(m.get("population_id", ""))
@@ -333,13 +488,14 @@ async def explain_membership(entity_id: str, population_id: str, request: Reques
     """Explain why an entity is in a specific group: basis, confidence, reason, provenance."""
     request.state.tenant.require_permission("read")
 
+    tenant_id = request.state.tenant.tenant_id
+    group = await _require_owned_group(population_id, tenant_id)
+
     record_id = hashlib.sha256(f"{population_id}:{entity_id}".encode()).hexdigest()[:24]
     membership = await membership_repo.find_by_id(record_id)
 
-    if not membership:
+    if not membership or membership.get("tenant_id") != tenant_id:
         raise NotFoundError("Membership not found — entity may not be in this group")
-
-    group = await population_repo.find_by_id(population_id)
 
     return APIResponse(data={
         "entity_id": entity_id,

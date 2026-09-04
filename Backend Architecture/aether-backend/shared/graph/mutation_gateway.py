@@ -739,16 +739,12 @@ def _digest_state(vertices: Iterable[Vertex], edges: Iterable[Edge]) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
-def replay_ledger(records: Iterable[dict]) -> str:
-    """Pure function: apply ledger rows to a fresh in-memory graph → digest.
+def _apply_records(backend: _InMemoryGraphBackend, records: Iterable[dict]) -> None:
+    """Apply ledger rows to a backend in the given (ledger) order.
 
-    ``records`` are ledger rows as returned by
-    ``GraphMutationLedgerRepository.list_records`` — each carries
-    ``operation`` plus the joined after-version ``payload``. Rows are applied
-    in the given (ledger) order; the same records always produce the same
-    digest.
+    Extracted from :func:`replay_ledger` so the digest replay and the
+    state-returning :func:`replay_state` share one application path.
     """
-    backend = _InMemoryGraphBackend()
     for row in records:
         payload = row.get("payload") or {}
         kind = payload.get("kind")
@@ -785,7 +781,52 @@ def replay_ledger(records: Iterable[dict]) -> str:
                 )
             )
         # Rows without a payload (pure ledger annotations) do not change state.
-    return _digest_state(backend._vertices.values(), backend._edges)
+
+
+@dataclass
+class GraphReplayState:
+    """The materialized state a ledger prefix reconstructs.
+
+    ``vertices`` / ``edges`` are the live graph the prefix closed at; ``digest``
+    is the sha256 over that state (identical to what :func:`replay_ledger`
+    returns for the same records), so a reconstruction is digest-verifiable:
+    replay the same prefix again and the digest must match.
+    """
+
+    vertices: dict[str, Vertex]
+    edges: list[Edge]
+    digest: str
+
+
+def replay_state(records: Iterable[dict]) -> GraphReplayState:
+    """Replay ledger rows into a fresh in-memory graph and RETURN THE STATE.
+
+    The knowledge-time substrate behind the ``graph_history_replay`` authority
+    (temporal360 T2.1): given the ledger prefix closed at an instant τ (rows
+    with ``recorded_at <= τ`` in ledger order), :func:`replay_state` rebuilds
+    the vertices/edges Aether actually had at τ — a ``KNOWN_THEN`` answer.
+    Pure read: never mutates canonical state; the same records always produce
+    the same state and digest.
+    """
+    backend = _InMemoryGraphBackend()
+    _apply_records(backend, records)
+    return GraphReplayState(
+        vertices=dict(backend._vertices),
+        edges=list(backend._edges),
+        digest=_digest_state(backend._vertices.values(), backend._edges),
+    )
+
+
+def replay_ledger(records: Iterable[dict]) -> str:
+    """Pure function: apply ledger rows to a fresh in-memory graph → digest.
+
+    ``records`` are ledger rows as returned by
+    ``GraphMutationLedgerRepository.list_records`` — each carries
+    ``operation`` plus the joined after-version ``payload``. Rows are applied
+    in the given (ledger) order; the same records always produce the same
+    digest. State-returning sibling: :func:`replay_state`.
+    """
+    return replay_state(records).digest
 
 
 async def current_graph_digest(client: Any, tenant_id: str, scope: str = "") -> str:
@@ -828,9 +869,11 @@ __all__ = [
     "GATEWAY_SCHEMA_VERSION",
     "EdgeRevocation",
     "GraphMutationGateway",
+    "GraphReplayState",
     "MutationIntent",
     "MutationOutcome",
     "current_graph_digest",
     "get_mutation_gateway",
     "replay_ledger",
+    "replay_state",
 ]

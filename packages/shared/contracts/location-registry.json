@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractVersion": "1.0.0",
+  "description": "Canonical location taxonomy for the geographic360 projection (Phase 4) — the program's ONE new canonical geography authority. Owns location roles, the region-type hierarchy (not US-only), the precision ladder (aligned to the context-capsule coarse_cell taxonomy), coordinate reference systems, and spatial-cell schemes. Generated artifacts: packages/shared/location-registry.ts, Backend Architecture/aether-backend/shared/geo/generated_taxonomy.py, docs/_generated/location-registry-table.md (via scripts/generate_platform_contracts.py). Coordinates live only here and on LocationFact records — never in context capsules (LocationObservation/ContextCapsule keep their no-raw-IP / no-lat-lon invariant).",
+  "locationRoles": [
+    "network_egress",
+    "observed_presence",
+    "likely_residence",
+    "primary_residence",
+    "declared_address",
+    "shipping_address",
+    "billing_address",
+    "workplace",
+    "commercial_destination",
+    "organization_registered",
+    "agent_execution_region",
+    "venue_association",
+    "trip_destination"
+  ],
+  "regionTypes": [
+    "continent",
+    "country",
+    "admin_region",
+    "admin_subregion",
+    "metro_area",
+    "city",
+    "district",
+    "locality"
+  ],
+  "precisionClasses": ["country", "region", "city", "coarse_cell", "precise"],
+  "coordinateSystems": ["wgs84"],
+  "cellSchemes": ["h3"]
+}

@@ -10,6 +10,7 @@ Sources (read-only — canonical source of truth):
   packages/shared/contracts/temporal-policy-registry.json
   packages/shared/contracts/interaction-vocabulary.json
   packages/shared/contracts/context-capsule-registry.json
+  packages/shared/contracts/location-registry.json
   packages/shared/contracts/graph-mutation-registry.json
   packages/shared/contracts/filter-field-registry.json
   packages/shared/contracts/surface-capability-registry.json
@@ -30,6 +31,9 @@ Generated outputs:
   packages/shared/context-capsule.ts
   Backend Architecture/aether-backend/shared/context_capsule/generated_taxonomy.py
   docs/_generated/context-capsule-table.md
+  packages/shared/location-registry.ts
+  Backend Architecture/aether-backend/shared/geo/generated_taxonomy.py
+  docs/_generated/location-registry-table.md
   packages/shared/graph-mutation.ts
   Backend Architecture/aether-backend/shared/graph/generated_mutation_taxonomy.py
   docs/_generated/graph-mutation-table.md
@@ -840,6 +844,126 @@ def _summary_context_capsule(reg: dict) -> str:
         f"{len(reg['locationSources'])} location sources, "
         f"{len(reg['contextStates'])} context states, "
         f"{len(reg['retentionClasses'])} retention classes"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Registry: location (geographic360 Phase 4 — the ONE new canonical geo authority)
+# ---------------------------------------------------------------------------
+
+LOCATION_REGISTRY_JSON = CONTRACTS / "location-registry.json"
+LOCATION_REGISTRY_TS = ROOT / "packages" / "shared" / "location-registry.ts"
+LOCATION_REGISTRY_PY = BACKEND / "shared" / "geo" / "generated_taxonomy.py"
+LOCATION_REGISTRY_MD = ROOT / "docs" / "_generated" / "location-registry-table.md"
+
+_LOCATION_VOCAB_KEYS = (
+    "locationRoles",
+    "regionTypes",
+    "precisionClasses",
+    "coordinateSystems",
+    "cellSchemes",
+)
+
+
+def validate_location_registry(reg: dict, ctx: dict) -> None:
+    for key in _LOCATION_VOCAB_KEYS:
+        _require_idents("location-registry", key, reg[key])
+    # Precision classes must stay aligned with the context-capsule ladder
+    # (coarse_cell / precisionClasses) so region and coordinate precision share
+    # one vocabulary — geographic360 must never invent a second ladder.
+    capsule = json.loads(CONTEXT_CAPSULE_JSON.read_text())
+    if reg["precisionClasses"] != capsule["precisionClasses"]:
+        _fail(
+            "location-registry.precisionClasses must match context-capsule "
+            f"precisionClasses ({capsule['precisionClasses']})"
+        )
+
+
+def gen_location_registry_ts(reg: dict) -> str:
+    lines = _ts_header(LOCATION_REGISTRY_JSON)
+    lines.append(
+        f"export const locationRegistryContractVersion = '{reg['contractVersion']}' as const;"
+    )
+    lines.append("")
+    lines += _ts_const_array(
+        "locationRoles", "LocationRole", reg["locationRoles"],
+        "Role a location fact plays for its subject (residence, egress, venue, ...).",
+    )
+    lines += _ts_const_array(
+        "regionTypes", "RegionType", reg["regionTypes"],
+        "Region-type hierarchy (not US-only), continent down to locality.",
+    )
+    # Precision classes are single-sourced on the context-capsule twin: the
+    # ladder is SHARED (validate_location_registry enforces equality against
+    # context-capsule-registry.json), so re-exporting context-capsule's
+    # declarations here keeps exactly one declaration in the shared barrel —
+    # `export *` of both twins would otherwise collide (TS2308). Any direct
+    # importer of this module still resolves the same names.
+    lines.append(
+        "export { locationPrecisionClasses, type LocationPrecisionClass } "
+        "from './context-capsule';"
+    )
+    lines.append("")
+    lines += _ts_const_array(
+        "coordinateSystems", "CoordinateSystem", reg["coordinateSystems"],
+        "Coordinate reference systems a LocationFact may carry.",
+    )
+    lines += _ts_const_array(
+        "cellSchemes", "CellScheme", reg["cellSchemes"],
+        "Spatial cell schemes (client-computed strings; never a DB spatial index).",
+    )
+    return "\n".join(lines)
+
+
+def gen_location_registry_py(reg: dict) -> str:
+    lines = _py_header(
+        LOCATION_REGISTRY_JSON,
+        "Generated location taxonomy (roles, region types, precision, cells).",
+    )
+    lines.append(f'LOCATION_REGISTRY_CONTRACT_VERSION = "{reg["contractVersion"]}"')
+    lines.append("")
+    lines += _py_tuple("LOCATION_ROLES", reg["locationRoles"],
+                       "Role a location fact plays for its subject.")
+    lines += _py_tuple("REGION_TYPES", reg["regionTypes"],
+                       "Region-type hierarchy (not US-only), continent down to locality.")
+    lines += _py_tuple("LOCATION_PRECISION_CLASSES", reg["precisionClasses"],
+                       "Coarsest-to-finest precision ladder (aligned to context-capsule).")
+    lines += _py_tuple("COORDINATE_SYSTEMS", reg["coordinateSystems"],
+                       "Coordinate reference systems a LocationFact may carry.")
+    lines += _py_tuple("CELL_SCHEMES", reg["cellSchemes"],
+                       "Spatial cell schemes (client-computed strings; never a spatial index).")
+    lines.append("__all__ = [")
+    lines.append('    "LOCATION_REGISTRY_CONTRACT_VERSION",')
+    lines.append('    "LOCATION_ROLES",')
+    lines.append('    "REGION_TYPES",')
+    lines.append('    "LOCATION_PRECISION_CLASSES",')
+    lines.append('    "COORDINATE_SYSTEMS",')
+    lines.append('    "CELL_SCHEMES",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_location_registry_md(reg: dict) -> str:
+    lines = _md_header(LOCATION_REGISTRY_JSON)
+    lines.append("# Location Registry")
+    lines.append("")
+    lines.append(f"Contract version: `{reg['contractVersion']}`")
+    lines.append("")
+    lines += _md_vocab_section("Location roles", reg["locationRoles"])
+    lines += _md_vocab_section("Region types", reg["regionTypes"])
+    lines += _md_vocab_section("Precision classes", reg["precisionClasses"])
+    lines += _md_vocab_section("Coordinate systems", reg["coordinateSystems"])
+    lines += _md_vocab_section("Cell schemes", reg["cellSchemes"])
+    return "\n".join(lines)
+
+
+def _summary_location_registry(reg: dict) -> str:
+    return (
+        f"location-registry v{reg['contractVersion']} — "
+        f"{len(reg['locationRoles'])} roles, {len(reg['regionTypes'])} region types, "
+        f"{len(reg['precisionClasses'])} precision classes, "
+        f"{len(reg['cellSchemes'])} cell schemes"
     )
 
 
@@ -3154,6 +3278,16 @@ REGISTRIES: tuple = (
             (CONTEXT_CAPSULE_MD, gen_context_capsule_md),
         ),
         _summary_context_capsule,
+    ),
+    (
+        LOCATION_REGISTRY_JSON,
+        validate_location_registry,
+        (
+            (LOCATION_REGISTRY_TS, gen_location_registry_ts),
+            (LOCATION_REGISTRY_PY, gen_location_registry_py),
+            (LOCATION_REGISTRY_MD, gen_location_registry_md),
+        ),
+        _summary_location_registry,
     ),
     (
         GRAPH_MUTATION_JSON,

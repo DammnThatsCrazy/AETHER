@@ -96,6 +96,14 @@ backend = [
     # attestation parsing and counter checks is a needless security risk, so the
     # maintained library is a declared backend dependency rather than optional.
     "webauthn>=2.0",
+    # geographic360 (G4.3): client-side spatial cells + pure-python geodesy.
+    # H3 cell strings (hierarchical containment + k-ring neighborhoods) are
+    # computed on the server and stored as plain strings on facts/edges — the
+    # graph backend is in-memory/Neptune and Postgres is JSONB, so there is NO
+    # PostGIS. geographiclib gives WGS84 geodesic distance without a C
+    # extension. Neither is optional: services/geo imports them directly.
+    "h3>=4.0",
+    "geographiclib>=2.0",
 ]
 
 # Backend with Stripe Billing integration

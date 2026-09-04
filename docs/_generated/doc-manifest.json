@@ -4045,6 +4045,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/blueprints/geographic360.md",
+      "title": "Geographic360 Vertical Slice Blueprint",
+      "slug": "blueprints/geographic360",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/blueprints/infrastructure360.md",
       "title": "Infrastructure360 Vertical Slice Blueprint",
       "slug": "blueprints/infrastructure360",
@@ -4064,6 +4080,38 @@
       "path": "docs/blueprints/outcome360.md",
       "title": "Outcome360 Vertical Slice Blueprint",
       "slug": "blueprints/outcome360",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/blueprints/population360.md",
+      "title": "Population360 Vertical Slice Blueprint",
+      "slug": "blueprints/population360",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/blueprints/temporal360.md",
+      "title": "Temporal360 Vertical Slice Blueprint",
+      "slug": "blueprints/temporal360",
       "section": "blueprints",
       "visibility": "I",
       "audience": [
@@ -5226,6 +5274,21 @@
       "status": "stable",
       "since_version": "8.10.0",
       "canonical_owner": "sre@aether"
+    },
+    {
+      "path": "docs/plans/CONTEXTUAL_360_PHASES.md",
+      "title": "Contextual 360 — Phased Implementation Program",
+      "slug": "plans/contextual-360-phases",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "canonical_owner": "backend@aether"
     },
     {
       "path": "docs/plans/UNIVERSAL_INTELLIGENCE_GRAPH_IMPLEMENTATION.md",

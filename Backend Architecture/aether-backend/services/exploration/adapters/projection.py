@@ -1,8 +1,9 @@
 """Projection-surface adapter — the S1 migration seam for 360 surfaces.
 
 Exploration surfaces whose backing plane is an intelligence projection
-(outcome360 / economic360 / infrastructure360) run through this adapter: it maps
-one registered exploration surface to its projection id (here equal by name) and
+(outcome360 / economic360 / infrastructure360 / temporal360 / population360 /
+geographic360) run through this adapter: it maps one registered exploration
+surface to its projection id (here equal by name) and
 executes the projection through the S1 engine
 (:class:`ProjectionRuntime <shared.projection_engine.runtime.ProjectionRuntime>`
 → :class:`ProjectionExecutor` → the fail-isolated
@@ -26,22 +27,18 @@ ADR-010 posture:
 
 The generic adapter is intentionally NOT registered: only the thin per-surface
 subclasses for 360 surfaces that previously had no dedicated exploration adapter
-(outcome360 / economic360 / infrastructure360) join the surface registry, so an
-already-owned surface (profile360, campaign360, ...) is never shadowed.
+(outcome360 / economic360 / infrastructure360 / temporal360 / population360 /
+geographic360) join the surface registry, so an already-owned surface
+(profile360, campaign360, geo, ...) is never shadowed.
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
-from shared.exploration.models import ExplorationContextV1
 from shared.intelligence_projections.contracts import (
     ProjectionRequest,
     ProjectionResult,
-    ProjectionSubject,
-)
-from shared.intelligence_projections.generated_registry import (
-    PROJECTION_SUBJECT_KINDS,
 )
 from shared.projection_engine.conflict import LensConflict, LensNotFound
 from shared.projection_engine.lens_registry import (
@@ -56,6 +53,7 @@ from services.exploration.adapters.base import (
     AdapterTruncation,
     SurfaceAdapter,
 )
+from services.exploration.projection_subject import projection_subject_for
 
 # The read plane this adapter honestly reports in AdapterResult.backend.
 _BACKEND = "intelligence_projection"
@@ -65,25 +63,6 @@ _BACKEND = "intelligence_projection"
 _REASON_PROVIDER_UNAVAILABLE = "provider_unavailable"
 _REASON_LENS_FRAME_INVALID = "lens_frame_invalid"
 _REASON_PROJECTION_FAILED = "projection_failed"
-
-_VALID_SUBJECT_KINDS = frozenset(PROJECTION_SUBJECT_KINDS)
-_DEFAULT_SUBJECT_KIND = "entity"
-_DEFAULT_SUBJECT_ID = "current"
-
-
-def _subject_from_context(context: ExplorationContextV1) -> ProjectionSubject:
-    """The tenant-scoped subject a projection is asked about.
-
-    Mirrors ``service.py::_compose_projection`` exactly: a ``selection.focused``
-    anchor whose kind is a registered projection subject kind becomes the
-    subject; otherwise the projection falls back to the canonical default
-    (``entity`` / ``current``) so the surface data path and the session
-    projection summary always agree.
-    """
-    focus = context.selection.focused if context.selection else None
-    if focus is not None and focus.kind in _VALID_SUBJECT_KINDS:
-        return ProjectionSubject(kind=focus.kind, id=focus.id)
-    return ProjectionSubject(kind=_DEFAULT_SUBJECT_KIND, id=_DEFAULT_SUBJECT_ID)
 
 
 class ProjectionSurfaceAdapter(SurfaceAdapter):
@@ -98,7 +77,7 @@ class ProjectionSurfaceAdapter(SurfaceAdapter):
     """
 
     surface_id = ""
-    # Optional explicit projection id; defaults to the surface id (the three
+    # Optional explicit projection id; defaults to the surface id (the
     # registered 360 surfaces share their name with their projection row).
     projection_id: Optional[str] = None
 
@@ -144,7 +123,7 @@ class ProjectionSurfaceAdapter(SurfaceAdapter):
             request = ProjectionRequest(
                 projectionId=projection_id,
                 tenantId=ctx.tenant_id,
-                subject=_subject_from_context(ctx.context),
+                subject=projection_subject_for(ctx.context),
                 lensIds=lens_ids,
                 temporalMode=temporal_mode,
             )
@@ -244,10 +223,49 @@ class Infrastructure360SurfaceAdapter(ProjectionSurfaceAdapter):
     surface_id = "infrastructure360"
 
 
+class Temporal360SurfaceAdapter(ProjectionSurfaceAdapter):
+    """temporal360 exploration surface → the temporal360 projection.
+
+    The context-360 time leaf (Phase 2): it owns its own ``temporal360``
+    surface rather than shadowing ``timeline`` (a non-projection adapter) or
+    ``temporal_observatory`` (owned by other work packages).
+    """
+
+    surface_id = "temporal360"
+
+
+class Population360SurfaceAdapter(ProjectionSurfaceAdapter):
+    """population360 exploration surface → the population360 projection.
+
+    The context-360 WHO/SET leaf (Phase 3): it owns its own ``population360``
+    surface rather than shadowing ``comparison_workbench`` (deferred, no
+    adapter) or ``cluster360`` (already owned by ``ClusterSurfaceAdapter`` —
+    an already-owned surface is never shadowed).
+    """
+
+    surface_id = "population360"
+
+
+class Geographic360SurfaceAdapter(ProjectionSurfaceAdapter):
+    """geographic360 exploration surface → the geographic360 projection.
+
+    The context-360 WHERE leaf (Phase 4): it owns its own ``geographic360``
+    surface rather than shadowing ``geo`` (already owned by the graph-plane
+    ``GeoSurfaceAdapter`` — an already-owned surface is never shadowed) or
+    ``outcome360`` / ``profile360`` geography (owned elsewhere). ``geo`` keeps
+    its country-bucket adapter; ``geographic360`` is the projection-depth WHERE
+    surface over canonical location facts (precision never exceeds evidence).
+    """
+
+    surface_id = "geographic360"
+
+
 __all__ = [
     "Economic360SurfaceAdapter",
+    "Geographic360SurfaceAdapter",
     "Infrastructure360SurfaceAdapter",
     "Outcome360SurfaceAdapter",
+    "Population360SurfaceAdapter",
     "ProjectionSurfaceAdapter",
-    "_subject_from_context",
+    "Temporal360SurfaceAdapter",
 ]

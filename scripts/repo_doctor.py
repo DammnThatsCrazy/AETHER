@@ -719,6 +719,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="render financial values via frontend/shared ValueDisplay/formatUSD; update the allowlist in scripts/validate_frontend_value_display.py",
     )
     run(
+        [sys.executable, "scripts/validate_cross360_monetary_fx.py"],
+        name="Cross-360 monetary/FX guard (context-360 + composition seam stay on the canonical value/FX path)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="keep the context-360 family, exploration path, and cross-360 composition seam monetary-free; consume economic360/services.value pre-priced content with canonical FX provenance; shrink scripts/allowlists/cross360_monetary_fx.json only",
+    )
+    run(
         [sys.executable, "scripts/validate_event_schema_parity.py"],
         name="EventType parity (TypeScript ↔ Python CANONICAL_EVENT_TYPES)",
         results=results,

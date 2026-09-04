@@ -48,6 +48,20 @@ OPTIONAL_EDGE_PROPERTIES: frozenset[str] = frozenset({
     "journey_id",        # journey this edge belongs to
     "journey_version",   # version of the journey definition
     "step_index",        # ordinal position within the journey
+    # Grouping / membership provenance (population360 P3.1 — MEMBER_OF edges):
+    "membership_state",      # active | left | expired — the membership's lifecycle state
+    "definition_version",    # immutable population-definition version the membership was computed under
+    "membership_basis",      # rule | graph | ml_model | similarity | manual | inferred
+    "population_type",       # segment | cohort | cluster | ... (PopulationType value)
+    "evidence_refs",         # list of EvidenceRef ids grounding this membership fact
+    # Location-fact provenance (geographic360 G4.2 — LOCATED_AT / OBSERVED_IN /
+    # UNDER_JURISDICTION edges). Precision is typed and never exceeds evidence:
+    # a downgrade is recorded as precision_state, never a silent coarsening.
+    "location_role",         # LOCATION_ROLES value (primary_residence, observed_presence, ...)
+    "precision_class",       # country | region | city | coarse_cell | precise (location ladder)
+    "precision_state",       # full | precision_reduced | suppressed — typed downgrade
+    "region_type",           # REGION_TYPES value carried on a located-at Region edge
+    "coarse_cell",           # H3 cell string when location precision is cell-granular
 })
 
 # Valid causality classes — prediction edges must NOT use direct_cause

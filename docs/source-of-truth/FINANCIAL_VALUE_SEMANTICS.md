@@ -9,8 +9,10 @@ executes.
 - Backend mirror: `Backend Architecture/aether-backend/services/value/`
   (`models.py`, `valuation.py`, `rollups.py`).
 - Gates: `scripts/validate_financial_value_semantics.py` (contract + no
-  cross-currency sums) and `scripts/validate_frontend_value_display.py`
-  (canonical display).
+  cross-currency sums), `scripts/validate_frontend_value_display.py`
+  (canonical display), and `scripts/validate_cross360_monetary_fx.py` (the
+  context-360 family + cross-360 composition seam stay on this canonical path
+  — no geography- or population-specific FX).
 
 ## Core rules
 
@@ -33,6 +35,18 @@ executes.
 7. **Exclusions are explicit.** `include_in_rollups: false` requires an
    `exclusion_reason`. Testnet and spam/untrusted assets are excluded from
    trusted production USD rollups by default.
+8. **One FX seam — no geography- or population-specific FX.** A cross-360
+   monetary metric is computed through this canonical value contract and its FX
+   provenance (`services/value` — the `packages/shared/value.ts` mirror) only.
+   There is no per-slice FX beside it: no location-flavored or cohort-flavored
+   rate table, no second `Money` class, no re-pricing inside the context-360
+   family (`temporal360`/`geographic360`/`population360`, their `services/geo`
+   plane, the exploration path, or the cross-360 composition seam in
+   `shared/projection_engine/composition.py`). A composite that carries a
+   monetary metric takes it **pre-priced** from economic360 /
+   `services.value`; the cross-360 composition union (`CompositionResult`)
+   moves section content unchanged — it never re-prices by geography or
+   population.
 
 ## Valuation methods
 

@@ -850,7 +850,7 @@
       "id": "temporal360",
       "displayName": "Temporal 360",
       "projectionKind": "context_360",
-      "implementationState": "in_flight",
+      "implementationState": "implemented",
       "implementationBlueprint": "docs/blueprints/temporal360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
@@ -889,8 +889,7 @@
         "relative"
       ],
       "surfaceIds": [
-        "temporal_observatory",
-        "timeline"
+        "temporal360"
       ],
       "capabilityKeys": [
         "temporal360.read",
@@ -933,32 +932,24 @@
           "/v1/preferences"
         ],
         "surfaceIds": [
-          "temporal_observatory",
-          "timeline"
+          "temporal360"
         ],
         "services": [
           "Backend Architecture/aether-backend/shared/temporal"
         ],
-        "migrationMode": "adapter",
+        "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/temporal360.md"
       },
       "deprecatedReason": null,
       "successorId": null,
-      "pendingAuthority": [
-        {
-          "id": "graph_history_replay",
-          "kind": "spine",
-          "reason": "bitemporal ledger exists; graph-history replay API not yet built",
-          "resolvesInProjection": "temporal360"
-        }
-      ],
+      "pendingAuthority": [],
       "pendingReference": []
     },
     {
       "id": "geographic360",
       "displayName": "Geographic 360",
       "projectionKind": "context_360",
-      "implementationState": "in_flight",
+      "implementationState": "implemented",
       "implementationBlueprint": "docs/blueprints/geographic360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
@@ -1001,7 +992,7 @@
         "relative"
       ],
       "surfaceIds": [
-        "geo"
+        "geographic360"
       ],
       "capabilityKeys": [
         "geographic360.read",
@@ -1043,31 +1034,24 @@
           "/v1/geo"
         ],
         "surfaceIds": [
-          "geo"
+          "geographic360"
         ],
         "services": [
           "Backend Architecture/aether-backend/services/geo"
         ],
-        "migrationMode": "adapter",
+        "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/geographic360.md"
       },
       "deprecatedReason": null,
       "successorId": null,
-      "pendingAuthority": [
-        {
-          "id": "context_capsule_semantics",
-          "kind": "spine",
-          "reason": "context-capsule plane not yet formalized",
-          "resolvesInProjection": "geographic360"
-        }
-      ],
+      "pendingAuthority": [],
       "pendingReference": []
     },
     {
       "id": "population360",
       "displayName": "Population 360",
       "projectionKind": "context_360",
-      "implementationState": "in_flight",
+      "implementationState": "implemented",
       "implementationBlueprint": "docs/blueprints/population360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
@@ -1112,8 +1096,7 @@
         "relative"
       ],
       "surfaceIds": [
-        "comparison_workbench",
-        "cluster360"
+        "population360"
       ],
       "capabilityKeys": [
         "population360.read",
@@ -1155,25 +1138,17 @@
           "/v1/population"
         ],
         "surfaceIds": [
-          "comparison_workbench",
-          "cluster360"
+          "population360"
         ],
         "services": [
           "Backend Architecture/aether-backend/services/population"
         ],
-        "migrationMode": "adapter",
+        "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/population360.md"
       },
       "deprecatedReason": null,
       "successorId": null,
-      "pendingAuthority": [
-        {
-          "id": "grouping_membership",
-          "kind": "spine",
-          "reason": "canonical grouping/membership contract not yet formalized",
-          "resolvesInProjection": "population360"
-        }
-      ],
+      "pendingAuthority": [],
       "pendingReference": []
     },
     {

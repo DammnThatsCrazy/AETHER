@@ -2,11 +2,12 @@
 
 A 360 is an intelligence projection over canonical Aether truth — never a
 competing system of record (ADR-010). :mod:`composition` layers that doctrine
-onto MULTI-360 orchestration: running two or three 360 providers over the SAME
-tenant-scoped subject and returning a deterministic composite
-(:class:`CompositionResult`) while every member projection stays fail-isolated.
+onto MULTI-360 orchestration: running two, three, or (for the context family)
+all three context leaves over the SAME tenant-scoped subject and returning a
+deterministic composite (:class:`CompositionResult`) while every member
+projection stays fail-isolated.
 
-The four public entry points:
+The five public entry points:
 
 * :func:`compose_economic_outcome` — economic360 + outcome360 (value view).
 * :func:`compose_outcome_infrastructure` — outcome360 + infrastructure360
@@ -15,16 +16,23 @@ The four public entry points:
   (condition → economic effect seam).
 * :func:`compose_operational_value_triangle` — the operational-value triangle:
   infrastructure condition -> outcome -> economic effect, running all three.
+* :func:`compose_context_triad` — the context-360 WHERE × WHEN × WHO triad
+  (geographic360 + temporal360 + population360): the Context Intelligence 360
+  family rule is that spatiotemporal analysis is *composition of the three
+  projections, never a fourth backend* — this entry point is that composition.
 
 Composition laws
 ----------------
 
 Each member projection is named by the registry 360 id it serves and mapped to
-its real engine overlay lens (``economic`` / ``outcome`` / ``infrastructure``,
-all defined in ``generated_lenses.py`` — never hardcoded ids outside that
-generated vocabulary). The composition forms one :class:`LensSet` whose base is
-the engine default (``standard``) and whose overlays are the member lenses, then
-composes it over the subject kind with ``compose_lenses``:
+its real engine overlay lens (``economic`` / ``outcome`` / ``infrastructure``
+for the operational-value family; ``temporal`` / ``geographic`` / ``population``
+for the context family, where ``population360`` is the WHO/cohort leaf and
+geographic is the WHERE leaf — all defined in ``generated_lenses.py``, never
+hardcoded ids outside that generated vocabulary). The composition forms one
+:class:`LensSet` whose base is the engine default (``standard``) and whose
+overlays are the member lenses, then composes it over the subject kind with
+``compose_lenses``:
 
 * **Identity / idempotence / order stability** come from the shared algebra —
   the same member set always yields the same ordered lens frame regardless of
@@ -115,12 +123,28 @@ _MEMBER_OVERLAY_LENS: dict[str, str] = {
     "economic360": "economic",
     "infrastructure360": "infrastructure",
     "outcome360": "outcome",
+    # The context-360 family: WHERE × WHEN × WHO. All three overlay lenses
+    # already exist; composition never builds a fourth (spatiotemporal) 360.
+    "geographic360": "geographic",
+    "population360": "population",
+    "temporal360": "temporal",
 }
 
 _MEMBERS = (
     "economic360",
     "infrastructure360",
     "outcome360",
+)
+
+# The context-360 leaves. The three overlay lenses intersect on the ``entity``
+# subject kind (temporal: campaign/entity/episode/relationship/source;
+# geographic: entity/population/source; population: cluster/entity/population),
+# so an entity subject composes all three; for other kinds the inapplicable
+# members drop as typed CAPABILITY_MISSING conflicts.
+_CONTEXT_MEMBERS = (
+    "geographic360",
+    "population360",
+    "temporal360",
 )
 
 _BASE_LENS = "standard"
@@ -231,6 +255,24 @@ async def compose_operational_value_triangle(
     independently; the survivors still compose.
     """
     return await _compose(_MEMBERS, context, executor=executor)
+
+
+async def compose_context_triad(
+    context: CompositionContext,
+    *,
+    executor: Optional[ProjectionExecutor] = None,
+) -> CompositionResult:
+    """Compose the context-360 triad — geographic360 × temporal360 × population360.
+
+    The Context Intelligence 360 family rule: spatiotemporal analysis is
+    composition of the three projections, never a fourth backend. The three
+    context leaves run over the same tenant-scoped subject and compose into one
+    result. The context overlays intersect on ``entity`` subject kinds, so an
+    entity subject composes all three; a population/source/cluster subject drops
+    whichever member lens cannot apply as a typed CAPABILITY_MISSING conflict —
+    the survivors still compose, and no member content is silently lost.
+    """
+    return await _compose(_CONTEXT_MEMBERS, context, executor=executor)
 
 
 # ── Composition engine ────────────────────────────────────────────────────────
@@ -523,6 +565,7 @@ __all__ = [
     "CompositionConflict",
     "CompositionContext",
     "CompositionResult",
+    "compose_context_triad",
     "compose_economic_infrastructure",
     "compose_economic_outcome",
     "compose_operational_value_triangle",

@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "4764707"
+last_synced_commit: "f543a085"
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -1477,11 +1477,14 @@ A **360** is an intelligence projection over canonical Aether truth — never a
 competing system of record. The plane is a fail-isolated `ProviderRegistry` of
 `IntelligenceProjectionProvider`s over the shared
 `ProjectionRequest`/`ProjectionContext`/`ProjectionResult` contracts (TS +
-Python). Three 360s are implemented native providers (`outcome360`,
-`economic360`, `infrastructure360`); the rest are `in_flight`. `implementationState`
-is repo metadata, **not** readiness. `infrastructure360` is the first projection
-to expose a classified public route (read-only, every route a GET, tenant-scoped
-from the authenticated tenant, capability-gated on `infrastructure360.read`):
+Python). Six 360s are implemented native providers (`outcome360`,
+`economic360`, `infrastructure360`, `temporal360`, `population360`,
+`geographic360`); the rest are `in_flight`. `implementationState` is repo
+metadata, **not** readiness.
+`infrastructure360` is
+the first projection to expose a classified public route (read-only, every route
+a GET, tenant-scoped from the authenticated tenant, capability-gated on
+`infrastructure360.read`):
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

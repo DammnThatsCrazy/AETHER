@@ -3,9 +3,10 @@
 Loads the REAL ``packages/shared/contracts/intelligence-projection-registry.json``
 and asserts the structural invariants the validation core enforces: 19
 projections, unique lower_snake ids, every required per-entry field present,
-``ownsCanonicalTruth is False`` for all, exactly the three 360 vertical slices
-``implemented`` (outcome360 / economic360 / infrastructure360) with the rest
-``in_flight``, consistent vocab enums, well-formed pending declarations,
+``ownsCanonicalTruth is False`` for all, exactly the five 360 vertical slices
+``implemented`` (outcome360 / economic360 / infrastructure360 / temporal360 /
+population360) with the rest ``in_flight``, consistent vocab enums, well-formed
+pending declarations,
 canonical authorities within AUTHORITY_INDEX, hard dependencies within
 SPINE_INDEX or declared pending, and well-formed projection-plane capability
 keys. Finally asserts ``validate_registry_schema`` agrees with all of the above
@@ -195,7 +196,7 @@ def test_owns_canonical_truth_false_for_all() -> None:
 
 
 def test_implementation_states_match_slice_program() -> None:
-    # Exactly the three 360 vertical slices are implemented; everything else
+    # The six implemented 360 vertical slices are implemented; everything else
     # stays in_flight. No registered/deprecated rows, and the implemented set is
     # honest (each has zero pending + converged bindings — proven by the
     # dependency-DAG gate in the order-resilience suite).
@@ -204,7 +205,14 @@ def test_implementation_states_match_slice_program() -> None:
     implemented = {
         p["id"] for p in _projections() if p["implementationState"] == "implemented"
     }
-    assert implemented == {"outcome360", "economic360", "infrastructure360"}
+    assert implemented == {
+        "outcome360",
+        "economic360",
+        "infrastructure360",
+        "temporal360",
+        "population360",
+        "geographic360",
+    }
     assert all(
         p["implementationState"] == "in_flight"
         for p in _projections()

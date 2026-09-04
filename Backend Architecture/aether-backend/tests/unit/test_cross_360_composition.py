@@ -61,6 +61,7 @@ from shared.projection_engine.composition import (  # noqa: E402
     CompositionConflict,
     CompositionContext,
     CompositionResult,
+    compose_context_triad,
     compose_economic_infrastructure,
     compose_economic_outcome,
     compose_operational_value_triangle,
@@ -75,10 +76,40 @@ from shared.projection_engine.executor import ProjectionExecutor  # noqa: E402
 # outcomes).
 _MEMBERS = ("economic360", "infrastructure360", "outcome360")
 
+# The context-360 leaves. Their real providers share the summary/state/timeline/
+# evidence/findings spine; the domain-specific sections below are a
+# representative mirror (temporal360's reconstruction/activity, geographic360's
+# primary_location, population360's memberships).
+_CONTEXT_MEMBERS = ("geographic360", "population360", "temporal360")
+
 _SECTION_IDS: dict[str, tuple[str, ...]] = {
     "economic360": ("summary", "state", "evidence", "outcomes", "findings"),
     "outcome360": ("summary", "state", "evidence", "outcomes", "findings"),
     "infrastructure360": ("summary", "state", "deployments", "evidence", "findings"),
+    "temporal360": (
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "findings",
+        "activity_in_window",
+    ),
+    "geographic360": (
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "findings",
+        "primary_location",
+    ),
+    "population360": (
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "findings",
+        "current_memberships",
+    ),
 }
 
 
@@ -473,3 +504,177 @@ async def test_composition_is_deterministic_across_identical_runs() -> None:
         "findings",
         "deployments",
     ]
+
+
+# ---------------------------------------------------------------------------
+# The context-360 triad (WHERE × WHEN × WHO) — composition, never a 4th backend
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_compose_context_triad_entity_subject_runs_all_three() -> None:
+    # An ``entity`` subject is the intersection of the three context overlays
+    # (temporal: campaign/entity/episode/relationship/source; geographic:
+    # entity/population/source; population: cluster/entity/population), so all
+    # three context leaves compose — the family-rule composition (no 4th
+    # Spatiotemporal360 backend).
+    executor = _executor_with(
+        _StubProvider("geographic360"),
+        _StubProvider("population360"),
+        _StubProvider("temporal360"),
+    )
+    context = CompositionContext(tenant_id="tenant-a", subject=_subject())
+
+    result = await compose_context_triad(context, executor=executor)
+
+    assert result.members == ("geographic360", "population360", "temporal360")
+    assert result.composed_lens_ids[0] == "standard"
+    assert set(result.composed_lens_ids) == {
+        "standard",
+        "geographic",
+        "population",
+        "temporal",
+    }
+    assert set(result.member_results) == {
+        "geographic360",
+        "population360",
+        "temporal360",
+    }
+    # Every member's own spine renders (checked at member depth); the top-level
+    # union keeps one section per distinct id across all three leaves.
+    for member in result.members:
+        ids = [s.id for s in result.member_results[member].sections]
+        assert ids == list(_SECTION_IDS[member])
+    assert _section_ids(result) == [
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "findings",
+        "primary_location",
+        "current_memberships",
+        "activity_in_window",
+    ]
+    assert result.degradation is not None
+    assert result.degradation.level == "none"
+    assert result.degraded_members == ()
+    assert result.conflicts == ()
+
+
+@pytest.mark.asyncio
+async def test_compose_context_triad_source_subject_drops_population_member() -> None:
+    # The population overlay cannot apply to a ``source`` subject kind, so the
+    # population360 member (WHO leaf) drops as a typed CAPABILITY_MISSING while
+    # temporal360 (WHEN) and geographic360 (WHERE) still compose over the source.
+    executor = _executor_with(
+        _StubProvider("geographic360"),
+        _StubProvider("population360"),
+        _StubProvider("temporal360"),
+    )
+    context = CompositionContext(tenant_id="tenant-a", subject=_subject(kind="source", ident="src_1"))
+
+    result = await compose_context_triad(context, executor=executor)
+
+    assert result.degraded_members == ("population360",)
+    assert result.degradation is not None
+    assert result.degradation.level == "partial"
+    assert len(result.conflicts) == 1
+    conflict = result.conflicts[0]
+    assert conflict.member == "population360"
+    assert conflict.conflict_class == ConflictClass.CAPABILITY_MISSING
+    assert "cannot apply to subject kind" in conflict.reason
+    # The survivors compose — no content silently dropped.
+    assert set(result.member_results) == {
+        "geographic360",
+        "population360",
+        "temporal360",
+    }
+    assert "geographic360" not in result.degraded_members
+    assert "temporal360" not in result.degraded_members
+    assert set(_section_ids(result)) == {
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "findings",
+        "primary_location",
+        "activity_in_window",
+    }
+
+
+@pytest.mark.asyncio
+async def test_compose_context_triad_cluster_subject_keeps_only_population() -> None:
+    # A ``cluster`` subject is served only by the population overlay (neither
+    # temporal nor geographic applies), so the WHEN and WHERE leaves drop as
+    # typed conflicts and only the WHO/cohort leaf composes.
+    executor = _executor_with(
+        _StubProvider("geographic360"),
+        _StubProvider("population360"),
+        _StubProvider("temporal360"),
+    )
+    context = CompositionContext(tenant_id="tenant-a", subject=_subject(kind="cluster", ident="clu_1"))
+
+    result = await compose_context_triad(context, executor=executor)
+
+    assert result.degraded_members == ("geographic360", "temporal360")
+    assert result.degradation is not None
+    assert result.degradation.level == "partial"
+    assert len(result.conflicts) == 2
+    assert {c.member for c in result.conflicts} == {"geographic360", "temporal360"}
+    assert all(c.conflict_class == ConflictClass.CAPABILITY_MISSING for c in result.conflicts)
+    assert "population360" not in result.degraded_members
+    # The population member renders its full spine at the top level.
+    assert _section_ids(result) == [
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "findings",
+        "current_memberships",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_compose_context_triad_missing_member_degrades_no_raise() -> None:
+    # population360 has no provider at all; over an entity subject its overlay
+    # DOES apply, so the member is run and degrades with a content-free
+    # "no provider registered" reason — the survivors compose.
+    executor = _executor_with(_StubProvider("geographic360"), _StubProvider("temporal360"))
+    context = CompositionContext(tenant_id="tenant-a", subject=_subject())
+
+    result = await compose_context_triad(context, executor=executor)
+
+    assert result.degraded_members == ("population360",)
+    assert result.degradation is not None
+    assert result.degradation.level == "partial"
+    assert result.conflicts[0].member == "population360"
+    assert result.conflicts[0].conflict_class == ConflictClass.CAPABILITY_MISSING
+    assert result.conflicts[0].reason == "no provider registered for member projection 'population360'"
+    assert _section_ids(result) == [
+        "summary",
+        "state",
+        "timeline",
+        "evidence",
+        "findings",
+        "primary_location",
+        "activity_in_window",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_compose_context_triad_is_deterministic() -> None:
+    executor = _executor_with(
+        _StubProvider("geographic360"),
+        _StubProvider("population360"),
+        _StubProvider("temporal360"),
+    )
+    context = CompositionContext(tenant_id="tenant-a", subject=_subject())
+
+    first = await compose_context_triad(context, executor=executor)
+    second = await compose_context_triad(context, executor=executor)
+
+    assert _section_ids(first) == _section_ids(second)
+    assert first.composed_lens_ids == second.composed_lens_ids
+    assert first.members == second.members
+    assert first.digest == second.digest
+    assert first.digest is not None and len(first.digest) == 64
