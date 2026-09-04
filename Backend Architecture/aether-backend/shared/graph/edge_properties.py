@@ -54,6 +54,14 @@ OPTIONAL_EDGE_PROPERTIES: frozenset[str] = frozenset({
     "membership_basis",      # rule | graph | ml_model | similarity | manual | inferred
     "population_type",       # segment | cohort | cluster | ... (PopulationType value)
     "evidence_refs",         # list of EvidenceRef ids grounding this membership fact
+    # Location-fact provenance (geographic360 G4.2 — LOCATED_AT / OBSERVED_IN /
+    # UNDER_JURISDICTION edges). Precision is typed and never exceeds evidence:
+    # a downgrade is recorded as precision_state, never a silent coarsening.
+    "location_role",         # LOCATION_ROLES value (primary_residence, observed_presence, ...)
+    "precision_class",       # country | region | city | coarse_cell | precise (location ladder)
+    "precision_state",       # full | precision_reduced | suppressed — typed downgrade
+    "region_type",           # REGION_TYPES value carried on a located-at Region edge
+    "coarse_cell",           # H3 cell string when location precision is cell-granular
 })
 
 # Valid causality classes — prediction edges must NOT use direct_cause

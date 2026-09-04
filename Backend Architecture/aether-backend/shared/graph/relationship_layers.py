@@ -270,6 +270,16 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     EdgeType.SECONDARY_LOCATION: RelationshipLayer.H2H,
     EdgeType.ACCESSED_FROM: RelationshipLayer.H2H,
 
+    # ── Geographic360 — location-fact edges (outside the 4 actor layers) ──
+    # Evidence-carrying WHERE facts (located-at / observed-in / under-
+    # jurisdiction) resolved by services/geo from LocationFact records. They
+    # are domain location facts, not human/agent interactions, so they sit in
+    # the EXCLUDED bucket with the other domain edges (Python-only — no TS
+    # RelationshipLayer bucket, mirroring SEMANTIC_RELATES_TO).
+    EdgeType.LOCATED_AT: RelationshipLayer.EXCLUDED,         # subject → Place|Region
+    EdgeType.OBSERVED_IN: RelationshipLayer.EXCLUDED,        # subject/source → Region|coarse_cell
+    EdgeType.UNDER_JURISDICTION: RelationshipLayer.EXCLUDED, # subject → Jurisdiction
+
     # ── Unified entity specialization ─────────────────────────────────────
     EdgeType.IS_GOVERNANCE_ORG: RelationshipLayer.H2H,
     EdgeType.IS_BRAND: RelationshipLayer.H2H,
