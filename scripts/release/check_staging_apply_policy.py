@@ -12,28 +12,64 @@ import yaml
 
 
 REQUIRED_ACTIONS = {
+    # S3
     "s3:PutEncryptionConfiguration",
     "s3:PutLifecycleConfiguration",
     "s3:GetEncryptionConfiguration",
     "s3:GetReplicationConfiguration",
+    "s3:CreateBucket",
+    "s3:DeleteBucket",
+    "s3:PutBucketPolicy",
+    "s3:DeleteBucketPolicy",
+    "s3:PutBucketVersioning",
+    "s3:PutBucketLogging",
+    "s3:PutBucketTagging",
+    "s3:PutPublicAccessBlock",
+    "s3:PutBucketAcl",
+    "s3:GetBucketPolicy",
+    "s3:GetBucketAcl",
+    "s3:GetBucketCORS",
+    "s3:GetBucketWebsite",
+    "s3:GetBucketVersioning",
+    "s3:GetBucketLogging",
+    "s3:GetBucketLocation",
+    "s3:GetBucketTagging",
+    "s3:GetBucketPublicAccessBlock",
+    "s3:GetBucketObjectLockConfiguration",
+    "s3:ListBucket",
+    # ECR
     "ecr:TagResource",
     "ecr:ListTagsForResource",
     "ecr:DescribeRepositories",
     "ecr:PutImageScanningConfiguration",
+    "ecr:DescribeImageScanFindings",
+    "ecr:GetImageScanningConfiguration",
     "ecr:GetLifecyclePolicy",
     "ecr:PutLifecyclePolicy",
     "ecr:GetRepositoryPolicy",
     "ecr:SetRepositoryPolicy",
     "ecr:DeleteRepositoryPolicy",
+    "ecr:CreateRepository",
+    "ecr:DeleteRepository",
+    # Secrets Manager
     "secretsmanager:TagResource",
     "secretsmanager:DescribeSecret",
     "secretsmanager:GetResourcePolicy",
+    "secretsmanager:ListSecretVersionIds",
     "secretsmanager:CreateSecret",
     "secretsmanager:UpdateSecret",
     "secretsmanager:DeleteSecret",
     "secretsmanager:RotateSecret",
+    "secretsmanager:ListSecrets",
+    # SSM
     "ssm:AddTagsToResource",
     "ssm:ListTagsForResource",
+    "ssm:PutParameter",
+    "ssm:DeleteParameter",
+    "ssm:GetParameter",
+    "ssm:GetParameters",
+    "ssm:DescribeParameters",
+    # KMS
     "kms:CreateKey",
     "kms:TagResource",
     "kms:CreateAlias",
@@ -45,16 +81,177 @@ REQUIRED_ACTIONS = {
     "kms:PutKeyPolicy",
     "kms:GenerateDataKey",
     "kms:Decrypt",
-    "ec2:GetSecurityGroupsForVpc",
-    "freetier:GetAccountPlanState",
     "kms:GetKeyRotationStatus",
     "kms:ScheduleKeyDeletion",
+    # EC2 / VPC
+    "ec2:GetSecurityGroupsForVpc",
+    "ec2:CreateVpc",
+    "ec2:DeleteVpc",
+    "ec2:ModifyVpcAttribute",
+    "ec2:CreateTags",
+    "ec2:DeleteTags",
+    "ec2:CreateSubnet",
+    "ec2:DeleteSubnet",
+    "ec2:CreateInternetGateway",
+    "ec2:AttachInternetGateway",
+    "ec2:DetachInternetGateway",
+    "ec2:DeleteInternetGateway",
+    "ec2:AllocateAddress",
+    "ec2:ReleaseAddress",
+    "ec2:CreateNatGateway",
+    "ec2:DeleteNatGateway",
+    "ec2:CreateRouteTable",
+    "ec2:DeleteRouteTable",
+    "ec2:CreateRoute",
+    "ec2:DeleteRoute",
+    "ec2:AssociateRouteTable",
+    "ec2:DisassociateRouteTable",
+    "ec2:ReplaceRouteTableAssociation",
+    "ec2:CreateSecurityGroup",
+    "ec2:DeleteSecurityGroup",
+    "ec2:AuthorizeSecurityGroupIngress",
+    "ec2:AuthorizeSecurityGroupEgress",
+    "ec2:RevokeSecurityGroupIngress",
+    "ec2:RevokeSecurityGroupEgress",
+    "ec2:CreateFlowLogs",
+    "ec2:DeleteFlowLogs",
+    "ec2:DescribeVpcs",
+    "ec2:DescribeSubnets",
+    "ec2:DescribeSecurityGroups",
+    "ec2:DescribeSecurityGroupRules",
+    "ec2:DescribeRouteTables",
+    "ec2:DescribeInternetGateways",
+    "ec2:DescribeNatGateways",
+    "ec2:DescribeAddresses",
+    "ec2:DescribeVpcAttribute",
+    "ec2:DescribeNetworkInterfaces",
+    "ec2:DescribeFlowLogs",
+    "ec2:DescribeNetworkAcls",
+    "ec2:DescribeVpcEndpoints",
+    "ec2:DescribeAvailabilityZones",
+    # ECS
+    "ecs:CreateCluster",
+    "ecs:DeleteCluster",
+    "ecs:UpdateCluster",
+    "ecs:TagResource",
+    "ecs:RegisterTaskDefinition",
+    "ecs:DeregisterTaskDefinition",
+    "ecs:CreateService",
+    "ecs:DeleteService",
+    "ecs:UpdateService",
+    "ecs:PutClusterCapacityProviders",
+    "ecs:DescribeServices",
+    "ecs:DescribeTaskDefinition",
+    "ecs:DescribeClusters",
+    "ecs:ListServices",
+    "ecs:ListTagsForResource",
+    # ALB / ELBv2
+    "elasticloadbalancing:ModifyTargetGroupAttributes",
+    "elasticloadbalancing:ModifyLoadBalancerAttributes",
+    "elasticloadbalancing:DescribeTargetGroups",
+    "elasticloadbalancing:DescribeLoadBalancers",
+    "elasticloadbalancing:DescribeListeners",
+    "elasticloadbalancing:CreateLoadBalancer",
+    "elasticloadbalancing:DeleteLoadBalancer",
+    "elasticloadbalancing:CreateTargetGroup",
+    "elasticloadbalancing:DeleteTargetGroup",
+    "elasticloadbalancing:CreateListener",
+    "elasticloadbalancing:DeleteListener",
+    "elasticloadbalancing:ModifyListener",
+    "elasticloadbalancing:CreateRule",
+    "elasticloadbalancing:DeleteRule",
+    "elasticloadbalancing:ModifyRule",
+    "elasticloadbalancing:AddTags",
+    "elasticloadbalancing:RemoveTags",
+    "elasticloadbalancing:SetSecurityGroups",
+    "elasticloadbalancing:SetSubnets",
+    "elasticloadbalancing:RegisterTargets",
+    "elasticloadbalancing:DeregisterTargets",
+    "elasticloadbalancing:DescribeLoadBalancerAttributes",
+    "elasticloadbalancing:DescribeListenerCertificates",
+    "elasticloadbalancing:DescribeTargetGroupAttributes",
+    "elasticloadbalancing:DescribeTags",
+    "elasticloadbalancing:DescribeRules",
+    # Aurora / RDS
+    "rds:CreateDBCluster",
+    "rds:DeleteDBCluster",
+    "rds:ModifyDBCluster",
+    "rds:CreateDBInstance",
+    "rds:DeleteDBInstance",
+    "rds:ModifyDBInstance",
+    "rds:CreateDBSubnetGroup",
+    "rds:DeleteDBSubnetGroup",
+    "rds:ModifyDBSubnetGroup",
+    "rds:CreateDBClusterParameterGroup",
+    "rds:DeleteDBClusterParameterGroup",
+    "rds:ModifyDBClusterParameterGroup",
+    "rds:AddTagsToResource",
+    "rds:RemoveTagsFromResource",
+    "rds:DescribeDBClusters",
+    "rds:DescribeDBSubnetGroups",
+    "rds:DescribeDBClusterParameterGroups",
+    "rds:DescribeDBClusterParameters",
+    "rds:DescribeDBInstances",
+    "rds:ListTagsForResource",
+    # DynamoDB
+    "dynamodb:ListTagsOfResource",
+    "dynamodb:CreateTable",
+    "dynamodb:DeleteTable",
+    "dynamodb:UpdateTable",
+    "dynamodb:TagResource",
+    "dynamodb:UntagResource",
+    "dynamodb:UpdateContinuousBackups",
+    "dynamodb:UpdateTimeToLive",
+    "dynamodb:DescribeTable",
+    "dynamodb:DescribeContinuousBackups",
+    "dynamodb:DescribeTimeToLive",
+    # SQS
+    "sqs:CreateQueue",
+    "sqs:DeleteQueue",
+    "sqs:SetQueueAttributes",
+    "sqs:TagQueue",
+    "sqs:UntagQueue",
+    "sqs:GetQueueAttributes",
+    "sqs:GetQueueUrl",
+    "sqs:ListQueueTags",
+    # SNS
     "sns:SetTopicAttributes",
     "sns:DeleteTopic",
     "sns:Subscribe",
-    "elasticloadbalancing:ModifyTargetGroupAttributes",
-    "elasticloadbalancing:ModifyLoadBalancerAttributes",
-    "dynamodb:ListTagsOfResource",
+    "sns:CreateTopic",
+    "sns:TagResource",
+    "sns:Unsubscribe",
+    "sns:GetTopicAttributes",
+    "sns:ListTagsForResource",
+    "sns:GetSubscriptionAttributes",
+    # CloudWatch
+    "cloudwatch:PutMetricAlarm",
+    "cloudwatch:DeleteAlarms",
+    "cloudwatch:TagResource",
+    "cloudwatch:PutDashboard",
+    "cloudwatch:DeleteDashboards",
+    "cloudwatch:DescribeAlarms",
+    "cloudwatch:GetDashboard",
+    "cloudwatch:ListTagsForResource",
+    # CloudWatch Logs
+    "logs:CreateLogGroup",
+    "logs:TagResource",
+    "logs:DescribeLogGroups",
+    "logs:PutRetentionPolicy",
+    "logs:DeleteLogGroup",
+    "logs:PutMetricFilter",
+    "logs:DeleteMetricFilter",
+    "logs:DescribeMetricFilters",
+    "logs:ListTagsForResource",
+    # Application Auto Scaling
+    "application-autoscaling:RegisterScalableTarget",
+    "application-autoscaling:DeregisterScalableTarget",
+    "application-autoscaling:PutScalingPolicy",
+    "application-autoscaling:DeleteScalingPolicy",
+    "application-autoscaling:TagResource",
+    "application-autoscaling:DescribeScalableTargets",
+    "application-autoscaling:DescribeScalingPolicies",
+    # IAM
     "iam:CreateServiceLinkedRole",
     "iam:GetRole",
     "iam:PassRole",
@@ -69,6 +266,8 @@ REQUIRED_ACTIONS = {
     "iam:ListAttachedRolePolicies",
     "iam:ListRolePolicies",
     "iam:ListInstanceProfilesForRole",
+    "iam:SimulatePrincipalPolicy",
+    # Lambda
     "lambda:TagResource",
     "lambda:CreateFunction",
     "lambda:GetFunction",
@@ -79,6 +278,8 @@ REQUIRED_ACTIONS = {
     "lambda:RemovePermission",
     "lambda:GetPolicy",
     "lambda:ListTags",
+    "lambda:GetFunctionConfiguration",
+    # EventBridge
     "events:ListTargetsByRule",
     "events:PutRule",
     "events:DeleteRule",
@@ -86,15 +287,10 @@ REQUIRED_ACTIONS = {
     "events:PutTargets",
     "events:RemoveTargets",
     "events:TagResource",
-    "logs:CreateLogGroup",
-    "logs:TagResource",
-    "logs:DescribeLogGroups",
-    "logs:PutRetentionPolicy",
-    "logs:DeleteLogGroup",
-    "elasticloadbalancing:DescribeTargetGroups",
-    "elasticloadbalancing:DescribeLoadBalancers",
-    "elasticloadbalancing:DescribeListeners",
-    "iam:SimulatePrincipalPolicy",
+    # STS
+    "sts:GetCallerIdentity",
+    # Free Tier
+    "freetier:GetAccountPlanState",
 }
 _LAMBDA_MANAGEMENT_ACTIONS = {
     "lambda:CreateFunction",
@@ -106,6 +302,7 @@ _LAMBDA_MANAGEMENT_ACTIONS = {
     "lambda:RemovePermission",
     "lambda:GetPolicy",
     "lambda:ListTags",
+    "lambda:GetFunctionConfiguration",
 }
 _IAM_ROLE_MANAGEMENT_ACTIONS = {
     "iam:CreateRole",
@@ -121,18 +318,150 @@ _IAM_ROLE_MANAGEMENT_ACTIONS = {
     "iam:ListInstanceProfilesForRole",
 }
 ALLOWED_GLOBAL_ACTIONS = {
+    # EC2 / VPC write (API requires '*')
+    "ec2:CreateVpc",
+    "ec2:DeleteVpc",
+    "ec2:ModifyVpcAttribute",
+    "ec2:CreateTags",
+    "ec2:DeleteTags",
+    "ec2:CreateSubnet",
+    "ec2:DeleteSubnet",
+    "ec2:CreateInternetGateway",
+    "ec2:AttachInternetGateway",
+    "ec2:DetachInternetGateway",
+    "ec2:DeleteInternetGateway",
+    "ec2:AllocateAddress",
+    "ec2:ReleaseAddress",
+    "ec2:CreateNatGateway",
+    "ec2:DeleteNatGateway",
+    "ec2:CreateRouteTable",
+    "ec2:DeleteRouteTable",
+    "ec2:CreateRoute",
+    "ec2:DeleteRoute",
+    "ec2:AssociateRouteTable",
+    "ec2:DisassociateRouteTable",
+    "ec2:ReplaceRouteTableAssociation",
+    "ec2:CreateSecurityGroup",
+    "ec2:DeleteSecurityGroup",
+    "ec2:AuthorizeSecurityGroupIngress",
+    "ec2:AuthorizeSecurityGroupEgress",
+    "ec2:RevokeSecurityGroupIngress",
+    "ec2:RevokeSecurityGroupEgress",
+    "ec2:CreateFlowLogs",
+    "ec2:DeleteFlowLogs",
+    # EC2 / VPC read
     "ec2:GetSecurityGroupsForVpc",
-    "freetier:GetAccountPlanState",
-    "iam:CreateServiceLinkedRole",
+    "ec2:DescribeVpcs",
+    "ec2:DescribeSubnets",
+    "ec2:DescribeSecurityGroups",
+    "ec2:DescribeSecurityGroupRules",
+    "ec2:DescribeRouteTables",
+    "ec2:DescribeInternetGateways",
+    "ec2:DescribeNatGateways",
+    "ec2:DescribeAddresses",
+    "ec2:DescribeVpcAttribute",
+    "ec2:DescribeNetworkInterfaces",
+    "ec2:DescribeFlowLogs",
+    "ec2:DescribeNetworkAcls",
+    "ec2:DescribeVpcEndpoints",
+    "ec2:DescribeAvailabilityZones",
+    # ECS
+    "ecs:CreateCluster",
+    "ecs:DeleteCluster",
+    "ecs:UpdateCluster",
+    "ecs:TagResource",
+    "ecs:RegisterTaskDefinition",
+    "ecs:DeregisterTaskDefinition",
+    "ecs:CreateService",
+    "ecs:DeleteService",
+    "ecs:UpdateService",
+    "ecs:PutClusterCapacityProviders",
+    "ecs:DescribeServices",
+    "ecs:DescribeTaskDefinition",
+    "ecs:DescribeClusters",
+    "ecs:ListServices",
+    "ecs:ListTagsForResource",
+    # ALB / ELBv2
     "elasticloadbalancing:DescribeTargetGroups",
     "elasticloadbalancing:DescribeLoadBalancers",
     "elasticloadbalancing:DescribeListeners",
+    "elasticloadbalancing:CreateLoadBalancer",
+    "elasticloadbalancing:DeleteLoadBalancer",
+    "elasticloadbalancing:CreateTargetGroup",
+    "elasticloadbalancing:DeleteTargetGroup",
+    "elasticloadbalancing:CreateListener",
+    "elasticloadbalancing:DeleteListener",
+    "elasticloadbalancing:ModifyListener",
+    "elasticloadbalancing:CreateRule",
+    "elasticloadbalancing:DeleteRule",
+    "elasticloadbalancing:ModifyRule",
+    "elasticloadbalancing:AddTags",
+    "elasticloadbalancing:RemoveTags",
+    "elasticloadbalancing:SetSecurityGroups",
+    "elasticloadbalancing:SetSubnets",
+    "elasticloadbalancing:RegisterTargets",
+    "elasticloadbalancing:DeregisterTargets",
+    "elasticloadbalancing:DescribeLoadBalancerAttributes",
+    "elasticloadbalancing:DescribeListenerCertificates",
+    "elasticloadbalancing:DescribeTargetGroupAttributes",
+    "elasticloadbalancing:DescribeTags",
+    "elasticloadbalancing:DescribeRules",
+    # Aurora / RDS
+    "rds:CreateDBCluster",
+    "rds:DeleteDBCluster",
+    "rds:ModifyDBCluster",
+    "rds:CreateDBInstance",
+    "rds:DeleteDBInstance",
+    "rds:ModifyDBInstance",
+    "rds:CreateDBSubnetGroup",
+    "rds:DeleteDBSubnetGroup",
+    "rds:ModifyDBSubnetGroup",
+    "rds:CreateDBClusterParameterGroup",
+    "rds:DeleteDBClusterParameterGroup",
+    "rds:ModifyDBClusterParameterGroup",
+    "rds:AddTagsToResource",
+    "rds:RemoveTagsFromResource",
+    "rds:DescribeDBClusters",
+    "rds:DescribeDBSubnetGroups",
+    "rds:DescribeDBClusterParameterGroups",
+    "rds:DescribeDBClusterParameters",
+    "rds:DescribeDBInstances",
+    "rds:ListTagsForResource",
+    # CloudWatch
+    "cloudwatch:PutMetricAlarm",
+    "cloudwatch:DeleteAlarms",
+    "cloudwatch:TagResource",
+    "cloudwatch:PutDashboard",
+    "cloudwatch:DeleteDashboards",
+    "cloudwatch:DescribeAlarms",
+    "cloudwatch:GetDashboard",
+    "cloudwatch:ListTagsForResource",
+    # CloudWatch Logs read
+    "logs:DescribeLogGroups",
+    "logs:DescribeMetricFilters",
+    "logs:ListTagsForResource",
+    # Application Auto Scaling
+    "application-autoscaling:RegisterScalableTarget",
+    "application-autoscaling:DeregisterScalableTarget",
+    "application-autoscaling:PutScalingPolicy",
+    "application-autoscaling:DeleteScalingPolicy",
+    "application-autoscaling:TagResource",
+    "application-autoscaling:DescribeScalableTargets",
+    "application-autoscaling:DescribeScalingPolicies",
+    # Secrets Manager
+    "secretsmanager:ListSecrets",
+    # STS
+    "sts:GetCallerIdentity",
+    # IAM
+    "iam:CreateServiceLinkedRole",
     "iam:SimulatePrincipalPolicy",
+    # KMS
     "kms:GetKeyRotationStatus",
     "kms:ScheduleKeyDeletion",
     "kms:CreateKey",
     "kms:ListAliases",
-    "logs:DescribeLogGroups",
+    # Free Tier
+    "freetier:GetAccountPlanState",
 }
 REQUIRED_AUTH0_SCOPES = {
     "create:resource_servers",
@@ -151,6 +480,39 @@ REQUIRED_AUTH0_SCOPES = {
     "update:clients",
     "delete:clients",
     "delete:connections",
+}
+
+_S3_STAGING_BUCKET = "arn:aws:s3:::aether-staging-*"
+_ECR_REPO = "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*"
+_SECRET_ARN = "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*"
+_SSM_PARAM = "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*"
+_DYNAMO_TABLE = "arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*"
+_SQS_QUEUE = "arn:aws:sqs:us-east-1:${account_id}:AETHER-staging-*"
+_EVENTS_RULE = "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*"
+_KMS_KEY = "arn:aws:kms:us-east-1:${account_id}:key/*"
+_SNS_RESOURCES = [
+    "arn:aws:sns:us-east-1:${account_id}:aether-staging-*",
+    "arn:aws:sns:us-east-1:${account_id}:AETHER-staging-*",
+]
+_LOG_GROUP_RESOURCES = [
+    "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
+    "arn:aws:logs:us-east-1:${account_id}:log-group:/ecs/AETHER-staging/*",
+    "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/vpc/AETHER-staging/*",
+    "arn:aws:logs:us-east-1:${account_id}:log-group:/aether/AETHER-staging/*",
+]
+_LAMBDA_ROLE_ARNS = {
+    "arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda",
+    "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation",
+}
+_INFRA_ROLE_ARNS = {
+    "arn:aws:iam::${account_id}:role/AETHER-staging-ecs-task-role",
+    "arn:aws:iam::${account_id}:role/AETHER-staging-ecs-execution-role",
+    "arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role",
+    "arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role",
+}
+_LAMBDA_FN_ARNS = {
+    "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift",
+    "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation",
 }
 
 
@@ -201,8 +563,8 @@ def main() -> int:
             fail(f"unqualified global resource scope in {sid}")
         if "iam:PassRole" in statement_actions:
             passed_to = (statement.get("conditions") or {}).get("iam:PassedToService")
-            if passed_to not in (["ecs-tasks.amazonaws.com"], ["vpc-flow-logs.amazonaws.com"], ["lambda.amazonaws.com"]):
-                fail("iam:PassRole must be limited to the approved ECS, VPC flow-logs, or Lambda service principals")
+            if passed_to not in (["ecs-tasks.amazonaws.com"], ["vpc-flow-logs.amazonaws.com"], ["lambda.amazonaws.com"], ["monitoring.rds.amazonaws.com"]):
+                fail("iam:PassRole must be limited to the approved ECS, VPC flow-logs, Lambda, or RDS monitoring service principals")
         if "kms:ScheduleKeyDeletion" in statement_actions:
             if resource != "*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                 fail("kms:ScheduleKeyDeletion must use an enforceable staging KMS tag condition")
@@ -217,115 +579,271 @@ def main() -> int:
                 fail("kms:CreateKey must require an Environment=staging request tag")
         if "kms:TagResource" in statement_actions:
             conditions = statement.get("conditions") or {}
-            if resource != "arn:aws:kms:us-east-1:${account_id}:key/*" or not (conditions.get("aws:ResourceTag/Environment") == "staging" or conditions.get("aws:RequestTag/Environment") == "staging"):
+            if resource != _KMS_KEY or not (conditions.get("aws:ResourceTag/Environment") == "staging" or conditions.get("aws:RequestTag/Environment") == "staging"):
                 fail("kms:TagResource must use a staging KMS key ARN and resource/request-tag condition")
         if "kms:CreateAlias" in statement_actions:
             conditions = statement.get("conditions") or {}
             alias_arn = "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*"
-            key_arn = "arn:aws:kms:us-east-1:${account_id}:key/*"
             if resource == alias_arn:
                 if conditions != {"kms:RequestAlias": "alias/aether-staging-*"}:
                     fail("kms:CreateAlias alias authorization must require the staging alias name")
                 operators = statement.get("condition_operators") or {}
                 if operators.get("kms:RequestAlias") != "StringLike":
                     fail("kms:CreateAlias alias authorization must use StringLike for the wildcard alias")
-            elif resource == key_arn:
+            elif resource == _KMS_KEY:
                 if conditions != {"aws:ResourceTag/Environment": "staging"}:
                     fail("kms:CreateAlias target-key authorization must require the staging key tag")
             else:
                 fail("kms:CreateAlias must split alias and target-key resource scopes")
         if "kms:PutKeyPolicy" in statement_actions:
-            if resource != "arn:aws:kms:us-east-1:${account_id}:key/*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
+            if resource != _KMS_KEY or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                 fail("kms:PutKeyPolicy must use a staging KMS key ARN and resource-tag condition")
         for _kms_data_action in ("kms:GenerateDataKey", "kms:Decrypt"):
             if _kms_data_action in statement_actions:
-                if resource != "arn:aws:kms:us-east-1:${account_id}:key/*" or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
+                if resource != _KMS_KEY or (statement.get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                     fail(f"{_kms_data_action} must use a staging KMS key ARN and resource-tag condition")
         if "iam:CreateServiceLinkedRole" in statement_actions:
             if (statement.get("conditions") or {}).get("iam:AWSServiceName") != "ecs.amazonaws.com":
                 fail("iam:CreateServiceLinkedRole must be restricted to ECS")
 
-    expected_resources = {
-        "s3:PutEncryptionConfiguration": "arn:aws:s3:::aether-staging-*",
-        "s3:PutLifecycleConfiguration": "arn:aws:s3:::aether-staging-*",
-        "s3:GetEncryptionConfiguration": "arn:aws:s3:::aether-staging-*",
-        "s3:GetReplicationConfiguration": "arn:aws:s3:::aether-staging-*",
-        "ecr:TagResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
-        "ecr:ListTagsForResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
-        "ecr:DescribeRepositories": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
-        "ecr:PutImageScanningConfiguration": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
-        "ecr:GetLifecyclePolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
-        "ecr:PutLifecyclePolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
-        "ecr:GetRepositoryPolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
-        "ecr:SetRepositoryPolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
-        "ecr:DeleteRepositoryPolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
-        "secretsmanager:TagResource": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
-        "secretsmanager:DescribeSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
-        "secretsmanager:GetResourcePolicy": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
-        "secretsmanager:CreateSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
-        "secretsmanager:UpdateSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
-        "secretsmanager:DeleteSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
-        "secretsmanager:RotateSecret": "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*",
-        "ssm:AddTagsToResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
-        "ssm:ListTagsForResource": "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*",
-        "kms:CreateKey": "*",
-        "kms:TagResource": "arn:aws:kms:us-east-1:${account_id}:key/*",
-        "kms:CreateAlias": [
-            "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*",
-            "arn:aws:kms:us-east-1:${account_id}:key/*",
-        ],
-        "kms:ListAliases": "*",
-        "kms:DescribeKey": "arn:aws:kms:us-east-1:${account_id}:key/*",
-        "kms:GetKeyPolicy": "arn:aws:kms:us-east-1:${account_id}:key/*",
-        "kms:ListResourceTags": "arn:aws:kms:us-east-1:${account_id}:key/*",
-        "kms:CreateGrant": "arn:aws:kms:us-east-1:${account_id}:key/*",
-        "kms:PutKeyPolicy": "arn:aws:kms:us-east-1:${account_id}:key/*",
-        "kms:GenerateDataKey": "arn:aws:kms:us-east-1:${account_id}:key/*",
-        "kms:Decrypt": "arn:aws:kms:us-east-1:${account_id}:key/*",
-        "ec2:GetSecurityGroupsForVpc": "*",
-        "freetier:GetAccountPlanState": "*",
-        "kms:GetKeyRotationStatus": "*",
-        "kms:ScheduleKeyDeletion": "*",
-        "sns:SetTopicAttributes": [
-            "arn:aws:sns:us-east-1:${account_id}:aether-staging-*",
-            "arn:aws:sns:us-east-1:${account_id}:AETHER-staging-*",
-        ],
-        "sns:DeleteTopic": [
-            "arn:aws:sns:us-east-1:${account_id}:aether-staging-*",
-            "arn:aws:sns:us-east-1:${account_id}:AETHER-staging-*",
-        ],
-        "sns:Subscribe": [
-            "arn:aws:sns:us-east-1:${account_id}:aether-staging-*",
-            "arn:aws:sns:us-east-1:${account_id}:AETHER-staging-*",
-        ],
-        "elasticloadbalancing:ModifyTargetGroupAttributes": "arn:aws:elasticloadbalancing:us-east-1:${account_id}:targetgroup/aether-staging-*",
-        "elasticloadbalancing:ModifyLoadBalancerAttributes": "arn:aws:elasticloadbalancing:us-east-1:${account_id}:loadbalancer/app/aether-staging-*",
-        "dynamodb:ListTagsOfResource": "arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*",
-        "iam:CreateServiceLinkedRole": "*",
-        "iam:GetRole": "exact-staging-role-read-bindings",
-        "iam:PassRole": "exact-staging-role-bindings",
-        "lambda:TagResource": "exact-staging-lambda-bindings",
-        "events:ListTargetsByRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
-        "events:PutRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
-        "events:DeleteRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
-        "events:DescribeRule": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
-        "events:PutTargets": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
-        "events:RemoveTargets": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
-        "events:TagResource": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
-        "logs:CreateLogGroup": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
-        "logs:TagResource": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
-        "logs:DescribeLogGroups": "*",
-        "logs:PutRetentionPolicy": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
-        "logs:DeleteLogGroup": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
-        "elasticloadbalancing:DescribeTargetGroups": "*",
-        "elasticloadbalancing:DescribeLoadBalancers": "*",
-        "elasticloadbalancing:DescribeListeners": "*",
-        "iam:SimulatePrincipalPolicy": "*",
-    }
+    expected_resources: dict[str, str | list[str]] = {}
+
+    # S3
+    for _s3 in (
+        "s3:PutEncryptionConfiguration", "s3:PutLifecycleConfiguration",
+        "s3:GetEncryptionConfiguration", "s3:GetReplicationConfiguration",
+        "s3:CreateBucket", "s3:DeleteBucket",
+        "s3:PutBucketPolicy", "s3:DeleteBucketPolicy",
+        "s3:PutBucketVersioning", "s3:PutBucketLogging",
+        "s3:PutBucketTagging", "s3:PutPublicAccessBlock", "s3:PutBucketAcl",
+        "s3:GetBucketPolicy", "s3:GetBucketAcl", "s3:GetBucketCORS",
+        "s3:GetBucketWebsite", "s3:GetBucketVersioning", "s3:GetBucketLogging",
+        "s3:GetBucketLocation", "s3:GetBucketTagging",
+        "s3:GetBucketPublicAccessBlock", "s3:GetBucketObjectLockConfiguration",
+        "s3:ListBucket",
+    ):
+        expected_resources[_s3] = _S3_STAGING_BUCKET
+
+    # ECR
+    for _ecr in (
+        "ecr:TagResource", "ecr:ListTagsForResource", "ecr:DescribeRepositories",
+        "ecr:PutImageScanningConfiguration", "ecr:DescribeImageScanFindings",
+        "ecr:GetImageScanningConfiguration",
+        "ecr:GetLifecyclePolicy", "ecr:PutLifecyclePolicy",
+        "ecr:GetRepositoryPolicy", "ecr:SetRepositoryPolicy",
+        "ecr:DeleteRepositoryPolicy",
+        "ecr:CreateRepository", "ecr:DeleteRepository",
+    ):
+        expected_resources[_ecr] = _ECR_REPO
+
+    # Secrets Manager
+    for _sm in (
+        "secretsmanager:TagResource", "secretsmanager:DescribeSecret",
+        "secretsmanager:GetResourcePolicy", "secretsmanager:ListSecretVersionIds",
+        "secretsmanager:CreateSecret", "secretsmanager:UpdateSecret",
+        "secretsmanager:DeleteSecret", "secretsmanager:RotateSecret",
+    ):
+        expected_resources[_sm] = _SECRET_ARN
+    expected_resources["secretsmanager:ListSecrets"] = "*"
+
+    # SSM
+    for _ssm in (
+        "ssm:AddTagsToResource", "ssm:ListTagsForResource",
+        "ssm:PutParameter", "ssm:DeleteParameter",
+        "ssm:GetParameter", "ssm:GetParameters", "ssm:DescribeParameters",
+    ):
+        expected_resources[_ssm] = _SSM_PARAM
+
+    # KMS
+    expected_resources["kms:CreateKey"] = "*"
+    expected_resources["kms:TagResource"] = _KMS_KEY
+    expected_resources["kms:CreateAlias"] = [
+        "arn:aws:kms:us-east-1:${account_id}:alias/aether-staging-*",
+        _KMS_KEY,
+    ]
+    expected_resources["kms:ListAliases"] = "*"
+    for _kms in (
+        "kms:DescribeKey", "kms:GetKeyPolicy", "kms:ListResourceTags",
+        "kms:CreateGrant", "kms:PutKeyPolicy",
+        "kms:GenerateDataKey", "kms:Decrypt",
+    ):
+        expected_resources[_kms] = _KMS_KEY
+    expected_resources["kms:GetKeyRotationStatus"] = "*"
+    expected_resources["kms:ScheduleKeyDeletion"] = "*"
+
+    # EC2 / VPC — all require '*'
+    for _ec2 in (
+        "ec2:GetSecurityGroupsForVpc",
+        "ec2:CreateVpc", "ec2:DeleteVpc", "ec2:ModifyVpcAttribute",
+        "ec2:CreateTags", "ec2:DeleteTags",
+        "ec2:CreateSubnet", "ec2:DeleteSubnet",
+        "ec2:CreateInternetGateway", "ec2:AttachInternetGateway",
+        "ec2:DetachInternetGateway", "ec2:DeleteInternetGateway",
+        "ec2:AllocateAddress", "ec2:ReleaseAddress",
+        "ec2:CreateNatGateway", "ec2:DeleteNatGateway",
+        "ec2:CreateRouteTable", "ec2:DeleteRouteTable",
+        "ec2:CreateRoute", "ec2:DeleteRoute",
+        "ec2:AssociateRouteTable", "ec2:DisassociateRouteTable",
+        "ec2:ReplaceRouteTableAssociation",
+        "ec2:CreateSecurityGroup", "ec2:DeleteSecurityGroup",
+        "ec2:AuthorizeSecurityGroupIngress", "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupIngress", "ec2:RevokeSecurityGroupEgress",
+        "ec2:CreateFlowLogs", "ec2:DeleteFlowLogs",
+        "ec2:DescribeVpcs", "ec2:DescribeSubnets",
+        "ec2:DescribeSecurityGroups", "ec2:DescribeSecurityGroupRules",
+        "ec2:DescribeRouteTables", "ec2:DescribeInternetGateways",
+        "ec2:DescribeNatGateways", "ec2:DescribeAddresses",
+        "ec2:DescribeVpcAttribute", "ec2:DescribeNetworkInterfaces",
+        "ec2:DescribeFlowLogs", "ec2:DescribeNetworkAcls",
+        "ec2:DescribeVpcEndpoints", "ec2:DescribeAvailabilityZones",
+    ):
+        expected_resources[_ec2] = "*"
+
+    # ECS — all require '*'
+    for _ecs in (
+        "ecs:CreateCluster", "ecs:DeleteCluster", "ecs:UpdateCluster",
+        "ecs:TagResource", "ecs:RegisterTaskDefinition",
+        "ecs:DeregisterTaskDefinition", "ecs:CreateService",
+        "ecs:DeleteService", "ecs:UpdateService",
+        "ecs:PutClusterCapacityProviders",
+        "ecs:DescribeServices", "ecs:DescribeTaskDefinition",
+        "ecs:DescribeClusters", "ecs:ListServices", "ecs:ListTagsForResource",
+    ):
+        expected_resources[_ecs] = "*"
+
+    # ALB / ELBv2
+    expected_resources["elasticloadbalancing:ModifyTargetGroupAttributes"] = (
+        "arn:aws:elasticloadbalancing:us-east-1:${account_id}:targetgroup/aether-staging-*"
+    )
+    expected_resources["elasticloadbalancing:ModifyLoadBalancerAttributes"] = (
+        "arn:aws:elasticloadbalancing:us-east-1:${account_id}:loadbalancer/app/aether-staging-*"
+    )
+    for _elb in (
+        "elasticloadbalancing:DescribeTargetGroups",
+        "elasticloadbalancing:DescribeLoadBalancers",
+        "elasticloadbalancing:DescribeListeners",
+        "elasticloadbalancing:CreateLoadBalancer",
+        "elasticloadbalancing:DeleteLoadBalancer",
+        "elasticloadbalancing:CreateTargetGroup",
+        "elasticloadbalancing:DeleteTargetGroup",
+        "elasticloadbalancing:CreateListener",
+        "elasticloadbalancing:DeleteListener",
+        "elasticloadbalancing:ModifyListener",
+        "elasticloadbalancing:CreateRule",
+        "elasticloadbalancing:DeleteRule",
+        "elasticloadbalancing:ModifyRule",
+        "elasticloadbalancing:AddTags",
+        "elasticloadbalancing:RemoveTags",
+        "elasticloadbalancing:SetSecurityGroups",
+        "elasticloadbalancing:SetSubnets",
+        "elasticloadbalancing:RegisterTargets",
+        "elasticloadbalancing:DeregisterTargets",
+        "elasticloadbalancing:DescribeLoadBalancerAttributes",
+        "elasticloadbalancing:DescribeListenerCertificates",
+        "elasticloadbalancing:DescribeTargetGroupAttributes",
+        "elasticloadbalancing:DescribeTags",
+        "elasticloadbalancing:DescribeRules",
+    ):
+        expected_resources[_elb] = "*"
+
+    # Aurora / RDS — all require '*'
+    for _rds in (
+        "rds:CreateDBCluster", "rds:DeleteDBCluster", "rds:ModifyDBCluster",
+        "rds:CreateDBInstance", "rds:DeleteDBInstance", "rds:ModifyDBInstance",
+        "rds:CreateDBSubnetGroup", "rds:DeleteDBSubnetGroup",
+        "rds:ModifyDBSubnetGroup",
+        "rds:CreateDBClusterParameterGroup",
+        "rds:DeleteDBClusterParameterGroup",
+        "rds:ModifyDBClusterParameterGroup",
+        "rds:AddTagsToResource", "rds:RemoveTagsFromResource",
+        "rds:DescribeDBClusters", "rds:DescribeDBSubnetGroups",
+        "rds:DescribeDBClusterParameterGroups",
+        "rds:DescribeDBClusterParameters",
+        "rds:DescribeDBInstances", "rds:ListTagsForResource",
+    ):
+        expected_resources[_rds] = "*"
+
+    # DynamoDB
+    expected_resources["dynamodb:ListTagsOfResource"] = _DYNAMO_TABLE
+    for _ddb in (
+        "dynamodb:CreateTable", "dynamodb:DeleteTable", "dynamodb:UpdateTable",
+        "dynamodb:TagResource", "dynamodb:UntagResource",
+        "dynamodb:UpdateContinuousBackups", "dynamodb:UpdateTimeToLive",
+        "dynamodb:DescribeTable", "dynamodb:DescribeContinuousBackups",
+        "dynamodb:DescribeTimeToLive",
+    ):
+        expected_resources[_ddb] = _DYNAMO_TABLE
+
+    # SQS
+    for _sqs in (
+        "sqs:CreateQueue", "sqs:DeleteQueue", "sqs:SetQueueAttributes",
+        "sqs:TagQueue", "sqs:UntagQueue",
+        "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:ListQueueTags",
+    ):
+        expected_resources[_sqs] = _SQS_QUEUE
+
+    # SNS
+    for _sns in (
+        "sns:SetTopicAttributes", "sns:DeleteTopic", "sns:Subscribe",
+        "sns:CreateTopic", "sns:TagResource", "sns:Unsubscribe",
+        "sns:GetTopicAttributes", "sns:ListTagsForResource",
+        "sns:GetSubscriptionAttributes",
+    ):
+        expected_resources[_sns] = _SNS_RESOURCES
+
+    # CloudWatch — all require '*'
+    for _cw in (
+        "cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms",
+        "cloudwatch:TagResource", "cloudwatch:PutDashboard",
+        "cloudwatch:DeleteDashboards", "cloudwatch:DescribeAlarms",
+        "cloudwatch:GetDashboard", "cloudwatch:ListTagsForResource",
+    ):
+        expected_resources[_cw] = "*"
+
+    # CloudWatch Logs
+    for _log_scoped in (
+        "logs:CreateLogGroup", "logs:TagResource",
+        "logs:PutRetentionPolicy", "logs:DeleteLogGroup",
+        "logs:PutMetricFilter", "logs:DeleteMetricFilter",
+    ):
+        expected_resources[_log_scoped] = _LOG_GROUP_RESOURCES
+    for _log_global in ("logs:DescribeLogGroups", "logs:DescribeMetricFilters", "logs:ListTagsForResource"):
+        expected_resources[_log_global] = "*"
+
+    # Application Auto Scaling — all require '*'
+    for _as in (
+        "application-autoscaling:RegisterScalableTarget",
+        "application-autoscaling:DeregisterScalableTarget",
+        "application-autoscaling:PutScalingPolicy",
+        "application-autoscaling:DeleteScalingPolicy",
+        "application-autoscaling:TagResource",
+        "application-autoscaling:DescribeScalableTargets",
+        "application-autoscaling:DescribeScalingPolicies",
+    ):
+        expected_resources[_as] = "*"
+
+    # EventBridge
+    for _evt in (
+        "events:ListTargetsByRule", "events:PutRule", "events:DeleteRule",
+        "events:DescribeRule", "events:PutTargets", "events:RemoveTargets",
+        "events:TagResource",
+    ):
+        expected_resources[_evt] = _EVENTS_RULE
+
+    # STS / Free Tier
+    expected_resources["sts:GetCallerIdentity"] = "*"
+    expected_resources["freetier:GetAccountPlanState"] = "*"
+
+    # IAM
+    expected_resources["iam:CreateServiceLinkedRole"] = "*"
+    expected_resources["iam:SimulatePrincipalPolicy"] = "*"
+    expected_resources["iam:GetRole"] = "exact-staging-role-read-bindings"
+    expected_resources["iam:PassRole"] = "exact-staging-role-bindings"
+    expected_resources["lambda:TagResource"] = "exact-staging-lambda-bindings"
     for action in _LAMBDA_MANAGEMENT_ACTIONS:
         expected_resources[action] = "exact-staging-lambda-bindings"
     for action in _IAM_ROLE_MANAGEMENT_ACTIONS:
-        expected_resources[action] = "exact-staging-lambda-role-bindings"
+        expected_resources[action] = "exact-staging-role-management-bindings"
 
     for action, expected in expected_resources.items():
         matching = [s for s in statements if action in (s.get("actions") or [])]
@@ -336,6 +854,7 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role",
                 "arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda",
                 "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation",
+                "arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role",
             }
             if {s.get("resource") for s in matching} != expected_scopes:
                 fail("iam:PassRole has an unexpected resource scope")
@@ -349,43 +868,29 @@ def main() -> int:
                 "arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role": ["vpc-flow-logs.amazonaws.com"],
                 "arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda": ["lambda.amazonaws.com"],
                 "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation": ["lambda.amazonaws.com"],
+                "arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role": ["monitoring.rds.amazonaws.com"],
             }:
                 fail("iam:PassRole resource and service-principal bindings do not match")
         elif action == "iam:GetRole":
             slr_arn = "arn:aws:iam::${account_id}:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS"
-            lambda_role_arns = {
-                "arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda",
-                "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation",
-            }
             single_resources = {s.get("resource") for s in matching if isinstance(s.get("resource"), str)}
             list_resources: set[str] = set()
             for s in matching:
                 r = s.get("resource")
                 if isinstance(r, list):
                     list_resources.update(r)
-            if single_resources != {slr_arn} or list_resources != lambda_role_arns:
+            if single_resources != {slr_arn} or list_resources != (_LAMBDA_ROLE_ARNS | _INFRA_ROLE_ARNS):
                 fail("iam:GetRole has an unexpected resource scope")
         elif action == "lambda:TagResource":
-            expected = {
-                "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift",
-                "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation",
-            }
-            if len(matching) != 1 or set(matching[0].get("resource") or []) != expected:
+            if len(matching) != 1 or set(matching[0].get("resource") or []) != _LAMBDA_FN_ARNS:
                 fail("lambda:TagResource must cover exactly the staging drift and secret-rotation functions")
         elif action in _LAMBDA_MANAGEMENT_ACTIONS:
-            expected_fns = {
-                "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift",
-                "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation",
-            }
-            if len(matching) != 1 or set(matching[0].get("resource") or []) != expected_fns:
+            if len(matching) != 1 or set(matching[0].get("resource") or []) != _LAMBDA_FN_ARNS:
                 fail(f"{action} must cover exactly the staging Lambda functions")
         elif action in _IAM_ROLE_MANAGEMENT_ACTIONS:
-            expected_roles = {
-                "arn:aws:iam::${account_id}:role/AETHER-staging-drift-lambda",
-                "arn:aws:iam::${account_id}:role/AETHER-staging-secret-rotation",
-            }
-            if len(matching) != 1 or set(matching[0].get("resource") or []) != expected_roles:
-                fail(f"{action} must cover exactly the staging Lambda roles")
+            role_sets = {frozenset(s.get("resource") or []) for s in matching}
+            if role_sets != {frozenset(_LAMBDA_ROLE_ARNS), frozenset(_INFRA_ROLE_ARNS)}:
+                fail(f"{action} must cover exactly the staging Lambda and infrastructure roles")
         elif action == "kms:CreateGrant":
             if len(matching) != 1 or matching[0].get("resource") != expected or (matching[0].get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                 fail("kms:CreateGrant must be limited to staging-tagged keys")
@@ -405,6 +910,9 @@ def main() -> int:
                 fail("kms:CreateAlias has an unexpected resource scope")
         elif action.startswith("sns:"):
             if len(matching) != 1 or set(matching[0].get("resource") or []) != set(expected):
+                fail(f"{action} has an unexpected resource scope")
+        elif isinstance(expected, list):
+            if len(matching) != 1 or (matching[0].get("resource") or []) != expected:
                 fail(f"{action} has an unexpected resource scope")
         elif len(matching) != 1 or matching[0].get("resource") != expected:
             fail(f"{action} has an unexpected resource scope")

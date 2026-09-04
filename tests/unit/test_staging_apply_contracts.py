@@ -779,11 +779,31 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
         "events:PutTargets": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
         "events:RemoveTargets": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
         "events:TagResource": "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*",
-        "logs:CreateLogGroup": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
-        "logs:TagResource": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
+        "logs:CreateLogGroup": [
+            "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
+            "arn:aws:logs:us-east-1:${account_id}:log-group:/ecs/AETHER-staging/*",
+            "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/vpc/AETHER-staging/*",
+            "arn:aws:logs:us-east-1:${account_id}:log-group:/aether/AETHER-staging/*",
+        ],
+        "logs:TagResource": [
+            "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
+            "arn:aws:logs:us-east-1:${account_id}:log-group:/ecs/AETHER-staging/*",
+            "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/vpc/AETHER-staging/*",
+            "arn:aws:logs:us-east-1:${account_id}:log-group:/aether/AETHER-staging/*",
+        ],
         "logs:DescribeLogGroups": "*",
-        "logs:PutRetentionPolicy": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
-        "logs:DeleteLogGroup": "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
+        "logs:PutRetentionPolicy": [
+            "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
+            "arn:aws:logs:us-east-1:${account_id}:log-group:/ecs/AETHER-staging/*",
+            "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/vpc/AETHER-staging/*",
+            "arn:aws:logs:us-east-1:${account_id}:log-group:/aether/AETHER-staging/*",
+        ],
+        "logs:DeleteLogGroup": [
+            "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*",
+            "arn:aws:logs:us-east-1:${account_id}:log-group:/ecs/AETHER-staging/*",
+            "arn:aws:logs:us-east-1:${account_id}:log-group:/aws/vpc/AETHER-staging/*",
+            "arn:aws:logs:us-east-1:${account_id}:log-group:/aether/AETHER-staging/*",
+        ],
         "freetier:GetAccountPlanState": "*",
     }
     for action, resource in expected.items():
@@ -797,7 +817,10 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
             }
         else:
             assert len(matches) == 1
-            assert matches[0]["resource"] == resource
+            if isinstance(resource, list):
+                assert set(matches[0]["resource"]) == set(resource)
+            else:
+                assert matches[0]["resource"] == resource
 
     create_key = next(s for s in statements if "kms:CreateKey" in s["actions"])
     assert create_key["resource"] == "*"

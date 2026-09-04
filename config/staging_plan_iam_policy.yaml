@@ -143,6 +143,7 @@ statements:
       - ec2:DescribeFlowLogs
       - ec2:DescribeNetworkAcls
       - ec2:DescribeVpcEndpoints
+      - ec2:DescribeAvailabilityZones
       - ec2:GetSecurityGroupsForVpc
     resource: '*'
     scope: global-read-required-by-api
@@ -214,6 +215,7 @@ statements:
   - sid: ReadStagingAlarms
     actions:
       - cloudwatch:DescribeAlarms
+      - cloudwatch:GetDashboard
       - cloudwatch:ListTagsForResource
     resource: '*'
     scope: global-read-required-by-api
@@ -234,6 +236,7 @@ statements:
   - sid: ReadStagingLogGroups
     actions:
       - logs:DescribeLogGroups
+      - logs:DescribeMetricFilters
       - logs:ListTagsForResource
     resource: '*'
     scope: global-read-required-by-api
@@ -245,6 +248,22 @@ statements:
       - events:ListTargetsByRule
       - events:ListTagsForResource
     resource: arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*
+    scope: staging-name-prefix
+
+  # ----- STS (data.aws_caller_identity) -----
+  - sid: VerifyCallerIdentity
+    actions:
+      - sts:GetCallerIdentity
+    resource: '*'
+    scope: global-read-required-by-api
+
+  # ----- SQS (module.sqs) -----
+  - sid: ReadStagingSqsQueues
+    actions:
+      - sqs:GetQueueAttributes
+      - sqs:GetQueueUrl
+      - sqs:ListQueueTags
+    resource: arn:aws:sqs:us-east-1:${account_id}:AETHER-staging-*
     scope: staging-name-prefix
 
   # ----- Account-level read (used by preflight) -----

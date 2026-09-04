@@ -33,6 +33,8 @@ statements:
   - sid: ConfigureStagingRepositoryScanning
     actions:
       - ecr:PutImageScanningConfiguration
+      - ecr:DescribeImageScanFindings
+      - ecr:GetImageScanningConfiguration
     resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
     scope: staging-name-prefix
   - sid: ManageStagingEcrLifecyclePolicies
@@ -57,6 +59,7 @@ statements:
     actions:
       - secretsmanager:DescribeSecret
       - secretsmanager:GetResourcePolicy
+      - secretsmanager:ListSecretVersionIds
     resource: arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*
     scope: staging-name-prefix
   - sid: ManageStagingSecrets
@@ -286,13 +289,21 @@ statements:
   - sid: CreateStagingLogGroups
     actions:
       - logs:CreateLogGroup
-    resource: arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*
-    scope: staging-name-prefix
+    resource:
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/ecs/AETHER-staging/*
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/aws/vpc/AETHER-staging/*
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/aether/AETHER-staging/*
+    scope: staging-log-groups
   - sid: TagStagingLogGroups
     actions:
       - logs:TagResource
-    resource: arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*
-    scope: staging-name-prefix
+    resource:
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/ecs/AETHER-staging/*
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/aws/vpc/AETHER-staging/*
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/aether/AETHER-staging/*
+    scope: staging-log-groups
   - sid: DiscoverStagingLogGroups
     actions:
       - logs:DescribeLogGroups
@@ -302,8 +313,12 @@ statements:
     actions:
       - logs:PutRetentionPolicy
       - logs:DeleteLogGroup
-    resource: arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*
-    scope: staging-name-prefix
+    resource:
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/ecs/AETHER-staging/*
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/aws/vpc/AETHER-staging/*
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/aether/AETHER-staging/*
+    scope: staging-log-groups
   - sid: ManageStagingLambdaFunctions
     actions:
       - lambda:CreateFunction
@@ -315,6 +330,7 @@ statements:
       - lambda:RemovePermission
       - lambda:GetPolicy
       - lambda:ListTags
+      - lambda:GetFunctionConfiguration
     resource:
       - arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift
       - arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation
@@ -355,6 +371,300 @@ statements:
       - events:TagResource
     resource: arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*
     scope: staging-name-prefix
+  # ----- VPC (module.vpc) -----
+  - sid: ManageStagingVpcNetwork
+    actions:
+      - ec2:CreateVpc
+      - ec2:DeleteVpc
+      - ec2:ModifyVpcAttribute
+      - ec2:CreateTags
+      - ec2:DeleteTags
+      - ec2:CreateSubnet
+      - ec2:DeleteSubnet
+      - ec2:CreateInternetGateway
+      - ec2:AttachInternetGateway
+      - ec2:DetachInternetGateway
+      - ec2:DeleteInternetGateway
+      - ec2:AllocateAddress
+      - ec2:ReleaseAddress
+      - ec2:CreateNatGateway
+      - ec2:DeleteNatGateway
+      - ec2:CreateRouteTable
+      - ec2:DeleteRouteTable
+      - ec2:CreateRoute
+      - ec2:DeleteRoute
+      - ec2:AssociateRouteTable
+      - ec2:DisassociateRouteTable
+      - ec2:ReplaceRouteTableAssociation
+      - ec2:CreateSecurityGroup
+      - ec2:DeleteSecurityGroup
+      - ec2:AuthorizeSecurityGroupIngress
+      - ec2:AuthorizeSecurityGroupEgress
+      - ec2:RevokeSecurityGroupIngress
+      - ec2:RevokeSecurityGroupEgress
+      - ec2:CreateFlowLogs
+      - ec2:DeleteFlowLogs
+    resource: '*'
+    scope: staging-write-required-by-api
+  - sid: ReadStagingVpcResources
+    actions:
+      - ec2:DescribeVpcs
+      - ec2:DescribeSubnets
+      - ec2:DescribeSecurityGroups
+      - ec2:DescribeSecurityGroupRules
+      - ec2:DescribeRouteTables
+      - ec2:DescribeInternetGateways
+      - ec2:DescribeNatGateways
+      - ec2:DescribeAddresses
+      - ec2:DescribeVpcAttribute
+      - ec2:DescribeNetworkInterfaces
+      - ec2:DescribeFlowLogs
+      - ec2:DescribeNetworkAcls
+      - ec2:DescribeVpcEndpoints
+      - ec2:DescribeAvailabilityZones
+    resource: '*'
+    scope: global-read-required-by-api
+  # ----- ECS (module.ecs) -----
+  - sid: ManageStagingEcsResources
+    actions:
+      - ecs:CreateCluster
+      - ecs:DeleteCluster
+      - ecs:UpdateCluster
+      - ecs:TagResource
+      - ecs:RegisterTaskDefinition
+      - ecs:DeregisterTaskDefinition
+      - ecs:CreateService
+      - ecs:DeleteService
+      - ecs:UpdateService
+      - ecs:PutClusterCapacityProviders
+    resource: '*'
+    scope: staging-write-required-by-api
+  - sid: ReadStagingEcsResources
+    actions:
+      - ecs:DescribeServices
+      - ecs:DescribeTaskDefinition
+      - ecs:DescribeClusters
+      - ecs:ListServices
+      - ecs:ListTagsForResource
+    resource: '*'
+    scope: global-read-required-by-api
+  # ----- ALB (module.alb) -----
+  - sid: ManageStagingAlbResources
+    actions:
+      - elasticloadbalancing:CreateLoadBalancer
+      - elasticloadbalancing:DeleteLoadBalancer
+      - elasticloadbalancing:CreateTargetGroup
+      - elasticloadbalancing:DeleteTargetGroup
+      - elasticloadbalancing:CreateListener
+      - elasticloadbalancing:DeleteListener
+      - elasticloadbalancing:ModifyListener
+      - elasticloadbalancing:CreateRule
+      - elasticloadbalancing:DeleteRule
+      - elasticloadbalancing:ModifyRule
+      - elasticloadbalancing:AddTags
+      - elasticloadbalancing:RemoveTags
+      - elasticloadbalancing:SetSecurityGroups
+      - elasticloadbalancing:SetSubnets
+      - elasticloadbalancing:RegisterTargets
+      - elasticloadbalancing:DeregisterTargets
+      - elasticloadbalancing:DescribeLoadBalancerAttributes
+      - elasticloadbalancing:DescribeListenerCertificates
+      - elasticloadbalancing:DescribeTargetGroupAttributes
+      - elasticloadbalancing:DescribeTags
+      - elasticloadbalancing:DescribeRules
+    resource: '*'
+    scope: staging-write-required-by-api
+  # ----- Aurora (module.aurora) -----
+  - sid: ManageStagingAuroraCluster
+    actions:
+      - rds:CreateDBCluster
+      - rds:DeleteDBCluster
+      - rds:ModifyDBCluster
+      - rds:CreateDBInstance
+      - rds:DeleteDBInstance
+      - rds:ModifyDBInstance
+      - rds:CreateDBSubnetGroup
+      - rds:DeleteDBSubnetGroup
+      - rds:ModifyDBSubnetGroup
+      - rds:CreateDBClusterParameterGroup
+      - rds:DeleteDBClusterParameterGroup
+      - rds:ModifyDBClusterParameterGroup
+      - rds:AddTagsToResource
+      - rds:RemoveTagsFromResource
+      - rds:DescribeDBClusters
+      - rds:DescribeDBSubnetGroups
+      - rds:DescribeDBClusterParameterGroups
+      - rds:DescribeDBClusterParameters
+      - rds:DescribeDBInstances
+      - rds:ListTagsForResource
+    resource: '*'
+    scope: staging-write-required-by-api
+  # ----- DynamoDB (module.dynamodb_cache) -----
+  - sid: ManageStagingDynamoResources
+    actions:
+      - dynamodb:CreateTable
+      - dynamodb:DeleteTable
+      - dynamodb:UpdateTable
+      - dynamodb:TagResource
+      - dynamodb:UntagResource
+      - dynamodb:UpdateContinuousBackups
+      - dynamodb:UpdateTimeToLive
+      - dynamodb:DescribeTable
+      - dynamodb:DescribeContinuousBackups
+      - dynamodb:DescribeTimeToLive
+    resource: arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*
+    scope: staging-name-prefix
+  # ----- SQS (module.sqs) -----
+  - sid: ManageStagingSqsQueues
+    actions:
+      - sqs:CreateQueue
+      - sqs:DeleteQueue
+      - sqs:SetQueueAttributes
+      - sqs:TagQueue
+      - sqs:UntagQueue
+      - sqs:GetQueueAttributes
+      - sqs:GetQueueUrl
+      - sqs:ListQueueTags
+    resource: arn:aws:sqs:us-east-1:${account_id}:AETHER-staging-*
+    scope: staging-name-prefix
+  # ----- SNS (module.monitoring, module.sqs) -----
+  - sid: ExtendStagingSnsTopics
+    actions:
+      - sns:CreateTopic
+      - sns:TagResource
+      - sns:Unsubscribe
+      - sns:GetTopicAttributes
+      - sns:ListTagsForResource
+      - sns:GetSubscriptionAttributes
+    resource:
+      - arn:aws:sns:us-east-1:${account_id}:aether-staging-*
+      - arn:aws:sns:us-east-1:${account_id}:AETHER-staging-*
+    scope: project-staging-name-prefix
+  # ----- S3 (module.s3, module.monitoring) -----
+  - sid: ManageStagingBuckets
+    actions:
+      - s3:CreateBucket
+      - s3:DeleteBucket
+      - s3:PutBucketPolicy
+      - s3:DeleteBucketPolicy
+      - s3:PutBucketVersioning
+      - s3:PutBucketLogging
+      - s3:PutBucketTagging
+      - s3:PutPublicAccessBlock
+      - s3:PutBucketAcl
+      - s3:GetBucketPolicy
+      - s3:GetBucketAcl
+      - s3:GetBucketCORS
+      - s3:GetBucketWebsite
+      - s3:GetBucketVersioning
+      - s3:GetBucketLogging
+      - s3:GetBucketLocation
+      - s3:GetBucketTagging
+      - s3:GetBucketPublicAccessBlock
+      - s3:GetBucketObjectLockConfiguration
+      - s3:ListBucket
+    resource: arn:aws:s3:::aether-staging-*
+    scope: staging-name-prefix
+  # ----- CloudWatch (module.monitoring) -----
+  - sid: ManageStagingAlarms
+    actions:
+      - cloudwatch:PutMetricAlarm
+      - cloudwatch:DeleteAlarms
+      - cloudwatch:TagResource
+      - cloudwatch:PutDashboard
+      - cloudwatch:DeleteDashboards
+      - cloudwatch:DescribeAlarms
+      - cloudwatch:GetDashboard
+      - cloudwatch:ListTagsForResource
+    resource: '*'
+    scope: staging-write-required-by-api
+  # ----- CloudWatch Logs metric filters (module.monitoring) -----
+  - sid: ManageStagingLogMetricFilters
+    actions:
+      - logs:PutMetricFilter
+      - logs:DeleteMetricFilter
+    resource:
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/aws/lambda/AETHER-staging-*
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/ecs/AETHER-staging/*
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/aws/vpc/AETHER-staging/*
+      - arn:aws:logs:us-east-1:${account_id}:log-group:/aether/AETHER-staging/*
+    scope: staging-log-groups
+  - sid: ReadStagingLogDetails
+    actions:
+      - logs:DescribeMetricFilters
+      - logs:ListTagsForResource
+    resource: '*'
+    scope: global-read-required-by-api
+  # ----- Application Auto Scaling (module.ecs, module.dynamodb_cache) -----
+  - sid: ManageStagingAutoScaling
+    actions:
+      - application-autoscaling:RegisterScalableTarget
+      - application-autoscaling:DeregisterScalableTarget
+      - application-autoscaling:PutScalingPolicy
+      - application-autoscaling:DeleteScalingPolicy
+      - application-autoscaling:TagResource
+      - application-autoscaling:DescribeScalableTargets
+      - application-autoscaling:DescribeScalingPolicies
+    resource: '*'
+    scope: staging-write-required-by-api
+  # ----- SSM Parameters (root main.tf) -----
+  - sid: ManageStagingParameters
+    actions:
+      - ssm:PutParameter
+      - ssm:DeleteParameter
+      - ssm:GetParameter
+      - ssm:GetParameters
+      - ssm:DescribeParameters
+    resource: arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*
+    scope: staging-name-prefix
+  # ----- ECR repositories (module.ecr) -----
+  - sid: ManageStagingEcrRepositories
+    actions:
+      - ecr:CreateRepository
+      - ecr:DeleteRepository
+    resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
+    scope: staging-name-prefix
+  # ----- Secrets Manager discovery -----
+  - sid: DiscoverStagingSecrets
+    actions:
+      - secretsmanager:ListSecrets
+    resource: '*'
+    scope: global-read-required-by-api
+  # ----- STS (data.aws_caller_identity) -----
+  - sid: VerifyCallerIdentity
+    actions:
+      - sts:GetCallerIdentity
+    resource: '*'
+    scope: global-read-required-by-api
+  # ----- IAM infrastructure roles (module.ecs, module.vpc, module.aurora) -----
+  - sid: ManageStagingInfraRoles
+    actions:
+      - iam:CreateRole
+      - iam:GetRole
+      - iam:DeleteRole
+      - iam:TagRole
+      - iam:PutRolePolicy
+      - iam:GetRolePolicy
+      - iam:DeleteRolePolicy
+      - iam:AttachRolePolicy
+      - iam:DetachRolePolicy
+      - iam:ListAttachedRolePolicies
+      - iam:ListRolePolicies
+      - iam:ListInstanceProfilesForRole
+    resource:
+      - arn:aws:iam::${account_id}:role/AETHER-staging-ecs-task-role
+      - arn:aws:iam::${account_id}:role/AETHER-staging-ecs-execution-role
+      - arn:aws:iam::${account_id}:role/AETHER-staging-vpc-flow-logs-role
+      - arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role
+    scope: staging-infra-roles
+  - sid: PassOnlyStagingAuroraMonitoringRole
+    actions:
+      - iam:PassRole
+    resource: arn:aws:iam::${account_id}:role/AETHER-staging-aurora-monitoring-role
+    conditions:
+      iam:PassedToService:
+        - monitoring.rds.amazonaws.com
+    scope: staging-aurora-monitoring-role
 
 # The provider errors below are deliberately not represented as AWS IAM
 # actions: Auth0 permissions are governed by the Auth0 management API and must
