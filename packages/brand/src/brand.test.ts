@@ -1,9 +1,12 @@
 import {
   ICON_SIZE,
+  MOTION_DURATION,
+  MOTION_EASING,
   REDUCED_MOTION,
   entityIdentities,
   lockupVariantFor,
   motionDuration,
+  motionRecipes,
   navigationDestinationFor,
   navigationDestinations,
   providerAttribution,
@@ -12,6 +15,7 @@ import {
   resolveProvider,
   severityIcons,
   statusIcons,
+  transitionFor,
 } from './index';
 
 describe('@olympus/brand provider registry', () => {
@@ -87,5 +91,32 @@ describe('@olympus/brand responsive and motion policy', () => {
   it('honors the canonical reduced-motion duration', () => {
     expect(motionDuration(false, 180)).toBe(180);
     expect(motionDuration(true, 180)).toBe(REDUCED_MOTION.durationMs);
+  });
+
+  it('serializes the interactive hover recipe from canonical tokens', () => {
+    const hover = transitionFor(motionRecipes.hover);
+    expect(hover).toContain('120ms');
+    expect(hover).toContain(MOTION_EASING.standard);
+  });
+
+  it('bounds every recipe to the canonical duration and easing vocabulary', () => {
+    const durations = Object.values(MOTION_DURATION);
+    const easings = Object.values(MOTION_EASING);
+    const recipes = Object.values(motionRecipes);
+    expect(recipes.length).toBeGreaterThan(0);
+    for (const recipe of recipes) {
+      expect(durations).toContain(MOTION_DURATION[recipe.duration]);
+      expect(easings).toContain(MOTION_EASING[recipe.easing]);
+    }
+  });
+
+  it('codifies the reduced-motion policy for the CSS mirrors', () => {
+    expect(REDUCED_MOTION.durationMs).toBe(1);
+    expect(REDUCED_MOTION.mediaQuery).toBe('(prefers-reduced-motion: reduce)');
+    expect(REDUCED_MOTION.preserve.length).toBeGreaterThan(0);
+    expect(REDUCED_MOTION.preserve).toContain('focus');
+    expect(REDUCED_MOTION.preserve).toContain('visibility');
+    expect(REDUCED_MOTION.avoid.length).toBeGreaterThan(0);
+    expect(REDUCED_MOTION.avoid).toContain('continuous pulse');
   });
 });

@@ -63,7 +63,7 @@ describe('Kyber rewards route data states', () => {
     const request = deferred<Record<string, unknown>>();
     mocks.rewardsHealth.mockReturnValue(request.promise);
     const view = renderHealth();
-    expect(view.container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+    expect(view.container.querySelectorAll('.animate-pulse, .aether-skeleton').length).toBeGreaterThan(0);
     request.resolve({
       summary: { active_campaigns: 2, eligible_decisions_24h: 7, blocked_fraud_24h: 1 },
       top_tenants: [{ tenant_id: 'tenant-a', campaigns: 2, decisions_24h: 8 }],
@@ -90,7 +90,7 @@ describe('Kyber rewards route data states', () => {
     const request = deferred<Record<string, unknown>>();
     mocks.campaigns.mockReturnValue(request.promise);
     const view = renderDrilldown();
-    expect(view.container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+    expect(view.container.querySelectorAll('.animate-pulse, .aether-skeleton').length).toBeGreaterThan(0);
     request.resolve({ campaigns: [{ id: 'campaign-a', name: 'Measured campaign' }], has_more: false });
     await waitFor(() => expect(screen.getByText('Measured campaign')).toBeInTheDocument());
     expect(screen.getByText('No eligibility decisions')).toBeInTheDocument();

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AetherLogo } from '@aether-app/components/aether-logo';
 import {
   Button,
@@ -55,13 +55,14 @@ const PLAN_OPTIONS = [
 
 export function SignupPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { apiKeyLogin, sessionLogin } = useAuth();
   const { toast } = useToast();
 
   const [step, setStep] = useState<Step>(1);
   // Step 1 form fields
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [name, setName] = useState(searchParams.get('name') ?? '');
+  const [email, setEmail] = useState(searchParams.get('email') ?? '');
   const [password, setPassword] = useState('');
   const [planTier, setPlanTier] = useState('P1');
   const [registerError, setRegisterError] = useState<string | null>(null);

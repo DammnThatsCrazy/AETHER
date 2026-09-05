@@ -166,7 +166,7 @@ describe('Kyber Semantic Operations page', () => {
   it('shows loading while fleet health is pending', () => {
     server.use(http.get(`${API}/v1/kyber/semantic/fleet-health`, async () => new Promise<never>(() => undefined)));
     const { container } = renderPage();
-    expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('.animate-pulse, .aether-skeleton').length).toBeGreaterThan(0);
   });
 
   it('renders the fleet-health scorecard from the real computed fields', async () => {

@@ -38,10 +38,19 @@
   --font-family-mono: 'Geist Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 
   /* Brand rendering utilities — values mirror @olympus/brand token policy. */
+  /* The motion scale and easings mirror @olympus/brand MOTION_DURATION and
+     MOTION_EASING; the reduced token mirrors REDUCED_MOTION.durationMs so
+     shells collapse motion to near-instant under prefers-reduced-motion. */
+  --aether-motion-instant: 0ms;
   --aether-motion-micro: 120ms;
   --aether-motion-standard: 180ms;
   --aether-motion-panel: 240ms;
+  --aether-motion-complex: 320ms;
   --aether-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --aether-ease-enter: cubic-bezier(0, 0, 0, 1);
+  --aether-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --aether-ease-linear: linear;
+  --aether-motion-reduced: 0.01ms;
   --aether-focus-width: 2px;
   --aether-focus-offset: 2px;
 }
@@ -68,10 +77,16 @@
   --color-danger:          #a87575;
   --color-info:            #5a85a8;
 
+  --aether-motion-instant: 0ms;
   --aether-motion-micro: 120ms;
   --aether-motion-standard: 180ms;
   --aether-motion-panel: 240ms;
+  --aether-motion-complex: 320ms;
   --aether-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --aether-ease-enter: cubic-bezier(0, 0, 0, 1);
+  --aether-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --aether-ease-linear: linear;
+  --aether-motion-reduced: 0.01ms;
   --aether-focus-width: 2px;
   --aether-focus-offset: 2px;
 }
@@ -98,10 +113,16 @@
   --color-danger:          #8a5a5a;
   --color-info:            #3a6896;
 
+  --aether-motion-instant: 0ms;
   --aether-motion-micro: 120ms;
   --aether-motion-standard: 180ms;
   --aether-motion-panel: 240ms;
+  --aether-motion-complex: 320ms;
   --aether-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --aether-ease-enter: cubic-bezier(0, 0, 0, 1);
+  --aether-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --aether-ease-linear: linear;
+  --aether-motion-reduced: 0.01ms;
   --aether-focus-width: 2px;
   --aether-focus-offset: 2px;
 }
@@ -183,13 +204,43 @@
   }
 }
 
+/* Interactive shared-control motion. Recipe: hover/press/focus = micro with the
+   standard ease, per @olympus/brand motionRecipes. Reduced motion is collapsed
+   by the media rule below (and by each shell's own reduce block). */
+.aether-motion-interactive {
+  transition:
+    background-color var(--aether-motion-micro) var(--aether-ease-standard),
+    border-color var(--aether-motion-micro) var(--aether-ease-standard),
+    color var(--aether-motion-micro) var(--aether-ease-standard);
+}
+
+/* Skeleton loading placeholder — mirrors the platform pulse so shared loaders
+   keep their affordance for motion-enabled users while the reduced-motion rule
+   below collapses the continuous pulse (REDUCED_MOTION.avoid: continuous pulse). */
+@keyframes aether-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.aether-skeleton {
+  animation: aether-skeleton-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .aether-surface,
   .aether-icon,
   .aether-product-lockup,
-  .aether-provider-mark {
-    transition-duration: 1ms !important;
-    animation-duration: 1ms !important;
+  .aether-provider-mark,
+  .aether-motion-interactive,
+  .aether-skeleton {
+    transition-duration: var(--aether-motion-reduced) !important;
+    animation-duration: var(--aether-motion-reduced) !important;
     animation-iteration-count: 1 !important;
   }
 }

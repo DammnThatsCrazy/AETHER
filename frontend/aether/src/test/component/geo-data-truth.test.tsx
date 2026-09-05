@@ -36,7 +36,7 @@ describe('Geo routes data-truth states', () => {
   it('renders loading without geographic totals', () => {
     state.summary = { data: null, isLoading: true, error: null, refetch: vi.fn() };
     renderPage();
-    expect(document.querySelector('.animate-pulse')).not.toBeNull();
+    expect(document.querySelector('.animate-pulse, .aether-skeleton')).not.toBeNull();
     expect(screen.queryByText('Entities')).not.toBeInTheDocument();
   });
 

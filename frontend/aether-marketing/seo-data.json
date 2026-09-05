@@ -1,0 +1,141 @@
+{
+  "host": "https://aether.olympuslabs.com",
+  "robotsDisallow": ["/login", "/signup", "/forgot-password"],
+  "routes": [
+    {
+      "path": "/platform",
+      "title": "One governed graph across the activity that shapes outcomes — Aether by Olympus Labs",
+      "description": "The Aether platform — identity resolution, intelligence graph, journey, campaign, communications, financial observability, agents, outcomes, and governance."
+    },
+    {
+      "path": "/solutions",
+      "title": "Built for the shape of your business — Aether by Olympus Labs",
+      "description": "Aether solutions — customer intelligence, commerce, SaaS, fintech, Web3, AI-native, enterprise, and public sector."
+    },
+    {
+      "path": "/developers",
+      "title": "Integrate once. Resolve everywhere. — Aether by Olympus Labs",
+      "description": "Aether developer surface — SDKs, event model, identity resolution, consent, validation, and technical documentation."
+    },
+    {
+      "path": "/integrations",
+      "title": "Connectors with truthful availability states — Aether by Olympus Labs",
+      "description": "Aether integrations directory — search by provider, category, use case, authentication type, data direction, and availability."
+    },
+    {
+      "path": "/security",
+      "title": "Boundaries are the design — Aether by Olympus Labs",
+      "description": "Aether security — tenant isolation, credential handling, authorization, consent, retention, auditability, and deployment models."
+    },
+    {
+      "path": "/pricing",
+      "title": "Pricing that matches usage, not guesswork — Aether by Olympus Labs",
+      "description": "Aether pricing — plan audience, usage limits, capabilities, support, retention, environments, integration limits, and deployment options."
+    },
+    {
+      "path": "/resources",
+      "title": "Guides, research, and product notes — Aether by Olympus Labs",
+      "description": "Aether resources — guides, research, changelog, webinars, and future case material."
+    },
+    {
+      "path": "/company",
+      "title": "Aether is a product of Olympus Labs — Aether by Olympus Labs",
+      "description": "The Olympus Labs relationship — who builds and operates Aether."
+    },
+    {
+      "path": "/platform/identity-resolution",
+      "title": "Identity and entity resolution — Aether by Olympus Labs",
+      "description": "Aether identity resolution — how disconnected identifiers resolve into people, accounts, devices, wallets, and organizations, with lineage, consent, and governed connectors."
+    },
+    {
+      "path": "/platform/intelligence-graph",
+      "title": "The intelligence graph — Aether by Olympus Labs",
+      "description": "The governed graph of entities, relationships, and activity that every Aether capability reads from and writes to — the platform spine."
+    },
+    {
+      "path": "/platform/journey-intelligence",
+      "title": "Journey intelligence — Aether by Olympus Labs",
+      "description": "How Aether turns graph activity into journeys — the path a relationship takes across touchpoints, systems, and time."
+    },
+    {
+      "path": "/platform/campaign-intelligence",
+      "title": "Campaign intelligence — Aether by Olympus Labs",
+      "description": "How Aether tracks campaign movement and behavior — what a campaign did to a relationship and what the relationship did in response — as governed evidence."
+    },
+    {
+      "path": "/platform/communications-intelligence",
+      "title": "Communications intelligence — Aether by Olympus Labs",
+      "description": "Every communication as part of the relationship record — what was sent, received, and replied to, under consent, across channels."
+    },
+    {
+      "path": "/platform/financial-observability",
+      "title": "Financial observability — Aether by Olympus Labs",
+      "description": "Ledger effects and balances as part of the relationship record — where value moved, under what authorization, and whether the runtime can verify it."
+    },
+    {
+      "path": "/platform/agent-access-intelligence",
+      "title": "Agent access intelligence — Aether by Olympus Labs",
+      "description": "Knowing when an agent is acting, under what authorization, and with what guardrails — agent activity as governed evidence on the graph."
+    },
+    {
+      "path": "/platform/rewards-and-activation",
+      "title": "Rewards and activation — Aether by Olympus Labs",
+      "description": "Governed rewards — earning, eligibility, issuance, and redemption — attached to resolved relationships and backed by verifiable activity."
+    },
+    {
+      "path": "/platform/outcome-attribution",
+      "title": "Outcome attribution — Aether by Olympus Labs",
+      "description": "Connecting governed decisions back to the outcomes that followed, as evidence on the graph rather than fabricated correlation."
+    },
+    {
+      "path": "/platform/governance-and-consent",
+      "title": "Governance and consent — Aether by Olympus Labs",
+      "description": "The boundaries of the platform — consent, retention, authorization, tenant isolation, and auditability as properties of the graph, not wrappers."
+    },
+    {
+      "path": "/platform/integrations-and-data-quality",
+      "title": "Integrations and data quality — Aether by Olympus Labs",
+      "description": "Governed connectors and the validation that keeps the graph honest — every integration stated at its real availability and data quality."
+    },
+    {
+      "path": "/solutions/customer-intelligence",
+      "title": "Customer intelligence on one governed graph — Aether by Olympus Labs",
+      "description": "How Aether turns fragmented customer activity into one governed graph — resolved identity, journey and campaign intelligence, and communications under shared consent."
+    },
+    {
+      "path": "/solutions/commerce",
+      "title": "Commerce on a governed relationship graph — Aether by Olympus Labs",
+      "description": "How Aether connects commerce, payments, support, and rewards activity to one governed graph so lifecycle decisions run on the full relationship."
+    },
+    {
+      "path": "/solutions/saas",
+      "title": "SaaS on a governed account graph — Aether by Olympus Labs",
+      "description": "How Aether resolves users, accounts, and organizations into one governed graph so product-led businesses read usage, billing, and support as one relationship."
+    },
+    {
+      "path": "/solutions/fintech",
+      "title": "Fintech on one governed graph — Aether by Olympus Labs",
+      "description": "How Aether keeps financial observability, communications, and customer context in one auditable, consent-governed graph — without overclaiming regulatory function."
+    },
+    {
+      "path": "/solutions/web3",
+      "title": "Web3 on one governed graph — Aether by Olympus Labs",
+      "description": "How Aether resolves wallets, on-chain activity, and off-chain context into one governed graph for Web3 businesses."
+    },
+    {
+      "path": "/solutions/ai-native-businesses",
+      "title": "AI-native businesses on one governed graph — Aether by Olympus Labs",
+      "description": "How Aether gives agents and AI-native businesses governed context, explicit authorization, and audit trails across the graph."
+    },
+    {
+      "path": "/solutions/enterprise",
+      "title": "One governed graph across the enterprise — Aether by Olympus Labs",
+      "description": "How Aether applies identity resolution, integration, and governance discipline across the systems, units, and geographies of a large organization."
+    },
+    {
+      "path": "/solutions/public-sector",
+      "title": "Public service on one governed graph — Aether by Olympus Labs",
+      "description": "How Aether helps public-sector teams see constituents across programs on one consent- and audit-governed graph — only where the rules permit."
+    }
+  ]
+}

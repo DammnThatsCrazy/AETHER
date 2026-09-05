@@ -1,0 +1,121 @@
+@import '@aether/ui/styles/tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Motion budget utilities — token-bound color transitions only (no decorative
+   motion). Recipe: hover/press/focus = micro 120ms; tab/disclosure/toggle =
+   standard 180ms. Fallbacks mirror the shared tokens.css values so these work
+   even before the shared tokens are present in a build. */
+.mkt-motion-color {
+  transition-property: background-color, border-color, color;
+  transition-duration: var(--aether-motion-micro, 120ms);
+  transition-timing-function: var(--aether-ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+
+.mkt-motion-color-standard {
+  transition-property: background-color, border-color, color;
+  transition-duration: var(--aether-motion-standard, 180ms);
+  transition-timing-function: var(--aether-ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+
+@layer base {
+  * {
+    @apply border-border-default;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-surface-base text-text-primary font-sans antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Geist Mono is reserved for technical metadata, code, and operational
+     surfaces — never a replacement body face. */
+  code,
+  kbd,
+  samp,
+  .font-mono {
+    font-family: var(--font-family-mono);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: var(--aether-motion-reduced, 0.01ms) !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: var(--aether-motion-reduced, 0.01ms) !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Editorial marketing layout primitives (Aether public marketing). Shared
+     product controls come from @aether/ui; this marketing rhythm stays local to
+     the public shell and is not imposed on the operational tenant app. */
+  .mkt-container {
+    @apply mx-auto w-full max-w-6xl px-6 md:px-10;
+  }
+
+  .mkt-measure {
+    @apply max-w-prose;
+  }
+
+  .mkt-eyebrow {
+    @apply font-mono text-xs uppercase tracking-[0.18em] text-text-secondary;
+  }
+
+  .mkt-display {
+    @apply text-4xl font-semibold leading-[1.05] tracking-tight text-text-primary md:text-6xl;
+  }
+
+  .mkt-h2 {
+    @apply text-2xl font-semibold tracking-tight text-text-primary md:text-4xl;
+  }
+
+  .mkt-lead {
+    @apply text-lg leading-relaxed text-text-secondary;
+  }
+
+  .mkt-body {
+    @apply text-base leading-relaxed text-text-secondary;
+  }
+
+  .mkt-chip {
+    @apply inline-flex items-center gap-2 rounded-full border border-border-default bg-surface-raised px-3 py-1 font-mono text-xs text-text-secondary;
+  }
+
+  .ui-card {
+    @apply rounded-md border border-border-default bg-surface-raised p-4;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-default);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
+}
+
+/* The shared light-theme muted text token (#908d87) sits near 3:1 on the
+   marketing light surfaces — below the 4.5:1 AA floor for the small labels it
+   is used for. The tenant apps keep the shared value; the public marketing
+   (and its auth threshold) override the token locally so muted text meets AA. */
+html.light {
+  --color-text-muted: #655f57;
+}

@@ -1,9 +1,16 @@
+import { cloneElement, isValidElement, type ButtonHTMLAttributes, type ReactElement, type ReactNode } from 'react';
+
 import { cn } from '../utils/cn';
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
   readonly size?: 'sm' | 'md' | 'lg';
+  /**
+   * Render the button styling onto a single child element (a router `Link` or
+   * an anchor) instead of a `<button>`. Used by public marketing CTAs so the
+   * interactive surface is a real link while sharing the exact button grammar.
+   */
+  readonly asChild?: boolean;
   readonly children: ReactNode;
 }
 
@@ -20,17 +27,32 @@ const sizeStyles: Record<string, string> = {
   lg: 'px-4 py-2 text-base',
 };
 
-export function Button({ variant = 'primary', size = 'md', className, children, ...props }: ButtonProps) {
+const buttonClass = (variant: ButtonProps['variant'], size: ButtonProps['size'], className: string | undefined) =>
+  cn(
+    'inline-flex items-center justify-center rounded-md font-medium aether-motion-interactive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-50 disabled:pointer-events-none',
+    variantStyles[variant ?? 'primary'],
+    sizeStyles[size ?? 'md'],
+    className,
+  );
+
+export function Button({
+  variant = 'primary',
+  size = 'md',
+  asChild = false,
+  className,
+  children,
+  ...props
+}: ButtonProps) {
+  if (asChild) {
+    const child = isValidElement<{ className?: string }>(children) ? (children as ReactElement<{ className?: string }>) : undefined;
+    if (child === undefined) {
+      throw new Error('Button with asChild requires exactly one child element.');
+    }
+    return cloneElement(child, { className: buttonClass(variant, size, cn(child.props.className, className)) });
+  }
+
   return (
-    <button
-      className={cn(
-        'inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus disabled:opacity-50 disabled:pointer-events-none',
-        variantStyles[variant],
-        sizeStyles[size],
-        className,
-      )}
-      {...props}
-    >
+    <button className={buttonClass(variant, size, className)} {...props}>
       {children}
     </button>
   );

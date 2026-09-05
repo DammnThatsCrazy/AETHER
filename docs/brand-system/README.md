@@ -30,6 +30,9 @@ a second asset library or a request to redraw product identity.
   verified facts and open blockers only.
 - [Historical inventory](./audit.md) records the pre-migration repository
   findings. It is useful context, but it is not the current acceptance status.
+- [Web ecosystem shells](../source-of-truth/WEB_ECOSYSTEM_SHELLS.md) is the
+  source of truth for which application shells exist, which domain each owns,
+  and how much brand weight each identity carries per shell.
 
 ## Topic reference
 

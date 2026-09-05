@@ -87,7 +87,7 @@ describe('Kyber AI Efficiency Health page', () => {
   it('shows loading while the fleet request is pending', () => {
     mocks.aiEfficiencyHealth.mockReturnValue(new Promise(() => undefined));
     const { container } = render(<MemoryRouter><AiEfficiencyPage /></MemoryRouter>);
-    expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('.animate-pulse, .aether-skeleton').length).toBeGreaterThan(0);
   });
 
   it('renders fleet aggregates, the cost coverage gauge, and detector counts', async () => {
