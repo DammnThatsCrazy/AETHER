@@ -250,7 +250,7 @@ def upgrade() -> None:
         value                   NUMERIC(24,6),
         unit                    TEXT,
         status                  TEXT NOT NULL,
-        window                  JSONB,
+        metric_window           JSONB,
         population              TEXT,
         observed_at             TIMESTAMPTZ,
         computation_ref         TEXT,

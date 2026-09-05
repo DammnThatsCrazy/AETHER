@@ -621,6 +621,41 @@ def test_metric_name_is_recorded_verbatim(social_event):
     assert row["status"] == "observed"
 
 
+def test_metric_window_dict_lands_in_metric_window_column(social_event):
+    # Regression: PostgreSQL reserves WINDOW, so the silver column is
+    # metric_window — the bare `window` name broke `alembic upgrade head`
+    # against a real database ("syntax error at or near window").
+    window = {"kind": "rolling", "days": 30}
+    event = social_event(
+        type_=METRIC,
+        properties={
+            "metric_name": "follower_count",
+            "value": 100,
+            "unit": "count",
+            "window": window,
+        },
+    )
+    row = SocialMetricProjector().project(event).rows[0]
+    assert row["metric_window"] == window
+    assert "window" not in row
+
+
+def test_metric_scalar_window_is_null_not_fabricated(social_event):
+    # A non-dict window on the bronze record is honest NULL in the JSONB
+    # column, never coerced into a fake shape.
+    event = social_event(
+        type_=METRIC,
+        properties={
+            "metric_name": "follower_count",
+            "value": 100,
+            "unit": "count",
+            "window": "30d",
+        },
+    )
+    row = SocialMetricProjector().project(event).rows[0]
+    assert row["metric_window"] is None
+
+
 def test_metric_bundle_fans_out_with_per_metric_idempotency_keys(social_event):
     event = social_event(
         type_=METRIC,

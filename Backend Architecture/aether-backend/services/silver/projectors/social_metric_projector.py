@@ -132,7 +132,7 @@ class SocialMetricProjector(SocialFactProjector):
             "value": value if was_measured else None,
             "unit": as_str(record.get("unit")),
             "status": status,
-            "window": record.get("window") if isinstance(record.get("window"), dict) else None,
+            "metric_window": record.get("window") if isinstance(record.get("window"), dict) else None,
             "population": as_str(record.get("population")),
             "observed_at": observed_at,
             "computation_ref": as_str(record.get("computation_ref")),

@@ -103,7 +103,7 @@ _COMMUNITY_DOMAIN_COLUMNS: tuple[str, ...] = (
 
 _METRIC_DOMAIN_COLUMNS: tuple[str, ...] = (
     "metric_observation_id", "social_identity_ref", "metric_name", "value",
-    "unit", "status", "window", "population", "observed_at",
+    "unit", "status", "metric_window", "population", "observed_at",
     "computation_ref", "quality", "evidence_refs",
 )
 
@@ -138,7 +138,7 @@ _TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
 
 _JSON_COLUMNS = frozenset({
     "payload", "identity_evidence_refs", "evidence_refs",
-    "contradictory_evidence_refs", "narrative_refs", "window",
+    "contradictory_evidence_refs", "narrative_refs", "metric_window",
 })
 _TIMESTAMP_COLUMNS = frozenset({
     "occurred_at", "received_at", "provider_profile_created_at",
