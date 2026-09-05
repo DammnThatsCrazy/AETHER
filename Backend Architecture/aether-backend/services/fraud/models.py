@@ -7,6 +7,13 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+# Canonical EvidenceRef (services/operational_intelligence/models.py). The
+# fraud-local duplicate (ref_id/ref_type/ref_source/description/metadata) was
+# removed; fraud decisions now reference the shared canonical ref shape
+# (id/type/source/observedAt/confidence/uri). Re-exported here for backward
+# compatibility only — new code should import from operational_intelligence.
+from services.operational_intelligence.models import EvidenceRef  # noqa: E402
+
 SubjectType = Literal[
     "entity", "activity", "journey", "wallet", "agent", "cluster", "profile"
 ]
@@ -26,14 +33,6 @@ ReviewState = Literal[
 ]
 
 DecisionStatus = Literal["active", "superseded", "expired", "voided"]
-
-
-class EvidenceRef(BaseModel):
-    ref_id: str = Field(default_factory=lambda: str(uuid4()))
-    ref_type: str  # "session", "transfer", "wallet_link", "reward_event", "delegation", "order"
-    ref_source: str  # service that produced this evidence
-    description: str = ""
-    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class FraudDecision(BaseModel):

@@ -52,9 +52,11 @@ _EXPECTED_SURFACES = {
     "connection360",
     "infrastructure360",
     "temporal360",
+    "risk360",
     "population360",
     "geographic360",
     "social360",
+    "fraud360",
 }
 
 

@@ -934,6 +934,43 @@
       ]
     },
     {
+      "name": "Risk360 / Fraud360 projection plane (phase 5+ emitters; read_only, never",
+      "topics": [
+        {
+          "member": "RISK_SIGNAL_CREATED",
+          "value": "aether.risk.signal.created"
+        },
+        {
+          "member": "RISK_SIGNAL_SUPERSEDED",
+          "value": "aether.risk.signal.superseded"
+        },
+        {
+          "member": "RISK_ASSESSMENT_CREATED",
+          "value": "aether.risk.assessment.created"
+        },
+        {
+          "member": "RISK_ASSESSMENT_SUPERSEDED",
+          "value": "aether.risk.assessment.superseded"
+        },
+        {
+          "member": "FRAUD_HYPOTHESIS_CREATED",
+          "value": "aether.fraud.hypothesis.created"
+        },
+        {
+          "member": "FRAUD_HYPOTHESIS_UPDATED",
+          "value": "aether.fraud.hypothesis.updated"
+        },
+        {
+          "member": "FRAUD_HYPOTHESIS_CONFIRMED",
+          "value": "aether.fraud.hypothesis.confirmed"
+        },
+        {
+          "member": "FRAUD_HYPOTHESIS_SUPERSEDED",
+          "value": "aether.fraud.hypothesis.superseded"
+        }
+      ]
+    },
+    {
       "name": "Canonical Activity",
       "topics": [
         {
@@ -1949,6 +1986,38 @@
     {
       "member": "RISK_ANNOTATION_UPDATED",
       "value": "aether.risk.annotation.updated"
+    },
+    {
+      "member": "RISK_SIGNAL_CREATED",
+      "value": "aether.risk.signal.created"
+    },
+    {
+      "member": "RISK_SIGNAL_SUPERSEDED",
+      "value": "aether.risk.signal.superseded"
+    },
+    {
+      "member": "RISK_ASSESSMENT_CREATED",
+      "value": "aether.risk.assessment.created"
+    },
+    {
+      "member": "RISK_ASSESSMENT_SUPERSEDED",
+      "value": "aether.risk.assessment.superseded"
+    },
+    {
+      "member": "FRAUD_HYPOTHESIS_CREATED",
+      "value": "aether.fraud.hypothesis.created"
+    },
+    {
+      "member": "FRAUD_HYPOTHESIS_UPDATED",
+      "value": "aether.fraud.hypothesis.updated"
+    },
+    {
+      "member": "FRAUD_HYPOTHESIS_CONFIRMED",
+      "value": "aether.fraud.hypothesis.confirmed"
+    },
+    {
+      "member": "FRAUD_HYPOTHESIS_SUPERSEDED",
+      "value": "aether.fraud.hypothesis.superseded"
     },
     {
       "member": "CANONICAL_ACTIVITY_INGESTED",

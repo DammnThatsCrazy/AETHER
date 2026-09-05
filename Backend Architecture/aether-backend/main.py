@@ -1226,6 +1226,32 @@ def create_app() -> FastAPI:
     else:
         logger.info("Risk Overlays: disabled (set FEATURE_RISK_OVERLAYS=true to enable)")
 
+    # ── Risk360 / Fraud360 intelligence-projection convergence (flag-gated) ──
+    # Read-only projection planes over the shipped fraud/risk subsystems
+    # (services/risk360, services/fraud360). Each plane's provider is registered
+    # on the global projection_registry so /v1/explore + Noesis projection reads
+    # can serve it, and its thin read-only router is mounted. Default OFF.
+    rf = settings.risk_fraud_360
+    if rf.risk360_enabled:
+        from shared.intelligence_projections.registry import projection_registry
+        from services.risk360.provider import register_provider as register_risk360
+        from services.risk360.routes import router as risk360_router
+        register_risk360(projection_registry)
+        app.include_router(risk360_router)
+        logger.info("Risk360: provider registered + routes mounted (/v1/risk360)")
+    else:
+        logger.info("Risk360: disabled (set AETHER_RISK360_ENABLED=true to enable)")
+
+    if rf.fraud360_enabled:
+        from shared.intelligence_projections.registry import projection_registry
+        from services.fraud360.provider import register_provider as register_fraud360
+        from services.fraud360.routes import router as fraud360_router
+        register_fraud360(projection_registry)
+        app.include_router(fraud360_router)
+        logger.info("Fraud360: provider registered + routes mounted (/v1/fraud360)")
+    else:
+        logger.info("Fraud360: disabled (set AETHER_FRAUD360_ENABLED=true to enable)")
+
     # Agentic Observability Layer — observation-only; AETHER never executes.
     agentic_flags = settings.agentic_observability
     if agentic_flags.enabled:

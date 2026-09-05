@@ -183,6 +183,17 @@
       "supportsExport": true
     },
     {
+      "surfaceId": "risk360",
+      "supportedFieldCategories": ["entity", "time", "graph", "risk", "truth"],
+      "supportedTemporalModes": ["window", "as_of", "relative"],
+      "supportedViews": ["table", "graph"],
+      "supportsFacets": true,
+      "supportsComparison": true,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": true,
+      "supportsExport": true
+    },
+    {
       "surfaceId": "population360",
       "supportedFieldCategories": ["entity", "graph", "time", "truth"],
       "supportedTemporalModes": ["window", "relative"],
@@ -198,6 +209,17 @@
       "supportedFieldCategories": ["entity", "time", "geography", "truth"],
       "supportedTemporalModes": ["window", "compare", "relative"],
       "supportedViews": ["map", "table"],
+      "supportsFacets": true,
+      "supportsComparison": true,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": true,
+      "supportsExport": true
+    },
+    {
+      "surfaceId": "fraud360",
+      "supportedFieldCategories": ["entity", "time", "graph", "risk", "truth"],
+      "supportedTemporalModes": ["window", "as_of", "relative"],
+      "supportedViews": ["table", "graph"],
       "supportsFacets": true,
       "supportsComparison": true,
       "supportsSelectionSets": true,

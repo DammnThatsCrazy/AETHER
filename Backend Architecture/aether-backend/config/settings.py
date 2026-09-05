@@ -1717,6 +1717,14 @@ class Social360Config:
     # until the read plane and its consent evaluation are verified.
     noesis_enabled: bool = _env_bool("AETHER_RELATIONSHIP_SPINE_NOESIS_ENABLED", False)
 
+@dataclass(frozen=True)
+class RiskFraud360Config:
+    # Risk360 / Fraud360 intelligence-projection convergence planes
+    # (services/risk360, services/fraud360). Default OFF: flag-gated until the
+    # registry rows flip to implemented and the re-cut runs the full ci-check.
+    risk360_enabled: bool = _env_bool("AETHER_RISK360_ENABLED", False)
+    fraud360_enabled: bool = _env_bool("AETHER_FRAUD360_ENABLED", False)
+
 
 @dataclass
 class Settings:
@@ -1868,6 +1876,7 @@ class Settings:
     client_sync: ClientSyncConfig = field(default_factory=ClientSyncConfig)
     mobile: MobileConfig = field(default_factory=MobileConfig)
     comparison: ComparisonConfig = field(default_factory=ComparisonConfig)
+    risk_fraud_360: RiskFraud360Config = field(default_factory=RiskFraud360Config)
 
     # Social360 + Relationship Fidelity product-surface rollout flags
     social360: Social360Config = field(default_factory=Social360Config)

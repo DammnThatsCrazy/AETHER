@@ -137,6 +137,8 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/fraud-networks/flow-trace` | flow trace create | no | I | — | — | — | I | gap |
 | `/fraud-networks/flow-trace/:traceId` | flow trace detail | no | I | — | — | — | I | gap |
 | `/fraud-networks/:networkId` | fraud network detail | no | I | — | — | — | I | gap |
+| `/fraud-networks/risk-360` | Risk 360 subject projection (/v1/risk360) | no | I | A | — | — | I | `kyber-fraud-projection-empty-routes.test.tsx` |
+| `/fraud-networks/fraud-360` | Fraud 360 subject projection (/v1/fraud360) | no | I | A | — | — | I | `kyber-fraud-projection-empty-routes.test.tsx` |
 | `/measurement` | measurement overview | no | I | A | — | — | I | `kyber-measurement-empty-routes.test.tsx` |
 | `/measurement/attribution` | attribution models and runs | no | I | A | — | — | I | `kyber-measurement-empty-routes.test.tsx` |
 | `/measurement/journeys` | journey explorer | no | I | A | — | — | I | `kyber-measurement-empty-routes.test.tsx` |
@@ -164,15 +166,15 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 ## Coverage totals
 
-The denominator is the 135 data-bearing route patterns above: 51 Aether and
-84 Kyber routes.
+The denominator is the 137 data-bearing route patterns above: 51 Aether and
+86 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 18 / 135 (13.3%) | tracked for every route |
-| Empty-state assertions | 123 / 135 (91.1%) | at least 90% overall |
-| Error/unavailable assertions | 105 / 135 (77.8%) | 100% of critical routes |
-| Populated-state assertions | 33 / 135 (24.4%) | tracked for every route |
+| Explicit loading-state assertions | 18 / 137 (13.1%) | tracked for every route |
+| Empty-state assertions | 125 / 137 (91.2%) | at least 90% overall |
+| Error/unavailable assertions | 105 / 137 (76.6%) | 100% of critical routes |
+| Populated-state assertions | 33 / 137 (24.1%) | tracked for every route |
 | Critical routes with both empty and error assertions | 62 / 62 (100%) | 62 / 62 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,

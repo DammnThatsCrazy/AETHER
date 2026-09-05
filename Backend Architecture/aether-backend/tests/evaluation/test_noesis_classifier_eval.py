@@ -233,6 +233,23 @@ EVAL_CASES: list[tuple[str, str]] = [
     ("Why is this user incentivized to share content?", "incentive_context_explain"),
     ("Show the incentive structure for this relationship", "incentive_context_explain"),
     ("What motivates this user to participate?", "incentive_context_explain"),
+
+
+    # risk_assessment_explain (3 examples)
+    ("Explain the risk assessment for entity ent_123", "risk_assessment_explain"),
+    ("Why does entity ent_123 carry this risk assessment?", "risk_assessment_explain"),
+    ("Show which dimensions were scored in the risk assessment of agent ag_1", "risk_assessment_explain"),
+
+    # fraud_hypothesis_summarize (3 examples)
+    ("Summarize the fraud hypothesis for entity ent_123", "fraud_hypothesis_summarize"),
+    ("What is the state of the fraud hypothesis on entity ent_123?", "fraud_hypothesis_summarize"),
+    ("Show fraud hypothesis status for agent ag_1", "fraud_hypothesis_summarize"),
+
+    # risk_fraud_contradiction_lookup (3 examples)
+    ("Are the risk and fraud views contradictory for entity ent_123?", "risk_fraud_contradiction_lookup"),
+    ("Reconcile the risk assessment and fraud hypotheses for entity ent_123", "risk_fraud_contradiction_lookup"),
+    ("Does the fraud hypothesis conflict with the risk assessment for agent ag_1?", "risk_fraud_contradiction_lookup"),
+
 ]
 
 

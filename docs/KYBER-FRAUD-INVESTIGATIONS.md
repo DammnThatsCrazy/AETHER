@@ -26,8 +26,12 @@ The Fraud Investigations Workspace in Kyber gives operators a visual environment
 | `/fraud-networks/:networkId` | Detail view with graph, members, evidence, case panel |
 | `/fraud-networks/flow-trace` | Create and browse flow traces |
 | `/fraud-networks/flow-trace/:traceId` | Detail view for a specific trace |
+| `/fraud-networks/risk-360` | Risk 360 workbench — read-only risk-assessment projection over the `/v1/risk360` plane |
+| `/fraud-networks/fraud-360` | Fraud 360 consolidation — read-only fraud-synthesis projection over the `/v1/fraud360` plane |
 
 Access requires the `fraud:read` permission. Write actions (build, refresh, escalate, attach) additionally require `fraud:write` or `fraud:escalate`.
+
+The Risk 360 and Fraud 360 surfaces are different in kind: they are read-only intelligence projections and carry **no** `fraud:*` write actions. Each route enforces the canonical tenant `read` permission plus the projection's fail-closed capability key (`risk360.read` / `fraud360.read`), and the plane itself is flag-gated server-side (see below) — a disabled plane is never a frontend grant.
 
 ---
 
@@ -133,6 +137,32 @@ The result card shows:
 ### Recent Traces
 
 The lower section lists all previous traces for the tenant, clicking navigates to the trace detail URL.
+
+---
+
+## Risk 360 Workbench
+
+The **Risk 360** workbench (`/fraud-networks/risk-360`, nav label **Risk 360**) renders the stored risk-assessment truth for a chosen subject as a read-only intelligence projection over the flag-gated `/v1/risk360` plane. It is a convergence surface — it reads the Risk360 assessment output and renders it faithfully; it never recomputes or mutates risk.
+
+- **Subject picker** — the operator selects a subject kind (`entity` | `relationship` | `cluster` | `population`) and enters a subject id, then runs the projection
+- **Projection sections** — the result renders `summary` / `state` / `evidence` / `findings` / `health` with honest state badges, plus any claims and dependency state the projection carries
+- **Health probe** — the page header shows the `/v1/risk360/health` plane state, so the operator sees whether the plane is registered and contract-compatible
+- **Not enabled behavior** — the `/v1/risk360` plane is flag-gated server-side (`AETHER_RISK360_ENABLED`, default OFF). When the plane is disabled, the provider is unregistered, or the subject kind is unserved, the API resolves to `null` and the page renders a graceful "plane not enabled / no projection" EmptyState — never an error crash
+
+**Data source:** `GET /v1/risk360/{subject_kind}/{subject_id}` and `GET /v1/risk360/health` via `api.risk360` in `frontend/kyber/src/lib/api/endpoints.ts` (hooks in `features/risk360/`, shared projection renderers in `features/projection-plane/`). The projection is `graphMutationPolicy: read_only` and does not own canonical truth.
+
+---
+
+## Fraud 360 Consolidation
+
+The **Fraud 360** consolidation page (`/fraud-networks/fraud-360`, nav label **Fraud 360**) presents the stored Fraud360 synthesis for a chosen subject as a read-only intelligence projection over the flag-gated `/v1/fraud360` plane. Fraud is presented as a hypothesis — never stronger than the lifecycle state and materiality the backend reports.
+
+- **Subject picker** — the operator selects a subject kind (`entity` | `relationship` | `agent`) and enters a subject id, then runs the projection
+- **Projection sections** — the result renders `summary` / `state` / `evidence` / `findings` / `health` with honest state badges; material hypotheses surface as candidate cards
+- **Health probe** — the page header shows the `/v1/fraud360/health` plane state
+- **Not enabled behavior** — the `/v1/fraud360` plane is flag-gated server-side (`AETHER_FRAUD360_ENABLED`, default OFF). When the plane is disabled, the provider is unregistered, or the subject kind is unserved, the API resolves to `null` and the page renders a graceful EmptyState — never an error crash
+
+**Data source:** `GET /v1/fraud360/{subject_kind}/{subject_id}` and `GET /v1/fraud360/health` via `api.fraud360` in `frontend/kyber/src/lib/api/endpoints.ts` (hooks in `features/fraud360/`, shared projection renderers in `features/projection-plane/`). The projection is `graphMutationPolicy: read_only` and does not own canonical truth.
 
 ---
 

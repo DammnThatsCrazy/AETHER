@@ -4061,6 +4061,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/blueprints/fraud360.md",
+      "title": "Fraud360 Vertical Slice Blueprint",
+      "slug": "blueprints/fraud360",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/blueprints/geographic360.md",
       "title": "Geographic360 Vertical Slice Blueprint",
       "slug": "blueprints/geographic360",
@@ -4112,6 +4128,22 @@
       "path": "docs/blueprints/population360.md",
       "title": "Population360 Vertical Slice Blueprint",
       "slug": "blueprints/population360",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/blueprints/risk360.md",
+      "title": "Risk360 Vertical Slice Blueprint",
+      "slug": "blueprints/risk360",
       "section": "blueprints",
       "visibility": "I",
       "audience": [
@@ -5365,6 +5397,21 @@
         "architect",
         "dev-senior",
         "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/plans/RISK_FRAUD_360_PHASES.md",
+      "title": "Risk360 + Fraud360 — Phased Convergence Program",
+      "slug": "plans/risk-fraud-360-phases",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
       ],
       "status": "experimental",
       "since_version": "8.12.0",
@@ -7639,6 +7686,23 @@
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/RISK_FRAUD_360.md",
+      "title": "Risk360 and Fraud360 Architecture",
+      "slug": "source-of-truth/risk-fraud-360",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "backend@aether"
     },
     {
       "path": "docs/source-of-truth/SOURCE_TO_MODEL_MATRIX.md",

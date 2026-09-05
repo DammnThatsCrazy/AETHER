@@ -347,6 +347,7 @@
         "Backend Architecture/services/delegation/**",
         "Backend Architecture/services/journey-service/**",
         "Backend Architecture/services/web3/**",
+        "!Backend Architecture/aether-backend/**",
         "!Data Ingestion Layer/**/package.json",
         "!Data Lake Architecture/**/package.json"
       ],

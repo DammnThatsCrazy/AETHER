@@ -196,10 +196,12 @@ def test_owns_canonical_truth_false_for_all() -> None:
 
 
 def test_implementation_states_match_slice_program() -> None:
-    # Exactly the seven 360 vertical slices are implemented; everything else
-    # stays in_flight. No registered/deprecated rows, and the implemented set is
-    # honest (each has zero pending + converged bindings — proven by the
-    # dependency-DAG gate in the order-resilience suite).
+    # Exactly the nine 360 vertical slices are implemented — the seven core
+    # 360s plus the risk360 / fraud360 convergence slices (re-cut onto the
+    # post-360-program base); everything else stays in_flight. No
+    # registered/deprecated rows, and the implemented set is honest (each has
+    # zero pending + converged bindings — proven by the dependency-DAG gate in
+    # the order-resilience suite).
     states = {p["implementationState"] for p in _projections()}
     assert states == {"in_flight", "implemented"}
     implemented = {
@@ -213,6 +215,8 @@ def test_implementation_states_match_slice_program() -> None:
         "temporal360",
         "population360",
         "geographic360",
+        "risk360",
+        "fraud360",
     }
     assert all(
         p["implementationState"] == "in_flight"

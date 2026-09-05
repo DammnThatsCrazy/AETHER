@@ -1477,13 +1477,15 @@ A **360** is an intelligence projection over canonical Aether truth — never a
 competing system of record. The plane is a fail-isolated `ProviderRegistry` of
 `IntelligenceProjectionProvider`s over the shared
 `ProjectionRequest`/`ProjectionContext`/`ProjectionResult` contracts (TS +
-Python). Seven 360s are implemented native providers (`outcome360`,
-`economic360`, `infrastructure360`, `communication360`, `temporal360`,
-`population360`, `geographic360`); the rest are `in_flight`. `implementationState`
-is repo metadata, **not** readiness. `infrastructure360` was the first projection
-to expose a classified public route, and `communication360` follows the same
-read-only route template (every route a GET, tenant-scoped from the authenticated
-tenant, capability-gated on `infrastructure360.read` / `communication360.read`):
+Python). Nine 360s are implemented native providers (`outcome360`,
+`economic360`, `infrastructure360`, `communication360`, `risk360`, `fraud360`,
+`temporal360`, `population360`, `geographic360`); the rest are `in_flight`.
+`implementationState` is repo metadata, **not** readiness. `infrastructure360`
+was the first projection to expose a classified public route, and
+`communication360` follows the same read-only route template (every route a GET,
+tenant-scoped from the authenticated tenant, capability-gated on
+`infrastructure360.read` / `communication360.read`); `risk360` and `fraud360`
+expose the same pattern behind their convergence flags (below):
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -1498,6 +1500,24 @@ capability key (fail-closed). The infrastructure360 provider reads the
 communication360 provider reads the `communication360_facts` store over the comms
 silver path and the ratified information / knowledge / participant authorities.
 Both projections are `graphMutationPolicy: read_only` — there is no write path.
+
+`risk360` and `fraud360` expose the same classified read-only projection surface
+pattern — each is an `implemented` native provider with
+`legacyBindings.migrationMode: converged` (repo metadata, **not** readiness),
+`graphMutationPolicy: read_only`, and `ownsCanonicalTruth: false`. The routes are
+wired in `main.py` behind the convergence flags `AETHER_RISK360_ENABLED` /
+`AETHER_FRAUD360_ENABLED` (both default OFF — when a flag is off the router is
+not mounted, so the surface answers 404). Each
+mirrors the infrastructure360 surface pattern (every route a GET, tenant-scoped,
+no write path) under its own prefix, capability-gated on `risk360.read` /
+`fraud360.read`:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/risk360/{subject_kind}/{subject_id}` | Run the risk360 projection for the requesting tenant (`subject_kind` ∈ `entity` \| `relationship` \| `cluster` \| `population`); 404 for an unserved kind, 503 when the provider is unregistered |
+| GET | `/v1/risk360/health` | Plane probe: risk360 provider registered + contract-compatible (`availability()` only) |
+| GET | `/v1/fraud360/{subject_kind}/{subject_id}` | Run the fraud360 projection for the requesting tenant (`subject_kind` ∈ `entity` \| `relationship` \| `agent`); 404 for an unserved kind, 503 when the provider is unregistered |
+| GET | `/v1/fraud360/health` | Plane probe: fraud360 provider registered + contract-compatible (`availability()` only) |
 
 ---
 

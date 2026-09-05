@@ -488,6 +488,21 @@ class NoesisService:
             candidates.append(("communications_insight", 0.8))
         if any(k in low for k in ("campaign", "reward", "spending", "valuable", "loyalty", "incentive")):
             candidates.append(("campaign_reward_lookup", 0.78))
+        # Risk360 / Fraud360 read-only intents (flag-gated planes; placed
+        # before the generic risk_cluster rule so assessment/hypothesis phrasing
+        # resolves to the specific intent even though it also contains the
+        # generic "risk"/"fraud" tokens).
+        if any(k in low for k in ("risk assessment", "risk assessments", "assessed risk", "risk explain", "explain risk")):
+            if any(k in low for k in ("explain", "why", "what is", "what's", "detail", "describe", "score", "scored", "dimension", "summarize", "outcome", "policy", "show", "look")):
+                candidates.append(("risk_assessment_explain", 0.88))
+        if "fraud" in low and "hypoth" in low:
+            if any(k in low for k in ("summarize", "summary", "overview", "status", "state", "explain", "describe", "what is", "what's", "detail")):
+                candidates.append(("fraud_hypothesis_summarize", 0.87))
+            else:
+                candidates.append(("fraud_hypothesis_summarize", 0.8))
+        if any(k in low for k in ("contradict", "contradiction", "contradictory", "conflict", "conflicting", "conflicts", "inconsistent", "inconsistency", "disagree", "reconcile", "reconcil", "alignment between")):
+            if "risk" in low and "fraud" in low:
+                candidates.append(("risk_fraud_contradiction_lookup", 0.88))
         if any(k in low for k in ("risk", "cluster", "abnormal", "anomalous", "fraud", "risky", "suspicious", "anomaly", "anomalies")):
             candidates.append(("risk_cluster_lookup", 0.76))
         if "wallet" in low or _WALLET_RE.search(text):
@@ -719,6 +734,12 @@ class NoesisService:
             "incentive_context_explain",
         ):
             return await self._relationship_spine_dispatch(plan, scope)
+        if plan.intent in (
+            "risk_assessment_explain",
+            "fraud_hypothesis_summarize",
+            "risk_fraud_contradiction_lookup",
+        ):
+            return await self._risk_fraud_dispatch(plan, scope)
         return self._unsupported_response(body, [])
 
     def _tenant_filter(self, scope: Scope) -> Optional[dict[str, Any]]:
@@ -1237,6 +1258,68 @@ class NoesisService:
                 if result.get("sufficient", True)
                 else (result.get("reason") or "No matching observations in tenant scope")
             ),
+        )
+        return self._response(
+            plan, result.get("answer", ""), result.get("results", []), [],
+            evidence=evidence, scope=scope,
+        )
+
+    async def _risk_fraud_dispatch(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
+        """Read-only delegation to the Risk360 / Fraud360 adapter.
+
+        Each plane is gated on its own flag (``settings.risk_fraud_360
+        .risk360_enabled`` for risk, ``.fraud360_enabled`` for fraud). The
+        contradiction intent reads BOTH planes, so it requires both flags.
+        Disabled planes surface a ``service_disabled`` NoesisError in the
+        response (mirroring ``_economic_dispatch``) rather than raising, so the
+        conversation surface stays coherent. Noesis never mutates risk or fraud
+        truth here — every call reads stored records only.
+        """
+        from .adapters.risk_fraud_adapter import RiskFraudNoesisAdapter
+
+        from config.settings import settings as app_settings
+
+        risk_enabled = app_settings.risk_fraud_360.risk360_enabled
+        fraud_enabled = app_settings.risk_fraud_360.fraud360_enabled
+
+        disabled_label: str | None = None
+        if plan.intent == "risk_assessment_explain" and not risk_enabled:
+            disabled_label = "Risk360 Intelligence"
+        elif plan.intent == "fraud_hypothesis_summarize" and not fraud_enabled:
+            disabled_label = "Fraud360 Intelligence"
+        elif plan.intent == "risk_fraud_contradiction_lookup" and not (risk_enabled and fraud_enabled):
+            disabled_label = "Risk360/Fraud360 Intelligence"
+        if disabled_label is not None:
+            return NoesisResponse(
+                answer=f"{disabled_label} is not enabled for this deployment.",
+                mode="deterministic",
+                intent=plan.intent,
+                confidence=plan.confidence,
+                warnings=[f"{disabled_label} Noesis surface is disabled"],
+                error=NoesisError(
+                    code="service_disabled",
+                    message=f"{disabled_label} Noesis queries are feature-flagged off.",
+                ),
+                query_debug={"plan": plan.model_dump(), "read_only": True},
+            )
+
+        tenant_id = scope.effective_tenant_id
+        adapter = RiskFraudNoesisAdapter()
+        if plan.intent == "risk_assessment_explain":
+            result = await adapter.risk_assessment_explain(tenant_id, plan.target, plan.limit)
+        elif plan.intent == "fraud_hypothesis_summarize":
+            result = await adapter.fraud_hypothesis_summarize(tenant_id, plan.target, plan.limit)
+        else:
+            result = await adapter.contradiction_surface(tenant_id, plan.target, plan.limit)
+
+        fetched_at = utc_now()
+        evidence = EvidenceEnvelope(
+            sources=[
+                EvidenceSource(service="risk_fraud_360", resource_type=source, fetched_at=fetched_at)
+                for source in result.get("sources", [])
+            ],
+            sufficient=bool(result.get("sufficient", True)),
+            insufficient_reason=None if result.get("sufficient", True) else "No matching Risk360/Fraud360 observations in tenant scope",
         )
         return self._response(
             plan, result.get("answer", ""), result.get("results", []), [],

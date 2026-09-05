@@ -264,6 +264,22 @@ class EvidenceRef(ContractModel):
     uri: Optional[str] = None
 
 
+class GraphSnapshotRef(ContractModel):
+    """Reference to a point-in-time graph snapshot.
+
+    Canonical home for the ``GraphSnapshotRef`` input ref declared by the 360
+    projection contracts (communication360, episode360, execution360, fraud360,
+    geographic360, population360, profile360, relationship360, risk360,
+    social360, temporal360) so those projection contracts import one shared
+    definition instead of re-declaring their own. ``asOf`` names the snapshot's
+    temporal anchor, matching how sibling refs name time fields
+    (``EvidenceRef.observedAt``).
+    """
+
+    graph_snapshot_id: str
+    asOf: Optional[str] = None
+
+
 class ExplainabilityMetadata(ContractModel):
     summary: str
     features: Optional[dict[str, float | str | bool]] = None

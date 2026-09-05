@@ -866,6 +866,8 @@ lives in `frontend/kyber/src/test/unit/` (`provider-manifest-hooks.test.ts`,
 /fraud-networks/:networkId           — network detail (graph, members, evidence, case)
 /fraud-networks/flow-trace           — flow-of-funds trace builder
 /fraud-networks/flow-trace/:traceId  — trace detail with paths
+/fraud-networks/risk-360             — Risk 360 workbench (read-only /v1/risk360 projection)
+/fraud-networks/fraud-360            — Fraud 360 consolidation (read-only /v1/fraud360 projection)
 ```
 
 ---
@@ -880,6 +882,23 @@ The fraud workspace lives under `/fraud-networks` in Kyber and consists of:
 | `FraudNetworkDetailPage` | `pages/fraud/fraud-network-detail-page.tsx` | Network detail: graph canvas, members table, evidence tray, case panel |
 | `FlowTracePage` | `pages/fraud/flow-trace-page.tsx` | Trace builder + recent traces list + trace result with paths |
 | `FraudDecisionsPage` | `pages/fraud/fraud-decisions-page.tsx` | Durable fraud decision review queue: filter by risk tier / decision / review state; review (confirmed_fraud / dispute / review_clear) and suppress actions with reason capture; wired to `GET /v1/fraud/decisions`, `POST /v1/fraud/decisions/{id}/review`, `POST /v1/fraud/decisions/{id}/suppress` |
+| `Risk360Page` | `pages/fraud/risk-360-page.tsx` | Risk 360 workbench (`/fraud-networks/risk-360`): read-only risk-assessment projection over the flag-gated `/v1/risk360` plane; subject kinds entity / relationship / cluster / population; graceful "plane not enabled / no projection" empty state when the plane flag is off |
+| `Fraud360Page` | `pages/fraud/fraud-360-page.tsx` | Fraud 360 consolidation (`/fraud-networks/fraud-360`): read-only fraud-synthesis projection over the flag-gated `/v1/fraud360` plane; subject kinds entity / relationship / agent; material hypotheses surface as candidate cards; graceful empty state when the plane flag is off |
+
+The two 360 pages are operator convergence surfaces over the Risk360/Fraud360
+intelligence-projection plane — read-only (no write path, `graphMutationPolicy:
+read_only`, non-owning of canonical truth), mounted inside the existing fraud
+URL space (`/fraud-networks/*`). Nav entries **Risk 360** and **Fraud 360** sit
+beside the Fraud Networks entries in `sidebar.tsx::KYBER_NAV_ITEMS` (a flat
+operator list), reusing the existing `kyber-reliability` /
+`kyber-fraud-networks` icon destinations because the brand union has no
+risk/fraud-specific member. They carry no frontend
+`envFlag`: the gate is the backend `AETHER_RISK360_ENABLED` /
+`AETHER_FRAUD360_ENABLED` flags (default OFF), which each page renders honestly
+from the API response. Support comes from `features/risk360/`,
+`features/fraud360/` (hooks reading `api.risk360` / `api.fraud360` from
+`endpoints.ts`), and the shared `features/projection-plane/` tolerant
+projection-result parser + presentational renderers.
 
 Supporting components:
 

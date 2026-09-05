@@ -1615,7 +1615,7 @@
       "id": "risk360",
       "displayName": "Risk 360",
       "projectionKind": "risk_360",
-      "implementationState": "in_flight",
+      "implementationState": "implemented",
       "implementationBlueprint": "docs/blueprints/risk360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
@@ -1666,7 +1666,8 @@
       ],
       "surfaceIds": [
         "graph",
-        "comparison_workbench"
+        "comparison_workbench",
+        "risk360"
       ],
       "capabilityKeys": [
         "risk360.read",
@@ -1710,12 +1711,13 @@
         ],
         "surfaceIds": [
           "graph",
-          "comparison_workbench"
+          "comparison_workbench",
+          "risk360"
         ],
         "services": [
           "Backend Architecture/aether-backend/services/risk_overlay"
         ],
-        "migrationMode": "adapter",
+        "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/risk360.md"
       },
       "deprecatedReason": null,
@@ -1727,7 +1729,7 @@
       "id": "fraud360",
       "displayName": "Fraud 360",
       "projectionKind": "risk_360",
-      "implementationState": "in_flight",
+      "implementationState": "implemented",
       "implementationBlueprint": "docs/blueprints/fraud360.md",
       "ownsCanonicalTruth": false,
       "subjectKinds": [
@@ -1777,7 +1779,8 @@
         "relative"
       ],
       "surfaceIds": [
-        "graph"
+        "graph",
+        "fraud360"
       ],
       "capabilityKeys": [
         "fraud360.read",
@@ -1819,12 +1822,13 @@
           "/v1/fraud"
         ],
         "surfaceIds": [
-          "graph"
+          "graph",
+          "fraud360"
         ],
         "services": [
           "Backend Architecture/aether-backend/services/fraud"
         ],
-        "migrationMode": "adapter",
+        "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/fraud360.md"
       },
       "deprecatedReason": null,

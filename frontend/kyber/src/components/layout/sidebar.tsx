@@ -87,6 +87,15 @@ export const KYBER_NAV_ITEMS: readonly NavItem[] = [
   { path: '/roi-calculators', label: 'ROI Calcs',       destination: 'kyber-roi-calculators' },
   { path: '/fraud-networks',  label: 'Fraud Networks',  destination: 'kyber-fraud-networks' },
   { path: '/fraud-networks/flow-trace', label: 'Flow Trace', destination: 'kyber-flow-trace' },
+  // Risk/Fraud 360 operator convergence surfaces. These carry no `envFlag`: the
+  // plane gate is the backend AETHER_RISK360_ENABLED / AETHER_FRAUD360_ENABLED
+  // env flags (default OFF), which is not a frontend capability or flag — each
+  // page renders its own honest "plane not enabled / no projection" state from
+  // what the backend returns, so routing is never a grant. Icon taxonomy reuses
+  // existing kyber destinations (kyber-risk-360/kyber-fraud-360 are not in
+  // @olympus/brand; packages/brand is out of scope) — same as Provider Runtime.
+  { path: '/fraud-networks/risk-360', label: 'Risk 360', destination: 'kyber-reliability' },
+  { path: '/fraud-networks/fraud-360', label: 'Fraud 360', destination: 'kyber-fraud-networks' },
   { path: '/security',        label: 'Security',        destination: 'kyber-security' },
   { path: '/diagnostics',     label: 'Diagnostics',     destination: 'kyber-diagnostics' },
   { path: '/lab',             label: 'Lab',             destination: 'kyber-lab' },

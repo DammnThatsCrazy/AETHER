@@ -470,6 +470,64 @@ CAPABILITY_REGISTRY: list[NoesisCapability] = [
         ],
         data_sources=["incentive_context", "relationship_spine"],
     ),
+    NoesisCapability(
+        intent="risk_assessment_explain",
+        label="Risk Assessment Explain",
+        description=(
+            "Explain the stored Risk360 assessment for a subject: which risk "
+            "dimensions are scored (with value states), the consolidated "
+            "claim_state, the referenced decision policy, and any exposure "
+            "summary. Read-only — Noesis never mutates risk truth; requires "
+            "Risk360 Intelligence to be enabled."
+        ),
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Explain the risk assessment for entity ent_123",
+            "What dimensions were scored in the risk assessment for agent ag_1?",
+            "Why does entity ent_123 carry this risk assessment?",
+        ],
+        data_sources=["risk_assessments"],
+    ),
+    NoesisCapability(
+        intent="fraud_hypothesis_summarize",
+        label="Fraud Hypothesis Summary",
+        description=(
+            "Summarize stored Fraud360 hypotheses for a subject: matched "
+            "pattern display names and families, lifecycle state and phase, "
+            "materiality when set, and risk/network/flow/decision "
+            "cross-references. Read-only — Noesis never mutates fraud truth; "
+            "requires Fraud360 Intelligence to be enabled."
+        ),
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Summarize the fraud hypotheses for entity ent_123",
+            "What fraud hypotheses exist for agent ag_1?",
+            "Show the state and materiality of fraud hypotheses on entity ent_123",
+        ],
+        data_sources=["fraud_hypotheses"],
+    ),
+    NoesisCapability(
+        intent="risk_fraud_contradiction_lookup",
+        label="Risk/Fraud Contradiction Surface",
+        description=(
+            "Surface honest contradictions or gaps between a subject's stored "
+            "Risk360 assessment and its stored Fraud360 hypotheses — e.g. a "
+            "material or confirmed fraud hypothesis whose subject's assessment "
+            "has no scored fraud dimension, or recorded contradictory evidence. "
+            "Read-only and honest: a contradiction is never invented. Requires "
+            "both Risk360 and Fraud360 Intelligence to be enabled."
+        ),
+        surfaces=["aether", "kyber"],
+        requires_target=True,
+        example_prompts=[
+            "Are the risk and fraud views contradictory for entity ent_123?",
+            "Does the fraud hypothesis conflict with the risk assessment for agent ag_1?",
+            "Reconcile the risk assessment and fraud hypotheses for entity ent_123",
+        ],
+        data_sources=["risk_assessments", "fraud_hypotheses"],
+    ),
 ]
 
 # Fast lookup by intent name

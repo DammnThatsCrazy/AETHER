@@ -30,10 +30,12 @@ from services.exploration.adapters.graph import GraphSurfaceAdapter
 from services.exploration.adapters.profile import ProfileSurfaceAdapter
 from services.exploration.adapters.projection import (
     Economic360SurfaceAdapter,
+    Fraud360SurfaceAdapter,
     Geographic360SurfaceAdapter,
     Infrastructure360SurfaceAdapter,
     Outcome360SurfaceAdapter,
     Population360SurfaceAdapter,
+    Risk360SurfaceAdapter,
     Temporal360SurfaceAdapter,
 )
 from services.exploration.adapters.timeline import TimelineSurfaceAdapter
@@ -51,6 +53,8 @@ _ADAPTER_TYPES: tuple[type[SurfaceAdapter], ...] = (
     Temporal360SurfaceAdapter,
     Population360SurfaceAdapter,
     Geographic360SurfaceAdapter,
+    Risk360SurfaceAdapter,
+    Fraud360SurfaceAdapter,
 )
 
 _REGISTRY: dict[str, SurfaceAdapter] = {a.surface_id: a() for a in _ADAPTER_TYPES}

@@ -55,6 +55,12 @@ const MLAdminPage = lazy(() => import('@kyber/pages/ml').then(m => ({ default: m
 const FraudNetworksPage = lazy(() => import('@kyber/pages/fraud/fraud-networks-page').then(m => ({ default: m.FraudNetworksPage })));
 const FraudNetworkDetailPage = lazy(() => import('@kyber/pages/fraud/fraud-network-detail-page').then(m => ({ default: m.FraudNetworkDetailPage })));
 const FlowTracePage = lazy(() => import('@kyber/pages/fraud/flow-trace-page').then(m => ({ default: m.FlowTracePage })));
+// Risk/Fraud 360 operator convergence surfaces. Read-only projections over the
+// flag-gated /v1/risk360 + /v1/fraud360 planes; each page renders its own honest
+// "plane not enabled / no projection" state when the backend flag is off, so
+// mounting the route is not a grant — the backend gates every request.
+const Risk360Page = lazy(() => import('@kyber/pages/fraud/risk-360-page').then(m => ({ default: m.Risk360Page })));
+const Fraud360Page = lazy(() => import('@kyber/pages/fraud/fraud-360-page').then(m => ({ default: m.Fraud360Page })));
 const MeasurementOverviewPage = lazy(() => import('@kyber/pages/measurement/measurement-overview-page').then(m => ({ default: m.MeasurementOverviewPage })));
 const AttributionStudioPage = lazy(() => import('@kyber/pages/measurement/attribution-studio-page').then(m => ({ default: m.AttributionStudioPage })));
 const JourneyExplorerPage = lazy(() => import('@kyber/pages/measurement/journey-explorer-page').then(m => ({ default: m.JourneyExplorerPage })));
@@ -182,6 +188,8 @@ export function AppRouter() {
                 <Route path="/fraud-networks/flow-trace" element={<PageSuspense><FlowTracePage /></PageSuspense>} />
                 <Route path="/fraud-networks/flow-trace/:traceId" element={<PageSuspense><FlowTracePage /></PageSuspense>} />
                 <Route path="/fraud-networks/:networkId" element={<PageSuspense><FraudNetworkDetailPage /></PageSuspense>} />
+                <Route path="/fraud-networks/risk-360" element={<PageSuspense><Risk360Page /></PageSuspense>} />
+                <Route path="/fraud-networks/fraud-360" element={<PageSuspense><Fraud360Page /></PageSuspense>} />
                 <Route path="/measurement" element={<PageSuspense><MeasurementOverviewPage /></PageSuspense>} />
                 <Route path="/measurement/attribution" element={<PageSuspense><AttributionStudioPage /></PageSuspense>} />
                 <Route path="/measurement/journeys" element={<PageSuspense><JourneyExplorerPage /></PageSuspense>} />
