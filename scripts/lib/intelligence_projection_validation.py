@@ -26,8 +26,10 @@ Rule groups (each returns ``list[Violation]``; severity ``"error"`` gates CI):
   optional edge are ``warning`` (benign — the lazy runtime degrades missing
   optional deps to ``not_applicable``); ``implemented`` ⇒ zero pending + zero
   unresolved; dangling pending (target now resolves in the spine or projection
-  id space, whatever the declared ``kind`` label) ⇒ error; ``in_flight``/
-  ``registered`` may carry pending.
+  id space, whatever the declared ``kind`` label) ⇒ error; a ``kind:"spine"``
+  pending whose target is neither resolved nor a spine-registry ``pending`` row
+  ⇒ error (the spine plane's vocabulary is canonical spine-registry.json);
+  ``in_flight``/``registered`` may carry pending.
 - cross_registry — surfaceIds ⊆ surface registry (a surfaceId is declared
   pending only via ``kind=="surface"``); supportedTemporalModes ⊆ the union of
   the projection's surfaces' modes; metricRefs ⊆ metric registry (a metricRef is
@@ -161,38 +163,28 @@ AUTHORITY_INDEX = frozenset(
     }
 )
 
-# RESOLVED spines only. journey_continuity and reconciled_control_plane are
-# deliberately ABSENT — they are pending, declared per-projection via
-# pendingAuthority until the spine plane formalizes them. graph_history_replay
-# WAS pending (temporal360 T2.1), grouping_membership WAS pending
-# (population360 P3.1), and context_capsule_semantics WAS pending (geographic360
-# G4.5) — each is formalized here now that its authority exists: the
-# knowledge-time reconstruction (shared/graph replay_state +
-# services/temporal360), the governed membership contract (MEMBER_OF-via-gateway
-# PopulationMembershipGovernor, append-only population_definition_versions, DSR
-# coverage — services/population), and the capsule -> canonical-geographic
-# reading rule set (services/geographic360/capsule_semantics, consumed through
-# the provider's reader seam and covered by DSR erasure).
+# The spine plane's vocabulary is the canonical spine registry
+# (packages/shared/contracts/spine-registry.json) — the projection plane does
+# NOT hand-maintain its own spine list. Every spine row the registry does not
+# mark "pending" counts as resolved in the spine plane (implemented AND
+# in_flight both mean declared + owner-bound, so pendingAuthority to an
+# in_flight row is already dangling). Rows the registry marks "pending" are the
+# ONLY legal pendingAuthority kind:"spine" targets, declared per-projection
+# until the spine plane lands them — enforced by the order_resilience ratchet.
+_SPINE_ROWS = json.loads(
+    (
+        Path(__file__).resolve().parents[2]
+        / "packages"
+        / "shared"
+        / "contracts"
+        / "spine-registry.json"
+    ).read_text(encoding="utf-8")
+).get("spines", [])
 SPINE_INDEX = frozenset(
-    {
-        "context_capsule_semantics",
-        "contract_spine",
-        "identity_resolution",
-        "evidence_provenance",
-        "graph_history_replay",
-        "grouping_membership",
-        "temporal_kernel",
-        "relationship_fidelity",
-        "upr",
-        "computation_substrate",
-        "measurement_outcome_contract",
-        "tenant_readiness",
-        "exploration_fabric",
-        "infrastructure_model",
-        "model_governance",
-        "agentic_runtime_access",
-        "attribution_architecture",
-    }
+    row["id"] for row in _SPINE_ROWS if row.get("implementationState") != "pending"
+)
+PENDING_SPINE_INDEX = frozenset(
+    row["id"] for row in _SPINE_ROWS if row.get("implementationState") == "pending"
 )
 
 # Canonical request/context primitives (reused repo-wide; never re-declared).
@@ -911,7 +903,7 @@ def validate_dependency_dag(reg: dict) -> list[Violation]:
                     Violation(
                         "order_resilience",
                         "error",
-                        f"dangling pending spine {target!r}: now resolved in SPINE_INDEX — remove the declaration",
+                        f"dangling pending spine {target!r}: now resolved in the canonical spine registry — remove the declaration",
                         pid,
                     )
                 )
@@ -921,6 +913,15 @@ def validate_dependency_dag(reg: dict) -> list[Violation]:
                         "order_resilience",
                         "error",
                         f"dangling pending projection {target!r}: target now exists in the registry — remove the declaration",
+                        pid,
+                    )
+                )
+            elif decl.get("kind") == "spine" and target not in PENDING_SPINE_INDEX:
+                violations.append(
+                    Violation(
+                        "order_resilience",
+                        "error",
+                        f"undeclared pending spine {target!r}: the spine plane's vocabulary is spine-registry.json — formalize it there as a \"pending\" row (with reason + resolving milestone) or correct the declaration",
                         pid,
                     )
                 )

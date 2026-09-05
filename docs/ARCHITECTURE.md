@@ -458,6 +458,7 @@ Canonical contract plane (single source of truth, codegen twins via
 | Intelligence projections | `packages/shared/contracts/intelligence-projection-registry.json` | `packages/shared/intelligence-projections_generated.ts`; `shared/intelligence_projections/generated_registry.py`; `docs/_generated/intelligence-projection-registry-table.md`; `docs/_generated/intelligence-projection-dependency-graph.md` |
 | Relationship predicates (Relational Intelligence Spine) | `packages/shared/contracts/relationship-predicate-registry.json` | `packages/shared/relationship-predicate-registry.ts`; `shared/relationship_spine/generated_relationship_predicate_registry.py`; `docs/_generated/relationship-predicate-registry-table.md` |
 | Relationship motifs (Relational Intelligence Spine) | `packages/shared/contracts/relationship-motif-registry.json` | `packages/shared/relationship-motif-registry.ts`; `shared/relationship_spine/generated_relationship_motif_registry.py`; `docs/_generated/relationship-motif-registry-table.md` |
+| Spine registry | `packages/shared/contracts/spine-registry.json` | `packages/shared/spine-registry.ts` (exported from `packages/shared/index.ts` beside the ADR-011 D3 envelope); `shared/spine/generated_spine_registry.py`; `docs/_generated/spine-registry-table.md`. Each spine row carries a 14-item conformance vocabulary that lives in-registry ([ADR-011](decisions/ADR-011-spine-composition-kernel.md)) |
 
 ### Intelligence projection plane
 

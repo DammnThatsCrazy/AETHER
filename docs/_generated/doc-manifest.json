@@ -4989,6 +4989,20 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/decisions/ADR-011-spine-composition-kernel.md",
+      "title": "ADR-011: Spine Composition Kernel",
+      "slug": "decisions/adr-011-spine-composition-kernel",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/deployment/WEB_ECOSYSTEM_DEPLOYMENT.md",
       "title": "Web Ecosystem — Deployment Contract",
       "slug": "deployment/web-ecosystem-deployment",
@@ -5431,6 +5445,21 @@
       "status": "experimental",
       "since_version": "8.12.0",
       "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/plans/SPINE_P0_PHASES.md",
+      "title": "Aether Spine P0 — Phased Implementation Program",
+      "slug": "plans/spine-p0-phases",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/plans/UNIVERSAL_INTELLIGENCE_GRAPH_IMPLEMENTATION.md",
@@ -7515,6 +7544,23 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/source-of-truth/IRRL_NAMING_OVERLAY.md",
+      "title": "Aether Spine P0 — IRRL Naming Overlay (Phase 5)",
+      "slug": "architecture/irrl-naming-overlay",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/source-of-truth/JOBS_PLATFORM.md",
       "title": "Durable Jobs Platform Source of Truth",
       "status": "stable"
@@ -7768,6 +7814,57 @@
       "status": "draft",
       "estimated_read_minutes": 6,
       "canonical_owner": "ml@aether"
+    },
+    {
+      "path": "docs/source-of-truth/SPINE_P0_ARCHITECTURE.md",
+      "title": "Aether Spine P0 — Ground Zero Founding Spine",
+      "slug": "architecture/spine-p0-architecture",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 25,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/SPINE_P0_CONFORMANCE_CHECKLIST.md",
+      "title": "Aether Spine P0 — Spine Conformance Checklist (Phase 6)",
+      "slug": "architecture/spine-p0-conformance-checklist",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 7,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/SPINE_REGISTRY_STATUS.md",
+      "title": "Aether Spine P0 — Spine Registry Status",
+      "slug": "architecture/spine-registry-status",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/STABLECOIN_CONSENT_MODEL.md",

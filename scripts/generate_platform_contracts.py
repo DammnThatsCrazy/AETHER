@@ -23,6 +23,7 @@ Sources (read-only — canonical source of truth):
   packages/shared/contracts/relationship-predicate-registry.json
   packages/shared/contracts/relationship-motif-registry.json
   packages/shared/contracts/social-provider-capability-vocabulary.json
+  packages/shared/contracts/spine-registry.json
 
 Generated outputs:
   packages/shared/temporal-policy.ts
@@ -72,6 +73,9 @@ Generated outputs:
   docs/_generated/relationship-motif-registry-table.md
   packages/shared/social-provider-capability-vocabulary.ts
   Backend Architecture/aether-backend/shared/social_provider/generated_social_provider_capability_vocabulary.py
+  packages/shared/spine-registry.ts
+  Backend Architecture/aether-backend/shared/spine/generated_spine_registry.py
+  docs/_generated/spine-registry-table.md
 
 Usage:
   python scripts/generate_platform_contracts.py           # write outputs in-place
@@ -109,6 +113,11 @@ from scripts.lib.intelligence_projection_validation import (  # noqa: E402
     validate_all as _projection_validate_all,
     validate_lens_registry as _projection_validate_lens_registry,
     validate_outcome_registry as _projection_validate_outcome_registry,
+)
+
+from scripts.lib.spine_registry_validation import (  # noqa: E402
+    load_context as _spine_load_context,
+    validate_all as _spine_validate_all,
 )
 
 TEMPORAL_POLICY_JSON = CONTRACTS / "temporal-policy-registry.json"
@@ -3868,6 +3877,182 @@ def _summary_social_provider_capability_vocabulary(reg: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Registry: spine registry
+# ---------------------------------------------------------------------------
+
+SPINE_REGISTRY_JSON = CONTRACTS / "spine-registry.json"
+SPINE_REGISTRY_TS = ROOT / "packages" / "shared" / "spine-registry.ts"
+SPINE_REGISTRY_PY = BACKEND / "shared" / "spine" / "generated_spine_registry.py"
+SPINE_REGISTRY_MD = ROOT / "docs" / "_generated" / "spine-registry-table.md"
+
+
+def validate_spine_registry(reg: dict, ctx: dict) -> list[str]:
+    """Validate the spine registry (thin lib wrapper).
+
+    Delegates to scripts/lib/spine_registry_validation.validate_all with the
+    FULL spine cross-registry facts merged in (the generator's shared ctx is
+    thinner than what the spine rule groups read), so generation-time
+    validation and the standalone validator (scripts/validate_spine_registry.py)
+    compute the SAME facts and can never drift. Returns ONLY messages with
+    severity == "error"; any error exits non-zero (fail-closed) before any
+    artifact is emitted.
+    """
+    spine_ctx = {**ctx, **_spine_load_context()}
+    errors = [
+        v.message
+        for v in _spine_validate_all(reg, spine_ctx)
+        if v.severity == "error"
+    ]
+    if errors:
+        for message in errors:
+            print(f"ERROR: {message}", file=sys.stderr)
+        sys.exit(1)
+    return errors
+
+
+def _conformance_summary(conformance: dict) -> str:
+    """Short per-row conformance status ("14 open" | "8 verified / 6 open" | "—")."""
+    if not conformance:
+        return "—"
+    verified = sum(1 for value in conformance.values() if value == "verified")
+    open_ = sum(1 for value in conformance.values() if value == "open")
+    if verified and open_:
+        return f"{verified} verified / {open_} open"
+    if verified:
+        return f"{verified} verified"
+    return f"{open_} open"
+
+
+def gen_spine_registry_ts(reg: dict) -> str:
+    spines = sorted(reg["spines"], key=lambda s: s["id"])
+    lines = _ts_header(SPINE_REGISTRY_JSON)
+    lines.append(
+        f"export const spineRegistryContractVersion = '{reg['contractVersion']}' as const;"
+    )
+    lines.append("")
+    lines += _ts_const_array(
+        "spineIds", "SpineId",
+        [s["id"] for s in spines],
+        "Registered spines (sorted).",
+    )
+    lines += _ts_const_array(
+        "spinePlanes", "SpinePlane",
+        sorted(reg["planes"]),
+        "Plane a spine may be anchored to (sorted).",
+    )
+    lines += _ts_const_array(
+        "spineKinds", "SpineKind",
+        sorted(reg["spineKinds"]),
+        "Kinds a spine may be (sorted).",
+    )
+    lines += _ts_const_array(
+        "spineImplementationStates", "SpineImplementationState",
+        sorted(reg["implementationStates"]),
+        "Implementation states — repo metadata, NOT readiness (sorted).",
+    )
+    lines += _ts_const_array(
+        "spineGraphMutationPolicies", "SpineGraphMutationPolicy",
+        sorted(reg["graphMutationPolicies"]),
+        "Graph-mutation policies a spine may declare (sorted).",
+    )
+    lines += _ts_const_array(
+        "spineConformanceCheckIds", "SpineConformanceCheckId",
+        sorted(c["id"] for c in reg["conformanceChecks"]),
+        "Canonical 14-item conformance contract ids (sorted).",
+    )
+    return "\n".join(lines)
+
+
+def gen_spine_registry_py(reg: dict) -> str:
+    spines = sorted(reg["spines"], key=lambda s: s["id"])
+    lines = _py_header(
+        SPINE_REGISTRY_JSON,
+        "Generated canonical spine registry (Spine Composition Kernel, ADR-011).",
+    )
+    lines.append(f'SPINE_REGISTRY_CONTRACT_VERSION = "{reg["contractVersion"]}"')
+    lines.append("")
+    lines += _py_tuple("SPINE_IDS", [s["id"] for s in spines], "Registered spines (sorted).")
+    lines += _py_tuple("SPINE_PLANES", sorted(reg["planes"]), "Plane a spine may be anchored to.")
+    lines += _py_tuple("SPINE_KINDS", sorted(reg["spineKinds"]), "Kinds a spine may be.")
+    lines += _py_tuple(
+        "SPINE_IMPLEMENTATION_STATES",
+        sorted(reg["implementationStates"]),
+        "Implementation states — repo metadata, NOT readiness.",
+    )
+    lines += _py_tuple(
+        "SPINE_GRAPH_MUTATION_POLICIES",
+        sorted(reg["graphMutationPolicies"]),
+        "Graph-mutation policies a spine may declare.",
+    )
+    lines += _py_tuple(
+        "SPINE_CONFORMANCE_CHECK_IDS",
+        sorted(c["id"] for c in reg["conformanceChecks"]),
+        "Canonical 14-item conformance contract ids.",
+    )
+    lines.append("__all__ = [")
+    for name in sorted((
+        "SPINE_REGISTRY_CONTRACT_VERSION",
+        "SPINE_IDS",
+        "SPINE_PLANES",
+        "SPINE_KINDS",
+        "SPINE_IMPLEMENTATION_STATES",
+        "SPINE_GRAPH_MUTATION_POLICIES",
+        "SPINE_CONFORMANCE_CHECK_IDS",
+    )):
+        lines.append(f'    "{name}",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_spine_registry_md(reg: dict) -> str:
+    spines = sorted(reg["spines"], key=lambda s: s["id"])
+    lines = _md_header(SPINE_REGISTRY_JSON)
+    lines.append("# Spine Registry")
+    lines.append("")
+    lines.append(f"Contract version: `{reg['contractVersion']}`")
+    lines.append("")
+    lines.append(
+        "Canonical Aether spine registry (Spine Composition Kernel, ADR-011). Every "
+        "spine is a governed authority or cross-cutting control boundary — no spine is "
+        "a private platform inside the platform. `implementationState` is repo "
+        "metadata, never readiness."
+    )
+    lines.append("")
+    lines += _md_vocab_section("Planes", sorted(reg["planes"]))
+    lines += _md_vocab_section("Spine kinds", sorted(reg["spineKinds"]))
+    lines += _md_vocab_section("Implementation states", sorted(reg["implementationStates"]))
+    lines += _md_vocab_section("Graph mutation policies", sorted(reg["graphMutationPolicies"]))
+    lines += _md_vocab_section(
+        "Conformance checks", sorted(c["id"] for c in reg["conformanceChecks"])
+    )
+    lines.append("## Spines")
+    lines.append("")
+    lines.append(
+        "| Spine | Display name | Plane | Kind | State | Graph policy | Surfaces | Conformance |"
+    )
+    lines.append("|---|---|---|---|---|---|---|---|")
+    for spine in spines:
+        surfaces = ", ".join(f"`{s}`" for s in sorted(spine["surfaces"])) or "—"
+        lines.append(
+            f"| `{spine['id']}` | {spine['displayName']} | {spine['plane']} | "
+            f"{spine['spineKind']} | {spine['implementationState']} | "
+            f"{spine['graphMutationPolicy']} | {surfaces} | "
+            f"{_conformance_summary(spine['conformance'])} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _summary_spine_registry(reg: dict) -> str:
+    return (
+        f"spine registry v{reg['contractVersion']} — "
+        f"{len(reg['spines'])} spines, {len(reg['planes'])} planes, "
+        f"{len(reg['conformanceChecks'])} conformance checks"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registry table + write/check machinery
 # ---------------------------------------------------------------------------
 
@@ -4033,6 +4218,16 @@ REGISTRIES: tuple = (
             (SOCIAL_PROVIDER_CAPABILITY_VOCAB_PY, gen_social_provider_capability_vocabulary_py),
         ),
         _summary_social_provider_capability_vocabulary,
+    ),
+    (
+        SPINE_REGISTRY_JSON,
+        validate_spine_registry,
+        (
+            (SPINE_REGISTRY_TS, gen_spine_registry_ts),
+            (SPINE_REGISTRY_PY, gen_spine_registry_py),
+            (SPINE_REGISTRY_MD, gen_spine_registry_md),
+        ),
+        _summary_spine_registry,
     ),
 )
 

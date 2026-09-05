@@ -511,6 +511,34 @@
         "python scripts/docs_drift.py --strict"
       ],
       "remediation": "Preserve event-time valuation invariants (immutable superseding snapshots, decimal strings only, reporting_amount null = unavailable never zero, peg-aware stablecoins, unknown explicit) and keep valuation docs + tests in sync."
+    },
+    {
+      "id": "spine_composition_kernel_architecture",
+      "name": "spine composition kernel architecture changed",
+      "source_globs": [
+        "packages/shared/contracts/spine-registry.json",
+        "packages/shared/spine-registry.ts",
+        "Backend Architecture/aether-backend/shared/spine/**",
+        "scripts/validate_spine_registry.py",
+        "scripts/lib/spine_registry_validation.py"
+      ],
+      "required_changed_globs": [
+        "docs/_generated/**",
+        "docs/source-of-truth/**",
+        "docs/REPO-INDEX.md",
+        "docs/AUTOMATION.md",
+        "packages/shared/index.ts",
+        "tests/**",
+        "Backend Architecture/**/tests/**"
+      ],
+      "required_commands": [
+        "python scripts/generate_platform_contracts.py --check",
+        "python scripts/validate_spine_registry.py",
+        "python scripts/docs_drift.py --strict",
+        "make spine-registry-check",
+        "python -m pytest tests/unit/test_spine_registry_validation.py tests/unit/test_spine_envelope_parity.py -q"
+      ],
+      "remediation": "Align the canonical spine registry (ADR-011 Spine Composition Kernel) with its generated twins, runtime package, and the real routes/surfaces/services each spine row binds; a row must bind to machinery that exists (tetris inventory gate) \u2014 declare unresolved bindings pending in unresolvedRefs with a reason and resolving milestone; regenerate via python scripts/generate_platform_contracts.py; and update the spine tests."
     }
   ]
 }

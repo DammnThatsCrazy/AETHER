@@ -124,3 +124,10 @@ export * from './social-provider-capability-vocabulary';
 
 // Commerce bridge (S2): SDK signal ↔ server snapshot reconciliation contract.
 export * from './commerce-bridge';
+
+// ADR-011 D3 common spine envelope (composes canonical primitives; redefines nothing).
+export * from './spine-envelope';
+
+// ADR-011 Spine Composition Kernel — generated registry twin
+// (packages/shared/contracts/spine-registry.json → scripts/generate_platform_contracts.py).
+export * from './spine-registry';

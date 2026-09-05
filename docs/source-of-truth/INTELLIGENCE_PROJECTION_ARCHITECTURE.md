@@ -121,13 +121,18 @@ disturbing placed pieces: `outcome360`/`economic360` flipped to `implemented`
 economic metric set); `infrastructure360` landed as a new piece; and the
 context-360 leaves followed their spine-formalization path — `graph_history_replay`
 (temporal360, T2.1→T2.4), `grouping_membership` (population360, P3.1→P3.5), and
-`context_capsule_semantics` (geographic360, G4.5) were built, then each
-formalized into the validator `SPINE_INDEX` so its row's `hardDependency`
-resolves through the spine rather than a pending declaration. Still-queued
-pieces — the unformalized spines (`journey_continuity`,
-`reconciled_control_plane` — declared `pendingAuthority`), native providers for
-the remaining `in_flight` projections, and any future projection — drop into
-place when their slot opens, without moving or deleting placed pieces.
+`context_capsule_semantics` (geographic360, G4.5) were built on the base, then
+formalized into the canonical spine registry
+(`packages/shared/contracts/spine-registry.json`) as
+`implementationState:"implemented"` rows so each projection's `hardDependency`
+resolves through the spine plane rather than a pending declaration; the
+projection validator derives its resolved-spine index from that registry rather
+than a hand-maintained list. Still-queued pieces — the unformalized spines
+(`journey_continuity`, `reconciled_control_plane` —
+`implementationState:"pending"` rows in the spine registry, declared
+`pendingAuthority` per-projection), native providers for the remaining
+`in_flight` projections, and any future projection — drop into place when their
+slot opens, without moving or deleting placed pieces.
 
 ## 3. Registry ownership + generated artifacts
 

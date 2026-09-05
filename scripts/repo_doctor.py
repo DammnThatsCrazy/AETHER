@@ -525,6 +525,8 @@ def main(argv: Sequence[str] | None = None) -> None:
                     "Backend Architecture/aether-backend/shared/relationship_spine/generated_relationship_motif_registry.py",
                     "packages/shared/social-provider-capability-vocabulary.ts",
                     "Backend Architecture/aether-backend/shared/social_provider/generated_social_provider_capability_vocabulary.py",
+                    "packages/shared/spine-registry.ts",
+                    "Backend Architecture/aether-backend/shared/spine/generated_spine_registry.py",
                 ],
                 name="Unified-platform generated contracts — no uncommitted diff",
                 results=results,
@@ -723,6 +725,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         results=results,
         stop_on_failure=stop,
         remediation="align packages/shared/contracts/intelligence-projection-registry.json with the shared contracts, generated artifacts, and real routes/surfaces/services; declare unresolved cross-registry refs in pendingAuthority/pendingReference",
+    )
+    run(
+        [sys.executable, "scripts/validate_spine_registry.py"],
+        name="Spine Composition Kernel registry (schema, conformance, cross-registry, lifecycle, ownership, inventory)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="align packages/shared/contracts/spine-registry.json with the shared contracts, generated artifacts, and the real routes/surfaces/services its rows bind; declare unresolved bindings pending in unresolvedRefs with a reason and resolving milestone (ADR-011 D1/D2)",
     )
     run(
         [sys.executable, "scripts/validate_financial_value_semantics.py"],
