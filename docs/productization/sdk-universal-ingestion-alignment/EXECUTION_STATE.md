@@ -273,6 +273,84 @@ the full-program tip per the gate-policy directive (WS-A3/A4 precedent).
 - WS-B owns the enforcement half (source-trust/consent/idempotency/lineage + universal
   adapter convergence) — this slice deliberately leaves it to WS-B.
 
+## WS-A6 — native event-type codegen (Swift/Kotlin regions generated from the event registry)
+
+Stacked on `feat/sdk-universal-ingestion` — feat content at `4ffd69f5`,
+tests/ownership at `623e94eb`, ledger close-out below (base = the WS-A5 tip
+`e5a825af`), delivered in the consolidated program PR. Canonical gate deferred to the
+full-program tip per the gate-policy directive; the build-time self-checks below are the
+recorded evidence.
+
+WS-A6 converts the hand-maintained iOS `AetherEventType` enum / `eventConsentPurpose`
+dict and Android `EVENT_CONSENT_PURPOSE` map into **marker-delimited generated regions**
+owned by `scripts/generate_contracts.py`, so a registry event-set or primary-purpose
+change regenerates the native surfaces exactly as it already regenerates the TS/Python
+twins and doc tables. The hand-authored Aether.swift/Aether.kt keep all non-region SDK
+code — only the marker bodies are generated, and hand-editing them is not supported.
+
+**The three generated regions (all spliced from `packages/shared/contracts/event-registry.json`):**
+
+| Surface | Location | Content |
+|---|---|---|
+| iOS event enum | `packages/ios/Sources/AetherSDK/Aether.swift` — `@generated-start/end aether-event-types/ios-enum` | `AetherEventType` case list, grouped by registry family |
+| iOS consent map | same file — `aether-consent-purposes/ios-map` | per-event `type → primary-purpose` dict |
+| Android consent map | `packages/android/src/main/java/com/aether/sdk/Aether.kt` — `aether-consent-purposes/android-map` | per-event `"type" to "purpose"` mapOf |
+
+Primary purpose = `requiredPurposes[0]`, defaulting to `analytics` when empty (same rule
+the TS/Python twins use). Regions are byte-stable, so `python scripts/generate_contracts.py
+--check` is idempotent.
+
+**Drift fix delivered by regeneration.** The hand-maintained native maps had drifted on 5
+agentic-trade/position events to purpose `agent` while the registry primary purpose is
+`financial_activity` — a consent-gating bug the old key-set parity gate could not see.
+Regeneration makes the registry authoritative:
+`agent_trade_order_observed`, `agent_trade_executed`, `agent_position_opened`,
+`agent_position_closed`, `agent_strategy_observed` → `financial_activity`;
+`agent_trade_intent_observed` and `agent_strategy_observed` (registry `agent`) stay `agent`.
+
+**Validator hardening (value-aware, never-weaken rule).** `make ci-check` (repo-doctor)
+runs `validate_mobile_event_parity.py` but never the generator `--check`, so a
+key-set-only parity gate would miss a single-event purpose re-gate inside a generated
+region. The parity validator now also diffs each event's purpose **value** against the
+registry on both native maps — the canonical gate catches value drift independently of
+the generator path. Claim retirements landed in the same slice: four scripts'
+"hand-maintained native maps / no generated native registry" language replaced with the
+generator-owned reality (`validate_mobile_event_parity.py`, `validate_sdk_parity.py`,
+`validate_sdk_release_alignment.py`, `repo_doctor.py`), plus this doc's sibling
+`SDK_RUNTIME_PARITY.md` (native registries now generated; brittle "11-purpose" count
+retired in favor of the generated per-event consent map).
+
+| Workstream item | Deliverable | Status |
+|---|---|---|
+| Generator native emitters | `gen_ios_event_enum_section` / `gen_ios_consent_map_section` / `gen_android_consent_map_section` + shared `_splice_region` in `generate_contracts.py`; family-grouped, byte-stable, `--check` idempotent | ✅ implemented (this slice) |
+| Regenerated native regions | Aether.swift enum + dict, Aether.kt map (403 events each) inside `@generated` markers; diffs confined to the three region bodies | ✅ implemented (this slice) |
+| Value-aware parity backstop | `validate_mobile_event_parity.py` key-set diff unchanged + per-event primary-purpose value diff on both maps; regression-proven on the 5-event class | ✅ implemented (this slice) |
+| Claim retirements | Hand-maintained-map claims retired in `validate_mobile_event_parity.py`, `validate_sdk_parity.py`, `validate_sdk_release_alignment.py`, `repo_doctor.py` (+ `SDK_RUNTIME_PARITY.md`) | ✅ implemented (this slice) |
+| Codegen + parity unit coverage | `tests/unit/test_native_event_codegen.py` (14: emitters ↔ parity extractors, byte-stability, grouped order, analytics default, splice + apply writers); `tests/unit/test_mobile_event_parity.py` (15: hermetic main() seams, value-drift regression, value-map extractors) | ✅ implemented (this slice) |
+| Ownership | New `mobile_native_regions` category in `repo_consistency_ownership.json` + `REPO_CONSISTENCY_OWNERSHIP.md` row (generator emitter + parity gate + region files → mirrors/tests) | ✅ implemented (this slice) |
+| Gap matrix / ledger | This ledger section | ✅ implemented (this slice) |
+
+Build-time self-checks (serial, no full gate): `generate_contracts.py --check` **exit 0**;
+`validate_mobile_event_parity.py` **exit 0** (403×3 keys + per-event purpose); new pytest
+suites **29 passed** (3.33s). `docs_drift.py --update` / `make ci-check` restamp deferred to
+the full-program tip per the gate-policy directive (WS-A3/A4/A5 precedent).
+
+### Definition of done (WS-A6)
+
+- The iOS `AetherEventType` enum, iOS `eventConsentPurpose` dict, and Android
+  `EVENT_CONSENT_PURPOSE` map are marker-delimited generated regions; generator `--check`
+  is byte-stable and idempotent; the pre-existing 5-event purpose drift is corrected to
+  the registry-authoritative values.
+- `validate_mobile_event_parity.py` stays green and now enforces keys **and** per-event
+  primary-purpose values, so value drift is caught under the canonical gate even though
+  repo-doctor does not run the generator `--check`.
+- Ownership category, codegen/parity tests, and claim retirements move with the source;
+  no validators weakened; no new ADR (ADR-012 still reserved).
+- Canonical gate green at the full-program tip: `make ci-check` = 0, `git status --short`
+  empty, `docs_drift.py --strict` clean.
+- WS-A7 next (re-point metric/privacy/retention truth into the Spine + un-stale the
+  per-domain count prose recorded in WS-A4) — reserved below.
+
 ## Later phases (reserved)
 
 Workstreams A–E (the blueprint's own sequencing) begin after Phase 0 converges.
@@ -281,7 +359,7 @@ built.
 
 | Workstream | Scope (reserved) | Opens when |
 |---|---|---|
-| WS-A — Contract foundation | **WS-A1 + WS-A2 + WS-A3 + WS-A4 + WS-A5 done —** WS-A6–A7: Swift/Kotlin event-type generation; re-point metric/privacy/retention truth into the Spine (Blueprint Points 2/3/10/13, Invariants #2/#16) | WS-A1 merged |
+| WS-A — Contract foundation | **WS-A1 done — WS-A2 + WS-A3 + WS-A4 + WS-A5 + WS-A6 done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR; WS-A1 merged) — WS-A7: re-point metric/privacy/retention truth into the Spine + un-stale the per-domain count prose (Blueprint Points 2/3/10/13, Invariants #2/#16) | WS-A7 (next) |
 | WS-B — Adapter convergence | SDK/webhook/connector/feed/import/harness/replay adapters that all produce Envelope B through one validated gateway; consent-on-every-path; idempotency-before-publish; ingestion-level replay with original-time preservation; kill deprecated `/v1/ingest` aliases (Invariants #1/#5/#8/#9/#15) | Phase 0 merged |
 | WS-C — SDK hardening | Native identity → subject hints (delete client `/sdk/identity/resolve` re-stamping); native encrypted persistent queues; remove/relocate shared interpretation modules; regenerate `web/src/types.ts`; add native correlation fields (Invariants #4/#12/#16) | Phase 0 merged |
 | WS-D — Backend interpretation | Typed `RelationshipFact` + `evidence_refs`; Episode engine; outcome truth store; Section-25 evidence dedupe; silver money → exact decimal/event-time valuation on by default (coordinate with `feat/financial-normalization` — do not build twice); mutation-gateway governance on by default (Invariants #7/#11/#13/#14) | Phase 0 merged |
