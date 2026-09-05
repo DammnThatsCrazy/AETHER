@@ -11,9 +11,12 @@ canonical_owner: frontend@aether
 
 # Kyber identity
 
-Kyber is Aether's operator/control-plane product. It shares the Olympus/Aether
-lineage and can add an operator descriptor; it must not become a third palette
-or independent corporate mark.
+Kyber is Olympus Labs' **private internal operator application** — the console
+Olympus runs to operate Aether. It is never a customer-facing product, never an
+Aether product, and never linked from public marketing. It shares the
+Olympus/Aether lineage and can add an operator descriptor; it must not become a
+third palette or independent corporate mark. Present it as "Olympus Labs ·
+Kyber" where an Olympus audience sees it.
 
 ```tsx
 import { KyberLockup } from '@aether/ui';

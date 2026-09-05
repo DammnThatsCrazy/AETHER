@@ -1,0 +1,51 @@
+{
+  "host": "https://olympuslabs.com",
+  "robotsDisallow": [],
+  "routes": [
+    {
+      "path": "/company",
+      "title": "A serious organization behind a long-term thesis — Olympus Labs",
+      "description": "Who Olympus Labs is, what it believes, and why it builds Aether."
+    },
+    {
+      "path": "/products",
+      "title": "Infrastructure products built on one governed foundation — Olympus Labs",
+      "description": "The Olympus Labs product family, led by Aether."
+    },
+    {
+      "path": "/products/aether",
+      "title": "Aether — relationship intelligence by Olympus Labs — Olympus Labs",
+      "description": "Aether is Olympus Labs’ relationship intelligence platform."
+    },
+    {
+      "path": "/research",
+      "title": "Systems thinking, published — Olympus Labs",
+      "description": "How Olympus Labs thinks about intelligence, governance, identity, and outcomes."
+    },
+    {
+      "path": "/principles",
+      "title": "The operating philosophy behind the platform — Olympus Labs",
+      "description": "Olympus Labs principles for building governed intelligence systems."
+    },
+    {
+      "path": "/security",
+      "title": "Responsibility as an architectural property — Olympus Labs",
+      "description": "How Olympus Labs approaches security, isolation, and accountability."
+    },
+    {
+      "path": "/careers",
+      "title": "Work on governed intelligence infrastructure — Olympus Labs",
+      "description": "Careers at Olympus Labs."
+    },
+    {
+      "path": "/contact",
+      "title": "Contact Olympus Labs — Olympus Labs",
+      "description": "Reach Olympus Labs and explore Aether."
+    },
+    {
+      "path": "/legal",
+      "title": "Legal and trust material — Olympus Labs",
+      "description": "Olympus Labs legal notices."
+    }
+  ]
+}

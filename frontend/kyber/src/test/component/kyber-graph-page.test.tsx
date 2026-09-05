@@ -412,7 +412,7 @@ describe('KyberGraphPage — surface', () => {
     restGet.mockImplementation(() => new Promise(() => undefined));
     restPost.mockImplementation(() => new Promise(() => undefined));
     const { container } = renderPage();
-    expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('.animate-pulse, .aether-skeleton').length).toBeGreaterThan(0);
   });
 
   it('shows the error state when a surface fails for a non-authorization reason', async () => {

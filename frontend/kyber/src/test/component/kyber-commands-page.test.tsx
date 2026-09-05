@@ -427,7 +427,7 @@ describe('KyberCommandsPage — authority', () => {
   it('shows a loading state before the command queue resolves', () => {
     restGet.mockImplementation(() => new Promise(() => undefined));
     const { container } = renderPage();
-    expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('.animate-pulse, .aether-skeleton').length).toBeGreaterThan(0);
   });
 
   it('renders an authoritative empty command queue', async () => {

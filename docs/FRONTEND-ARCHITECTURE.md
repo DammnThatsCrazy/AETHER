@@ -13,12 +13,16 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: "f4ba474e"
+last_synced_commit: "0ebab813"
 reviewed_source_commits:
   - commit: "7ba83380"
     reason: "Reviewed the Kyber component-test synchronization change; frontend architecture and runtime contracts are unaffected."
   - commit: "f4ba474e"
     reason: "Reviewed the Kyber empty-state test timing correction; data-bearing pages must await response-backed populated or empty state before asserting content."
+  - commit: "436ebec1"
+    reason: "Rebase re-stamp: re-reviewed the web-ecosystem P4 in-public auth entry (frontend/aether + frontend/kyber prefill and origin-scoped session changes) against the replayed diff; the auth-handoff note is carried in-band in this doc."
+  - commit: "5d0a4989"
+    reason: "Rebase re-stamp: re-reviewed the web-ecosystem P6 motion tokenization of shared button/skeleton/tokens.css under frontend/shared; this doc makes no loading-skeleton, button-transition, or motion-token claim, so no body change was required."
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -42,7 +46,12 @@ There are two separate frontend applications. **Do not mix them up.**
   sent as `Authorization: Bearer`; see `features/auth/grant.ts` and
   `sessionLogin` in `features/auth/auth-context.tsx`) and fall back to the
   legacy `api_key` response shape only when the backend trust-plane flag is
-  off; signup skips the API-key reveal step when a session is issued
+  off; signup skips the API-key reveal step when a session is issued. The
+  Aether public marketing threshold (`frontend/aether-marketing`) hands users
+  into these pages with optional prefill query params — login accepts `?email`,
+  signup accepts `?name` and `?email` — read once via a `useState` initializer
+  (never an effect) so the first step arrives pre-filled; nothing is persisted
+  and the auth semantics are unchanged
 - The intelligence **graph canvas** showing the tenant's users, organizations, and AI agents — layer/overlay toggles (H2H/H2A/A2H/A2A, risk, trust, campaign, economic, fraud), path finder with multi-hop traversal modes (Shortest / Strongest / K-Shortest), cluster panel, and cluster drill-down to Cluster360; summary strip (entity/relationship/cluster/risk-alert counts), truncation warning when entity set exceeds 200, replay mode with date picker, observation-class node styling (solid/dashed/dotted borders), Recommendation/Prediction outcome panel in Inspector, **PathInspector** panel (shown in right panel when a path is active — Overview/Hops/Evidence/Score tabs, save-to-investigation action)
 - **Cluster360** (`/clusters/:clusterId`) — 7-tab cluster surface: Overview (type, state, formation reason, confidence, risk score, properties), Members (paginated DataTable with confidence + join date), Timeline (merge/split/growth events), Economic (revenue, spend, LTV, value tier, top-member breakdown), Campaigns (attributed campaigns, top channel, conversion rate), Risk (aggregate score, fraud network link, alert count, evidence refs, high-risk members), Geography (country distribution bars, concentration score)
 - **Semantic zoom** — graph canvas supports server-backed macro→cluster→entity zoom: macro level uses a `depth: 1` query scoped to cluster node types (the backend minimum depth is 1; depth-0 is rejected); clicking a cluster fetches depth-1 member expansion via `useGraphZoom(tenantId?)`

@@ -49,9 +49,15 @@ CANONICAL_MARK_TARGETS = frozenset(
     {"frontend/aether/src/components/aether-logo.tsx"}
 )
 MOTION_SURFACE_ROOTS = (
+    "frontend/aether-marketing/src/components/",
+    "frontend/aether-marketing/src/pages/",
+    "frontend/aether-marketing/src/styles/",
     "frontend/aether/src/components/",
     "frontend/kyber/src/components/layout/",
     "frontend/kyber/src/styles/",
+    "frontend/olympus-marketing/src/components/",
+    "frontend/olympus-marketing/src/pages/",
+    "frontend/olympus-marketing/src/styles/",
     "frontend/shared/src/components/",
 )
 GLYPH_COMPATIBILITY_PATH = "frontend/shared/src/components/glyph-icon.tsx"
@@ -100,9 +106,14 @@ PROVIDER_URL_TERMS = (
     "jira",
 )
 _PROVIDER_TERM_GROUP = "|".join(PROVIDER_URL_TERMS)
+# The tag-manager host is excluded from the provider-term match: the Google
+# Tag Manager *script endpoint* (https://www.googletagmanager.com/gtag/js) is
+# a network/analytics seam, not a hotlinked provider brand mark, even though
+# its hostname contains the "google" provider term.
 REMOTE_PROVIDER_URL_RE = re.compile(
     rf"""(?:\b(?:src|href)\s*=\s*\{{?\s*|\b(?:src|href)\s*:\s*)
-         [\"'`](?:https?:)?//[^\"'`\s]*(?:{_PROVIDER_TERM_GROUP}|logo)[^\"'`\s]*""",
+         [\"'`](?:https?:)?//(?!(?:www\.)?googletagmanager\.com/)
+         [^\"'`\s]*(?:{_PROVIDER_TERM_GROUP}|logo)[^\"'`\s]*""",
     re.IGNORECASE | re.VERBOSE,
 )
 LOCAL_PROVIDER_ASSET_RE = re.compile(
@@ -148,6 +159,22 @@ RAW_TAILWIND_DURATION_RE = re.compile(r"\bduration-(?:\[)?\d+(?:ms|s)?\]?\b")
 RAW_SHADOW_RE = re.compile(r"\bbox-shadow\s*:\s*(?!var\()[^;]+", re.IGNORECASE)
 RAW_TAILWIND_SHADOW_RE = re.compile(r"\bshadow-\[[^\]]+\]")
 REDUCED_MOTION_LITERAL_RE = re.compile(r"0\.01ms\s*!important")
+
+# Continuous decorative motion is not a canonical brand recipe.  These patterns
+# guard the seams that introduce it on migrated motion surfaces: bespoke
+# keyframes, `will-change` layer promotion, and raw `animate-*` utilities or
+# `animation:` shorthands.  They deliberately do not touch interaction motion
+# (`transition-colors`, `transition-transform`, `transition-opacity`,
+# `translate-x-*` transform utilities) or token-bound durations
+# (`duration-[var(--aether-motion-*)]`), which the raw-motion rules above also
+# leave alone.
+DECORATIVE_KEYFRAMES_RE = re.compile(r"@keyframes\s+[a-zA-Z0-9_-]+")
+DECORATIVE_WILL_CHANGE_RE = re.compile(r"\bwill-change\s*:|\bwillChange\s*:")
+DECORATIVE_ANIMATE_UTILITY_RE = re.compile(
+    r"\banimate-(?:[a-zA-Z0-9_-]+|\[[^\]]*\])"
+)
+DECORATIVE_ANIMATION_SHORTHAND_RE = re.compile(r"(?<![\w-])animation\s*:")
+DECORATIVE_ANIMATION_NONE_RE = re.compile(r"animation\s*:\s*none\b", re.IGNORECASE)
 
 PROVIDER_MARK_PROP_RE = re.compile(
     r"<ProviderMark\b[^>]*\b(?:provider|providerId)\s*=\s*[\"'](?P<provider>[a-z0-9_-]+)[\"']",
@@ -482,6 +509,52 @@ def _scan_size_motion_and_shadow(path: Path, text: str, rel: str, root: Path) ->
     return findings
 
 
+def _scan_decorative_motion(path: Path, text: str, rel: str, root: Path) -> list[Finding]:
+    """Flag seams that introduce continuous decorative motion on migrated surfaces."""
+    if not _is_motion_surface(rel):
+        return []
+    findings: list[Finding] = []
+    code = _without_comments(text)
+    for pattern, reason in (
+        (
+            DECORATIVE_KEYFRAMES_RE,
+            "raw @keyframes are not a shared reduced-motion-aware recipe; use the canonical motion recipes or a tokenized utility",
+        ),
+        (
+            DECORATIVE_WILL_CHANGE_RE,
+            "will-change promotes ad-hoc animation layers; rely on the canonical motion recipes instead",
+        ),
+        (
+            DECORATIVE_ANIMATE_UTILITY_RE,
+            "raw animate-* utilities are not shared reduced-motion-aware recipes",
+        ),
+        (
+            DECORATIVE_ANIMATION_SHORTHAND_RE,
+            "raw animation: shorthand is not a shared reduced-motion-aware recipe",
+        ),
+    ):
+        for match in pattern.finditer(code):
+            line_start = code.rfind("\n", 0, match.start()) + 1
+            line_end = code.find("\n", match.start())
+            if line_end == -1:
+                line_end = len(code)
+            line = code[line_start:line_end]
+            # Reduced-motion media literals and `animation: none` (disabling
+            # motion) are accessibility techniques, not decorative animation,
+            # and stay exempt.
+            if REDUCED_MOTION_LITERAL_RE.search(line):
+                continue
+            if (
+                pattern is DECORATIVE_ANIMATION_SHORTHAND_RE
+                and DECORATIVE_ANIMATION_NONE_RE.search(line)
+            ):
+                continue
+            findings.append(
+                _finding(path, text, match.start(), "decorative-motion", reason, root)
+            )
+    return findings
+
+
 def _scan_icon_only_controls(path: Path, text: str, rel: str, root: Path) -> list[Finding]:
     if rel not in NAVIGATION_TARGETS:
         return []
@@ -552,6 +625,7 @@ def scan(
             *_scan_canonical_mark(path, text, rel, root),
             *_scan_assets_and_registry(path, text, rel, root, registered_provider_ids),
             *_scan_size_motion_and_shadow(path, text, rel, root),
+            *_scan_decorative_motion(path, text, rel, root),
             *_scan_icon_only_controls(path, text, rel, root),
             *_scan_glyph_compatibility(path, text, rel, root),
         ]

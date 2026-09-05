@@ -62,7 +62,7 @@ describe('Me route data-truth states', () => {
   it('renders loading without account or usage conclusions', () => {
     state.profile = { data: null, isLoading: true, error: null, refetch: vi.fn() };
     renderPage();
-    expect(document.querySelector('.animate-pulse')).not.toBeNull();
+    expect(document.querySelector('.animate-pulse, .aether-skeleton')).not.toBeNull();
     expect(screen.queryByText('Backend Tenant')).not.toBeInTheDocument();
   });
 

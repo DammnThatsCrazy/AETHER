@@ -96,7 +96,7 @@ describe('Tenant landing routing', () => {
   it('shows a loading state without misrouting while status resolves', () => {
     state.onboarding = { data: null, isLoading: true, error: null, refetch: vi.fn() };
     renderLanding('/');
-    expect(document.querySelector('.animate-pulse')).not.toBeNull();
+    expect(document.querySelector('.animate-pulse, .aether-skeleton')).not.toBeNull();
     expect(screen.queryByText('ACTIVATION ROUTE')).not.toBeInTheDocument();
     expect(screen.queryByText('SETTINGS ROUTE')).not.toBeInTheDocument();
     expect(screen.queryByText('HOME WORKSPACE')).not.toBeInTheDocument();
@@ -123,7 +123,7 @@ describe('Activation route data-truth states', () => {
   it('renders loading without any activation step conclusions', () => {
     state.status = { data: null, isLoading: true, error: null, refetch: vi.fn() };
     renderActivation();
-    expect(document.querySelector('.animate-pulse')).not.toBeNull();
+    expect(document.querySelector('.animate-pulse, .aether-skeleton')).not.toBeNull();
     expect(screen.queryByText(/Choose your plan/)).not.toBeInTheDocument();
   });
 

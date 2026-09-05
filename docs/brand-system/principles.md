@@ -17,13 +17,20 @@ canonical_owner: frontend@aether
 corporate, documentation, marketing, legal, and combined-product contexts; it
 is not routine application chrome.
 
-**Aether** is the customer product. Its layered mark, warm/stone surfaces,
-Deep Steel/Sky Blue accents, and Geist-led typography are the default product
-language.
+**Aether** is the customer product: a public marketing surface and a protected
+tenant application. Its layered mark, warm/stone surfaces, Deep Steel/Sky Blue
+accents, and Geist-led typography are the default product language. On public
+material it appears as "Aether by Olympus Labs"; inside the tenant application
+Olympus Labs branding stays secondary to Aether.
 
-**Kyber** is the Aether operations product. It uses the same corporate and
-product lineage with an operator-oriented descriptor; it is not a third visual
-identity or a reason to introduce a competing base palette.
+**Kyber** is Olympus Labs' private internal operator application — never
+customer-facing, never linked from public marketing. It uses the same corporate
+and product lineage with an operator-oriented descriptor; it is not a third
+visual identity or a reason to introduce a competing base palette.
+
+The shell taxonomy — which surface each identity leads on, and the brand weight
+per shell — is the web-ecosystem source of truth
+([`docs/source-of-truth/WEB_ECOSYSTEM_SHELLS.md`](../source-of-truth/WEB_ECOSYSTEM_SHELLS.md)).
 
 Use a manifest lockup rather than re-composing a wordmark:
 
