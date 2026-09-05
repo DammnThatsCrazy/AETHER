@@ -1896,7 +1896,7 @@ def gen_event_table_md(event_reg: dict) -> str:
         marker = " *(deprecated)*" if status == "deprecated" else ""
         rows.append(
             f"| `{e['type']}`{marker} | `{e['family']}` | {purposes} | "
-            f"{e.get('privacyClass', '')} | {e.get('description', '')} |"
+            f"{e.get('privacyClass', '')} | {e.get('retentionClass', '')} | {e.get('description', '')} |"
         )
 
     rows_str = "\n".join(rows)
@@ -1906,8 +1906,8 @@ def gen_event_table_md(event_reg: dict) -> str:
         f"\n"
         f"# Aether Event Registry ({total} types, contract v{version})\n"
         f"\n"
-        f"| Event Type | Family | Required Purposes | Privacy Class | Description |\n"
-        f"|---|---|---|---|---|\n"
+        f"| Event Type | Family | Required Purposes | Privacy Class | Retention Class | Description |\n"
+        f"|---|---|---|---|---|---|\n"
         f"{rows_str}\n"
     )
 
