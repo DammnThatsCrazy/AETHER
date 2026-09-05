@@ -16,7 +16,7 @@ source_files:
   - frontend/kyber/src/features/investigation/use-investigations.ts
   - frontend/kyber/src/features/governance/use-governance.ts
   - frontend/kyber/src/features/graph/use-graph-intelligence.ts
-last_synced_commit: "5bdc43c6"
+last_synced_commit: "c1ed52a7"
 reviewed_source_commits:
   - commit: "54eaac5d"
     reason: "Reviewed the staging first-admin bootstrap change; operational-intelligence findings remain unchanged."
