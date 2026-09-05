@@ -22,7 +22,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
-last_synced_commit: "7fd8fcb"
+last_synced_commit: "5703254"
 ---
 
 # Deployment Profiles
@@ -227,8 +227,10 @@ Terraform profile checks before a wake is authorized.
 
 The profile's customer-managed KMS keys are tagged with `Environment = staging`.
 The Secrets Manager key policy permits only same-account Secrets Manager use and
-regional CloudWatch Logs use, constrained by `kms:ViaService`, caller account,
-and the AETHER staging log namespace; it does not grant services unrestricted
+regional CloudWatch Logs use, constrained by caller account and the AETHER
+staging log namespace (Secrets Manager additionally uses `kms:ViaService`;
+CloudWatch Logs omits it because the service calls KMS as its own principal
+where that condition key is absent); it does not grant services unrestricted
 key access. ECR and Aurora keys carry the same environment tag so the reviewed
 staging apply policy can scope grants to staging resources. These tags and
 service conditions are part of the Terraform profile shape and must remain
