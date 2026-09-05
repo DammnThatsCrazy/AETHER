@@ -78,7 +78,7 @@ mutation of the program. Descriptive in WS-A2; boundary enforcement is WS-A3.
 | Parity gate | `scripts/validate_field_trust_parity.py` (regenerate-and-diff over both twins + structural validation), wired into `scripts/repo_doctor.py` → `make ci-check`; closes the `generate_contracts.py` CI-coverage gap | ✅ implemented (this slice) |
 | Ownership map | New `event_field_trust_schema` category in `repo_consistency_ownership.json` + mirrored `REPO_CONSISTENCY_OWNERSHIP.md` row | ✅ implemented (this slice) |
 | Tests | `tests/unit/test_validate_field_trust_parity.py` + wiring test in `test_repo_doctor_cli.py`; `test_commerce_parity.py::test_registry_shape` top-level-key pin extended for the additive WS-A2 keys | ✅ implemented (this slice) |
-| Integration + final gate | Regenerated twins, `make repo-doctor-fix` (incl. synced-doc reindex of the two new files), `make ci-check` = 0, `git status --short` empty | ⏳ integrator-owned |
+| Integration + final gate | `make repo-doctor-fix` **70/0** (wrote the synced-doc reindex — `REPO-INDEX.md` `scripts` 184→185 / `tests` 541→542 once the two new files were tracked); 11 source-linked docs genuinely reviewed against the additive change and restamped (also healing the pre-existing `AWS-DEPLOYMENT.md` staleness from #598 in-band); **`make ci-check` 73/0** at HEAD `424a761a`, `git status --short` empty, `docs_drift.py --strict` exit 0 | ✅ implemented (this slice) |
 
 ### Definition of done (WS-A2)
 
@@ -100,7 +100,7 @@ built.
 
 | Workstream | Scope (reserved) | Opens when |
 |---|---|---|
-| WS-A — Contract foundation | **WS-A1 done —** WS-A2–A7: field-trust/authority taxonomy + per-field minimum trust + Level A/B/C + missing vocabularies in the Contract Spine; Envelope B server-side; per-event metadata load-bearing and generated; Swift/Kotlin generation; re-point metric/privacy/retention truth into the Spine (Blueprint Points 2/3/10/13, Invariants #2/#16) | WS-A1 merged |
+| WS-A — Contract foundation | **WS-A1 + WS-A2 done —** WS-A3–A7: per-field minimum trust + Level A/B/C; missing vocabularies; Envelope B server-side; Swift/Kotlin generation; re-point metric/privacy/retention truth into the Spine (Blueprint Points 2/3/10/13, Invariants #2/#16) | WS-A1 merged |
 | WS-B — Adapter convergence | SDK/webhook/connector/feed/import/harness/replay adapters that all produce Envelope B through one validated gateway; consent-on-every-path; idempotency-before-publish; ingestion-level replay with original-time preservation; kill deprecated `/v1/ingest` aliases (Invariants #1/#5/#8/#9/#15) | Phase 0 merged |
 | WS-C — SDK hardening | Native identity → subject hints (delete client `/sdk/identity/resolve` re-stamping); native encrypted persistent queues; remove/relocate shared interpretation modules; regenerate `web/src/types.ts`; add native correlation fields (Invariants #4/#12/#16) | Phase 0 merged |
 | WS-D — Backend interpretation | Typed `RelationshipFact` + `evidence_refs`; Episode engine; outcome truth store; Section-25 evidence dedupe; silver money → exact decimal/event-time valuation on by default (coordinate with `feat/financial-normalization` — do not build twice); mutation-gateway governance on by default (Invariants #7/#11/#13/#14) | Phase 0 merged |
