@@ -40,6 +40,27 @@ the big missing pieces. This page + `TARGET_ARCHITECTURE.md` +
   out-of-scope note that `docs/plans/RISK_FRAUD_360_PHASES.md` is not on
   `origin/main`).
 
+## WS-A1 (current) — blueprint canonicalization + spec recovery
+
+Branch `feat/sdk-univ-ws-a1` off `d379a9d2` (= `origin/main` head after the
+Phase 0 squash-merge, PR #599).
+Commit the controlling 34-section alignment blueprint in-repo and make the
+alignment docs authoritative against it, so executors steer against committed
+content — not session memory or an external paste.
+
+| Workstream item | Deliverable | Status |
+|---|---|---|
+| Commit verbatim blueprint | `docs/blueprints/sdk-universal-ingestion-alignment.md` — verbatim recovery of the 34-section blueprint (sections 0–34, sections 0–1 headers through the section-34 final-architecture diagram), frontmatter-governed (`canonical_owner: platform@aether`, authored, not generated); the section-34 tail truncation is documented in a clearly-labelled provenance note, not reconstructed | ✅ implemented (this slice) |
+| Point the alignment docs at it | `TARGET_ARCHITECTURE.md` names the in-repo blueprint as the controlling artifact (was: external paste) | ✅ implemented (this slice) |
+| Spec recovery (WS-A…E working decomposition) | The 2026-09-04 parallel recovery pass produced per-workstream implementation tickets carrying the authoritative spec detail (field-trust taxonomy, Level A/B/C, Gates G/H, missing-vocabulary enumeration, file-level line anchors). Downstream WS slices are executed against the committed blueprint + this ledger + the curated `TARGET_ARCHITECTURE.md`/`REPO_TRUTH_AND_GAP_MATRIX.md`; file-level anchors are re-verified at each slice's start | ✅ recorded |
+
+### Definition of done (WS-A1)
+
+- `docs/blueprints/sdk-universal-ingestion-alignment.md` committed, frontmatter-valid.
+- `TARGET_ARCHITECTURE.md` and this ledger reference it as the controlling artifact.
+- Canonical gate green: `make ci-check` = 0, `git status --short` empty,
+  `docs_drift.py --strict` clean.
+
 ## Later phases (reserved)
 
 Workstreams A–E (the blueprint's own sequencing) begin after Phase 0 converges.
@@ -48,7 +69,7 @@ built.
 
 | Workstream | Scope (reserved) | Opens when |
 |---|---|---|
-| WS-A — Contract foundation | Field-trust/authority taxonomy + per-field minimum trust + Level A/B/C + missing vocabularies in the Contract Spine; Envelope B server-side; per-event metadata load-bearing and generated; Swift/Kotlin generation; re-point metric/privacy/retention truth into the Spine (Blueprint Points 2/3/10/13, Invariants #2/#16) | Phase 0 merged |
+| WS-A — Contract foundation | **WS-A1 done —** WS-A2–A7: field-trust/authority taxonomy + per-field minimum trust + Level A/B/C + missing vocabularies in the Contract Spine; Envelope B server-side; per-event metadata load-bearing and generated; Swift/Kotlin generation; re-point metric/privacy/retention truth into the Spine (Blueprint Points 2/3/10/13, Invariants #2/#16) | WS-A1 merged |
 | WS-B — Adapter convergence | SDK/webhook/connector/feed/import/harness/replay adapters that all produce Envelope B through one validated gateway; consent-on-every-path; idempotency-before-publish; ingestion-level replay with original-time preservation; kill deprecated `/v1/ingest` aliases (Invariants #1/#5/#8/#9/#15) | Phase 0 merged |
 | WS-C — SDK hardening | Native identity → subject hints (delete client `/sdk/identity/resolve` re-stamping); native encrypted persistent queues; remove/relocate shared interpretation modules; regenerate `web/src/types.ts`; add native correlation fields (Invariants #4/#12/#16) | Phase 0 merged |
 | WS-D — Backend interpretation | Typed `RelationshipFact` + `evidence_refs`; Episode engine; outcome truth store; Section-25 evidence dedupe; silver money → exact decimal/event-time valuation on by default (coordinate with `feat/financial-normalization` — do not build twice); mutation-gateway governance on by default (Invariants #7/#11/#13/#14) | Phase 0 merged |

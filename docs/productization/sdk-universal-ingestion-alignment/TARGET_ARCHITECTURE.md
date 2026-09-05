@@ -14,11 +14,12 @@ canonical_owner: platform@aether
 ## Scope & role of this document
 
 This is the canonical, governed home for the **SDK + Universal Ingestion Alignment**
-target architecture — a curated rendering of the 34-section alignment blueprint
-(the blueprint is the controlling artifact; this page is the repository's
-working reference to it). It exists so that future work has a single place to
-anchor "how the repo must be organized around ingestion" without re-deriving the
-boundary each time.
+target architecture — a curated rendering of the 34-section alignment blueprint.
+The controlling artifact is the blueprint itself, now committed in-repo at
+`docs/blueprints/sdk-universal-ingestion-alignment.md`; this page is the
+repository's working reference to it. It exists so that future work has a single
+place to anchor "how the repo must be organized around ingestion" without
+re-deriving the boundary each time.
 
 This page references — it does **not** recreate — the two decisions that already
 encode parts of the boundary:

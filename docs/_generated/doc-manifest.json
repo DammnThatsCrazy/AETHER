@@ -4125,6 +4125,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/blueprints/sdk-universal-ingestion-alignment.md",
+      "title": "Aether SDK + Universal Ingestion Alignment Blueprint",
+      "slug": "blueprints/sdk-universal-ingestion-alignment",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 45,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/blueprints/temporal360.md",
       "title": "Temporal360 Vertical Slice Blueprint",
       "slug": "blueprints/temporal360",
