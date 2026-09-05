@@ -593,6 +593,31 @@
         "python -m pytest tests/unit/observation -q"
       ],
       "remediation": "Keep the three Envelope-B surfaces in lock-step - packages/shared/contracts/observation-envelope-registry.json (canonical field registry), Backend Architecture/aether-backend/shared/observation/envelope.py (pydantic runtime model), and packages/shared/observation-envelope.ts (passive TS twin) - held by tests/contracts/test_observation_envelope_parity.py; extend tests/unit/observation/test_observation_envelope.py when the model or the SDK mapping (services/ingestion/observation_envelope.py) changes."
+    },
+    {
+      "id": "mobile_native_regions",
+      "name": "native iOS/Android event-type + consent-purpose regions changed (generator emitter, parity gate, or the region files)",
+      "source_globs": [
+        "scripts/generate_contracts.py",
+        "scripts/validate_mobile_event_parity.py",
+        "packages/ios/Sources/AetherSDK/Aether.swift",
+        "packages/android/src/main/java/com/aether/sdk/Aether.kt"
+      ],
+      "required_changed_globs": [
+        "docs/_generated/**",
+        "docs/source-of-truth/**",
+        "docs/REPO-INDEX.md",
+        "docs/AUTOMATION.md",
+        "packages/shared/**",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/generate_contracts.py --check",
+        "python scripts/validate_mobile_event_parity.py",
+        "python -m pytest tests/unit/test_mobile_event_parity.py -q",
+        "python -m pytest tests/unit/test_native_event_codegen.py -q"
+      ],
+      "remediation": "The iOS AetherEventType enum, iOS eventConsentPurpose dict, and Android EVENT_CONSENT_PURPOSE map are marker-delimited regions inside the hand-authored Aether.swift/Aether.kt, generated from packages/shared/contracts/event-registry.json by scripts/generate_contracts.py (WS-A6). Hand-editing the regions is not supported - change the event registry or the generator emitters, rerun python scripts/generate_contracts.py, and keep validate_mobile_event_parity.py green (it checks region keys AND per-event primary-purpose values so the canonical gate still catches a single-event purpose re-gate even though repo-doctor does not run the generator --check). Move tests/unit/test_mobile_event_parity.py and tests/unit/test_native_event_codegen.py when the gate or emitters change."
     }
   ]
 }
