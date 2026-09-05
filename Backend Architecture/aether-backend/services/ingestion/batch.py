@@ -351,6 +351,38 @@ async def ingest_batch(
                 raise RuntimeError("accepted validation missing normalized event")
             if server_context is not None:
                 normalized["server_context"] = server_context
+            if settings.observation_envelope.enabled:
+                # WS-A5 flag-gated adoption (default OFF). Builds the canonical
+                # Envelope-B observation for this accepted SDK event and persists
+                # it additively as normalized["observation_envelope"] — consumers
+                # keep reading the flat dict until WS-B converges every adapter
+                # onto Envelope B. Degrades to the flat path on any mapping
+                # failure so the flag can never take ingestion down.
+                try:
+                    from services.ingestion.observation_envelope import (
+                        build_sdk_observation_envelope,
+                    )
+
+                    envelope = build_sdk_observation_envelope(normalized)
+                    if envelope is not None:
+                        normalized["observation_envelope"] = envelope.to_bronze_additive()
+                    else:
+                        metrics.increment(
+                            "ingestion_observation_envelope_skipped_total",
+                            labels={"tenant_id": tenant.tenant_id},
+                        )
+                except Exception as exc:
+                    logger.warning(
+                        "observation_envelope build failed for batch %s event_id=%s: %s",
+                        batch_id,
+                        normalized.get("event_id"),
+                        exc,
+                        exc_info=True,
+                    )
+                    metrics.increment(
+                        "ingestion_observation_envelope_build_failed_total",
+                        labels={"tenant_id": tenant.tenant_id},
+                    )
             accepted_events.append(Event(
                 topic=Topic.SDK_EVENTS_VALIDATED,
                 tenant_id=tenant.tenant_id,

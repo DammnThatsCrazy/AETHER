@@ -934,6 +934,22 @@ class IngestionV2Config:
 
 
 # ---------------------------------------------------------------------------
+# UniversalObservationEnvelope (WS-A5) — Envelope B server-side canonical
+# observation model. Default OFF: when ON, the /v1/batch SDK path also builds
+# a UniversalObservationEnvelope per accepted event (services/ingestion/
+# observation_envelope.py) and persists it additively on the normalized
+# payload (normalized["observation_envelope"]). Consumers are unchanged — the
+# flat SDK dict remains the consumption surface until WS-B converges adapters
+# onto Envelope B as the single observation model (Invariant #1). Structural
+# enforcement of Envelope-B required blocks / curated vocabularies happens at
+# build time only; source-trust/consent/idempotency ordering is the WS-B
+# gateway's scope.
+@dataclass(frozen=True)
+class ObservationEnvelopeConfig:
+    enabled: bool = _env_bool("AETHER_OBSERVATION_ENVELOPE_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
 # Storage Plane (PR 7 / FT-7 + PR 8 / FT-8) — Elastic Data Plane descriptor +
 # object layer, object-backed Bronze compaction, and cross-store lifecycle.
 #
@@ -1792,6 +1808,7 @@ class Settings:
     integration_consent: IntegrationConsentConfig = field(default_factory=IntegrationConsentConfig)
     credential_platform: CredentialPlatformConfig = field(default_factory=CredentialPlatformConfig)
     ingestion_v2: IngestionV2Config = field(default_factory=IngestionV2Config)
+    observation_envelope: ObservationEnvelopeConfig = field(default_factory=ObservationEnvelopeConfig)
     storage_plane: StoragePlaneConfig = field(default_factory=StoragePlaneConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
     stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
