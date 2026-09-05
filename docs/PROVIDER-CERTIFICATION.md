@@ -14,7 +14,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "b89edb3f"
+last_synced_commit: "60a5c024"
 ---
 
 # Provider Certification
