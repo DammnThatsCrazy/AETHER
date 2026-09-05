@@ -42,6 +42,7 @@ The machine-readable owner map is `docs/source-of-truth/repo_consistency_ownersh
 | computation substrate changed | `config/computation_inventory.yaml`, `COMPUTATION_SUBSTRATE.md`, regenerated registry twin, substrate tests |
 | intelligence projection architecture changed | generated projection artifacts (TS/Py/doc mirrors), SOT docs, `REPO-INDEX.md`/`AUTOMATION.md`, `packages/shared/index.ts`, projection tests |
 | relationship spine registry changed | generated relationship predicate/motif twins (TS/Py/doc mirrors), barrel exports, parity tests |
+| observation envelope (Envelope B) model/registry/twin/adoption changed | Envelope-B field registry ↔ pydantic runtime model ↔ passive TS twin lock-step (parity test), observation-envelope unit tests, SOT + alignment docs |
 | workflow/check command changed | Makefile, workflows, docs, repo_doctor tests |
 | deprecated legacy ingestion/data-lake tree mutated (do-not-extend) | program acknowledgment docs (`docs/productization/sdk-universal-ingestion-alignment/**`), this md, canonical-ingestion-trees gate (`scripts/validate_canonical_ingestion_trees.py`) |
 | Aether/Kyber production data source changed | `scripts/validate_frontend_data_truth.py` source guardrail and explicit production-bundle scan |

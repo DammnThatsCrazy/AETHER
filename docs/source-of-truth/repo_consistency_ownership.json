@@ -567,6 +567,32 @@
         "python -m pytest tests/unit/test_spine_registry_validation.py tests/unit/test_spine_envelope_parity.py -q"
       ],
       "remediation": "Align the canonical spine registry (ADR-011 Spine Composition Kernel) with its generated twins, runtime package, and the real routes/surfaces/services each spine row binds; a row must bind to machinery that exists (tetris inventory gate) \u2014 declare unresolved bindings pending in unresolvedRefs with a reason and resolving milestone; regenerate via python scripts/generate_platform_contracts.py; and update the spine tests."
+    },
+    {
+      "id": "observation_envelope",
+      "name": "observation envelope (Envelope B) model/registry/twin/adoption changed",
+      "source_globs": [
+        "packages/shared/contracts/observation-envelope-registry.json",
+        "packages/shared/observation-envelope.ts",
+        "Backend Architecture/aether-backend/shared/observation/**",
+        "Backend Architecture/aether-backend/services/ingestion/observation_envelope.py"
+      ],
+      "required_changed_globs": [
+        "docs/_generated/**",
+        "docs/source-of-truth/**",
+        "docs/REPO-INDEX.md",
+        "docs/AUTOMATION.md",
+        "packages/shared/observation-envelope.ts",
+        "Backend Architecture/aether-backend/shared/observation/**",
+        "tests/**",
+        "Backend Architecture/**/tests/**"
+      ],
+      "required_commands": [
+        "python scripts/docs_drift.py --strict",
+        "python -m pytest tests/contracts/test_observation_envelope_parity.py -q",
+        "python -m pytest tests/unit/observation -q"
+      ],
+      "remediation": "Keep the three Envelope-B surfaces in lock-step - packages/shared/contracts/observation-envelope-registry.json (canonical field registry), Backend Architecture/aether-backend/shared/observation/envelope.py (pydantic runtime model), and packages/shared/observation-envelope.ts (passive TS twin) - held by tests/contracts/test_observation_envelope_parity.py; extend tests/unit/observation/test_observation_envelope.py when the model or the SDK mapping (services/ingestion/observation_envelope.py) changes."
     }
   ]
 }
