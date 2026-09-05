@@ -276,6 +276,7 @@ REQUIRED_ACTIONS = {
     "lambda:TagResource",
     "lambda:CreateFunction",
     "lambda:GetFunction",
+    "lambda:GetFunctionCodeSigningConfig",
     "lambda:UpdateFunctionCode",
     "lambda:UpdateFunctionConfiguration",
     "lambda:DeleteFunction",
@@ -300,6 +301,7 @@ REQUIRED_ACTIONS = {
 _LAMBDA_MANAGEMENT_ACTIONS = {
     "lambda:CreateFunction",
     "lambda:GetFunction",
+    "lambda:GetFunctionCodeSigningConfig",
     "lambda:UpdateFunctionCode",
     "lambda:UpdateFunctionConfiguration",
     "lambda:DeleteFunction",
@@ -456,6 +458,8 @@ ALLOWED_GLOBAL_ACTIONS = {
     "application-autoscaling:DescribeScalingPolicies",
     # Secrets Manager
     "secretsmanager:ListSecrets",
+    # SSM (DescribeParameters is a filter/list API requiring resource '*')
+    "ssm:DescribeParameters",
     # STS
     "sts:GetCallerIdentity",
     # IAM
@@ -658,9 +662,10 @@ def main() -> int:
     for _ssm in (
         "ssm:AddTagsToResource", "ssm:ListTagsForResource",
         "ssm:PutParameter", "ssm:DeleteParameter",
-        "ssm:GetParameter", "ssm:GetParameters", "ssm:DescribeParameters",
+        "ssm:GetParameter", "ssm:GetParameters",
     ):
         expected_resources[_ssm] = _SSM_PARAM
+    expected_resources["ssm:DescribeParameters"] = "*"
 
     # KMS
     expected_resources["kms:CreateKey"] = "*"

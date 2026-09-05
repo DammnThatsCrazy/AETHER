@@ -323,6 +323,7 @@ statements:
     actions:
       - lambda:CreateFunction
       - lambda:GetFunction
+      - lambda:GetFunctionCodeSigningConfig
       - lambda:UpdateFunctionCode
       - lambda:UpdateFunctionConfiguration
       - lambda:DeleteFunction
@@ -619,9 +620,13 @@ statements:
       - ssm:DeleteParameter
       - ssm:GetParameter
       - ssm:GetParameters
-      - ssm:DescribeParameters
     resource: arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*
     scope: staging-name-prefix
+  - sid: DiscoverStagingParameterMetadata
+    actions:
+      - ssm:DescribeParameters
+    resource: '*'
+    scope: global-read-required-by-api
   # ----- ECR repositories (module.ecr) -----
   - sid: ManageStagingEcrRepositories
     actions:
