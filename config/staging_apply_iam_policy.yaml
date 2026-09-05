@@ -41,6 +41,7 @@ statements:
     actions:
       - ecr:GetLifecyclePolicy
       - ecr:PutLifecyclePolicy
+      - ecr:DeleteLifecyclePolicy
     resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
     scope: staging-name-prefix
   - sid: ManageStagingEcrRepositoryPolicies

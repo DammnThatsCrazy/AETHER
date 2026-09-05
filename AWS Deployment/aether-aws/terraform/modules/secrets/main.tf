@@ -104,11 +104,10 @@ data "aws_iam_policy_document" "secrets" {
       identifiers = ["logs.${data.aws_region.current.name}.amazonaws.com"]
     }
 
-    condition {
-      test     = "StringEquals"
-      variable = "kms:ViaService"
-      values   = ["logs.${data.aws_region.current.name}.amazonaws.com"]
-    }
+    # kms:ViaService is intentionally omitted: CloudWatch Logs calls KMS as its
+    # own service principal, so that condition key is not present during
+    # CreateLogGroup and causes spurious denials.  kms:CallerAccount +
+    # EncryptionContext scope access sufficiently.
 
     condition {
       test     = "StringEquals"
