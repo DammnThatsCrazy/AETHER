@@ -1590,6 +1590,41 @@ class InteropIntelligenceConfig:
     kyber_enabled: bool = _env_bool("KYBER_INTEROP_OPS_ENABLED", False)
 
 
+@dataclass(frozen=True)
+class UniversalAssetRegistryConfig:
+    """Universal financial-normalization asset registry (services/assets) — the
+    canonical reference registry (financial-normalization WP2/WP3). Reference +
+    observational domain: it registers canonical assets/chains/deployments and
+    records UNRESOLVED references; no execution capability exists behind any
+    flag. All flags default False (fail-closed) until staging validation.
+
+    W5 (C5-ADMIN) adds the registry-admin + automated-discovery surface:
+    ``admin_enabled`` mounts the /v1/admin/assets console (registry reference
+    data reads + suggested discovery candidates, global-ADMIN gated) and
+    ``admin_mode`` is the apply capability that lets an explicitly-posted,
+    human/global-admin-confirmed reference-data write actually register an
+    alias/asset/chain/deployment. Both default False: the surface is absent
+    until enabled, and even when mounted in review mode it never auto-applies
+    a discovery suggestion."""
+    ingestion_enabled: bool = _env_bool("AETHER_ASSETS_INGESTION_ENABLED", False)
+    graph_enabled: bool = _env_bool("AETHER_ASSETS_GRAPH_ENABLED", False)
+    api_enabled: bool = _env_bool("AETHER_ASSETS_API_ENABLED", False)
+    admin_enabled: bool = _env_bool("AETHER_ASSETS_ADMIN_ENABLED", False)
+    admin_mode: bool = _env_bool("AETHER_ASSETS_ADMIN_MODE", False)
+
+
+@dataclass(frozen=True)
+class ValuationConfig:
+    """Universal financial-normalization event-time valuation
+    (services/valuation) — observation/reporting surface over the asset registry
+    (financial-normalization WP2/WP3 lane C3). Reads and writes OBSERVE and
+    REPORT tenant-scoped valuation snapshots; no execution capability exists
+    behind any flag (execution_by_aether is always False). All flags default
+    False (fail-closed) until staging validation."""
+    api_enabled: bool = _env_bool("AETHER_VALUATION_API_ENABLED", False)
+    ingestion_enabled: bool = _env_bool("AETHER_VALUATION_INGESTION_ENABLED", False)
+
+
 # ---------------------------------------------------------------------------
 # Unified Intelligence Plane — capability flags (all default OFF; safety
 # defaults ON). New planes must add zero runtime cost while disabled: every
@@ -1862,9 +1897,12 @@ class Settings:
     one_person_ops: OnePersonOpsConfig = field(default_factory=OnePersonOpsConfig)
 
     # Stablecoin / Derivatives / Interoperability economic-intelligence domains
+    # and the universal asset registry (financial-normalization WP2/WP3).
     stablecoin: StablecoinDomainConfig = field(default_factory=StablecoinDomainConfig)
     derivatives: DerivativesIntelligenceConfig = field(default_factory=DerivativesIntelligenceConfig)
     interop: InteropIntelligenceConfig = field(default_factory=InteropIntelligenceConfig)
+    assets: UniversalAssetRegistryConfig = field(default_factory=UniversalAssetRegistryConfig)
+    valuation: ValuationConfig = field(default_factory=ValuationConfig)
 
     # Unified Intelligence Plane
     temporal_integrity: TemporalIntegrityConfig = field(default_factory=TemporalIntegrityConfig)

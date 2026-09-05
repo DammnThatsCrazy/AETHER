@@ -233,6 +233,18 @@ export {
   FreshnessBadge,
   ReconciliationBadge,
   OwnershipConfidenceBadge,
+  // Reporting-asset + viewer display-currency presentation (additive Wave 3).
+  REPORTING_UNAVAILABLE,
+  DISPLAY_CONVERSION_UNAVAILABLE,
+  isDecimalString,
+  convertDecimalAmount,
+  formatDecimalAmount,
+  decorateAmountText,
+  composeReportingDisplay,
+  resolveCanonicalAssetDisplayMeta,
+  resolveReportingAssetMeta,
+  ReportingValueDisplay,
+  buildReportingValueRender,
 } from './value/index';
 export type {
   FormatUSDOptions,
@@ -248,4 +260,12 @@ export type {
   RollupStatus,
   ValueReconciliationState,
   OwnershipRelationship,
+  AssetDisplayMeta,
+  DisplayCurrencyQuote,
+  ReportingValuationLike,
+  ReportingValueKind,
+  ReportingUnavailableReason,
+  ReportingValueRender,
+  ComposeReportingDisplayInput,
+  FormatDecimalAmountOptions,
 } from './value/index';

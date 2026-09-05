@@ -14,6 +14,8 @@
 //   - liabilities are never counted as assets
 // =============================================================================
 
+import type { EconomicRole } from './financial-assets';
+
 /** What kind of quantity a value represents. These must never be mixed in a rollup. */
 export type MetricKind =
   | 'balance'
@@ -85,6 +87,15 @@ export interface NativeValue {
   account_id?: string;
   wallet_id?: string;
   rail?: string;
+  // ── Financial-normalization additive fields (packages/shared/financial-assets.ts) ──
+  /** Namespaced canonical asset id (`fiat:USD`, `crypto:ETH`, `stablecoin:USDC`,
+   * `token:<chain>:<contract>`) when identity is canonicalized. */
+  canonical_asset_id?: string;
+  /** Canonical deployment id (`deploy:<asset_id>@<chain>:<contract>`) when the
+   * value is deployment-scoped. */
+  deployment_id?: string;
+  /** Economic role this leg plays (financial-assets EconomicRole union). */
+  economic_role?: EconomicRole;
 }
 
 /** A trustworthy (or explicitly absent) USD valuation of a native value. */
@@ -100,6 +111,13 @@ export interface USDValuation {
   valuation_method: ValuationMethod;
   stale_after_seconds?: number;
   warning?: string;
+  // ── Financial-normalization additive fields (packages/shared/financial-assets.ts) ──
+  /** Reporting asset id when the envelope reports in a non-USD asset
+   * (e.g. `fiat:EUR`). `usd_value` above remains the required USD leg. */
+  reporting_asset_id?: string;
+  /** Reporting amount in `reporting_asset_id`, as a decimal string OR null.
+   * null => unavailable (NEVER "0"). */
+  reporting_amount?: string | null;
 }
 
 export interface ValueOwnership {
@@ -162,9 +180,70 @@ export interface RollupResult {
   rollup_status: RollupStatus;
   /** Populated only when unambiguous (single native currency); null otherwise. */
   native_currency?: string | null;
+  /**
+   * Reporting-asset-keyed totals (financial-normalization additive). Present only
+   * when a non-default reporting context was requested. Each key is a canonical
+   * asset id (`fiat:USD` default). A null `total` means no trustworthy value in
+   * that reporting asset — never "0". Conversion to another reporting asset is
+   * never guessed: amounts are summed only where a trustworthy valuation exists.
+   */
+  reporting_totals?: Record<
+    string,
+    {
+      total: string | null;
+      priced_count: number;
+      unpriced_count: number;
+      excluded_count: number;
+      stale_count: number;
+      coverage_percentage: number | null;
+      rollup_status: RollupStatus;
+    }
+  >;
+  /** Provenance of the values summed into the reporting total (opt-in). */
+  value_lineage?: Array<{
+    source_record_id?: string;
+    native_amount: string;
+    native_currency: string;
+    reporting_amount: string;
+    reporting_asset_id: string;
+  }>;
 }
 
 /** Type guard: a value is safe to include in a USD rollup. */
 export function isRollupEligible(v: Pick<AetherValue, 'status' | 'valuation'>): boolean {
   return v.status.include_in_rollups === true && v.valuation.usd_value !== null;
+}
+
+// ── Financial-normalization additive contracts (canonical native value) ──────
+
+/**
+ * A NativeValue whose canonical identity is REQUIRED. Created when an
+ * unresolved/symbol-only value has been resolved against the financial-assets
+ * registry (packages/shared/financial-assets.ts). `canonical_asset_id` is the
+ * namespaced identity — the native value keeps its original `amount`/`currency`
+ * verbatim; canonicalization never rewrites the observed amount.
+ */
+export interface CanonicalNativeValue extends NativeValue {
+  /** Namespaced canonical asset id — REQUIRED (unlike NativeValue). */
+  canonical_asset_id: string;
+}
+
+/** Narrowing guard: a native value is canonical when it carries a non-empty
+ * namespaced canonical_asset_id. */
+export function isCanonicalNativeValue(v: NativeValue): v is CanonicalNativeValue {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    typeof v.canonical_asset_id === 'string' &&
+    v.canonical_asset_id.length > 0
+  );
+}
+
+/** Assertion variant: throws a TypeError when `v` is not canonical. */
+export function assertCanonicalNative(v: NativeValue): asserts v is CanonicalNativeValue {
+  if (!isCanonicalNativeValue(v)) {
+    throw new TypeError(
+      'value is not a CanonicalNativeValue: a non-empty namespaced canonical_asset_id is required',
+    );
+  }
 }

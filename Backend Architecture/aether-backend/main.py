@@ -1470,6 +1470,37 @@ def create_app() -> FastAPI:
     else:
         logger.info("Kyber Interop Ops disabled (KYBER_INTEROP_OPS_ENABLED=false)")
 
+    # ── Universal asset registry — canonical reference data; the registry
+    #    observes and records; it never executes (financial-normalization
+    #    WP2/WP3) ──────────────────────────────────────────────────────────
+    if settings.assets.api_enabled:
+        from services.assets.routes import router as assets_router
+        app.include_router(assets_router, tags=["Universal Asset Registry"])
+        logger.info("Universal Asset Registry API mounted (/v1/assets)")
+    else:
+        logger.info("Universal Asset Registry API disabled (AETHER_ASSETS_API_ENABLED=false)")
+
+    # ── Universal asset registry admin + automated discovery — data-integrity
+    #    scaffolding (unresolved→candidate→verified→active with human apply);
+    #    observation-only, global-ADMIN gated, never executes
+    #    (financial-normalization W5 C5-ADMIN) ─────────────────────────────
+    if settings.assets.admin_enabled:
+        from services.assets.admin_routes import admin_router as assets_admin_router
+        app.include_router(assets_admin_router, tags=["Universal Asset Registry Admin"])
+        logger.info("Universal Asset Registry admin mounted (/v1/admin/assets)")
+    else:
+        logger.info("Universal Asset Registry admin disabled (AETHER_ASSETS_ADMIN_ENABLED=false)")
+
+    # ── Event-time valuation — observe/report tenant valuation snapshots over
+    #    the asset registry; Aether observes and reports, it never executes
+    #    (financial-normalization WP2/WP3 lane C3) ─────────────────────────
+    if settings.valuation.api_enabled:
+        from services.valuation.routes import router as valuation_router
+        app.include_router(valuation_router, tags=["Event-time Valuation"])
+        logger.info("Event-time Valuation API mounted (/v1/valuation)")
+    else:
+        logger.info("Event-time Valuation API disabled (AETHER_VALUATION_API_ENABLED=false)")
+
     # ═══════════════════════════════════════════════════════════════════════
     # Unified Intelligence Plane — all routers in this block are flag-gated
     # (default OFF) and lazily imported: zero startup cost while disabled.

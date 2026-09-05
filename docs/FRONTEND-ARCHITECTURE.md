@@ -23,6 +23,7 @@ reviewed_source_commits:
     reason: "Rebase re-stamp: re-reviewed the web-ecosystem P4 in-public auth entry (frontend/aether + frontend/kyber prefill and origin-scoped session changes) against the replayed diff; the auth-handoff note is carried in-band in this doc."
   - commit: "5d0a4989"
     reason: "Rebase re-stamp: re-reviewed the web-ecosystem P6 motion tokenization of shared button/skeleton/tokens.css under frontend/shared; this doc makes no loading-skeleton, button-transition, or motion-token claim, so no body change was required."
+
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -110,6 +111,7 @@ There are two separate frontend applications. **Do not mix them up.**
   [migration guide](brand-system/migration.md).
 - `TimeWindowSelector`, `FreshnessIndicator`, `EvidenceDrawer`, `UsageBar`, `Toast`, etc.
 - **Canonical value display** (`frontend/shared/src/value/`): `ValueDisplay`, `USDValue`, `NativeValueBreakdown`, `ValuationWarning` + `formatUSD` / `formatNativeValue` / `formatAetherValue`. USD-first with native drilldown; absent/unpriced values render "Value unavailable", never `$0.00`. All financial values must render through these — enforced by `scripts/validate_frontend_value_display.py`. See [`FINANCIAL_VALUE_SEMANTICS.md`](source-of-truth/FINANCIAL_VALUE_SEMANTICS.md).
+- **Reporting-asset / display-currency presentation** (`frontend/shared/src/value/reporting-*`, additive financial-normalization): `ReportingValueDisplay` renders a value in its tenant **reporting** asset and — only with an explicit caller-supplied display rate — a pure-viewer display conversion. It composes with, never replaces, the USD-first `ValueDisplay` (it is for envelopes that already report in a non-USD asset) and keeps the same invariants: an absent reporting amount renders "Reporting unavailable" and a missing display rate renders "Display conversion unavailable" — display never fabricates a rate and never mutates the stored fact. See [`FINANCIAL_NORMALIZATION.md`](source-of-truth/FINANCIAL_NORMALIZATION.md).
 - Graph layer type contracts: `RelationshipLayer` (`H2H | H2A | A2H | A2A`), `RELATIONSHIP_LAYERS`, `LAYER_DESCRIPTIONS`, `EDGE_LAYER_MAP`, `classifyEdgeType`, `countEdgesByLayer` — shared between Aether and Kyber graph health features
 - **Path intelligence types** (Phase 20): `PathClassification`, `PathNode`, `PathEdge`, `PathScoreBreakdown`, `RelationshipPath`, `PathExplanation`, `TraversalSnapshot`, `PathQuery`, `PathQueryResponse`, `NodeExpansionRequest`, `NodeExpansionResponse`, `DeepTraversalJob` — canonical TS contracts in `packages/shared/operational-intelligence.ts`, mirroring the Pydantic models exactly
 

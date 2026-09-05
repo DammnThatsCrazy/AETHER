@@ -470,6 +470,47 @@
         "python scripts/generate_platform_contracts.py --check"
       ],
       "remediation": "Regenerate the relationship predicate/motif registry twins and tables (python scripts/generate_platform_contracts.py), keep the packages/shared/index.ts barrel in sync, and update the relationship predicate/motif parity tests."
+    },
+    {
+      "id": "universal_asset_registry",
+      "name": "universal asset registry changed",
+      "source_globs": [
+        "Backend Architecture/aether-backend/services/assets/**",
+        "Backend Architecture/aether-backend/repositories/registry_repos.py"
+      ],
+      "required_changed_globs": [
+        "docs/BACKEND-API.md",
+        "docs/source-of-truth/**",
+        "docs/_generated/**",
+        "docs/REPO-INDEX.md",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/docs_extract/run_all.py",
+        "python scripts/validate_contracts.py",
+        "python scripts/docs_drift.py --strict"
+      ],
+      "remediation": "Keep the universal asset registry (canonical fiat:/crypto:/stablecoin:/token: identity, chain deployments, aliases, resolver, seeds, and /v1/assets routes) in sync with BACKEND-API.md, source-of-truth docs, and registry tests. Legacy stablecoin ids are bridged by aliases, never rewritten."
+    },
+    {
+      "id": "event_time_valuation",
+      "name": "event-time valuation plane changed",
+      "source_globs": [
+        "Backend Architecture/aether-backend/services/valuation/**"
+      ],
+      "required_changed_globs": [
+        "docs/BACKEND-API.md",
+        "docs/source-of-truth/**",
+        "docs/_generated/**",
+        "docs/REPO-INDEX.md",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/docs_extract/run_all.py",
+        "python scripts/validate_contracts.py",
+        "python scripts/docs_drift.py --strict"
+      ],
+      "remediation": "Preserve event-time valuation invariants (immutable superseding snapshots, decimal strings only, reporting_amount null = unavailable never zero, peg-aware stablecoins, unknown explicit) and keep valuation docs + tests in sync."
     }
   ]
 }

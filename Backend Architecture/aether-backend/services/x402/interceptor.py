@@ -12,10 +12,13 @@ from __future__ import annotations
 
 import json
 import uuid
+from decimal import Decimal, ROUND_HALF_EVEN
 from typing import Optional
 
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
+
+from services.value.models import to_decimal
 
 from .models import (
     CapturedX402Transaction,
@@ -28,6 +31,13 @@ logger = get_logger("aether.service.x402.interceptor")
 
 # Card fee rate for computing fee_eliminated_usd
 CARD_FEE_RATE = 0.029
+# Exact decimal fee factor (mirror of CARD_FEE_RATE). Fee elimination is money
+# arithmetic: amount * rate is computed in Decimal so a fractional amount never
+# produces a binary-float artifact at the round boundary (e.g. $0.05 * 2.9%
+# yields 0.0014500000000000001 in float but exactly 0.00145 in Decimal, which
+# rounds half-even to 0.0014 — not 0.0015).
+_FEE_FACTOR_DEC = Decimal(str(CARD_FEE_RATE))
+_FEE_ROUND = Decimal("0.0001")  # 4 dp, mirrors the legacy round(..., 4)
 
 # Maximum header value size (8 KB)
 _MAX_HEADER_SIZE = 8192
@@ -118,7 +128,16 @@ class X402Interceptor:
     ) -> CapturedX402Transaction:
         """Capture a complete x402 transaction from parsed headers."""
         amount_usd = terms.amount  # Assumes stablecoin / USD-denominated
-        fee_eliminated = round(amount_usd * CARD_FEE_RATE, 4)
+        # Fee elimination is money math — convert to Decimal at the boundary and
+        # round half-even at 4 dp. The float value written to the wire model is
+        # produced from the exact decimal only after the arithmetic is done.
+        amount_dec = to_decimal(amount_usd)
+        if amount_dec is None:
+            raise ValueError("Invalid amount")  # unparseable amount is never 0
+        fee_dec = (amount_dec * _FEE_FACTOR_DEC).quantize(
+            _FEE_ROUND, rounding=ROUND_HALF_EVEN
+        )
+        fee_eliminated = float(fee_dec)
 
         tx = CapturedX402Transaction(
             capture_id=str(uuid.uuid4()),

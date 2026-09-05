@@ -5403,6 +5403,21 @@
       "canonical_owner": "backend@aether"
     },
     {
+      "path": "docs/plans/FINANCIAL_NORMALIZATION_PHASES.md",
+      "title": "Financial Normalization — Phased Implementation Program",
+      "slug": "plans/financial-normalization-phases",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "canonical_owner": "backend@aether"
+    },
+    {
       "path": "docs/plans/RISK_FRAUD_360_PHASES.md",
       "title": "Risk360 + Fraud360 — Phased Convergence Program",
       "slug": "plans/risk-fraud-360-phases",
@@ -7279,6 +7294,41 @@
     },
     {
       "path": "docs/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md"
+    },
+    {
+      "path": "docs/source-of-truth/FINANCIAL_DOMAIN_MIGRATION_STATUS.md",
+      "title": "Financial Normalization — Domain Migration Status",
+      "slug": "architecture/financial-domain-migration-status",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/source-of-truth/FINANCIAL_NORMALIZATION.md",
+      "title": "Financial Normalization — Architecture",
+      "slug": "architecture/financial-normalization",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec",
+        "compliance"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "backend@aether"
     },
     {
       "path": "docs/source-of-truth/FIRST_RELEASE_INTELLIGENCE_TELEMETRY_OPERATIONS.md"

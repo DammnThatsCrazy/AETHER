@@ -10,6 +10,12 @@ Classifies graph edges into four relationship layers:
   outside the four-layer analytics graph (pure graph-topology or metadata edges).
   Edges classified as EXCLUDED are never counted in the four operational layers.
 
+  EXCLUDED is also the home of the Financial Normalization reference layer
+  (WP6a): financial/asset reference relationships between global reference
+  vertices (asset, deployment, chain, fiat currency, issuer, price provider,
+  venue, bridge) are non-actor edges and mirror the stablecoin-domain edges
+  below — they are never H2H/H2A/A2H/A2A.
+
 Used by: Analytics, Agent, Commerce, On-Chain services.
 """
 
@@ -509,6 +515,26 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     EdgeType.PEGGED_TO:              RelationshipLayer.EXCLUDED,
     EdgeType.VALUED_AT:              RelationshipLayer.EXCLUDED,
     EdgeType.RECONCILED_WITH:        RelationshipLayer.EXCLUDED,
+
+    # ── Financial Normalization — reference edges (WP6a). Canonical asset /
+    #    deployment / chain / fiat reference relationships are graph-topology
+    #    edges between non-actor reference vertices. They intentionally live
+    #    OFF the four operational layers — mirroring the stablecoin-domain
+    #    precedent above (DEPLOYED_ON_CHAIN / PEGGED_TO / VALUED_AT /
+    #    RECONCILED_WITH are shared from that block; PRICED_BY is the existing
+    #    derivatives domain edge). ISSUED_BY (existing cross-domain edge) stays
+    #    on its historical H2H classification — flipping it is non-additive. ──
+    EdgeType.DENOMINATED_IN: RelationshipLayer.EXCLUDED,
+    EdgeType.PAID_WITH:      RelationshipLayer.EXCLUDED,
+    EdgeType.SETTLED_IN:     RelationshipLayer.EXCLUDED,
+    EdgeType.CHARGED_IN:     RelationshipLayer.EXCLUDED,
+    EdgeType.ASSESSED_IN:    RelationshipLayer.EXCLUDED,
+    EdgeType.WRAPS:          RelationshipLayer.EXCLUDED,
+    EdgeType.BRIDGED_FROM:   RelationshipLayer.EXCLUDED,
+    EdgeType.VALUED_IN:      RelationshipLayer.EXCLUDED,
+    EdgeType.DERIVED_FROM:   RelationshipLayer.EXCLUDED,
+    EdgeType.REVERSES:       RelationshipLayer.EXCLUDED,
+    EdgeType.DISPUTES:       RelationshipLayer.EXCLUDED,
 
     # ── Interoperability Intelligence — actor edges ────────────────────────
     EdgeType.INITIATED_CROSS_CHAIN_WITH: RelationshipLayer.H2H,

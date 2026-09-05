@@ -8,17 +8,19 @@ suppression). Suspicious cohorts are flagged for human review only.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 from shared.logger.logger import get_logger
 
 from services.card_linked_payments.gold import cluster_features
+from services.value.models import to_decimal
 
 logger = get_logger("aether.card_linked.clusters")
 
 _PROGRAM_CLUSTERS = ("redotpay", "kast", "gnosis", "metamask")
 _ASSET_TOPUP_CLUSTERS = ("USDC", "USDT")
-_HIGH_VOLUME_THRESHOLD_USD = 10_000.0
+_HIGH_VOLUME_THRESHOLD_USD = Decimal("10000")
 _REPEAT_SPEND_THRESHOLD = 3
 
 
@@ -65,11 +67,15 @@ async def build_card_linked_clusters(tenant_id: str) -> list[dict[str, Any]]:
             "card_funding_chain_users", base_members,
         ))
 
-    def _volume(f: dict) -> float:
-        try:
-            return float(f["topup_volume_usd"]) + float(f["spend_volume_usd"])
-        except (TypeError, ValueError):
-            return 0.0
+    def _volume(f: dict) -> Decimal:
+        # Decimal magnitude over the gold decimal-string volumes — never float
+        # money. An absent/unparseable side contributes nothing (unknown != 0).
+        total = Decimal(0)
+        for key in ("topup_volume_usd", "spend_volume_usd"):
+            amount = to_decimal(f.get(key))
+            if amount is not None:
+                total += amount
+        return total
 
     high_volume = [f["entity_id"] for f in features if _volume(f) >= _HIGH_VOLUME_THRESHOLD_USD]
     if high_volume:

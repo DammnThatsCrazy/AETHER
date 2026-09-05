@@ -237,6 +237,32 @@ def _is_stale(ts_iso: Optional[str], sla_hours: float = _FRESHNESS_SLA_HOURS) ->
     return age_hours > sla_hours
 
 
+def _profile_rollup(
+    records: list[dict],
+    *,
+    reporting_asset_id: Optional[str] = None,
+    amount_in_reporting_asset: Any = None,
+) -> dict:
+    """Canonical currency-safe rollup over profile value records.
+
+    Wraps ``services.value.safe_rollup`` so a caller that already knows the
+    tenant's reporting asset (from a tenant value policy /
+    ``ValuationService.reporting_asset_id_for``) can request the additive
+    ``reporting_totals`` envelope keyed by that asset. Default (no reporting
+    context) is byte-identical to the USD-first rollup — mixed native
+    currencies are never summed into one scalar and unknown/unpriced values
+    are never coerced to 0. Conversion to a non-USD reporting asset is never
+    guessed: pass ``amount_in_reporting_asset`` (backed by the valuation
+    engine) or the reporting block honestly reports unpriced-for-reporting.
+    """
+    kwargs: dict[str, Any] = {}
+    if reporting_asset_id is not None:
+        kwargs["reporting_asset_id"] = reporting_asset_id
+    if amount_in_reporting_asset is not None:
+        kwargs["amount_in_reporting_asset"] = amount_in_reporting_asset
+    return safe_rollup(records, **kwargs)
+
+
 # ───────────────────────────────────────────────────────────────────────
 # Aggregator
 # ───────────────────────────────────────────────────────────────────────
@@ -985,7 +1011,15 @@ class Profile360Aggregator:
         merged.sort(key=lambda r: r.get("occurred_at", ""), reverse=True)
         return merged[:limit]
 
-    async def financials(self, entity_id: str, tenant_id: str, limit: int = 200) -> dict:
+    async def financials(
+        self,
+        entity_id: str,
+        tenant_id: str,
+        limit: int = 200,
+        *,
+        reporting_asset_id: Optional[str] = None,
+        amount_in_reporting_asset: Any = None,
+    ) -> dict:
         transfers = await self._transfers_for_entity(entity_id, tenant_id, limit=limit)
         transfers = _tenant_filter(transfers, tenant_id)
 
@@ -1016,13 +1050,23 @@ class Profile360Aggregator:
 
         # Canonical, currency-safe rollups. Mixed native currencies are NEVER
         # summed into one scalar; unknown/unpriced values are never coerced to 0.
-        inflow_rollup = safe_rollup(
-            [t for t in transfers if t.get("to_entity_id") == entity_id]
+        # A reporting context (tenant policy) is threaded when the caller
+        # already knows it; default stays fiat:USD (byte-identical envelope).
+        inflow_rollup = _profile_rollup(
+            [t for t in transfers if t.get("to_entity_id") == entity_id],
+            reporting_asset_id=reporting_asset_id,
+            amount_in_reporting_asset=amount_in_reporting_asset,
         )
-        outflow_rollup = safe_rollup(
-            [t for t in transfers if t.get("from_entity_id") == entity_id]
+        outflow_rollup = _profile_rollup(
+            [t for t in transfers if t.get("from_entity_id") == entity_id],
+            reporting_asset_id=reporting_asset_id,
+            amount_in_reporting_asset=amount_in_reporting_asset,
         )
-        settled_rollup = safe_rollup(settlements)
+        settled_rollup = _profile_rollup(
+            settlements,
+            reporting_asset_id=reporting_asset_id,
+            amount_in_reporting_asset=amount_in_reporting_asset,
+        )
 
         recent_items = [
             {

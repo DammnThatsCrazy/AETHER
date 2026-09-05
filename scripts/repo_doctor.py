@@ -732,6 +732,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="use services.value.safe_rollup and the canonical value contract; see docs/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md",
     )
     run(
+        [sys.executable, "scripts/validate_universal_financial_assets.py"],
+        name="Universal financial-asset normalization (namespaced ids, Decimal money, immutable valuation, observe-only)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="keep canonical asset/valuation surfaces on the namespaced Decimal immutable observe-only model; see docs/source-of-truth/FINANCIAL_NORMALIZATION.md",
+    )
+    run(
         [sys.executable, "scripts/validate_frontend_value_display.py"],
         name="Frontend value-display guardrail (canonical ValueDisplay/formatUSD)",
         results=results,

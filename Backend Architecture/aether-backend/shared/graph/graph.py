@@ -310,6 +310,21 @@ class VertexType:
     # STABLECOIN_ASSET; chains reuse CHAIN; bridges reuse BRIDGE_ROUTE) ──────
     STABLECOIN_DEPLOYMENT = "StablecoinDeployment"
 
+    # ── Financial Normalization — canonical reference vertices (WP6a) ──────
+    # Universal financial-registry reference data. These vertices live on the
+    # NON-actor reference layer (never H2H/H2A/A2H/A2A subject vertices) and are
+    # GLOBAL (tenant_scoped=False): tenant-owned records reference them by id,
+    # but the reference layer itself is not tenant-mutable. ASSET and CHAIN
+    # already exist above (Profile-360 generic abstraction + Web3 chain node);
+    # they are reused here as the canonical-asset / canonical-chain registry
+    # nodes. The remaining members are additive reference vertices.
+    ASSET_DEPLOYMENT = "AssetDeployment"    # deploy:<asset_id>@<chain>:<contract>
+    FIAT_CURRENCY = "FiatCurrency"          # ISO-4217 reference row (FIAT_REFERENCE_SEED)
+    ISSUER = "Issuer"                       # canonical issuer of an asset/stablecoin
+    PRICE_PROVIDER = "PriceProvider"        # price-feed / oracle provider
+    VENUE = "Venue"                         # trading / listing venue reference
+    BRIDGE = "Bridge"                       # bridge operator/router reference
+
     # ── Card-linked payment rails (V1: catalog dims + flow facts) ──
     CARD_PROGRAM = "CardProgram"
     CARD_ISSUER = "CardIssuer"
@@ -805,6 +820,24 @@ class EdgeType:
     PEGGED_TO              = "PEGGED_TO"               # Asset → reference currency
     VALUED_AT              = "VALUED_AT"               # Deployment → Valuation
     RECONCILED_WITH        = "RECONCILED_WITH"         # Observation → Reconciliation
+
+    # ── Financial Normalization — reference edges (WP6a, non-actor reference
+    #    layer). DEPLOYED_ON_CHAIN / PEGGED_TO / VALUED_AT / RECONCILED_WITH /
+    #    PRICED_BY are declared above (stablecoin + derivatives domains);
+    #    ISSUED_BY is the existing cross-domain edge. These members are additive
+    #    to complete the universal financial reference edge surface (see
+    #    docs/source-of-truth/FINANCIAL_NORMALIZATION.md §9). ────────────────
+    DENOMINATED_IN = "DENOMINATED_IN"        # Value leg/instrument → FiatCurrency|Asset
+    PAID_WITH = "PAID_WITH"                  # Payment/leg → Asset|AssetDeployment
+    SETTLED_IN = "SETTLED_IN"                # Settlement/leg → Asset|AssetDeployment|FiatCurrency
+    CHARGED_IN = "CHARGED_IN"                # Charge/leg → FiatCurrency|Asset
+    ASSESSED_IN = "ASSESSED_IN"              # Assessment/liability → FiatCurrency|Asset
+    WRAPS = "WRAPS"                          # AssetDeployment → AssetDeployment (wrapped)
+    BRIDGED_FROM = "BRIDGED_FROM"            # AssetDeployment → AssetDeployment (origin)
+    VALUED_IN = "VALUED_IN"                  # Event/Observation → FiatCurrency|Asset (native context)
+    DERIVED_FROM = "DERIVED_FROM"            # Projection/Valuation → source asset/observation
+    REVERSES = "REVERSES"                    # Flow/entry → Flow/entry (reversal)
+    DISPUTES = "DISPUTES"                    # Flow/entry → Flow/entry (dispute)
 
     # ── Interoperability Intelligence — actor edges ─────────────────────────
     INITIATED_CROSS_CHAIN_WITH = "INITIATED_CROSS_CHAIN_WITH"  # Human → Human (H2H)

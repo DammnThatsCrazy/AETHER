@@ -79,6 +79,7 @@ known_prefixes:
   - /v1/account
   - /v1/agents
   - /v1/analytics
+  - /v1/assets
   - /v1/attribution
   - /v1/audit
   - /v1/auth
@@ -183,6 +184,7 @@ known_prefixes:
   - /v1/tenants
   - /v1/track
   - /v1/traffic
+  - /v1/valuation
   - /v1/value-review
   - /v1/web3
 

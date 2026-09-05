@@ -75,6 +75,10 @@ export * from './interoperability';
 // Canonical financial value semantics (USD-first, native-preserving)
 export * from './value';
 
+// Universal financial normalization (C1): canonical asset/chain/deployment/alias
+// identity, price observations, valuation snapshots, and tenant value policy.
+export * from './financial-assets';
+
 // Production-readiness platform contracts
 export * from './ingestion-contract';
 export * from './problem-details';

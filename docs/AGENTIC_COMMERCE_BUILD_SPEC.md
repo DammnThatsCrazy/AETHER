@@ -12,7 +12,7 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
-last_synced_commit: "1884f7be"
+last_synced_commit: "02fab7b9"
 
 ---
 # Aether Agentic Commerce — Day-1 Build Specification

@@ -34,3 +34,34 @@ export {
   ReconciliationBadge,
   OwnershipConfidenceBadge,
 } from './value-badges';
+
+// Reporting-asset + viewer display-currency presentation (additive Wave 3).
+export {
+  REPORTING_UNAVAILABLE,
+  DISPLAY_CONVERSION_UNAVAILABLE,
+  isDecimalString,
+  convertDecimalAmount,
+  formatDecimalAmount,
+  decorateAmountText,
+  composeReportingDisplay,
+} from './reporting-value';
+export type {
+  AssetDisplayMeta,
+  DisplayCurrencyQuote,
+  ReportingValuationLike,
+  ReportingValueKind,
+  ReportingUnavailableReason,
+  ReportingValueRender,
+  ComposeReportingDisplayInput,
+  FormatDecimalAmountOptions,
+} from './reporting-value';
+
+export {
+  resolveCanonicalAssetDisplayMeta,
+  resolveReportingAssetMeta,
+} from './reporting-asset-meta';
+
+export {
+  ReportingValueDisplay,
+  buildReportingValueRender,
+} from './reporting-value-display';
