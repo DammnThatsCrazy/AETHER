@@ -11,9 +11,22 @@ canonical_owner: platform@aether
 
 # Execution State
 
-## Phase 0 (current) — convergence bedrock
+> **Delivery model (supersedes per-slice merges):** all WS-A…E implementation
+> slices are delivered as **stacked commits on one branch,
+> `feat/sdk-universal-ingestion`**, and land as **one consolidated program PR**
+> (no per-slice PRs/merges). The canonical gate is run **once at the full-program
+> tip**, not per slice. Slice rows below record their commit + content; the
+> "Branch off …" lines describe the base each slice was authored on before the
+> stack consolidated.
+>
+> **Gate policy (user directive):** do not start `make ci-check` /
+> `repo-doctor` / `docs_drift` until the entire WS-A…E program build is
+> completely over and done with; the single final gate runs then.
 
-Branch `feat/sdk-universal-ingestion` (rebased onto `bfea2e93` = `origin/main` head at landing, which carried Communication360 #596 on top of the 360 program #593).
+## Phase 0 — convergence bedrock
+
+Convergence bedrock (Phase 0 base = `bfea2e93`, `origin/main` head at landing,
+which carried Communication360 #596 on top of the 360 program #593).
 Make the canonical architecture authoritative *and enforced* without yet building
 the big missing pieces. This page + `TARGET_ARCHITECTURE.md` +
 `REPO_TRUTH_AND_GAP_MATRIX.md` are the governed home for the program.
@@ -40,10 +53,11 @@ the big missing pieces. This page + `TARGET_ARCHITECTURE.md` +
   out-of-scope note that `docs/plans/RISK_FRAUD_360_PHASES.md` is not on
   `origin/main`).
 
-## WS-A1 (current) — blueprint canonicalization + spec recovery
+## WS-A1 — blueprint canonicalization + spec recovery
 
-Branch `feat/sdk-univ-ws-a1` off `d379a9d2` (= `origin/main` head after the
-Phase 0 squash-merge, PR #599).
+Merged to `origin/main` via PR #600 (`b4fc4d18`), squash of slice branch
+`feat/sdk-univ-ws-a1` off `d379a9d2` (= `origin/main` head after the Phase 0
+squash-merge, PR #599).
 Commit the controlling 34-section alignment blueprint in-repo and make the
 alignment docs authoritative against it, so executors steer against committed
 content — not session memory or an external paste.
@@ -61,10 +75,13 @@ content — not session memory or an external paste.
 - Canonical gate green: `make ci-check` = 0, `git status --short` empty,
   `docs_drift.py --strict` clean.
 
-## WS-A2 (current) — field-trust taxonomy in the Contract Spine
+## WS-A2 — field-trust taxonomy in the Contract Spine
 
-Branch `feat/sdk-univ-ws-a2` off `b4fc4d18` (= `origin/main` head after the
-WS-A1 squash-merge, PR #600).
+Authored as slice branch `feat/sdk-univ-ws-a2` off `b4fc4d18` (= `origin/main`
+head after the WS-A1 squash-merge, PR #600); under the stacked model this content
+is carried on `feat/sdk-universal-ingestion` as commits `571de852` … `9b77cdda`
+(base `584fda74` = #601), delivered in the consolidated program PR (supersedes
+the closed un-merged PR #602).
 Put per-field trust/authority metadata on the SDK-facing event families in the
 Contract Spine (additive `schemaVersion` 2.1.0), emit the per-field maps to the
 TS + Python twins, and enforce them with a parity gate — the first real spine
@@ -78,7 +95,7 @@ mutation of the program. Descriptive in WS-A2; boundary enforcement is WS-A3.
 | Parity gate | `scripts/validate_field_trust_parity.py` (regenerate-and-diff over both twins + structural validation), wired into `scripts/repo_doctor.py` → `make ci-check`; closes the `generate_contracts.py` CI-coverage gap | ✅ implemented (this slice) |
 | Ownership map | New `event_field_trust_schema` category in `repo_consistency_ownership.json` + mirrored `REPO_CONSISTENCY_OWNERSHIP.md` row | ✅ implemented (this slice) |
 | Tests | `tests/unit/test_validate_field_trust_parity.py` + wiring test in `test_repo_doctor_cli.py`; `test_commerce_parity.py::test_registry_shape` top-level-key pin extended for the additive WS-A2 keys | ✅ implemented (this slice) |
-| Integration + final gate | `make repo-doctor-fix` **70/0** (wrote the synced-doc reindex — `REPO-INDEX.md` `scripts` 184→185 / `tests` 541→542 once the two new files were tracked); 11 source-linked docs genuinely reviewed against the additive change and restamped (also healing the pre-existing `AWS-DEPLOYMENT.md` staleness from #598 in-band); **`make ci-check` 73/0** at HEAD `424a761a`, `git status --short` empty, `docs_drift.py --strict` exit 0 | ✅ implemented (this slice) |
+| Integration + final gate | `make repo-doctor-fix` **70/0** (wrote the synced-doc reindex — `REPO-INDEX.md` `scripts` 184→185 / `tests` 541→542 once the two new files were tracked); 11 source-linked docs genuinely reviewed against the additive change and restamped (also healing the pre-existing `AWS-DEPLOYMENT.md` staleness from #598 in-band); **`make ci-check` 73/0** at HEAD `424a761a` (pre-consolidation tree; the consolidated tip `9b77cdda` differs only by rebase shas + dropping the AWS-DEPLOYMENT opportunistic restamp — gate-neutral, docs-only), `git status --short` empty, `docs_drift.py --strict` exit 0 | ✅ implemented (this slice, stacked) |
 
 ### Definition of done (WS-A2)
 
