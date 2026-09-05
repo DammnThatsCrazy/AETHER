@@ -168,6 +168,7 @@ module "rds" {
 
 module "aurora" {
   source = "./modules/aurora"
+  count  = local.enable_aurora ? 1 : 0
 
   environment  = var.environment
   project      = var.project
@@ -413,7 +414,7 @@ module "ecs" {
   # an empty ARN would be handed to the execution role as a valueFrom.
   secret_arns = merge(
     module.secrets.secret_arns,
-    { "db-password" = module.aurora.db_password_secret_arn },
+    local.enable_aurora ? { "db-password" = module.aurora[0].db_password_secret_arn } : {},
     local.redis_auth_secret_arn == "" ? {} : { "redis-auth-token" = local.redis_auth_secret_arn },
   )
   companion_secret_arns = module.secrets.companion_secret_arns
@@ -540,9 +541,9 @@ module "monitoring" {
   # the monitoring module enables the Aurora ACU alarm and dashboard widget.
   # aurora_max_acu follows the profile so the max-ACU alarm threshold tracks
   # the capacity the cluster was actually given.
-  aurora_cluster_id           = module.aurora.cluster_identifier
+  aurora_cluster_id           = local.enable_aurora ? module.aurora[0].cluster_identifier : ""
   aurora_max_acu              = var.aurora_max_acu
-  enable_aurora_observability = true
+  enable_aurora_observability = local.enable_aurora
   alb_arn_suffix              = module.alb.alb_arn_suffix
 
   # Alarm gating: a profile that provisions no Redis/Kafka/Neptune/dedicated ML

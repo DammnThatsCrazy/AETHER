@@ -32,6 +32,10 @@ aurora_backup_retention_days = 1
 # Express mode uses AWS-managed encryption instead of a customer-managed KMS
 # key, which is required for AWS Free-tier accounts.
 aurora_express_mode = true
+# AWS Free-tier accounts require WithExpressConfiguration for Aurora, which
+# forces Internet Access Gateway mode (no VPC). Skip Aurora until the account
+# is upgraded; the rest of the stack validates without it.
+skip_aurora = true
 
 # Logs — short retention; INFO/DEBUG ship to S3.
 log_retention_days        = 3

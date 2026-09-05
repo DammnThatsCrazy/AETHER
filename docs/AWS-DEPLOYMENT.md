@@ -23,7 +23,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "5703254"
+last_synced_commit: "81583a2"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -100,7 +100,11 @@ probe used by the staging free-plan guard. On a free AWS account, the guard
 checks the reviewed plan for customer-managed KMS resources; express mode
 (`aurora_express_mode = true`) uses AWS-managed encryption and passes the
 guard, while a plan containing customer-managed Aurora KMS keys fails closed
-before any Terraform mutation. Existing Secrets Manager
+before any Terraform mutation. Free-tier accounts that cannot provision Aurora
+at all (the `WithExpressConfiguration` API parameter forces Internet Access
+Gateway mode, incompatible with the VPC topology) set `skip_aurora = true` in
+their profile tfvars; the rest of the stack validates without it and Aurora is
+added back when the account is upgraded. Existing Secrets Manager
 objects are reconciled by metadata only: exact names, the staging CMK, and an
 `AWSCURRENT` version are checked before state import; no secret value is read
 or written by that workflow. The ECS module uses `lookup()` for secret ARN
@@ -343,7 +347,7 @@ Seventeen module directories exist under `terraform/modules/`. Modules marked
 | `ecr` | 4 private ECR repositories with lifecycle policies | always |
 | `secrets` | Secrets Manager stubs (KMS-encrypted), rotation Lambda | always |
 | `kms_credentials` | Customer-managed KMS CMK + alias for provider-credential envelope encryption (surfaced as `CREDENTIAL_KMS_KEY_ID`); least-privilege `Encrypt`/`Decrypt`/`GenerateDataKey` grant bound to the five-key encryption context, attached to the ECS task role. The apply role is **not** injected into the CMK key policy by default; the account-root statement remains the lockout-safe administrator. The reviewed staging identity policy permits key-rotation status and a separate 30-day key-deletion request, both constrained to staging-tagged keys. Supplying `kms_key_admin_role_arns` is an explicit, separately reviewed administrative grant; removing the role from the plan-time principal list therefore does not remove root authority or task-role cryptographic access. | always; disabled only by `enable_credential_kms = false`, which the throwaway `terraform test` apply run passes so its teardown can delete every created resource (the key carries `prevent_destroy`) |
-| `aurora` | Aurora Serverless v2 cluster + writer, KMS (skipped in express mode) | always |
+| `aurora` | Aurora Serverless v2 cluster + writer, KMS (skipped in express mode) | **gated** — `skip_aurora = false` (default); free-tier accounts set `skip_aurora = true` to defer Aurora while validating the rest of the stack |
 | `dynamodb_cache` | DynamoDB cache table with read/write autoscaling | always |
 | `sqs` | SNS fanout topic, shared + per-role SQS queues, DLQs | always |
 | `alb` | Internet-facing ALB, HTTP→HTTPS redirect, backend target group | always; **gated** ML target group + `/v1/ml/*` rule |

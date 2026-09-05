@@ -77,8 +77,11 @@ locals {
   # --------------------------------------------------------------------------
 
   # Aurora Serverless v2 is the database of record for every deployable
-  # profile — all four declare `database: aurora_postgres`.
-  enable_aurora = true
+  # profile — all four declare `database: aurora_postgres`.  skip_aurora
+  # lets a free-tier account bypass Aurora provisioning (the API parameter
+  # WithExpressConfiguration forces Internet Access Gateway, incompatible
+  # with the VPC topology) while still validating the rest of the stack.
+  enable_aurora = !var.skip_aurora
 
   # Pay-per-use substrate. Held on for every profile: SQS/SNS and the DynamoDB
   # cache table cost effectively nothing at rest, they are the lean required

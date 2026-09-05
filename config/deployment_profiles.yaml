@@ -217,7 +217,10 @@ profiles:
         - cloudfront_s3_frontends
         - alb
         - explicit_runtime_role_services
-        - aurora_serverless_v2
+        # aurora_serverless_v2 is provisioned when enable_aurora is true (the
+        # default).  It is omitted from this list because skip_aurora lets a
+        # free-tier account rehearse everything else while Aurora is deferred;
+        # production profiles still list it as required.
         - sqs_sns
         - dynamodb
         - s3_object_lake
