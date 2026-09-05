@@ -188,6 +188,7 @@ SUPPORTED_CONDITION_OPERATORS = frozenset(
     {
         "StringEquals",
         "StringLike",
+        "NumericEquals",
         "ArnEquals",
         "ArnLike",
         "ForAllValues:StringEquals",
