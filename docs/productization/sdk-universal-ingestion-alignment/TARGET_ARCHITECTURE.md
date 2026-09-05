@@ -78,10 +78,16 @@ legacy trees; it does **not** delete them (see
 Every downstream predicate in the blueprint (observation boundary, identity
 subject-hints, field trust, event semantics) hangs off Envelope B.
 
-**Live status: Envelope B has zero implementation.** The repository carries
-`BaseEvent` only; repo-wide grep for `UniversalObservationEnvelope` and the
-field-trust classes returns nothing. See the ledger row for Blueprint §3 and the
-18-gate matrix in [`REPO_TRUTH_AND_GAP_MATRIX.md`](./REPO_TRUTH_AND_GAP_MATRIX.md).
+**Live status: Envelope B model shipped (WS-A5), adapter convergence is WS-B.**
+The canonical field registry (`packages/shared/contracts/observation-envelope-registry.json`),
+the pydantic runtime model (`Backend Architecture/aether-backend/shared/observation/envelope.py`)
+and the passive TS twin (`packages/shared/observation-envelope.ts`) now exist and are held in
+lock-step by a parity test; `/v1/batch` can build the envelope per accepted SDK event behind a
+default-OFF flag (`AETHER_OBSERVATION_ENVELOPE_ENABLED`, additive
+`normalized["observation_envelope"]`, degrade-safe). `BaseEvent` (Envelope A) remains the
+public/client envelope and the flat dict the consumption surface until WS-B converges every
+ingress adapter onto Envelope B. See the ledger row for Blueprint §3 and the gap matrix in
+[`REPO_TRUTH_AND_GAP_MATRIX.md`](./REPO_TRUTH_AND_GAP_MATRIX.md).
 
 ## Field-trust taxonomy
 
@@ -107,9 +113,13 @@ a `SOURCE_ASSERTED` identifier hint but must **not** assert
 `customer = cus_123` means "Stripe observed/refers to `cus_123`", not "`cus_123`
 is definitely canonical Entity E5".
 
-**Live status: the taxonomy has zero implementation** — no per-field metadata,
-no minimum-trust-per-field, no per-path enforcement. Ledger rows Blueprint §3 /
-§10 / §11.
+**Live status: field-trust + semantic-level metadata is real on the spine
+(WS-A2/A3).** `event-registry.json` carries per-field `fieldTrust` metadata and
+`semanticLevel`/`sdkEmitable`/`sdkBoundary` release semantics; the generator emits
+`EVENT_FIELD_TRUST` / `TRUST_CLASS_ORDER` / `EVENT_SEMANTIC_LEVEL` to the Python twin and
+the field-trust map to TS, drift-gated. Minimum-trust-per-field enforcement at the boundary
+and per-path trust evaluation (the WS-A3 boundary gate holds `sdkEmitable`/level; runtime
+per-field enforcement) remain ledger rows Blueprint §3 / §10 / §11 / WS-B.
 
 ## Contract spine
 

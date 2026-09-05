@@ -208,6 +208,71 @@ families**, A = 17, **B = 371**, C = 15, sdkEmitable = 153.
 - No validators weakened; no new ADR; enrichment + economic additions
   deliberately NOT invented (documented above).
 
+## WS-A5 — Envelope B server-side: UniversalObservationEnvelope model + registry + adoption (flag)
+
+Stacked on `feat/sdk-universal-ingestion` — feat content at `b1d89132`,
+tests/ownership at `f8ec5d3e`, ledger close-out below (base = the WS-A4 tip
+`0d0ce8cc`), delivered in the consolidated program PR. Canonical gate deferred to the
+full-program tip per the gate-policy directive; the build-time self-checks below are the
+recorded evidence.
+WS-A5 ships the **model, not the enforcement** (the blueprint's PR-2 note: "create
+backend canonical representation. Do not break BaseEvent."). Scope boundary, applied
+throughout: `BaseEvent` stays the public Envelope A; `UniversalObservationEnvelope` is
+server-built by the SDK adapter after validation; structural validation happens at
+build time, source-trust/consent/idempotency/lineage stay the WS-B gateway's job.
+
+**The triad (bound in lock-step by `tests/contracts/test_observation_envelope_parity.py`):**
+
+| Surface | File | Role |
+|---|---|---|
+| Canonical field registry | `packages/shared/contracts/observation-envelope-registry.json` (schemaVersion 1.0.0) | §3 block tree → machine-readable: blocks + field requiredness + vocabularies + `naming_resolutions` (source_native_id/subjects[]/signature_status/adapter/occurred_at-vs-source_time/trust-vocab) + `passthrough_blocks` note |
+| Runtime model | `Backend Architecture/aether-backend/shared/observation/envelope.py` (+ `__init__.py` barrel) | pydantic v2, every class `extra="forbid"`; 11 model classes; curated vocab tuples (source/identifier/credential) + `TRUST_CLASSES` frozenset asserted == `generated_registry.TRUST_CLASS_ORDER`; `to_bronze_additive()` JSON-safe dump |
+| Passive TS twin | `packages/shared/observation-envelope.ts` (+ `index.ts` barrel export) | Contract mirror; explicitly NOT a client emitter (no builder/emit) — adapters build Envelope B inside Aether |
+
+**Flag-gated adoption (default OFF, `AETHER_OBSERVATION_ENVELOPE_ENABLED`):**
+
+- `ObservationEnvelopeConfig` frozen dataclass + `settings.observation_envelope` root field
+  (`Backend Architecture/aether-backend/config/settings.py`); operator-facing flag block in
+  `.env.production.example` next to the Ingestion V2 flags.
+- SDK mapping `Backend Architecture/aether-backend/services/ingestion/observation_envelope.py`:
+  normalized SDK dict → envelope; subject `trust_class` derived from `EVENT_FIELD_TRUST`
+  (WS-A2) — `user_id` → CLIENT_HINT (fallback), `anonymous_id` → OBSERVED — never above the
+  WS-A3 public-SDK boundary; temporal enforcement stamp (sequence coerced to the envelope's
+  string `sequence`, `utc_offset` derived); correlation from EventContext; payload = properties.
+- `batch.py` V1 accepted path (after `server_context` injection, before the `Event` bus
+  object): when the flag is ON, builds + attaches `normalized["observation_envelope"]`
+  additively (the shared dict reaches both the bus payload and durable Bronze); any mapping
+  failure warn-degrades with a `ingestion_observation_envelope_*` meter — the flag can never
+  take ingestion down. Flat-dict consumption unchanged until WS-B.
+- Ownership: new `observation_envelope` change category in `repo_consistency_ownership.json`
+  + `REPO_CONSISTENCY_OWNERSHIP.md` row (registry ↔ runtime model ↔ TS twin lock-step).
+
+| Workstream item | Deliverable | Status |
+|---|---|---|
+| Field registry | `observation-envelope-registry.json` with §3 blocks, requiredness, vocabularies, naming resolutions, passthrough-block note (acquisition/application/surface/device/network/payload fields NOT re-declared — A-side EventContext/AcquisitionEvidence owns that shape) | ✅ implemented (this slice) |
+| Runtime model | `shared/observation/envelope.py`: ObservationBlock/TenancyBlock/SourceBlock/SubjectRef/TemporalBlock/CorrelationBlock/PrivacyBlock/ProvenanceBlock/QualityBlock/LineageBlock + UniversalObservationEnvelope, extra=forbid, curated-vocab validators, `to_bronze_additive` | ✅ implemented (this slice) |
+| Passive TS twin + barrel | `observation-envelope.ts` (mirror interfaces + SOURCE_TYPES/IDENTIFIER_TYPES/CREDENTIAL_CLASSES/TRUST_CLASSES `as const` + schema-version const), exported from `packages/shared/index.ts` | ✅ implemented (this slice) |
+| Flag-gated adoption | `ObservationEnvelopeConfig` (OFF), mapping module, batch V1 attach point, `.env.production.example` block | ✅ implemented (this slice) |
+| Parity + unit coverage | `tests/contracts/test_observation_envelope_parity.py` (registry↔TS↔Py + TRUST_CLASSES == TRUST_CLASS_ORDER + barrel/passive guards); `tests/unit/observation/{conftest,test_observation_envelope}.py` (construction/extra=forbid/vocab/mapping/trust-override/temporal/degrade/flag-attach) | ✅ implemented (this slice) |
+| Gap matrix / ledger | Point 2 "Two-Envelope Architecture" MISSING → **PARTIAL** (evidence + owning phase WS-A5→WS-B); this ledger section | ✅ implemented (this slice) |
+
+Build-time self-checks (serial, no full gate): parity file direct-run **10/10**; new pytest
+suites **31 passed** (2.08s). `docs_drift.py --update` / `make ci-check` restamp deferred to
+the full-program tip per the gate-policy directive (WS-A3/A4 precedent).
+
+### Definition of done (WS-A5)
+
+- Envelope-B field registry + runtime model + passive TS twin exist, held in lock-step by a
+  parity test; the 10-class trust vocabulary equals `generated_registry.TRUST_CLASS_ORDER`.
+- Adoption is flag-gated OFF with an additive, degrade-safe attach on the accepted path;
+  `BaseEvent` (Envelope A) and the flat normalized consumption surface are unchanged.
+- Ownership category, env-flag doc, unit + parity tests, and the gap-matrix/ledger updates
+  move with the source; no validators weakened; no new ADR (ADR-012 still reserved).
+- Canonical gate green at the full-program tip: `make ci-check` = 0, `git status --short`
+  empty, `docs_drift.py --strict` clean.
+- WS-B owns the enforcement half (source-trust/consent/idempotency/lineage + universal
+  adapter convergence) — this slice deliberately leaves it to WS-B.
+
 ## Later phases (reserved)
 
 Workstreams A–E (the blueprint's own sequencing) begin after Phase 0 converges.
@@ -216,7 +281,7 @@ built.
 
 | Workstream | Scope (reserved) | Opens when |
 |---|---|---|
-| WS-A — Contract foundation | **WS-A1 + WS-A2 + WS-A3 + WS-A4 done —** WS-A5–A7: Envelope B server-side; Swift/Kotlin generation; re-point metric/privacy/retention truth into the Spine (Blueprint Points 2/3/10/13, Invariants #2/#16) | WS-A1 merged |
+| WS-A — Contract foundation | **WS-A1 + WS-A2 + WS-A3 + WS-A4 + WS-A5 done —** WS-A6–A7: Swift/Kotlin event-type generation; re-point metric/privacy/retention truth into the Spine (Blueprint Points 2/3/10/13, Invariants #2/#16) | WS-A1 merged |
 | WS-B — Adapter convergence | SDK/webhook/connector/feed/import/harness/replay adapters that all produce Envelope B through one validated gateway; consent-on-every-path; idempotency-before-publish; ingestion-level replay with original-time preservation; kill deprecated `/v1/ingest` aliases (Invariants #1/#5/#8/#9/#15) | Phase 0 merged |
 | WS-C — SDK hardening | Native identity → subject hints (delete client `/sdk/identity/resolve` re-stamping); native encrypted persistent queues; remove/relocate shared interpretation modules; regenerate `web/src/types.ts`; add native correlation fields (Invariants #4/#12/#16) | Phase 0 merged |
 | WS-D — Backend interpretation | Typed `RelationshipFact` + `evidence_refs`; Episode engine; outcome truth store; Section-25 evidence dedupe; silver money → exact decimal/event-time valuation on by default (coordinate with `feat/financial-normalization` — do not build twice); mutation-gateway governance on by default (Invariants #7/#11/#13/#14) | Phase 0 merged |
