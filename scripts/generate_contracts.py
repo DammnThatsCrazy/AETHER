@@ -112,6 +112,11 @@ FIELD_TRUST_SPEC_KEYS = [
     "introducedVersion",
 ]
 
+# Canonical semantic levels (WS-A3): A primitive observation, B typed source
+# observation, C derived Aether state. Order A<B<C mirrors increasing semantic
+# distance from the raw observation; C is never a public-SDK emit level.
+SEMANTIC_LEVELS = ("A", "B", "C")
+
 
 # ---------------------------------------------------------------------------
 # Registry loading and validation
@@ -178,8 +183,124 @@ def validate(event_reg: dict, consent_reg: dict) -> None:
                 sys.exit(1)
 
 
+def _validate_semantic_boundary(event_reg: dict) -> None:
+    """Validate the WS-A3 semantic-level + SDK-boundary declarations.
+
+    Self-gating: no-op when ``semanticLevelSchemaVersion`` /
+    ``sdkBoundarySchemaVersion`` are absent (pre-2.2 registries). Rules:
+    - every event carries semanticLevel A/B/C and a boolean sdkEmitable;
+    - the public-SDK trust boundary is a class SET, and it contains no
+      SERVER_STAMPED-or-above class (backend-only fields are gated);
+    - Level C (derived Aether state) is never a public-SDK emit level;
+    - sdkEmitable:true events must be a public-SDK emit level (A/B) and may
+      only declare field-trust classes inside the public-SDK assertable set;
+    - sdkBoundary.aetherInternal.assertableTrustClasses == full trustClasses.
+    """
+    events = event_reg["events"]
+    if (
+        "semanticLevelSchemaVersion" not in event_reg
+        or "sdkBoundarySchemaVersion" not in event_reg
+    ):
+        return
+    boundary = event_reg.get("sdkBoundary")
+    if not isinstance(boundary, dict) or not (
+        isinstance(boundary.get("publicSdk"), dict)
+        and isinstance(boundary.get("aetherInternal"), dict)
+    ):
+        print(
+            "ERROR: sdkBoundary requires publicSdk and aetherInternal entries",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    classes = event_reg.get("trustClasses")
+    if not classes:
+        print("ERROR: trustClasses required for semantic-boundary validation", file=sys.stderr)
+        sys.exit(1)
+    server_rank = classes.index("SERVER_STAMPED")
+    pub = boundary["publicSdk"]
+    for key in ("assertableTrustClasses", "emittableSemanticLevels"):
+        if key not in pub:
+            print(f"ERROR: sdkBoundary.publicSdk missing {key!r}", file=sys.stderr)
+            sys.exit(1)
+    sdk_classes = pub["assertableTrustClasses"]
+    if not sdk_classes or any(c not in classes for c in sdk_classes):
+        print(
+            "ERROR: sdkBoundary.publicSdk.assertableTrustClasses must be a non-empty "
+            "list of known trust classes",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    for c in sdk_classes:
+        if classes.index(c) >= server_rank:
+            print(
+                f"ERROR: sdkBoundary.publicSdk.assertableTrustClasses includes {c}, "
+                "which is SERVER_STAMPED-or-above (backend-only — gated)",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    emit_levels = pub["emittableSemanticLevels"]
+    if not emit_levels or any(l not in SEMANTIC_LEVELS for l in emit_levels):
+        print(
+            "ERROR: sdkBoundary.publicSdk.emittableSemanticLevels must be a non-empty "
+            "subset of A/B/C",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if "C" in emit_levels:
+        print(
+            "ERROR: Level C (derived Aether state) is never a public-SDK emit level",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    internal = boundary["aetherInternal"]
+    if internal.get("assertableTrustClasses") != list(classes):
+        print(
+            "ERROR: sdkBoundary.aetherInternal.assertableTrustClasses must equal the "
+            "full trustClasses rank",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    sdk_class_set = set(sdk_classes)
+    for e in events:
+        lv = e.get("semanticLevel")
+        if lv not in SEMANTIC_LEVELS:
+            print(
+                f"ERROR: event {e['type']!r} missing/unknown semanticLevel {lv!r} (A/B/C)",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        se = e.get("sdkEmitable")
+        if not isinstance(se, bool):
+            print(
+                f"ERROR: event {e['type']!r} missing/unknown sdkEmitable {se!r} (bool)",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if se and lv not in emit_levels:
+            print(
+                f"ERROR: event {e['type']!r} sdkEmitable true but semanticLevel "
+                f"{lv} is not a public-SDK emit level",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if not se:
+            continue
+        ft = e.get("fieldTrust", {}).get("fields")
+        if not ft:
+            continue
+        for path, spec in ft.items():
+            tc = spec.get("trustClass")
+            if tc is not None and tc not in sdk_class_set:
+                print(
+                    f"ERROR: event {e['type']!r} sdkEmitable field {path!r} trustClass "
+                    f"{tc} exceeds the public-SDK assertable set",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
+
 def validate_field_trust(event_reg: dict) -> None:
-    """Validate the WS-A2 field-trust taxonomy block and per-event fieldTrust.
+    """Validate the WS-A2 field-trust taxonomy + WS-A3 semantic boundary.
 
     Descriptive in A2 (enforced at the SDK/ingress boundary in A3). Rules:
     - fieldTrustSchemaVersion is present iff >=1 event declares fieldTrust.fields.
@@ -187,7 +308,10 @@ def validate_field_trust(event_reg: dict) -> None:
       trustClass / minimumTrust is one of them; trustClass is required per spec.
     - A field spec's level, when present, is A/B/C; sourceEmit is a bool.
     - sourceEmit:false requires the field's trustClass rank >= SERVER_STAMPED.
+    - WS-A3 semantic-level + SDK-boundary rules (see _validate_semantic_boundary).
     """
+    _validate_semantic_boundary(event_reg)
+
     events = event_reg["events"]
     ftsv = event_reg.get("fieldTrustSchemaVersion")
     classes = event_reg.get("trustClasses")
@@ -954,6 +1078,93 @@ def _field_trust_py_block(event_reg: dict) -> str:
     )
 
 
+# ---------------------------------------------------------------------------
+# Semantic-level + SDK boundary (WS-A3) emission: per-event level + boundary
+# ---------------------------------------------------------------------------
+
+def _semantic_boundary_ts_block(event_reg: dict) -> str:
+    """events.ts generated-section block (empty when the A3 keys are off)."""
+    if "semanticLevelSchemaVersion" not in event_reg:
+        return ""
+    events = event_reg["events"]
+    level_lines = "\n".join(f"  {e['type']}: '{e['semanticLevel']}'," for e in events)
+    sdk_types = [e["type"] for e in events if e.get("sdkEmitable")]
+    sdk_type_lines = "\n".join(f"  '{t}'," for t in sdk_types)
+    boundary = event_reg["sdkBoundary"]["publicSdk"]
+    sdk_class_lines = "\n".join(f"  '{c}'," for c in boundary["assertableTrustClasses"])
+    emit_level_lines = "\n".join(f"  '{l}'," for l in boundary["emittableSemanticLevels"])
+    return (
+        "\n"
+        "/** Semantic level A/B/C (primitive observation / typed source observation / derived Aether state). */\n"
+        "export const SEMANTIC_LEVEL_ORDER = [\n"
+        "  'A',\n"
+        "  'B',\n"
+        "  'C',\n"
+        "] as const;\n"
+        "\n"
+        "/** A Contract Spine semantic level. */\n"
+        "export type SemanticLevel = typeof SEMANTIC_LEVEL_ORDER[number];\n"
+        "\n"
+        "/** Per-event semantic level (WS-A3). */\n"
+        "export const EVENT_SEMANTIC_LEVEL: Record<EventType, SemanticLevel> = {\n"
+        f"{level_lines}\n"
+        "};\n"
+        "\n"
+        "/** Trust classes a public SDK key may originate (WS-A3 boundary = a class SET, not a rank cut). */\n"
+        "export const SDK_ASSERTABLE_TRUST_CLASSES: readonly TrustClass[] = [\n"
+        f"{sdk_class_lines}\n"
+        "];\n"
+        "\n"
+        "/** Semantic levels a public SDK key may emit. */\n"
+        "export const SDK_EMITTABLE_SEMANTIC_LEVELS: readonly SemanticLevel[] = [\n"
+        f"{emit_level_lines}\n"
+        "];\n"
+        "\n"
+        "/** Event types a public SDK key may emit (per-event sdkEmitable, WS-A3). */\n"
+        "export const SDK_EMITTABLE_EVENT_TYPES: readonly EventType[] = [\n"
+        f"{sdk_type_lines}\n"
+        "];\n"
+    )
+
+
+def _semantic_boundary_py_block(event_reg: dict) -> str:
+    """generated_registry.py tail block (empty when the A3 keys are off)."""
+    if "semanticLevelSchemaVersion" not in event_reg:
+        return ""
+    events = event_reg["events"]
+    level_lines = "\n".join(
+        f'    "{e["type"]}": "{e["semanticLevel"]}",' for e in events
+    )
+    sdk_types = [e["type"] for e in events if e.get("sdkEmitable")]
+    sdk_type_lines = ",\n".join(f'    "{t}"' for t in sdk_types)
+    boundary = event_reg["sdkBoundary"]["publicSdk"]
+    sdk_class_lines = ",\n".join(f'    "{c}"' for c in boundary["assertableTrustClasses"])
+    emit_levels = boundary["emittableSemanticLevels"]
+    emit_level_lit = ", ".join(f'"{l}"' for l in emit_levels)
+    return (
+        "\n"
+        "# Semantic level + SDK boundary (WS-A3).\n"
+        'SEMANTIC_LEVEL_ORDER: tuple[str, ...] = ("A", "B", "C")\n'
+        "\n"
+        "# Per-event semantic level (A primitive / B typed source / C derived Aether state).\n"
+        "EVENT_SEMANTIC_LEVEL: dict[str, str] = {\n"
+        f"{level_lines}\n"
+        "}\n"
+        "\n"
+        "# Trust classes a public SDK key may originate (boundary = class SET, not a rank cut).\n"
+        "SDK_ASSERTABLE_TRUST_CLASSES: tuple[str, ...] = (\n"
+        f"{sdk_class_lines},\n"
+        ")\n"
+        "\n"
+        f"SDK_EMITTABLE_SEMANTIC_LEVELS: tuple[str, ...] = ({emit_level_lit})\n"
+        "\n"
+        "# Event types a public SDK key may emit (per-event sdkEmitable).\n"
+        "SDK_EMITTABLE_EVENT_TYPES: frozenset[str] = frozenset({\n"
+        f"{sdk_type_lines},\n"
+        "})\n"
+    )
+
+
 def gen_events_ts_section(event_reg: dict) -> str:
     """Return the content to insert between @generated-start and @generated-end."""
     events = event_reg["events"]
@@ -984,7 +1195,7 @@ def gen_events_ts_section(event_reg: dict) -> str:
         f"export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {{\n"
         f"{_event_consent_map(events)}\n"
         f"}};\n"
-        f"{_field_trust_ts_block(event_reg)}"
+        f"{_field_trust_ts_block(event_reg)}{_semantic_boundary_ts_block(event_reg)}"
     )
 
 
@@ -1055,7 +1266,7 @@ def gen_python_registry(event_reg: dict, consent_reg: dict) -> str:
         f"EVENT_FAMILY: dict[str, str] = {{\n"
         f"{family_lines}\n"
         f"}}\n"
-        f"{_field_trust_py_block(event_reg)}"
+        f"{_field_trust_py_block(event_reg)}{_semantic_boundary_py_block(event_reg)}"
     )
 
 
