@@ -61,6 +61,37 @@ content — not session memory or an external paste.
 - Canonical gate green: `make ci-check` = 0, `git status --short` empty,
   `docs_drift.py --strict` clean.
 
+## WS-A2 (current) — field-trust taxonomy in the Contract Spine
+
+Branch `feat/sdk-univ-ws-a2` off `b4fc4d18` (= `origin/main` head after the
+WS-A1 squash-merge, PR #600).
+Put per-field trust/authority metadata on the SDK-facing event families in the
+Contract Spine (additive `schemaVersion` 2.1.0), emit the per-field maps to the
+TS + Python twins, and enforce them with a parity gate — the first real spine
+mutation of the program. Descriptive in WS-A2; boundary enforcement is WS-A3.
+
+| Workstream item | Deliverable | Status |
+|---|---|---|
+| Spine field-trust block | `event-registry.json`: `schemaVersion` **2.1.0** + `fieldTrustSchemaVersion` `1.0.0`, `trustClasses` (canonical rank-ordered 10, verbatim from the committed blueprint), `fieldTrustDefaults`, `_registryNotes.field_trust` (incl. the SDK-assertable boundary is a class SET, not a linear cut — resolved WS-A3) | ✅ implemented (this slice) |
+| Per-event content | `fieldTrust.fields` on **117 events** across the 14 SDK-facing families (core 7 + journey/reward/wallet, identity_lc/identity/consent, commerce/ecommerce, b2b/friction, interaction/exposure, x402): app-authored events → `userId: CLIENT_HINT` + `properties: SOURCE_ASSERTED`; pure-observation events stay OBSERVED (no block); external-source leaves (`properties.address/txHash/contract/external_ref/quoteId`) → SOURCE_REFERENCE, each file:line evidenced | ✅ implemented (this slice) |
+| Generator emission | `generate_contracts.py` `validate_field_trust()` (structural rules) + emits `TRUST_CLASS_ORDER`/`TrustClass`/`FieldTrustSpec`/`EVENT_FIELD_TRUST` to the TS twin and `TRUST_CLASS_ORDER`/`EVENT_FIELD_TRUST` to the Python twin | ✅ implemented (this slice) |
+| Parity gate | `scripts/validate_field_trust_parity.py` (regenerate-and-diff over both twins + structural validation), wired into `scripts/repo_doctor.py` → `make ci-check`; closes the `generate_contracts.py` CI-coverage gap | ✅ implemented (this slice) |
+| Ownership map | New `event_field_trust_schema` category in `repo_consistency_ownership.json` + mirrored `REPO_CONSISTENCY_OWNERSHIP.md` row | ✅ implemented (this slice) |
+| Tests | `tests/unit/test_validate_field_trust_parity.py` + wiring test in `test_repo_doctor_cli.py`; `test_commerce_parity.py::test_registry_shape` top-level-key pin extended for the additive WS-A2 keys | ✅ implemented (this slice) |
+| Integration + final gate | Regenerated twins, `make repo-doctor-fix` (incl. synced-doc reindex of the two new files), `make ci-check` = 0, `git status --short` empty | ⏳ integrator-owned |
+
+### Definition of done (WS-A2)
+
+- `make ci-check` exits **0** — the only valid completion gate.
+- `git status --short` empty; regenerated twins + synced docs committed, never
+  hand-edited.
+- `python scripts/validate_field_trust_parity.py` green (117 events carry
+  `fieldTrust.fields`; TS + Python twins match the registry) and
+  `python scripts/generate_contracts.py --check` idempotent.
+- `validate_consistency_ownership.py` green for the new `event_field_trust_schema`
+  category.
+- No validators weakened; no new ADR.
+
 ## Later phases (reserved)
 
 Workstreams A–E (the blueprint's own sequencing) begin after Phase 0 converges.

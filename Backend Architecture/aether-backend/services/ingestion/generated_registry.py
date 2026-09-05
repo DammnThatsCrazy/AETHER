@@ -1222,3 +1222,466 @@ EVENT_FAMILY: dict[str, str] = {
     "interop_reconciliation_variance_detected": "interop",
     "interop_reconciliation_variance_resolved": "interop",
 }
+
+# Field-trust taxonomy rank order (low -> high authority), from event-registry.json.
+TRUST_CLASS_ORDER: tuple[str, ...] = (
+    "OBSERVED",
+    "SOURCE_ASSERTED",
+    "SOURCE_REFERENCE",
+    "CLIENT_HINT",
+    "SERVER_STAMPED",
+    "RESOLVED",
+    "DERIVED",
+    "INFERRED",
+    "PREDICTED",
+    "OPERATOR_ASSERTED",
+)
+
+# Per-event field-trust declarations (dotted Envelope-A payload paths).
+# Unlisted fields default per fieldTrustDefaults (OBSERVED / sourceEmit:true / level A).
+EVENT_FIELD_TRUST: dict[str, dict[str, dict[str, object]]] = {
+    "track": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+    },
+    "page": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "context.page.url": { "trustClass": "OBSERVED" },
+    },
+    "screen": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+    },
+    "heartbeat": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+    },
+    "error": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+    },
+    "performance": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "context.page.url": { "trustClass": "OBSERVED" },
+    },
+    "experiment": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "context.page.url": { "trustClass": "OBSERVED" },
+    },
+    "journey_started": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "journey_paused": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "journey_resumed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "journey_continued": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "journey_completed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "journey_abandoned": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "journey_checkpoint": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "navigation_intent": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "navigation_arrival": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "deep_link_opened": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "qr_code_scanned": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "nfc_tag_read": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "identify": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "consent": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "conversion": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "payment_initiated": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "properties.external_ref": { "trustClass": "SOURCE_REFERENCE" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "payment_completed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "properties.external_ref": { "trustClass": "SOURCE_REFERENCE" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "payment_failed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "properties.external_ref": { "trustClass": "SOURCE_REFERENCE" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "approval_requested": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "approval_resolved": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "entitlement_granted": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "entitlement_revoked": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "access_granted": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "access_denied": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "wallet": {
+        "properties.address": { "trustClass": "SOURCE_REFERENCE" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "transaction": {
+        "properties.txHash": { "trustClass": "SOURCE_REFERENCE" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "contract_action": {
+        "properties.contract": { "trustClass": "SOURCE_REFERENCE" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "x402_payment": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties.txHash": { "trustClass": "SOURCE_REFERENCE" },
+    },
+    "x402_resource_requested": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+    },
+    "x402_payment_required": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "x402_quote_received": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties.quoteId": { "trustClass": "SOURCE_REFERENCE" },
+    },
+    "x402_authorization_requested": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+    },
+    "x402_authorization_resolved": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "x402_payment_intent_created": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+    },
+    "x402_payment_submitted": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "properties.txHash": { "trustClass": "SOURCE_REFERENCE" },
+    },
+    "x402_payment_settled": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties.txHash": { "trustClass": "SOURCE_REFERENCE" },
+    },
+    "x402_payment_failed": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "x402_payment_timeout": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "x402_receipt_verified": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "x402_access_granted": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "x402_access_denied": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "x402_refund_or_reversal": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "workspace_created": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "workspace_updated": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "member_invited": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "member_joined": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "member_removed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "role_changed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "seat_assigned": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "seat_released": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "integration_connected": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "integration_disconnected": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "service_account_created": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "service_account_revoked": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "api_key_created": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "api_key_revoked": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "project_created": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "project_archived": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "workflow_started": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "workflow_completed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "workflow_failed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "product_viewed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "cart_item_added": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "cart_item_removed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "cart_updated": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "coupon_applied": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "checkout_started": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "checkout_step_completed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "order_completed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "order_cancelled": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "order_refunded": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "subscription_started": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "trial_started": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "trial_converted": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "subscription_renewed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "subscription_cancelled": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "dead_click_observed": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "rage_click_observed": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "scroll_depth_observed": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "form_started": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "form_field_interaction": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "form_validation_failed": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "form_submitted": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "form_abandoned": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "search_reformulated": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "retry_observed": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "journey_stalled": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "backtrack_observed": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "feature_started": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+    },
+    "feature_completed": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+    },
+    "feature_abandoned": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+    },
+    "action_attempted": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+    },
+    "action_succeeded": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+    },
+    "action_failed": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+    },
+    "action_cancelled": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+    },
+    "signup_started": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "signup_completed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "login_succeeded": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "login_failed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "logout_observed": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "sso_observed": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "mfa_challenge_observed": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "identity_verified": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "alias_link_requested": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "alias_link_confirmed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "alias_revoked": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "account_recovery_started": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "account_recovery_completed": {
+        "properties": { "trustClass": "SOURCE_ASSERTED" },
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "device_registered": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+    "device_revoked": {
+        "userId": { "trustClass": "CLIENT_HINT" },
+    },
+}

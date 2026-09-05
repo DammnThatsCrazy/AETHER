@@ -181,3 +181,22 @@ def test_intelligence_projection_gate_wired_in_repo_doctor() -> None:
         "repo_doctor _check_clean must track the backend generated registry "
         "(intelligence_projections/generated_registry.py)"
     )
+
+
+def test_field_trust_parity_gate_wired_in_repo_doctor() -> None:
+    """repo_doctor.py must dispatch the field-trust parity gate.
+
+    The gate (scripts/validate_field_trust_parity.py) asserts the WS-A2
+    per-field trust metadata in event-registry.json is structurally valid and
+    that the TypeScript + Python field-trust twins exactly match a fresh
+    regeneration — closing the coverage gap where generate_contracts.py is not
+    otherwise run inside repo-doctor/CI.
+    """
+    import inspect
+
+    source = inspect.getsource(repo_doctor)
+    assert 'scripts/validate_field_trust_parity.py"]' in source, (
+        "repo_doctor must dispatch scripts/validate_field_trust_parity.py "
+        "as part of the WS-A2 field-trust parity gate"
+    )
+
