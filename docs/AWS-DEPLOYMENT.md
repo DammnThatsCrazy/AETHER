@@ -23,7 +23,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "c292514"
+last_synced_commit: "01ccf8e"
 ---
 
 # AWS Deployment — Infrastructure Reference
@@ -39,8 +39,10 @@ the reviewed Terraform state is a hard stop, so shared repositories are never
 silently adopted or replaced, and that collision check runs before the
 account-level ECS service-linked role bootstrap. Secrets, ECR, and Aurora CMKs carry the staging
 environment tag; the Secrets Manager and regional CloudWatch Logs service
-principals are constrained by ViaService, caller account, and encryption
-context rather than broad key access. The pre-apply verifier compares the
+principals are constrained by caller account and encryption
+context rather than broad key access (Secrets Manager additionally uses
+ViaService; CloudWatch Logs omits it because the service calls KMS as its
+own principal where that condition key is absent). The pre-apply verifier compares the
 attached policy statements with the reviewed staging manifest, including
 resource coverage, conditions, and explicit Deny statements, before any
 Terraform mutation.
