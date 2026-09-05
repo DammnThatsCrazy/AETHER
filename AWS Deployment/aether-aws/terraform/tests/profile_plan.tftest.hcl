@@ -334,6 +334,7 @@ run "staging_listener_maintenance_transition" {
     deployment_profile                = "staging"
     environment                       = "staging"
     network_egress_mode               = null
+    skip_aurora                       = true
     staging_listener_target_group_arn = "arn:aws:elasticloadbalancing:us-east-1:111122223333:targetgroup/aether-staging-maintenance/0000000000000000"
   }
 
@@ -364,6 +365,7 @@ run "demo_profile_plan" {
     aurora_min_acu      = 0
     aurora_max_acu      = 2
     log_retention_days  = 3
+    skip_aurora         = false
   }
 
   # The egress posture profiles.tf must derive for a cost-capped profile that
@@ -521,6 +523,7 @@ run "preview_profile_plan" {
     aurora_min_acu      = 0
     aurora_max_acu      = 2
     log_retention_days  = 3
+    skip_aurora         = false
   }
 
   # The egress posture profiles.tf must derive for a cost-capped profile that
@@ -745,6 +748,7 @@ run "production_lean_profile_plan" {
     aurora_min_acu      = 0.5
     aurora_max_acu      = 4
     log_retention_days  = 3
+    skip_aurora         = false
   }
 
   assert {
@@ -997,6 +1001,7 @@ run "production_scale_profile_plan" {
     aurora_min_acu      = 1
     aurora_max_acu      = 8
     log_retention_days  = 7
+    skip_aurora         = false
   }
 
   assert {
@@ -1151,6 +1156,7 @@ run "enterprise_isolated_profile_plan" {
     aurora_max_acu      = 16
     db_multi_az         = true
     log_retention_days  = 30
+    skip_aurora         = false
   }
 
   assert {
@@ -1377,6 +1383,7 @@ run "vpc_endpoints_egress_mode_is_rejected" {
     aurora_min_acu      = 0.5
     aurora_max_acu      = 4
     log_retention_days  = 3
+    skip_aurora         = false
   }
 
   expect_failures = [var.network_egress_mode]
