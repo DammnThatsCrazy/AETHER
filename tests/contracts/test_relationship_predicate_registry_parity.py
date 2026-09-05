@@ -174,8 +174,8 @@ def test_relationship_predicate_catalog_parity():
     json_predicates = _json_predicates()
     assert set(ts_predicates) == set(py_predicates) == set(json_predicates)
     for pid in json_predicates:
-        assert _canon(ts_predicates[pid]) == _canon(json_predicates[pid]), f"TS/{JSON} drift for {pid!r}"
-        assert _canon(py_predicates[pid]) == _canon(json_predicates[pid]), f"PY/{JSON} drift for {pid!r}"
+        assert _canon(ts_predicates[pid]) == _canon(json_predicates[pid]), f"TS/JSON drift for {pid!r}"
+        assert _canon(py_predicates[pid]) == _canon(json_predicates[pid]), f"PY/JSON drift for {pid!r}"
 
 
 def test_relationship_predicate_registered_edges_resolve():

@@ -200,8 +200,8 @@ def test_relationship_motif_catalog_parity():
     json_motifs = _json_motifs()
     assert set(ts_motifs) == set(py_motifs) == set(json_motifs)
     for mid in json_motifs:
-        assert _canon(ts_motifs[mid]) == _canon(json_motifs[mid]), f"TS/{JSON} drift for {mid!r}"
-        assert _canon(py_motifs[mid]) == _canon(json_motifs[mid]), f"PY/{JSON} drift for {mid!r}"
+        assert _canon(ts_motifs[mid]) == _canon(json_motifs[mid]), f"TS/JSON drift for {mid!r}"
+        assert _canon(py_motifs[mid]) == _canon(json_motifs[mid]), f"PY/JSON drift for {mid!r}"
 
 
 def test_relationship_motif_output_predicates_resolve():
