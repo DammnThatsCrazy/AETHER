@@ -9,7 +9,7 @@ since_version: "8.12.0"
 source_files:
   - packages/shared/contracts/event-registry.json
 canonical_owner: platform@aether
-last_synced_commit: "aa3e2d37"
+last_synced_commit: "db530dce"
 ---
 
 # Canonical Event Model
