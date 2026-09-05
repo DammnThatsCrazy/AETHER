@@ -75,9 +75,27 @@ TRAFFIC_SOURCE_PY = (
 )
 TRAFFIC_SOURCE_TABLE_MD = ROOT / "docs" / "_generated" / "traffic-source-registry-table.md"
 
+# Native SDK sources whose event-type + consent-purpose regions are generated
+# here (WS-A6). The files themselves are hand-authored; only the marker-delimited
+# region bodies below are owned by this generator.
+IOS_AETHER_SWIFT = ROOT / "packages" / "ios" / "Sources" / "AetherSDK" / "Aether.swift"
+ANDROID_AETHER_KT = (
+    ROOT / "packages" / "android" / "src" / "main" / "java" / "com" / "aether" / "sdk" / "Aether.kt"
+)
+
 # Markers used in events.ts to delimit the generated section
 GENERATED_START = "// @generated-start"
 GENERATED_END = "// @generated-end"
+
+# Markers delimiting the iOS/Android event-type + consent-purpose regions this
+# generator owns (WS-A6). Distinct per region so a splice target is unambiguous
+# even with several generated regions inside one hand-authored source file.
+IOS_EVENT_ENUM_START = "// @generated-start aether-event-types/ios-enum"
+IOS_EVENT_ENUM_END = "// @generated-end aether-event-types/ios-enum"
+IOS_CONSENT_MAP_START = "// @generated-start aether-consent-purposes/ios-map"
+IOS_CONSENT_MAP_END = "// @generated-end aether-consent-purposes/ios-map"
+ANDROID_CONSENT_MAP_START = "// @generated-start aether-consent-purposes/android-map"
+ANDROID_CONSENT_MAP_END = "// @generated-end aether-consent-purposes/android-map"
 
 GENERATED_PY_HEADER = """\
 # DO NOT EDIT — generated from packages/shared/contracts/event-registry.json
@@ -1223,6 +1241,192 @@ def update_events_ts(event_reg: dict, current: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Native iOS/Android event-type + consent-purpose regions (WS-A6)
+#
+# The AetherEventType enum, the eventConsentPurpose dict, and the Android
+# EVENT_CONSENT_PURPOSE map were hand-maintained until WS-A6. They are now
+# marker-delimited regions inside hand-authored SDK files, regenerated here so
+# the native event-type surface can never drift from event-registry.json.
+# ---------------------------------------------------------------------------
+
+def _native_banner(version: str) -> str:
+    """Banner emitted at the top of each generated native region."""
+    return (
+        "// @generated — DO NOT EDIT. Source: packages/shared/contracts/event-registry.json\n"
+        f"// Contract version: {version} — Run: python scripts/generate_contracts.py"
+    )
+
+
+def _primary_purpose(event: dict) -> str:
+    """Primary required consent purpose for an event: requiredPurposes[0], or
+    ``analytics`` when empty (e.g. the ``consent`` event). Same rule the TS and
+    Python twins use."""
+    purposes = event.get("requiredPurposes", [])
+    return purposes[0] if purposes else "analytics"
+
+
+def _registry_family_groups(events: list[dict]) -> tuple[list[str], dict[str, list[dict]]]:
+    """Group registry events by family, preserving first-seen (registry) order."""
+    family_order: list[str] = []
+    by_family: dict[str, list[dict]] = {}
+    for e in events:
+        family = e["family"]
+        if family not in by_family:
+            by_family[family] = []
+            family_order.append(family)
+        by_family[family].append(e)
+    return family_order, by_family
+
+
+def _wrap_rows(tokens: list[str], prefix: str, width: int = 100) -> list[str]:
+    """Greedily pack ``tokens`` into ``prefix``-led rows no wider than ``width``
+    columns. Rows join tokens with ``, `` and carry no trailing comma; every row
+    begins with ``prefix``. Deterministic for a fixed token order (byte-stable)."""
+    rows: list[str] = []
+    cur = prefix
+    for token in tokens:
+        piece = token if cur == prefix else ", " + token
+        if len(cur) + len(piece) <= width:
+            cur += piece
+        else:
+            rows.append(cur)
+            cur = prefix + token
+    if cur:
+        rows.append(cur)
+    return rows
+
+
+def gen_ios_event_enum_section(event_reg: dict) -> str:
+    """Registry-derived body of the iOS ``AetherEventType`` enum (the content
+    between the ios-enum markers). Grouped by registry family so the native enum
+    order is exactly registry order."""
+    family_order, by_family = _registry_family_groups(event_reg["events"])
+    lines: list[str] = [_native_banner(event_reg["contractVersion"])]
+    for family in family_order:
+        lines.append(f"    // {family}")
+        lines.extend(_wrap_rows([e["type"] for e in by_family[family]], "    case "))
+    return "\n".join(lines) + "\n"
+
+
+def gen_ios_consent_map_section(event_reg: dict) -> str:
+    """Registry-derived body of the iOS ``eventConsentPurpose`` dict (the content
+    between the ios-map markers). One ``.type: "purpose"`` entry per line in
+    registry order, grouped by family."""
+    family_order, by_family = _registry_family_groups(event_reg["events"])
+    lines: list[str] = [_native_banner(event_reg["contractVersion"])]
+    for family in family_order:
+        lines.append(f"        // {family}")
+        for e in by_family[family]:
+            lines.append(f'        .{e["type"]}: "{_primary_purpose(e)}",')
+    lines[-1] = lines[-1].rstrip(",")
+    return "\n".join(lines) + "\n"
+
+
+def gen_android_consent_map_section(event_reg: dict) -> str:
+    """Registry-derived body of the Android ``EVENT_CONSENT_PURPOSE`` map (the
+    content between the android-map markers). One ``"type" to "purpose"`` entry
+    per line in registry order, grouped by family."""
+    family_order, by_family = _registry_family_groups(event_reg["events"])
+    lines: list[str] = [_native_banner(event_reg["contractVersion"])]
+    for family in family_order:
+        lines.append(f"        // {family}")
+        for e in by_family[family]:
+            lines.append(f'        "{e["type"]}" to "{_primary_purpose(e)}",')
+    lines[-1] = lines[-1].rstrip(",")
+    return "\n".join(lines) + "\n"
+
+
+def _splice_region(current: str, start_marker: str, end_marker: str, inner: str, what: str) -> str:
+    """Replace the body between ``start_marker`` and ``end_marker`` with ``inner``,
+    preserving everything before and after. Mirrors update_events_ts."""
+    start_idx = current.find(start_marker)
+    end_idx = current.find(end_marker)
+    if start_idx == -1 or end_idx == -1:
+        print(
+            f"ERROR: {what} is missing its @generated markers "
+            f"({start_marker!r} / {end_marker!r}).\n"
+            "Place the marker comments around the generated region body, then rerun.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if start_idx > end_idx:
+        print(
+            f"ERROR: {what} has its @generated markers in the wrong order "
+            f"(start at {start_idx} found after end at {end_idx}).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    # Everything up to and including the start marker line
+    preamble = current[: start_idx + len(start_marker)] + "\n"
+    # Everything from the end marker onward
+    postamble = current[end_idx:]
+    return preamble + inner + postamble
+
+
+def _apply_ios_event_enum(event_reg: dict, check: bool, diffs: list[str]) -> None:
+    if not IOS_AETHER_SWIFT.exists():
+        print(f"ERROR: iOS SDK source not found: {IOS_AETHER_SWIFT}", file=sys.stderr)
+        sys.exit(1)
+    current = IOS_AETHER_SWIFT.read_text()
+    updated = _splice_region(
+        current,
+        IOS_EVENT_ENUM_START,
+        IOS_EVENT_ENUM_END,
+        gen_ios_event_enum_section(event_reg),
+        "Aether.swift `enum AetherEventType`",
+    )
+    if current == updated:
+        return
+    if check:
+        diffs.append(str(IOS_AETHER_SWIFT.relative_to(ROOT)))
+        return
+    IOS_AETHER_SWIFT.write_text(updated)
+    print(f"  written: {IOS_AETHER_SWIFT.relative_to(ROOT)}")
+
+
+def _apply_ios_consent_map(event_reg: dict, check: bool, diffs: list[str]) -> None:
+    if not IOS_AETHER_SWIFT.exists():
+        print(f"ERROR: iOS SDK source not found: {IOS_AETHER_SWIFT}", file=sys.stderr)
+        sys.exit(1)
+    current = IOS_AETHER_SWIFT.read_text()
+    updated = _splice_region(
+        current,
+        IOS_CONSENT_MAP_START,
+        IOS_CONSENT_MAP_END,
+        gen_ios_consent_map_section(event_reg),
+        "Aether.swift `eventConsentPurpose`",
+    )
+    if current == updated:
+        return
+    if check:
+        diffs.append(str(IOS_AETHER_SWIFT.relative_to(ROOT)))
+        return
+    IOS_AETHER_SWIFT.write_text(updated)
+    print(f"  written: {IOS_AETHER_SWIFT.relative_to(ROOT)}")
+
+
+def _apply_android_consent_map(event_reg: dict, check: bool, diffs: list[str]) -> None:
+    if not ANDROID_AETHER_KT.exists():
+        print(f"ERROR: Android SDK source not found: {ANDROID_AETHER_KT}", file=sys.stderr)
+        sys.exit(1)
+    current = ANDROID_AETHER_KT.read_text()
+    updated = _splice_region(
+        current,
+        ANDROID_CONSENT_MAP_START,
+        ANDROID_CONSENT_MAP_END,
+        gen_android_consent_map_section(event_reg),
+        "Aether.kt `EVENT_CONSENT_PURPOSE`",
+    )
+    if current == updated:
+        return
+    if check:
+        diffs.append(str(ANDROID_AETHER_KT.relative_to(ROOT)))
+        return
+    ANDROID_AETHER_KT.write_text(updated)
+    print(f"  written: {ANDROID_AETHER_KT.relative_to(ROOT)}")
+
+
+# ---------------------------------------------------------------------------
 # generated_registry.py generator
 # ---------------------------------------------------------------------------
 
@@ -1845,6 +2049,9 @@ def main() -> int:
 
     _apply(CONSENT_TS, gen_consent_ts(consent_reg), args.check, diffs)
     _apply_events_ts(event_reg, args.check, diffs)
+    _apply_ios_event_enum(event_reg, args.check, diffs)
+    _apply_ios_consent_map(event_reg, args.check, diffs)
+    _apply_android_consent_map(event_reg, args.check, diffs)
     _apply(GENERATED_REGISTRY_PY, gen_python_registry(event_reg, consent_reg), args.check, diffs)
     _apply(MEASUREMENT_TS, gen_measurement_ts(metric_reg), args.check, diffs)
     _apply(GENERATED_METRIC_REGISTRY_PY, gen_metric_registry_py(metric_reg), args.check, diffs)

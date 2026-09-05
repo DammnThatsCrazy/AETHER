@@ -774,10 +774,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         results=results,
         stop_on_failure=stop,
         remediation=(
-            "hand-edit AetherEventType/eventConsentPurpose in packages/ios/Sources/AetherSDK/Aether.swift "
-            "and/or EVENT_CONSENT_PURPOSE in packages/android/src/main/java/com/aether/sdk/Aether.kt so their "
-            "event-type sets match packages/shared/contracts/event-registry.json; native registries are never "
-            "code-generated (see scripts/validate_sdk_parity.py's documented non-goal)"
+            "run python scripts/generate_contracts.py to regenerate the marker-delimited native "
+            "regions (AetherEventType enum / eventConsentPurpose in packages/ios/Sources/AetherSDK/Aether.swift "
+            "and EVENT_CONSENT_PURPOSE in packages/android/src/main/java/com/aether/sdk/Aether.kt) from "
+            "packages/shared/contracts/event-registry.json; hand-editing the regions is not supported"
         ),
     )
     run(

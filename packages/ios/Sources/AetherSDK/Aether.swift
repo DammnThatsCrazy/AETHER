@@ -142,166 +142,171 @@ public enum ConsentReceiptError: Error {
 // MARK: - Event Types
 
 public enum AetherEventType: String, Codable, CaseIterable {
+// @generated-start aether-event-types/ios-enum
+// @generated — DO NOT EDIT. Source: packages/shared/contracts/event-registry.json
+// Contract version: 8.12.0 — Run: python scripts/generate_contracts.py
+    // core
     case track, page, screen, heartbeat, error, performance, experiment
-    case journey_started, journey_paused, journey_resumed, journey_continued, journey_completed, journey_abandoned, journey_checkpoint
-    // Acquisition attribution — SDKs observe evidence; the backend classifies
-    case navigation_intent, navigation_arrival, deep_link_opened, app_install_attributed, deferred_attribution_resolved
-    // QR / NFC / App Clip acquisition capture + native UI interaction observation
-    case qr_code_scanned, nfc_tag_read, app_clip_invoked, ui_interaction_observed
-    case identify, consent
-    case conversion, payment_initiated, payment_completed, payment_failed, approval_requested, approval_resolved, entitlement_granted, entitlement_revoked, access_granted, access_denied
+    // journey
+    case journey_started, journey_paused, journey_resumed, journey_continued, journey_completed
+    case journey_abandoned, journey_checkpoint, navigation_intent, navigation_arrival
+    case deep_link_opened, app_install_attributed, deferred_attribution_resolved, qr_code_scanned
+    case nfc_tag_read, app_clip_invoked
+    // identity
+    case identify
+    // consent
+    case consent
+    // commerce
+    case conversion, payment_initiated, payment_completed, payment_failed, approval_requested
+    case approval_resolved, entitlement_granted, entitlement_revoked, access_granted, access_denied
+    // wallet
     case wallet, transaction, contract_action
-    // Agent — legacy
-    case agent_task, agent_decision, a2h_interaction
-    // Agent — lifecycle (granular)
-    case agent_registered, agent_updated, agent_authorized, agent_deauthorized
-    case agent_capability_granted, agent_capability_revoked
-    case agent_task_created, agent_task_decomposed, agent_task_started, agent_task_completed, agent_task_failed
-    case agent_tool_called, agent_resource_requested, agent_delegated_task, agent_subagent_spawned
-    case agent_policy_evaluated, agent_handoff, agent_escalated_to_human, agent_outcome_recorded
-    // x402 — legacy
-    case x402_payment
-    // x402 — lifecycle (granular)
-    case x402_resource_requested, x402_payment_required, x402_quote_received
-    case x402_authorization_requested, x402_authorization_resolved
-    case x402_payment_intent_created, x402_payment_submitted, x402_payment_settled
-    case x402_payment_failed, x402_payment_timeout, x402_receipt_verified
-    case x402_access_granted, x402_access_denied, x402_refund_or_reversal
-    // reward enablement (A6)
-    case reward_action_queued, reward_proof_generated, reward_delivered, reward_claim_submitted
-    // Agentic observability — account / MCP / tool
-    case agentic_account_observed, agentic_account_connected_observed, agentic_account_disconnected_observed
-    case agent_budget_observed, agent_budget_changed_observed, agent_permission_observed
-    case agent_mcp_connection_observed, agent_tool_observed, agent_tool_invocation_observed
-    case agent_activity_observed, agent_risk_signal_observed, agent_notification_observed
-    // Agentic observability — Robinhood-style trading observation
-    case agent_strategy_observed, agent_trade_intent_observed, agent_trade_order_observed
-    case agent_trade_fill_observed, agent_trade_rejection_observed, agent_position_observed
-    case agent_portfolio_snapshot_observed, agent_performance_snapshot_observed, agent_disconnect_observed
-    // Agentic observability — AgentMail-style communication observation
-    case agent_inbox_observed, agent_email_address_observed, agent_thread_observed
-    case agent_message_received_observed, agent_message_sent_observed, agent_reply_observed
-    case agent_attachment_observed, agent_attachment_parsed_observed
-    case agent_otp_detected_observed, agent_invoice_detected_observed, agent_receipt_detected_observed
+    // agent
+    case agent_task, agent_decision, a2h_interaction, agent_registered, agent_updated
+    case agent_authorized, agent_deauthorized, agent_capability_granted, agent_capability_revoked
+    case agent_task_created, agent_task_decomposed, agent_task_started, agent_task_completed
+    case agent_task_failed, agent_tool_called, agent_resource_requested, agent_delegated_task
+    case agent_subagent_spawned, agent_policy_evaluated, agent_handoff, agent_escalated_to_human
+    case agent_outcome_recorded, agentic_account_observed, agentic_account_connected_observed
+    case agentic_account_disconnected_observed, agent_budget_observed, agent_budget_changed_observed
+    case agent_permission_observed, agent_mcp_connection_observed, agent_tool_observed
+    case agent_tool_invocation_observed, agent_activity_observed, agent_risk_signal_observed
+    case agent_notification_observed, agent_strategy_observed, agent_trade_intent_observed
+    case agent_trade_order_observed, agent_trade_fill_observed, agent_trade_rejection_observed
+    case agent_position_observed, agent_portfolio_snapshot_observed
+    case agent_performance_snapshot_observed, agent_disconnect_observed, agent_inbox_observed
+    case agent_email_address_observed, agent_thread_observed, agent_message_received_observed
+    case agent_message_sent_observed, agent_reply_observed, agent_attachment_observed
+    case agent_attachment_parsed_observed, agent_otp_detected_observed
+    case agent_invoice_detected_observed, agent_receipt_detected_observed
     case agent_calendar_intent_observed, agent_support_route_observed
-    case agent_semantic_search_observed, agent_data_extraction_observed
-    // x402 protocol observation family (from external observer perspective)
+    case agent_semantic_search_observed, agent_data_extraction_observed, agent_evaluation_observed
+    case agent_cost_observed, ai_invocation_observed, agent_grounding_observed
+    case agent_guardrail_observed, agent_human_override_observed
+    // reward
+    case reward_action_queued, reward_proof_generated, reward_delivered, reward_claim_submitted
+    // x402
+    case x402_payment, x402_resource_requested, x402_payment_required, x402_quote_received
+    case x402_authorization_requested, x402_authorization_resolved, x402_payment_intent_created
+    case x402_payment_submitted, x402_payment_settled, x402_payment_failed, x402_payment_timeout
+    case x402_receipt_verified, x402_access_granted, x402_access_denied, x402_refund_or_reversal
     case x402_resource_request_observed, x402_challenge_observed, x402_payment_requirement_observed
     case x402_signature_observed, x402_verification_observed, x402_settlement_observed
-    case x402_resource_access_observed, x402_resource_access_denied_observed
-    case x402_failure_observed, x402_replay_risk_observed, x402_provider_observed
-    // Exposure family
+    case x402_resource_access_observed, x402_resource_access_denied_observed, x402_failure_observed
+    case x402_replay_risk_observed, x402_provider_observed
+    // exposure
     case content_impression, recommendation_exposed, offer_exposed, feature_exposed
     case search_result_exposed, ad_exposed, notification_presented, decision_observed
-    // Outcome family
-    case outcome_observed, goal_achieved, goal_failed
-    case recommendation_accepted, recommendation_rejected, feedback_submitted
-    case retention_observed, churn_observed, human_override_observed
-    // B2B family
-    case organization_observed, workspace_created, workspace_updated
-    case member_invited, member_joined, member_removed, role_changed
-    case seat_assigned, seat_released, integration_connected, integration_disconnected
-    case service_account_created, service_account_revoked
-    case api_key_created, api_key_revoked
-    case project_created, project_archived
-    case workflow_started, workflow_completed, workflow_failed
-    // Ecommerce extended family
+    // outcome
+    case outcome_observed, goal_achieved, goal_failed, recommendation_accepted
+    case recommendation_rejected, feedback_submitted, retention_observed, churn_observed
+    case human_override_observed
+    // b2b
+    case organization_observed, workspace_created, workspace_updated, member_invited, member_joined
+    case member_removed, role_changed, seat_assigned, seat_released, integration_connected
+    case integration_disconnected, service_account_created, service_account_revoked, api_key_created
+    case api_key_revoked, project_created, project_archived, workflow_started, workflow_completed
+    case workflow_failed
+    // ecommerce
     case product_viewed, cart_item_added, cart_item_removed, cart_updated, coupon_applied
     case checkout_started, checkout_step_completed, order_completed, order_cancelled, order_refunded
-    case chargeback_observed
-    case subscription_started, trial_started, trial_converted, subscription_renewed
-    case subscription_upgrade_observed, subscription_downgrade_observed, subscription_cancelled
-    case invoice_issued, invoice_paid, invoice_failed, dunning_started, dunning_resolved
-    // Friction family
-    case dead_click_observed, rage_click_observed, scroll_depth_observed
-    case form_started, form_field_interaction, form_validation_failed, form_submitted, form_abandoned
+    case chargeback_observed, subscription_started, trial_started, trial_converted
+    case subscription_renewed, subscription_upgrade_observed, subscription_downgrade_observed
+    case subscription_cancelled, invoice_issued, invoice_paid, invoice_failed, dunning_started
+    case dunning_resolved
+    // friction
+    case dead_click_observed, rage_click_observed, scroll_depth_observed, form_started
+    case form_field_interaction, form_validation_failed, form_submitted, form_abandoned
     case search_reformulated, retry_observed, journey_stalled, backtrack_observed
-    // Interaction family
-    case surface_entered, surface_exited, interaction_observed
-    case feature_started, feature_completed, feature_abandoned
-    case action_attempted, action_succeeded, action_failed, action_cancelled
-    case active_interval_observed
-    // Server observation family
-    case api_request_observed, webhook_delivery_observed
-    case connector_sync_started, connector_sync_completed, connector_sync_failed
-    case job_started, job_completed, job_failed
+    // interaction
+    case surface_entered, surface_exited, interaction_observed, ui_interaction_observed
+    case feature_started, feature_completed, feature_abandoned, action_attempted, action_succeeded
+    case action_failed, action_cancelled, active_interval_observed
+    // server
+    case api_request_observed, webhook_delivery_observed, connector_sync_started
+    case connector_sync_completed, connector_sync_failed, job_started, job_completed, job_failed
     case rate_limit_observed, dependency_failure_observed, export_completed
-    // Identity lifecycle family
+    // identity_lc
     case signup_started, signup_completed, login_succeeded, login_failed, logout_observed
-    case sso_observed, mfa_challenge_observed, identity_verified
-    case alias_link_requested, alias_link_confirmed, alias_revoked
-    case account_recovery_started, account_recovery_completed
+    case sso_observed, mfa_challenge_observed, identity_verified, alias_link_requested
+    case alias_link_confirmed, alias_revoked, account_recovery_started, account_recovery_completed
     case device_registered, device_revoked
-    // Agent evaluation family
-    case agent_evaluation_observed, agent_cost_observed
-    case agent_grounding_observed, agent_guardrail_observed, agent_human_override_observed
-    case ai_invocation_observed
-    // Web3 lifecycle extensions
-    case transaction_pending_observed, transaction_confirmed_observed
-    case transaction_reverted_observed, transaction_reorged_observed
-    case token_approval_observed, allowance_changed_observed
+    // web3_lc
+    case transaction_pending_observed, transaction_confirmed_observed, transaction_reverted_observed
+    case transaction_reorged_observed, token_approval_observed, allowance_changed_observed
     case bridge_transfer_observed, settlement_finality_observed
-    // Comms family
-    case notification_delivered, notification_opened, notification_clicked
-    case email_delivered, email_opened, email_clicked, email_bounced
-    case email_queued, email_processed, email_sent, email_deferred
-    case email_dropped, email_replied, email_spam_complaint, email_suppressed
-    case message_replied_observed, unsubscribe_observed
-    case message_received_observed, message_sent_observed
-    case support_case_created, support_case_resolved, support_case_escalated, support_sla_breached
-    // Credit family (explicit opt-in)
+    // comms
+    case notification_delivered, notification_opened, notification_clicked, email_delivered
+    case email_opened, email_clicked, email_bounced, email_queued, email_processed, email_sent
+    case email_deferred, email_dropped, email_replied, email_spam_complaint, email_suppressed
+    case message_received_observed, message_sent_observed, message_replied_observed
+    case unsubscribe_observed, support_case_created, support_case_resolved, support_case_escalated
+    case support_sla_breached
+    // credit
     case credit_signal_observed, credit_account_observed, credit_decision_observed
-    // Location family (explicit opt-in)
+    // location
     case location_observed, geofence_transition_observed
-    // Derivatives family (explicit financial_activity opt-in)
-    case trading_account_connected, trading_account_disconnected
-    case trading_account_authorized, trading_account_deauthorized
-    case trading_agent_enabled, trading_agent_disabled
+    // derivatives
+    case trading_account_connected, trading_account_disconnected, trading_account_authorized
+    case trading_account_deauthorized, trading_agent_enabled, trading_agent_disabled
     case trade_intent_created, trade_approval_requested, trade_approval_resolved
-    case risk_policy_updated, human_trade_override_recorded
-    // Stablecoin intelligence family (explicit opt-in)
+    case risk_policy_updated, human_trade_override_recorded, derivatives_venue_registered
+    case derivatives_venue_deployment_registered, derivatives_instrument_registered
+    case derivatives_market_registered, derivatives_strategy_registered
+    case derivatives_strategy_version_registered, derivatives_risk_policy_registered
+    case derivatives_account_linked, derivatives_account_link_revoked
+    case derivatives_balance_snapshot_observed, derivatives_collateral_change_observed
+    case derivatives_margin_snapshot_observed, derivatives_order_observed
+    case derivatives_order_updated_observed, derivatives_order_cancelled_observed
+    case derivatives_order_rejected_observed, derivatives_order_expired_observed
+    case derivatives_fill_observed, derivatives_fill_corrected, derivatives_position_opened_observed
+    case derivatives_position_increased_observed, derivatives_position_reduced_observed
+    case derivatives_position_closed_observed, derivatives_position_liquidated_observed
+    case derivatives_position_adl_observed, derivatives_position_settled_observed
+    case derivatives_position_corrected, derivatives_funding_payment_observed
+    case derivatives_fee_observed, derivatives_pnl_snapshot_materialized
+    case derivatives_exposure_snapshot_materialized, derivatives_price_observation_recorded
+    case derivatives_market_status_changed, derivatives_stream_gap_detected
+    case derivatives_stream_gap_recovered, derivatives_stream_checkpoint_advanced
+    case derivatives_adapter_conformance_run, derivatives_reconciliation_run_completed
+    case derivatives_reconciliation_variance_detected, derivatives_reconciliation_variance_resolved
+    case derivatives_risk_threshold_breached
+    // stablecoin
     case stablecoin_transfer_observed, stablecoin_payment_observed, stablecoin_mint_observed
-    case stablecoin_burn_observed, stablecoin_bridge_outbound_observed, stablecoin_bridge_inbound_observed
-    case stablecoin_swap_observed, stablecoin_x402_settlement_observed, stablecoin_treasury_movement_observed
-    case stablecoin_payout_observed, stablecoin_venue_deposit_observed, stablecoin_venue_withdrawal_observed
-    case stablecoin_balance_snapshot_observed, stablecoin_supply_snapshot_observed, stablecoin_holder_concentration_observed
+    case stablecoin_burn_observed, stablecoin_bridge_outbound_observed
+    case stablecoin_bridge_inbound_observed, stablecoin_swap_observed
+    case stablecoin_x402_settlement_observed, stablecoin_treasury_movement_observed
+    case stablecoin_payout_observed, stablecoin_venue_deposit_observed
+    case stablecoin_venue_withdrawal_observed, stablecoin_balance_snapshot_observed
+    case stablecoin_supply_snapshot_observed, stablecoin_holder_concentration_observed
     case stablecoin_valuation_observed, stablecoin_depeg_detected, stablecoin_depeg_resolved
     case stablecoin_finality_confirmed, stablecoin_reorg_detected, stablecoin_observation_corrected
-    case stablecoin_reconciliation_run_completed, stablecoin_reconciliation_variance_detected, stablecoin_reconciliation_variance_resolved
-    case stablecoin_asset_registered, stablecoin_deployment_registered, stablecoin_support_asserted
-    case stablecoin_support_revoked, stablecoin_flow_aggregate_materialized, stablecoin_checkpoint_advanced
-    // Derivatives intelligence family (explicit opt-in)
-    case derivatives_venue_registered, derivatives_venue_deployment_registered, derivatives_instrument_registered
-    case derivatives_market_registered, derivatives_strategy_registered, derivatives_strategy_version_registered
-    case derivatives_risk_policy_registered, derivatives_account_linked, derivatives_account_link_revoked
-    case derivatives_balance_snapshot_observed, derivatives_collateral_change_observed, derivatives_margin_snapshot_observed
-    case derivatives_order_observed, derivatives_order_updated_observed, derivatives_order_cancelled_observed
-    case derivatives_order_rejected_observed, derivatives_order_expired_observed, derivatives_fill_observed
-    case derivatives_fill_corrected, derivatives_position_opened_observed, derivatives_position_increased_observed
-    case derivatives_position_reduced_observed, derivatives_position_closed_observed, derivatives_position_liquidated_observed
-    case derivatives_position_adl_observed, derivatives_position_settled_observed, derivatives_position_corrected
-    case derivatives_funding_payment_observed, derivatives_fee_observed, derivatives_pnl_snapshot_materialized
-    case derivatives_exposure_snapshot_materialized, derivatives_price_observation_recorded, derivatives_market_status_changed
-    case derivatives_stream_gap_detected, derivatives_stream_gap_recovered, derivatives_stream_checkpoint_advanced
-    case derivatives_adapter_conformance_run, derivatives_reconciliation_run_completed, derivatives_reconciliation_variance_detected
-    case derivatives_reconciliation_variance_resolved, derivatives_risk_threshold_breached
-    // Interoperability intelligence family (explicit opt-in)
+    case stablecoin_reconciliation_run_completed, stablecoin_reconciliation_variance_detected
+    case stablecoin_reconciliation_variance_resolved, stablecoin_asset_registered
+    case stablecoin_deployment_registered, stablecoin_support_asserted, stablecoin_support_revoked
+    case stablecoin_flow_aggregate_materialized, stablecoin_checkpoint_advanced
+    // interop
     case interop_provider_registered, interop_gateway_registered, interop_path_registered
-    case interop_application_registered, interop_verification_actor_registered, interop_message_discovered
-    case interop_message_sent_observed, interop_message_source_confirmed, interop_message_verification_observed
-    case interop_message_verified, interop_message_delivery_attempt_observed, interop_message_delivered
+    case interop_application_registered, interop_verification_actor_registered
+    case interop_message_discovered, interop_message_sent_observed, interop_message_source_confirmed
+    case interop_message_verification_observed, interop_message_verified
+    case interop_message_delivery_attempt_observed, interop_message_delivered
     case interop_message_executed_observed, interop_message_settled, interop_message_failed
     case interop_message_timeout, interop_message_expired, interop_message_cancelled
     case interop_message_refunded_observed, interop_message_recovered, interop_message_reorged
     case interop_message_corrected, interop_message_correlated, interop_intent_observed
-    case interop_intent_fulfilled_observed, interop_asset_leg_locked_observed, interop_asset_leg_burned_observed
-    case interop_asset_leg_minted_observed, interop_asset_leg_released_observed, interop_fee_observed
-    case interop_security_policy_snapshot_recorded, interop_security_policy_changed, interop_verification_quorum_observed
-    case interop_provider_checkpoint_advanced, interop_stream_gap_detected, interop_stream_gap_recovered
-    case interop_reconciliation_run_completed, interop_reconciliation_variance_detected, interop_reconciliation_variance_resolved
-    // Privacy / DSR lifecycle family (control-plane state; never SDK-emitted)
+    case interop_intent_fulfilled_observed, interop_asset_leg_locked_observed
+    case interop_asset_leg_burned_observed, interop_asset_leg_minted_observed
+    case interop_asset_leg_released_observed, interop_fee_observed
+    case interop_security_policy_snapshot_recorded, interop_security_policy_changed
+    case interop_verification_quorum_observed, interop_provider_checkpoint_advanced
+    case interop_stream_gap_detected, interop_stream_gap_recovered
+    case interop_reconciliation_run_completed, interop_reconciliation_variance_detected
+    case interop_reconciliation_variance_resolved
+    // privacy
     case data_subject_request_received, data_subject_request_queued, data_subject_request_denied
     case erasure_completed, erasure_failed
+// @generated-end aether-event-types/ios-enum
 }
 
 public struct AetherEvent: Codable {
@@ -539,220 +544,438 @@ public final class Aether: NSObject {
     ]
 
     private static let eventConsentPurpose: [AetherEventType: String] = [
-        .track: "analytics", .page: "analytics", .screen: "analytics", .heartbeat: "analytics", .error: "analytics", .performance: "analytics",
-        .journey_started: "analytics", .journey_paused: "analytics", .journey_resumed: "analytics", .journey_continued: "analytics", .journey_completed: "analytics", .journey_abandoned: "analytics", .journey_checkpoint: "analytics", .identify: "analytics",
-        // Acquisition attribution — SDKs observe evidence; the backend classifies
-        .navigation_intent: "analytics", .navigation_arrival: "analytics",
-        .deep_link_opened: "analytics", .app_install_attributed: "analytics",
+// @generated-start aether-consent-purposes/ios-map
+// @generated — DO NOT EDIT. Source: packages/shared/contracts/event-registry.json
+// Contract version: 8.12.0 — Run: python scripts/generate_contracts.py
+        // core
+        .track: "analytics",
+        .page: "analytics",
+        .screen: "analytics",
+        .heartbeat: "analytics",
+        .error: "analytics",
+        .performance: "analytics",
+        .experiment: "marketing",
+        // journey
+        .journey_started: "analytics",
+        .journey_paused: "analytics",
+        .journey_resumed: "analytics",
+        .journey_continued: "analytics",
+        .journey_completed: "analytics",
+        .journey_abandoned: "analytics",
+        .journey_checkpoint: "analytics",
+        .navigation_intent: "analytics",
+        .navigation_arrival: "analytics",
+        .deep_link_opened: "analytics",
+        .app_install_attributed: "analytics",
         .deferred_attribution_resolved: "analytics",
-        // QR / NFC / App Clip acquisition capture + native UI interaction observation
-        .qr_code_scanned: "analytics", .nfc_tag_read: "analytics",
-        .app_clip_invoked: "analytics", .ui_interaction_observed: "analytics",
-        .experiment: "marketing", .conversion: "marketing", .consent: "analytics",
-        .payment_initiated: "commerce", .payment_completed: "commerce", .payment_failed: "commerce", .approval_requested: "commerce", .approval_resolved: "commerce", .entitlement_granted: "commerce", .entitlement_revoked: "commerce", .access_granted: "commerce", .access_denied: "commerce",
-        // x402 — legacy + lifecycle
-        .x402_payment: "commerce",
-        .x402_resource_requested: "commerce", .x402_payment_required: "commerce",
-        .x402_quote_received: "commerce", .x402_authorization_requested: "commerce",
-        .x402_authorization_resolved: "commerce", .x402_payment_intent_created: "commerce",
-        .x402_payment_submitted: "commerce", .x402_payment_settled: "commerce",
-        .x402_payment_failed: "commerce", .x402_payment_timeout: "commerce",
-        .x402_receipt_verified: "commerce", .x402_access_granted: "commerce",
-        .x402_access_denied: "commerce", .x402_refund_or_reversal: "commerce",
-        // reward enablement (A6)
-        .reward_action_queued: "commerce", .reward_proof_generated: "commerce",
-        .reward_delivered: "commerce", .reward_claim_submitted: "commerce",
-        .wallet: "web3", .transaction: "web3", .contract_action: "web3",
-        // Agent — legacy + lifecycle
-        .agent_task: "agent", .agent_decision: "agent", .a2h_interaction: "agent",
-        .agent_registered: "agent", .agent_updated: "agent",
-        .agent_authorized: "agent", .agent_deauthorized: "agent",
-        .agent_capability_granted: "agent", .agent_capability_revoked: "agent",
-        .agent_task_created: "agent", .agent_task_decomposed: "agent",
-        .agent_task_started: "agent", .agent_task_completed: "agent",
-        .agent_task_failed: "agent", .agent_tool_called: "agent",
-        .agent_resource_requested: "agent", .agent_delegated_task: "agent",
-        .agent_subagent_spawned: "agent", .agent_policy_evaluated: "agent",
-        .agent_handoff: "agent", .agent_escalated_to_human: "agent",
+        .qr_code_scanned: "analytics",
+        .nfc_tag_read: "analytics",
+        .app_clip_invoked: "analytics",
+        // identity
+        .identify: "analytics",
+        // consent
+        .consent: "analytics",
+        // commerce
+        .conversion: "marketing",
+        .payment_initiated: "commerce",
+        .payment_completed: "commerce",
+        .payment_failed: "commerce",
+        .approval_requested: "commerce",
+        .approval_resolved: "commerce",
+        .entitlement_granted: "commerce",
+        .entitlement_revoked: "commerce",
+        .access_granted: "commerce",
+        .access_denied: "commerce",
+        // wallet
+        .wallet: "web3",
+        .transaction: "web3",
+        .contract_action: "web3",
+        // agent
+        .agent_task: "agent",
+        .agent_decision: "agent",
+        .a2h_interaction: "agent",
+        .agent_registered: "agent",
+        .agent_updated: "agent",
+        .agent_authorized: "agent",
+        .agent_deauthorized: "agent",
+        .agent_capability_granted: "agent",
+        .agent_capability_revoked: "agent",
+        .agent_task_created: "agent",
+        .agent_task_decomposed: "agent",
+        .agent_task_started: "agent",
+        .agent_task_completed: "agent",
+        .agent_task_failed: "agent",
+        .agent_tool_called: "agent",
+        .agent_resource_requested: "agent",
+        .agent_delegated_task: "agent",
+        .agent_subagent_spawned: "agent",
+        .agent_policy_evaluated: "agent",
+        .agent_handoff: "agent",
+        .agent_escalated_to_human: "agent",
         .agent_outcome_recorded: "agent",
-        // Agentic observability — account / MCP / tool
-        .agentic_account_observed: "agent", .agentic_account_connected_observed: "agent", .agentic_account_disconnected_observed: "agent",
-        .agent_budget_observed: "agent", .agent_budget_changed_observed: "agent", .agent_permission_observed: "agent",
-        .agent_mcp_connection_observed: "agent", .agent_tool_observed: "agent", .agent_tool_invocation_observed: "agent",
-        .agent_activity_observed: "agent", .agent_risk_signal_observed: "agent", .agent_notification_observed: "agent",
-        // Agentic observability — Robinhood-style trading observation
-        .agent_strategy_observed: "agent", .agent_trade_intent_observed: "agent", .agent_trade_order_observed: "agent",
-        .agent_trade_fill_observed: "agent", .agent_trade_rejection_observed: "agent", .agent_position_observed: "agent",
-        .agent_portfolio_snapshot_observed: "agent", .agent_performance_snapshot_observed: "agent", .agent_disconnect_observed: "agent",
-        // Agentic observability — AgentMail-style communication observation
-        .agent_inbox_observed: "agent", .agent_email_address_observed: "agent", .agent_thread_observed: "agent",
-        .agent_message_received_observed: "agent", .agent_message_sent_observed: "agent", .agent_reply_observed: "agent",
-        .agent_attachment_observed: "agent", .agent_attachment_parsed_observed: "agent",
-        .agent_otp_detected_observed: "agent", .agent_invoice_detected_observed: "agent", .agent_receipt_detected_observed: "agent",
-        .agent_calendar_intent_observed: "agent", .agent_support_route_observed: "agent",
-        .agent_semantic_search_observed: "agent", .agent_data_extraction_observed: "agent",
-        // x402 protocol observation family
-        .x402_resource_request_observed: "commerce", .x402_challenge_observed: "commerce", .x402_payment_requirement_observed: "commerce",
-        .x402_signature_observed: "commerce", .x402_verification_observed: "commerce", .x402_settlement_observed: "commerce",
-        .x402_resource_access_observed: "commerce", .x402_resource_access_denied_observed: "commerce",
-        .x402_failure_observed: "commerce", .x402_replay_risk_observed: "commerce", .x402_provider_observed: "commerce",
-        // Exposure family
-        .content_impression: "analytics", .recommendation_exposed: "analytics",
-        .offer_exposed: "analytics", .feature_exposed: "analytics",
-        .search_result_exposed: "analytics", .ad_exposed: "marketing",
-        .notification_presented: "analytics", .decision_observed: "analytics",
-        // Outcome family
-        .outcome_observed: "analytics", .goal_achieved: "analytics", .goal_failed: "analytics",
-        .recommendation_accepted: "analytics", .recommendation_rejected: "analytics",
-        .feedback_submitted: "analytics", .retention_observed: "analytics",
-        .churn_observed: "analytics", .human_override_observed: "analytics",
-        // B2B family
-        .organization_observed: "analytics", .workspace_created: "analytics", .workspace_updated: "analytics",
-        .member_invited: "analytics", .member_joined: "analytics", .member_removed: "analytics",
-        .role_changed: "analytics", .seat_assigned: "analytics", .seat_released: "analytics",
-        .integration_connected: "analytics", .integration_disconnected: "analytics",
-        .service_account_created: "analytics", .service_account_revoked: "analytics",
-        .api_key_created: "analytics", .api_key_revoked: "analytics",
-        .project_created: "analytics", .project_archived: "analytics",
-        .workflow_started: "analytics", .workflow_completed: "analytics", .workflow_failed: "analytics",
-        // Ecommerce extended family
-        .product_viewed: "commerce", .cart_item_added: "commerce", .cart_item_removed: "commerce",
-        .cart_updated: "commerce", .coupon_applied: "commerce",
-        .checkout_started: "commerce", .checkout_step_completed: "commerce",
-        .order_completed: "commerce", .order_cancelled: "commerce", .order_refunded: "commerce",
+        .agentic_account_observed: "agent",
+        .agentic_account_connected_observed: "agent",
+        .agentic_account_disconnected_observed: "agent",
+        .agent_budget_observed: "agent",
+        .agent_budget_changed_observed: "agent",
+        .agent_permission_observed: "agent",
+        .agent_mcp_connection_observed: "agent",
+        .agent_tool_observed: "agent",
+        .agent_tool_invocation_observed: "agent",
+        .agent_activity_observed: "agent",
+        .agent_risk_signal_observed: "agent",
+        .agent_notification_observed: "agent",
+        .agent_strategy_observed: "agent",
+        .agent_trade_intent_observed: "agent",
+        .agent_trade_order_observed: "financial_activity",
+        .agent_trade_fill_observed: "financial_activity",
+        .agent_trade_rejection_observed: "agent",
+        .agent_position_observed: "financial_activity",
+        .agent_portfolio_snapshot_observed: "financial_activity",
+        .agent_performance_snapshot_observed: "financial_activity",
+        .agent_disconnect_observed: "agent",
+        .agent_inbox_observed: "agent",
+        .agent_email_address_observed: "agent",
+        .agent_thread_observed: "agent",
+        .agent_message_received_observed: "agent",
+        .agent_message_sent_observed: "agent",
+        .agent_reply_observed: "agent",
+        .agent_attachment_observed: "agent",
+        .agent_attachment_parsed_observed: "agent",
+        .agent_otp_detected_observed: "agent",
+        .agent_invoice_detected_observed: "agent",
+        .agent_receipt_detected_observed: "agent",
+        .agent_calendar_intent_observed: "agent",
+        .agent_support_route_observed: "agent",
+        .agent_semantic_search_observed: "agent",
+        .agent_data_extraction_observed: "agent",
+        .agent_evaluation_observed: "agent",
+        .agent_cost_observed: "agent",
+        .ai_invocation_observed: "agent",
+        .agent_grounding_observed: "agent",
+        .agent_guardrail_observed: "agent",
+        .agent_human_override_observed: "agent",
+        // reward
+        .reward_action_queued: "commerce",
+        .reward_proof_generated: "commerce",
+        .reward_delivered: "commerce",
+        .reward_claim_submitted: "commerce",
+        // x402
+        .x402_payment: "commerce",
+        .x402_resource_requested: "commerce",
+        .x402_payment_required: "commerce",
+        .x402_quote_received: "commerce",
+        .x402_authorization_requested: "commerce",
+        .x402_authorization_resolved: "commerce",
+        .x402_payment_intent_created: "commerce",
+        .x402_payment_submitted: "commerce",
+        .x402_payment_settled: "commerce",
+        .x402_payment_failed: "commerce",
+        .x402_payment_timeout: "commerce",
+        .x402_receipt_verified: "commerce",
+        .x402_access_granted: "commerce",
+        .x402_access_denied: "commerce",
+        .x402_refund_or_reversal: "commerce",
+        .x402_resource_request_observed: "commerce",
+        .x402_challenge_observed: "commerce",
+        .x402_payment_requirement_observed: "commerce",
+        .x402_signature_observed: "commerce",
+        .x402_verification_observed: "commerce",
+        .x402_settlement_observed: "commerce",
+        .x402_resource_access_observed: "commerce",
+        .x402_resource_access_denied_observed: "commerce",
+        .x402_failure_observed: "commerce",
+        .x402_replay_risk_observed: "commerce",
+        .x402_provider_observed: "commerce",
+        // exposure
+        .content_impression: "analytics",
+        .recommendation_exposed: "analytics",
+        .offer_exposed: "analytics",
+        .feature_exposed: "analytics",
+        .search_result_exposed: "analytics",
+        .ad_exposed: "marketing",
+        .notification_presented: "analytics",
+        .decision_observed: "analytics",
+        // outcome
+        .outcome_observed: "analytics",
+        .goal_achieved: "analytics",
+        .goal_failed: "analytics",
+        .recommendation_accepted: "analytics",
+        .recommendation_rejected: "analytics",
+        .feedback_submitted: "analytics",
+        .retention_observed: "analytics",
+        .churn_observed: "analytics",
+        .human_override_observed: "analytics",
+        // b2b
+        .organization_observed: "analytics",
+        .workspace_created: "analytics",
+        .workspace_updated: "analytics",
+        .member_invited: "analytics",
+        .member_joined: "analytics",
+        .member_removed: "analytics",
+        .role_changed: "analytics",
+        .seat_assigned: "analytics",
+        .seat_released: "analytics",
+        .integration_connected: "analytics",
+        .integration_disconnected: "analytics",
+        .service_account_created: "analytics",
+        .service_account_revoked: "analytics",
+        .api_key_created: "analytics",
+        .api_key_revoked: "analytics",
+        .project_created: "analytics",
+        .project_archived: "analytics",
+        .workflow_started: "analytics",
+        .workflow_completed: "analytics",
+        .workflow_failed: "analytics",
+        // ecommerce
+        .product_viewed: "commerce",
+        .cart_item_added: "commerce",
+        .cart_item_removed: "commerce",
+        .cart_updated: "commerce",
+        .coupon_applied: "commerce",
+        .checkout_started: "commerce",
+        .checkout_step_completed: "commerce",
+        .order_completed: "commerce",
+        .order_cancelled: "commerce",
+        .order_refunded: "commerce",
         .chargeback_observed: "commerce",
-        .subscription_started: "commerce", .trial_started: "commerce", .trial_converted: "commerce",
-        .subscription_renewed: "commerce", .subscription_upgrade_observed: "commerce",
-        .subscription_downgrade_observed: "commerce", .subscription_cancelled: "commerce",
-        .invoice_issued: "commerce", .invoice_paid: "commerce", .invoice_failed: "commerce",
-        .dunning_started: "commerce", .dunning_resolved: "commerce",
-        // Friction family
-        .dead_click_observed: "analytics", .rage_click_observed: "analytics",
-        .scroll_depth_observed: "analytics", .form_started: "analytics",
-        .form_field_interaction: "analytics", .form_validation_failed: "analytics",
-        .form_submitted: "analytics", .form_abandoned: "analytics",
-        .search_reformulated: "analytics", .retry_observed: "analytics",
-        .journey_stalled: "analytics", .backtrack_observed: "analytics",
-        // Interaction family
-        .surface_entered: "analytics", .surface_exited: "analytics",
-        .interaction_observed: "analytics", .feature_started: "analytics",
-        .feature_completed: "analytics", .feature_abandoned: "analytics",
-        .action_attempted: "analytics", .action_succeeded: "analytics",
-        .action_failed: "analytics", .action_cancelled: "analytics",
+        .subscription_started: "commerce",
+        .trial_started: "commerce",
+        .trial_converted: "commerce",
+        .subscription_renewed: "commerce",
+        .subscription_upgrade_observed: "commerce",
+        .subscription_downgrade_observed: "commerce",
+        .subscription_cancelled: "commerce",
+        .invoice_issued: "commerce",
+        .invoice_paid: "commerce",
+        .invoice_failed: "commerce",
+        .dunning_started: "commerce",
+        .dunning_resolved: "commerce",
+        // friction
+        .dead_click_observed: "analytics",
+        .rage_click_observed: "analytics",
+        .scroll_depth_observed: "analytics",
+        .form_started: "analytics",
+        .form_field_interaction: "analytics",
+        .form_validation_failed: "analytics",
+        .form_submitted: "analytics",
+        .form_abandoned: "analytics",
+        .search_reformulated: "analytics",
+        .retry_observed: "analytics",
+        .journey_stalled: "analytics",
+        .backtrack_observed: "analytics",
+        // interaction
+        .surface_entered: "analytics",
+        .surface_exited: "analytics",
+        .interaction_observed: "analytics",
+        .ui_interaction_observed: "analytics",
+        .feature_started: "analytics",
+        .feature_completed: "analytics",
+        .feature_abandoned: "analytics",
+        .action_attempted: "analytics",
+        .action_succeeded: "analytics",
+        .action_failed: "analytics",
+        .action_cancelled: "analytics",
         .active_interval_observed: "analytics",
-        // Server observation family
-        .api_request_observed: "analytics", .webhook_delivery_observed: "analytics",
-        .connector_sync_started: "analytics", .connector_sync_completed: "analytics",
-        .connector_sync_failed: "analytics", .job_started: "analytics",
-        .job_completed: "analytics", .job_failed: "analytics",
-        .rate_limit_observed: "analytics", .dependency_failure_observed: "analytics",
+        // server
+        .api_request_observed: "analytics",
+        .webhook_delivery_observed: "analytics",
+        .connector_sync_started: "analytics",
+        .connector_sync_completed: "analytics",
+        .connector_sync_failed: "analytics",
+        .job_started: "analytics",
+        .job_completed: "analytics",
+        .job_failed: "analytics",
+        .rate_limit_observed: "analytics",
+        .dependency_failure_observed: "analytics",
         .export_completed: "analytics",
-        // Identity lifecycle family
-        .signup_started: "analytics", .signup_completed: "analytics",
-        .login_succeeded: "analytics", .login_failed: "analytics",
-        .logout_observed: "analytics", .sso_observed: "analytics",
-        .mfa_challenge_observed: "analytics", .identity_verified: "analytics",
-        .alias_link_requested: "analytics", .alias_link_confirmed: "analytics",
-        .alias_revoked: "analytics", .account_recovery_started: "analytics",
-        .account_recovery_completed: "analytics", .device_registered: "analytics",
+        // identity_lc
+        .signup_started: "analytics",
+        .signup_completed: "analytics",
+        .login_succeeded: "analytics",
+        .login_failed: "analytics",
+        .logout_observed: "analytics",
+        .sso_observed: "analytics",
+        .mfa_challenge_observed: "analytics",
+        .identity_verified: "analytics",
+        .alias_link_requested: "analytics",
+        .alias_link_confirmed: "analytics",
+        .alias_revoked: "analytics",
+        .account_recovery_started: "analytics",
+        .account_recovery_completed: "analytics",
+        .device_registered: "analytics",
         .device_revoked: "analytics",
-        // Agent evaluation family
-        .agent_evaluation_observed: "agent", .agent_cost_observed: "agent",
-        .agent_grounding_observed: "agent", .agent_guardrail_observed: "agent",
-        .agent_human_override_observed: "agent", .ai_invocation_observed: "agent",
-        // Web3 lifecycle extensions
-        .transaction_pending_observed: "web3", .transaction_confirmed_observed: "web3",
-        .transaction_reverted_observed: "web3", .transaction_reorged_observed: "web3",
-        .token_approval_observed: "web3", .allowance_changed_observed: "web3",
-        .bridge_transfer_observed: "web3", .settlement_finality_observed: "web3",
-        // Comms family
-        .notification_delivered: "analytics", .notification_opened: "analytics",
+        // web3_lc
+        .transaction_pending_observed: "web3",
+        .transaction_confirmed_observed: "web3",
+        .transaction_reverted_observed: "web3",
+        .transaction_reorged_observed: "web3",
+        .token_approval_observed: "web3",
+        .allowance_changed_observed: "web3",
+        .bridge_transfer_observed: "web3",
+        .settlement_finality_observed: "web3",
+        // comms
+        .notification_delivered: "analytics",
+        .notification_opened: "analytics",
         .notification_clicked: "analytics",
-        .email_delivered: "marketing", .email_opened: "marketing",
-        .email_clicked: "marketing", .email_bounced: "marketing",
-        .email_queued: "marketing", .email_processed: "marketing",
-        .email_sent: "marketing", .email_deferred: "marketing",
-        .email_dropped: "marketing", .email_replied: "marketing",
-        .email_spam_complaint: "marketing", .email_suppressed: "marketing",
-        .message_replied_observed: "analytics", .unsubscribe_observed: "marketing",
-        .message_received_observed: "analytics", .message_sent_observed: "analytics",
-        .support_case_created: "analytics", .support_case_resolved: "analytics",
-        .support_case_escalated: "analytics", .support_sla_breached: "analytics",
-        // Credit family (explicit opt-in)
-        .credit_signal_observed: "credit", .credit_account_observed: "credit",
+        .email_delivered: "marketing",
+        .email_opened: "marketing",
+        .email_clicked: "marketing",
+        .email_bounced: "marketing",
+        .email_queued: "marketing",
+        .email_processed: "marketing",
+        .email_sent: "marketing",
+        .email_deferred: "marketing",
+        .email_dropped: "marketing",
+        .email_replied: "marketing",
+        .email_spam_complaint: "marketing",
+        .email_suppressed: "marketing",
+        .message_received_observed: "analytics",
+        .message_sent_observed: "analytics",
+        .message_replied_observed: "analytics",
+        .unsubscribe_observed: "marketing",
+        .support_case_created: "analytics",
+        .support_case_resolved: "analytics",
+        .support_case_escalated: "analytics",
+        .support_sla_breached: "analytics",
+        // credit
+        .credit_signal_observed: "credit",
+        .credit_account_observed: "credit",
         .credit_decision_observed: "credit",
-        // Location family (explicit opt-in)
-        .location_observed: "location", .geofence_transition_observed: "location",
-        // Derivatives family (explicit financial_activity opt-in)
-        .trading_account_connected: "financial_activity", .trading_account_disconnected: "financial_activity",
-        .trading_account_authorized: "financial_activity", .trading_account_deauthorized: "financial_activity",
-        .trading_agent_enabled: "financial_activity", .trading_agent_disabled: "financial_activity",
-        .trade_intent_created: "financial_activity", .trade_approval_requested: "financial_activity",
-        .trade_approval_resolved: "financial_activity", .risk_policy_updated: "financial_activity",
+        // location
+        .location_observed: "location",
+        .geofence_transition_observed: "location",
+        // derivatives
+        .trading_account_connected: "financial_activity",
+        .trading_account_disconnected: "financial_activity",
+        .trading_account_authorized: "financial_activity",
+        .trading_account_deauthorized: "financial_activity",
+        .trading_agent_enabled: "financial_activity",
+        .trading_agent_disabled: "financial_activity",
+        .trade_intent_created: "financial_activity",
+        .trade_approval_requested: "financial_activity",
+        .trade_approval_resolved: "financial_activity",
+        .risk_policy_updated: "financial_activity",
         .human_trade_override_recorded: "financial_activity",
-        // Stablecoin intelligence family (explicit opt-in)
-        .stablecoin_transfer_observed: "economic_observability", .stablecoin_payment_observed: "economic_observability",
-        .stablecoin_mint_observed: "economic_observability", .stablecoin_burn_observed: "economic_observability",
-        .stablecoin_bridge_outbound_observed: "economic_observability", .stablecoin_bridge_inbound_observed: "economic_observability",
-        .stablecoin_swap_observed: "economic_observability", .stablecoin_x402_settlement_observed: "economic_observability",
-        .stablecoin_treasury_movement_observed: "economic_observability", .stablecoin_payout_observed: "economic_observability",
-        .stablecoin_venue_deposit_observed: "economic_observability", .stablecoin_venue_withdrawal_observed: "economic_observability",
-        .stablecoin_balance_snapshot_observed: "economic_observability", .stablecoin_supply_snapshot_observed: "economic_observability",
-        .stablecoin_holder_concentration_observed: "economic_observability", .stablecoin_valuation_observed: "economic_observability",
-        .stablecoin_depeg_detected: "economic_observability", .stablecoin_depeg_resolved: "economic_observability",
-        .stablecoin_finality_confirmed: "economic_observability", .stablecoin_reorg_detected: "economic_observability",
-        .stablecoin_observation_corrected: "economic_observability", .stablecoin_reconciliation_run_completed: "economic_observability",
-        .stablecoin_reconciliation_variance_detected: "economic_observability", .stablecoin_reconciliation_variance_resolved: "economic_observability",
-        .stablecoin_asset_registered: "economic_observability", .stablecoin_deployment_registered: "economic_observability",
-        .stablecoin_support_asserted: "economic_observability", .stablecoin_support_revoked: "economic_observability",
-        .stablecoin_flow_aggregate_materialized: "economic_observability", .stablecoin_checkpoint_advanced: "economic_observability",
-        // Derivatives intelligence family (explicit opt-in)
-        .derivatives_venue_registered: "financial_activity", .derivatives_venue_deployment_registered: "financial_activity",
-        .derivatives_instrument_registered: "financial_activity", .derivatives_market_registered: "financial_activity",
-        .derivatives_strategy_registered: "financial_activity", .derivatives_strategy_version_registered: "financial_activity",
-        .derivatives_risk_policy_registered: "financial_activity", .derivatives_account_linked: "financial_activity",
-        .derivatives_account_link_revoked: "financial_activity", .derivatives_balance_snapshot_observed: "financial_activity",
-        .derivatives_collateral_change_observed: "financial_activity", .derivatives_margin_snapshot_observed: "financial_activity",
-        .derivatives_order_observed: "financial_activity", .derivatives_order_updated_observed: "financial_activity",
-        .derivatives_order_cancelled_observed: "financial_activity", .derivatives_order_rejected_observed: "financial_activity",
-        .derivatives_order_expired_observed: "financial_activity", .derivatives_fill_observed: "financial_activity",
-        .derivatives_fill_corrected: "financial_activity", .derivatives_position_opened_observed: "financial_activity",
-        .derivatives_position_increased_observed: "financial_activity", .derivatives_position_reduced_observed: "financial_activity",
-        .derivatives_position_closed_observed: "financial_activity", .derivatives_position_liquidated_observed: "financial_activity",
-        .derivatives_position_adl_observed: "financial_activity", .derivatives_position_settled_observed: "financial_activity",
-        .derivatives_position_corrected: "financial_activity", .derivatives_funding_payment_observed: "financial_activity",
-        .derivatives_fee_observed: "financial_activity", .derivatives_pnl_snapshot_materialized: "financial_activity",
-        .derivatives_exposure_snapshot_materialized: "financial_activity", .derivatives_price_observation_recorded: "financial_activity",
-        .derivatives_market_status_changed: "financial_activity", .derivatives_stream_gap_detected: "financial_activity",
-        .derivatives_stream_gap_recovered: "financial_activity", .derivatives_stream_checkpoint_advanced: "financial_activity",
-        .derivatives_adapter_conformance_run: "financial_activity", .derivatives_reconciliation_run_completed: "financial_activity",
-        .derivatives_reconciliation_variance_detected: "financial_activity", .derivatives_reconciliation_variance_resolved: "financial_activity",
+        .derivatives_venue_registered: "financial_activity",
+        .derivatives_venue_deployment_registered: "financial_activity",
+        .derivatives_instrument_registered: "financial_activity",
+        .derivatives_market_registered: "financial_activity",
+        .derivatives_strategy_registered: "financial_activity",
+        .derivatives_strategy_version_registered: "financial_activity",
+        .derivatives_risk_policy_registered: "financial_activity",
+        .derivatives_account_linked: "financial_activity",
+        .derivatives_account_link_revoked: "financial_activity",
+        .derivatives_balance_snapshot_observed: "financial_activity",
+        .derivatives_collateral_change_observed: "financial_activity",
+        .derivatives_margin_snapshot_observed: "financial_activity",
+        .derivatives_order_observed: "financial_activity",
+        .derivatives_order_updated_observed: "financial_activity",
+        .derivatives_order_cancelled_observed: "financial_activity",
+        .derivatives_order_rejected_observed: "financial_activity",
+        .derivatives_order_expired_observed: "financial_activity",
+        .derivatives_fill_observed: "financial_activity",
+        .derivatives_fill_corrected: "financial_activity",
+        .derivatives_position_opened_observed: "financial_activity",
+        .derivatives_position_increased_observed: "financial_activity",
+        .derivatives_position_reduced_observed: "financial_activity",
+        .derivatives_position_closed_observed: "financial_activity",
+        .derivatives_position_liquidated_observed: "financial_activity",
+        .derivatives_position_adl_observed: "financial_activity",
+        .derivatives_position_settled_observed: "financial_activity",
+        .derivatives_position_corrected: "financial_activity",
+        .derivatives_funding_payment_observed: "financial_activity",
+        .derivatives_fee_observed: "financial_activity",
+        .derivatives_pnl_snapshot_materialized: "financial_activity",
+        .derivatives_exposure_snapshot_materialized: "financial_activity",
+        .derivatives_price_observation_recorded: "financial_activity",
+        .derivatives_market_status_changed: "financial_activity",
+        .derivatives_stream_gap_detected: "financial_activity",
+        .derivatives_stream_gap_recovered: "financial_activity",
+        .derivatives_stream_checkpoint_advanced: "financial_activity",
+        .derivatives_adapter_conformance_run: "financial_activity",
+        .derivatives_reconciliation_run_completed: "financial_activity",
+        .derivatives_reconciliation_variance_detected: "financial_activity",
+        .derivatives_reconciliation_variance_resolved: "financial_activity",
         .derivatives_risk_threshold_breached: "financial_activity",
-        // Interoperability intelligence family (explicit opt-in)
-        .interop_provider_registered: "cross_chain_observability", .interop_gateway_registered: "cross_chain_observability",
-        .interop_path_registered: "cross_chain_observability", .interop_application_registered: "cross_chain_observability",
-        .interop_verification_actor_registered: "cross_chain_observability", .interop_message_discovered: "cross_chain_observability",
-        .interop_message_sent_observed: "cross_chain_observability", .interop_message_source_confirmed: "cross_chain_observability",
-        .interop_message_verification_observed: "cross_chain_observability", .interop_message_verified: "cross_chain_observability",
-        .interop_message_delivery_attempt_observed: "cross_chain_observability", .interop_message_delivered: "cross_chain_observability",
-        .interop_message_executed_observed: "cross_chain_observability", .interop_message_settled: "cross_chain_observability",
-        .interop_message_failed: "cross_chain_observability", .interop_message_timeout: "cross_chain_observability",
-        .interop_message_expired: "cross_chain_observability", .interop_message_cancelled: "cross_chain_observability",
-        .interop_message_refunded_observed: "cross_chain_observability", .interop_message_recovered: "cross_chain_observability",
-        .interop_message_reorged: "cross_chain_observability", .interop_message_corrected: "cross_chain_observability",
-        .interop_message_correlated: "cross_chain_observability", .interop_intent_observed: "cross_chain_observability",
-        .interop_intent_fulfilled_observed: "cross_chain_observability", .interop_asset_leg_locked_observed: "cross_chain_observability",
-        .interop_asset_leg_burned_observed: "cross_chain_observability", .interop_asset_leg_minted_observed: "cross_chain_observability",
-        .interop_asset_leg_released_observed: "cross_chain_observability", .interop_fee_observed: "cross_chain_observability",
-        .interop_security_policy_snapshot_recorded: "cross_chain_observability", .interop_security_policy_changed: "cross_chain_observability",
-        .interop_verification_quorum_observed: "cross_chain_observability", .interop_provider_checkpoint_advanced: "cross_chain_observability",
-        .interop_stream_gap_detected: "cross_chain_observability", .interop_stream_gap_recovered: "cross_chain_observability",
-        .interop_reconciliation_run_completed: "cross_chain_observability", .interop_reconciliation_variance_detected: "cross_chain_observability",
+        // stablecoin
+        .stablecoin_transfer_observed: "economic_observability",
+        .stablecoin_payment_observed: "economic_observability",
+        .stablecoin_mint_observed: "economic_observability",
+        .stablecoin_burn_observed: "economic_observability",
+        .stablecoin_bridge_outbound_observed: "economic_observability",
+        .stablecoin_bridge_inbound_observed: "economic_observability",
+        .stablecoin_swap_observed: "economic_observability",
+        .stablecoin_x402_settlement_observed: "economic_observability",
+        .stablecoin_treasury_movement_observed: "economic_observability",
+        .stablecoin_payout_observed: "economic_observability",
+        .stablecoin_venue_deposit_observed: "economic_observability",
+        .stablecoin_venue_withdrawal_observed: "economic_observability",
+        .stablecoin_balance_snapshot_observed: "economic_observability",
+        .stablecoin_supply_snapshot_observed: "economic_observability",
+        .stablecoin_holder_concentration_observed: "economic_observability",
+        .stablecoin_valuation_observed: "economic_observability",
+        .stablecoin_depeg_detected: "economic_observability",
+        .stablecoin_depeg_resolved: "economic_observability",
+        .stablecoin_finality_confirmed: "economic_observability",
+        .stablecoin_reorg_detected: "economic_observability",
+        .stablecoin_observation_corrected: "economic_observability",
+        .stablecoin_reconciliation_run_completed: "economic_observability",
+        .stablecoin_reconciliation_variance_detected: "economic_observability",
+        .stablecoin_reconciliation_variance_resolved: "economic_observability",
+        .stablecoin_asset_registered: "economic_observability",
+        .stablecoin_deployment_registered: "economic_observability",
+        .stablecoin_support_asserted: "economic_observability",
+        .stablecoin_support_revoked: "economic_observability",
+        .stablecoin_flow_aggregate_materialized: "economic_observability",
+        .stablecoin_checkpoint_advanced: "economic_observability",
+        // interop
+        .interop_provider_registered: "cross_chain_observability",
+        .interop_gateway_registered: "cross_chain_observability",
+        .interop_path_registered: "cross_chain_observability",
+        .interop_application_registered: "cross_chain_observability",
+        .interop_verification_actor_registered: "cross_chain_observability",
+        .interop_message_discovered: "cross_chain_observability",
+        .interop_message_sent_observed: "cross_chain_observability",
+        .interop_message_source_confirmed: "cross_chain_observability",
+        .interop_message_verification_observed: "cross_chain_observability",
+        .interop_message_verified: "cross_chain_observability",
+        .interop_message_delivery_attempt_observed: "cross_chain_observability",
+        .interop_message_delivered: "cross_chain_observability",
+        .interop_message_executed_observed: "cross_chain_observability",
+        .interop_message_settled: "cross_chain_observability",
+        .interop_message_failed: "cross_chain_observability",
+        .interop_message_timeout: "cross_chain_observability",
+        .interop_message_expired: "cross_chain_observability",
+        .interop_message_cancelled: "cross_chain_observability",
+        .interop_message_refunded_observed: "cross_chain_observability",
+        .interop_message_recovered: "cross_chain_observability",
+        .interop_message_reorged: "cross_chain_observability",
+        .interop_message_corrected: "cross_chain_observability",
+        .interop_message_correlated: "cross_chain_observability",
+        .interop_intent_observed: "cross_chain_observability",
+        .interop_intent_fulfilled_observed: "cross_chain_observability",
+        .interop_asset_leg_locked_observed: "cross_chain_observability",
+        .interop_asset_leg_burned_observed: "cross_chain_observability",
+        .interop_asset_leg_minted_observed: "cross_chain_observability",
+        .interop_asset_leg_released_observed: "cross_chain_observability",
+        .interop_fee_observed: "cross_chain_observability",
+        .interop_security_policy_snapshot_recorded: "cross_chain_observability",
+        .interop_security_policy_changed: "cross_chain_observability",
+        .interop_verification_quorum_observed: "cross_chain_observability",
+        .interop_provider_checkpoint_advanced: "cross_chain_observability",
+        .interop_stream_gap_detected: "cross_chain_observability",
+        .interop_stream_gap_recovered: "cross_chain_observability",
+        .interop_reconciliation_run_completed: "cross_chain_observability",
+        .interop_reconciliation_variance_detected: "cross_chain_observability",
         .interop_reconciliation_variance_resolved: "cross_chain_observability",
-        // Privacy / DSR lifecycle family (control-plane state; never SDK-emitted)
-        .data_subject_request_received: "analytics", .data_subject_request_queued: "analytics",
-        .data_subject_request_denied: "analytics", .erasure_completed: "analytics",
+        // privacy
+        .data_subject_request_received: "analytics",
+        .data_subject_request_queued: "analytics",
+        .data_subject_request_denied: "analytics",
+        .erasure_completed: "analytics",
         .erasure_failed: "analytics"
+// @generated-end aether-consent-purposes/ios-map
     ]
 
     static let sensitiveKeys: Set<String> = [
