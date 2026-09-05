@@ -14,7 +14,7 @@ last_synced_commit: "db530dce"
 
 # Canonical Event Model
 
-398 events across 24 families in
+403 events across 25 families in
 `packages/shared/contracts/event-registry.json` (single source of truth;
 `scripts/generate_contracts.py` emits TS/Python/doc artifacts). The
 economic-interoperability families:

@@ -299,6 +299,9 @@ public enum AetherEventType: String, Codable, CaseIterable {
     case interop_security_policy_snapshot_recorded, interop_security_policy_changed, interop_verification_quorum_observed
     case interop_provider_checkpoint_advanced, interop_stream_gap_detected, interop_stream_gap_recovered
     case interop_reconciliation_run_completed, interop_reconciliation_variance_detected, interop_reconciliation_variance_resolved
+    // Privacy / DSR lifecycle family (control-plane state; never SDK-emitted)
+    case data_subject_request_received, data_subject_request_queued, data_subject_request_denied
+    case erasure_completed, erasure_failed
 }
 
 public struct AetherEvent: Codable {
@@ -745,7 +748,11 @@ public final class Aether: NSObject {
         .interop_verification_quorum_observed: "cross_chain_observability", .interop_provider_checkpoint_advanced: "cross_chain_observability",
         .interop_stream_gap_detected: "cross_chain_observability", .interop_stream_gap_recovered: "cross_chain_observability",
         .interop_reconciliation_run_completed: "cross_chain_observability", .interop_reconciliation_variance_detected: "cross_chain_observability",
-        .interop_reconciliation_variance_resolved: "cross_chain_observability"
+        .interop_reconciliation_variance_resolved: "cross_chain_observability",
+        // Privacy / DSR lifecycle family (control-plane state; never SDK-emitted)
+        .data_subject_request_received: "analytics", .data_subject_request_queued: "analytics",
+        .data_subject_request_denied: "analytics", .erasure_completed: "analytics",
+        .erasure_failed: "analytics"
     ]
 
     static let sensitiveKeys: Set<String> = [

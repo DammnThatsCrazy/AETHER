@@ -47,6 +47,7 @@ TEMPORAL_FAMILY_BOUNDS: dict[str, dict[str, int]] = {
     "journey": {"maxFutureSkewMs": 300000, "warnSkewMs": 30000, "maxLatenessMs": 604800000},
     "location": {"maxFutureSkewMs": 60000, "warnSkewMs": 30000, "maxLatenessMs": 604800000},
     "outcome": {"maxFutureSkewMs": 300000, "warnSkewMs": 30000, "maxLatenessMs": 604800000},
+    "privacy": {"maxFutureSkewMs": 300000, "warnSkewMs": 30000, "maxLatenessMs": 604800000},
     "reward": {"maxFutureSkewMs": 300000, "warnSkewMs": 30000, "maxLatenessMs": 604800000},
     "server": {"maxFutureSkewMs": 60000, "warnSkewMs": 5000, "maxLatenessMs": 604800000},
     "stablecoin": {"maxFutureSkewMs": 300000, "warnSkewMs": 30000, "maxLatenessMs": 2592000000},

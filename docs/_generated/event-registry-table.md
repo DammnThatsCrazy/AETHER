@@ -1,7 +1,7 @@
 <!-- DO NOT EDIT — generated from packages/shared/contracts/event-registry.json -->
 <!-- Run: python scripts/generate_contracts.py -->
 
-# Aether Event Registry (398 types, contract v8.12.0)
+# Aether Event Registry (403 types, contract v8.12.0)
 
 | Event Type | Family | Required Purposes | Privacy Class | Description |
 |---|---|---|---|---|
@@ -403,3 +403,8 @@
 | `interop_reconciliation_run_completed` | `interop` | cross_chain_observability | governance | Interop reconciliation run completed |
 | `interop_reconciliation_variance_detected` | `interop` | cross_chain_observability | financial | Reconciliation variance detected (incl. provider disagreement) |
 | `interop_reconciliation_variance_resolved` | `interop` | cross_chain_observability | financial | Reconciliation variance resolved |
+| `data_subject_request_received` | `privacy` | — | governance | Data-subject request (access/rectification/erasure/portability/restriction/objection) intake recorded by the consent DSR service; record opened status=pending |
+| `data_subject_request_queued` | `privacy` | — | governance | DSR request accepted and queued for durable erasure propagation; consent record status=queued |
+| `data_subject_request_denied` | `privacy` | — | governance | DSR request denied by retention/data-request policy; record status=denied persisted |
+| `erasure_completed` | `privacy` | — | governance | Durable erasure job completed across all propagation planes; consent record status=completed |
+| `erasure_failed` | `privacy` | — | governance | Durable erasure job failed; consent record status=failed |

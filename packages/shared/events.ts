@@ -435,6 +435,12 @@ export type EventType =
   | 'interop_reconciliation_run_completed'
   | 'interop_reconciliation_variance_detected'
   | 'interop_reconciliation_variance_resolved'
+  // privacy
+  | 'data_subject_request_received'
+  | 'data_subject_request_queued'
+  | 'data_subject_request_denied'
+  | 'erasure_completed'
+  | 'erasure_failed'
   ;
 
 export type EventFamily =
@@ -456,6 +462,7 @@ export type EventFamily =
   | 'journey'
   | 'location'
   | 'outcome'
+  | 'privacy'
   | 'reward'
   | 'server'
   | 'stablecoin'
@@ -864,6 +871,11 @@ export const EVENT_FAMILY: Record<EventType, EventFamily> = {
   interop_reconciliation_run_completed: 'interop',
   interop_reconciliation_variance_detected: 'interop',
   interop_reconciliation_variance_resolved: 'interop',
+  data_subject_request_received: 'privacy',
+  data_subject_request_queued: 'privacy',
+  data_subject_request_denied: 'privacy',
+  erasure_completed: 'privacy',
+  erasure_failed: 'privacy',
 };
 
 /**
@@ -1269,6 +1281,11 @@ export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {
   interop_reconciliation_run_completed: 'cross_chain_observability',
   interop_reconciliation_variance_detected: 'cross_chain_observability',
   interop_reconciliation_variance_resolved: 'cross_chain_observability',
+  data_subject_request_received: 'analytics',
+  data_subject_request_queued: 'analytics',
+  data_subject_request_denied: 'analytics',
+  erasure_completed: 'analytics',
+  erasure_failed: 'analytics',
 };
 
 /** Canonical field-trust taxonomy rank (low -> high authority). */
@@ -1833,6 +1850,11 @@ export const EVENT_SEMANTIC_LEVEL: Record<EventType, SemanticLevel> = {
   interop_reconciliation_run_completed: 'C',
   interop_reconciliation_variance_detected: 'C',
   interop_reconciliation_variance_resolved: 'C',
+  data_subject_request_received: 'B',
+  data_subject_request_queued: 'B',
+  data_subject_request_denied: 'B',
+  erasure_completed: 'B',
+  erasure_failed: 'B',
 };
 
 /** Trust classes a public SDK key may originate (WS-A3 boundary = a class SET, not a rank cut). */

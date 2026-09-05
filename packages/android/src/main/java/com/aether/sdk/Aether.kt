@@ -449,7 +449,11 @@ object Aether : DefaultLifecycleObserver {
         "interop_verification_quorum_observed" to "cross_chain_observability", "interop_provider_checkpoint_advanced" to "cross_chain_observability",
         "interop_stream_gap_detected" to "cross_chain_observability", "interop_stream_gap_recovered" to "cross_chain_observability",
         "interop_reconciliation_run_completed" to "cross_chain_observability", "interop_reconciliation_variance_detected" to "cross_chain_observability",
-        "interop_reconciliation_variance_resolved" to "cross_chain_observability"
+        "interop_reconciliation_variance_resolved" to "cross_chain_observability",
+        // Privacy / DSR lifecycle family (control-plane state; never SDK-emitted)
+        "data_subject_request_received" to "analytics", "data_subject_request_queued" to "analytics",
+        "data_subject_request_denied" to "analytics", "erasure_completed" to "analytics",
+        "erasure_failed" to "analytics"
     )
     private val CANONICAL_EVENT_TYPES = EVENT_CONSENT_PURPOSE.keys
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {

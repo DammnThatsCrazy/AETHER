@@ -401,6 +401,11 @@ CANONICAL_EVENT_TYPES: frozenset[str] = frozenset({
     "interop_reconciliation_run_completed",
     "interop_reconciliation_variance_detected",
     "interop_reconciliation_variance_resolved",
+    "data_subject_request_received",
+    "data_subject_request_queued",
+    "data_subject_request_denied",
+    "erasure_completed",
+    "erasure_failed",
 })
 
 # Canonical consent purposes — generated from consent-registry.json.
@@ -820,6 +825,11 @@ EVENT_CONSENT_PURPOSE: dict[str, str] = {
     "interop_reconciliation_run_completed": "cross_chain_observability",
     "interop_reconciliation_variance_detected": "cross_chain_observability",
     "interop_reconciliation_variance_resolved": "cross_chain_observability",
+    "data_subject_request_received": "analytics",
+    "data_subject_request_queued": "analytics",
+    "data_subject_request_denied": "analytics",
+    "erasure_completed": "analytics",
+    "erasure_failed": "analytics",
 }
 
 EVENT_FAMILY: dict[str, str] = {
@@ -1221,6 +1231,11 @@ EVENT_FAMILY: dict[str, str] = {
     "interop_reconciliation_run_completed": "interop",
     "interop_reconciliation_variance_detected": "interop",
     "interop_reconciliation_variance_resolved": "interop",
+    "data_subject_request_received": "privacy",
+    "data_subject_request_queued": "privacy",
+    "data_subject_request_denied": "privacy",
+    "erasure_completed": "privacy",
+    "erasure_failed": "privacy",
 }
 
 # Field-trust taxonomy rank order (low -> high authority), from event-registry.json.
@@ -2089,6 +2104,11 @@ EVENT_SEMANTIC_LEVEL: dict[str, str] = {
     "interop_reconciliation_run_completed": "C",
     "interop_reconciliation_variance_detected": "C",
     "interop_reconciliation_variance_resolved": "C",
+    "data_subject_request_received": "B",
+    "data_subject_request_queued": "B",
+    "data_subject_request_denied": "B",
+    "erasure_completed": "B",
+    "erasure_failed": "B",
 }
 
 # Trust classes a public SDK key may originate (boundary = class SET, not a rank cut).
