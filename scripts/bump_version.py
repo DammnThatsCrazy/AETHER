@@ -43,6 +43,8 @@ PACKAGE_JSONS = [
     ROOT / "frontend" / "shared" / "package.json",
     ROOT / "frontend" / "docs" / "package.json",
     ROOT / "frontend" / "demo" / "package.json",
+    ROOT / "frontend" / "olympus-marketing" / "package.json",
+    ROOT / "frontend" / "aether-marketing" / "package.json",
     ROOT / "Data Ingestion Layer" / "package.json",
     ROOT / "Data Ingestion Layer" / "packages" / "common" / "package.json",
     ROOT / "Data Ingestion Layer" / "packages" / "auth" / "package.json",

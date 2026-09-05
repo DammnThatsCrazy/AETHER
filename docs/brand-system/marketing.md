@@ -17,6 +17,13 @@ runtime cannot substantiate.
 
 - Lead with the correct product: Olympus Labs for corporate material, Aether
   for customer product material, Kyber for operator material.
+- Kyber is Olympus Labs' **internal** operator application. It never appears on
+  a public or customer-facing property and is never linked from public
+  marketing; customer-visible material presents Olympus Labs and Aether only.
+- On the Aether public surface, attribute ownership as "Aether by Olympus
+  Labs" — Aether leads, Olympus Labs attribution is quiet but present. On
+  Olympus Labs corporate material, Olympus Labs leads and presents Aether as
+  its product.
 - Use manifest lockups and reviewed package-owned assets. Do not screenshot,
   redraw, crop, recolor, or place third-party logos from the web.
 - Name providers in prose only when context requires it. Registry presence is

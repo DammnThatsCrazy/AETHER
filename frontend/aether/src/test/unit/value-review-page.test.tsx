@@ -23,7 +23,7 @@ describe('Aether Value Review page', () => {
   it('renders loading without fabricated metrics', () => {
     overview.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({}), 20)));
     render(<ValueReviewPage />);
-    expect(document.querySelector('.animate-pulse')).not.toBeNull();
+    expect(document.querySelector('.animate-pulse, .aether-skeleton')).not.toBeNull();
     expect(screen.queryByText('$0')).not.toBeInTheDocument();
   });
 

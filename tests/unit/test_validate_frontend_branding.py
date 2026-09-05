@@ -113,6 +113,21 @@ def test_direct_provider_urls_and_feature_local_canonical_assets_are_rejected(tm
     }
 
 
+def test_analytics_script_endpoints_are_not_flagged_but_remote_google_marks_are(
+    tmp_path: Path,
+) -> None:
+    findings, _ = _scan(
+        tmp_path,
+        "frontend/aether-marketing/src/lib/analytics.ts",
+        """
+        script.src = `https://www.googletagmanager.com/gtag/js?id=${id}`;
+        const mark = <img src=\"https://cdn.example.com/google-mark.svg\" />;
+        """,
+    )
+
+    assert [item["rule"] for item in findings] == ["remote-provider-asset"]
+
+
 def test_registry_backed_provider_mark_rejects_unknown_static_id(tmp_path: Path) -> None:
     _write(
         tmp_path / "packages/brand/src/providers/registry.ts",
@@ -223,3 +238,61 @@ def test_docs_and_tests_are_not_runtime_validator_input(tmp_path: Path) -> None:
     findings, _ = validator.scan(root=tmp_path, paths=[docs, test])
 
     assert findings == []
+
+
+def test_marketing_pages_enforce_raw_motion_literals(tmp_path: Path) -> None:
+    findings, _ = _scan(
+        tmp_path,
+        "frontend/aether-marketing/src/pages/home-page.tsx",
+        "const css = 'transition-duration: 300ms';\n",
+    )
+
+    assert [(item["rule"], item["line"]) for item in findings] == [
+        ("raw-motion-literal", 1),
+    ]
+
+
+def test_marketing_interaction_transition_utilities_are_allowed(tmp_path: Path) -> None:
+    findings, _ = _scan(
+        tmp_path,
+        "frontend/olympus-marketing/src/components/marketing-section.tsx",
+        (
+            "const cls = 'transition-colors transition-opacity transition-transform "
+            "translate-x-0 hover:translate-x-1 duration-[var(--aether-motion-standard)]';\n"
+        ),
+    )
+
+    assert findings == []
+
+
+def test_marketing_reduced_motion_literal_is_exempt(tmp_path: Path) -> None:
+    findings, _ = _scan(
+        tmp_path,
+        "frontend/aether-marketing/src/styles/index.css",
+        "@media (prefers-reduced-motion: reduce) {\n"
+        "  *,\n"
+        "  *::before,\n"
+        "  *::after {\n"
+        "    animation-duration: 0.01ms !important;\n"
+        "    animation-iteration-count: 1 !important;\n"
+        "    transition-duration: 0.01ms !important;\n"
+        "    scroll-behavior: auto !important;\n"
+        "  }\n"
+        "}\n",
+    )
+
+    assert findings == []
+
+
+def test_marketing_decorative_animation_is_reported(tmp_path: Path) -> None:
+    findings, _ = _scan(
+        tmp_path,
+        "frontend/olympus-marketing/src/pages/home-page.css",
+        "@keyframes float-in {\n"
+        "  from { opacity: 0; }\n"
+        "}\n"
+        ".hero { animation: float-in 2s ease infinite; will-change: transform; }\n",
+    )
+
+    assert {item["rule"] for item in findings} == {"decorative-motion"}
+    assert len(findings) == 3

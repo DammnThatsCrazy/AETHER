@@ -4957,6 +4957,23 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/deployment/WEB_ECOSYSTEM_DEPLOYMENT.md",
+      "title": "Web Ecosystem — Deployment Contract",
+      "slug": "deployment/web-ecosystem-deployment",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "frontend@aether"
+    },
+    {
       "path": "docs/deployment/model-runtime-deployment.md",
       "title": "Model Runtime Deployment",
       "slug": "operations/model-runtime-deployment",
@@ -5367,6 +5384,21 @@
       "status": "experimental",
       "since_version": "8.10.0",
       "canonical_owner": "graph@aether"
+    },
+    {
+      "path": "docs/plans/WEB_ECOSYSTEM_PHASES.md",
+      "title": "Web Ecosystem — Phased Implementation Program",
+      "slug": "plans/web-ecosystem-phases",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "canonical_owner": "frontend@aether"
     },
     {
       "path": "docs/privacy/traffic-intelligence-data-retention.md",
@@ -7763,6 +7795,24 @@
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/WEB_ECOSYSTEM_SHELLS.md",
+      "title": "Web Ecosystem — Shell Architecture and Domain Model",
+      "slug": "architecture/web-ecosystem-shells",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "frontend@aether"
     },
     {
       "path": "docs/staging-activation-runbook.md",

@@ -405,7 +405,7 @@ describe('KyberExceptionsPage — surface', () => {
   it('shows a loading state before the queue resolves', () => {
     restGet.mockImplementation(() => new Promise(() => undefined));
     const { container } = renderPage();
-    expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('.animate-pulse, .aether-skeleton').length).toBeGreaterThan(0);
   });
 
   it('shows the error state with the backend reason when the queue fails', async () => {

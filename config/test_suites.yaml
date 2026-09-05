@@ -392,3 +392,27 @@ suites:
     release_class: advisory
     evidence_artifact: null
     quarantine: null
+
+  - id: frontend-olympus-marketing
+    subsystem: frontend-olympus-marketing
+    paths: ["frontend/olympus-marketing"]
+    # Olympus Labs corporate marketing site (olympuslabs.com).
+    runner: ["npm", "run", "test", "--workspace=frontend/olympus-marketing"]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: advisory
+    evidence_artifact: null
+    quarantine: null
+
+  - id: frontend-aether-marketing
+    subsystem: frontend-aether-marketing
+    paths: ["frontend/aether-marketing"]
+    # Aether public marketing + auth-threshold site (aether.olympuslabs.com).
+    runner: ["npm", "run", "test", "--workspace=frontend/aether-marketing"]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: advisory
+    evidence_artifact: null
+    quarantine: null

@@ -284,7 +284,7 @@ describe('Kyber Payment Rails page', () => {
   it('shows loading while the fleet request is pending', () => {
     mocks.paymentRailsHealth.mockReturnValue(new Promise(() => undefined));
     const { container } = render(<MemoryRouter><PaymentRailsPage /></MemoryRouter>);
-    expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('.animate-pulse, .aether-skeleton').length).toBeGreaterThan(0);
   });
 
   it('renders fleet aggregates and the per-provider health table', async () => {
