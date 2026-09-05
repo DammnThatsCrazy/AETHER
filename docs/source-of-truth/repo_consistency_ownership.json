@@ -78,6 +78,33 @@
       "remediation": "Update contract docs, SDK types, validation fixtures, generated docs, and tests."
     },
     {
+      "id": "event_field_trust_schema",
+      "name": "event field-trust/authority metadata or its generator/gate changed",
+      "source_globs": [
+        "packages/shared/contracts/event-registry.json",
+        "packages/shared/events.ts",
+        "Backend Architecture/aether-backend/services/ingestion/generated_registry.py",
+        "scripts/generate_contracts.py",
+        "scripts/validate_field_trust_parity.py"
+      ],
+      "required_changed_globs": [
+        "docs/_generated/**",
+        "docs/source-of-truth/**",
+        "docs/REPO-INDEX.md",
+        "docs/AUTOMATION.md",
+        "packages/shared/**",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/generate_contracts.py --check",
+        "python scripts/validate_field_trust_parity.py",
+        "python scripts/validate_contracts.py",
+        "python scripts/docs_drift.py --strict",
+        "python -m pytest tests/unit/test_validate_field_trust_parity.py -q"
+      ],
+      "remediation": "Keep per-event fieldTrust metadata in packages/shared/contracts/event-registry.json structurally valid (see generate_contracts.validate_field_trust), regenerate the TS/Python twins with python scripts/generate_contracts.py, and move the tests when the field-trust gate changes."
+    },
+    {
       "id": "consent_tenant_auth",
       "name": "consent/tenant/auth behavior changed",
       "source_globs": [

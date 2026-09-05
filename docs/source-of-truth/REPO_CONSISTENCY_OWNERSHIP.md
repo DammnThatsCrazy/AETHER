@@ -28,6 +28,7 @@ The machine-readable owner map is `docs/source-of-truth/repo_consistency_ownersh
 | `pyproject.toml` version | all package versions, docs version metadata, generated docs |
 | backend route added/changed | generated API docs, route index, contract validation, frontend/client types if applicable |
 | event schema changed | contract docs, SDK types, validation fixtures, generated docs |
+| event field-trust/authority metadata or its generator/gate changed | regenerated TS/Python field-trust twins, `python scripts/generate_contracts.py --check`, field-trust parity gate, contract tests |
 | consent/tenant/auth behavior changed | source-linked docs, contract validation, tests |
 | SDK public method changed | package exports, `src/index.ts`, declaration output, SDK release alignment |
 | package public type changed | barrel exports, TypeScript build, declaration files |

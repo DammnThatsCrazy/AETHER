@@ -781,6 +781,17 @@ def main(argv: Sequence[str] | None = None) -> None:
         ),
     )
     run(
+        [sys.executable, "scripts/validate_field_trust_parity.py"],
+        name="Field-trust parity (registry structure + TS/Python field-trust twins)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "fix structural field-trust errors in packages/shared/contracts/event-registry.json (see "
+            "generate_contracts.validate_field_trust), then regenerate the event twins with "
+            "python scripts/generate_contracts.py"
+        ),
+    )
+    run(
         [sys.executable, "scripts/validate_meter_names.py"],
         name="Canonical meter names (ingestion/connector paths)",
         results=results,

@@ -84,6 +84,34 @@ GENERATED_PY_HEADER = """\
 # Run: python scripts/generate_contracts.py
 """
 
+# Canonical field-trust taxonomy rank (low -> high authority). Order is
+# load-bearing: consumers index into it (e.g. sourceEmit:false fields must rank
+# at or above SERVER_STAMPED). The SDK-assertable boundary is a class SET, not a
+# linear cut — see the event-registry field_trust note (WS-A3 enforces it).
+FIELD_TRUST_CLASSES = [
+    "OBSERVED",
+    "SOURCE_ASSERTED",
+    "SOURCE_REFERENCE",
+    "CLIENT_HINT",
+    "SERVER_STAMPED",
+    "RESOLVED",
+    "DERIVED",
+    "INFERRED",
+    "PREDICTED",
+    "OPERATOR_ASSERTED",
+]
+
+# Key emission order for a FieldTrustSpec (registry + twins stay deterministic).
+FIELD_TRUST_SPEC_KEYS = [
+    "trustClass",
+    "sourceEmit",
+    "minimumTrust",
+    "level",
+    "privacyClass",
+    "retentionClass",
+    "introducedVersion",
+]
+
 
 # ---------------------------------------------------------------------------
 # Registry loading and validation
@@ -148,6 +176,103 @@ def validate(event_reg: dict, consent_reg: dict) -> None:
             if field not in p:
                 print(f"ERROR: consent purpose {p.get('key')!r} missing field {field!r}", file=sys.stderr)
                 sys.exit(1)
+
+
+def validate_field_trust(event_reg: dict) -> None:
+    """Validate the WS-A2 field-trust taxonomy block and per-event fieldTrust.
+
+    Descriptive in A2 (enforced at the SDK/ingress boundary in A3). Rules:
+    - fieldTrustSchemaVersion is present iff >=1 event declares fieldTrust.fields.
+    - trustClasses (when the block is on) equals the canonical rank; every spec's
+      trustClass / minimumTrust is one of them; trustClass is required per spec.
+    - A field spec's level, when present, is A/B/C; sourceEmit is a bool.
+    - sourceEmit:false requires the field's trustClass rank >= SERVER_STAMPED.
+    """
+    events = event_reg["events"]
+    ftsv = event_reg.get("fieldTrustSchemaVersion")
+    classes = event_reg.get("trustClasses")
+    defaults = event_reg.get("fieldTrustDefaults")
+    any_fields = any(bool(e.get("fieldTrust", {}).get("fields")) for e in events)
+
+    if not any_fields:
+        if ftsv is not None or classes is not None or defaults is not None:
+            print(
+                "ERROR: field-trust top-level block present but no event declares "
+                "fieldTrust.fields — add content or remove the block",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        return
+
+    if ftsv is None or classes is None or defaults is None:
+        print(
+            "ERROR: fieldTrustSchemaVersion/trustClasses/fieldTrustDefaults are required "
+            "when any event declares fieldTrust.fields",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if classes != FIELD_TRUST_CLASSES:
+        print(
+            f"ERROR: trustClasses must equal the canonical rank {FIELD_TRUST_CLASSES}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    class_set = set(classes)
+    server_rank = classes.index("SERVER_STAMPED")
+    for key in ("trustClass", "sourceEmit", "minimumTrust", "level"):
+        if key not in defaults:
+            print(f"ERROR: fieldTrustDefaults missing {key!r}", file=sys.stderr)
+            sys.exit(1)
+    if defaults["trustClass"] not in class_set:
+        print(f"ERROR: fieldTrustDefaults.trustClass {defaults['trustClass']!r} not in trustClasses", file=sys.stderr)
+        sys.exit(1)
+
+    for e in events:
+        ft = e.get("fieldTrust")
+        if not ft:
+            continue
+        fields = ft.get("fields")
+        if not isinstance(fields, dict) or not fields:
+            print(
+                f"ERROR: event {e['type']!r} fieldTrust.fields must be a non-empty object",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        for path, spec in fields.items():
+            if not isinstance(spec, dict):
+                print(f"ERROR: event {e['type']!r} field {path!r} spec must be an object", file=sys.stderr)
+                sys.exit(1)
+            tc = spec.get("trustClass")
+            if tc is None or tc not in class_set:
+                print(
+                    f"ERROR: event {e['type']!r} field {path!r} spec missing or unknown "
+                    f"trustClass {tc!r}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            mt = spec.get("minimumTrust")
+            if mt is not None and mt not in class_set:
+                print(
+                    f"ERROR: event {e['type']!r} field {path!r} minimumTrust {mt!r} not in trustClasses",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            level = spec.get("level")
+            if level is not None and level not in ("A", "B", "C"):
+                print(f"ERROR: event {e['type']!r} field {path!r} level {level!r} not A/B/C", file=sys.stderr)
+                sys.exit(1)
+            se = spec.get("sourceEmit")
+            if se is not None and not isinstance(se, bool):
+                print(f"ERROR: event {e['type']!r} field {path!r} sourceEmit must be a bool", file=sys.stderr)
+                sys.exit(1)
+            if se is False:
+                if classes.index(tc) < server_rank:
+                    print(
+                        f"ERROR: event {e['type']!r} field {path!r} sourceEmit:false but "
+                        f"trustClass {tc} ranks below SERVER_STAMPED",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
 
 
 def validate_integration_consent(integration_reg: dict, consent_reg: dict) -> None:
@@ -715,6 +840,120 @@ def _event_consent_map(events: list[dict]) -> str:
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Field-trust (WS-A2) emission: per-field trust/authority metadata maps
+# ---------------------------------------------------------------------------
+
+def _spec_literal(spec: dict, quote: str = '"', ts: bool = False) -> str:
+    """Render a FieldTrustSpec dict with deterministic key order.
+
+    `ts=True` emits TS literals (single-quoted strings, `true`/`false`);
+    otherwise emits a JSON-compatible / Python-compatible literal (double
+    quotes, `True`/`False`).
+    """
+    parts: list[str] = []
+    for k in FIELD_TRUST_SPEC_KEYS:
+        if k not in spec:
+            continue
+        v = spec[k]
+        if isinstance(v, bool):
+            lit = ("true" if v else "false") if ts else ("True" if v else "False")
+        elif isinstance(v, int):
+            lit = str(v)
+        else:
+            lit = json.dumps(v) if not ts else f"'{v}'"
+        if ts:
+            parts.append(f"{k}: {lit}")
+        else:
+            parts.append(f"{json.dumps(k)}: {lit}")
+    return "{ " + ", ".join(parts) + " }"
+
+
+def _field_trust_event_blocks(events: list[dict], ts: bool) -> list[str]:
+    """Per-event field-trust declaration rows (only events that carry content)."""
+    rows: list[str] = []
+    for e in events:
+        fields = e.get("fieldTrust", {}).get("fields")
+        if not fields:
+            continue
+        if ts:
+            inner = ", ".join(
+                f"{json.dumps(path)}: {_spec_literal(spec, ts=True)}"
+                for path, spec in fields.items()
+            )
+            rows.append(f"  {e['type']}: {{ {inner} }},")
+        else:
+            inner_lines = [
+                f"        {json.dumps(path)}: {_spec_literal(spec)},"
+                for path, spec in fields.items()
+            ]
+            rows.append(
+                "    %s: {\n%s\n    },"
+                % (json.dumps(e["type"]), "\n".join(inner_lines))
+            )
+    return rows
+
+
+def _field_trust_ts_block(event_reg: dict) -> str:
+    """events.ts generated-section block (empty when the taxonomy is off)."""
+    if "fieldTrustSchemaVersion" not in event_reg:
+        return ""
+    class_lines = "\n".join(f"  '{c}'," for c in event_reg["trustClasses"])
+    rows = _field_trust_event_blocks(event_reg["events"], ts=True)
+    body = "\n".join(rows)
+    return (
+        "\n"
+        "/** Canonical field-trust taxonomy rank (low -> high authority). */\n"
+        "export const TRUST_CLASS_ORDER = [\n"
+        f"{class_lines}\n"
+        "] as const;\n"
+        "\n"
+        "/** A Contract Spine field-trust class. */\n"
+        "export type TrustClass = typeof TRUST_CLASS_ORDER[number];\n"
+        "\n"
+        "/** Per-field trust declaration on an Envelope-A (BaseEvent) dotted path. */\n"
+        "export interface FieldTrustSpec {\n"
+        "  trustClass: TrustClass;\n"
+        "  sourceEmit?: boolean;\n"
+        "  minimumTrust?: TrustClass;\n"
+        "  level?: 'A' | 'B' | 'C';\n"
+        "  privacyClass?: string;\n"
+        "  retentionClass?: string;\n"
+        "  introducedVersion?: string;\n"
+        "}\n"
+        "\n"
+        "/**\n"
+        " * Per-event field-trust declarations. Dotted paths are into the Envelope-A\n"
+        " * (BaseEvent) payload; unlisted fields default per fieldTrustDefaults.\n"
+        " */\n"
+        "export const EVENT_FIELD_TRUST: Partial<Record<EventType, Record<string, FieldTrustSpec>>> = {\n"
+        f"{body}\n"
+        "};\n"
+    )
+
+
+def _field_trust_py_block(event_reg: dict) -> str:
+    """generated_registry.py tail block (empty when the taxonomy is off)."""
+    if "fieldTrustSchemaVersion" not in event_reg:
+        return ""
+    class_lines = ",\n".join(f"    {json.dumps(c)}" for c in event_reg["trustClasses"])
+    rows = _field_trust_event_blocks(event_reg["events"], ts=False)
+    body = "\n".join(rows)
+    return (
+        "\n"
+        "# Field-trust taxonomy rank order (low -> high authority), from event-registry.json.\n"
+        "TRUST_CLASS_ORDER: tuple[str, ...] = (\n"
+        f"{class_lines},\n"
+        ")\n"
+        "\n"
+        "# Per-event field-trust declarations (dotted Envelope-A payload paths).\n"
+        "# Unlisted fields default per fieldTrustDefaults (OBSERVED / sourceEmit:true / level A).\n"
+        "EVENT_FIELD_TRUST: dict[str, dict[str, dict[str, object]]] = {\n"
+        f"{body}\n"
+        "}\n"
+    )
+
+
 def gen_events_ts_section(event_reg: dict) -> str:
     """Return the content to insert between @generated-start and @generated-end."""
     events = event_reg["events"]
@@ -745,6 +984,7 @@ def gen_events_ts_section(event_reg: dict) -> str:
         f"export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {{\n"
         f"{_event_consent_map(events)}\n"
         f"}};\n"
+        f"{_field_trust_ts_block(event_reg)}"
     )
 
 
@@ -815,6 +1055,7 @@ def gen_python_registry(event_reg: dict, consent_reg: dict) -> str:
         f"EVENT_FAMILY: dict[str, str] = {{\n"
         f"{family_lines}\n"
         f"}}\n"
+        f"{_field_trust_py_block(event_reg)}"
     )
 
 
@@ -1384,6 +1625,7 @@ def main() -> int:
 
     event_reg, consent_reg, metric_reg, integration_reg, traffic_reg = load_registries()
     validate(event_reg, consent_reg)
+    validate_field_trust(event_reg)
     validate_metrics(metric_reg)
     validate_integration_consent(integration_reg, consent_reg)
     validate_traffic_source(traffic_reg)
