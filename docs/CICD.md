@@ -21,7 +21,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "c76243f6"
+last_synced_commit: "33423c1"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release
@@ -56,8 +56,9 @@ imports only the reviewed Terraform addresses. It never calls
 `get-secret-value`; secret materialization remains a separate secure bootstrap.
 The staging promotion also probes the account plan and fails closed before any
 mutation when a Free plan cannot support the reviewed Aurora topology. Its IAM
-manifest therefore includes the ECR scan and account-plan read actions that
-those preflight checks actually call.
+manifest therefore includes the ECR scan, account-plan read, S3 bucket-level
+read, and ELB listener-attribute actions that those preflight checks and
+Terraform plan actually call.
 
 Reviewed Terraform promotion pins immutable digests and injects the staging
 apply-role ARN only for staging. Inline-ML profiles leave the ML digest empty;
@@ -76,9 +77,12 @@ encrypted with that key before import. Before assigning ownership, it reads the
 staging, demo, and preview state keys and refuses an import if any shared
 repository or target group is already owned by another profile.
 staging IAM contract is explicit about repository metadata, event targets,
-parameter tags, staging Lambda tags, and KMS grant/key-tag operations, while
-CMK policies constrain service use to the staging account and regional service
-endpoints.
+parameter tags, staging Lambda tags, KMS grant/key-tag operations, S3
+bucket-level read actions (`GetAccelerateConfiguration`,
+`GetBucketRequestPayment`, `GetBucketNotification`,
+`GetBucketOwnershipControls`, `ListBucket`), and ELB listener attributes
+(`DescribeListenerAttributes`), while CMK policies constrain service use to
+the staging account and regional service endpoints.
 Role-name assertions are staging-only: every other profile is checked against
 its encrypted role ARN without being forced to use a staging role name. The
 staging effective-policy check also evaluates each reviewed action against its

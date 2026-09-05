@@ -36,6 +36,10 @@ REQUIRED_ACTIONS = {
     "s3:GetBucketTagging",
     "s3:GetBucketPublicAccessBlock",
     "s3:GetBucketObjectLockConfiguration",
+    "s3:GetAccelerateConfiguration",
+    "s3:GetBucketRequestPayment",
+    "s3:GetBucketNotification",
+    "s3:GetBucketOwnershipControls",
     "s3:ListBucket",
     # ECR
     "ecr:TagResource",
@@ -172,6 +176,7 @@ REQUIRED_ACTIONS = {
     "elasticloadbalancing:DescribeTargetGroupAttributes",
     "elasticloadbalancing:DescribeTags",
     "elasticloadbalancing:DescribeRules",
+    "elasticloadbalancing:DescribeListenerAttributes",
     # Aurora / RDS
     "rds:CreateDBCluster",
     "rds:DeleteDBCluster",
@@ -406,6 +411,7 @@ ALLOWED_GLOBAL_ACTIONS = {
     "elasticloadbalancing:DescribeTargetGroupAttributes",
     "elasticloadbalancing:DescribeTags",
     "elasticloadbalancing:DescribeRules",
+    "elasticloadbalancing:DescribeListenerAttributes",
     # Aurora / RDS
     "rds:CreateDBCluster",
     "rds:DeleteDBCluster",
@@ -620,7 +626,9 @@ def main() -> int:
         "s3:GetBucketWebsite", "s3:GetBucketVersioning", "s3:GetBucketLogging",
         "s3:GetBucketLocation", "s3:GetBucketTagging",
         "s3:GetBucketPublicAccessBlock", "s3:GetBucketObjectLockConfiguration",
-        "s3:ListBucket",
+        "s3:GetAccelerateConfiguration",
+        "s3:GetBucketRequestPayment", "s3:GetBucketNotification",
+        "s3:GetBucketOwnershipControls", "s3:ListBucket",
     ):
         expected_resources[_s3] = _S3_STAGING_BUCKET
 
@@ -743,6 +751,7 @@ def main() -> int:
         "elasticloadbalancing:DescribeTargetGroupAttributes",
         "elasticloadbalancing:DescribeTags",
         "elasticloadbalancing:DescribeRules",
+    "elasticloadbalancing:DescribeListenerAttributes",
     ):
         expected_resources[_elb] = "*"
 
