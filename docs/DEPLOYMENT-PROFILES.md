@@ -22,7 +22,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
-last_synced_commit: "5703254"
+last_synced_commit: "81583a2"
 ---
 
 # Deployment Profiles
@@ -137,7 +137,10 @@ The staging apply contract also checks the AWS account plan before mutation.
 Free-plan accounts are permitted when the reviewed plan uses express mode
 (AWS-managed Aurora encryption with no customer-managed KMS key); a plan
 containing customer-managed Aurora KMS resources on a free account fails
-closed. Paid accounts may proceed after the normal policy and cost gates. State
+closed. Free-tier accounts that cannot provision Aurora at all set
+`skip_aurora = true`; Aurora is omitted from the staging `required_resources`
+list for this reason, while production profiles still require it.
+Paid accounts may proceed after the normal policy and cost gates. State
 reconciliation can import pre-existing Secrets Manager metadata only after
 verifying the exact staging CMK and `AWSCURRENT` version; values are populated
 through the separate secure bootstrap and are never read by CI.
@@ -248,7 +251,7 @@ delete/recreate plan.
 |---|---|
 | **Purpose** | Release rehearsal. Wakes for validation, proves a release, returns to zero. |
 | **Selection** | `terraform plan -var-file=profiles/staging.tfvars`, or `.github/workflows/staging-lifecycle.yml`, which dispatches `terraform-promote.yml` for every mutation. `environment = "staging"` is set explicitly; the root default is `production`. |
-| **Resource inventory** | Aurora Serverless v2 (`aurora_min_acu = 0`, max 2), DynamoDB cache, SNS → per-role SQS queues + DLQs, S3 object lake, S3 SPA origins + SSM pointers, ALB, Secrets/KMS, CloudWatch alarms, inline ML, Postgres graph. **Zero** MSK, ElastiCache, Neptune, ClickHouse, dedicated ML, frontend ECS, legacy RDS, NAT gateways, Elastic IPs and self-managed Prometheus/Grafana. |
+| **Resource inventory** | Aurora Serverless v2 (`aurora_min_acu = 0`, max 2), DynamoDB cache, SNS → per-role SQS queues + DLQs, S3 object lake, S3 SPA origins + SSM pointers, ALB, Secrets/KMS, CloudWatch alarms, inline ML, Postgres graph. **Zero** MSK, ElastiCache, Neptune, ClickHouse, dedicated ML, frontend ECS, legacy RDS, NAT gateways, Elastic IPs and self-managed Prometheus/Grafana. Aurora is gated by `skip_aurora` (default `false`); free-tier accounts set `skip_aurora = true` to defer Aurora while validating the rest of the stack. |
 | **Runtime topology** | `execution_mode: consolidated`. Two always-on tasks when awake: `api` (1 vCPU / 2 GiB, max 2) and `lean-worker` (1 vCPU / 4 GiB, max 2) hosting all eight worker roles. `staging_state: asleep` drives every desired count **and every autoscaling floor** to zero. |
 | **Data behaviour** | `database`/`graph`/`analytics: aurora_postgres`/`postgres`, `cache: dynamodb`, `event: sns_sqs`, `object: s3`, `ml: inline`. Aurora auto-pauses at 0 ACU while asleep. |
 | **Network behaviour** | `network_egress_mode = "public_ip"` → `nat_mode = "none"`. Tasks carry a public IP on the task ENI for egress; inbound is governed entirely by the task security group, which accepts traffic only from the ALB. |
