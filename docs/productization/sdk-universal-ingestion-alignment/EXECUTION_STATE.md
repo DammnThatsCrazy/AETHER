@@ -109,6 +109,43 @@ mutation of the program. Descriptive in WS-A2; boundary enforcement is WS-A3.
   category.
 - No validators weakened; no new ADR.
 
+## WS-A3 — minimum-trust + Level A/B/C + SDK trust boundary
+
+Stacked on `feat/sdk-universal-ingestion` at `3e559da9` (base `584fda74` = #601),
+authored on top of the WS-A2 stack (`571de852`…`9b77cdda`), delivered in the
+consolidated program PR. Canonical gate deferred to the full-program tip per the
+gate-policy directive; the generator run that validates the new registry and
+regenerates the twins (exit 0) is the recorded build evidence.
+The spine declares a per-event semantic release level (A/B/C) and an SDK
+emittability boundary; the static gate asserts public-SDK emittable events never
+declare Level C and never carry a field-trust class the public SDK cannot assert
+(SDK ≤ CLIENT_HINT; RESOLVED/SERVER_STAMPED+ are backend-only). Runtime
+enforcement at the ingestion boundary is deliberately **deferred to WS-B's
+universal gateway** (flag-gated OFF there) so the still-un-runnable green tree is
+not risked — WS-A3 ships the spine + generator + static boundary validation only.
+
+| Workstream item | Deliverable | Status |
+|---|---|---|
+| Spine semantic-level + boundary block | `event-registry.json`: `schemaVersion` **2.2.0** + `semanticLevelSchemaVersion` `1.0.0` + `semanticLevels` catalog {A primitive, B typed source, C derived Aether state}, + `sdkBoundarySchemaVersion` `1.0.0` + `sdkBoundary` {`publicSdk`: assertableTrustClasses = class SET `OBSERVED/SOURCE_ASSERTED/SOURCE_REFERENCE/CLIENT_HINT` + emittableSemanticLevels `A,B`; `aetherInternal`: full 10-class rank + `A,B,C`}; `_registryNotes` gained `semantic_levels` + `sdk_boundary`, and the WS-A2 `field_trust` note tail rewritten to the A3-resolved SDK-boundary wording (class set, not a rank cut) | ✅ implemented (this slice) |
+| Per-event classification | every event carries `semanticLevel` A/B/C + boolean `sdkEmitable`: **A = 17** (track,page,screen,heartbeat,error,performance,experiment,identify,consent,interaction_observed,ui_interaction_observed,active_interval_observed,api_request_observed,action_attempted/succeeded/failed/cancelled), **B = 366**, **C = 15** (journey_completed,deferred_attribution_resolved,app_install_attributed + stablecoin/derivatives/interop reconciliation_run_completed/variance_detected/variance_resolved + stablecoin_flow_aggregate_materialized + derivatives pnl/exposure_snapshot_materialized); **sdkEmitable = 153**; zero sdkEmitable-and-C; the four F-family non-emittable events = app_install_attributed,deferred_attribution_resolved,journey_completed,reward_action_queued | ✅ implemented (this slice) |
+| Generator self-gating validation | `generate_contracts.py` `_validate_semantic_boundary()` (runs first inside `validate_field_trust`): per-event semanticLevel ∈ A/B/C, sdkEmitable is bool, sdkEmitable ⇒ level ∈ publicSdk.emittableSemanticLevels, publicSdk classes known + none ≥ SERVER_STAMPED index, "C" never a public emit level, aetherInternal.assertableTrustClasses == full 10-rank, sdkEmitable fieldTrust trustClasses ∈ public-SDK set | ✅ implemented (this slice) |
+| Twin emission | `_semantic_boundary_ts_block` + `_semantic_boundary_py_block`: TS `SEMANTIC_LEVEL_ORDER`/`SemanticLevel`/`EVENT_SEMANTIC_LEVEL` (398)/`SDK_ASSERTABLE_TRUST_CLASSES`/`SDK_EMITTABLE_SEMANTIC_LEVELS`/`SDK_EMITTABLE_EVENT_TYPES` (153) and the Python mirrors (frozenset, 153 confirmed) | ✅ implemented (this slice) |
+| Parity gate | `validate_field_trust_parity.py` docstring + OK line extended (reports `n sdkEmitable` + level {A,B,C} counts); regenerate-and-diff now covers the semantic-boundary section of both twins | ✅ implemented (this slice) |
+| Ownership map | `repo_consistency_ownership.json` `event_field_trust_schema` category name + `test_semantic_boundary.py` required-command + remediation extended to cover the semantic-level/trust-boundary declarations and `_validate_semantic_boundary`; mirrored `REPO_CONSISTENCY_OWNERSHIP.md` row updated | ✅ implemented (this slice) |
+| Tests | new `tests/unit/test_semantic_boundary.py` (13 tests: pre-2.2 no-op, valid-boundary pass, missing level / C-as-emittable / unknown-level / non-bool-emittable / SERVER_STAMPED-in-SDK-set / C-as-public-emit-level / internal-classes≠full-rank failures, sdkEmitable-declaring-backend-only-field fails, sdkEmitable-declaring-assertable-field passes, live-registry 2.2.0 boundary pass) + `test_commerce_parity.py::test_registry_shape` top-level-key pin extended for the four additive WS-A3 keys | ✅ implemented (this slice) |
+| Build evidence | generator exit 0 on the 2.2.0 registry (validation passed + both twins regenerated); canonical `make ci-check` deferred to the full-program tip (user gate policy) | ✅ implemented (this slice, stacked) |
+
+### Definition of done (WS-A3)
+
+- `event-registry.json` is 2.2.0 and passes `_validate_semantic_boundary` with
+  zero sdkEmitable-and-C and zero sdkEmitable event declaring a non-public-SDK
+  field-trust class.
+- TS + Python twins carry the semantic-boundary section and match a fresh
+  regeneration.
+- Canonical gate green at the full-program tip: `make ci-check` = 0,
+  `git status --short` empty, `docs_drift.py --strict` clean.
+- No validators weakened; no new ADR; runtime enforcement deferred to WS-B.
+
 ## Later phases (reserved)
 
 Workstreams A–E (the blueprint's own sequencing) begin after Phase 0 converges.
@@ -117,7 +154,7 @@ built.
 
 | Workstream | Scope (reserved) | Opens when |
 |---|---|---|
-| WS-A — Contract foundation | **WS-A1 + WS-A2 done —** WS-A3–A7: per-field minimum trust + Level A/B/C; missing vocabularies; Envelope B server-side; Swift/Kotlin generation; re-point metric/privacy/retention truth into the Spine (Blueprint Points 2/3/10/13, Invariants #2/#16) | WS-A1 merged |
+| WS-A — Contract foundation | **WS-A1 + WS-A2 + WS-A3 done —** WS-A4–A7: missing vocabularies; Envelope B server-side; Swift/Kotlin generation; re-point metric/privacy/retention truth into the Spine (Blueprint Points 2/3/10/13, Invariants #2/#16) | WS-A1 merged |
 | WS-B — Adapter convergence | SDK/webhook/connector/feed/import/harness/replay adapters that all produce Envelope B through one validated gateway; consent-on-every-path; idempotency-before-publish; ingestion-level replay with original-time preservation; kill deprecated `/v1/ingest` aliases (Invariants #1/#5/#8/#9/#15) | Phase 0 merged |
 | WS-C — SDK hardening | Native identity → subject hints (delete client `/sdk/identity/resolve` re-stamping); native encrypted persistent queues; remove/relocate shared interpretation modules; regenerate `web/src/types.ts`; add native correlation fields (Invariants #4/#12/#16) | Phase 0 merged |
 | WS-D — Backend interpretation | Typed `RelationshipFact` + `evidence_refs`; Episode engine; outcome truth store; Section-25 evidence dedupe; silver money → exact decimal/event-time valuation on by default (coordinate with `feat/financial-normalization` — do not build twice); mutation-gateway governance on by default (Invariants #7/#11/#13/#14) | Phase 0 merged |
