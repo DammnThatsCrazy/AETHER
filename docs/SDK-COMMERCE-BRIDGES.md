@@ -18,7 +18,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "bee65298"
+last_synced_commit: "aa3e2d37"
 ---
 
 # SDK Commerce Bridges
