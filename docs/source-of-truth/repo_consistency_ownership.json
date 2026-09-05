@@ -79,7 +79,7 @@
     },
     {
       "id": "event_field_trust_schema",
-      "name": "event field-trust/authority metadata or its generator/gate changed",
+      "name": "event field-trust/authority + semantic-level/trust-boundary metadata or its generator/gate changed",
       "source_globs": [
         "packages/shared/contracts/event-registry.json",
         "packages/shared/events.ts",
@@ -100,9 +100,10 @@
         "python scripts/validate_field_trust_parity.py",
         "python scripts/validate_contracts.py",
         "python scripts/docs_drift.py --strict",
-        "python -m pytest tests/unit/test_validate_field_trust_parity.py -q"
+        "python -m pytest tests/unit/test_validate_field_trust_parity.py -q",
+        "python -m pytest tests/unit/test_semantic_boundary.py -q"
       ],
-      "remediation": "Keep per-event fieldTrust metadata in packages/shared/contracts/event-registry.json structurally valid (see generate_contracts.validate_field_trust), regenerate the TS/Python twins with python scripts/generate_contracts.py, and move the tests when the field-trust gate changes."
+      "remediation": "Keep per-event fieldTrust metadata AND the semantic-level / sdkEmitable / sdkBoundary declarations in packages/shared/contracts/event-registry.json structurally valid (see generate_contracts.validate_field_trust + _validate_semantic_boundary), regenerate the TS/Python twins with python scripts/generate_contracts.py, and move/update the parity + boundary tests when the field-trust or semantic-boundary gate changes."
     },
     {
       "id": "consent_tenant_auth",
