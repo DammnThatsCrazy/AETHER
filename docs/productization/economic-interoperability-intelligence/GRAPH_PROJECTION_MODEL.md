@@ -11,7 +11,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/graph/relationship_layers.py
   - packages/shared/graph-contract.ts
 canonical_owner: platform@aether
-last_synced_commit: "60a5c024"
+last_synced_commit: "c587eb8b"
 ---
 
 # Graph Projection Model
