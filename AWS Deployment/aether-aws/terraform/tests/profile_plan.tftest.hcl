@@ -170,6 +170,7 @@ run "staging_profile_plan" {
     aurora_min_acu      = 0
     aurora_max_acu      = 2
     aurora_express_mode = true
+    skip_aurora         = true
     log_retention_days  = 3
   }
 
@@ -679,6 +680,7 @@ run "staging_asleep_profile_plan" {
     aurora_min_acu      = 0
     aurora_max_acu      = 2
     aurora_express_mode = true
+    skip_aurora         = true
     log_retention_days  = 3
   }
 
@@ -841,7 +843,7 @@ run "production_lean_profile_plan" {
     condition = alltrue([
       local.enable_aurora,
       local.enable_postgres_graph,
-      module.aurora.db_name == var.db_name,
+      module.aurora[0].db_name == var.db_name,
       local.graph_backend == "postgres",
     ])
     error_message = "The production-lean plan does not provision Aurora Serverless v2 as the database and graph of record."
@@ -1286,6 +1288,7 @@ run "staging_awake_applied" {
     aurora_min_acu        = 0
     aurora_max_acu        = 2
     aurora_express_mode   = true
+    skip_aurora           = true
     log_retention_days    = 3
     enable_credential_kms = false
   }
@@ -1314,6 +1317,7 @@ run "staging_sleep_plan_against_applied" {
     aurora_min_acu      = 0
     aurora_max_acu      = 2
     aurora_express_mode = true
+    skip_aurora         = true
     log_retention_days  = 3
   }
 

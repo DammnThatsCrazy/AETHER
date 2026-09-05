@@ -218,6 +218,12 @@ variable "aurora_express_mode" {
   default     = false
 }
 
+variable "skip_aurora" {
+  type        = bool
+  description = "Skip Aurora provisioning entirely. Use on AWS Free-tier accounts where Aurora requires WithExpressConfiguration (Internet Access Gateway, no VPC). Everything else in the stack is validated; Aurora is added back when the account is upgraded."
+  default     = false
+}
+
 # --------------------------------------------------------------------------
 # RDS Postgres (kept for rollback safety — decommission after E3 validation)
 # --------------------------------------------------------------------------
