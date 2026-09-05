@@ -122,6 +122,36 @@ def test_outcome_type_gate_wired_in_repo_doctor() -> None:
     )
 
 
+def test_canonical_ingestion_tree_gate_wired_in_repo_doctor() -> None:
+    """repo_doctor.py must dispatch the canonical ingestion-tree ownership gate.
+
+    The gate enforces single-owner registration of every tree unit and fails on
+    a NEW duplicate ingestion tree or NEW backend orphan unit.
+    """
+    import inspect
+
+    source = inspect.getsource(repo_doctor)
+    assert 'scripts/validate_canonical_ingestion_trees.py"]' in source, (
+        "repo_doctor must dispatch scripts/validate_canonical_ingestion_trees.py "
+        "as part of the canonical ingestion-tree ownership gate"
+    )
+
+
+def test_sdk_import_boundary_gate_wired_in_repo_doctor() -> None:
+    """repo_doctor.py must dispatch the SDK import-boundary gate.
+
+    The gate keeps SDK client surfaces thin: they may not import backend or
+    legacy-duplicate implementation internals.
+    """
+    import inspect
+
+    source = inspect.getsource(repo_doctor)
+    assert 'scripts/validate_sdk_import_boundary.py"]' in source, (
+        "repo_doctor must dispatch scripts/validate_sdk_import_boundary.py "
+        "as part of the SDK import-boundary gate"
+    )
+
+
 def test_intelligence_projection_gate_wired_in_repo_doctor() -> None:
     """repo_doctor.py must dispatch and track the intelligence-projection plane.
 

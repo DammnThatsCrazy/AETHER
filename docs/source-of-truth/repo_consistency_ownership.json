@@ -336,6 +336,30 @@
       "remediation": "Keep Makefile, workflows, docs, repo_doctor, and parser tests synchronized."
     },
     {
+      "id": "legacy_ingestion_tree_mutation",
+      "name": "deprecated legacy ingestion/data-lake tree mutated (do-not-extend)",
+      "source_globs": [
+        "Data Ingestion Layer/**",
+        "Data Lake Architecture/**",
+        "Backend Architecture/*.py",
+        "Backend Architecture/migrations/**",
+        "Backend Architecture/mnt/**",
+        "Backend Architecture/services/delegation/**",
+        "Backend Architecture/services/journey-service/**",
+        "Backend Architecture/services/web3/**",
+        "!Data Ingestion Layer/**/package.json",
+        "!Data Lake Architecture/**/package.json"
+      ],
+      "required_changed_globs": [
+        "docs/productization/sdk-universal-ingestion-alignment/**",
+        "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md"
+      ],
+      "required_commands": [
+        "python scripts/validate_canonical_ingestion_trees.py"
+      ],
+      "remediation": "Do not extend deprecated legacy ingestion/data-lake trees; route new work into Backend Architecture/aether-backend or packages/*. An acknowledged deprecation mutation must co-move the program acknowledgment docs (docs/productization/sdk-universal-ingestion-alignment/**) and REPO_CONSISTENCY_OWNERSHIP.md, and keep scripts/validate_canonical_ingestion_trees.py available on disk."
+    },
+    {
       "id": "deployment_profiles",
       "name": "deployment profile / Terraform topology changed",
       "source_globs": [

@@ -109,7 +109,7 @@ closed.
 | docs/api/FLOW-TRACE.md | f44dceec5 | 1 | yes |
 | docs/api/FRAUD-NETWORKS.md | f44dceec5 | 1 | yes |
 | docs/campaign/CAMPAIGN_REGISTRY_ARCHITECTURE.md | e55fd16e2 | 1 | no |
-| docs/decisions/ADR-007-observation-only-execution-invariant.md | f44dceec5 | 1 | no |
+| docs/decisions/ADR-011-observation-only-execution-invariant.md | f44dceec5 | 1 | no |
 | docs/productization/aether_productization_audit.md | 4e944e7f1 | 1 | no |
 | docs/productization/staging-capstone/CREDENTIAL_WAITING_PROMOTION_GUIDE.md | fdebe494a | 1 | no |
 | docs/productization/staging-capstone/PROVIDER_CAPABILITY_MATRIX_GUIDE.md | fdebe494a | 1 | no |

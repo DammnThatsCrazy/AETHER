@@ -4125,6 +4125,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/blueprints/sdk-universal-ingestion-alignment.md",
+      "title": "Aether SDK + Universal Ingestion Alignment Blueprint",
+      "slug": "blueprints/sdk-universal-ingestion-alignment",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 45,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/blueprints/temporal360.md",
       "title": "Temporal360 Vertical Slice Blueprint",
       "slug": "blueprints/temporal360",
@@ -4869,20 +4885,6 @@
       "canonical_owner": "platform@aether"
     },
     {
-      "path": "docs/decisions/ADR-007-observation-only-execution-invariant.md",
-      "title": "ADR-007: Observation-Only Execution Invariant",
-      "slug": "decisions/adr-007-observation-only-execution-invariant",
-      "section": "reference",
-      "visibility": "I",
-      "audience": [
-        "architect",
-        "dev-senior"
-      ],
-      "status": "stable",
-      "since_version": "8.12.0",
-      "canonical_owner": "platform@aether"
-    },
-    {
       "path": "docs/decisions/ADR-008-multi-model-intelligence-harness.md",
       "title": "ADR-008: Multi-Model Intelligence Harness",
       "slug": "decisions/adr-008-multi-model-intelligence-harness",
@@ -4914,6 +4916,20 @@
       "path": "docs/decisions/ADR-010-intelligence-projection-plane.md",
       "title": "ADR-010: Intelligence Projection Plane",
       "slug": "decisions/adr-010-intelligence-projection-plane",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/decisions/ADR-011-observation-only-execution-invariant.md",
+      "title": "ADR-011: Observation-Only Execution Invariant",
+      "slug": "decisions/adr-011-observation-only-execution-invariant",
       "section": "reference",
       "visibility": "I",
       "audience": [
@@ -5745,6 +5761,51 @@
       "path": "docs/productization/economic-interoperability-intelligence/TEST_EVIDENCE.md",
       "title": "Test Evidence",
       "slug": "productization/economic-interoperability-intelligence/test-evidence",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/sdk-universal-ingestion-alignment/EXECUTION_STATE.md",
+      "title": "Execution State — SDK + Universal Ingestion Alignment",
+      "slug": "productization/sdk-universal-ingestion-alignment/execution-state",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/sdk-universal-ingestion-alignment/REPO_TRUTH_AND_GAP_MATRIX.md",
+      "title": "Repo Truth and Gap Matrix — SDK + Universal Ingestion Alignment",
+      "slug": "productization/sdk-universal-ingestion-alignment/repo-truth-and-gap-matrix",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/sdk-universal-ingestion-alignment/TARGET_ARCHITECTURE.md",
+      "title": "Target Architecture — SDK + Universal Ingestion Alignment",
+      "slug": "productization/sdk-universal-ingestion-alignment/target-architecture",
       "section": "operations",
       "visibility": "I",
       "audience": [
