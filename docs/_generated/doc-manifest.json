@@ -4141,6 +4141,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/blueprints/social360.md",
+      "title": "Social360 Blueprint — Relationship-Fidelity Extension to the Relational Intelligence Spine",
+      "slug": "blueprints/social360",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 15,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/blueprints/temporal360.md",
       "title": "Temporal360 Vertical Slice Blueprint",
       "slug": "blueprints/temporal360",

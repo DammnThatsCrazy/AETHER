@@ -40,6 +40,7 @@ The machine-readable owner map is `docs/source-of-truth/repo_consistency_ownersh
 | measurement integrity plane changed | metric registry contract (TS/Py/doc mirrors), `MEASUREMENT_RESTATEMENT.md`, measurement tests |
 | computation substrate changed | `config/computation_inventory.yaml`, `COMPUTATION_SUBSTRATE.md`, regenerated registry twin, substrate tests |
 | intelligence projection architecture changed | generated projection artifacts (TS/Py/doc mirrors), SOT docs, `REPO-INDEX.md`/`AUTOMATION.md`, `packages/shared/index.ts`, projection tests |
+| relationship spine registry changed | generated relationship predicate/motif twins (TS/Py/doc mirrors), barrel exports, parity tests |
 | workflow/check command changed | Makefile, workflows, docs, repo_doctor tests |
 | deprecated legacy ingestion/data-lake tree mutated (do-not-extend) | program acknowledgment docs (`docs/productization/sdk-universal-ingestion-alignment/**`), this md, canonical-ingestion-trees gate (`scripts/validate_canonical_ingestion_trees.py`) |
 | Aether/Kyber production data source changed | `scripts/validate_frontend_data_truth.py` source guardrail and explicit production-bundle scan |

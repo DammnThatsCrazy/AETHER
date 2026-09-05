@@ -800,6 +800,84 @@
         "transaction"
       ],
       "ownedActivityEventTypes": []
+    },
+    {
+      "name": "SocialIdentityProjector",
+      "table": "silver_social_identity_facts",
+      "activityRole": "no_activity",
+      "eventFamilies": [],
+      "eventTypes": [
+        "social_identity_observed"
+      ],
+      "ownedActivityEventTypes": [],
+      "unregisteredEventTypes": [
+        "social_identity_observed"
+      ]
+    },
+    {
+      "name": "SocialConnectionProjector",
+      "table": "silver_social_connection_facts",
+      "activityRole": "no_activity",
+      "eventFamilies": [],
+      "eventTypes": [
+        "social_connection_observed"
+      ],
+      "ownedActivityEventTypes": [],
+      "unregisteredEventTypes": [
+        "social_connection_observed"
+      ]
+    },
+    {
+      "name": "SocialInteractionProjector",
+      "table": "silver_social_interaction_facts",
+      "activityRole": "no_activity",
+      "eventFamilies": [],
+      "eventTypes": [
+        "social_interaction_observed"
+      ],
+      "ownedActivityEventTypes": [],
+      "unregisteredEventTypes": [
+        "social_interaction_observed"
+      ]
+    },
+    {
+      "name": "SocialContentProjector",
+      "table": "silver_social_content_facts",
+      "activityRole": "no_activity",
+      "eventFamilies": [],
+      "eventTypes": [
+        "social_content_observed"
+      ],
+      "ownedActivityEventTypes": [],
+      "unregisteredEventTypes": [
+        "social_content_observed"
+      ]
+    },
+    {
+      "name": "SocialCommunityMembershipProjector",
+      "table": "silver_social_community_facts",
+      "activityRole": "no_activity",
+      "eventFamilies": [],
+      "eventTypes": [
+        "social_community_membership_observed"
+      ],
+      "ownedActivityEventTypes": [],
+      "unregisteredEventTypes": [
+        "social_community_membership_observed"
+      ]
+    },
+    {
+      "name": "SocialMetricProjector",
+      "table": "silver_social_metric_facts",
+      "activityRole": "no_activity",
+      "eventFamilies": [],
+      "eventTypes": [
+        "social_metric_observed"
+      ],
+      "ownedActivityEventTypes": [],
+      "unregisteredEventTypes": [
+        "social_metric_observed"
+      ]
     }
   ],
   "outOfBand": [

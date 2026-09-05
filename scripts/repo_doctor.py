@@ -519,6 +519,12 @@ def main(argv: Sequence[str] | None = None) -> None:
                     "Backend Architecture/aether-backend/shared/projection_engine/generated_lenses.py",
                     "packages/shared/outcome-types_generated.ts",
                     "Backend Architecture/aether-backend/shared/measurement/generated_outcome_types.py",
+                    "packages/shared/relationship-predicate-registry.ts",
+                    "Backend Architecture/aether-backend/shared/relationship_spine/generated_relationship_predicate_registry.py",
+                    "packages/shared/relationship-motif-registry.ts",
+                    "Backend Architecture/aether-backend/shared/relationship_spine/generated_relationship_motif_registry.py",
+                    "packages/shared/social-provider-capability-vocabulary.ts",
+                    "Backend Architecture/aether-backend/shared/social_provider/generated_social_provider_capability_vocabulary.py",
                 ],
                 name="Unified-platform generated contracts — no uncommitted diff",
                 results=results,
@@ -703,6 +709,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         results=results,
         stop_on_failure=stop,
         remediation="align packages/shared/contracts/projector-ownership-registry.json with services/silver/dispatcher.py, then regenerate via make repo-doctor-fix",
+    )
+    run(
+        [sys.executable, "scripts/validate_social360_guardrails.py"],
+        name="Social360 static guardrails (predicate-registry honesty vs live EdgeTypes + no legacy fabricated defaults)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="REGISTERED predicates must name live EdgeTypes present in shared.graph.relationship_layers; remove any fabricated followers=0 / influence='low' / fixed audience_overlap idioms from the governed social surfaces (services/social, services/silver, services/exploration/adapters/social360.py, services/relationship_fidelity, shared/social360)",
     )
     run(
         [sys.executable, "scripts/validate_intelligence_projections.py"],

@@ -2391,6 +2391,30 @@ Read-side behavioral profile output computed by the `BehaviorScorer` Profile 360
 
 ---
 
+## Relationship Intelligence Service (v8.12.0)
+
+Read-only relationship-fidelity surface over the Social360 / relationship spine,
+mounted at `/v1/relationships/{source_entity_id}/{target_entity_id}/*`. Every
+route is flag-gated (`AETHER_SOCIAL360_ENABLED`, default OFF) and, when the flag
+is ON, consent-gated for the read subject (the source entity). In the OFF state
+each route returns the same content-free `feature_disabled` degraded envelope the
+Social360 projection adapter uses; a consent-denied read returns a content-free
+`403`. Absent data is never a zero vector — every envelope keeps unavailable
+dimensions `null` and reports `available` / `degraded` state. Tenant scope comes
+from the authenticated API key; the routes require the `read` permission and
+never fabricate a fidelity or influence figure.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| `GET` | `/v1/relationships/{source}/{target}/fidelity` | read | Latest persisted fidelity-vector surface for the directed pair. Degrades `no_persisted_fidelity_run` when no run exists (fidelity unknown, never 0). |
+| `GET` | `/v1/relationships/{source}/{target}/explain` | read | Honest explain basis: registered predicate semantics + latest fidelity + degraded sections. |
+| `GET` | `/v1/relationships/{source}/{target}/influence` | read | Nine-way influence-propagation decomposition (optional `as_of`). Skeleton read: without caller-supplied path edges it honestly reports `insufficient_data` — never a synthesized influence figure. |
+
+Relationship refs and fidelity runs persist on the Computation Substrate (one run
+slot per relationship); see `docs/source-of-truth/COMPUTATION_SUBSTRATE.md`.
+
+---
+
 ## Error Responses
 
 All endpoints return standard error format:

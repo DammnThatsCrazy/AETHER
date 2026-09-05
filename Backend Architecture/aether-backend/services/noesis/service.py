@@ -534,6 +534,54 @@ class NoesisService:
             candidates.append(("job_status_lookup", 0.82))
         if any(k in low for k in ("metric", "metrics", "measurement", "value_state", "value state", "conversion rate")):
             candidates.append(("measurement_integrity_lookup", 0.83))
+        # Relationship / spine Intelligence (read-only, flag-gated on the
+        # Social360 relationship-intelligence surface — default OFF)
+        if any(k in low for k in (
+            "explain the relationship", "explain relationship",
+            "explain this relationship", "relationship between",
+            "relationship explain", "relationship basis",
+            "basis of the relationship", "underlying relationship",
+            "relationship evidence", "relationship context",
+            "relationship detail", "relationship quality",
+            "relationship motif", "relational basis", "relational structure",
+            "relational context", "relationship structure",
+            "what kind of relationship", "type of relationship",
+            "why is there a relationship", "how are they related",
+            "how are these two related", "what connects these",
+            "are these two related", "is there a relationship",
+            "nature of the relationship", "have a relationship",
+            "has a relationship", "share a relationship",
+        )):
+            candidates.append(("relationship_explain", 0.86))
+        if any(k in low for k in (
+            "influence path", "path of influence", "path for influence",
+            "influence propagation", "how does influence",
+            "influence propagate", "influence spread", "spread of influence",
+            "influence chain", "who influences", "who is influencing",
+            "who is influenced", "influence route", "influence decomposition",
+            "influence between", "trace influence", "influence analysis",
+            "amount of influence", "influence graph", "does influence",
+            "influence evidence", "influence flow",
+        )):
+            candidates.append(("influence_path", 0.87))
+        if any(k in low for k in (
+            "engagement fidelity", "relationship fidelity", "fidelity",
+            "interaction frequency", "interaction depth", "reciprocity",
+            "fidelity vector", "how engaged", "engagement strength",
+            "how strong is the engagement", "strength of engagement",
+            "fidelity of the relationship", "persistence of the relationship",
+        )):
+            candidates.append(("engagement_fidelity", 0.86))
+        if any(k in low for k in (
+            "incentive context", "incentive structure", "incentive design",
+            "incentive alignment", "what incentives", "incentives behind",
+            "underlying incentive", "why is this incentivized",
+            "incentivized to", "what motivates", "what motivation",
+            "motivation behind", "motivates this relationship",
+            "motivates this user", "reward structure", "incentive explain",
+            "incentive analysis", "incentives to engage",
+        )):
+            candidates.append(("incentive_context_explain", 0.86))
 
         if not candidates:
             # If conversation history provides a prior intent, carry it forward with low confidence
@@ -664,6 +712,13 @@ class NoesisService:
             "measurement_integrity_lookup",
         ):
             return await self._observability_dispatch(plan, scope)
+        if plan.intent in (
+            "relationship_explain",
+            "influence_path",
+            "engagement_fidelity",
+            "incentive_context_explain",
+        ):
+            return await self._relationship_spine_dispatch(plan, scope)
         return self._unsupported_response(body, [])
 
     def _tenant_filter(self, scope: Scope) -> Optional[dict[str, Any]]:
@@ -1124,6 +1179,64 @@ class NoesisService:
             ],
             sufficient=bool(result.get("sufficient", True)),
             insufficient_reason=None if result.get("sufficient", True) else "No matching observations in tenant scope",
+        )
+        return self._response(
+            plan, result.get("answer", ""), result.get("results", []), [],
+            evidence=evidence, scope=scope,
+        )
+
+    async def _relationship_spine_dispatch(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
+        """Read-only delegation to the relationship / spine intelligence
+        adapter (relationship_explain / influence_path / engagement_fidelity /
+        incentive_context_explain).
+
+        The whole family is gated on the Social360 relationship-intelligence
+        noesis flag; a disabled surface answers honestly (``service_disabled``)
+        instead of 404ing so the conversation surface stays coherent. The flag
+        is read here (never inside the adapter). When enabled the adapter owns
+        consent + read resolution and degrades honestly when reads are absent.
+        """
+        from config.settings import settings as app_settings
+
+        if not app_settings.social360.noesis_enabled:
+            return NoesisResponse(
+                answer="Relationship Intelligence is not enabled for this deployment.",
+                mode="deterministic",
+                intent=plan.intent,
+                confidence=plan.confidence,
+                warnings=["Relationship Intelligence Noesis surface is disabled"],
+                error=NoesisError(
+                    code="service_disabled",
+                    message="Relationship Intelligence Noesis queries are feature-flagged off.",
+                ),
+                query_debug={"plan": plan.model_dump(), "read_only": True},
+            )
+
+        from .adapters.relationship_spine_adapter import RelationshipSpineNoesisAdapter
+
+        adapter = RelationshipSpineNoesisAdapter()
+        tenant_id = scope.effective_tenant_id
+        if plan.intent == "relationship_explain":
+            result = await adapter.relationship_explain(tenant_id, plan.target, plan.limit)
+        elif plan.intent == "influence_path":
+            result = await adapter.influence_path(tenant_id, plan.target, plan.limit)
+        elif plan.intent == "engagement_fidelity":
+            result = await adapter.engagement_fidelity(tenant_id, plan.target, plan.limit)
+        else:
+            result = await adapter.incentive_context_explain(tenant_id, plan.target, plan.limit)
+
+        fetched_at = utc_now()
+        evidence = EvidenceEnvelope(
+            sources=[
+                EvidenceSource(service="relationship_intelligence", resource_type=source, fetched_at=fetched_at)
+                for source in result.get("sources", [])
+            ],
+            sufficient=bool(result.get("sufficient", True)),
+            insufficient_reason=(
+                None
+                if result.get("sufficient", True)
+                else (result.get("reason") or "No matching observations in tenant scope")
+            ),
         )
         return self._response(
             plan, result.get("answer", ""), result.get("results", []), [],

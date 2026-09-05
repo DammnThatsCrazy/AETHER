@@ -1682,6 +1682,42 @@ class ComparisonConfig:
     enabled: bool = _env_bool("AETHER_COMPARISON_INTELLIGENCE_ENABLED", False)
 
 
+# ---------------------------------------------------------------------------
+# Social360 + Relationship Fidelity — product-surface rollout flags
+# (docs/blueprints/social360.md §121-122 rollout_controls). The rollout_controls
+# flags below mirror the blueprint verbatim (the trailing noesis gate is an
+# extra read-only NL surface knob, not a rollout_control); every flag defaults
+# OFF / "off" until the corresponding plane is implemented and verified. New
+# product behavior behind these flags stays inert while disabled. Consumers
+# read these defensively and must NOT flip the defaults here.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Social360Config:
+    """Feature flags for the Social360 + Relationship Fidelity spine surfaces.
+
+    All flags default OFF / "off" (flag-gated rollout, blueprint §121-122).
+    AETHER_RELATIONSHIP_FIDELITY_MODE follows the shared off → shadow → warn →
+    enforce mode ladder; validated in Settings.__post_init__.
+    """
+    # Master switch: any Social360 product surface is inert until true.
+    social360_enabled: bool = _env_bool("AETHER_SOCIAL360_ENABLED", False)
+    # Universal Provider Runtime social provider convergence (M2).
+    social_upr_enabled: bool = _env_bool("AETHER_SOCIAL_UPR_ENABLED", False)
+    # Relationship-motif detection (registry-driven higher-order structure).
+    relationship_motifs_enabled: bool = _env_bool("AETHER_RELATIONSHIP_MOTIFS_ENABLED", False)
+    # Relationship-fidelity enforcement mode: off | shadow | warn | enforce.
+    relationship_fidelity_mode: str = _env("AETHER_RELATIONSHIP_FIDELITY_MODE", "off")
+    # Fidelity-aware, relationship-intelligent path composition (M8).
+    path_fidelity_enabled: bool = _env_bool("AETHER_PATH_FIDELITY_ENABLED", False)
+    # Social lens capability on the product surfaces (M9/M10 exploration fabric).
+    social_lenses_enabled: bool = _env_bool("AETHER_SOCIAL_LENSES_ENABLED", False)
+    # Relationship / spine read-only Noesis surface (Wave 3a). Observation-only
+    # NL answers over relationship spine evidence; default False (fail-closed)
+    # until the read plane and its consent evaluation are verified.
+    noesis_enabled: bool = _env_bool("AETHER_RELATIONSHIP_SPINE_NOESIS_ENABLED", False)
+
+
 @dataclass
 class Settings:
     env: Environment = Environment(_env("AETHER_ENV", "local"))
@@ -1833,6 +1869,9 @@ class Settings:
     mobile: MobileConfig = field(default_factory=MobileConfig)
     comparison: ComparisonConfig = field(default_factory=ComparisonConfig)
 
+    # Social360 + Relationship Fidelity product-surface rollout flags
+    social360: Social360Config = field(default_factory=Social360Config)
+
     def __post_init__(self):
         _is_non_local = self.env != Environment.LOCAL
         _is_prod = self.env == Environment.PRODUCTION
@@ -1854,6 +1893,13 @@ class Settings:
             raise RuntimeError(
                 "AETHER_MUTATION_GATEWAY_MODE must be one of off, shadow, enforce "
                 f"(got: {self.temporal_observatory.mutation_gateway_mode!r})"
+            )
+
+        # ── Social360 / relationship-fidelity mode ladder (blueprint §121-122) ──
+        if self.social360.relationship_fidelity_mode not in ("off", "shadow", "warn", "enforce"):
+            raise RuntimeError(
+                "AETHER_RELATIONSHIP_FIDELITY_MODE must be one of off, shadow, warn, enforce "
+                f"(got: {self.social360.relationship_fidelity_mode!r})"
             )
 
         # ── Interop flag coherence ────────────────────────────────────────────

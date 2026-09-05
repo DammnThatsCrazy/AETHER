@@ -11,6 +11,14 @@ and the identity cross-check from
 
 The registry runs :func:`assert_plugin_honest` on every registration, so a
 plugin cannot ship a lying manifest into the runtime.
+
+An ADDITIONAL M2-A check runs for every registered plugin but only bites
+social ones: :func:`social_capability_violations
+<services.provider_runtime.social_capability.social_capability_violations>`
+enforces the M1 UPR social capability vocabulary at runtime for plugins whose
+``ProviderIdentity.product == "social"`` (capability membership, grammar
+well-formedness, ``partner_live`` lifecycle evidence). Non-social plugins
+return an empty list and are completely unaffected.
 """
 
 from __future__ import annotations
@@ -27,6 +35,8 @@ from shared.integration_contracts.plugin import (
     capability_set,
     plugin_identity_key,
 )
+
+from services.provider_runtime.social_capability import social_capability_violations
 
 # (capability accessor name, manifest-claims predicate). ``capability`` matches
 # both the CapabilitySet field names and the plugin accessor names.
@@ -96,6 +106,18 @@ def capability_violations(plugin: object) -> list[str]:
             violations.append(
                 f"plugin exposes a {cap}() adapter but the manifest does not claim it"
             )
+
+    # 4. UPR social capability vocabulary honesty (M2-A) — an ADDITIONAL
+    #    social-scoped check. It runs for EVERY plugin on registry.register, but
+    #    returns [] unless the identity product segment == "social", so commerce
+    #    and other non-social plugins are completely unaffected. A social plugin
+    #    is checked against the generated canonical vocabulary (capability
+    #    membership, grammar well-formedness, partner_live lifecycle evidence).
+    #    A raising social check is itself a violation — never a silent pass.
+    try:
+        violations.extend(social_capability_violations(plugin))
+    except Exception as exc:  # noqa: BLE001 - a raising check is never a silent pass
+        violations.append(f"social capability honesty check raised: {exc!r}")
 
     return violations
 

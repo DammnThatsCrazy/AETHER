@@ -532,6 +532,32 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     EdgeType.HAS_ASSET_LEG:         RelationshipLayer.EXCLUDED,
     EdgeType.HAS_SECURITY_SNAPSHOT: RelationshipLayer.EXCLUDED,
     EdgeType.FULFILLED_INTENT:      RelationshipLayer.EXCLUDED,
+
+    # ── Relationship Intelligence Spine — Social360 predicate edges (M6) ──
+    # Every predicate registered in relationship-predicate-registry.json with a
+    # graphEdgeType resolves here. Registered edges are NEVER EXCLUDED.
+    #   entity→entity / principal relationship predicates          → H2H
+    #   RECIPROCAL_COMMUNICATION (aggregate over COMMUNICATES_WITH
+    #     substrate, which is itself A2A)                          → A2A
+    #   AGENT_MEDIATED_PRINCIPAL_INTERACTION is written between the
+    #     PRINCIPAL endpoints (USER/ENTITY), so it is H2H; the agent-chain
+    #     evidence that produced it stays on the assertion provenance.
+    EdgeType.MUTUAL_SOCIAL_CONNECTION:          RelationshipLayer.H2H,
+    EdgeType.SOCIAL_SUBSCRIBES_TO:              RelationshipLayer.H2H,
+    EdgeType.SOCIAL_INTERACTS_WITH:             RelationshipLayer.H2H,
+    EdgeType.COLLABORATES_WITH:                 RelationshipLayer.H2H,
+    EdgeType.PARTICIPATES_WITH:                 RelationshipLayer.H2H,
+    EdgeType.COMMUNITY_ASSOCIATION:             RelationshipLayer.H2H,
+    EdgeType.RECURRING_SOCIAL_INTERACTION:      RelationshipLayer.H2H,
+    EdgeType.RECIPROCAL_COMMUNICATION:          RelationshipLayer.A2A,
+    EdgeType.RECURRING_CO_PRESENCE:             RelationshipLayer.H2H,
+    EdgeType.PERSISTENT_MULTI_CONTEXT_ASSOCIATION: RelationshipLayer.H2H,
+    EdgeType.SHARES_AFFINITY_WITH:              RelationshipLayer.H2H,
+    EdgeType.AGENT_MEDIATED_PRINCIPAL_INTERACTION: RelationshipLayer.H2H,
+    EdgeType.REFERRED_BY:                       RelationshipLayer.H2H,
+    EdgeType.CO_EXPOSED:                        RelationshipLayer.H2H,
+    EdgeType.SHARES_RISK_CONTEXT_WITH:          RelationshipLayer.H2H,
+    EdgeType.CO_PRESENT_WITH:                   RelationshipLayer.H2H,
 }
 
 

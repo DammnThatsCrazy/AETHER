@@ -455,6 +455,8 @@ Canonical contract plane (single source of truth, codegen twins via
 | Model catalog | `packages/shared/contracts/model-registry.json` | `packages/shared/model-registry.ts`; `shared/model_governance/generated_model_registry.py`; `docs/_generated/model-registry-table.md` |
 | Task profiles | `packages/shared/contracts/task-profile-registry.json` | `packages/shared/task-profile.ts`; `shared/model_governance/generated_task_profiles.py`; `docs/_generated/task-profile-table.md` |
 | Intelligence projections | `packages/shared/contracts/intelligence-projection-registry.json` | `packages/shared/intelligence-projections_generated.ts`; `shared/intelligence_projections/generated_registry.py`; `docs/_generated/intelligence-projection-registry-table.md`; `docs/_generated/intelligence-projection-dependency-graph.md` |
+| Relationship predicates (Relational Intelligence Spine) | `packages/shared/contracts/relationship-predicate-registry.json` | `packages/shared/relationship-predicate-registry.ts`; `shared/relationship_spine/generated_relationship_predicate_registry.py`; `docs/_generated/relationship-predicate-registry-table.md` |
+| Relationship motifs (Relational Intelligence Spine) | `packages/shared/contracts/relationship-motif-registry.json` | `packages/shared/relationship-motif-registry.ts`; `shared/relationship_spine/generated_relationship_motif_registry.py`; `docs/_generated/relationship-motif-registry-table.md` |
 
 ### Intelligence projection plane
 

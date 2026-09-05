@@ -445,6 +445,30 @@
         "python -m pytest tests/unit/test_intelligence_projection_*.py -q"
       ],
       "remediation": "Align the intelligence projection registry with its shared contracts, generated artifacts, runtime package, and the real routes/surfaces/services its legacyBindings reference; declare any unresolved cross-registry ref in pendingAuthority/pendingReference; regenerate via python scripts/generate_platform_contracts.py; and update the projection tests."
+    },
+    {
+      "id": "relationship_spine_registries",
+      "name": "relationship spine registry changed",
+      "source_globs": [
+        "packages/shared/contracts/relationship-predicate-registry.json",
+        "packages/shared/contracts/relationship-motif-registry.json"
+      ],
+      "required_changed_globs": [
+        "packages/shared/relationship-predicate-registry.ts",
+        "packages/shared/relationship-motif-registry.ts",
+        "Backend Architecture/aether-backend/shared/relationship_spine/**",
+        "docs/_generated/relationship-predicate-registry-table.md",
+        "docs/_generated/relationship-motif-registry-table.md",
+        "docs/_generated/**",
+        "packages/shared/index.ts",
+        "tests/contracts/test_relationship_predicate_registry_parity.py",
+        "tests/contracts/test_relationship_motif_registry_parity.py",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/generate_platform_contracts.py --check"
+      ],
+      "remediation": "Regenerate the relationship predicate/motif registry twins and tables (python scripts/generate_platform_contracts.py), keep the packages/shared/index.ts barrel in sync, and update the relationship predicate/motif parity tests."
     }
   ]
 }

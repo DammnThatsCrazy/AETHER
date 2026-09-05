@@ -1,0 +1,387 @@
+/**
+ * DO NOT EDIT — generated from packages/shared/contracts/relationship-motif-registry.json
+ * Run: python scripts/generate_platform_contracts.py
+ */
+
+export const relationshipMotifRegistryVersion = '1.0.0' as const;
+
+/** Output kinds a relationship motif may declare. */
+export const relationshipMotifOutputKinds = [
+  'RELATIONSHIP_PREDICATE',
+  'DERIVED_RELATIONSHIP_STATE',
+] as const;
+export type RelationshipMotifOutputKind = typeof relationshipMotifOutputKinds[number];
+
+/** Claim ceilings a relationship motif may attach to its output. */
+export const relationshipMotifClaimCeilings = [
+  'observed',
+  'verified',
+  'resolved',
+  'derived',
+  'inferred',
+  'predicted',
+  'correlated',
+  'temporally_supported',
+] as const;
+export type RelationshipMotifClaimCeiling = typeof relationshipMotifClaimCeilings[number];
+
+/** Evidence-independence policies a relationship motif may declare. */
+export const relationshipMotifEvidenceIndependencePolicies = [
+  'INDEPENDENT_OBSERVATIONS_REQUIRED',
+  'SINGLE_SOURCE_NOT_SUFFICIENT',
+  'CORRELATION_DAMPING_REQUIRED',
+] as const;
+export type RelationshipMotifEvidenceIndependencePolicy = typeof relationshipMotifEvidenceIndependencePolicies[number];
+
+/** Incentive policies a relationship motif may declare. */
+export const relationshipMotifIncentivePolicies = [
+  'NONE_REQUIRED',
+  'DETECTED_UPSTREAM_INCENTIVE_REQUIRED',
+  'DOWNSTREAM_UNINCENTIVIZED_REQUIRED',
+  'CONTEXT_ONLY_RECORDED',
+] as const;
+export type RelationshipMotifIncentivePolicy = typeof relationshipMotifIncentivePolicies[number];
+
+/** Roles an edge may play inside a relationship motif. */
+export const relationshipMotifEdgeRoles = ['source', 'target', 'intermediate'] as const;
+export type RelationshipMotifEdgeRole = typeof relationshipMotifEdgeRoles[number];
+
+/** Canonical relationship-motif catalog (JSON file order). */
+export const relationshipMotifs = [
+  {
+    motifId: 'MUTUAL_SOCIAL_CONNECTION',
+    version: 1,
+    name: 'Mutual Social Connection',
+    description: 'A FOLLOWS B and B FOLLOWS A observed independently (blueprint §45 M1). Emits the MUTUAL_SOCIAL_CONNECTION relationship predicate as a derived claim.',
+    requiredNodes: ['source_entity', 'target_entity'],
+    requiredEdges: [
+      {
+        sourceRole: 'source_entity',
+        targetRole: 'target_entity',
+        predicate: 'FOLLOWS'
+      },
+      {
+        sourceRole: 'target_entity',
+        targetRole: 'source_entity',
+        predicate: 'FOLLOWS'
+      }
+    ],
+    optionalEdges: [],
+    temporalConstraints: 'No minimum duration; both follow directions must be observed, but may be observed at different times within the validity window.',
+    entityKindConstraints: 'source_entity and target_entity MUST be relationship-capable human/entity kinds; both directions must reference the same canonical identities.',
+    evidenceIndependencePolicy: 'SINGLE_SOURCE_NOT_SUFFICIENT',
+    incentivePolicy: 'NONE_REQUIRED',
+    outputPredicate: 'MUTUAL_SOCIAL_CONNECTION',
+    outputState: null,
+    outputKind: 'RELATIONSHIP_PREDICATE',
+    outputClaimCeiling: 'derived',
+    promotionPolicyRef: 'promotion/direct-pair-v1',
+    owner: 'relational-intelligence-spine',
+    tests: ['mutual follows across two independent provider observations emits MUTUAL_SOCIAL_CONNECTION (derived)', 'opposite follow from the same single source/event does not emit (evidence independence)', 'unfollow of one direction closes validity window, never rewrites history (valid_from/valid_to)']
+  },
+  {
+    motifId: 'RECIPROCAL_COMMUNICATION',
+    version: 1,
+    name: 'Reciprocal Communication',
+    description: 'A → communications → B and B → communications → A over a policy-defined duration with independent interactions (blueprint §45 M2). Consumes Communication360 facts; emits RECIPROCAL_COMMUNICATION.',
+    requiredNodes: ['entity_a', 'entity_b'],
+    requiredEdges: [
+      {
+        sourceRole: 'entity_a',
+        targetRole: 'entity_b',
+        predicate: 'COMMUNICATES_WITH'
+      },
+      {
+        sourceRole: 'entity_b',
+        targetRole: 'entity_a',
+        predicate: 'COMMUNICATES_WITH'
+      }
+    ],
+    optionalEdges: [],
+    temporalConstraints: 'Both directions over a policy-defined minimum duration with temporally-dispersed independent interactions.',
+    entityKindConstraints: 'Human/entity communicants; agent-to-agent traffic is excluded from this motif (see AGENT_MEDIATED_PRINCIPAL_INTERACTION).',
+    evidenceIndependencePolicy: 'INDEPENDENT_OBSERVATIONS_REQUIRED',
+    incentivePolicy: 'NONE_REQUIRED',
+    outputPredicate: 'RECIPROCAL_COMMUNICATION',
+    outputState: null,
+    outputKind: 'RELATIONSHIP_PREDICATE',
+    outputClaimCeiling: 'derived',
+    promotionPolicyRef: 'promotion/aggregate-communication-v1',
+    owner: 'relational-intelligence-spine',
+    tests: ['bidirectional, temporally-dispersed independent interactions emit RECIPROCAL_COMMUNICATION', 'one-directional volume never emits the reciprocal predicate', 'all interactions within a single incentive window do not satisfy duration independence on their own']
+  },
+  {
+    motifId: 'RECURRING_CO_PRESENCE',
+    version: 1,
+    name: 'Recurring Co-Presence',
+    description: 'A and B share a geographic context across multiple independent temporal episodes (blueprint §45 M3). Output is recurring co-presence, explicitly NOT friendship and never inferred from a single co-location.',
+    requiredNodes: ['entity_a', 'entity_b', 'shared_location'],
+    requiredEdges: [
+      {
+        sourceRole: 'entity_a',
+        targetRole: 'shared_location',
+        predicate: 'CO_PRESENT_WITH'
+      },
+      {
+        sourceRole: 'entity_b',
+        targetRole: 'shared_location',
+        predicate: 'CO_PRESENT_WITH'
+      }
+    ],
+    optionalEdges: [],
+    temporalConstraints: 'Multiple independent temporal episodes in the same geographic context; single co-location is insufficient.',
+    entityKindConstraints: 'Human/entity kinds with resolvable geographic context.',
+    evidenceIndependencePolicy: 'INDEPENDENT_OBSERVATIONS_REQUIRED',
+    incentivePolicy: 'CONTEXT_ONLY_RECORDED',
+    outputPredicate: 'RECURRING_CO_PRESENCE',
+    outputState: null,
+    outputKind: 'RELATIONSHIP_PREDICATE',
+    outputClaimCeiling: 'derived',
+    promotionPolicyRef: 'promotion/aggregate-temporal-geo-v1',
+    owner: 'relational-intelligence-spine',
+    tests: ['two independent episodes emit RECURRING_CO_PRESENCE; one episode does not', 'co-location in a single campaign/event context is recorded with incentive context, not promoted as recurring', 'output never carries a personal-relationship label']
+  },
+  {
+    motifId: 'COMMUNITY_ASSOCIATION',
+    version: 1,
+    name: 'Shared Community + Interaction',
+    description: 'A member_of Community C, B member_of Community C, and A/B repeatedly interact (blueprint §45 M4). Emits COMMUNITY_ASSOCIATION (derived).',
+    requiredNodes: ['entity_a', 'entity_b', 'community'],
+    requiredEdges: [
+      {
+        sourceRole: 'entity_a',
+        targetRole: 'community',
+        predicate: 'MEMBER_OF'
+      },
+      {
+        sourceRole: 'entity_b',
+        targetRole: 'community',
+        predicate: 'MEMBER_OF'
+      },
+      {
+        sourceRole: 'entity_a',
+        targetRole: 'entity_b',
+        predicate: 'INTERACTS_WITH'
+      }
+    ],
+    optionalEdges: [],
+    temporalConstraints: 'Shared membership and repeated interaction within a bounded window; membership overlap alone is not enough.',
+    entityKindConstraints: 'Human/entity members of the same community vertex.',
+    evidenceIndependencePolicy: 'INDEPENDENT_OBSERVATIONS_REQUIRED',
+    incentivePolicy: 'NONE_REQUIRED',
+    outputPredicate: 'COMMUNITY_ASSOCIATION',
+    outputState: null,
+    outputKind: 'RELATIONSHIP_PREDICATE',
+    outputClaimCeiling: 'derived',
+    promotionPolicyRef: 'promotion/shared-membership-v1',
+    owner: 'relational-intelligence-spine',
+    tests: ['shared membership plus repeated independent interaction emits COMMUNITY_ASSOCIATION', 'shared membership alone does not emit', 'membership in the same incentive-driven community records incentive context rather than organic association']
+  },
+  {
+    motifId: 'SOCIAL_ECONOMIC_TRANSITION',
+    version: 1,
+    name: 'Social → Economic Transition',
+    description: 'A socially interacts with B and later an economic relationship appears (blueprint §45 M5). Emits a derived social_economic_transition state with a bounded causal claim: sequencing is observed, motivation is not declared.',
+    requiredNodes: ['entity_a', 'entity_b'],
+    requiredEdges: [
+      {
+        sourceRole: 'entity_a',
+        targetRole: 'entity_b',
+        predicate: 'INTERACTS_WITH'
+      },
+      {
+        sourceRole: 'entity_a',
+        targetRole: 'entity_b',
+        predicate: 'PAYS'
+      }
+    ],
+    optionalEdges: [],
+    temporalConstraints: 'Social interaction predates the first economic edge; the transition is temporal, not causal beyond what the evidence sequence supports.',
+    entityKindConstraints: 'Human/entity pairs with both social and economic surfaces.',
+    evidenceIndependencePolicy: 'CORRELATION_DAMPING_REQUIRED',
+    incentivePolicy: 'CONTEXT_ONLY_RECORDED',
+    outputPredicate: null,
+    outputState: 'social_economic_transition',
+    outputKind: 'DERIVED_RELATIONSHIP_STATE',
+    outputClaimCeiling: 'derived',
+    promotionPolicyRef: 'promotion/sequence-transition-v1',
+    owner: 'relational-intelligence-spine',
+    tests: ['social-before-economic sequencing emits social_economic_transition with bounded causal language', 'economic-before-social ordering emits nothing for this motif', 'limitations record that no private motivation is declared']
+  },
+  {
+    motifId: 'AGENT_MEDIATED_PRINCIPAL_INTERACTION',
+    version: 1,
+    name: 'Agent-Mediated Principal Interaction',
+    description: 'Human A delegates to Agent A, Agent A transacts with Agent B, Agent B acts_for Human B (blueprint §45 M6). Emits AGENT_MEDIATED_PRINCIPAL_INTERACTION between the principals; the observed interaction is between agents.',
+    requiredNodes: ['principal_a', 'principal_b', 'agent_a', 'agent_b'],
+    requiredEdges: [
+      {
+        sourceRole: 'principal_a',
+        targetRole: 'agent_a',
+        predicate: 'DELEGATES_TO'
+      },
+      {
+        sourceRole: 'principal_b',
+        targetRole: 'agent_b',
+        predicate: 'ACTED_FOR'
+      },
+      {
+        sourceRole: 'agent_a',
+        targetRole: 'agent_b',
+        predicate: 'PAYS'
+      }
+    ],
+    optionalEdges: [],
+    temporalConstraints: 'Agent transaction must fall within the principals\' delegation/acting authority windows.',
+    entityKindConstraints: 'Principals are human/entity kinds; agents are AGENT vertices; delegation edges must be canonical.',
+    evidenceIndependencePolicy: 'SINGLE_SOURCE_NOT_SUFFICIENT',
+    incentivePolicy: 'NONE_REQUIRED',
+    outputPredicate: 'AGENT_MEDIATED_PRINCIPAL_INTERACTION',
+    outputState: null,
+    outputKind: 'RELATIONSHIP_PREDICATE',
+    outputClaimCeiling: 'derived',
+    promotionPolicyRef: 'promotion/agent-chain-principal-v1',
+    owner: 'relational-intelligence-spine',
+    tests: ['valid delegation + acting + agent-to-agent transaction chain emits AGENT_MEDIATED_PRINCIPAL_INTERACTION', 'missing authority window for either principal blocks emission', 'agent-only activity with no principal linkage emits nothing']
+  },
+  {
+    motifId: 'INCENTIVE_ORIGINATED_CASCADE',
+    version: 1,
+    name: 'Incentive-Originated Cascade',
+    description: 'Reward program → creator content → downstream amplifiers (blueprint §45 M7). Emits incentive_originated_propagation; requires a DETECTED upstream incentive.',
+    requiredNodes: ['reward_program', 'creator', 'content', 'amplifier'],
+    requiredEdges: [
+      {
+        sourceRole: 'reward_program',
+        targetRole: 'creator',
+        predicate: 'CO_EXPOSED'
+      },
+      {
+        sourceRole: 'creator',
+        targetRole: 'content',
+        predicate: 'REFERRED_BY'
+      },
+      {
+        sourceRole: 'content',
+        targetRole: 'amplifier',
+        predicate: 'REFERRED_BY'
+      }
+    ],
+    optionalEdges: [],
+    temporalConstraints: 'Amplifier exposure follows creator exposure within the incentive window lineage.',
+    entityKindConstraints: 'Creator/amplifier are entity/media kinds; reward_program is a campaign/reward vertex.',
+    evidenceIndependencePolicy: 'CORRELATION_DAMPING_REQUIRED',
+    incentivePolicy: 'DETECTED_UPSTREAM_INCENTIVE_REQUIRED',
+    outputPredicate: null,
+    outputState: 'incentive_originated_propagation',
+    outputKind: 'DERIVED_RELATIONSHIP_STATE',
+    outputClaimCeiling: 'derived',
+    promotionPolicyRef: 'promotion/cascade-lineage-v1',
+    owner: 'relational-intelligence-spine',
+    tests: ['upstream reward linkage present emits incentive_originated_propagation', 'no detected upstream incentive blocks emission (never infers incentive)', 'output is an incentive-exposure finding, never an organic claim']
+  },
+  {
+    motifId: 'EARNED_DOWNSTREAM_AMPLIFICATION',
+    version: 1,
+    name: 'Earned Downstream Amplification',
+    description: 'Same cascade shape as incentive-originated, but the downstream actor has no observed direct incentive (blueprint §45 M8). Emits earned_downstream_amplification WITH the limitation: direct incentive not observed; not proof of intrinsic motivation.',
+    requiredNodes: ['creator', 'content', 'amplifier'],
+    requiredEdges: [
+      {
+        sourceRole: 'creator',
+        targetRole: 'content',
+        predicate: 'REFERRED_BY'
+      },
+      {
+        sourceRole: 'content',
+        targetRole: 'amplifier',
+        predicate: 'REFERRED_BY'
+      }
+    ],
+    optionalEdges: [],
+    temporalConstraints: 'Downstream amplification follows content publication; downstream actor has no observed incentive linkage.',
+    entityKindConstraints: 'Amplifier is an entity/media kind with no detected direct incentive.',
+    evidenceIndependencePolicy: 'CORRELATION_DAMPING_REQUIRED',
+    incentivePolicy: 'DOWNSTREAM_UNINCENTIVIZED_REQUIRED',
+    outputPredicate: null,
+    outputState: 'earned_downstream_amplification',
+    outputKind: 'DERIVED_RELATIONSHIP_STATE',
+    outputClaimCeiling: 'derived',
+    promotionPolicyRef: 'promotion/cascade-earned-v1',
+    owner: 'relational-intelligence-spine',
+    tests: ['downstream amplifier with no observed direct incentive emits earned_downstream_amplification', 'output MUST carry the \'not proof of intrinsic motivation\' limitation', 'downstream actor with a detected incentive routes to INCENTIVE_ORIGINATED_CASCADE instead']
+  },
+  {
+    motifId: 'PREEXISTING_AFFINITY_INTERSECTS_CAMPAIGN',
+    version: 1,
+    name: 'Preexisting Affinity Then Campaign',
+    description: 'Relationship evidence predates campaign exposure (blueprint §45 M9). Emits preexisting_relationship_intersects_campaign — temporal support for affinity, never a claim that the campaign was the cause.',
+    requiredNodes: ['entity_a', 'entity_b', 'campaign'],
+    requiredEdges: [
+      {
+        sourceRole: 'entity_a',
+        targetRole: 'entity_b',
+        predicate: 'INTERACTS_WITH'
+      },
+      {
+        sourceRole: 'entity_a',
+        targetRole: 'entity_b',
+        predicate: 'CO_EXPOSED'
+      }
+    ],
+    optionalEdges: [],
+    temporalConstraints: 'Relationship/interaction evidence must predate the campaign-exposure window.',
+    entityKindConstraints: 'Human/entity pairs with both interaction and campaign-exposure surfaces.',
+    evidenceIndependencePolicy: 'INDEPENDENT_OBSERVATIONS_REQUIRED',
+    incentivePolicy: 'CONTEXT_ONLY_RECORDED',
+    outputPredicate: null,
+    outputState: 'preexisting_relationship_intersects_campaign',
+    outputKind: 'DERIVED_RELATIONSHIP_STATE',
+    outputClaimCeiling: 'temporally_supported',
+    promotionPolicyRef: 'promotion/temporal-support-v1',
+    owner: 'relational-intelligence-spine',
+    tests: ['interaction evidence predating campaign exposure emits the preexisting-affinity state', 'interaction only during the campaign window emits nothing for this motif', 'output is temporally_supported, never causally_supported, absent causal evidence']
+  },
+  {
+    motifId: 'PERSISTENT_MULTI_CONTEXT_ASSOCIATION',
+    version: 1,
+    name: 'Multi-Context Persistent Association',
+    description: 'Independent social, communication, economic and/or temporal-geographic evidence across time (blueprint §45 M10). Emits PERSISTENT_MULTI_CONTEXT_ASSOCIATION — the bounded-language alternative to a \'friend\' label.',
+    requiredNodes: ['entity_a', 'entity_b'],
+    requiredEdges: [
+      {
+        sourceRole: 'entity_a',
+        targetRole: 'entity_b',
+        predicate: 'RECURRING_SOCIAL_INTERACTION'
+      },
+      {
+        sourceRole: 'entity_a',
+        targetRole: 'entity_b',
+        predicate: 'RECURRING_CO_PRESENCE'
+      }
+    ],
+    optionalEdges: [
+      {
+        sourceRole: 'entity_a',
+        targetRole: 'entity_b',
+        predicate: 'RECIPROCAL_COMMUNICATION'
+      },
+      {
+        sourceRole: 'entity_a',
+        targetRole: 'entity_b',
+        predicate: 'PAYS'
+      }
+    ],
+    temporalConstraints: 'Evidence across at least two independent contexts dispersed over time.',
+    entityKindConstraints: 'Human/entity pairs; contexts must be independent (social, communication, economic, temporal-geographic).',
+    evidenceIndependencePolicy: 'INDEPENDENT_OBSERVATIONS_REQUIRED',
+    incentivePolicy: 'CONTEXT_ONLY_RECORDED',
+    outputPredicate: 'PERSISTENT_MULTI_CONTEXT_ASSOCIATION',
+    outputState: null,
+    outputKind: 'RELATIONSHIP_PREDICATE',
+    outputClaimCeiling: 'derived',
+    promotionPolicyRef: 'promotion/multi-context-persistent-v1',
+    owner: 'relational-intelligence-spine',
+    tests: ['two independent context types with dispersed evidence emit PERSISTENT_MULTI_CONTEXT_ASSOCIATION', 'single-context evidence does not emit', 'output never automatically carries a \'friend\' label']
+  },
+] as const;

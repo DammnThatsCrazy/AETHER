@@ -65,6 +65,12 @@ SUPPORTED_INTENTS: frozenset[str] = frozenset({
     "import_status_lookup",
     "job_status_lookup",
     "measurement_integrity_lookup",
+    # Relationship / spine intelligence (read-only, flag-gated on the
+    # Social360 relationship-intelligence surface — default OFF)
+    "relationship_explain",
+    "influence_path",
+    "engagement_fidelity",
+    "incentive_context_explain",
 })
 
 SUPPORTED_ENTITY_TYPES: frozenset[str] = frozenset({
@@ -213,6 +219,11 @@ class QueryPlan(BaseModel):
         "import_status_lookup",
         "job_status_lookup",
         "measurement_integrity_lookup",
+        # Relationship / spine intelligence intents (read-only, flag-gated)
+        "relationship_explain",
+        "influence_path",
+        "engagement_fidelity",
+        "incentive_context_explain",
         # Agentic intelligence intents (must mirror _agentic_dispatch keys)
         "agent_inventory_lookup",
         "agent_activity_lookup",

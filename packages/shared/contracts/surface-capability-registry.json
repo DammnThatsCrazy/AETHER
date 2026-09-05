@@ -161,6 +161,17 @@
       "supportsExport": true
     },
     {
+      "surfaceId": "social360",
+      "supportedFieldCategories": ["entity", "time", "social", "relationship", "incentive", "source", "evidence", "path", "narrative"],
+      "supportedTemporalModes": ["window", "as_of", "relative"],
+      "supportedViews": ["table", "graph"],
+      "supportsFacets": true,
+      "supportsComparison": false,
+      "supportsSelectionSets": true,
+      "supportsSavedViews": false,
+      "supportsExport": true
+    },
+{
       "surfaceId": "temporal360",
       "supportedFieldCategories": ["entity", "time", "truth"],
       "supportedTemporalModes": ["window", "as_of", "compare", "relative"],

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "aether://contracts/relationship-fidelity-vector.schema.json",
+  "title": "Aether RelationshipFidelityVector canonical contract",
+  "description": "Multidimensional relationship-fidelity vector for the Relational Intelligence Spine (blueprint §§34-38). The vector is authoritative and is deliberately NOT one universal scalar: no composite fidelity score may be added to this schema; use-case composites exist only as separately-versioned ComputationDefinitions (§38). Dimension values are nullable numbers with no default and no synthetic 0 for missing evidence — unknown is a state, 0 is a measurement. When not genuinely calibrated, dimensions use HeuristicScore/OrdinalScore/Rate/Ratio/GraphMetric, never Probability, so that e.g. a persistence value is never misread as a probability of friendship (§37).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "fidelity_vector_id",
+    "relationship_ref",
+    "definition_version",
+    "observation_count",
+    "first_observed_at",
+    "last_observed_at",
+    "status",
+    "computed_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "fidelity_vector_id": { "type": "string", "minLength": 1 },
+    "relationship_ref": { "type": "string", "minLength": 1 },
+    "definition_version": { "type": "string", "minLength": 1 },
+    "evidence_confidence": { "$ref": "#/$defs/dimension" },
+    "source_reliability": { "$ref": "#/$defs/dimension" },
+    "identity_confidence": { "$ref": "#/$defs/dimension" },
+    "persistence": { "$ref": "#/$defs/dimension" },
+    "reciprocity": { "$ref": "#/$defs/dimension" },
+    "interaction_frequency": { "$ref": "#/$defs/dimension" },
+    "interaction_depth": { "$ref": "#/$defs/dimension" },
+    "context_diversity": { "$ref": "#/$defs/dimension" },
+    "temporal_continuity": { "$ref": "#/$defs/dimension" },
+    "semantic_specificity": { "$ref": "#/$defs/dimension" },
+    "semantic_originality": { "$ref": "#/$defs/dimension" },
+    "preexisting_affinity_support": { "$ref": "#/$defs/dimension" },
+    "incentive_exposure": { "$ref": "#/$defs/dimension" },
+    "incentive_independence_support": { "$ref": "#/$defs/dimension" },
+    "coordination_indicator_strength": { "$ref": "#/$defs/dimension" },
+    "economic_significance": { "$ref": "#/$defs/dimension" },
+    "social_significance": { "$ref": "#/$defs/dimension" },
+    "organizational_significance": { "$ref": "#/$defs/dimension" },
+    "agentic_significance": { "$ref": "#/$defs/dimension" },
+    "outcome_support": { "$ref": "#/$defs/dimension" },
+    "observation_count": { "type": "number", "minimum": 0 },
+    "independent_evidence_count": { "type": ["number", "null"], "minimum": 0 },
+    "independent_source_count": { "type": ["number", "null"], "minimum": 0 },
+    "first_observed_at": { "type": "string", "format": "date-time" },
+    "last_observed_at": { "type": "string", "format": "date-time" },
+    "coverage": { "type": ["object", "null"], "additionalProperties": true },
+    "quality": { "type": ["object", "null"], "additionalProperties": true },
+    "uncertainty": { "type": ["object", "null"], "additionalProperties": true },
+    "status": {
+      "type": "string",
+      "enum": ["current", "stale", "superseded", "disputed", "unknown"]
+    },
+    "computation_refs": { "type": "array", "items": { "type": "string" } },
+    "evidence_refs": { "type": "array", "items": { "type": "string" } },
+    "limitations": { "type": "array", "items": { "type": "string" } },
+    "computed_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "dimension": {
+      "oneOf": [
+        {
+          "type": "number",
+          "description": "Calibrated or heuristic value. When not genuinely calibrated the computation_refs entry records the math_type (HeuristicScore | OrdinalScore | Rate | Ratio | GraphMetric), never Probability."
+        },
+        { "type": "null", "description": "Dimension not computable for this relationship — recorded as unknown, never synthesized as 0." }
+      ]
+    }
+  }
+}

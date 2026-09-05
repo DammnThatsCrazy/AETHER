@@ -109,5 +109,14 @@ export * from './intelligence-projection';
 export * from './model-registry';
 export * from './task-profile';
 
+// Relational Intelligence Spine registries (Social360 + Relationship Fidelity,
+// generated from packages/shared/contracts/relationship-*-registry.json)
+export * from './relationship-predicate-registry';
+export * from './relationship-motif-registry';
+
+// UPR social provider capability vocabulary (M2 runtime-enforced canonical
+// surface; generated from packages/shared/contracts/social-provider-capability-vocabulary.json)
+export * from './social-provider-capability-vocabulary';
+
 // Commerce bridge (S2): SDK signal ↔ server snapshot reconciliation contract.
 export * from './commerce-bridge';

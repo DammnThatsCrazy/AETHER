@@ -17,6 +17,7 @@ Composable viewing frames a projection applies over canonical Aether truth — o
 | `data_quality` | overlay | standard | data_quality | `campaign`, `cluster`, `connection`, `entity`, `population`, `source` | `as_of`, `relative`, `window` |  |
 | `deployment` | overlay | standard | deployment | `deployment`, `entity`, `infrastructure` | `as_of`, `relative`, `window` |  |
 | `economic` | overlay | standard | economic | `campaign`, `entity`, `episode`, `population`, `source` | `compare`, `relative`, `window` |  |
+| `engagementfi` | overlay | standard | engagementfi | `campaign`, `entity`, `relationship`, `source` | `relative`, `window` |  |
 | `episode` | overlay | standard | episode | `campaign`, `entity`, `episode` | `relative`, `window` |  |
 | `evidence` | overlay | standard | evidence | `campaign`, `cluster`, `connection`, `entity`, `episode`, `relationship`, `source` | `as_of`, `compare`, `window` |  |
 | `execution` | overlay | standard | execution | `agent`, `entity`, `episode` | `as_of`, `relative`, `window` |  |
@@ -24,6 +25,7 @@ Composable viewing frames a projection applies over canonical Aether truth — o
 | `geographic` | overlay | standard | spatial | `entity`, `population`, `source` | `compare`, `relative`, `window` |  |
 | `infrastructure` | overlay | standard | infrastructure | `deployment`, `entity`, `infrastructure` | `as_of`, `relative`, `window` |  |
 | `journey` | overlay | standard | journey | `campaign`, `entity`, `episode` | `compare`, `relative`, `window` |  |
+| `narrative` | overlay | standard | narrative | `entity`, `episode`, `relationship`, `source` | `relative`, `window` |  |
 | `operational` | overlay | standard | operational | `cluster`, `connection`, `source` | `as_of`, `relative`, `window` |  |
 | `outcome` | overlay | standard | outcome | `campaign`, `entity`, `episode`, `population` | `compare`, `relative`, `window` |  |
 | `payment` | overlay | standard | payment | `entity`, `source` | `compare`, `relative`, `window` |  |
@@ -32,6 +34,7 @@ Composable viewing frames a projection applies over canonical Aether truth — o
 | `relationship` | overlay | standard | relationship | `entity`, `relationship` | `as_of`, `relative`, `window` |  |
 | `risk` | overlay | standard | risk | `cluster`, `entity`, `population`, `relationship` | `as_of`, `relative`, `window` |  |
 | `security` | overlay | standard | security | `deployment`, `entity`, `infrastructure` | `as_of`, `relative`, `window` |  |
+| `socialfi` | overlay | standard | socialfi | `connection`, `entity`, `relationship`, `source` | `as_of`, `relative`, `window` |  |
 | `source` | overlay | standard | source | `connection`, `source` | `relative`, `window` |  |
 | `standard` | base | — | general | `agent`, `campaign`, `cluster`, `connection`, `entity`, `episode`, `population`, `relationship`, `source` | `as_of`, `compare`, `relative`, `window` | yes |
 | `temporal` | overlay | standard | temporal | `campaign`, `entity`, `episode`, `relationship`, `source` | `as_of`, `compare`, `relative`, `window` |  |

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "aether://contracts/incentive-context.schema.json",
+  "title": "Aether IncentiveContext canonical contract",
+  "description": "First-class, temporal, provenance-bearing incentive context for the Relational Intelligence Spine (blueprint §§30-33). IncentiveContext records what incentive evidence intersects an activity — never a person's private motivation, and never an automatic 'organic' inference. Invariant enforced downstream: status none_observed MUST NOT convert to organic (blueprint §31); incentive independence support is positive evidence of behavior outside the incentive window, not the mere inverse of exposure (blueprint §36).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "incentive_context_id",
+    "status",
+    "source_scope",
+    "evidence_basis",
+    "policy_ref",
+    "computed_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "incentive_context_id": { "type": "string", "minLength": 1 },
+    "subject_entity_ref": { "type": ["string", "null"] },
+    "social_identity_ref": { "type": ["string", "null"] },
+    "content_ref": { "type": ["string", "null"] },
+    "interaction_ref": { "type": ["string", "null"] },
+    "campaign_ref": { "type": ["string", "null"] },
+    "reward_ref": { "type": ["string", "null"] },
+    "economic_value_ref": { "type": ["string", "null"] },
+    "status": { "$ref": "#/$defs/incentiveStatus" },
+    "reward_condition": { "type": ["string", "null"] },
+    "eligibility_rule_ref": { "type": ["string", "null"] },
+    "exposure_started_at": { "type": ["string", "null"], "format": "date-time" },
+    "exposure_ended_at": { "type": ["string", "null"], "format": "date-time" },
+    "direct_incentive": { "type": "boolean" },
+    "upstream_incentive_origin": { "type": ["string", "null"] },
+    "downstream_exposure": { "type": ["boolean", "null"] },
+    "temporal_segments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/temporalSegment" },
+      "description": "Segmentation of related activity into PRE_INCENTIVE / INCENTIVE_WINDOW / POST_INCENTIVE (§32)."
+    },
+    "evidence_refs": { "type": "array", "items": { "type": "string" } },
+    "contradictory_evidence_refs": { "type": "array", "items": { "type": "string" } },
+    "source_scope": { "$ref": "#/$defs/sourceScope" },
+    "evidence_basis": { "$ref": "#/$defs/evidenceBasis" },
+    "confidence_kind": {
+      "type": "string",
+      "enum": ["provider_declared", "derived", "semantic_classification", "aggregated", "unknown"]
+    },
+    "confidence_value": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "policy_ref": { "type": "string", "minLength": 1 },
+    "computed_at": { "type": "string", "format": "date-time" },
+    "limitations": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "incentiveStatus": {
+      "type": "string",
+      "enum": ["verified", "declared", "observed", "suspected", "none_observed", "unknown", "not_applicable"],
+      "description": "none_observed MUST NOT be converted to 'organic'. There is no automatic conversion (blueprint §31)."
+    },
+    "temporalSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["segment", "started_at", "ended_at"],
+      "properties": {
+        "segment": { "type": "string", "enum": ["PRE_INCENTIVE", "INCENTIVE_WINDOW", "POST_INCENTIVE"] },
+        "started_at": { "type": "string", "format": "date-time" },
+        "ended_at": { "type": "string", "format": "date-time" },
+        "interaction_count": { "type": ["number", "null"], "minimum": 0 },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+    "sourceScope": {
+      "type": "string",
+      "enum": ["olympus_corpus", "tenant_connected", "tenant_imported", "tenant_first_party"]
+    },
+    "evidenceBasis": {
+      "type": "string",
+      "enum": ["provider_record", "provider_api", "imported_source", "first_party_sdk", "derived_aggregate", "semantic_classification", "unknown"]
+    }
+  }
+}

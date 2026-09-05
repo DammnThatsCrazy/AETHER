@@ -20,6 +20,9 @@ Sources (read-only — canonical source of truth):
   packages/shared/contracts/task-profile-registry.json
   packages/shared/contracts/intelligence-projection-registry.json
   packages/shared/contracts/lens-registry.json
+  packages/shared/contracts/relationship-predicate-registry.json
+  packages/shared/contracts/relationship-motif-registry.json
+  packages/shared/contracts/social-provider-capability-vocabulary.json
 
 Generated outputs:
   packages/shared/temporal-policy.ts
@@ -61,6 +64,14 @@ Generated outputs:
   packages/shared/lenses_generated.ts
   Backend Architecture/aether-backend/shared/projection_engine/generated_lenses.py
   docs/_generated/lens-registry-table.md
+  packages/shared/relationship-predicate-registry.ts
+  Backend Architecture/aether-backend/shared/relationship_spine/generated_relationship_predicate_registry.py
+  docs/_generated/relationship-predicate-registry-table.md
+  packages/shared/relationship-motif-registry.ts
+  Backend Architecture/aether-backend/shared/relationship_spine/generated_relationship_motif_registry.py
+  docs/_generated/relationship-motif-registry-table.md
+  packages/shared/social-provider-capability-vocabulary.ts
+  Backend Architecture/aether-backend/shared/social_provider/generated_social_provider_capability_vocabulary.py
 
 Usage:
   python scripts/generate_platform_contracts.py           # write outputs in-place
@@ -2558,6 +2569,8 @@ def _ts_literal(value: object, depth: int = 0) -> str:
         return "true" if value else "false"
     if isinstance(value, str):
         return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+    if isinstance(value, (int, float)):
+        return str(value)
     if isinstance(value, list):
         if not value:
             return "[]"
@@ -2588,6 +2601,8 @@ def _py_literal(value: object, depth: int = 0) -> str:
         return "True" if value else "False"
     if isinstance(value, str):
         return _py_str(value)
+    if isinstance(value, (int, float)):
+        return repr(value)
     if isinstance(value, list):
         if not value:
             return "[]"
@@ -3252,6 +3267,607 @@ def _summary_outcome_types(reg: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Registry: relationship-predicate (Relational Intelligence Spine)
+# ---------------------------------------------------------------------------
+
+RELATIONSHIP_PREDICATE_REGISTRY_JSON = CONTRACTS / "relationship-predicate-registry.json"
+RELATIONSHIP_PREDICATE_REGISTRY_TS = ROOT / "packages" / "shared" / "relationship-predicate-registry.ts"
+RELATIONSHIP_PREDICATE_REGISTRY_PY = BACKEND / "shared" / "relationship_spine" / "generated_relationship_predicate_registry.py"
+RELATIONSHIP_PREDICATE_REGISTRY_MD = ROOT / "docs" / "_generated" / "relationship-predicate-registry-table.md"
+
+# (json vocab key, TS const name, TS type name, PY const name, doc comment)
+_RELATIONSHIP_PREDICATE_VOCAB = (
+    ("families", "relationshipPredicateFamilies", "RelationshipPredicateFamily",
+     "RELATIONSHIP_PREDICATE_FAMILIES",
+     "Families a relationship predicate may belong to."),
+    ("directionality", "relationshipPredicateDirectionality", "RelationshipPredicateDirectionality",
+     "RELATIONSHIP_PREDICATE_DIRECTIONALITY",
+     "Directionality a relationship predicate may express."),
+    ("reciprocitySemantics", "relationshipPredicateReciprocitySemantics", "RelationshipPredicateReciprocitySemantics",
+     "RELATIONSHIP_PREDICATE_RECIPROCITY_SEMANTICS",
+     "Reciprocity semantics a relationship predicate may declare."),
+    ("transitivityClasses", "relationshipPredicateTransitivityClasses", "RelationshipPredicateTransitivityClass",
+     "RELATIONSHIP_PREDICATE_TRANSITIVITY_CLASSES",
+     "Transitivity / path-composition classes a relationship predicate may declare."),
+    ("proofLevels", "relationshipPredicateProofLevels", "RelationshipPredicateProofLevel",
+     "RELATIONSHIP_PREDICATE_PROOF_LEVELS",
+     "Evidence proof-level floors a relationship predicate may require."),
+    ("graphRegistrationStates", "relationshipPredicateGraphRegistrationStates", "RelationshipPredicateGraphRegistrationState",
+     "RELATIONSHIP_PREDICATE_GRAPH_REGISTRATION_STATES",
+     "Graph registration state of a relationship predicate."),
+    ("validitySemantics", "relationshipPredicateValiditySemantics", "RelationshipPredicateValiditySemantics",
+     "RELATIONSHIP_PREDICATE_VALIDITY_SEMANTICS",
+     "Validity semantics a relationship predicate may declare."),
+    ("claimTypes", "relationshipPredicateClaimTypes", "RelationshipPredicateClaimType",
+     "RELATIONSHIP_PREDICATE_CLAIM_TYPES",
+     "Claim types a relationship predicate may reference."),
+    ("strengthSemantics", "relationshipPredicateStrengthSemantics", "RelationshipPredicateStrengthSemantics",
+     "RELATIONSHIP_PREDICATE_STRENGTH_SEMANTICS",
+     "Strength semantics a relationship predicate may declare."),
+    ("sensitiveInferencePolicies", "relationshipPredicateSensitiveInferencePolicies", "RelationshipPredicateSensitiveInferencePolicy",
+     "RELATIONSHIP_PREDICATE_SENSITIVE_INFERENCE_POLICIES",
+     "Sensitive-inference policies a relationship predicate may declare."),
+    ("actorKinds", "relationshipPredicateActorKinds", "RelationshipPredicateActorKind",
+     "RELATIONSHIP_PREDICATE_ACTOR_KINDS",
+     "Actor kinds a relationship predicate may allow as source or target."),
+    ("sensitiveRelationshipLabels", "relationshipPredicateSensitiveRelationshipLabels", "RelationshipPredicateSensitiveRelationshipLabel",
+     "RELATIONSHIP_PREDICATE_SENSITIVE_RELATIONSHIP_LABELS",
+     "Sensitive relationship labels the spine must not over-claim."),
+)
+
+# Fixed schema field orders for deterministic emission (order-stable generation).
+_RELATIONSHIP_PREDICATE_FIELD_ORDER = (
+    "predicate", "version", "label", "description", "family",
+    "allowedSourceKinds", "allowedTargetKinds", "directionality",
+    "reciprocitySemantics", "transitivityClasses", "directFactAllowed",
+    "inferenceAllowed", "claimTypeFloor", "sensitiveInferencePolicy",
+    "defaultEvidenceRequirements", "graphEdgeType", "graphRegistrationState",
+    "validitySemantics", "strengthSemantics", "owner",
+)
+_RELATIONSHIP_MOTIF_FIELD_ORDER = (
+    "motifId", "version", "name", "description", "requiredNodes",
+    "requiredEdges", "optionalEdges", "temporalConstraints",
+    "entityKindConstraints", "evidenceIndependencePolicy", "incentivePolicy",
+    "outputPredicate", "outputState", "outputKind", "outputClaimCeiling",
+    "promotionPolicyRef", "owner", "tests",
+)
+_RELATIONSHIP_EDGE_FIELD_ORDER = ("sourceRole", "targetRole", "predicate")
+
+_OBJECT_FIELD_ORDERS[frozenset(_RELATIONSHIP_PREDICATE_FIELD_ORDER)] = _RELATIONSHIP_PREDICATE_FIELD_ORDER
+_OBJECT_FIELD_ORDERS[frozenset(_RELATIONSHIP_MOTIF_FIELD_ORDER)] = _RELATIONSHIP_MOTIF_FIELD_ORDER
+_OBJECT_FIELD_ORDERS[frozenset(_RELATIONSHIP_EDGE_FIELD_ORDER)] = _RELATIONSHIP_EDGE_FIELD_ORDER
+
+
+def _require_unique_strings(registry: str, key: str, values: object) -> None:
+    """A vocab list must be a non-empty list of unique non-empty strings."""
+    if not isinstance(values, list) or not values:
+        _fail(f"{registry}.{key} must be a non-empty list")
+    seen: set[str] = set()
+    for value in values:
+        if not isinstance(value, str) or not value:
+            _fail(f"{registry}.{key} entry {value!r} must be a non-empty string")
+        if value in seen:
+            _fail(f"{registry}.{key} has duplicate entry {value!r}")
+        seen.add(value)
+
+
+def _require_enum_member(owner: str, owner_id: str, field: str, value: object, allowed: set[str]) -> None:
+    if not isinstance(value, str) or value not in allowed:
+        _fail(f"{owner} {owner_id!r} has {field} {value!r} outside {sorted(allowed)}")
+
+
+def validate_relationship_predicates(reg: dict, ctx: dict) -> None:
+    for key in ("schemaVersion", "contractVersion"):
+        value = reg.get(key)
+        if not isinstance(value, str) or not value:
+            _fail(f"relationship-predicate-registry.{key} must be a non-empty string")
+    for vocab_key, *_rest in _RELATIONSHIP_PREDICATE_VOCAB:
+        _require_unique_strings("relationship-predicate-registry", vocab_key, reg[vocab_key])
+
+    families = set(reg["families"])
+    directionalities = set(reg["directionality"])
+    reciprocities = set(reg["reciprocitySemantics"])
+    transitivity = set(reg["transitivityClasses"])
+    states = set(reg["graphRegistrationStates"])
+    validities = set(reg["validitySemantics"])
+    strengths = set(reg["strengthSemantics"])
+    sensitive = set(reg["sensitiveInferencePolicies"])
+
+    predicates = reg.get("predicates")
+    if not isinstance(predicates, list) or not predicates:
+        _fail("relationship-predicate-registry.predicates must be a non-empty list")
+    seen: set[str] = set()
+    for p in predicates:
+        pid = p.get("predicate")
+        if not isinstance(pid, str) or not pid:
+            _fail("relationship-predicate-registry: every predicate needs a non-empty string 'predicate'")
+        if pid in seen:
+            _fail(f"duplicate relationship predicate {pid!r}")
+        seen.add(pid)
+
+        _require_enum_member("relationship predicate", pid, "family", p.get("family"), families)
+        _require_enum_member("relationship predicate", pid, "directionality", p.get("directionality"), directionalities)
+        _require_enum_member("relationship predicate", pid, "reciprocitySemantics", p.get("reciprocitySemantics"), reciprocities)
+        _require_enum_member("relationship predicate", pid, "validitySemantics", p.get("validitySemantics"), validities)
+        _require_enum_member("relationship predicate", pid, "strengthSemantics", p.get("strengthSemantics"), strengths)
+        _require_enum_member("relationship predicate", pid, "sensitiveInferencePolicy", p.get("sensitiveInferencePolicy"), sensitive)
+        state = p.get("graphRegistrationState")
+        _require_enum_member("relationship predicate", pid, "graphRegistrationState", state, states)
+
+        tc = p.get("transitivityClasses")
+        if not isinstance(tc, list) or not tc:
+            _fail(f"relationship predicate {pid!r} transitivityClasses must be a non-empty list")
+        if len(tc) != len(set(tc)):
+            _fail(f"relationship predicate {pid!r} transitivityClasses must be unique")
+        unknown = set(tc) - transitivity
+        if unknown:
+            _fail(f"relationship predicate {pid!r} transitivityClasses {sorted(unknown)} outside transitivityClasses")
+
+        for flag in ("directFactAllowed", "inferenceAllowed"):
+            if not isinstance(p.get(flag), bool):
+                _fail(f"relationship predicate {pid!r} {flag} must be a boolean")
+
+        edge = p.get("graphEdgeType")
+        if edge is not None and not isinstance(edge, str):
+            _fail(f"relationship predicate {pid!r} graphEdgeType must be null or a string")
+        if state == "REGISTERED":
+            if not isinstance(edge, str) or not edge:
+                _fail(
+                    f"relationship predicate {pid!r} graphRegistrationState=REGISTERED "
+                    "requires a non-null string graphEdgeType"
+                )
+        # PENDING_M6_REGISTRATION: graphEdgeType may be null (canonical graph edge
+        # awaits M6 registration) or a string — both are accepted.
+
+
+def gen_relationship_predicates_ts(reg: dict) -> str:
+    lines = _ts_header(RELATIONSHIP_PREDICATE_REGISTRY_JSON)
+    lines.append(f"export const relationshipPredicateRegistryVersion = '{reg['contractVersion']}' as const;")
+    lines.append("")
+    for vocab_key, ts_name, ts_type, _py_name, doc in _RELATIONSHIP_PREDICATE_VOCAB:
+        lines += _ts_const_array(ts_name, ts_type, reg[vocab_key], doc)
+    lines.append("/** Canonical relationship-predicate catalog (JSON file order). */")
+    lines.append("export const relationshipPredicates = [")
+    for pred in reg["predicates"]:
+        literal = _ts_literal(pred, 1).splitlines()
+        lines.append("  " + literal[0])
+        lines.extend(literal[1:-1])
+        lines.append(literal[-1] + ",")
+    lines.append("] as const;")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_relationship_predicates_py(reg: dict) -> str:
+    lines = _py_header(
+        RELATIONSHIP_PREDICATE_REGISTRY_JSON,
+        "Generated relationship-predicate registry (Relational Intelligence Spine).",
+    )
+    lines.append("from typing import Any")
+    lines.append("")
+    lines.append(f'RELATIONSHIP_PREDICATE_REGISTRY_VERSION = "{reg["contractVersion"]}"')
+    lines.append("")
+    for vocab_key, _ts_name, _ts_type, py_name, doc in _RELATIONSHIP_PREDICATE_VOCAB:
+        lines += _py_tuple(py_name, reg[vocab_key], doc)
+    lines.append("# Canonical relationship-predicate catalog (JSON file order).")
+    lines.append("RELATIONSHIP_PREDICATES: tuple[dict[str, Any], ...] = (")
+    for pred in reg["predicates"]:
+        literal = _py_literal(pred, 1).splitlines()
+        lines.append("    " + literal[0])
+        lines.extend(literal[1:-1])
+        lines.append(literal[-1] + ",")
+    lines.append(")")
+    lines.append("")
+    lines.append("__all__ = [")
+    names = ["RELATIONSHIP_PREDICATE_REGISTRY_VERSION", "RELATIONSHIP_PREDICATES"]
+    names += [entry[3] for entry in _RELATIONSHIP_PREDICATE_VOCAB]
+    for name in names:
+        lines.append(f'    "{name}",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_relationship_predicates_md(reg: dict) -> str:
+    lines = _md_header(RELATIONSHIP_PREDICATE_REGISTRY_JSON)
+    lines.append("# Relationship Predicate Registry")
+    lines.append("")
+    lines.append(f"Contract version: `{reg['contractVersion']}`")
+    lines.append("")
+    lines.append(reg["description"])
+    lines.append("")
+    lines += _md_vocab_section("Families", reg["families"])
+    lines += _md_vocab_section("Transitivity classes", reg["transitivityClasses"])
+    lines.append("| Predicate | Family | Directionality | Reciprocity | Validity | Strength | Direct | Inference | Transitivity | Registration | Graph edge |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
+    for pred in reg["predicates"]:
+        edge = pred.get("graphEdgeType") or "—"
+        transitivity = ", ".join(f"`{t}`" for t in pred["transitivityClasses"])
+        lines.append(
+            f"| `{pred['predicate']}` | {pred['family']} | {pred['directionality']} "
+            f"| {pred['reciprocitySemantics']} | {pred['validitySemantics']} | {pred['strengthSemantics']} "
+            f"| {'yes' if pred['directFactAllowed'] else ''} | {'yes' if pred['inferenceAllowed'] else ''} "
+            f"| {transitivity} | {pred['graphRegistrationState']} | {edge} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _summary_relationship_predicates(reg: dict) -> str:
+    registered = sum(1 for p in reg["predicates"] if p["graphRegistrationState"] == "REGISTERED")
+    return (
+        f"relationship-predicate-registry v{reg['contractVersion']} — "
+        f"{len(reg['predicates'])} predicates ({registered} registered in graph, "
+        f"{len(reg['predicates']) - registered} pending M6 registration)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Registry: relationship-motif (Relational Intelligence Spine)
+# ---------------------------------------------------------------------------
+
+RELATIONSHIP_MOTIF_REGISTRY_JSON = CONTRACTS / "relationship-motif-registry.json"
+RELATIONSHIP_MOTIF_REGISTRY_TS = ROOT / "packages" / "shared" / "relationship-motif-registry.ts"
+RELATIONSHIP_MOTIF_REGISTRY_PY = BACKEND / "shared" / "relationship_spine" / "generated_relationship_motif_registry.py"
+RELATIONSHIP_MOTIF_REGISTRY_MD = ROOT / "docs" / "_generated" / "relationship-motif-registry-table.md"
+
+# (json vocab key, TS const name, TS type name, PY const name, doc comment)
+_RELATIONSHIP_MOTIF_VOCAB = (
+    ("outputKinds", "relationshipMotifOutputKinds", "RelationshipMotifOutputKind",
+     "RELATIONSHIP_MOTIF_OUTPUT_KINDS",
+     "Output kinds a relationship motif may declare."),
+    ("claimCeilings", "relationshipMotifClaimCeilings", "RelationshipMotifClaimCeiling",
+     "RELATIONSHIP_MOTIF_CLAIM_CEILINGS",
+     "Claim ceilings a relationship motif may attach to its output."),
+    ("evidenceIndependencePolicies", "relationshipMotifEvidenceIndependencePolicies", "RelationshipMotifEvidenceIndependencePolicy",
+     "RELATIONSHIP_MOTIF_EVIDENCE_INDEPENDENCE_POLICIES",
+     "Evidence-independence policies a relationship motif may declare."),
+    ("incentivePolicies", "relationshipMotifIncentivePolicies", "RelationshipMotifIncentivePolicy",
+     "RELATIONSHIP_MOTIF_INCENTIVE_POLICIES",
+     "Incentive policies a relationship motif may declare."),
+    ("edgeRoles", "relationshipMotifEdgeRoles", "RelationshipMotifEdgeRole",
+     "RELATIONSHIP_MOTIF_EDGE_ROLES",
+     "Roles an edge may play inside a relationship motif."),
+)
+
+
+def validate_relationship_motifs(reg: dict, ctx: dict) -> None:
+    for key in ("schemaVersion", "contractVersion"):
+        value = reg.get(key)
+        if not isinstance(value, str) or not value:
+            _fail(f"relationship-motif-registry.{key} must be a non-empty string")
+    for vocab_key, *_rest in _RELATIONSHIP_MOTIF_VOCAB:
+        _require_unique_strings("relationship-motif-registry", vocab_key, reg[vocab_key])
+
+    output_kinds = set(reg["outputKinds"])
+    claim_ceilings = set(reg["claimCeilings"])
+    independence = set(reg["evidenceIndependencePolicies"])
+    incentives = set(reg["incentivePolicies"])
+
+    motifs = reg.get("motifs")
+    if not isinstance(motifs, list) or not motifs:
+        _fail("relationship-motif-registry.motifs must be a non-empty list")
+    seen: set[str] = set()
+    for m in motifs:
+        mid = m.get("motifId")
+        if not isinstance(mid, str) or not mid:
+            _fail("relationship-motif-registry: every motif needs a non-empty string 'motifId'")
+        if mid in seen:
+            _fail(f"duplicate relationship motif {mid!r}")
+        seen.add(mid)
+
+        output_kind = m.get("outputKind")
+        _require_enum_member("relationship motif", mid, "outputKind", output_kind, output_kinds)
+        _require_enum_member("relationship motif", mid, "outputClaimCeiling", m.get("outputClaimCeiling"), claim_ceilings)
+        _require_enum_member("relationship motif", mid, "evidenceIndependencePolicy", m.get("evidenceIndependencePolicy"), independence)
+        _require_enum_member("relationship motif", mid, "incentivePolicy", m.get("incentivePolicy"), incentives)
+
+        output_predicate = m.get("outputPredicate")
+        if output_predicate is not None and not isinstance(output_predicate, str):
+            _fail(f"relationship motif {mid!r} outputPredicate must be null or a string")
+        if output_kind == "RELATIONSHIP_PREDICATE":
+            if not isinstance(output_predicate, str) or not output_predicate:
+                _fail(
+                    f"relationship motif {mid!r} outputKind=RELATIONSHIP_PREDICATE "
+                    "requires a non-null string outputPredicate"
+                )
+
+        for edge_key in ("requiredEdges", "optionalEdges"):
+            edges = m.get(edge_key)
+            if not isinstance(edges, list):
+                _fail(f"relationship motif {mid!r} {edge_key} must be a list")
+            for edge in edges:
+                if "predicate" in edge and (not isinstance(edge["predicate"], str) or not edge["predicate"]):
+                    _fail(f"relationship motif {mid!r} {edge_key} entry predicate must be a non-null string")
+
+
+def _relationship_motif_for_emission(m: dict) -> dict:
+    """Emit every motif with both outputPredicate and outputState keys so the
+    generated objects share one canonical shape (derived-state motifs carry a
+    null outputPredicate; relationship-predicate motifs carry a null outputState)."""
+    emitted = dict(m)
+    emitted.setdefault("outputState", None)
+    return emitted
+
+
+def gen_relationship_motifs_ts(reg: dict) -> str:
+    lines = _ts_header(RELATIONSHIP_MOTIF_REGISTRY_JSON)
+    lines.append(f"export const relationshipMotifRegistryVersion = '{reg['contractVersion']}' as const;")
+    lines.append("")
+    for vocab_key, ts_name, ts_type, _py_name, doc in _RELATIONSHIP_MOTIF_VOCAB:
+        lines += _ts_const_array(ts_name, ts_type, reg[vocab_key], doc)
+    lines.append("/** Canonical relationship-motif catalog (JSON file order). */")
+    lines.append("export const relationshipMotifs = [")
+    for motif in reg["motifs"]:
+        literal = _ts_literal(_relationship_motif_for_emission(motif), 1).splitlines()
+        lines.append("  " + literal[0])
+        lines.extend(literal[1:-1])
+        lines.append(literal[-1] + ",")
+    lines.append("] as const;")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_relationship_motifs_py(reg: dict) -> str:
+    lines = _py_header(
+        RELATIONSHIP_MOTIF_REGISTRY_JSON,
+        "Generated relationship-motif registry (Relational Intelligence Spine).",
+    )
+    lines.append("from typing import Any")
+    lines.append("")
+    lines.append(f'RELATIONSHIP_MOTIF_REGISTRY_VERSION = "{reg["contractVersion"]}"')
+    lines.append("")
+    for vocab_key, _ts_name, _ts_type, py_name, doc in _RELATIONSHIP_MOTIF_VOCAB:
+        lines += _py_tuple(py_name, reg[vocab_key], doc)
+    lines.append("# Canonical relationship-motif catalog (JSON file order).")
+    lines.append("RELATIONSHIP_MOTIFS: tuple[dict[str, Any], ...] = (")
+    for motif in reg["motifs"]:
+        literal = _py_literal(_relationship_motif_for_emission(motif), 1).splitlines()
+        lines.append("    " + literal[0])
+        lines.extend(literal[1:-1])
+        lines.append(literal[-1] + ",")
+    lines.append(")")
+    lines.append("")
+    lines.append("__all__ = [")
+    names = ["RELATIONSHIP_MOTIF_REGISTRY_VERSION", "RELATIONSHIP_MOTIFS"]
+    names += [entry[3] for entry in _RELATIONSHIP_MOTIF_VOCAB]
+    for name in names:
+        lines.append(f'    "{name}",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_relationship_motifs_md(reg: dict) -> str:
+    lines = _md_header(RELATIONSHIP_MOTIF_REGISTRY_JSON)
+    lines.append("# Relationship Motif Registry")
+    lines.append("")
+    lines.append(f"Contract version: `{reg['contractVersion']}`")
+    lines.append("")
+    lines.append(reg["description"])
+    lines.append("")
+    lines += _md_vocab_section("Output kinds", reg["outputKinds"])
+    lines += _md_vocab_section("Claim ceilings", reg["claimCeilings"])
+    lines.append("| Motif | Output kind | Output | Claim ceiling | Evidence independence | Incentive |")
+    lines.append("|---|---|---|---|---|---|")
+    for motif in reg["motifs"]:
+        output = motif.get("outputPredicate") or motif.get("outputState") or "—"
+        lines.append(
+            f"| `{motif['motifId']}` | {motif['outputKind']} | `{output}` "
+            f"| {motif['outputClaimCeiling']} | {motif['evidenceIndependencePolicy']} "
+            f"| {motif['incentivePolicy']} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _summary_relationship_motifs(reg: dict) -> str:
+    relationship_predicates = sum(1 for m in reg["motifs"] if m["outputKind"] == "RELATIONSHIP_PREDICATE")
+    return (
+        f"relationship-motif-registry v{reg['contractVersion']} — "
+        f"{len(reg['motifs'])} motifs ({relationship_predicates} relationship-predicate outputs, "
+        f"{len(reg['motifs']) - relationship_predicates} derived-state outputs)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Registry: social-provider-capability-vocabulary (UPR Social convergence)
+# ---------------------------------------------------------------------------
+
+# M2-A: make the M1 UPR social capability vocabulary (validation-only) a
+# runtime-enforced canonical surface. Unlike the predicate/motif registries this
+# JSON has NO ``items`` array — it is pure vocabulary (capabilities, acquisition
+# classes, lifecycle states, empty-success-forbidden states) plus scalar
+# metadata (schemaVersion/contractVersion/description/capabilityGrammar),
+# example identities and prose rules. The emitters below render exactly those
+# fields — nothing is fabricated and nothing is dropped.
+SOCIAL_PROVIDER_CAPABILITY_VOCAB_JSON = CONTRACTS / "social-provider-capability-vocabulary.json"
+SOCIAL_PROVIDER_CAPABILITY_VOCAB_TS = ROOT / "packages" / "shared" / "social-provider-capability-vocabulary.ts"
+SOCIAL_PROVIDER_CAPABILITY_VOCAB_PY = (
+    BACKEND / "shared" / "social_provider" / "generated_social_provider_capability_vocabulary.py"
+)
+
+# The grammar constrains every identity to ``family.product.capability`` and the
+# vocabulary's canonical product segment is ``social`` (identities like
+# ``reddit.social.account_read``). Backend runtime gate reuses this exact value.
+SOCIAL_PRODUCT = "social"
+
+# (json vocab key, TS const name, TS type name, PY const name, doc comment)
+_SOCIAL_PROVIDER_CAPABILITY_VOCAB = (
+    ("capabilities", "socialProviderCapabilities", "SocialProviderCapability",
+     "SOCIAL_PROVIDER_CAPABILITIES",
+     "Capabilities a social provider may declare under the UPR grammar."),
+    ("acquisitionClasses", "socialProviderAcquisitionClasses", "SocialProviderAcquisitionClass",
+     "SOCIAL_PROVIDER_ACQUISITION_CLASSES",
+     "Acquisition classes describing how a social provider capability was acquired."),
+    ("lifecycleStates", "socialProviderLifecycleStates", "SocialProviderLifecycleState",
+     "SOCIAL_PROVIDER_LIFECYCLE_STATES",
+     "Lifecycle states a social provider capability may occupy."),
+    ("emptySuccessForbiddenStates", "socialProviderEmptySuccessForbiddenStates", "SocialProviderEmptySuccessForbiddenState",
+     "SOCIAL_PROVIDER_EMPTY_SUCCESS_FORBIDDEN_STATES",
+     "States that must return an explicit negative result rather than empty success."),
+)
+
+
+def _ts_str_list(values: list[str]) -> str:
+    """Inline TS array-of-string literal (single line when short, else wrapped)."""
+    single = "[" + ", ".join(_ts_str(v) for v in values) + "]"
+    if len(single) <= 100:
+        return single
+    body = ",\n  ".join(_ts_str(v) for v in values)
+    return f"[\n  {body},\n]"
+
+
+def validate_social_provider_capability_vocabulary(reg: dict, ctx: dict) -> None:
+    for key in ("schemaVersion", "contractVersion", "description", "capabilityGrammar"):
+        value = reg.get(key)
+        if not isinstance(value, str) or not value:
+            _fail(f"social-provider-capability-vocabulary.{key} must be a non-empty string")
+
+    grammar_parts = reg["capabilityGrammar"].split(".")
+    if grammar_parts != ["family", "product", "capability"]:
+        _fail(
+            "social-provider-capability-vocabulary.capabilityGrammar must be "
+            "family.product.capability"
+        )
+
+    for vocab_key, *_rest in _SOCIAL_PROVIDER_CAPABILITY_VOCAB:
+        _require_unique_strings("social-provider-capability-vocabulary", vocab_key, reg[vocab_key])
+    _require_unique_strings(
+        "social-provider-capability-vocabulary", "exampleCapabilities", reg["exampleCapabilities"]
+    )
+    _require_unique_strings("social-provider-capability-vocabulary", "rules", reg["rules"])
+
+    capabilities = set(reg["capabilities"])
+    lifecycle = set(reg["lifecycleStates"])
+    forbidden = set(reg["emptySuccessForbiddenStates"])
+
+    # ``credential_waiting`` is BOTH a lifecycle state and an
+    # empty-success-forbidden state (a waiting capability must say so, never
+    # return an empty success); the other forbidden states (not_supported /
+    # not_authorized) are adapter-result states and legitimately stay outside the
+    # lifecycle list.
+    overlap = lifecycle & forbidden
+    if "credential_waiting" not in overlap:
+        _fail(
+            "social-provider-capability-vocabulary: credential_waiting must appear in "
+            "both lifecycleStates and emptySuccessForbiddenStates"
+        )
+
+    # Every example must obey the grammar and stay inside the canonical
+    # capabilities (grammar + membership honesty at generation time).
+    for example in reg["exampleCapabilities"]:
+        parts = example.split(".")
+        if len(parts) != 3:
+            _fail(
+                f"social-provider-capability-vocabulary example {example!r} is not "
+                "family.product.capability"
+            )
+        _family, product, capability = parts
+        if product != SOCIAL_PRODUCT:
+            _fail(
+                f"social-provider-capability-vocabulary example {example!r} product "
+                f"segment {product!r} is not {SOCIAL_PRODUCT!r}"
+            )
+        if capability not in capabilities:
+            _fail(
+                f"social-provider-capability-vocabulary example {example!r} capability "
+                f"{capability!r} is outside capabilities"
+            )
+
+
+def gen_social_provider_capability_vocabulary_ts(reg: dict) -> str:
+    lines = _ts_header(SOCIAL_PROVIDER_CAPABILITY_VOCAB_JSON)
+    lines.append(
+        f"export const socialProviderCapabilityVocabularySchemaVersion = "
+        f"{_ts_str(reg['schemaVersion'])} as const;"
+    )
+    lines.append(
+        f"export const socialProviderCapabilityVocabularyContractVersion = "
+        f"{_ts_str(reg['contractVersion'])} as const;"
+    )
+    lines.append("")
+    lines.append("/** Canonical description of the UPR social capability vocabulary. */")
+    lines.append(
+        f"export const socialProviderCapabilityVocabularyDescription = "
+        f"{_ts_str(reg['description'])} as const;"
+    )
+    lines.append("")
+    lines.append("/** Canonical social-provider capability grammar (family.product.capability). */")
+    lines.append(
+        f"export const socialProviderCapabilityGrammar = "
+        f"{_ts_str(reg['capabilityGrammar'])} as const;"
+    )
+    lines.append("")
+    for vocab_key, ts_name, ts_type, _py_name, doc in _SOCIAL_PROVIDER_CAPABILITY_VOCAB:
+        lines += _ts_const_array(ts_name, ts_type, reg[vocab_key], doc)
+    lines.append("/** Example well-formed social capability identities (family.product.capability). */")
+    lines.append(f"export const socialProviderExampleCapabilities = {_ts_str_list(reg['exampleCapabilities'])} as const;")
+    lines.append("")
+    lines.append("/** Rules constraining social-provider capability declarations. */")
+    lines.append(f"export const socialProviderCapabilityRules = {_ts_str_list(reg['rules'])} as const;")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def gen_social_provider_capability_vocabulary_py(reg: dict) -> str:
+    lines = _py_header(
+        SOCIAL_PROVIDER_CAPABILITY_VOCAB_JSON,
+        "Generated social provider capability vocabulary (UPR Social convergence, "
+        "blueprint §§15-19).",
+    )
+    lines.append(
+        f'SOCIAL_PROVIDER_CAPABILITY_VOCABULARY_SCHEMA_VERSION = "{reg["schemaVersion"]}"'
+    )
+    lines.append(
+        f'SOCIAL_PROVIDER_CAPABILITY_VOCABULARY_CONTRACT_VERSION = "{reg["contractVersion"]}"'
+    )
+    lines.append("")
+    lines.append("# Canonical description of the UPR social capability vocabulary.")
+    lines.append(
+        f"SOCIAL_PROVIDER_CAPABILITY_VOCABULARY_DESCRIPTION = {_py_str(reg['description'])}"
+    )
+    lines.append("")
+    lines.append("# Canonical social-provider capability grammar (family.product.capability).")
+    lines.append(f"SOCIAL_PROVIDER_CAPABILITY_GRAMMAR = {_py_str(reg['capabilityGrammar'])}")
+    lines.append("")
+    for vocab_key, _ts_name, _ts_type, py_name, doc in _SOCIAL_PROVIDER_CAPABILITY_VOCAB:
+        lines += _py_tuple(py_name, reg[vocab_key], doc)
+    lines += _py_tuple(
+        "SOCIAL_PROVIDER_EXAMPLE_CAPABILITIES", reg["exampleCapabilities"],
+        "Example well-formed social capability identities (family.product.capability).",
+    )
+    lines += _py_tuple(
+        "SOCIAL_PROVIDER_CAPABILITY_RULES", reg["rules"],
+        "Rules constraining social-provider capability declarations.",
+    )
+    lines.append("")
+    lines.append("__all__ = [")
+    names = [
+        "SOCIAL_PROVIDER_CAPABILITY_VOCABULARY_SCHEMA_VERSION",
+        "SOCIAL_PROVIDER_CAPABILITY_VOCABULARY_CONTRACT_VERSION",
+        "SOCIAL_PROVIDER_CAPABILITY_VOCABULARY_DESCRIPTION",
+        "SOCIAL_PROVIDER_CAPABILITY_GRAMMAR",
+        "SOCIAL_PROVIDER_CAPABILITY_RULES",
+        "SOCIAL_PROVIDER_EXAMPLE_CAPABILITIES",
+    ]
+    names += [entry[3] for entry in _SOCIAL_PROVIDER_CAPABILITY_VOCAB]
+    for name in names:
+        lines.append(f'    "{name}",')
+    lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _summary_social_provider_capability_vocabulary(reg: dict) -> str:
+    return (
+        f"social-provider-capability-vocabulary v{reg['contractVersion']} — "
+        f"{len(reg['capabilities'])} capabilities, {len(reg['acquisitionClasses'])} acquisition "
+        f"classes, {len(reg['lifecycleStates'])} lifecycle states, {len(reg['rules'])} rules"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registry table + write/check machinery
 # ---------------------------------------------------------------------------
 
@@ -3388,6 +4004,35 @@ REGISTRIES: tuple = (
             (OUTCOME_TYPES_MD, gen_outcome_types_md),
         ),
         _summary_outcome_types,
+    ),
+    (
+        RELATIONSHIP_PREDICATE_REGISTRY_JSON,
+        validate_relationship_predicates,
+        (
+            (RELATIONSHIP_PREDICATE_REGISTRY_TS, gen_relationship_predicates_ts),
+            (RELATIONSHIP_PREDICATE_REGISTRY_PY, gen_relationship_predicates_py),
+            (RELATIONSHIP_PREDICATE_REGISTRY_MD, gen_relationship_predicates_md),
+        ),
+        _summary_relationship_predicates,
+    ),
+    (
+        RELATIONSHIP_MOTIF_REGISTRY_JSON,
+        validate_relationship_motifs,
+        (
+            (RELATIONSHIP_MOTIF_REGISTRY_TS, gen_relationship_motifs_ts),
+            (RELATIONSHIP_MOTIF_REGISTRY_PY, gen_relationship_motifs_py),
+            (RELATIONSHIP_MOTIF_REGISTRY_MD, gen_relationship_motifs_md),
+        ),
+        _summary_relationship_motifs,
+    ),
+    (
+        SOCIAL_PROVIDER_CAPABILITY_VOCAB_JSON,
+        validate_social_provider_capability_vocabulary,
+        (
+            (SOCIAL_PROVIDER_CAPABILITY_VOCAB_TS, gen_social_provider_capability_vocabulary_ts),
+            (SOCIAL_PROVIDER_CAPABILITY_VOCAB_PY, gen_social_provider_capability_vocabulary_py),
+        ),
+        _summary_social_provider_capability_vocabulary,
     ),
 )
 

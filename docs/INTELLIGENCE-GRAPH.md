@@ -179,6 +179,16 @@ Captures orchestration, hiring, payments, and protocol composition between auton
 - **Behaviors:** Multi-hop hiring chains, payment splitting, SLA tracking
 - **Protocol composition:** Agents consuming other agents' exposed services via x402 micropayments
 
+> **Social360 relationship-spine additions (M6, flag-gated OFF):** the
+> Social360/relationship-fidelity extension registers additional entity↔entity
+> social predicate edges on the shared `EdgeType` enum and its relationship-layer
+> map (`shared/graph/relationship_layers.py`), classified into the H2H / A2A
+> layers above (e.g. `SOCIAL_INTERACTS_WITH`, `SOCIAL_SUBSCRIBES_TO`,
+> `MUTUAL_SOCIAL_CONNECTION`, `COLLABORATES_WITH`, `REFERRED_BY` → H2H; the
+> aggregate `RECIPROCAL_COMMUNICATION` → A2A). They are distinct from the
+> classic edges (`SOCIAL_INTERACTS_WITH` ≠ `INTERACTS_WITH`) and are inert
+> taxonomy-level registrations while the Social360 feature flags default OFF.
+
 ## Graph Schema
 
 `shared/graph/economic_schema.py` — `EconomicGraphSchema` declares all economic vertex and edge types (PAYMENT_REQUIREMENT, PAYMENT_AUTHORIZATION, SETTLEMENT, ENTITLEMENT, GRANTS_ACCESS_TO, etc.) used by L3b+. `shared/graph/graph_contract.py` — `GraphContract` is the authoritative Python schema registry; it mirrors the TypeScript `graph-contract.ts` and is the single source for vertex/edge type enumerations used by mutation services and tests.

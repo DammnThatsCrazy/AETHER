@@ -13,7 +13,7 @@ source_files:
   - Data Lake Architecture/schemas/gold_derivatives_exposure.py
   - Data Lake Architecture/schemas/gold_interop_paths.py
 canonical_owner: platform@aether
-last_synced_commit: "1884f7be"
+last_synced_commit: "b89edb3f"
 ---
 
 # Data Storage and Projection
@@ -35,9 +35,12 @@ dispatcher after `X402FlowProjector` and before `SilverGraphProjector`;
 `SilverFactWriter` provides idempotent writes and drops unknown columns.
 
 The card-linked payment rail slice adds `CardLinkedProjector`
-(`card_linked_flow_facts`), registered LAST in `_ALL_PROJECTORS` — it
-observes card-context SDK events after every canonical projector has run
-and is never the canonical-activity owner for an event.
+(`card_linked_flow_facts`), registered after the economic projectors in
+`_ALL_PROJECTORS` — it observes card-context SDK events after every
+canonical economic projector has run and is never the canonical-activity
+owner for an event. (The Social Silver plane's six observation-only
+social projectors are registered after it; they too are never
+canonical-activity owners.)
 
 `_ALL_PROJECTORS` is not the whole of what the dispatcher does per
 result. After each successful projection it also fires **out-of-band,

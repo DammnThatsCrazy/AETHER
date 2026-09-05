@@ -389,6 +389,87 @@ CAPABILITY_REGISTRY: list[NoesisCapability] = [
         ],
         data_sources=["measurement_results_store", "metric_registry"],
     ),
+    NoesisCapability(
+        intent="relationship_explain",
+        label="Relationship Explain",
+        description=(
+            "Explain the observed basis and evidence for a relationship or "
+            "entity pair: canonical relationship predicates, supporting "
+            "motifs, persisted relationship-fidelity dims, and any incentive "
+            "context that is present. Read-only — relationship fidelity is "
+            "reported as persisted; missing values are never zero. Requires "
+            "the Relationship Intelligence Noesis surface to be enabled."
+        ),
+        surfaces=["aether", "kyber"],
+        requires_target=True,
+        example_prompts=[
+            "Explain the relationship between entity ent_100 and entity ent_200",
+            "Why is there a relationship edge between these two profiles?",
+            "What is the basis of the relationship between Alice and Bob?",
+            "Show the relationship context for profile p_42",
+        ],
+        data_sources=["relationship_spine", "relationship_fidelity", "incentive_context"],
+    ),
+    NoesisCapability(
+        intent="influence_path",
+        label="Influence Path",
+        description=(
+            "Decompose measured influence along the best evidence-backed path "
+            "between subjects, computed from the influence-propagation "
+            "substrate. Reports only per-hop values that were actually "
+            "measured — never fabricated. Read-only; flag-gated on the "
+            "Relationship Intelligence Noesis surface."
+        ),
+        surfaces=["aether", "kyber"],
+        requires_target=True,
+        example_prompts=[
+            "Show the influence path between wallet w_a and wallet w_b",
+            "Who influences profile p_9 the most?",
+            "How does influence propagate from user_a to user_b?",
+            "Is there an influence chain from ent_1 to ent_4?",
+        ],
+        data_sources=["relationship_spine", "influence_propagation", "computation_substrate"],
+    ),
+    NoesisCapability(
+        intent="engagement_fidelity",
+        label="Engagement Fidelity",
+        description=(
+            "Report the latest persisted relationship-fidelity vector for a "
+            "subject or relationship: interaction_frequency, interaction_depth, "
+            "reciprocity, and persistence engagement dims. Missing dims stay "
+            "null — a missing engagement value is never reported as zero. "
+            "Read-only; flag-gated."
+        ),
+        surfaces=["aether", "kyber"],
+        requires_target=True,
+        example_prompts=[
+            "What is the engagement fidelity of entity ent_789?",
+            "Show the fidelity vector for relationship rel_12",
+            "How strong is the engagement between Alice and Bob?",
+            "Show reciprocity and persistence for profile p_5",
+        ],
+        data_sources=["relationship_fidelity", "relationship_spine"],
+    ),
+    NoesisCapability(
+        intent="incentive_context_explain",
+        label="Incentive Context Explain",
+        description=(
+            "Explain the persisted incentive-context assessment for a subject "
+            "when present — recorded incentive structures and alignment "
+            "signals. Observation-only: an incentive is never asserted where "
+            "none is persisted, and none of this is causal attribution. "
+            "Read-only; flag-gated."
+        ),
+        surfaces=["aether", "kyber"],
+        requires_target=False,
+        example_prompts=[
+            "Explain the incentive context for this relationship",
+            "What is the incentive context behind Alice's activity?",
+            "Why is this user incentivized to share content?",
+            "Show the incentive context for profile p_7",
+        ],
+        data_sources=["incentive_context", "relationship_spine"],
+    ),
 ]
 
 # Fast lookup by intent name

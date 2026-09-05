@@ -830,6 +830,40 @@ class EdgeType:
     HAS_SECURITY_SNAPSHOT = "HAS_SECURITY_SNAPSHOT"  # Message fact → Snapshot
     FULFILLED_INTENT      = "FULFILLED_INTENT"       # Message fact → Intent
 
+    # ── Relationship Intelligence Spine — registered Social360 predicate
+    #    edges (Milestone M6). One EdgeType per relationship predicate in
+    #    packages/shared/contracts/relationship-predicate-registry.json whose
+    #    graphRegistrationState is REGISTERED and whose graphEdgeType resolves
+    #    here. Two names are deliberately SOCIAL_-prefixed because the bare
+    #    predicate name already exists on this class with DIFFERENT semantics:
+    #      * SOCIAL_INTERACTS_WITH  (entity→entity social interaction) vs the
+    #        existing INTERACTS_WITH   (User → Protocol, H2A).
+    #      * SOCIAL_SUBSCRIBES_TO   (entity→entity social channel subscription)
+    #        vs the existing SUBSCRIBES_TO (User/Agent → ServicePlan, H2A).
+    #    FOLLOWS follows the same disambiguation precedent (FOLLOWS_SOCIAL).
+    #    Registered edges are NEVER classified RelationshipLayer.EXCLUDED;
+    #    entity→entity / principal relationship predicates are H2H, the
+    #    reciprocal-communication aggregate is A2A (its direct COMMUNICATES_WITH
+    #    substrate is A2A), and the agent-chain-principal predicate is H2H at the
+    #    principal endpoints the edge is written between. Layer map:
+    #    shared/graph/relationship_layers.py.
+    MUTUAL_SOCIAL_CONNECTION = "MUTUAL_SOCIAL_CONNECTION"   # Entity ↔ Entity (reciprocal follows)
+    SOCIAL_SUBSCRIBES_TO = "SOCIAL_SUBSCRIBES_TO"           # Entity → Entity (social channel subscription)
+    SOCIAL_INTERACTS_WITH = "SOCIAL_INTERACTS_WITH"         # Entity → Entity (durable social interaction)
+    COLLABORATES_WITH = "COLLABORATES_WITH"                 # Entity ↔ Entity (verified collaboration)
+    PARTICIPATES_WITH = "PARTICIPATES_WITH"                 # Entity ↔ Entity (shared participation)
+    COMMUNITY_ASSOCIATION = "COMMUNITY_ASSOCIATION"         # Entity ↔ Entity (shared community + interaction)
+    RECURRING_SOCIAL_INTERACTION = "RECURRING_SOCIAL_INTERACTION"  # Entity → Entity (aggregate interaction)
+    RECIPROCAL_COMMUNICATION = "RECIPROCAL_COMMUNICATION"   # Entity/Agent ↔ Entity/Agent (reciprocal comms)
+    RECURRING_CO_PRESENCE = "RECURRING_CO_PRESENCE"         # Entity ↔ Entity (recurring co-presence episodes)
+    PERSISTENT_MULTI_CONTEXT_ASSOCIATION = "PERSISTENT_MULTI_CONTEXT_ASSOCIATION"  # Entity ↔ Entity
+    SHARES_AFFINITY_WITH = "SHARES_AFFINITY_WITH"           # Entity/Agent → Entity/Agent (behavioral affinity)
+    AGENT_MEDIATED_PRINCIPAL_INTERACTION = "AGENT_MEDIATED_PRINCIPAL_INTERACTION"  # Principal ↔ Principal
+    REFERRED_BY = "REFERRED_BY"                             # Entity → Entity (campaign attribution)
+    CO_EXPOSED = "CO_EXPOSED"                               # Entity ↔ Entity (campaign exposure)
+    SHARES_RISK_CONTEXT_WITH = "SHARES_RISK_CONTEXT_WITH"   # Entity/Agent ↔ Entity/Agent (shared risk context)
+    CO_PRESENT_WITH = "CO_PRESENT_WITH"                     # Entity ↔ Entity (single-episode co-presence)
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # SAFE VALUE ESCAPING

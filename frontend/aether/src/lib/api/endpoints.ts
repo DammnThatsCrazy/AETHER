@@ -1888,23 +1888,31 @@ export const api = {
   },
 
   // ── Social Intelligence (12-platform unified grid) ─────────────────────────
+  // Honest contract: the canonical Profile360 IntelligenceAggregator envelope
+  // (services/profile/intelligence.py). The legacy stub that fabricated
+  // influence_level / total_followers_deduped / engagement_rate was removed in
+  // M4 — unknown data is absent (null / empty), never reported as 0 or 'low'.
   social: {
-    /** Unified social intelligence for a user — all 12 platforms in one response. */
+    /** Evidence-backed social facts per platform (canonical aggregator envelope). */
     intelligence: (userId: string, window = '30d') =>
       restClient.get(`/v1/profile/${userId}/social-intelligence${buildQS({ window })}`, wrap(unknownSchema))
         .then(r => r.data as {
-          influence_level: 'high' | 'medium' | 'low' | null;
-          total_followers_deduped: number | null;
-          platforms: Array<{
-            platform: string;
+          entity_id: string;
+          kind: 'social_intelligence';
+          window: string;
+          items: Array<{
+            platform: string | null;
             handle: string | null;
             followers: number | null;
-            verified: boolean;
+            following: number | null;
+            post_count: number | null;
             engagement_rate: number | null;
-            content_count: number | null;
-            extra: Record<string, unknown>;
+            verified: boolean | null;
+            computed_at: string | null;
           }>;
+          summary: { platform_count: number; platforms: Array<string> };
           computed_at: string | null;
+          provenance: { sources: Array<string> } | null;
         }),
   },
 
