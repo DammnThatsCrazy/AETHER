@@ -146,6 +146,68 @@ not risked — WS-A3 ships the spine + generator + static boundary validation on
   `git status --short` empty, `docs_drift.py --strict` clean.
 - No validators weakened; no new ADR; runtime enforcement deferred to WS-B.
 
+## WS-A4 — missing vocabularies (grounded privacy DSR family; enrichment/economic notes)
+
+Stacked on `feat/sdk-universal-ingestion` at `f5048446` (base = the WS-A3 tip
+`4ba07daf`), delivered in the consolidated program PR. Canonical gate deferred to
+the full-program tip per the gate-policy directive; the two generator runs that
+validate the 403-event registry and regenerate the twins/tables (both exit 0) are
+the recorded build evidence.
+WS-A4's reserved scope ("missing vocabularies" per the blueprint §4: `enrichment`/
+`economic`/`privacy` (+ blueprint-listed)) was under-determined — no committed
+enumeration exists. Recon across the tree established the ground truth, and the
+user chose **"add a conservative grounded set."** Resolution per vocabulary:
+
+| Vocabulary | Decision | Evidence |
+|---|---|---|
+| `enrichment` | **NO family.** Inline field-stamping only — no emitter, no run lifecycle, no SDK surface; `context_enricher.py` augments an event already owned by its source family. Recorded here, not invented as a family | blueprint §4 treats enrichment as a *registry* (pre-observation field stamps), not an event family |
+| `economic` | **NO new events.** Already governed across `derivatives` (41) / `stablecoin` (30) / `interop` (39) / commerce / x402 / agent-trade; a parallel "economic" family would duplicate silver vocabulary | family census + `test_event_registry_economic_domains.py` subset pin |
+| `privacy` | **5-event DSR lifecycle family ADDED** (below) — grounded in real mounted compliance code | `services/consent/routes.py`, `erasure_jobs.py`, `dsr_propagation/models.py`, `security/retention.py` |
+
+Added to `event-registry.json` (schemaVersion stays **2.2.0** — additive events
+only, no new top-level key; contractVersion stays 8.12.0): **403 events / 25
+families**, A = 17, **B = 371**, C = 15, sdkEmitable = 153.
+
+- `data_subject_request_received` / `data_subject_request_queued` /
+  `data_subject_request_denied` / `erasure_completed` / `erasure_failed` —
+  family `privacy`, `semanticLevel` B, `sdkEmitable` false, `privacyClass`
+  governance, `retentionClass` permanent, `requiredPurposes` [],
+  `introducedVersion` 8.12.0. Grounded in the consent DSR service
+  (`services/consent/routes.py:307-369`, status `pending→queued`,
+  publishes `aether.consent.dsr`), the durable-erasure propagator
+  (`services/consent/erasure_jobs.py:280-586`, statuses `completed`/`failed`),
+  `services/dsr_propagation/models.py` (DSR_TYPES + per-step statuses), and the
+  retention/data-request denied path (`services/security/retention.py:138`).
+- `projector-ownership-registry.json` `noProjection`: `privacy` =
+  `no_projection` ("Privacy DSR/compliance lifecycle events are control-plane
+  state owned by the consent/DSR authority, not Silver analytics facts") —
+  mirrors the `consent` no_projection precedent. No dispatcher projector, by
+  design.
+
+| Workstream item | Deliverable | Status |
+|---|---|---|
+| Spine vocabularies | `privacy` family (5 events) added with full WS-A3 metadata (level B / non-emittable / governance / permanent / no-purpose); enrichment + economic documented as no-add above | ✅ implemented (this slice) |
+| Projector ownership | `privacy` noProjection entry (status `no_projection`) + regenerated `generated_ownership.py` + `projector-ownership-table.md` row | ✅ implemented (this slice) |
+| Twins/tables | `generate_contracts.py` exit 0 (403 events; regenerated `events.ts`, `generated_registry.py`, `generated-consent-map.ts`, `event-registry-table.md` — header now "(403 types, contract v8.12.0)"); `generate_platform_contracts.py` exit 0 (temporal surfaces roll to **25 families**; projector-ownership-table gained the privacy row) | ✅ implemented (this slice) |
+| Native parity co-edits | 5 privacy types hand-added to iOS `AetherEventType` enum + `eventConsentPurpose` and Android `EVENT_CONSENT_PURPOSE`, purpose `"analytics"` (the generator's empty-`requiredPurposes` default — same value the `consent` event maps to). Inline mirror-parse self-check: iOS enum / iOS purpose / Android purpose each = 403 = registry, bidirectional, zero extras | ✅ implemented (this slice) |
+| Authored doc count sync | `CANONICAL_EVENT_MODEL.md` (398/24 → 403/25), `REPO_TRUTH_AND_GAP_MATRIX.md` row-18 (398 → 403), `EXECUTION_STATE.md` WS-A3 pins (B 366 → 371, `EVENT_SEMANTIC_LEVEL` 398 → 403) | ✅ implemented (this slice) |
+| Source-linked docs review | 7 docs declaring `source_files: event-registry.json` reviewed: CANONICAL_EVENT_MODEL (global-count edit, above); SDK-COMMERCE-BRIDGES, COMMS_TRUTH_MATRIX, FIRST_RELEASE_INTELLIGENCE_TELEMETRY_OPERATIONS, DERIVATIVES/INTEROP/STABLECOIN_EVENT_REGISTRY — content **unaffected** by a new non-economic `privacy` family (per-domain counts unchanged). Pre-existing prose inaccuracies surfaced during review — `FIRST_RELEASE_INTELLIGENCE_TELEMETRY_OPERATIONS.md` "267 events, 21 families", `COMMS_TRUTH_MATRIX.md` "comms family has 15 events" — are **WS-A7** un-stale scope (recorded here, not opportunistically rewritten). `docs_drift.py --update` restamp deferred to the full-program tip per the gate-policy directive (WS-A3 precedent) | ✅ reviewed (restamp deferred) |
+
+### Definition of done (WS-A4)
+
+- `event-registry.json` = 403 events / 25 families (A=17, B=371, C=15,
+  sdkEmitable=153), schemaVersion 2.2.0, boundary-valid by construction
+  (B-level / non-emittable / empty-purpose with governance privacy + permanent
+  retention).
+- TS + Python + temporal twins/tables match a fresh regeneration of both
+  generators (exit 0 recorded above).
+- iOS/Android native event/consent surfaces mirror the full 403-type registry
+  (bidirectional — inline parse confirmed).
+- Canonical gate green at the full-program tip: `make ci-check` = 0,
+  `git status --short` empty, `docs_drift.py --strict` clean.
+- No validators weakened; no new ADR; enrichment + economic additions
+  deliberately NOT invented (documented above).
+
 ## Later phases (reserved)
 
 Workstreams A–E (the blueprint's own sequencing) begin after Phase 0 converges.
@@ -154,7 +216,7 @@ built.
 
 | Workstream | Scope (reserved) | Opens when |
 |---|---|---|
-| WS-A — Contract foundation | **WS-A1 + WS-A2 + WS-A3 done —** WS-A4–A7: missing vocabularies; Envelope B server-side; Swift/Kotlin generation; re-point metric/privacy/retention truth into the Spine (Blueprint Points 2/3/10/13, Invariants #2/#16) | WS-A1 merged |
+| WS-A — Contract foundation | **WS-A1 + WS-A2 + WS-A3 + WS-A4 done —** WS-A5–A7: Envelope B server-side; Swift/Kotlin generation; re-point metric/privacy/retention truth into the Spine (Blueprint Points 2/3/10/13, Invariants #2/#16) | WS-A1 merged |
 | WS-B — Adapter convergence | SDK/webhook/connector/feed/import/harness/replay adapters that all produce Envelope B through one validated gateway; consent-on-every-path; idempotency-before-publish; ingestion-level replay with original-time preservation; kill deprecated `/v1/ingest` aliases (Invariants #1/#5/#8/#9/#15) | Phase 0 merged |
 | WS-C — SDK hardening | Native identity → subject hints (delete client `/sdk/identity/resolve` re-stamping); native encrypted persistent queues; remove/relocate shared interpretation modules; regenerate `web/src/types.ts`; add native correlation fields (Invariants #4/#12/#16) | Phase 0 merged |
 | WS-D — Backend interpretation | Typed `RelationshipFact` + `evidence_refs`; Episode engine; outcome truth store; Section-25 evidence dedupe; silver money → exact decimal/event-time valuation on by default (coordinate with `feat/financial-normalization` — do not build twice); mutation-gateway governance on by default (Invariants #7/#11/#13/#14) | Phase 0 merged |
