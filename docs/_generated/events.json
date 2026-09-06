@@ -21,6 +21,7 @@
     "journey",
     "location",
     "outcome",
+    "privacy",
     "reward",
     "server",
     "stablecoin",
@@ -2428,6 +2429,36 @@
       "family": "interop",
       "consent_purpose": "cross_chain_observability",
       "section_comment": "interop"
+    },
+    {
+      "name": "data_subject_request_received",
+      "family": "privacy",
+      "consent_purpose": "analytics",
+      "section_comment": "privacy"
+    },
+    {
+      "name": "data_subject_request_queued",
+      "family": "privacy",
+      "consent_purpose": "analytics",
+      "section_comment": "privacy"
+    },
+    {
+      "name": "data_subject_request_denied",
+      "family": "privacy",
+      "consent_purpose": "analytics",
+      "section_comment": "privacy"
+    },
+    {
+      "name": "erasure_completed",
+      "family": "privacy",
+      "consent_purpose": "analytics",
+      "section_comment": "privacy"
+    },
+    {
+      "name": "erasure_failed",
+      "family": "privacy",
+      "consent_purpose": "analytics",
+      "section_comment": "privacy"
     }
   ]
 }
