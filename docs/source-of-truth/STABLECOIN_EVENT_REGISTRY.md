@@ -30,8 +30,12 @@ TS/Python/docs artifacts. Never hand-edit generated files.
   bridge/swap/x402/treasury/payout/venue), registry curation, support
   assertions, valuation + depeg transitions, finality advance/reorg/
   correction, reconciliation, and flow materialization.
-- `privacyClass` is `financial` for facts and `governance` for
-  registry/ops events; `retentionClass` is `financial_7y` for facts.
+- `privacyClass` is `financial` for transfer/payment/mint/burn/finality,
+  reorg/correction, and reconciliation-fact events and `governance` for
+  registry/ops, supply/valuation/snapshot, and aggregate events.
+- `retentionClass` is `financial_7y` for transaction and reconciliation
+  facts, `standard_365d` for balance snapshots and registry/ops/valuation
+  events, and `standard_90d` for `stablecoin_checkpoint_advanced`.
 - `graphProjection` is set only on material events (e.g.
   `stablecoin_transfer_observed` → `TRANSFERRED_STABLECOIN`).
 
