@@ -685,3 +685,36 @@ built.
 - PRs that touch a deprecated legacy tree must carry the acknowledgment
   (`docs/productization/sdk-universal-ingestion-alignment/**`) required by the
   `legacy_ingestion_tree_mutation` ownership category.
+
+## Acknowledged external mutations
+
+The `legacy_ingestion_tree_mutation` ownership category fires when the legacy
+ingestion/data-lake trees OR the deprecated backend monolith root move. Third
+programs that deliberately mutate one of those surfaces record the
+acknowledgment here, in the governed home the category designates.
+
+### 2026-09-05 — End-User Lifecycle & Integration Management (R1 catalog read-model)
+
+Branch `feat/enduser-lifecycle-integration` (R1 contract spine, commit `64877fca`)
+mounted the connectors-gated **catalog read-model** router from
+`Backend Architecture/aether-backend/main.py` and added
+`services/integrations/connectors/catalog_endpoints.py`.
+
+- **Why the deprecated surface was touched:** the four `/v1` catalog endpoints
+  (`/v1/integration-catalog`, `/v1/tenant-integrations[/{id}]`,
+  `/v1/integration-readiness`) must be reachable behind the existing
+  `AETHER_CONNECTORS_ENABLED` feature gate, which only `main.py` can wire, and the
+  read-model module lives in the legacy connectors package to respect the
+  connectors-package import-cycle law (the module is standalone and is NOT
+  exported by `connectors/__init__`, so a readiness-first import cannot break).
+  The change is additive, read-only projection wiring; no ingestion or data-lake
+  behavior is altered.
+- **What was NOT extended:** no files were added under `Data Ingestion Layer/**`,
+  `Data Lake Architecture/**`, `Backend Architecture/migrations/**`,
+  `Backend Architecture/mnt/**`, or the deprecated
+  `services/{delegation,journey-service,web3}/**` trees. All new catalog
+  vocabulary lives in `shared/integration_contracts/` (`catalog.py`,
+  `experience.py`, `aliases.py`), which is the canonical UPR-aligned contract
+  layer this program steers new work into.
+- **Guardrail intact:** `scripts/validate_canonical_ingestion_trees.py` remains
+  on disk and is still run by the ownership gate.

@@ -1585,3 +1585,74 @@ CATEGORY_PROVIDERS: dict[ProviderCategory, list[str]] = {
         "robinhood", "sofi", "betterment", "vanguard", "etrade", "tdameritrade", "webull",
     ],
 }
+
+
+# =============================================================================
+# Ad-platform canonical identity crosswalk (additive — WS-2 advertising
+# convergence). Do NOT rename PROVIDER_FACTORY / CATEGORY_PROVIDERS keys.
+#
+# The legacy adapter keys above were coined before the unified catalog existed:
+# AD_PLATFORM keyed on ``twitter_ads`` while the measurement runtime, campaign
+# normalization, and the unified catalog all key on ``x_ads``. The catalog's
+# canonical ad families (AD_FAMILIES in shared/integration_contracts/catalog.py)
+# are the seven measurement-backed platforms below.
+#
+# ``shared/integration_contracts/aliases.py`` is the SINGLE boundary alias map
+# (ADR-0009). This block only annotates which legacy adapter keys exist and how
+# they map onto canonical families; it does not resolve — consumers that need a
+# canonical family run an id through :func:`canonical_ad_platform_family`
+# (which defers to ``canonical_family_id``) or import aliases directly.
+# =============================================================================
+
+# Canonical ad-platform families (catalog AD_FAMILIES order). Every family here
+# has a runtime behind it; alias-only families (snapchat_ads / pinterest_ads)
+# are intentionally excluded so no surface claims capability behind them.
+AD_PLATFORM_CANONICAL_FAMILIES: tuple[str, ...] = (
+    "google_ads",
+    "meta_ads",
+    "tiktok_ads",
+    "linkedin_ads",
+    "x_ads",
+    "reddit_ads",
+    "microsoft_ads",
+)
+
+# Legacy shared/providers ad adapter key → canonical catalog family. Adapter
+# keys stay stable (PROVIDER_FACTORY / CATEGORY_PROVIDERS are unrenamed); this
+# map documents which legacy key each canonical family answers to, including
+# the twitter_ads→x_ads boundary collision that aliases.py already records.
+AD_PLATFORM_FAMILY_BY_ADAPTER: dict[str, str] = {
+    # Legacy adapters that are already canonical (no alias needed).
+    "google_ads": "google_ads",
+    "meta_ads": "meta_ads",
+    "linkedin_ads": "linkedin_ads",
+    "tiktok_ads": "tiktok_ads",
+    # twitter_ads is the legacy adapter key; the measurement runtime and the
+    # unified catalog key this family as x_ads (see aliases.FAMILY_ALIASES).
+    "twitter_ads": "x_ads",
+    # Families the legacy adapter set does not implement but the catalog does;
+    # they have no shared/providers adapter key and are listed for completeness.
+    "x_ads": "x_ads",
+    "reddit_ads": "reddit_ads",
+    "microsoft_ads": "microsoft_ads",
+}
+
+
+def canonical_ad_platform_family(raw: Optional[str]) -> Optional[str]:
+    """Resolve a provider/adapter id to a canonical ad-platform family.
+
+    Delegates to the single boundary alias map (aliases.canonical_family_id),
+    so new collisions are reconciled there, never in a private table here.
+    Returns ``None`` for a non-ad or unbacked family rather than guessing.
+    """
+    if not raw:
+        return None
+    from shared.integration_contracts.aliases import canonical_family_id
+
+    token = (raw or "").strip().lower()
+    if not token:
+        return None
+    canonical = canonical_family_id(token)
+    if canonical not in AD_PLATFORM_CANONICAL_FAMILIES:
+        return None
+    return canonical

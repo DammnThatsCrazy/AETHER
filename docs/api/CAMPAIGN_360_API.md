@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/campaign/routes.py
   - Backend Architecture/aether-backend/services/campaign/exploration.py
   - Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py
-last_synced_commit: "4e6fdad"
+last_synced_commit: "8238f06d"
 ---
 
 # Campaign 360 API Reference
@@ -517,3 +517,25 @@ All errors use this envelope:
 The Campaign Registry API is a separate API surface introduced in v8.11.0 for managing canonical campaign identities, external references, aliases, campaign sources, and mapping review. It lives at `/v1/campaigns` (list/create), `/v1/campaign-sources`, `/v1/mapping-review`, and `/v1/campaign-quality`. These endpoints use the same permission model (`campaign:read` for queries, `campaign:manage` for mutations) and error envelope as the Campaign 360 API above.
 
 See `docs/campaign/CAMPAIGN_INTELLIGENCE_OVERVIEW.md` and `docs/campaign/CAMPAIGN_REGISTRY_ARCHITECTURE.md` for the full contract.
+
+### Advertising connect flow (WS-2, additive)
+
+The ad-platform connect surface is served from the same `/v1/campaign-sources`
+router, additive to the legacy `POST /v1/campaign-sources` create. Orchestration
+lives in `services/campaign/ad_source_links.py`; ambiguous campaign resolution
+after a source is anchored stays in the `/v1/mapping-review` surface.
+
+| Method | Path | Permission | Purpose |
+|---|---|---|---|
+| GET | `/v1/campaign-sources/overview` | `campaign:read` | Redacted read model of every connected source — never returns `config`; projects account id, `secret_configured`, health/sync state |
+| GET | `/v1/campaign-sources/ad-options` | `campaign:read` | Connectable ad platforms with catalog credential-field shape + already-connected state |
+| POST | `/v1/campaign-sources/connect` | `campaign:manage` | Idempotent connect (one active source per tenant/family); rejects incomplete credential sets and unbacked platforms |
+| POST | `/v1/campaign-sources/{connector_id}/test` | `campaign:manage` | Live credential probe via the connector's own `validate_credentials`/`health_check` — never persisted |
+| POST | `/v1/campaign-sources/{connector_id}/account` | `campaign:manage` | Explicit single-account selection; rotates the source to the new account (archive + fresh active row carrying credentials) |
+| POST | `/v1/campaign-sources/{connector_id}/disable` | `campaign:manage` | Disable a source (stops scheduling; row stays as history) |
+| POST | `/v1/campaign-sources/{connector_id}/enable` | `campaign:manage` | Re-enable a source; refused when another active row exists for the same ad family |
+
+`connect` accepts `{platform, name?, config}` where `platform` may be a brand or
+alias (e.g. `twitter` → `x_ads`) and `config` must be a complete credential set
+for the family (secrets + the single account identifier). Errors use the same
+error envelope as the rest of the registry API.

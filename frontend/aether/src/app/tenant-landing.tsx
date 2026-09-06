@@ -9,6 +9,21 @@ import { HomePage } from '@aether-app/pages/home/home-page';
 const COMPLETE_STATUSES = new Set(['live', 'value_proven', 'expansion_ready']);
 
 /**
+ * WS-3 (additive) seam: where an incomplete tenant lands. Today the classic
+ * /activation flow remains the target (kept stable for the landing contract);
+ * the guided intent-driven experience is already served at /activate, so the
+ * post-auth resolver can be switched over without touching the landing logic.
+ */
+export const INCOMPLETE_ACTIVATION_ROUTE = '/activation';
+export type LandingTarget = '/' | typeof INCOMPLETE_ACTIVATION_ROUTE | '/activate';
+
+/** Post-auth resolver: '/' for a complete tenant, else the activation entry. */
+export function resolveLandingTarget(status?: string | null): LandingTarget {
+  if (status && COMPLETE_STATUSES.has(status)) return '/';
+  return INCOMPLETE_ACTIVATION_ROUTE;
+}
+
+/**
  * Tenant root ("/") gate. Decides the landing surface from real onboarding
  * truth and NEVER falls back to the operator-oriented /settings page, and never
  * misroutes to /activation before a decision can be made.
@@ -34,7 +49,7 @@ export function TenantLanding() {
   const status = data?.plan?.status;
   if (status && COMPLETE_STATUSES.has(status)) return <HomePage />;
 
-  return <Navigate to="/activation" replace />;
+  return <Navigate to={INCOMPLETE_ACTIVATION_ROUTE} replace />;
 }
 
 /**

@@ -18,7 +18,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 14
 toc_depth: 3
-last_synced_commit: "f6c2b81a"
+last_synced_commit: "95d53f4c"
 ---
 
 # Universal Provider Runtime
@@ -100,7 +100,9 @@ Backend Architecture/aether-backend/
 │   │   ├── normalization.py            #   EventNormalizer, NormalizationResult
 │   │   ├── events.py                   #   RawProviderRecord, ReadBatch, AetherEvent
 │   │   ├── certification.py            #   CertificationReport, readiness tokens
-│   │   ├── catalog.py                  #   catalog-derived manifests (legacy)
+│   │   ├── catalog.py                  #   derived catalog — 4 groups (connectors, ad-platforms, payment-rails, credit bureaus)
+│   │   ├── experience.py               #   ExperienceCategory + experience_category_for (customer-facing projection)
+│   │   ├── aliases.py                  #   boundary-family aliases (twitter_ads→x_ads, …) + canonical_family_id
 │   │   └── ...                         #   lifecycle, deployment, health
 │   ├── commerce_contracts/             # commerce vocabulary (additive)
 │   │   ├── money.py                    #   Money, Currency, sum_money, money_from_cents

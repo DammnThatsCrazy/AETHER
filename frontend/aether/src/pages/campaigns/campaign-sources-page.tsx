@@ -5,6 +5,11 @@ import {
   formatCount, useTimeContext,
 } from '@aether/ui';
 import { useCampaignSources, useSyncCampaignSource } from '@aether-app/features/campaigns/use-campaign-sources';
+import {
+  contextualReadiness,
+  useTenantIntegrationReadiness,
+} from '@aether-app/features/integrations';
+import type { TenantReadinessItem } from '@aether-app/features/integrations';
 
 type Source = Record<string, unknown>;
 
@@ -42,9 +47,12 @@ const PLATFORM_LABELS: Record<string, string> = {
 function SourceCard({ source, onSync }: { source: Source; onSync: (id: string) => void }) {
   const timeCtx = useTimeContext();
   const connectorId = fmt(source.connector_id ?? source.id);
-  const platform = fmt(source.platform);
-  const status = fmt(source.status ?? source.sync_status, 'unknown');
-  const lastSync = source.last_synced_at as string | undefined;
+  // Backend rows carry the ad platform as `connector_type` and timestamps as
+  // `last_sync_at`/`last_success_at`; tolerate the older camelCase reads while
+  // the connect flow is consolidated under Settings → Integrations.
+  const platform = fmt(source.connector_type ?? source.platform);
+  const status = fmt(source.status ?? source.health ?? source.sync_status, 'unknown');
+  const lastSync = (source.last_sync_at ?? source.last_success_at ?? source.last_synced_at) as string | undefined;
   const campaignCount = source.campaign_count as number | undefined;
 
   return (
@@ -96,6 +104,18 @@ export function CampaignSourcesPage() {
   const syncMutation = useSyncCampaignSource();
   const [syncingId, setSyncingId] = useState<string | null>(null);
 
+  // Only offer a "Connect advertising" action when the tenant has NOT already
+  // engaged an advertising integration in the unified Integrations surface —
+  // an empty source list with an engaged ad platform means "sources appear
+  // after sync", never "connect something".
+  const { data: readinessData } = useTenantIntegrationReadiness();
+  const ads = contextualReadiness(
+    readinessData?.items as TenantReadinessItem[] | undefined,
+    ['advertising_campaigns'],
+  );
+  const adsNotEngaged = ads.connect !== null;
+  const returnHref = `/integrations?return=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+
   const rawSources = Array.isArray((data as Record<string, unknown>)?.items)
     ? (data as Record<string, unknown[]>).items
     : Array.isArray(data) ? data : [];
@@ -120,13 +140,9 @@ export function CampaignSourcesPage() {
             Connected ad platforms. Each source syncs campaign metadata and spend.
           </p>
         </div>
-        <a
-          href="/campaign-intelligence/sources"
-          aria-label="Connect campaign source"
-          className="inline-flex items-center justify-center rounded-md font-medium transition-colors bg-accent text-text-inverse hover:bg-accent-hover px-2 py-1 text-xs"
-        >
-          Connect source
-        </a>
+        <p className="text-xs text-text-secondary max-w-xs text-right">
+          Adding an advertising platform is being consolidated under Settings → Integrations → Advertising &amp; Campaigns; manage and sync existing sources here.
+        </p>
       </div>
 
       {error && <ErrorState title="Failed to load sources" message={String(error)} />}
@@ -135,15 +151,17 @@ export function CampaignSourcesPage() {
       {!isLoading && !error && sources.length === 0 && (
         <EmptyState
           title="No campaign sources connected"
-          description="Connect a paid-media platform to start importing campaigns and syncing spend data."
-          action={
+          description={adsNotEngaged
+            ? 'The guided advertising connection flow lives under Integrations → Advertising & Campaigns. Once a paid-media platform is connected and syncing, its sources will appear here for management and sync.'
+            : 'An advertising platform is connected under Integrations — after its first sync its sources will appear here for management and sync.'}
+          action={adsNotEngaged ? (
             <a
-              href="/campaign-intelligence/sources/connect"
-              className="inline-flex items-center justify-center rounded-md font-medium transition-colors bg-accent text-text-inverse hover:bg-accent-hover px-2 py-1 text-xs"
+              href={returnHref}
+              className="inline-flex items-center rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
             >
-              Connect your first source
+              Connect an advertising platform
             </a>
-          }
+          ) : undefined}
         />
       )}
 

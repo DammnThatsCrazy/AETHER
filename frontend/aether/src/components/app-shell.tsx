@@ -49,7 +49,7 @@ const NAV_ITEMS: readonly NavEntry[] = [
   { to: '/security', label: 'Security', destination: 'aether-security' },
   { to: '/system-status', label: 'System Status', destination: 'aether-system-status' },
   { to: '/data-quality', label: 'Data Quality', destination: 'aether-data-quality', requirement: { flag: 'data_quality_enabled' } },
-  { to: '/integrations', label: 'Integrations', destination: 'aether-integrations', requirement: { flag: 'connectors_enabled' } },
+  { to: '/settings/integrations', label: 'Integrations', destination: 'aether-integrations', requirement: { flag: 'connectors_enabled' } },
   { to: '/imports', label: 'Imports', destination: 'aether-imports' },
   { to: '/deployments', label: 'Deployments', destination: 'aether-deployments' },
   { to: '/payment-rails', label: 'Payment Rails', destination: 'aether-payment-rails', requirement: { domain: 'payments' } },

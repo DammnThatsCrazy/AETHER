@@ -10,10 +10,12 @@ from __future__ import annotations
 
 from services.integrations.connectors.registry import CONNECTORS
 from shared.integration_contracts.catalog import (
+    AD_MANIFESTS,
     ALL_MANIFESTS,
     CONNECTOR_MANIFESTS,
     DEFERRED_CREDIT_BUREAU_MANIFESTS,
     PAYMENT_RAIL_MANIFESTS,
+    build_ad_platform_manifests,
     build_connector_manifests,
     build_deferred_credit_bureau_manifests,
     build_payment_rail_manifests,
@@ -342,9 +344,12 @@ def test_deferred_manifests_accessor_returns_the_bureaus() -> None:
 # ── Combined catalog + honesty sweep over ALL_MANIFESTS ──────────────────────
 
 
-def test_all_manifests_is_the_union_of_the_three_groups() -> None:
+def test_all_manifests_is_the_union_of_the_four_groups() -> None:
+    # Full catalog = BYOD connectors + measurement ad platforms + observe-only
+    # payment rails + deferred (non-tenant-visible) credit bureaus.
     assert len(ALL_MANIFESTS) == (
         len(CONNECTOR_MANIFESTS)
+        + len(AD_MANIFESTS)
         + len(PAYMENT_RAIL_MANIFESTS)
         + len(DEFERRED_CREDIT_BUREAU_MANIFESTS)
     )

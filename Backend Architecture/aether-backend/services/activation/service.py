@@ -155,6 +155,10 @@ class ActivationService:
             "billing_state": billing.value,
             "first_value_evidence": record.get("first_value_evidence", {}),
             "waiting_reason": record.get("waiting_reason"),
+            # WS-3 (intent-driven activation): the tenant's selected ActivationIntent
+            # tokens (durable; drives the recommended connect plan). Additive.
+            "intents": list(record.get("intents", [])),
+            "intents_updated_at": record.get("intents_updated_at"),
             "history": record.get("history", []),
         }
 

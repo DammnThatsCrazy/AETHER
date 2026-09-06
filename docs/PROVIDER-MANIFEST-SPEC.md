@@ -14,7 +14,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 13
 toc_depth: 3
-last_synced_commit: "4e6fdad"
+last_synced_commit: "0e967a68"
 ---
 
 # Provider Manifest Spec

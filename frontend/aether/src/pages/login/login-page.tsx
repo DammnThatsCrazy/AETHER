@@ -16,6 +16,21 @@ const SSO_PROVIDERS: Array<{ provider: SocialProvider; label: string }> = [
   { provider: 'microsoft', label: 'Continue with Microsoft' },
 ];
 
+/**
+ * The post-auth destination a successful login should land on. Only an
+ * internal absolute path is accepted (a single leading `/`, not a
+ * protocol-relative `//…` or an absolute scheme) — RequireAuth builds it from
+ * the visitor's own deep link, and anything else falls back to the tenant home
+ * so a hand-built `/login?redirect=…` link can never push the browser to a
+ * foreign origin.
+ */
+export function resolvePostAuthRedirect(raw: string | null): string {
+  if (raw !== null && raw.startsWith('/') && !raw.startsWith('//')) {
+    return raw;
+  }
+  return '/settings';
+}
+
 export function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -27,7 +42,7 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [ssoLoading, setSsoLoading] = useState<SsoState>('idle');
 
-  const redirectTo = searchParams.get('redirect') ?? '/settings';
+  const redirectTo = resolvePostAuthRedirect(searchParams.get('redirect'));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

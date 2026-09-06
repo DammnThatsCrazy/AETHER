@@ -8,133 +8,103 @@ status: draft
 canonical_owner: platform@aether
 source_files:
   - Backend Architecture/aether-backend/services/integrations/connectors/base.py
-last_synced_commit: "pending"
+  - Backend Architecture/aether-backend/shared/integration_contracts/catalog.py
+last_synced_commit: "8b1ca3dc"
 estimated_read_minutes: 5
+toc_depth: 3
 ---
 
 # Connector Lake Policy
 
-> Every connector class carries an immutable default lake write policy and graph
-> write policy. These defaults are set at the class level and cannot be overridden
-> by connector configuration alone. Changing a policy requires a DataRightsGrant
-> amendment and a compliance review.
+> Every connector class carries a declared default lake-write policy, graph-write
+> policy, and model-training eligibility. These defaults are declared on the
+> `ConnectorDescriptor` at registration time and enforced at descriptor/registration
+> time — not at ingestion time. Elevating a policy requires a governance grant, not
+> a connector-configuration change.
 
-## Why immutable class-level defaults?
+The authoritative enum definitions and the full class/role/policy reference live
+in `CONNECTOR_TAXONOMY.md` (mirroring
+`Backend Architecture/aether-backend/services/integrations/connectors/base.py`).
+This document is the policy-interaction view: which default policy each class
+carries, the dual-role rule, and how an elevation is governed. `DUAL_ROLE`
+replaces the older conceptual `IDENTITY_BRIDGE`/`AGENT_TOOL` rows — those were
+never `base.py` members; such surfaces are capabilities of a declared class, and
+their policy is set on that class's descriptor, not on a phantom class.
 
-Individual connectors are numerous and frequently added. If each connector
-required a bespoke policy decision, enforcement gaps would appear during rapid
-integration work. Class-level defaults ensure that a new `ACTION_NOTIFIER`
-connector is never accidentally permitted to write to the lake, even if the
-engineer who built it did not think to check.
+## 1. Default write policy by connector class
 
-The connector class is set at registration time and cannot be changed without
-migration through a formal connector deprecation cycle.
+The per-connector record is the source of truth (a `ConnectorDescriptor`), and
+the shared default posture for tenant connectors is `TENANT_ONLY` lake /
+`TENANT_GRAPH_ONLY` graph / `NEVER` training. Class docstrings encode the
+intended defaults below.
 
----
+| ConnectorClass | LakeWritePolicy (default) | GraphWritePolicy (default) | ModelTrainingEligibility (default) |
+|---|---|---|---|
+| `OLYMPUS_PROVIDER` | `OLYMPUS_BASELINE_ELIGIBLE` (provenance required; cleared = `OLYMPUS_BASELINE_ALLOWED`) | `OLYMPUS_GRAPH_ALLOWED` (lineage required) | `OLYMPUS_ALLOWED` for baseline models only |
+| `TENANT_BYOD_DATA` | `TENANT_ONLY` | `TENANT_GRAPH_ONLY` | `NEVER` (tenant grants elevate) |
+| `BYOK_GATEWAY` | `NEVER` (credential routing; no persistence) | `NONE` | `NEVER` |
+| `ACTION_NOTIFIER` | `NEVER` (outbound-only; no inbound data) | `NONE` | `NEVER` |
+| `DUAL_ROLE` | Most restrictive of its modeled capabilities (see §3) | Most restrictive of its modeled capabilities | Most restrictive of its modeled capabilities |
 
-## Lake write policy by connector class
+**Rule:** `ACTION_NOTIFIER` and `BYOK_GATEWAY` connectors carry `NEVER` lake
+write. Any connector that both writes data and delivers notifications/actions
+must model each as a separate capability (`ConnectorCapability`) or be split
+into distinct registrations — never relax `NEVER` on an outbound/credential path.
 
-| ConnectorClass | LakeWritePolicy | Notes |
-|---|---|---|
-| `OLYMPUS_PROVIDER` | `OLYMPUS_BASELINE_ELIGIBLE` | Subject to provider-level DataRightsGrant |
-| `TENANT_BYOD_DATA` | `TENANT_ONLY` | Data stays in tenant's lake partition |
-| `BYOK_GATEWAY` | `NEVER` | Credential routing only; no persistence |
-| `ACTION_NOTIFIER` | `NEVER` | Outbound-only; no inbound data |
-| `IDENTITY_BRIDGE` | `OLYMPUS_BASELINE_ELIGIBLE` | Identity signals enter shared baseline |
-| `AGENT_TOOL` | `NEVER` | Tool outputs are ephemeral context |
+**Rule:** data that has not cleared provenance/license review lands
+`QUARANTINE_ONLY` (lake and graph) until review passes, rather than entering a
+shared layer un-vetted.
 
-**Rule:** `ACTION_NOTIFIER` connectors must carry `NEVER`. The class is
-outbound-only by definition. Any connector that writes data AND delivers
-notifications must use a different class.
+## 2. What each policy means in practice
 
-**Rule:** `BYOK_GATEWAY` connectors carry `NEVER` unless the tenant also holds
-a separate DataRightsGrant with `lake_write_allowed=true`. That grant must be
-reviewed and approved before the policy can be elevated.
+- `TENANT_ONLY` lake writes land in the tenant's private partition. Shared
+  layers (cross-tenant analytics, Olympus-baseline pipelines, model training)
+  cannot read this partition without an explicit tenant grant.
+- `OLYMPUS_BASELINE_ELIGIBLE` permits Olympus-baseline writes only with
+  provenance attached; `OLYMPUS_BASELINE_ALLOWED` is the post-review cleared
+  state. `OLYMPUS_GRAPH_ALLOWED` writes edges with lineage.
+- `QUARANTINE_ONLY` (lake and graph) means the data/edges are staged but not
+  consumable until provenance/license review clears.
+- Training eligibility is independent of lake policy: `NEVER`,
+  `TENANT_ONLY` (tenant-scoped models), `AGGREGATE_ONLY` (aggregate, never raw),
+  `OLYMPUS_ALLOWED` (baseline models), or `COMPLIANCE_REVIEW_REQUIRED`
+  (conditional on review). Tenant BYOD data is `NEVER` until the tenant grants
+  training rights.
 
----
+## 3. Dual-role connectors
 
-## Graph write policy by connector class
+`DUAL_ROLE` connectors (e.g. Jira — ingest plus action) declare each capability
+separately as a `ConnectorCapability` so lake/graph/training policy, grants, and
+health stay isolated per capability.
 
-| ConnectorClass | GraphWritePolicy | Notes |
-|---|---|---|
-| `OLYMPUS_PROVIDER` | `ALLOWED` | Edges enter Olympus graph with lineage |
-| `TENANT_BYOD_DATA` | `TENANT_GRAPH_ONLY` | Edges isolated to tenant graph partition |
-| `BYOK_GATEWAY` | `BLOCKED` | No graph mutations from BYOK paths |
-| `ACTION_NOTIFIER` | `BLOCKED` | Outbound only; no graph side effects |
-| `IDENTITY_BRIDGE` | `ALLOWED` | Identity edges enter shared graph |
-| `AGENT_TOOL` | `BLOCKED` | Tool calls do not mutate the graph directly |
+**Most restrictive wins.** A connector whose capabilities span an
+ingest-capable class and an action/credential-only class carries `NEVER` lake /
+`NONE` graph on the action capability and the tenant/baseline policy only on the
+ingest capability. This is intentional friction: a dual-role connector that
+cannot be cleanly partitioned indicates an architectural boundary violation, and
+the fix is two registrations/capabilities, not a relaxed policy.
 
----
+## 4. Elevation is governed, not self-service
 
-## Dual-role connectors
+There is no self-service path for policy elevation. To elevate a connector's
+declared lake/graph/training policy:
 
-Some connectors serve more than one architectural role (e.g., a provider that
-also delivers webhook notifications). When a connector would require two classes,
-the following rule applies:
+1. File a data-rights amendment referencing the provider/family identity and the
+   desired policy change.
+2. Compliance issues an amended grant covering the new use (see
+   `DATA_RIGHTS_LEDGER.md` for the grant model).
+3. The connector's descriptor policy fields are updated and an audit event is
+   emitted.
+4. Granting training rights additionally requires ML-governance sign-off.
 
-**Most restrictive policy wins.** If a connector handles both
-`OLYMPUS_PROVIDER` (eligible for lake) and `ACTION_NOTIFIER` (never lake), the
-lake write policy is `NEVER` until a deliberate architecture decision separates
-the two functions into distinct connector registrations.
+Attempting to work around the policy by reclassifying a connector (changing its
+class to dodge a `NEVER`) is a policy-enforcement alert.
 
-This is intentional friction. Dual-role connectors indicate an architectural
-boundary violation. The correct fix is to register two connectors — one for
-inbound provider data, one for outbound notifications — not to relax the policy.
+## 5. Related docs
 
----
-
-## OLYMPUS_BASELINE_ELIGIBLE in practice
-
-A connector with `LakeWritePolicy = OLYMPUS_BASELINE_ELIGIBLE` can write to the
-Olympus shared lake partition, but only if:
-
-1. A valid `DataRightsGrant` exists with `olympus_baseline_allowed=true` for the
-   source slug.
-2. The data has an `enrichment_lineage` record attached.
-3. The write is idempotent (duplicate records are detected via lineage ID).
-
-If any of these conditions is not met, the write is blocked and an
-`enrichment.lake_write_blocked` audit event is emitted.
-
----
-
-## TENANT_ONLY in practice
-
-A connector with `LakeWritePolicy = TENANT_ONLY` writes to a partitioned
-namespace within the lake:
-
-```
-s3://aether-{env}/{tenant_id}/byod/{source_slug}/{date}/
-```
-
-Olympus-baseline pipelines (model training, cross-tenant analytics, protocol
-health) cannot read from this partition. The partition is visible only to:
-
-- The tenant's own analytics queries.
-- Aether support engineers with an explicit break-glass access record.
-- Compliance exports scoped to the tenant.
-
----
-
-## Policy change process
-
-To elevate a connector's lake or graph write policy:
-
-1. File a data rights amendment request referencing the connector slug and
-   the desired policy change.
-2. Compliance team issues an amended DataRightsGrant covering the new use.
-3. The connector's policy record is updated and an audit event is emitted.
-4. If `model_training_allowed` is being granted, a second sign-off from
-   the ML governance lead is required.
-
-There is no self-service path for policy elevation. Engineers who attempt to
-work around the policy by reclassifying a connector will trigger a policy
-enforcement alert.
-
----
-
-## Related docs
-
-- `CONNECTOR_TAXONOMY.md` — Full enum reference for all connector classes.
-- `DATA_RIGHTS_LEDGER.md` — Grant model that governs policy elevations.
-- `BYOK_PROVIDER_GATEWAY.md` — BYOK class and its NEVER default explained.
+- `CONNECTOR_TAXONOMY.md` — full enum reference for the six-layer corpus model
+  and the derived four-group customer catalog mirror.
+- `DATA_RIGHTS_LEDGER.md` — grant model that governs policy elevations.
+- `BYOK_PROVIDER_GATEWAY.md` — BYOK class and its `NEVER` default.
+- `AETHER_END_USER_LIFECYCLE.md` — how the catalog mirrors into customer-facing
+  experience grouping with an honest (dormant-by-default) posture.

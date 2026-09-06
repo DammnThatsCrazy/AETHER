@@ -1,42 +1,50 @@
-import { useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
-import { Button } from '@aether/ui';
-import { CtaBand, Eyebrow, PageHero } from '@aether-marketing/components/marketing-section';
-import type { CtaLink } from '@aether-marketing/components/marketing-section';
+import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
+import { Button } from "@aether/ui";
+import {
+  CtaBand,
+  Eyebrow,
+  PageHero,
+} from "@aether-marketing/components/marketing-section";
+import type { CtaLink } from "@aether-marketing/components/marketing-section";
 import {
   CONNECTORS,
   CONNECTOR_CATEGORIES,
   CONNECTOR_STATUS_LABELS,
-} from '@aether-marketing/content/connectors';
+  EXPERIENCE_LABELS,
+  PRESENT_EXPERIENCES,
+} from "@aether-marketing/content/connectors";
 import type {
   ConnectorAuth,
   ConnectorRecord,
   ConnectorReadiness,
-} from '@aether-marketing/content/connectors';
-import { findSection } from '@aether-marketing/content/sections';
-import { AETHER_DOCS_URL } from '@aether-marketing/lib/env';
-import { usePageMeta } from '@aether-marketing/lib/meta';
+  ExperienceToken,
+} from "@aether-marketing/content/connectors";
+import { findSection } from "@aether-marketing/content/sections";
+import { buildIntegrationsHandoffUrl } from "@aether-marketing/lib/handoff";
+import { AETHER_DOCS_URL } from "@aether-marketing/lib/env";
+import { usePageMeta } from "@aether-marketing/lib/meta";
 
 /** Short display form for a real ConnectorCategory literal (marketing voice). */
-const ACRONYM_CATEGORY = new Set<string>(['crm']);
+const ACRONYM_CATEGORY = new Set<string>(["crm"]);
 
 function categoryLabel(category: string): string {
   return category
-    .split('_')
+    .split("_")
     .map((word) =>
       ACRONYM_CATEGORY.has(word)
         ? word.toUpperCase()
         : `${word.charAt(0).toUpperCase()}${word.slice(1)}`,
     )
-    .join(' ');
+    .join(" ");
 }
 
 /** Short public label per real authentication token (catalog's auth vocabulary). */
 const AUTH_LABELS: Readonly<Record<ConnectorAuth, string>> = {
-  api_key: 'API key',
-  webhook_only: 'Webhook credential',
-  none: 'No credential',
+  api_key: "API key",
+  webhook_only: "Webhook credential",
+  none: "No credential",
 };
 
 /** Statuses actually present in the dataset (every registry connector is at
@@ -48,23 +56,29 @@ const PRESENT_STATUSES: readonly ConnectorReadiness[] = [
 
 function chipClass(pressed: boolean): string {
   return pressed
-    ? 'border-accent bg-surface-raised text-text-primary'
-    : 'border-border-default bg-surface-raised text-text-secondary hover:border-accent hover:text-text-primary';
+    ? "border-accent bg-surface-raised text-text-primary"
+    : "border-border-default bg-surface-raised text-text-secondary hover:border-accent hover:text-text-primary";
 }
 
 /** The /integrations route is served from the SECTIONS entry of the same slug;
  * this page is the interactive rendering of that entry. */
 export function IntegrationsPage() {
-  const section = findSection('/integrations');
+  const section = findSection("/integrations");
 
   usePageMeta(
     section !== undefined
-      ? { title: `${section.title} — Aether by Olympus Labs`, description: section.description }
-      : { title: 'Aether by Olympus Labs' },
+      ? {
+          title: `${section.title} — Aether by Olympus Labs`,
+          description: section.description,
+        }
+      : { title: "Aether by Olympus Labs" },
   );
 
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [categories, setCategories] = useState<readonly string[]>([]);
+  const [experiences, setExperiences] = useState<readonly ExperienceToken[]>(
+    [],
+  );
   const [statuses, setStatuses] = useState<readonly ConnectorReadiness[]>([]);
 
   const term = query.trim().toLowerCase();
@@ -75,29 +89,48 @@ export function IntegrationsPage() {
         if (categories.length > 0 && !categories.includes(connector.category)) {
           return false;
         }
+        if (
+          experiences.length > 0 &&
+          !experiences.includes(connector.experience)
+        ) {
+          return false;
+        }
         if (statuses.length > 0 && !statuses.includes(connector.status)) {
           return false;
         }
-        if (term !== '') {
-          const haystack = `${connector.name} ${connector.description} ${connector.category} ${categoryLabel(
-            connector.category,
-          )}`.toLowerCase();
+        if (term !== "") {
+          const haystack =
+            `${connector.name} ${connector.description} ${connector.category} ${categoryLabel(
+              connector.category,
+            )} ${EXPERIENCE_LABELS[connector.experience]}`.toLowerCase();
           if (!haystack.includes(term)) {
             return false;
           }
         }
         return true;
       }),
-    [categories, statuses, term],
+    [categories, experiences, statuses, term],
   );
 
-  const filtersActive = term !== '' || categories.length > 0 || statuses.length > 0;
+  const filtersActive =
+    term !== "" ||
+    categories.length > 0 ||
+    experiences.length > 0 ||
+    statuses.length > 0;
 
   function toggleCategory(category: string): void {
     setCategories((current) =>
       current.includes(category)
         ? current.filter((value) => value !== category)
         : [...current, category],
+    );
+  }
+
+  function toggleExperience(experience: ExperienceToken): void {
+    setExperiences((current) =>
+      current.includes(experience)
+        ? current.filter((value) => value !== experience)
+        : [...current, experience],
     );
   }
 
@@ -110,8 +143,9 @@ export function IntegrationsPage() {
   }
 
   function clearFilters(): void {
-    setQuery('');
+    setQuery("");
     setCategories([]);
+    setExperiences([]);
     setStatuses([]);
   }
 
@@ -119,7 +153,9 @@ export function IntegrationsPage() {
     return (
       <div className="mkt-container py-24">
         <h1 className="mkt-display">Page not found</h1>
-        <p className="mkt-lead mt-4 max-w-xl">This section does not exist yet.</p>
+        <p className="mkt-lead mt-4 max-w-xl">
+          This section does not exist yet.
+        </p>
         <p className="mt-8">
           <Button asChild variant="primary">
             <Link to="/">Back to the Aether home page</Link>
@@ -131,12 +167,24 @@ export function IntegrationsPage() {
 
   const primaryCta: CtaLink =
     section.cta !== undefined
-      ? { label: section.cta.label, to: section.cta.to, external: section.cta.external ?? false }
-      : { label: 'Read the integration documentation', to: AETHER_DOCS_URL, external: true };
+      ? {
+          label: section.cta.label,
+          to: section.cta.to,
+          external: section.cta.external ?? false,
+        }
+      : {
+          label: "Read the integration documentation",
+          to: AETHER_DOCS_URL,
+          external: true,
+        };
 
   return (
     <>
-      <PageHero eyebrow={section.eyebrow} title={section.title} lead={section.lead} />
+      <PageHero
+        eyebrow={section.eyebrow}
+        title={section.title}
+        lead={section.lead}
+      />
 
       {/* Interactive directory */}
       <section className="border-b border-border-default">
@@ -157,16 +205,28 @@ export function IntegrationsPage() {
 
           <div className="mt-6 max-w-3xl space-y-4">
             <p className="mkt-body text-text-secondary">
-              These connectors come from Aether’s runtime connector registry and are listed at
-              the availability state the runtime records for each — nothing here is pre-announced or
-              invented. Every registry connector is inbound tenant-BYOD ingestion: Aether reads
-              provider activity in, and none pushes data outbound today.
+              These entries come from Aether’s derived one-customer catalog —
+              the same vocabulary the product’s Settings → Integrations surface
+              is built on — and are listed at the availability state the runtime
+              records for each. Nothing here is pre-announced or invented, and
+              no entry is shown as live before the runtime can demonstrate it.
             </p>
             <p className="mkt-body text-text-secondary">
-              In this snapshot every registered connector is credential-gated and shown as
-              “Credentials required” — the connector code and wiring are in place, but none has
-              been validated against live provider traffic. A partial or credential-gated connector
-              is never shown as live.
+              The directory covers the connectable catalog families Aether
+              advertises publicly: the inbound connector registry (commerce,
+              CRM, communications, analytics, support, and work connectors that
+              read provider activity in) and the advertising measurement
+              platforms (campaign spend pulled into measurement). Every entry is
+              read-inbound — Aether reads provider activity in, and none pushes
+              data outbound today.
+            </p>
+            <p className="mkt-body text-text-secondary">
+              Today every listed family is credential-gated and shown as
+              “Credentials required”: the connector code and wiring are in
+              place, but none has been validated against live provider traffic.
+              A partial or credential-gated connector is never shown as live.
+              Connecting an entry opens the Aether app, where you sign in and
+              the product walks the real connect flow for that provider.
             </p>
           </div>
 
@@ -183,7 +243,7 @@ export function IntegrationsPage() {
                   id="connector-search"
                   type="search"
                   aria-label="Search connectors"
-                  placeholder="Search by provider, capability, or category"
+                  placeholder="Search by provider, experience, or category"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   className="mt-2 w-full rounded-md border border-border-default bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
@@ -201,6 +261,25 @@ export function IntegrationsPage() {
             </div>
 
             <div className="mt-8 flex flex-col gap-6">
+              <FacetGroup label="Filter by experience">
+                {PRESENT_EXPERIENCES.map((experience) => {
+                  const pressed = experiences.includes(experience);
+                  return (
+                    <li key={experience}>
+                      <button
+                        type="button"
+                        aria-pressed={pressed}
+                        onClick={() => toggleExperience(experience)}
+                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs mkt-motion-color-standard ${chipClass(
+                          pressed,
+                        )}`}
+                      >
+                        {EXPERIENCE_LABELS[experience]}
+                      </button>
+                    </li>
+                  );
+                })}
+              </FacetGroup>
               <FacetGroup label="Filter by category">
                 {CONNECTOR_CATEGORIES.map((category) => {
                   const pressed = categories.includes(category);
@@ -251,7 +330,8 @@ export function IntegrationsPage() {
                   No connector matches the current search and filters.
                 </p>
                 <p className="mkt-body mt-2 text-text-secondary">
-                  Try a different search term, or clear the filters to see the full registry.
+                  Try a different search term, or clear the filters to see the
+                  full registry.
                 </p>
                 <p className="mt-4">
                   <button
@@ -295,14 +375,18 @@ export function IntegrationsPage() {
         title="Go deeper in the documentation"
         body="Aether’s documentation site carries the technical depth behind the platform — the event model, identity resolution, consent, connectors, and validation."
         primary={primaryCta}
-        secondary={{ label: 'Start building', to: '/signup' }}
+        secondary={{ label: "Start building", to: "/signup" }}
       />
     </>
   );
 }
 
-/** One searchable/filterable row for a real registry connector. */
+/** One searchable/filterable row for a connectable catalog family. */
 function ConnectorRow({ connector }: { readonly connector: ConnectorRecord }) {
+  const connectHref = buildIntegrationsHandoffUrl({
+    family: connector.id,
+    experience: connector.experience,
+  });
   return (
     <li className="rounded-md border border-border-default bg-surface-base p-6">
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
@@ -314,11 +398,22 @@ function ConnectorRow({ connector }: { readonly connector: ConnectorRecord }) {
             {connector.description}
           </p>
         </div>
-        <p className="mkt-chip" title={`Runtime readiness token: ${connector.status}`}>
+        <p
+          className="mkt-chip"
+          title={`Runtime readiness token: ${connector.status}`}
+        >
           {CONNECTOR_STATUS_LABELS[connector.status]}
         </p>
       </div>
       <ul className="mt-4 flex flex-wrap items-center gap-2">
+        <li>
+          <span
+            className="mkt-chip"
+            title={`Customer experience token: ${connector.experience}`}
+          >
+            {EXPERIENCE_LABELS[connector.experience]}
+          </span>
+        </li>
         <li>
           <span className="mkt-chip">{categoryLabel(connector.category)}</span>
         </li>
@@ -339,6 +434,19 @@ function ConnectorRow({ connector }: { readonly connector: ConnectorRecord }) {
           <span className="mkt-chip">Inbound</span>
         </li>
       </ul>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-border-default pt-4">
+        <p className="text-sm text-text-secondary">
+          Open the Aether app to sign in and run the real connect flow for this
+          provider.
+        </p>
+        <a
+          href={connectHref}
+          aria-label={`Connect ${connector.name}`}
+          className="inline-flex items-center gap-2 rounded-md border border-border-default bg-surface-raised px-3 py-2 text-sm font-medium text-text-primary mkt-motion-color hover:border-accent hover:text-text-primary"
+        >
+          Connect
+        </a>
+      </div>
     </li>
   );
 }

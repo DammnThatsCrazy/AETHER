@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { LoadingState } from '@aether/ui';
 import { RequireAuth } from '@aether-app/features/auth';
 import { AppShell } from '@aether-app/components/app-shell';
@@ -31,19 +31,22 @@ const NotificationCenterPage = lazy(() => import('@aether-app/pages/notification
 const GeoPage = lazy(() => import('@aether-app/pages/geo').then(m => ({ default: m.GeoPage })));
 const OnboardingPage = lazy(() => import('@aether-app/pages/onboarding').then(m => ({ default: m.OnboardingPage })));
 const ActivationPage = lazy(() => import('@aether-app/pages/activation/activation-page').then(m => ({ default: m.ActivationPage })));
+// WS-3 guided activation (/activate alias): intent-driven connect over the same
+// connect contracts; the classic step flow stays at /activation.
+const ActivatePage = lazy(() => import('@aether-app/pages/activation/activate-page').then(m => ({ default: m.ActivatePage })));
 const AuditExportsPage = lazy(() => import('@aether-app/pages/audit-exports').then(m => ({ default: m.AuditExportsPage })));
 const ValueReviewPage = lazy(() => import('@aether-app/pages/value-review').then(m => ({ default: m.ValueReviewPage })));
 const SecurityPage = lazy(() => import('@aether-app/pages/security').then(m => ({ default: m.SecurityPage })));
 const SystemStatusPage = lazy(() => import('@aether-app/pages/system-status').then(m => ({ default: m.SystemStatusPage })));
 const DataQualityPage = lazy(() => import('@aether-app/pages/data-quality').then(m => ({ default: m.DataQualityPage })));
-const ConnectorsPage = lazy(() => import('@aether-app/pages/connectors').then(m => ({ default: m.ConnectorsPage })));
+const ConnectorsPage = lazy(() => import('@aether-app/pages/settings/integrations/connectors-page').then(m => ({ default: m.ConnectorsPage })));
 const RewardDecisionsPage = lazy(() => import('@aether-app/pages/rewards').then(m => ({ default: m.RewardDecisionsPage })));
 const RewardApprovalQueuePage = lazy(() => import('@aether-app/pages/rewards').then(m => ({ default: m.RewardApprovalQueuePage })));
 const RewardRailSetupPage = lazy(() => import('@aether-app/pages/rewards').then(m => ({ default: m.RewardRailSetupPage })));
 const CampaignBuilderPage = lazy(() => import('@aether-app/pages/rewards').then(m => ({ default: m.CampaignBuilderPage })));
 const SuggestionsPage = lazy(() => import('@aether-app/pages/suggestions').then(m => ({ default: m.SuggestionsPage })));
 const Cluster360Page = lazy(() => import('@aether-app/pages/cluster360').then(m => ({ default: m.Cluster360Page })));
-const DeliveryHistoryPage = lazy(() => import('@aether-app/pages/connectors').then(m => ({ default: m.DeliveryHistoryPage })));
+const DeliveryHistoryPage = lazy(() => import('@aether-app/pages/settings/integrations/delivery-history').then(m => ({ default: m.DeliveryHistoryPage })));
 const DeploymentsPage = lazy(() => import('@aether-app/pages/deployments').then(m => ({ default: m.DeploymentsPage })));
 const DeploymentDetailPage = lazy(() => import('@aether-app/pages/deployments').then(m => ({ default: m.DeploymentDetailPage })));
 const ImportsPage = lazy(() => import('@aether-app/pages/imports').then(m => ({ default: m.ImportsPage })));
@@ -97,6 +100,7 @@ export function AppRouter() {
               <Routes>
                 <Route path="/" element={<TenantLanding />} />
                 <Route path="/activation" element={<PageSuspense><ActivationPage /></PageSuspense>} />
+                <Route path="/activate" element={<PageSuspense><ActivatePage /></PageSuspense>} />
                 <Route path="/users" element={<PageSuspense><UsersPage /></PageSuspense>} />
                 <Route path="/users/:id" element={<PageSuspense><UserProfilePage /></PageSuspense>} />
                 <Route path="/users/:profileId/journey" element={<PageSuspense><JourneyExplorerPage /></PageSuspense>} />
@@ -112,9 +116,16 @@ export function AppRouter() {
                 <Route path="/graph" element={<PageSuspense><GraphPage /></PageSuspense>} />
                 <Route path="/compare" element={<PageSuspense><ComparisonPage /></PageSuspense>} />
                 <Route path="/noesis" element={<PageSuspense><NoesisPage /></PageSuspense>} />
+                {/* Nested Settings shell (WS-1): /settings stays the API Keys index;
+                    each area is a /settings/* section rendered by the shell. */}
                 <Route path="/settings" element={<PageSuspense><SettingsPage /></PageSuspense>} />
+                <Route path="/settings/integrations" element={<PageSuspense><SettingsPage /></PageSuspense>} />
+                <Route path="/settings/sdk-fleet" element={<PageSuspense><SettingsPage /></PageSuspense>} />
                 <Route path="/settings/notifications" element={<PageSuspense><SettingsPage /></PageSuspense>} />
                 <Route path="/settings/data-exchange" element={<PageSuspense><SettingsPage /></PageSuspense>} />
+                <Route path="/settings/notification-preferences" element={<PageSuspense><SettingsPage /></PageSuspense>} />
+                <Route path="/settings/webhooks" element={<PageSuspense><SettingsPage /></PageSuspense>} />
+                <Route path="/settings/integrations/connectors" element={<PageSuspense><ConnectorsPage /></PageSuspense>} />
                 <Route path="/notifications" element={<PageSuspense><NotificationCenterPage /></PageSuspense>} />
                 <Route path="/onboarding" element={<PageSuspense><OnboardingPage /></PageSuspense>} />
                 <Route path="/billing" element={<PageSuspense><BillingPage /></PageSuspense>} />
@@ -127,7 +138,8 @@ export function AppRouter() {
                 <Route path="/security" element={<PageSuspense><SecurityPage /></PageSuspense>} />
                 <Route path="/system-status" element={<PageSuspense><SystemStatusPage /></PageSuspense>} />
                 <Route path="/data-quality" element={<PageSuspense><DataQualityPage /></PageSuspense>} />
-                <Route path="/integrations" element={<PageSuspense><ConnectorsPage /></PageSuspense>} />
+                {/* Compatibility: /integrations moved to Settings → Integrations (WS-1). */}
+                <Route path="/integrations" element={<Navigate to="/settings/integrations" replace />} />
                 <Route path="/rewards" element={<PageSuspense><RewardDecisionsPage /></PageSuspense>} />
                 <Route path="/rewards/decisions" element={<PageSuspense><RewardDecisionsPage /></PageSuspense>} />
                 <Route path="/rewards/approval-queue" element={<PageSuspense><RewardApprovalQueuePage /></PageSuspense>} />

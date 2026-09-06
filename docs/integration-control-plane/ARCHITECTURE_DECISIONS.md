@@ -91,3 +91,73 @@ shared framework must be capable of supporting them later, but this program does
 not activate them: no tenant catalog entry, no mounted routes, no workers, no
 credential submission, no startup secret requirements. They are visible in Kyber
 only as deferred.
+
+---
+
+# End-User Lifecycle & Integration Management (absorbed program)
+
+ADR-0001..0007 above are adopted from the absorbed
+`feat/unified-integration-control-plane` program and remain in force unless a
+decision below supersedes them. Decisions 0008+ are adopted by the
+`feat/enduser-lifecycle-integration` program (spec: external "Aether Canonical
+End-User Lifecycle & Integration Management Blueprint"; program ledger:
+`docs/plans/ENDUSER_LIFECYCLE_PHASES.md`).
+
+## ADR-0008 — The canonical integration catalog is a derived projection, not a new store
+
+One customer-facing catalog is produced as a **derived projection** over
+authoritative runtimes — the existing `shared/integration_contracts/catalog.py`
+pattern generalized to compose connector descriptors, CampaignSource platform
+descriptors, SDK/tracking capability, webhook/import kinds, plus tenant state.
+Runtime objects (connectors, CampaignSource/`measurement_connectors`, credential
+authority) remain the system of record. Never introduce a second catalog store or
+a competing provider list that can drift.
+
+## ADR-0009 — Provider + capability identity, never provider-name-only
+
+Catalog identity is `ProviderIdentity = family.product.capability`
+(`shared/integration_contracts/identity.py`). A boundary **alias map** reconciles
+existing id collisions (`x_ads`↔`twitter_ads`, `ga4`↔`google_analytics`, shopify
+decommissionable-vs-brand, alias-only snapchat/pinterest) **without renaming
+runtime id spaces**. Runtime internal keys stay stable; the alias map is the
+single place collisions are resolved.
+
+## ADR-0010 — `experience_category` is additive, and lives beside runtime categories
+
+Add a customer-facing `experience_category` projection (eight categories:
+advertising_campaigns, commerce_revenue, crm_customer, communications_lifecycle,
+analytics_behavior, social_community, customer_support, work_operations). Do not
+rename or remove backend engineering categories (`ConnectorCategory`,
+`ProviderCategory`, campaign platform vocabulary); they serve different purposes.
+Membership rules mirror ADR-C11: derive, never hardcode a cohort in one place.
+
+## ADR-0011 — Settings → Integrations is the authenticated management authority
+
+The canonical destination for "where do I connect / manage something" is
+`/settings/integrations` (and `/settings/integrations/advertising` for paid
+media). Activation (first-use) and public discovery are the same catalog and the
+same tenant-integration state projected differently. Legacy `/integrations`
+becomes a redirect during the compatibility period. Campaign Sources no longer
+presents itself as a customer setup path for advertising; Campaign Intelligence
+keeps campaigns/registry/mapping/quality, Settings owns provider connection,
+account selection, credentials, sync and health.
+
+## ADR-0012 — Connected is not Ready; every surface reports truthfully
+
+"Connected" (credential + account established) is distinct from "Ready"
+(readiness projection satisfied for the tenant's use case). Readiness is a
+projection over existing engines (CredentialReadiness ladder, readiness-graph,
+sdk_health, measurement freshness/mapping) — no parallel readiness enum. All
+providers remain `credential_waiting` in this program; no surface advertises
+capability beyond certification truth, and connector/activation feature flags
+stay OFF through integration (ADR: data-truth invariant §31 of the spec).
+
+## ADR-0013 — Delivery: single absorbed branch, parallel workstreams, serialized queue
+
+Extends ADR-0001 for this program. All work lands on
+`feat/enduser-lifecycle-integration` as ordered atomic commits. R2 workstreams
+(WS-1..WS-6) run **concurrently in isolated git worktrees** with non-overlapping
+write scopes (lease map); the orchestrator serializes landings in dependency
+order (WS-1→WS-2→WS-3→WS-4→WS-5→WS-6) and runs `make ci-check` at each
+integration point. Delivery may be one PR or the PR A–G sequence at the end; a
+release-readiness claim additionally requires `make release-gate`.

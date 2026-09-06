@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: "60a5c024"
+last_synced_commit: "0e967a68"
 reviewed_source_commits:
   - commit: "7ba83380"
     reason: "Reviewed the Kyber component-test synchronization change; frontend architecture and runtime contracts are unaffected."
@@ -23,7 +23,16 @@ reviewed_source_commits:
     reason: "Rebase re-stamp: re-reviewed the web-ecosystem P4 in-public auth entry (frontend/aether + frontend/kyber prefill and origin-scoped session changes) against the replayed diff; the auth-handoff note is carried in-band in this doc."
   - commit: "5d0a4989"
     reason: "Rebase re-stamp: re-reviewed the web-ecosystem P6 motion tokenization of shared button/skeleton/tokens.css under frontend/shared; this doc makes no loading-skeleton, button-transition, or motion-token claim, so no body change was required."
-
+  - commit: "01d51676"
+    reason: "R0 re-stamp after review (enduser-lifecycle lane). Reviewed against the two newer source commits under source_files: (1) 9620539f — the PR #607 squash; its non-test delta is login/signup ?email/?name prefill (already documented at lines 50-54 as the marketing-threshold handoff) plus frontend/shared motion tokenization (reviewed no-body-change at 5d0a4989), and the squash made the prior 0ebab813 stamp unreachable as an ancestor; (2) 01d51676 — the campaign-source triage touching the tenant Campaign Sources page under frontend/aether, which this doc does not describe (its Kyber /campaign-intelligence/sources bullet remains accurate). No body change required."
+  - commit: "95d53f4c"
+    reason: "R1 re-stamp after review (enduser-lifecycle lane, contract spine). Reviewed the R1-s4 FE twin under frontend/aether/src: new features/integrations/** (zod transport schemas for the four /v1 catalog read-model endpoints, useQuery hooks) plus the api.integrationCatalog group added to lib/api/endpoints.ts. This doc makes no exhaustive api-namespace or features/-directory enumeration, so the additions are additive and no body change was required."
+  - commit: "3456414b"
+    reason: "R2 WS-3 re-stamp after review (enduser-lifecycle lane, guided activation). Reviewed the additive intent-driven activation UI under frontend/aether/src: features/activation/use-activation-intents.ts, pages/activation/activate-page.tsx, exported step components in pages/activation/activation-page.tsx, the /activate router alias in app/router.tsx, and the resolveLandingTarget() seam in app/tenant-landing.tsx (redirect behavior unchanged, still /activation). This doc does not enumerate tenant activation pages/routes (its only router reference is Kyber, line ~787), and no documented frontend architecture contract changed, so no body change was required."
+  - commit: "5c5d85be"
+    reason: "WS-4 review (enduser-lifecycle lane, contextual readiness). Reviewed the additive features/integrations readiness surface (useTenantIntegrationReadiness calling restClient directly + readiness-context advisor + tenant-readiness zod types) and its consumers on the Campaign 360 / Campaign Sources / Profile360 pages. Added the 'Contextual integration readiness CTAs' subsection under Connector Pages documenting the hook/advisor + §6 copy invariants. body change was required and made."
+  - commit: "8b1ca3dc"
+    reason: "R2 WS-6 re-stamp after review (enduser-lifecycle lane, Phase 8 acceptance tail). Reviewed the new Playwright lifecycle suites A–E + shared harness added under frontend/aether/src/test/e2e/. This doc makes no claim about the tenant app's e2e/test inventory (its only test reference is Kyber unit tests at lines 842-844), and the suites are additive test surfaces, not runtime/IA changes — no body change required."
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -90,7 +99,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Campaign Intelligence** — campaign hierarchy, performance metrics, spend/ROAS time-series (`/measurement/campaigns`)
 - **Campaign 360** — full per-campaign drill-down: overview metrics, population funnel (observed→resolved→engaged→converted→attributed), identity clusters, entities, journeys, conversions, attribution model comparison, graph anchor, quality/freshness diagnostics (`/measurement/campaigns/:campaignId`); launched via "Campaign 360 →" links in Campaign Intelligence rows and Profile360 attribution panel. Also hosts **Outcome 360** / **Economic 360** intelligence-projection tabs (`features/projection-360/`) rendering typed projection section states for the campaign focus — never recomputing projection content
 - **Campaign Registry** (v8.11.0+) — canonical campaign list with origin/platform/status filters, alias management, external references view (`/campaign-intelligence/registry`)
-- **Campaign Sources** (v8.11.0+) — connected ad platform sources with sync controls and health indicators (`/campaign-intelligence/sources`)
+- **Campaign Sources** (v8.11.0+) — connected ad platform sources with sync controls and health indicators, plus the advertising connect flow: pick a supported ad platform, fill its catalog credential schema (secrets + the single account id), run a live credential test, and manage sources with explicit single-account selection (change account rotates the source) and disable/enable (`/campaign-intelligence/sources`)
 - **Mapping Review** (v8.11.0+) — unresolved/ambiguous attribution evidence queue; resolve/ignore actions create durable aliases and trigger reprocessing (`/campaign-intelligence/mapping-review`)
 - **Campaign Quality** (v8.11.0+) — measurement mapping rate gauges and quality metrics (`/campaign-intelligence/quality`)
 - **Custom Campaign** (v8.11.0+) — creation form for custom (non-platform) campaigns (`/campaign-intelligence/new`)
@@ -111,7 +120,6 @@ There are two separate frontend applications. **Do not mix them up.**
   [migration guide](brand-system/migration.md).
 - `TimeWindowSelector`, `FreshnessIndicator`, `EvidenceDrawer`, `UsageBar`, `Toast`, etc.
 - **Canonical value display** (`frontend/shared/src/value/`): `ValueDisplay`, `USDValue`, `NativeValueBreakdown`, `ValuationWarning` + `formatUSD` / `formatNativeValue` / `formatAetherValue`. USD-first with native drilldown; absent/unpriced values render "Value unavailable", never `$0.00`. All financial values must render through these — enforced by `scripts/validate_frontend_value_display.py`. See [`FINANCIAL_VALUE_SEMANTICS.md`](source-of-truth/FINANCIAL_VALUE_SEMANTICS.md).
-- **Reporting-asset / display-currency presentation** (`frontend/shared/src/value/reporting-*`, additive financial-normalization): `ReportingValueDisplay` renders a value in its tenant **reporting** asset and — only with an explicit caller-supplied display rate — a pure-viewer display conversion. It composes with, never replaces, the USD-first `ValueDisplay` (it is for envelopes that already report in a non-USD asset) and keeps the same invariants: an absent reporting amount renders "Reporting unavailable" and a missing display rate renders "Display conversion unavailable" — display never fabricates a rate and never mutates the stored fact. See [`FINANCIAL_NORMALIZATION.md`](source-of-truth/FINANCIAL_NORMALIZATION.md).
 - Graph layer type contracts: `RelationshipLayer` (`H2H | H2A | A2H | A2A`), `RELATIONSHIP_LAYERS`, `LAYER_DESCRIPTIONS`, `EDGE_LAYER_MAP`, `classifyEdgeType`, `countEdgesByLayer` — shared between Aether and Kyber graph health features
 - **Path intelligence types** (Phase 20): `PathClassification`, `PathNode`, `PathEdge`, `PathScoreBreakdown`, `RelationshipPath`, `PathExplanation`, `TraversalSnapshot`, `PathQuery`, `PathQueryResponse`, `NodeExpansionRequest`, `NodeExpansionResponse`, `DeepTraversalJob` — canonical TS contracts in `packages/shared/operational-intelligence.ts`, mirroring the Pydantic models exactly
 
@@ -868,8 +876,6 @@ lives in `frontend/kyber/src/test/unit/` (`provider-manifest-hooks.test.ts`,
 /fraud-networks/:networkId           — network detail (graph, members, evidence, case)
 /fraud-networks/flow-trace           — flow-of-funds trace builder
 /fraud-networks/flow-trace/:traceId  — trace detail with paths
-/fraud-networks/risk-360             — Risk 360 workbench (read-only /v1/risk360 projection)
-/fraud-networks/fraud-360            — Fraud 360 consolidation (read-only /v1/fraud360 projection)
 ```
 
 ---
@@ -884,23 +890,6 @@ The fraud workspace lives under `/fraud-networks` in Kyber and consists of:
 | `FraudNetworkDetailPage` | `pages/fraud/fraud-network-detail-page.tsx` | Network detail: graph canvas, members table, evidence tray, case panel |
 | `FlowTracePage` | `pages/fraud/flow-trace-page.tsx` | Trace builder + recent traces list + trace result with paths |
 | `FraudDecisionsPage` | `pages/fraud/fraud-decisions-page.tsx` | Durable fraud decision review queue: filter by risk tier / decision / review state; review (confirmed_fraud / dispute / review_clear) and suppress actions with reason capture; wired to `GET /v1/fraud/decisions`, `POST /v1/fraud/decisions/{id}/review`, `POST /v1/fraud/decisions/{id}/suppress` |
-| `Risk360Page` | `pages/fraud/risk-360-page.tsx` | Risk 360 workbench (`/fraud-networks/risk-360`): read-only risk-assessment projection over the flag-gated `/v1/risk360` plane; subject kinds entity / relationship / cluster / population; graceful "plane not enabled / no projection" empty state when the plane flag is off |
-| `Fraud360Page` | `pages/fraud/fraud-360-page.tsx` | Fraud 360 consolidation (`/fraud-networks/fraud-360`): read-only fraud-synthesis projection over the flag-gated `/v1/fraud360` plane; subject kinds entity / relationship / agent; material hypotheses surface as candidate cards; graceful empty state when the plane flag is off |
-
-The two 360 pages are operator convergence surfaces over the Risk360/Fraud360
-intelligence-projection plane — read-only (no write path, `graphMutationPolicy:
-read_only`, non-owning of canonical truth), mounted inside the existing fraud
-URL space (`/fraud-networks/*`). Nav entries **Risk 360** and **Fraud 360** sit
-beside the Fraud Networks entries in `sidebar.tsx::KYBER_NAV_ITEMS` (a flat
-operator list), reusing the existing `kyber-reliability` /
-`kyber-fraud-networks` icon destinations because the brand union has no
-risk/fraud-specific member. They carry no frontend
-`envFlag`: the gate is the backend `AETHER_RISK360_ENABLED` /
-`AETHER_FRAUD360_ENABLED` flags (default OFF), which each page renders honestly
-from the API response. Support comes from `features/risk360/`,
-`features/fraud360/` (hooks reading `api.risk360` / `api.fraud360` from
-`endpoints.ts`), and the shared `features/projection-plane/` tolerant
-projection-result parser + presentational renderers.
 
 Supporting components:
 
@@ -918,9 +907,21 @@ All components use `useQuery` / `useMutation` from `@aether/ui`, the `api.fraudN
 
 ## Delivery & Connector Pages (v9.1.0)
 
+> **WS-1 rehome (end-user lifecycle):** the Aether tenant connector surfaces
+> moved into the nested Settings shell — `ConnectorsPage` and
+> `DeliveryHistoryPage` now live under
+> `frontend/aether/src/pages/settings/integrations/` (the connector manager
+> renders at `/settings/integrations/connectors`, and the legacy `/integrations`
+> route redirects to `/settings/integrations`). A compatibility barrel at
+> `frontend/aether/src/pages/connectors/` re-exports them so legacy importers
+> keep resolving. The Settings shell itself splits the historical one-long-page
+> `/settings` into a sub-nav over `/settings` (API Keys),
+> `/settings/integrations`, `/settings/sdk-fleet`, `/settings/notifications`,
+> `/settings/notification-preferences`, and `/settings/webhooks`.
+
 ### Aether (tenant) — Delivery History
 
-**File:** `frontend/aether/src/pages/connectors/delivery-history.tsx`
+**File:** `frontend/aether/src/pages/settings/integrations/delivery-history.tsx`
 
 `DeliveryHistoryPage` provides tenants with a paginated view of their outbound `DeliveryIntent` records and their associated per-provider jobs, attempt details, and provider receipts.
 
@@ -937,7 +938,7 @@ All components use `useQuery` / `useMutation` from `@aether/ui`, the `api.fraudN
 
 ### Aether (tenant) — Connectors Page Health Labels
 
-**File:** `frontend/aether/src/pages/connectors/connectors-page.tsx`
+**File:** `frontend/aether/src/pages/settings/integrations/connectors-page.tsx`
 
 The `healthLabel(connector)` function maps `sync_status` + `secret_configured` to a human-readable label. **Critical invariant: never returns "Connected" when `secret_configured` is absent or false.**
 
@@ -955,6 +956,34 @@ The `healthLabel(connector)` function maps `sync_status` + `secret_configured` t
 | (other) | any | Unconfigured |
 
 The `connectorCapabilityState` helper maps every state above onto the shared `CapabilityState` matrix, rendered via `CapabilityStateBadge` with honest tones.
+
+### Contextual integration readiness CTAs (v8.12.0)
+
+**Source:** `frontend/aether/src/features/integrations/use-tenant-readiness.ts`,
+`readiness-context.ts`, `types.ts` (additive over the R1 catalog/tenant read models)
+
+The joined tenant-contextual readiness graph (`GET /v1/tenant/integration-readiness`)
+is consumed through `useTenantIntegrationReadiness()`, a `useQuery` hook that
+calls `restClient` directly rather than adding to the shared `api` endpoint map,
+so the graph stays additive to the endpoint layer. `contextualReadiness(items,
+dependentCategories)` reduces the wire items to two honest, page-level actions:
+
+- `attention` — tenant integrations whose own record facts say they need
+  attention (missing credential on a connected credential-bearing integration,
+  failing/degraded sync, provider off-ramp); rendered with the §6 "Needs
+  attention" vocabulary.
+- `connect` — the first *dependent* experience category the page declares (e.g.
+  a paid-search campaign depends on `advertising_campaigns`) for which the
+  tenant has no engaged integration: "an integration is connected but a needed
+  one is not". It is a suggestion, never a readiness claim.
+
+Consumers (additive): the Campaign 360 header + Messages empty state
+(`pages/campaigns/campaign-360-page.tsx`), the Campaign Sources empty state
+(`pages/campaigns/campaign-sources-page.tsx`), and the Profile360 header
+(`pages/user-profile/user-profile-page.tsx`). CTAs deep-link to
+`/integrations?return=…`. A connected-but-not-capability-ready integration is
+never announced as Ready, and an empty sources list with an already-engaged ad
+platform reads "appears after sync" rather than "connect".
 
 ### Kyber (operator) — Delivery Operations
 

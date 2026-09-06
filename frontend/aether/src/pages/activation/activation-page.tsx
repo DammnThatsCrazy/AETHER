@@ -48,7 +48,10 @@ function evidenceValue(value: unknown): string {
   return String(value);
 }
 
-interface StepShellProps {
+// Step components are exported (additive) so the WS-3 guided activate page
+// (/activate) can reuse the same proven SDK activation steps — one canonical
+// finish path, never a second implementation.
+export interface StepShellProps {
   readonly index: number;
   readonly title: string;
   readonly done: boolean;
@@ -57,7 +60,7 @@ interface StepShellProps {
 }
 
 /** Uniform step frame with an honest per-step capability badge. */
-function StepShell({ index, title, done, available, children }: StepShellProps) {
+export function StepShell({ index, title, done, available, children }: StepShellProps) {
   const badgeState = done ? 'live' : available ? 'credential_required' : 'not_configured';
   return (
     <Card>
@@ -74,11 +77,11 @@ function StepShell({ index, title, done, available, children }: StepShellProps) 
   );
 }
 
-interface StepProps {
+export interface StepProps {
   readonly status: ActivationStatus;
 }
 
-function PlanStep({ status }: StepProps) {
+export function PlanStep({ status }: StepProps) {
   const selectPlan = useSelectPlan();
   const selected = status.selected_plan_tier;
   const done = Boolean(selected);
@@ -115,7 +118,7 @@ function PlanStep({ status }: StepProps) {
   );
 }
 
-function SdkStep({ status }: StepProps) {
+export function SdkStep({ status }: StepProps) {
   const selectSdks = useSelectSdks();
   const available = Boolean(status.selected_plan_tier);
   const done = status.sdk_selection.length > 0;
@@ -179,7 +182,7 @@ function SdkStep({ status }: StepProps) {
   );
 }
 
-function KeysStep({ status }: StepProps) {
+export function KeysStep({ status }: StepProps) {
   const createKeys = useCreateSdkKeys();
   const available = status.sdk_selection.length > 0;
   const done = status.created_key_ids.length > 0;
@@ -262,7 +265,7 @@ function KeysStep({ status }: StepProps) {
   );
 }
 
-function TestEventStep({ status }: StepProps) {
+export function TestEventStep({ status }: StepProps) {
   const sendEvent = useSendTestEvent();
   const available = status.created_key_ids.length > 0;
   const eventFlowed =
@@ -339,7 +342,7 @@ function TestEventStep({ status }: StepProps) {
   );
 }
 
-function FirstValueStep({ status }: StepProps) {
+export function FirstValueStep({ status }: StepProps) {
   const firstValue = useFirstValue();
   const available =
     status.state === 'event_received' ||
@@ -389,7 +392,7 @@ function FirstValueStep({ status }: StepProps) {
   );
 }
 
-function CompleteStep({ status }: StepProps) {
+export function CompleteStep({ status }: StepProps) {
   const complete = useCompleteActivation();
   const navigate = useNavigate();
   const isComplete = status.state === 'complete';

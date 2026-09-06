@@ -51,6 +51,14 @@
       "minimum_disclosure": "D0"
     },
     {
+      "feature_id": "activate",
+      "aether_route": "/activate",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant self-serve guided activation wizard (WS-3 intent-driven goals-to-plan); same class as /activation and /onboarding",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
       "feature_id": "users",
       "aether_route": "/users",
       "tenant_parity_required": true,
@@ -267,6 +275,22 @@
       "minimum_disclosure": "D0"
     },
     {
+      "feature_id": "settings-integrations",
+      "aether_route": "/settings/integrations",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant self-configuration of external integrations (Settings \u2192 Integrations); operator connection ops live in their own provider-connection plane",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "settings-sdk-fleet",
+      "aether_route": "/settings/sdk-fleet",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant's own SDK fleet (installed packages / versions / activity); operator equivalent is per-tenant SDK telemetry, not a tenant mirror",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
       "feature_id": "settings-notifications",
       "aether_route": "/settings/notifications",
       "tenant_parity_required": false,
@@ -279,6 +303,30 @@
       "aether_route": "/settings/data-exchange",
       "tenant_parity_required": false,
       "parity_exception_reason": "tenant self-configuration (Settings \u2192 Data Exchange)",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "settings-notification-preferences",
+      "aether_route": "/settings/notification-preferences",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant self-configuration (notification quiet-hours / timezone / severity)",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "settings-webhooks",
+      "aether_route": "/settings/webhooks",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant self-configuration (own outbound delivery endpoints); operator webhook delivery ops are separately governed",
+      "kyber_mirror_route": null,
+      "minimum_disclosure": "D0"
+    },
+    {
+      "feature_id": "settings-integrations-connectors",
+      "aether_route": "/settings/integrations/connectors",
+      "tenant_parity_required": false,
+      "parity_exception_reason": "tenant self-configuration (connector browser under Settings \u2192 Integrations); same class as /settings/integrations",
       "kyber_mirror_route": null,
       "minimum_disclosure": "D0"
     },

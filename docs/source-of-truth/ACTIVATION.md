@@ -11,6 +11,8 @@ source_files:
   - Backend Architecture/aether-backend/services/activation/repository.py
   - Backend Architecture/aether-backend/services/activation/service.py
   - Backend Architecture/aether-backend/services/activation/routes.py
+  - Backend Architecture/aether-backend/services/activation/intents.py
+  - Backend Architecture/aether-backend/services/activation/planner.py
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
@@ -47,16 +49,47 @@ restamps `updated_at` but records no new history entry.
 
 | Method | Path | Effect |
 |---|---|---|
-| `GET`  | `/v1/activation/status` | Current record + derived `billing_state` (lazily creates `not_started`). |
+| `GET`  | `/v1/activation/status` | Current record + derived `billing_state` + the tenant's durable `intents` (WS-3, lazily creates `not_started`). |
 | `POST` | `/v1/activation/select-plan` | Records `plan_tier` (P1–P4) only. Never calls billing checkout. |
 | `POST` | `/v1/activation/sdk-selection` | Records target platforms. |
 | `POST` | `/v1/activation/create-sdk-keys` | Mints ingestion keys (returns raw key **once**). |
 | `POST` | `/v1/activation/test-event` | Sends a canonical event through `/v1/batch` in-process. |
 | `GET`  | `/v1/activation/first-value` | Honest first-value proof from the Bronze ledger. |
 | `POST` | `/v1/activation/complete` | Allowed only when state is `first_value_ready`. |
+| `GET`  | `/v1/activation/intents` | WS-3 intent picker: every `ActivationIntent` goal + its recommended experience categories, plus the canonical category order/labels. |
+| `POST` | `/v1/activation/intents` | Saves the tenant's chosen intent tokens (validated, canonical order, replace-on-reselect). |
+| `GET`  | `/v1/activation/plan` | Recommended connect plan per experience, derived from REAL tenant connector rows (never fabricated). |
+| `POST` | `/v1/activation/connect-action` | Runs one connect step through `connector_service` (`create_tenant_integration \| configure_credential \| enable_connection \| first_sync`). |
 
 Tenant scope is derived from `request.state.tenant` only — never from the body.
 GETs require `read`; state-changing POSTs require `Permissions.WRITE`.
+
+## Intent-driven activation (WS-3)
+
+The activation flow also turns a tenant's *goals* into connect steps over the
+shared connect contracts (`connector_service` + the credential service + the
+consent policy — the same runtime behind Settings). Goal vocabulary lives in
+`ActivationIntent` (`services/activation/intents.py`, stable snake_case tokens
+shared with the tenant UI: `grow_revenue`, `run_advertising`, `know_customers`,
+`engage_customers`, `understand_behavior`, `grow_community`,
+`support_customers`, `streamline_work`). Each intent recommends an ordered set
+of `ExperienceCategory` values; recommended integrations are derived from the
+one catalog (`ALL_MANIFESTS`) — never a hand-synced provider list.
+
+The planner (`services/activation/planner.py`) reads the tenant's chosen
+intents (persisted on the same `tenant_activations` record, orthogonal to the
+SDK state machine) and derives, per recommended experience, each integration's
+next connect step from the tenant's REAL connector row facts (enabled /
+`secret_configured` / `sync_status`). Only a healthy sync yields `connected`;
+a missing credential / disabled connector / never-synced integration each maps
+to exactly one next action (`configure_credential` / `enable_connection` /
+`first_sync`); a failed or degraded sync surfaces an honest attention state
+with no fabricated forward step. Integration connect steps reuse
+`connector_service.configure`/`sync`, so credentials go to the credential
+service and enablement through the consent policy, with no second
+implementation. Only self-service `ingestion`-product manifests offer an
+activation connect action; advertising/payment-rail entries with their own
+connect flows are surfaced honestly as non-actionable (`connectable: false`).
 
 ## Reuse seams (no reimplementation)
 
@@ -82,6 +115,7 @@ advance another tenant's activation, and key ids never leak across tenants
 ## Known limitations
 
 - Flag-gated OFF by default; there is no end-to-end/integration proof under a
-  live tenant yet — coverage is unit-level (`tests/activation/`, 39 tests).
+  live tenant yet — coverage is unit-level + route-surface (`tests/activation/`),
+  including the WS-3 intent/plan/connect-action suites.
 - The V2/canary ingestion path writes typed Bronze rather than `bronze_sdk_events`,
   so first-value may lag for canary tenants (documented, not worked around).

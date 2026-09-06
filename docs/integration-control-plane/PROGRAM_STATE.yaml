@@ -1,110 +1,85 @@
-# Unified Integration Control Plane — living program state.
+# End-User Lifecycle & Integration Management — living program state.
 # SINGLE AUTHORITY for work status. Only the orchestrator writes this file.
 # Not generated; not source-linked (no drift stamping). Hand-maintained per landing.
+# Absorbs the prior "unified-integration-control-plane" program (W0-W2 landed,
+# ADR-0001..0007 retained as ancestors). See docs/plans/ENDUSER_LIFECYCLE_PHASES.md.
 
 program:
-  branch: feat/unified-integration-control-plane
-  base_commit: "06aeaf97d3e0b0d3926da714ce51446a5b0a94cb"   # == origin/main at program start
-  last_landed_checkpoint: C2                                  # W0 + W2 landed; W1 next
+  name: enduser-lifecycle-integration
+  branch: feat/enduser-lifecycle-integration
+  base_commit: "59a7fb24"                                      # == origin/main at program start (PR #607 marketing shells 9620539f); REBASED onto 59a7fb24 (post-PR-#608 squash of the 4-program financial-normalization stack) 2026-09-05
+  absorbs: feat/unified-integration-control-plane           # prior lane, ADR-0001..0007, W0-W2 landed
+  last_landed_checkpoint: R4                                # integration waves WS-1..WS-6 + WS-5 taxonomy swap all gated GREEN
   status: active
-  delivery_model: orchestrated-swarm            # one orchestrator, isolated-worktree specialists, serialized commit queue
-  gate: "make ci-check"                          # canonical completion gate (repo_doctor.py --ci)
+  delivery_model: contract-first parallel workstreams       # one orchestrator, isolated-worktree specialists, serialized integration queue
+  gate: "make ci-check"                                     # canonical completion gate (repo_doctor.py --ci)
 
-# Wave schedule (dependency-ordered). Foundation W0-W2 is sequential and guaranteed.
-waves:
-  - id: W0
-    name: program-control
+# Round schedule (dependency-ordered). R1 (contract spine) is sequential; R2 fans out all phases.
+rounds:
+  - id: R0
+    name: program-control        # lane, baseline, absorb, triage
     parallelism: solo
     depends_on: []
     status: completed
-    lands: [scaffolding-files, dependency-graph, ownership-freeze, migration-id-reservation]
-  - id: W1
-    name: canonical-contracts            # provider identity, manifest, adapter-result, lifecycle, deployment-contract schema
+    lands: [lane, absorb-control-files, plan-doc, campaign-source-triage]
+  - id: R1
+    name: contract-spine         # Phase 0 + PR A: ADR, identity/alias map, experience_category, one-catalog contract, tenant projection endpoints, readiness projection, parity tests
+    parallelism: solo (sub-agents within)
+    depends_on: [R0]
+    status: completed            # make ci-check 72/0 GREEN @ 8905c735 (2026-09-05)
+    lands: [s1-experience-alias-87e85193, s2-ad-catalog-63fab756, s3-read-model-endpoints-64877fca, s4-fe-twin-95d53f4c, docs-sync-8905c735]
+  - id: R2
+    name: fan-out                # WS-1..WS-6 == blueprint Phases 2-8 / PR B-G, all concurrent in isolated worktrees
+    parallelism: "6x"
+    depends_on: [R1]
+    status: completed            # WS-1..WS-6 authored in isolated ws/enduser-ws{1..6} worktrees (shared symlinked env)
+    lands: [ws1-settings-ia, ws2-advertising-convergence, ws3-activation, ws4-readiness-contextual, ws5-public-private, ws6-tail]
+  - id: R3
+    name: integration-waves      # ordered merges WS-1 -> WS-2 -> WS-3 -> WS-4 -> WS-5 -> WS-6; make ci-check each merge
+    parallelism: serialized
+    depends_on: [R2]
+    status: completed            # all six merges + WS-5 taxonomy swap each gated make ci-check 72/0 GREEN (2026-09-05)
+    lands: [merge-ws1-6074bc31, merge-ws2-f9c0b504, merge-ws3-55171917, merge-ws4-c0c302b8, merge-ws5-522da08d, merge-ws6-cd0855f2, ws5-taxonomy-swap-7604fb95]
+  - id: R4
+    name: lifecycle-acceptance   # E2E A-E, a11y/data-truth, spec source-of-truth capture, release-gate only if claimed
     parallelism: solo
-    depends_on: [W0]
-    status: completed                    # shared/integration_contracts landed (additive)
-  - id: W2
-    name: credential-platform            # CredentialBackend + tenant_credentials + wiring
-    parallelism: solo
-    depends_on: [W0]                      # decoupled from W1: manifest describes cred SHAPE, not cred value types
-    status: completed
-  - id: W3
-    name: auth-webhook-sync-core         # OAuth broker | webhook registry | sync runtime
-    parallelism: "3x"
-    depends_on: [W1, W2]
-    status: pending
-  - id: W4
-    name: provider-migration             # 15 connectors | 5 payment rails | gateway remediation
-    parallelism: "up to 5x"
-    depends_on: [W3]
-    status: in_progress                  # IntegrationAdapter facade + PaymentRailIntegrationAdapter (§17); gateway ProviderResult remediation done (streaming/social providers now return typed ProviderResult, fixing a real router-incompatibility). OAuth route wiring + tenant/Kyber UIs remain (follow-up).
-  - id: W5
-    name: frontends                      # tenant onboarding | kyber operations
-    parallelism: "2x"
-    depends_on: [W4]
-    status: pending
-  - id: W6
-    name: deploy-and-certify
-    parallelism: solo
-    depends_on: [W5]
-    status: pending
+    depends_on: [R3]
+    status: in_progress          # LANE ACCEPTANCE DELIVERABLE DONE: suites landed + honest-skip verified 12/12 exit 0 (2026-09-05). Full A-E green BLOCKED on the seeded integration env (backend :8000 + E2E_TENANT_EMAIL[_A.._E]/PASSWORD + E2E_CAMPAIGN_UUID + connectors_enabled flag), which is NOT provisioned in this lane. No integration-env claim made.
 
 architecture:
-  provider_identity: complete            # W1 landed (shared/integration_contracts/identity.py)
-  provider_manifest: complete            # W1 manifest.py + validate_manifest; catalog.py derives 23 honest manifests (15 connectors + 5 observe-only payment rails + 3 deferred credit bureaus), all validated at import; manifest_by_identity / deferred_manifests accessors
-  connection_lifecycle: complete         # W1 landed (lifecycle.py ConnectionState machine)
-  adapter_result_contract: complete      # W1 landed (results.py AdapterResult + bridge mappers)
-  deployment_contract_schema: complete   # W1 landed (deployment.py DeploymentContract)
-  credential_backend: complete           # W2 landed (shared/credentials)
-  oauth_broker: complete                 # W3a landed (services/integrations/oauth, additive library)
-  webhook_registry: exists-enhancement-deferred  # provider-native verify + generic HMAC + quarantine + inbox already present; declarative side covered by W1 manifest.webhooks + lifecycle.webhook_invalid
-  sync_runtime: exists-enhancement-deferred       # ConnectorService.sync + cursors + backfill + workers + rate-limit already present; declarative side covered by W1 manifest.sync + lifecycle
-  tenant_ui: pending                     # W5
-  kyber_ui: pending                      # W5
-  certification: reuse                    # shared/certification/* already canonical — extend, do not duplicate
+  # Absorbed as complete from the prior program (W1/W2 + follow-ups):
+  provider_identity: complete          # shared/integration_contracts/identity.py
+  provider_manifest: complete          # manifest.py + catalog.py derived projection (pure)
+  connection_lifecycle: complete       # lifecycle.py ConnectionState machine + transitions
+  adapter_result_contract: complete    # results.py AdapterResult + bridge mappers
+  credential_backend: complete         # shared/credentials CredentialBackend + tenant_credentials
+  credential_authority: complete       # services/providers/credentials (multi-slot)
+  readiness_core: reuse                # shared/certification/* — extend, do not duplicate
+  # End-user lifecycle program deliverables (R1+):
+  experience_category: completed       # additive customer-facing projection enum (R1-s1)
+  integration_catalog_api: completed   # /v1/integration-catalog + /v1/tenant-integrations[/{id}] read model (R1-s3 backend + s4 FE twin)
+  readiness_projection: catalog-only   # /v1/integration-readiness = manifest catalog matrix over CredentialReadiness (R1-s3); tenant-contextual graph is WS-4
+  settings_control_plane: completed    # /settings + /settings/integrations nested shell (WS-1) — merged, route-state evidenced
+  advertising_convergence: completed   # campaign-source auto-link + account selection + connect flow (WS-2) — merged
+  activation_lifecycle: completed      # intent-driven activation over same connect contracts (WS-3) — merged
+  public_private_continuity: completed # marketing directory consumes WS-6 generated taxonomy (WS-5 + taxonomy swap 7604fb95)
 
-# Alembic revision block reserved before W2 so parallel agents never collide on the single head.
-# Current DB head at program start: 20260811_demo_seed_core
-migration_reservation:
-  chain_root: "20260811_demo_seed_core"
-  reserved:
-    - id: "20260812_credential_platform"   # W2, table tenant_credentials
-      down_revision: "20260811_demo_seed_core"
-      owner_wave: W2
-      status: landed
-    - id: "20260813_integration_contracts" # W1, only if contracts require a table
-      down_revision: "20260812_credential_platform"
-      owner_wave: W1
-      status: reserved-conditional
-    - id: "20260814_oauth_grants"          # W3 OAuth
-      down_revision: "20260813_integration_contracts"
-      owner_wave: W3
-      status: reserved-conditional
-    - id: "20260815_webhook_registry"      # W3 webhooks
-      down_revision: "20260814_oauth_grants"
-      owner_wave: W3
-      status: reserved-conditional
-    - id: "20260816_sync_cursors"          # W4 sync
-      down_revision: "20260815_webhook_registry"
-      owner_wave: W4
-      status: reserved-conditional
-
-provider_counts:                          # rollup; canonical machine source is the certification matrix (see PROVIDER_READINESS.yaml)
+provider_counts:                      # rollup; canonical machine source = docs/_generated/adapter-certification-matrix.json
+  # All first-release providers remain credential_waiting. The program does NOT
+  # ship live connectors; it ships honest lifecycle/management surfaces.
   certified: 0
-  credential_waiting: 18                   # first-release economic providers, per prior audit
-  contract_required: 0
-  provider_approval_required: 0
-  product_deferred: 3                      # Experian / Equifax / TransUnion — stay deferred (§26)
+  credential_waiting: "see adapter-certification-matrix.json"   # 26 across domains (incl. communications)
+  product_deferred: 3                 # Experian / Equifax / TransUnion (ADR-0007)
   unsupported: 0
-  scaffolded_visible: 0
 
-quality:                                   # updated at each wave boundary from real gate runs
-  ci_check: "docs-path green (repo_doctor --fix --docs-only 34/34); full gate pending W1 boundary"
-  unit_tests: "credential suite 36 passed; regressions 112 passed (byok/connectors/payment-rails/card-linked)"
-  contract_tests: unknown
-  frontend_tests: unknown
-  typecheck: "ruff clean on shared/credentials"
-  lint: "ruff clean on shared/credentials"
-  migration_single_head: "true (head=20260812_credential_platform)"
-  storage_policies: "PASS (330 checks; tenant_credentials covered)"
-  secret_scan: "PASS (no high-confidence secrets)"
+quality:                              # updated at each round boundary from real gate runs
+  r4: "R4 honest-skip verification 2026-09-05 — all five lifecycle suites (A1-A3, B1-B2, C1-C3, D1-D2, E1-E2 = 12 tests) run clean: `npx playwright test <five explicit lifecycle files> --reporter=list` → 12 skipped, exit 0, no browser/server booted. Suites COLLECT without error (valid specs, gate intact) and skip on the documented reason (no E2E_TENANT_EMAIL/PASSWORD — R3/R4 integration env absent). Full A-E green is NOT claimed: it needs the seeded backend (:8000) + E2E_TENANT_* pairs + E2E_CAMPAIGN_UUID (suite E) + connectors_enabled flag, which are not provisioned in this lane. Verification surfaced a runbook defect now fixed: the bare `npx playwright test lifecycle` positional ALSO over-matches the unrelated onboarding.spec.ts (8 non-gated tests that need a Playwright browser install) — ENDUSER_LIFECYCLE_E2E.md §5 now documents the explicit five-file invocation and §7 explains the over-match."
+  r3: "R3 integration waves GREEN 2026-09-05 — make ci-check 72/0 at each of the six ordered merges (WS-1 6074bc31 → WS-2 f9c0b504 → WS-3 55171917 → WS-4 c0c302b8 → WS-5 522da08d → WS-6 cd0855f2) plus the WS-5 taxonomy swap (7604fb95). R3 merge-conflict pattern mastered: stamp-only + reviewed_source_commits marker merges keep BOTH sides' review entries and adopt the newer stamp; docs re-stamped pointer-only after genuine review (b6c45633) and doc-manifest regenerated against the full merged tree (f49695c6). WS-5 taxonomy swap: frontend/aether-marketing connectors.ts now projects its 28 public rows from packages/shared/connector-taxonomy.ts CATALOG_ENTRIES (WS-6 mirror) with only marketing voice (description/supports_pull) in a PUBLIC_COPY overlay — vitest 128/128 + tsc clean + full 72/0. docs_drift 445/445 clean."
+  baseline: "R1 gate GREEN 2026-09-05 — make ci-check 72/0 on 8905c735. Docs-drift fix: reviewed all 9 stale source-linked docs after R1-s2/s3/s4 against declared source_files — real content updates in BACKEND-API.md (new Integration Catalog Read Model section for the 4 connectors-gated endpoints) and UNIVERSAL-PROVIDER-RUNTIME.md (package-layout tree + catalog four-group annotation); FRONTEND-ARCHITECTURE.md pointer + reviewed_source_commits audit entry; remaining six pointer-only after review. docs_drift 444/444 clean."
+  r1: "contract spine landed; connector-taxonomy.ts TS generator DEFERRED to WS-6 tail (recorded in FILE_OWNERSHIP r2_ws6_tail) — derive from catalog.py, never hand-edit"
+  r0: "R0 gate GREEN 2026-09-05 — make ci-check 72/0 on c3840cb4. First run failed npm test on ENOSPC (disk full, 3.2GiB free; 4 pre-existing Kyber/payment-rails component suites failed on temp writes, not assertions); freed ~3.3GiB of stale updater caches and re-ran clean."
+  unit_tests: pass                  # make ci-check python suites (compliance / agent-layer / journey-service / backend-observability)
+  contract_tests: pass             # make ci-check parity/integrity/contract gates
+  frontend_tests: pass             # make ci-check npm test (vitest full frontend matrix, 71 files green on clean rerun)
+  typecheck: pass                  # npm typecheck across all TS workspaces
+  migration_single_head: "R1 owns any new migration reservation (catalog is projection-first; unlikely to need tables)"

@@ -11,6 +11,15 @@ tenant is read from ``request.state.tenant`` — never from the body):
     GET  /v1/activation/first-value       Evaluate first value from Bronze rows
     POST /v1/activation/complete          Finish (only when first_value_ready)
 
+WS-3 (intent-driven activation, additive): goals → recommended connect steps
+over the shared connect contracts (connector_service runtime):
+
+    GET  /v1/activation/intents           Intent picker + experience-category order
+    POST /v1/activation/intents           Save the tenant's chosen intents (durable)
+    GET  /v1/activation/plan              Recommended connect plan per experience
+    POST /v1/activation/connect-action    Run one connect step (create/credential/
+                                          enable/first_sync) via connector_service
+
 Reads require ``read`` permission; state-changing writes require ``write``.
 """
 from __future__ import annotations
@@ -22,6 +31,8 @@ from shared.common.common import APIResponse
 from shared.logger.logger import get_logger
 
 from .models import (
+    ActivationConnectActionRequest,
+    ActivationIntentsRequest,
     CreateSdkKeysRequest,
     SdkSelectionRequest,
     SelectPlanRequest,
@@ -34,6 +45,21 @@ logger = get_logger("aether.activation.routes")
 router = APIRouter(prefix="/v1/activation", tags=["Activation"])
 
 _service = ActivationService()
+
+# The planner pulls the connectors runtime (catalog + connector_service), so it
+# is imported lazily to keep this module's import surface light (matching the
+# lazy-import pattern used across the connectors routes).
+_planner_instance = None
+
+
+def _get_planner():
+    """Process-level ActivationPlanner singleton (created on first use)."""
+    global _planner_instance
+    if _planner_instance is None:
+        from services.activation.planner import ActivationPlanner
+
+        _planner_instance = ActivationPlanner()
+    return _planner_instance
 
 
 @router.get("/status")
@@ -94,4 +120,70 @@ async def complete(request: Request) -> dict:
     tenant = request.state.tenant
     tenant.require_permission(Permissions.WRITE)
     data = await _service.complete(tenant.tenant_id)
+    return APIResponse(data=data).to_dict()
+
+
+# ── WS-3 intent-driven activation (additive) ────────────────────────────────
+
+
+@router.get("/intents")
+async def activation_intents(request: Request) -> dict:
+    """The intent picker: customer goals + their recommended experience
+    categories, plus the canonical experience-category order/labels."""
+    tenant = request.state.tenant
+    tenant.require_permission(Permissions.READ)
+    planner = _get_planner()
+    data = await planner.intent_catalog_view()
+    return APIResponse(data=data).to_dict()
+
+
+@router.post("/intents")
+async def save_activation_intents(
+    request: Request, body: ActivationIntentsRequest
+) -> dict:
+    """Save the tenant's chosen ActivationIntent tokens (durable save/resume)."""
+    tenant = request.state.tenant
+    tenant.require_permission(Permissions.WRITE)
+    planner = _get_planner()
+    data = await planner.select_intents(tenant.tenant_id, body.intents)
+    return APIResponse(data=data).to_dict()
+
+
+@router.get("/plan")
+async def activation_plan(request: Request) -> dict:
+    """The recommended connect plan for the tenant's selected intents.
+
+    Reads real tenant connector state and proposes the next connect step per
+    experience — never fabricates a step or a readiness claim. Empty until the
+    tenant has selected intents (``needs_selection``).
+    """
+    tenant = request.state.tenant
+    tenant.require_permission(Permissions.READ)
+    planner = _get_planner()
+    data = await planner.build_plan(tenant.tenant_id)
+    return APIResponse(data=data).to_dict()
+
+
+@router.post("/connect-action")
+async def activation_connect_action(
+    request: Request, body: ActivationConnectActionRequest
+) -> dict:
+    """Run ONE activation connect step, delegating to connector_service.
+
+    Actions: ``create_tenant_integration`` | ``configure_credential`` |
+    ``enable_connection`` | ``first_sync``. Credentials flow through the
+    credential service; enablement through the consent policy — the same
+    runtime as PUT /v1/integrations/connectors/{type}.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission(Permissions.WRITE)
+    planner = _get_planner()
+    data = await planner.run_connect_action(
+        tenant.tenant_id,
+        body.family,
+        body.action,
+        name=body.name,
+        credential=body.credential,
+        since=body.since,
+    )
     return APIResponse(data=data).to_dict()

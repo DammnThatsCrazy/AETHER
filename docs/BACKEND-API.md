@@ -11,7 +11,12 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "68dc02c1"
+last_synced_commit: "c0c302b8"
+reviewed_source_commits:
+  - commit: "c607780c"
+    reason: "Reviewed c607780c (new services/measurement/connectors/ad_accounts.py account-identity/credential-probe module + its tests). It adds no HTTP surface — the doc's /v1/* endpoint tables are unaffected — so no body change was required."
+  - commit: "41e8356b"
+    reason: "Reviewed 41e8356b (additive /v1/campaign-sources overview/ad-options/connect/test/account/disable/enable endpoints in services/campaign/routes.py, orchestrated by new ad_source_links.py). This spec's Campaign Management Service section documents the /v1/campaigns CRUD surface and does not enumerate the /v1/campaign-sources registry router (covered in docs/api/CAMPAIGN_360_API.md), so the additions are additive to routes this doc does not describe; no body change was required."
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -346,6 +351,25 @@ key. GETs require `read`; state-changing POSTs require `write`. Full behavior:
 | `POST` | `/v1/activation/test-event` | write | Sends a canonical event through `/v1/batch`; per-event `accepted \| duplicate \| rejected`. |
 | `GET`  | `/v1/activation/first-value` | read | `{ "state", "ready", "evidence" }` from real Bronze rows. |
 | `POST` | `/v1/activation/complete` | write | `409` unless state is `first_value_ready`. |
+
+### Intent-driven activation (WS-3)
+
+Additive endpoints (same `/v1/activation` mount gate) that turn customer goals
+into recommended connect steps. A tenant selects `ActivationIntent` tokens
+(`grow_revenue`, `run_advertising`, … — full vocabulary in the `/intents`
+picker); the `/plan` read derives, per recommended experience category, each
+integration's next connect step from REAL tenant connector rows — the same
+config store `/v1/tenant-integrations` and the Settings connect surface read,
+never a fabricated step. Connect actions delegate to `connector_service` (the
+runtime behind `PUT /v1/integrations/connectors/{type}`), so credentials flow
+through the credential service and enablement through the consent policy.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| `GET`  | `/v1/activation/intents` | read | Intent picker: every goal + its recommended experience categories + the canonical category order/labels. |
+| `POST` | `/v1/activation/intents` | write | Body `{ "intents": ["grow_revenue", …] }`. Validated tokens (unknown → `400`), stored in canonical order, replace-on-reselect. |
+| `GET`  | `/v1/activation/plan` | read | Recommended connect plan per experience; `needs_selection` until intents are saved. Each integration carries `connection_state` + `next_action` derived from tenant rows. |
+| `POST` | `/v1/activation/connect-action` | write | Body `{ "family", "action", "name"?, "credential"?, "since"? }`. Actions: `create_tenant_integration \| configure_credential \| enable_connection \| first_sync`. A failed initial sync returns honest `ok:false` + `sync_failed`; unknown family/action → `400`. |
 
 ## Command Center (read-only tenant aggregate, flag-gated)
 
@@ -3078,6 +3102,68 @@ Provider readiness is truthful: without a credential a provider reports
 `credential_missing`, is never marked connected, and the certification harness
 reports `credential_turnkey / staging_validation_pending` — never `provider_live`
 — until real infrastructure and credentials are supplied.
+
+---
+
+## Integration Catalog Read Model (v8.12.0)
+
+The unified catalog read model
+(`Backend Architecture/aether-backend/services/integrations/connectors/catalog_endpoints.py`)
+projects the one-customer catalog — the derived manifests in
+`shared/integration_contracts/catalog` (connectors, ad-platforms, payment rails,
+credit bureaus) — plus tenant connector records as read-only endpoints. Mounted
+inside the connectors gate (`AETHER_CONNECTORS_ENABLED`, default OFF — the same
+gate as the ingestion/webhook connector routes). Tenant API key required.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/integration-catalog` | Every connectable manifest as a flat entry (identity key, display name, `experience_category`, readiness state/rank/level, auth, sync, data outputs) in stable experience-grouping order; deferred bureaus (enabled-nowhere) are excluded. |
+| GET | `/v1/tenant-integrations` | The tenant's configured connectors with connection facts (`enabled` / `secret_configured` / `sync_status` / `last_synced_at`) plus the manifest's catalog readiness. |
+| GET | `/v1/tenant-integrations/{integration_id}` | One tenant integration (404 unless the tenant has a stored record for it). |
+| GET | `/v1/integration-readiness` | Catalog-level readiness matrix reusing the `CredentialReadiness` ladder + `readiness_rank` (single source). |
+
+### Tenant-contextual joined readiness (`/v1/tenant/integration-readiness`)
+
+The joined *tenant-contextual* readiness graph
+(`Backend Architecture/aether-backend/services/readiness_graph/`) is the WS-4
+workstream the catalog read model above deferred: it combines the catalog's
+provider truth with the tenant's connection record facts under the "Connected
+≠ Ready" honesty law.
+
+| GET | `/v1/tenant/integration-readiness` | The joined projection for the calling tenant: every connectable catalog manifest (plus any tenant-configured family the catalog no longer exposes) joined with the tenant's stored connection facts into an evidence-derived `tenant_state` per integration. |
+| GET | `/v1/tenant/integration-readiness?experience_category={cat}` | Restrict the projection to one customer experience category (e.g. `advertising_campaigns`). |
+| GET | `/v1/tenant/integration-readiness?state={state}` | Restrict to one tenant-contextual state (`available` / `connected` / `ready` / `connection_disabled` / `needs_attention`). |
+
+Item shape and honesty rules:
+
+- `readiness` is ALWAYS the manifest's catalog baseline (`state`/`rank`/`level`) —
+  tenant connection evidence can never raise it. An integration that reads
+  `connected` may still be `credential_waiting` on the provider axis.
+- `connection` carries record facts (`configured`, `connected` — enabled OR
+  credential configured OR ever synced — `state`, `enabled`,
+  `secret_configured`, `sync_status`, `last_synced_at`, `error_count`,
+  `last_error_at`). `connected` is a fact, never a readiness claim.
+- `tenant_state` is an evidence-derived connection/attention label, deliberately
+  distinct from the `CredentialReadiness` ladder tokens:
+  - `available` — no connection record (or a residual record with no fact);
+  - `connected` — a connection fact exists and no attention/disabled evidence;
+  - `ready` — the ONE claim needing proof on BOTH axes: provider catalog
+    `sandbox_validated` or better (rank ≥ 60) AND a currently healthy
+    connection. With every connectable manifest at `credential_waiting` today,
+    no integration can read `ready` — the honest posture;
+  - `connection_disabled` — the tenant turned the connection off;
+  - `needs_attention` — at least one concrete signal in `attention_reasons`
+    (`provider_off_ramp`, `sync_failed`, `sync_degraded`,
+    `credential_missing` — an enabled connection on a credential-bearing
+    provider with no configured credential).
+- Readiness is never asserted from a parallel token: another tenant's record
+  never affects this projection, and the unknown-`state` filter returns an
+  error payload rather than fabricating items.
+
+The router is a standalone, cycle-safe module mounted under the same connectors
+gate as the catalog read model; it is intentionally absent from the eagerly
+imported package surface and wired lazily by the gate next to
+`catalog_endpoints.catalog_router`.
 
 ---
 

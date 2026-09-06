@@ -8,7 +8,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ThemeProvider } from '@aether/ui';
 import { AuthProvider } from '@aether-app/features/auth';
-import { LoginPage } from './login-page';
+import { LoginPage, resolvePostAuthRedirect } from './login-page';
 
 vi.mock('@aether-app/lib/api/endpoints', () => ({
   api: {
@@ -46,5 +46,22 @@ describe('LoginPage public-handoff prefill', () => {
     renderLogin('/login');
 
     expect(screen.getByLabelText('Email address')).toHaveValue('');
+  });
+});
+
+describe('resolvePostAuthRedirect', () => {
+  it('accepts an internal deep link with query params (RequireAuth round-trip)', () => {
+    expect(
+      resolvePostAuthRedirect(
+        '/settings/integrations?family=google_ads&intent=connect',
+      ),
+    ).toBe('/settings/integrations?family=google_ads&intent=connect');
+  });
+
+  it('falls back to the tenant home for empty or foreign redirect values', () => {
+    expect(resolvePostAuthRedirect(null)).toBe('/settings');
+    expect(resolvePostAuthRedirect('')).toBe('/settings');
+    expect(resolvePostAuthRedirect('//evil.example')).toBe('/settings');
+    expect(resolvePostAuthRedirect('https://evil.example')).toBe('/settings');
   });
 });
