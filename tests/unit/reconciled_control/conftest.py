@@ -29,15 +29,20 @@ def _reset_rcp_stores():
     from services.managed_integrations.change_sets_repository import (
         reset_change_set_in_memory_store,
     )
+    from services.managed_integrations.execution_records_repository import (
+        reset_execution_record_stores,
+    )
     from services.managed_integrations.repository import (
         reset_managed_integration_in_memory_store,
     )
 
     reset_managed_integration_in_memory_store()
     reset_change_set_in_memory_store()
+    reset_execution_record_stores()
     yield
     reset_managed_integration_in_memory_store()
     reset_change_set_in_memory_store()
+    reset_execution_record_stores()
 
 
 @pytest.fixture

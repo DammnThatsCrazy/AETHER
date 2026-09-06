@@ -273,6 +273,25 @@ export function isChangeActionKind(value: string): value is ChangeActionKind {
   return (changeActionKinds as readonly string[]).includes(value);
 }
 
+export function isControlFindingKind(value: string): value is ControlFindingKind {
+  return (controlFindingKinds as readonly string[]).includes(value);
+}
+
+export function isVerifyOutcome(value: string): value is VerifyOutcome {
+  return (verifyOutcomes as readonly string[]).includes(value);
+}
+
+export function isRollbackStatus(value: string): value is RollbackStatus {
+  return (rollbackStatuses as readonly string[]).includes(value);
+}
+
+export function isActionRequiredStatus(
+  value: string,
+): value is ActionRequiredStatus {
+  return (actionRequiredStatuses as readonly string[]).includes(value);
+}
+
+
 // ── §6 ManagedIntegrationView (Phase-0 operator read surface) ───────────────
 // Mirrors the durable `managed_integrations` row. Health/lifecycle states are
 // strings sourced from the observing authority (SDK health, provider runtime,
@@ -427,6 +446,43 @@ export interface BlastRadiusView {
   actionable_drift_types: DriftTaxonomyType[];
 }
 
+// ── §12.15 control-finding kinds (canonical epistemic model) ────────────────
+
+export const controlFindingKinds = [
+  'observed',
+  'verified',
+  'correlated',
+  'inferred',
+  'predicted',
+] as const;
+export type ControlFindingKind = (typeof controlFindingKinds)[number];
+
+// ── §32 step 19 verify outcomes (technical + semantic health) ───────────────
+
+export const verifyOutcomes = ['passed', 'failed'] as const;
+export type VerifyOutcome = (typeof verifyOutcomes)[number];
+
+// ── §12.13 evidence confidence scale (mirrors the §39 rollback-confidence
+//    high/medium/low scale) ─────────────────────────────────────────────────
+
+export const evidenceConfidenceValues = ['high', 'medium', 'low'] as const;
+export type EvidenceConfidence = (typeof evidenceConfidenceValues)[number];
+
+// ── §12.11 rollback-record lifecycle ─────────────────────────────────────────
+
+export const rollbackStatuses = [
+  'pending',
+  'rolling_back',
+  'rolled_back',
+  'failed',
+] as const;
+export type RollbackStatus = (typeof rollbackStatuses)[number];
+
+// ── §12.14 action-required lifecycle ─────────────────────────────────────────
+
+export const actionRequiredStatuses = ['open', 'resolved'] as const;
+export type ActionRequiredStatus = (typeof actionRequiredStatuses)[number];
+
 // ── §32 step 12 + §12.5 ChangeSetPlanView (planning subset, never applied) ──
 
 export interface ChangeSetPlanView {
@@ -452,4 +508,107 @@ export interface ChangeSetPlanView {
   status: ChangeSetStatus;
   created_at: string;
   superseded_at?: string | null;
+}
+
+// ── §32 step 19 VerifyReport (technical + semantic health) ──────────────────
+
+export interface VerifyReport {
+  changeset_id: string;
+  technical_health: VerifyOutcome;
+  semantic_health: VerifyOutcome;
+  /** Refs to per-change verification evidence (actuator verify outcomes). */
+  validation_refs: string[];
+  note?: string | null;
+  verified_at: string;
+}
+
+// ── §12.13 ChangeEvidenceView ────────────────────────────────────────────────
+
+export interface ChangeEvidenceView {
+  change_evidence_id: string;
+  changeset_ref: string;
+  tenant_id: string;
+  environment_id: string;
+  initiator: string;
+  policy_ref?: string | null;
+  /** Refs to the durable states before/after the change (existing refs when
+   * the actuator performed no mutation; both empty on a blocked attempt). */
+  before_state_refs: string[];
+  after_state_refs: string[];
+  reason?: string | null;
+  /** Epistemic status of the before/after claim over the §12.15 model — the
+   * control plane never labels a correlation as causality. */
+  claim_type: ControlFindingKind;
+  confidence: EvidenceConfidence;
+  risk_ref?: string | null;
+  simulation_ref?: string | null;
+  rollout_ref?: string | null;
+  validation_refs: string[];
+  approval_refs: string[];
+  rollback_ref?: string | null;
+  tenant_action_required: boolean;
+  evidence_refs: string[];
+  contradictory_evidence_refs: string[];
+  started_at: string;
+  completed_at: string;
+}
+
+// ── §12.12 LastKnownGoodView ─────────────────────────────────────────────────
+
+export interface LastKnownGoodView {
+  lkg_id: string;
+  managed_integration_ref: string;
+  tenant_id: string;
+  environment_id: string;
+  desired_state_ref?: string | null;
+  artifact_ref?: string | null;
+  runtime_config_ref?: string | null;
+  schema_ref?: string | null;
+  mapping_refs: string[];
+  integration_contract_ref?: string | null;
+  policy_ref?: string | null;
+  provider_state_ref?: string | null;
+  verified_health_ref?: string | null;
+  /** A rollout is not LKG until verification passes (§32 step 21 / §12.12). */
+  established_at: string;
+}
+
+// ── §12.11 RollbackRecordView ────────────────────────────────────────────────
+
+export interface RollbackRecordView {
+  rollback_id: string;
+  changeset_ref: string;
+  tenant_id: string;
+  environment_id: string;
+  last_known_good_ref?: string | null;
+  /** Typed §36 rollback actions the rollback executed (ordered). */
+  rollback_actions: string[];
+  queue_recovery_policy?: string | null;
+  replay_policy?: string | null;
+  validation_requirements: string[];
+  status: RollbackStatus;
+  created_at: string;
+  completed_at?: string | null;
+}
+
+// ── §12.14 ActionRequiredView ────────────────────────────────────────────────
+
+export interface ActionRequiredView {
+  action_id: string;
+  tenant_ref: string;
+  managed_integration_ref: string;
+  environment_id: string;
+  /** Open vocabulary — emitted by the executor/actuator that cannot resolve a
+   * change (approval, exception, data-loss decision, quarantine, ...). */
+  action_type: string;
+  reason: string;
+  impact?: string | null;
+  deadline?: string | null;
+  required_actor: string;
+  required_action: string;
+  continuity_state?: string | null;
+  data_loss_expected: boolean;
+  resolution_ref?: string | null;
+  status: ActionRequiredStatus;
+  created_at: string;
 }

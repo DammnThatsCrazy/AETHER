@@ -20,10 +20,13 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 from services.managed_integrations.contracts import (  # noqa: E402
+    ACTION_REQUIRED_STATUSES,
     CHANGE_ACTION_KINDS,
     CHANGE_RISK_CLASSES,
     CHANGESET_STATUSES,
+    CONTROL_FINDING_KINDS,
     DRIFT_TAXONOMY_TYPES,
+    EVIDENCE_CONFIDENCE_VALUES,
     INTEGRATION_AVAILABILITY_VALUES,
     INTEGRATION_SOURCE_ORIGINS,
     INTEGRATION_SOURCE_OWNERS,
@@ -32,6 +35,8 @@ from services.managed_integrations.contracts import (  # noqa: E402
     MANAGED_RELEASE_CHANNELS,
     OBSERVED_PROVENANCE_VALUES,
     RECONCILE_RESULT_VALUES,
+    ROLLBACK_STATUSES,
+    VERIFY_OUTCOMES,
 )
 
 TS_PATH = REPO_ROOT / "packages" / "shared" / "managed-integrations.ts"
@@ -129,6 +134,41 @@ def test_change_action_kinds_parity():
     )
 
 
+def test_control_finding_kinds_parity():
+    ts = _const_array("controlFindingKinds")
+    assert ts == list(CONTROL_FINDING_KINDS), (
+        f"control-finding-kind drift: TS={ts} PY={list(CONTROL_FINDING_KINDS)}"
+    )
+
+
+def test_verify_outcomes_parity():
+    ts = _const_array("verifyOutcomes")
+    assert ts == list(VERIFY_OUTCOMES), (
+        f"verify-outcome drift: TS={ts} PY={list(VERIFY_OUTCOMES)}"
+    )
+
+
+def test_evidence_confidence_parity():
+    ts = _const_array("evidenceConfidenceValues")
+    assert ts == list(EVIDENCE_CONFIDENCE_VALUES), (
+        f"evidence-confidence drift: TS={ts} PY={list(EVIDENCE_CONFIDENCE_VALUES)}"
+    )
+
+
+def test_rollback_statuses_parity():
+    ts = _const_array("rollbackStatuses")
+    assert ts == list(ROLLBACK_STATUSES), (
+        f"rollback-status drift: TS={ts} PY={list(ROLLBACK_STATUSES)}"
+    )
+
+
+def test_action_required_statuses_parity():
+    ts = _const_array("actionRequiredStatuses")
+    assert ts == list(ACTION_REQUIRED_STATUSES), (
+        f"action-required-status drift: TS={ts} PY={list(ACTION_REQUIRED_STATUSES)}"
+    )
+
+
 def test_drift_taxonomy_is_exactly_the_22_canonical_types():
     # §33 canonical taxonomy — not every drift requires mutation, and later
     # phases must be able to plan any of these. Guard against accidental
@@ -198,6 +238,28 @@ def test_change_set_statuses_cover_the_spec_state_machine():
 def test_risk_classes_cover_r0_through_r5_and_security_emergency():
     assert set(CHANGE_RISK_CLASSES) == {
         "R0", "R1", "R2", "R3", "R4", "R5", "security_emergency",
+    }
+
+
+def test_control_finding_kinds_are_the_12_15_epistemic_model():
+    # §12.15: the canonical epistemic model for operational explanations. A
+    # control plane never labels correlation as causality.
+    assert set(CONTROL_FINDING_KINDS) == {
+        "observed", "verified", "correlated", "inferred", "predicted",
+    }
+
+
+def test_action_required_phases_hold_until_resolution():
+    # §12.14 ActionRequired lifecycle: open until resolved. No other terminal
+    # state is invented in the contract vocabulary.
+    assert set(ACTION_REQUIRED_STATUSES) == {"open", "resolved"}
+
+
+def test_rollback_statuses_follow_the_s34_rollback_vocabulary():
+    # §12.11 rollback-record lifecycle mirrors the §34 rolling_back/rolled_back
+    # terminal vocabulary plus pending/failed; it never invents a new label.
+    assert set(ROLLBACK_STATUSES) == {
+        "pending", "rolling_back", "rolled_back", "failed",
     }
 
 

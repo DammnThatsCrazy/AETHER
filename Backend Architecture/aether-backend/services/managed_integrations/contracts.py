@@ -308,6 +308,39 @@ CHANGE_ACTION_KINDS: tuple[str, ...] = (
 )
 
 
+# ── §12.15 control-finding kinds (canonical epistemic model) ─────────────────
+
+ControlFindingKind = Literal[
+    "observed", "verified", "correlated", "inferred", "predicted",
+]
+CONTROL_FINDING_KINDS: tuple[str, ...] = (
+    "observed", "verified", "correlated", "inferred", "predicted",
+)
+
+# ── §32 step 19 verify outcomes (technical + semantic health) ────────────────
+
+VerifyOutcome = Literal["passed", "failed"]
+VERIFY_OUTCOMES: tuple[str, ...] = ("passed", "failed")
+
+# ── §12.13 evidence confidence scale (mirrors the §39 rollback-confidence
+#    high/medium/low scale) ───────────────────────────────────────────────────
+
+EvidenceConfidence = Literal["high", "medium", "low"]
+EVIDENCE_CONFIDENCE_VALUES: tuple[str, ...] = ("high", "medium", "low")
+
+# ── §12.11 rollback-record lifecycle ──────────────────────────────────────────
+
+RollbackStatus = Literal["pending", "rolling_back", "rolled_back", "failed"]
+ROLLBACK_STATUSES: tuple[str, ...] = (
+    "pending", "rolling_back", "rolled_back", "failed",
+)
+
+# ── §12.14 action-required lifecycle ──────────────────────────────────────────
+
+ActionRequiredStatus = Literal["open", "resolved"]
+ACTION_REQUIRED_STATUSES: tuple[str, ...] = ("open", "resolved")
+
+
 # ── §12.2 observed-state provenance ──────────────────────────────────────────
 
 ObservedProvenance = Literal[
@@ -504,6 +537,148 @@ class ChangeSetPlanView(BaseModel):
     superseded_at: Optional[datetime] = None
 
 
+class VerifyReport(BaseModel):
+    """§32 step-19 verification of technical + semantic health (§12.9 subset).
+
+    Produced after actuator apply, before commit-or-rollback. A rollback is
+    triggered when either dimension fails; LKG is established only when both
+    pass (§32 steps 19-21).
+    """
+
+    changeset_id: str
+    technical_health: VerifyOutcome
+    semantic_health: VerifyOutcome
+    validation_refs: list[str] = Field(default_factory=list)
+    note: Optional[str] = None
+    verified_at: datetime
+
+
+class ChangeEvidenceView(BaseModel):
+    """One executed/attempted change's evidence (§32 step 22 / §12.13).
+
+    ``claim_type`` is the §12.15 epistemic status of the before/after claim —
+    the control plane never labels a correlation as causality. ``confidence``
+    is the evidence-confidence scale. Approval refs identify the §21 authority
+    exercised. ``contradictory_evidence_refs`` are recorded, never dropped.
+    """
+
+    change_evidence_id: str
+    changeset_ref: str
+    tenant_id: str = Field(..., min_length=1)
+    environment_id: str = Field(..., min_length=1)
+    initiator: str
+    policy_ref: Optional[str] = None
+    before_state_refs: list[str] = Field(default_factory=list)
+    after_state_refs: list[str] = Field(default_factory=list)
+    reason: Optional[str] = None
+    claim_type: ControlFindingKind
+    confidence: EvidenceConfidence
+    risk_ref: Optional[str] = None
+    simulation_ref: Optional[str] = None
+    rollout_ref: Optional[str] = None
+    validation_refs: list[str] = Field(default_factory=list)
+    approval_refs: list[str] = Field(default_factory=list)
+    rollback_ref: Optional[str] = None
+    tenant_action_required: bool = False
+    evidence_refs: list[str] = Field(default_factory=list)
+    contradictory_evidence_refs: list[str] = Field(default_factory=list)
+    started_at: datetime
+    completed_at: datetime
+
+
+class LastKnownGoodView(BaseModel):
+    """Last-known-good state for a managed integration (§32 step 21 / §12.12).
+
+    Established only after verification passes — a completed rollout that did
+    not verify never becomes LKG. Refs point at durable states the control
+    plane can restore on rollback.
+    """
+
+    lkg_id: str
+    managed_integration_ref: str = Field(..., min_length=1)
+    tenant_id: str = Field(..., min_length=1)
+    environment_id: str = Field(..., min_length=1)
+    desired_state_ref: Optional[str] = None
+    artifact_ref: Optional[str] = None
+    runtime_config_ref: Optional[str] = None
+    schema_ref: Optional[str] = None
+    mapping_refs: list[str] = Field(default_factory=list)
+    integration_contract_ref: Optional[str] = None
+    policy_ref: Optional[str] = None
+    provider_state_ref: Optional[str] = None
+    verified_health_ref: Optional[str] = None
+    established_at: datetime
+
+
+class RollbackRecordView(BaseModel):
+    """One ChangeSet rollback (§32 steps 20-21 / §12.11).
+
+    References the LKG ref it restores toward and the ordered §36 rollback
+    actions executed. ``status`` follows the rollback-record lifecycle
+    (pending -> rolling_back -> rolled_back | failed).
+    """
+
+    rollback_id: str
+    changeset_ref: str = Field(..., min_length=1)
+    tenant_id: str = Field(..., min_length=1)
+    environment_id: str = Field(..., min_length=1)
+    last_known_good_ref: Optional[str] = None
+    rollback_actions: list[str] = Field(default_factory=list)
+    queue_recovery_policy: Optional[str] = None
+    replay_policy: Optional[str] = None
+    validation_requirements: list[str] = Field(default_factory=list)
+    status: RollbackStatus = "pending"
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+
+
+class ChangeSetApprovalView(BaseModel):
+    """A §21 role-gated approval attached to a ChangeSet (evidence record).
+
+    Records which authority (role) exercised the approval for which required
+    approval ref (``approval:olympus_operator``, ``approval:tenant_owner``,
+    ...) and the actor that carried it. Approvals are required before an R3/R4/
+    R5/security-emergency plan may move past ``waiting_approval``.
+    """
+
+    approval_id: str
+    changeset_ref: str = Field(..., min_length=1)
+    tenant_id: str = Field(..., min_length=1)
+    environment_id: str = Field(..., min_length=1)
+    required_approval_ref: str = Field(..., min_length=1)
+    granted_role: str = Field(..., min_length=1)  # §21 role name
+    granted_by_actor: str = Field(..., min_length=1)  # operator identity
+    decision: str = "approved"  # approved | denied
+    note: Optional[str] = None
+    decided_at: datetime
+
+
+class ActionRequiredView(BaseModel):
+    """An unresolved change surfaced for action (§32 step 23 / §12.14).
+
+    Emitted by the executor/actuator when a change cannot resolve within the
+    current authority (missing approval, unavailable substrate, a rollback that
+    also failed, a data-loss decision). ``action_type`` is open vocabulary
+    emitted by the component that cannot resolve the change.
+    """
+
+    action_id: str
+    tenant_ref: str = Field(..., min_length=1)
+    managed_integration_ref: str = Field(..., min_length=1)
+    environment_id: str = Field(..., min_length=1)
+    action_type: str
+    reason: str
+    impact: Optional[str] = None
+    deadline: Optional[datetime] = None
+    required_actor: str
+    required_action: str
+    continuity_state: Optional[str] = None
+    data_loss_expected: bool = False
+    resolution_ref: Optional[str] = None
+    status: ActionRequiredStatus = "open"
+    created_at: datetime
+
+
 # Convenience guards mirroring the TS ``is*`` helpers.
 def is_managed_integration_kind(value: str) -> bool:
     return value in MANAGED_INTEGRATION_KINDS
@@ -535,3 +710,19 @@ def is_change_risk_class(value: str) -> bool:
 
 def is_change_action_kind(value: str) -> bool:
     return value in CHANGE_ACTION_KINDS
+
+
+def is_control_finding_kind(value: str) -> bool:
+    return value in CONTROL_FINDING_KINDS
+
+
+def is_verify_outcome(value: str) -> bool:
+    return value in VERIFY_OUTCOMES
+
+
+def is_rollback_status(value: str) -> bool:
+    return value in ROLLBACK_STATUSES
+
+
+def is_action_required_status(value: str) -> bool:
+    return value in ACTION_REQUIRED_STATUSES
