@@ -12,7 +12,7 @@ source_files:
 related:
   - concepts/economic-value-framing
   - concepts/tvl-gmv-revenue-metrics
-last_synced_commit: "4e6fdad"
+last_synced_commit: "c4f33e58"
 ---
 
 # Aether — Unified Economic Graph

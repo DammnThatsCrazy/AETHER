@@ -11,7 +11,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "c0c302b8"
+last_synced_commit: "c4f33e58"
 reviewed_source_commits:
   - commit: "c607780c"
     reason: "Reviewed c607780c (new services/measurement/connectors/ad_accounts.py account-identity/credential-probe module + its tests). It adds no HTTP surface — the doc's /v1/* endpoint tables are unaffected — so no body change was required."
@@ -1965,6 +1965,60 @@ the tenant-facing `/v1/events/replay` service above. The router is mounted in
 |---|---|---|
 | POST | `/v1/kyber/ingest/replay/events` | Submit a replay scan for one tenant's Bronze SDK events (`tenant_id` required; optional `event_types`, `families`, `occurred_from`, `occurred_to`, `limit`, `replay_run_id`). `dry_run` defaults to `true` — previews rows scanned / would-replay / gateway-rejected / skipped with zero publishes. A real run (`dry_run=false`) is refused with HTTP 403 until `AETHER_INGESTION_REPLAY_ENABLED=true`. |
 | GET | `/v1/kyber/ingest/replay/status` | Gate state: `enabled` (the `AETHER_INGESTION_REPLAY_ENABLED` kill switch), the `source_service` label replayed events carry (`ingestion.replay`), and `dry_run_default`. |
+
+### Operator ingestion observability & SDK version tiers (WS-E, v8.12.0)
+
+Three additive operator/health surfaces mounted in `main.py` / the gateway /
+the sdk_config router. They mirror the replay route's adoption posture: the
+routers stay mounted so gateway discovery sees them, but while the flags are
+OFF no instrumentation runs and the surfaces report `enabled: false` / empty
+bodies rather than erroring, so the Kyber UI renders the feature as
+not-enabled.
+
+**Observability routes** (flag `AETHER_INGESTION_OBSERVABILITY_ENABLED`,
+default OFF; router mounted in `main.py`; every route requires
+`require_kyber_operator`):
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/v1/kyber/ingest/observability` | Status + instrumentation: `enabled`, `recorded_at`, and `instrumentation.monitored_stages` (`RECEIVED` / `VALIDATED` / `BRONZE` from the API process, `NORMALIZED` / `PROJECTIONS` from the worker functions) with `declared_unmonitored` completing the funnel ladder for the control plane to render. |
+| GET | `/v1/kyber/ingest/observability/funnel` | Per-stage ingestion funnel telemetry: `rollup` (`received` / `accepted` / `duplicates` / `rejected` / `degraded`) plus per-stage buckets carrying the disposition split (`accepted` / `duplicate` / `rejected` / `degraded` / `observed`); stages marked `monitored: false` complete the ladder but are not instrumented in this slice. |
+| GET | `/v1/kyber/ingest/observability/traces/{event_id}` | Observation Inspector — one observation's `RAW → … → METRICS/FINDINGS` stage trace. `event_id` is the client event id (the same id returned by `/v1/batch`); optional `tenant_id` query scopes the lookup. Returns `{"trace": {...}}`, or `{"trace": null}` when the ledger has no record for that key (flag OFF returns `null` — no instrumentation ran). |
+| GET | `/v1/kyber/ingest/observability/traces` | Recent observation traces for inspector browse (`{"traces": [...]}`, `limit` bounded 1–200, default 50; flag OFF returns `{"traces": []}`). |
+
+**Funnel health summary** — `GET /v1/health/pipeline` (gateway). Always
+200-shaped, mirroring the gateway health conventions; a disabled pipeline
+reports `enabled: false` with zeroed counters rather than erroring:
+
+```json
+{
+  "probe": "ingestion-pipeline",
+  "status": "disabled",
+  "enabled": false,
+  "timestamp": "...",
+  "pipeline": { "received": 0, "accepted": 0, "duplicates": 0, "rejected": 0, "degraded": 0 },
+  "stages": []
+}
+```
+
+`status` is `disabled` while the observability flag is OFF; otherwise
+`healthy` (no rejected/degraded rollup) or `degraded` (any rejected/degraded
+stage), and `enabled` reflects the same flag.
+
+**SDK version-compatibility tiers** — `GET /v1/config/sdk/versions`
+(sdk_config router). Returns the capability-manifest block:
+`schema_version`, `enabled` / `mode`, `blocked_after_date`, `tiers[]` (each
+band: `id`, `status`, `label`, `min_version`, `max_version_exclusive`,
+`deprecated_after`, `blocked_after`, `capabilities`, `note`), and the
+`unclassified` band. The tier table is **static, non-secret policy data and is
+always served** — reading it never depends on the flag. Only the `/v1/batch` /
+`/v1/ingest/events[/batch]` ingress consultation is flag-gated
+(`AETHER_SDK_VERSION_COMPAT_ENABLED`, default OFF; `AETHER_SDK_VERSION_COMPAT_MODE`
+= `off` | `shadow` | `warn` | `enforce`). When enabled the ingress attaches an
+additive `normalized["sdk_tier"]` advisory (mode / tier / label / capabilities
+/ `blocked_after` / source) — metadata only, never a rejection — except in
+`enforce` mode, which rejects events from SDK bands past their
+`blocked_after` date.
 
 ---
 

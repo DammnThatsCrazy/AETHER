@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: "c50a1061"
+last_synced_commit: "c4f33e58"
 reviewed_source_commits:
   - commit: "7ba83380"
     reason: "Reviewed the Kyber component-test synchronization change; frontend architecture and runtime contracts are unaffected."
@@ -104,6 +104,15 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Campaign Quality** (v8.11.0+) — measurement mapping rate gauges and quality metrics (`/campaign-intelligence/quality`)
 - **Custom Campaign** (v8.11.0+) — creation form for custom (non-platform) campaigns (`/campaign-intelligence/new`)
 - **Measurement Operations** — connector and source-classification health, classifier-version coverage, repair status, tenant drill-down, and confirm-gated restart/backfill/recompute/repair actions (`/kyber/measurement`)
+- **Ingestion Ops** (`/ingestion-ops`, `enableIngestionOps` default OFF) — Kyber
+  ingestion control plane (WS-E, `features/ingestion-ops/`, sidebar destination
+  `kyber-reliability`): per-stage ingestion funnel telemetry (rollup + stage
+  buckets), recent traces, the Observation Inspector (one observation's
+  RAW→…→METRICS/FINDINGS trace by `event_id`), and SDK version-tier visibility.
+  Reads `api.ingestionOps.*` → `GET /v1/kyber/ingest/observability*`,
+  `GET /v1/health/pipeline`, and `GET /v1/config/sdk/versions`. While the
+  backend `AETHER_INGESTION_OBSERVABILITY_ENABLED` is OFF the page renders
+  honest "telemetry is OFF" / disabled states rather than empty error surfaces.
 - Lab — backend-supported test and replay tools
 
 **Shared (`frontend/shared/` — npm package `@aether/ui`):**

@@ -13,7 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: "f69e5128"
+last_synced_commit: "c4f33e58"
 ---
 # Aether vNext — Architecture Guide
 
@@ -276,6 +276,9 @@ Resolution Consumer (real-time)
 | `/v1/batch` | POST | Canonical batched raw events (ALL SDKs — web, iOS, Android, RN) |
 | `/v1/ingest/events[/batch]` | POST | Deprecated server-to-server connector aliases — converged (WS-B2) onto the canonical `/v1/batch` spine (same validation/consent/scrub/Bronze/idempotency/publish path + `write` auth); retire with HTTP 410 when `AETHER_KILL_DEPRECATED_INGEST_ALIASES=true` |
 | `/v1/kyber/ingest/replay/*` | POST/GET | Kyber-operator Bronze-ingestion replay (WS-B4) — re-deliver a tenant's durable Bronze SDK events with original-time preservation; `POST /v1/kyber/ingest/replay/events` dry-runs by default (zero publishes), a real run requires `AETHER_INGESTION_REPLAY_ENABLED` (else HTTP 403); `GET /v1/kyber/ingest/replay/status` reports gate state |
+| `/v1/kyber/ingest/observability*` | GET | Kyber-operator ingestion-funnel telemetry + Observation Inspector (WS-E; flag-gated `AETHER_INGESTION_OBSERVABILITY_ENABLED`, default OFF — while OFF the routes stay mounted but report `enabled: false` / empty, never an error) |
+| `/v1/health/pipeline` | GET | Ingestion funnel health summary (`healthy`/`degraded`/`disabled`; `enabled: false` + zeroed counters while the observability flag is OFF) |
+| `/v1/config/sdk/versions` | GET | SDK version-compatibility tier manifest (supported / deprecated / read-compatible / blocked-after-date + per-band capabilities; static non-secret policy data, always served — the `/v1/batch` ingress consultation rides `AETHER_SDK_VERSION_COMPAT_ENABLED` / `_MODE` (`off`/`shadow`/`warn`/`enforce`), default OFF) |
 | `/v1/config/sdk/manifest` | GET | SDK remote config (signed manifests + rollouts) |
 | `/v1/activation/*` | GET/POST | Self-serve tenant activation FSM (flag-gated `AETHER_ACTIVATION_ENABLED`, default OFF) |
 | `/v1/kyber/missions[/*]` | GET/POST | Kyber Mission aggregate + monitoring read plane (operator; flag-gated `KYBER_MISSIONS_ENABLED`, default OFF) |

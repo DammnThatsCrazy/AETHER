@@ -14,7 +14,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "f69e5128"
+last_synced_commit: "c4f33e58"
 ---
 # Operations Runbook v8.12.0
 
@@ -201,6 +201,7 @@ in-memory only and is **not durable** until Redis returns.
 | Service | Endpoint | Expected |
 |---------|----------|----------|
 | Backend | `GET /v1/health` | `{"status": "healthy"}` |
+| Ingestion funnel | `GET /v1/health/pipeline` | `{"probe": "ingestion-pipeline", "status": healthy/degraded/disabled, "enabled": true/false}` — `disabled` with zeroed counters while `AETHER_INGESTION_OBSERVABILITY_ENABLED` is OFF |
 | ML Serving | `GET /health` | `{"status": "healthy", "models_loaded": [...]}` |
 | Defense | `GET /v1/defense/status` | `{"enabled": true/false}` |
 
@@ -609,6 +610,37 @@ Replay reads Bronze only and republishes to `aether.sdk.events.validated` with
 those rows (the durable Bronze row already exists), incrementing
 `ingestion_bronze_replay_skip_total`, so a replay re-delivers the downstream
 pipeline without double-persisting.
+
+## Ingestion Funnel Observability & SDK Version Tiers (WS-E)
+
+The ingestion-observability slice records **nothing** until enabled:
+
+```
+AETHER_INGESTION_OBSERVABILITY_ENABLED=true   → records per-stage ingestion-funnel
+                                                 telemetry (RECEIVED → VALIDATED →
+                                                 BRONZE → NORMALIZED → PROJECTIONS)
+                                                 and per-observation traces keyed by
+                                                 {tenant_id}:{event_id}
+AETHER_SDK_VERSION_COMPAT_ENABLED=true        → /v1/batch consults context.library.version
+AETHER_SDK_VERSION_COMPAT_MODE=off            → off | shadow | warn | enforce
+                                                 (enforce rejects past blocked-after date)
+```
+
+While the observability flag is OFF the operator surfaces stay mounted but
+report `enabled: false` / empty bodies (never an error), so dashboards keep a
+stable liveness surface:
+
+- `GET /v1/kyber/ingest/observability` (+ `/funnel`, `/traces`,
+  `/traces/{event_id}`) — Kyber-operator-only (Observation Inspector / control
+  plane), gated on `require_kyber_operator`.
+- `GET /v1/health/pipeline` — funnel health summary: `healthy` when no rejected
+  or degraded stage, `degraded` otherwise, `disabled` while the flag is OFF.
+- `GET /v1/config/sdk/versions` — always served: the tier table is static,
+  non-secret policy data. Only the `/v1/batch` ingress consultation
+  (advisory `sdk_tier` label / enforce-mode rejection) is flag-gated.
+
+The ledger is in-process and never rejects, drops, or changes event
+dispositions — it is observation-only by construction.
 
 ---
 
