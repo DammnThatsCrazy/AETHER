@@ -644,19 +644,89 @@ outbox/workers, imports/provider/journey/card-linked/payment, comms 344, route-m
 + registry coverage); settings/import smoke clean across all seams and the four new
 flag blocks (all default OFF except the five B3 ingress-consent flags, default True).
 
-## Later phases (reserved)
+## WS-C close-out (SDK hardening — Invariants #3/#4/#12/#16)
 
-Workstreams A–E (the blueprint's own sequencing) begin after Phase 0 converges.
-Phases are added to this ledger as they are scheduled; nothing below is claimed
-built.
+Stacked on `feat/sdk-universal-ingestion` for the consolidated PR at `99717978`
+(18 files). Every behavior-changing mechanism is flag-gated default OFF; the
+legacy path is byte-identical while OFF. Items map to gap rows 4/6/12/15/28.
 
-| Workstream | Scope (reserved) | Opens when |
+- **Native identity → subject hints (`AETHER_SUBJECT_HINTS_ONLY_ENABLED`, default OFF; Invariant #4, gap row 6).** `SubjectHintsConfig` on `Settings`; `validation.py` neutralizes client-asserted `identityConfidence`/`identitySignals` at the single Bronze-write normalization point; `touchpoint_projector.py` nulls `identity_resolution_method`/`_confidence`/`_version`; iOS/Android `AetherConfig.subjectHintsOnly` (default false) stops client `/sdk/identity/resolve` re-stamping. Legacy values preserved when OFF.
+- **Native encrypted durable queues (`AetherConfig.encryptedDurableQueue`, default OFF; gap row 12).** Replaces delete-before-ack with a durable AES-GCM ack queue: Keychain / Android-Keystore cipher key, `AETHERQ1` envelope magic, 2xx-acknowledge / transient-retry-retain / ≥400 acknowledge-drop (poison-pill protection). Honest boundary: iOS verified to `swiftc -parse`; Android not compilable in CI — a device/emulator build + integration test is required before enablement.
+- **Shared-barrel delist (`packages/shared` no longer star-ships `commerce-bridge.ts`/`economic-metrics.ts`; Invariant #3, gap row 28).** Canonical backend homes documented on both files; consumers import via explicit subpath; `validate_sdk_import_boundary.py` gains a regression lock forbidding re-adding either star-export (validator not weakened). Full physical relocation off the SDK graph is deferred (no governed non-SDK TS home yet) — tracked, not faked.
+- **`packages/web/src/types.ts` EventType re-point (Invariant #16, gap row 4).** Hand-mirror union removed; re-export from the Contract Spine; `generate_contracts.py` `validate_web_eventtype_reimport()` guard fails on local re-declaration or lost re-export.
+- **Native correlation fields, end-to-end (Invariant #12, gap row 8).** iOS/Android `CorrelationContext` (camelCase, shared-shaped with `packages/shared/events.ts`); `observation_envelope.py` additively maps a `span_id` flat fallback + `parent_observation_id`; nothing re-stamps a source-provided id.
+
+Lane evidence (pre-integration; coordinator gate deferred to the program tip):
+pytest **60 passed** (8 new + 52 adjacent), `generate_contracts.py --check` /
+`validate_sdk_import_boundary.py` / `validate_mobile_event_parity.py` /
+`validate_ts_public_exports.py` all exit 0, docs-fix 56/0, docs_drift 0 stale.
+
+## WS-D close-out (backend interpretation — Invariants #7/#11/#12/#13/#14)
+
+Stacked on `feat/sdk-universal-ingestion` for the consolidated PR at `5f2f0272`
+(28 files). Architecture: `docs/architecture/BACKEND_INTERPRETATION_WS_D.md`.
+Seven new flags, all default OFF, on `Settings.backend_interpretation`
+(`BackendInterpretationConfig`); item-8 governance rides the pre-existing
+`AETHER_MUTATION_GATEWAY_MODE` (`off|shadow|enforce`, default `off`) — no new
+knob, no production default flip. Scopes gap rows 7/8/9/22/24/26/31.
+
+| Item | Flag (default OFF) | Deliverable |
+|---|---|---|
+| 1 Typed `RelationshipFact` | `AETHER_BACKEND_RELATIONSHIP_FACT_ENABLED` | `RelationshipFact` + `evidence_refs` / `resolution_method` / validity window; promotion forwards evidence + correlation onto the mutation ledger when ON (#14) |
+| 2 Episode engine | `AETHER_BACKEND_EPISODE_ENGINE_ENABLED` | canonical episode primitive + `episode360` read surface; deterministic digest ids; durable; provider fail-isolated — registry row stays `in_flight` (honest, not flipped) |
+| 3 Outcome truth store | `AETHER_OUTCOME_TRUTH_STORE_ENABLED` | durable mirror of projected silver outcome rows with evidence lineage (`workers.py` recorder hook, best-effort) (#14) |
+| 4 Section-25 dedupe | `AETHER_EVIDENCE_DEDUPE_ENABLED` | one outcome, many evidence refs |
+| 5 Temporal envelope → Silver | `AETHER_SILVER_TEMPORAL_ENVELOPE_ENABLED` | server temporal block replaces the raw client timestamp at the Silver projector boundary (#11) |
+| 6 Correlation first-class | `AETHER_CORRELATION_FIRST_CLASS_ENABLED` | canonical registry, not opaque JSONB (#12) |
+| 7 Silver exact money | `AETHER_SILVER_EXACT_MONEY_ENABLED` | exact `Decimal`; missing-never-0.0, currency never `'USD'`; alembic `20260906_wsd_silver_exact_money` (#13) |
+
+Convergence note (`feat/financial-normalization`, merged to `origin/main`
+`59a7fb24`): WS-D reuses the canonical financial exact-money machinery and keeps
+its Silver exact-money behind the default-OFF flag — migration/table overlap with
+the financial-normalization lane is resolved at the consolidated-PR merge onto
+`main`; the machinery is never built twice.
+
+Lane evidence (pre-integration): **26 new + 24 flag-OFF parity** tests green;
+`validate_migration_safety` 103 revisions, 0 destructive.
+
+## WS-E close-out (operations — Invariant #17, Gates G/H)
+
+Stacked on `feat/sdk-universal-ingestion` for the consolidated PR at `08e46a1b`
+(backend) + `df323de7` (frontend). Authored doc:
+`docs/source-of-truth/INGESTION_OPS.md`. Every mechanism default OFF.
+
+- **Ingestion funnel telemetry (`AETHER_INGESTION_OBSERVABILITY_ENABLED`, default OFF).** `ingestion_observability.py` in-process ledger + per-observation trace ladder; monitored stages RECEIVED/VALIDATED/BRONZE (API process) + NORMALIZED/PROJECTIONS (workers); the remainder honestly `declared-unmonitored`. Recording seams never change dispositions.
+- **Kyber ingestion control plane + Observation Inspector (`enableIngestionOps`, default OFF).** `/ingestion-ops` route (`router.tsx`), sidebar gated by the same flag; funnel table + rollup, trace inspector, recent traces, SDK fleet, tier manifest, replay status; honest disabled note when the backend reports `enabled:false`.
+- **Real `GET /v1/health/pipeline`** (replaces the phantom endpoint lane-0 Gate G needle found); mounted in `services/gateway/routes.py`.
+- **SDK-fleet view mounted** (pre-built `SdkFleetMonitor` — not rebuilt) + **golden cross-path fixture** asserted across batch/replay paths.
+- **SDK version-compatibility tiers (`AETHER_SDK_VERSION_COMPAT_ENABLED` default OFF; `AETHER_SDK_VERSION_COMPAT_MODE` default `off`).** `sdk_version_tiers.py` + `GET /v1/config/sdk/versions`; `/v1/batch` `sdk_tier` advisory label gated by the enable flag; fail-closed date enforcement only in mode `enforce`.
+- **Gate G (`validate_kyber_ops_surface.py`) + Gate H (`validate_sdk_compat_tiers.py`) dispatched in `repo_doctor`** (both PASS in the 78-gate run); fail-closed.
+
+## WS-C/D/E integration evidence (single combined gate at the program tip)
+
+`make ci-check` (env-stripped) **78 passed / 0 failed** at the integration head;
+`docs_drift.py --strict` **455 clean / 0 stale** after a genuine 18-doc re-review
+(7 content-edited — SDK-IOS / SDK-ANDROID / SDK-COMMERCE-BRIDGES, ARCHITECTURE,
+OPERATIONS-RUNBOOK, FRONTEND-ARCHITECTURE, BACKEND-API — 11 verified-accurate
+restamps, `ea658fba`); `FRONTEND-ROUTE-STATE-MATRIX.md` registered the new
+`/ingestion-ops` route with only genuinely-asserted states (empty + gating `A`,
+loading/error/populated `I`) — `c098c109`. The head is not yet pushed; GitHub
+leaf checks (typescript / e2e / mobile / sdk-js / staging) run after push to
+`origin/feat/sdk-universal-ingestion`.
+
+## Workstreams A–E (ledger)
+
+WS-A1 merged to `origin/main` via #600; WS-A2–A7 and WS-B…E are stacked on
+`feat/sdk-universal-ingestion` for the consolidated program PR. Close-out per
+lane is above; each row records its slice commit(s) and content.
+
+| Workstream | Scope (delivered) | Status |
 |---|---|---|
 | WS-A — Contract foundation | **WS-A1 + WS-A2 + WS-A3 + WS-A4 + WS-A5 + WS-A6 + WS-A7 done** (WS-A1 merged to main via #600; A2–A7 stacked on `feat/sdk-universal-ingestion` for the consolidated PR). WS-A complete: field-trust + semantic-level spine, privacy family, Envelope-B, native event-type codegen, and registry-re-pointed metric/privacy/retention docs | — (complete) |
 | WS-B — Adapter convergence | **WS-B1..B5 done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR): universal ingress adapter registry (7 families declared; `SdkIngressAdapter` + `ReplayIngressAdapter` implemented) + one validated gateway (`services/ingestion/gateway.py`) + flag-gated `/v1/batch` adoption; deprecated `/v1/ingest` aliases converged onto the canonical spine (kill flag `AETHER_KILL_DEPRECATED_INGEST_ALIASES`); consent-on-every-path across feed/comm/provider/import/payment seams (B3, mandatory scrub/policy default-ON, S server-receipt fail-closed toggle); ingestion-level replay with original-time preservation (`AETHER_INGESTION_REPLAY_ENABLED`, operator surface mounted); consumption-side normalization spine (`AETHER_NORMALIZATION_SPINE_ENABLED`) retiring heterogeneous-envelope branching (Invariants #1/#5/#8/#9/#15) | Phase 0 merged |
-| WS-C — SDK hardening | Native identity → subject hints (delete client `/sdk/identity/resolve` re-stamping); native encrypted persistent queues; remove/relocate shared interpretation modules; regenerate `web/src/types.ts`; add native correlation fields (Invariants #4/#12/#16) | Phase 0 merged |
-| WS-D — Backend interpretation | Typed `RelationshipFact` + `evidence_refs`; Episode engine; outcome truth store; Section-25 evidence dedupe; silver money → exact decimal/event-time valuation on by default (coordinate with `feat/financial-normalization` — do not build twice); mutation-gateway governance on by default (Invariants #7/#11/#13/#14) | Phase 0 merged |
-| WS-E — Operations | Ingestion funnel telemetry; Kyber ingestion control plane + Observation Inspector; mount the already-built SDK-fleet view; golden cross-path fixture; SDK version-compatibility tiers; shadow/staged enforcement (Invariant #17, Gates G/H) | Phase 0 merged |
+| WS-C — SDK hardening | **done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR, `99717978`): native identity → subject hints (`AETHER_SUBJECT_HINTS_ONLY_ENABLED`, default OFF); native encrypted durable ack queues (`AetherConfig.encryptedDurableQueue`, default OFF); `@aether/shared` barrel delist of `commerce-bridge.ts`/`economic-metrics.ts` + import-boundary regression lock; `web/src/types.ts` EventType re-point to the Contract Spine + generator guard; native correlation fields end-to-end, never overwritten (Invariants #3/#4/#12/#16). Close-out + evidence above | — (complete) |
+| WS-D — Backend interpretation | **done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR, `5f2f0272`): typed `RelationshipFact` + `evidence_refs`; episode engine + episode360 read surface; durable outcome truth store; Section-25 evidence dedupe; server temporal envelope reaches Silver; correlation first-class; Silver exact-decimal money — all seven behind `BackendInterpretationConfig` flags default OFF; derived-truth governance rides `AETHER_MUTATION_GATEWAY_MODE` (no new knob); coordinated with `feat/financial-normalization` (never built twice) (Invariants #7/#11/#12/#13/#14). Close-out + evidence above | — (complete) |
+| WS-E — Operations | **done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR, `08e46a1b` + `df323de7`): ingestion funnel telemetry (`AETHER_INGESTION_OBSERVABILITY_ENABLED`, default OFF); Kyber ingestion control plane + Observation Inspector (`enableIngestionOps`, default OFF); real `GET /v1/health/pipeline` (was phantom); SDK-fleet view mounted; golden cross-path fixture; SDK version-compatibility tiers (`AETHER_SDK_VERSION_COMPAT_ENABLED`/`_MODE`, default OFF); Gate G/H validators in `repo_doctor` (Invariant #17). Close-out + evidence above | — (complete) |
 
 **ADR-012** is reserved for a future genuine decision (e.g. converge-on-one-
 `observe` + the Envelope A→B contract) and is **not** created in Phase 0.
