@@ -14,12 +14,17 @@ spine so an AetherEvent ``subject_id``/``actor_id`` becomes a reachable
 from __future__ import annotations
 
 import inspect
+from copy import deepcopy
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
 from services.ingestion import observation_envelope as oe
+from services.ingestion import workers
 from services.ingestion.spine import ObservationView, normalization_spine_enabled, to_observation_view
+from services.silver.dispatcher import ProjectionOutcome
+from shared.events.events import Event, Topic
 
 
 def _core_normalized() -> dict:
@@ -279,3 +284,230 @@ def test_view_never_raises_on_garbage() -> None:
     view = to_observation_view({"event_type": "page", "observation_envelope": "bad"})
     assert view.envelope_source is False
     assert view.observation_type == "page"
+
+
+# ── Flag-gated worker convergence (WS-B5, default OFF) ───────────────────────
+
+
+def _set_spine(monkeypatch: pytest.MonkeyPatch, enabled: bool) -> None:
+    """Toggle settings.normalization_spine.enabled on the settings singleton."""
+    from config import settings as settings_module
+
+    monkeypatch.setattr(
+        settings_module.settings,
+        "normalization_spine",
+        SimpleNamespace(enabled=enabled),
+    )
+
+
+def _connector_flat_payload(**overrides) -> dict:
+    """A connector-family flat SDK/comms-shaped payload (provider fields in props)."""
+    payload = {
+        "event_id": "conn_evt_1",
+        "tenant_id": "t1",
+        "event_type": "checkout_completed",
+        "event_family": "commerce",
+        "user_id": "u-conn",
+        "session_id": "sess-conn",
+        "properties": {
+            "provider": "shopify",
+            "source_connector_id": "conn-1",
+            "order_id": "o-1",
+            "currency": "USD",
+            "amount": 10,
+        },
+        "context": {
+            "tenantId": "t1",
+            "sourceConnectorId": "conn-1",
+            "platform": "shopify",
+        },
+        "timestamp": "2026-09-05T03:00:00.000Z",
+        "received_at": "2026-09-05T03:00:00.100Z",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _validated_event(payload: dict) -> Event:
+    return Event(
+        topic=Topic.SDK_EVENTS_VALIDATED,
+        tenant_id=payload.get("tenant_id", ""),
+        source_service="test",
+        payload=payload,
+    )
+
+
+class _CaptureRepo:
+    """Async fake for SilverRepository capturing upsert_record kwargs."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    async def upsert_record(self, **kwargs) -> dict:
+        self.calls.append(kwargs)
+        return {}
+
+
+class _CaptureDispatcher:
+    """Async fake for SilverDispatcher capturing the projector envelope."""
+
+    def __init__(self) -> None:
+        self.captured_envelopes: list[dict] = []
+
+    async def project_with_outcome(self, envelope: dict) -> ProjectionOutcome:
+        self.captured_envelopes.append(deepcopy(envelope))
+        return ProjectionOutcome(event_type=envelope.get("type", ""))
+
+    def handles(self, event_type: str) -> bool:
+        return True
+
+
+# ── _bus_payload_to_sdk_envelope parity / convergence ────────────────────────
+
+
+def test_flag_off_bus_envelope_ignores_envelope_and_matches_legacy(monkeypatch) -> None:
+    """Flag OFF: the additive envelope key is IGNORED — output equals the legacy
+    flat mapping exactly (the branch existing Silver write-path tests assert)."""
+    _set_spine(monkeypatch, False)
+    payload = _flat_sdk_payload()
+    payload["observation_envelope"] = _sdk_envelope_additive(_core_normalized())
+
+    envelope = workers._bus_payload_to_sdk_envelope(payload)
+    assert envelope["type"] == "page"
+    assert envelope["messageId"] == "evt_flat"
+    assert envelope["userId"] == "u-2"  # flat read, NOT the envelope's u-1
+    assert envelope["timestamp"] == "2026-09-05T01:00:00.000Z"
+    assert envelope["context"]["tenantId"] == "t1"
+
+
+@pytest.mark.parametrize(
+    "builder",
+    [_flat_sdk_payload, _connector_flat_payload],
+    ids=["sdk", "connector"],
+)
+def test_bus_envelope_flat_payload_identical_flag_on_vs_off(monkeypatch, builder) -> None:
+    """Parity proof for the legacy branch: an SDK/comms fixture produces an
+    identical projector envelope under flag OFF and flag ON."""
+    payload = builder()
+    _set_spine(monkeypatch, False)
+    legacy = workers._bus_payload_to_sdk_envelope(payload)
+    _set_spine(monkeypatch, True)
+    converged = workers._bus_payload_to_sdk_envelope(payload)
+    assert converged == legacy
+
+
+def test_bus_envelope_aether_dump_gains_subject_and_occurrence_flag_on(monkeypatch) -> None:
+    """Flag ON: an AetherEvent dump keeps its subject/occurrence in the projector
+    envelope (the legacy path dropped them)."""
+    payload = _aether_event_dump()
+
+    _set_spine(monkeypatch, False)
+    legacy = workers._bus_payload_to_sdk_envelope(payload)
+    assert legacy["userId"] is None
+    assert legacy["timestamp"] is None
+    assert legacy["properties"] == {}
+    assert legacy["type"] == "commerce.order.created"
+    assert legacy["messageId"] == "evt_aether_1"
+
+    _set_spine(monkeypatch, True)
+    converged = workers._bus_payload_to_sdk_envelope(payload)
+    assert converged["type"] == "commerce.order.created"
+    assert converged["messageId"] == "evt_aether_1"
+    assert converged["userId"] == "u-9"  # subject_id → user subject
+    assert converged["timestamp"] == "2026-09-05T00:00:00.000Z"  # occurred_at
+    assert converged["properties"] == {"amount": 5, "currency": "USD"}
+    assert converged["context"]["tenantId"] == "t1"
+
+
+# ── silver_fact_projector (the ~L180 projector-envelope seam) ────────────────
+
+
+async def test_silver_fact_projector_flat_connector_envelope(monkeypatch) -> None:
+    """silver_fact_projector hands the dispatcher a correct type/messageId envelope."""
+    from services.silver import dispatcher as dispatcher_module
+
+    _set_spine(monkeypatch, True)
+    capture = _CaptureDispatcher()
+    monkeypatch.setattr(dispatcher_module, "SilverDispatcher", lambda: capture)
+
+    await workers.silver_fact_projector(_validated_event(_connector_flat_payload()))
+    assert len(capture.captured_envelopes) == 1
+    envelope = capture.captured_envelopes[0]
+    assert envelope["type"] == "checkout_completed"
+    assert envelope["messageId"] == "conn_evt_1"
+    assert envelope["userId"] == "u-conn"
+    assert envelope["properties"]["provider"] == "shopify"
+    assert envelope["context"]["tenantId"] == "t1"
+
+
+async def test_silver_fact_projector_aether_dump_envelope(monkeypatch) -> None:
+    """Flag ON: an AetherEvent dump projects through the spine (subject reachable)."""
+    from services.silver import dispatcher as dispatcher_module
+
+    _set_spine(monkeypatch, True)
+    capture = _CaptureDispatcher()
+    monkeypatch.setattr(dispatcher_module, "SilverDispatcher", lambda: capture)
+
+    payload = _aether_event_dump(event_type="commerce.order.created")
+    await workers.silver_fact_projector(_validated_event(payload))
+    assert len(capture.captured_envelopes) == 1
+    envelope = capture.captured_envelopes[0]
+    assert envelope["type"] == "commerce.order.created"
+    assert envelope["messageId"] == "evt_aether_1"
+    assert envelope["userId"] == "u-9"
+    assert envelope["timestamp"] == "2026-09-05T00:00:00.000Z"
+    assert envelope["properties"] == {"amount": 5, "currency": "USD"}
+
+
+# ── silver_normalizer parity / convergence ───────────────────────────────────
+
+
+async def test_silver_normalizer_flat_payload_identical_flag_on_vs_off(monkeypatch) -> None:
+    repo = _CaptureRepo()
+    monkeypatch.setattr(workers, "_silver", repo)
+    payload = _connector_flat_payload()
+
+    _set_spine(monkeypatch, False)
+    await workers.silver_normalizer(_validated_event(deepcopy(payload)))
+    _set_spine(monkeypatch, True)
+    await workers.silver_normalizer(_validated_event(deepcopy(payload)))
+
+    assert len(repo.calls) == 2
+    assert repo.calls[0]["entity_id"] == repo.calls[1]["entity_id"] == "u-conn"
+    assert repo.calls[0]["normalized"] == repo.calls[1]["normalized"]
+
+
+async def test_silver_normalizer_aether_subject_reachable_only_flag_on(monkeypatch) -> None:
+    repo = _CaptureRepo()
+    monkeypatch.setattr(workers, "_silver", repo)
+    payload = _aether_event_dump()
+
+    _set_spine(monkeypatch, False)
+    await workers.silver_normalizer(_validated_event(deepcopy(payload)))
+    assert repo.calls[0]["entity_id"] == ""
+    assert "user_id" not in repo.calls[0]["normalized"]
+
+    _set_spine(monkeypatch, True)
+    await workers.silver_normalizer(_validated_event(deepcopy(payload)))
+    assert repo.calls[1]["entity_id"] == "u-9"
+    assert repo.calls[1]["normalized"]["user_id"] == "u-9"
+    assert repo.calls[1]["normalized"]["last_event_at"] == "2026-09-05T00:00:00.000Z"
+
+
+# ── identity_signal_emitter ──────────────────────────────────────────────────
+
+
+async def test_identity_signal_emitter_aether_subject_flag_on(monkeypatch) -> None:
+    producer = SimpleNamespace(publish=AsyncMock())
+    payload = _aether_event_dump(event_type="identify")
+
+    _set_spine(monkeypatch, False)
+    await workers.identity_signal_emitter(_validated_event(deepcopy(payload)), producer)
+    assert producer.publish.await_count == 0  # legacy read has no user_id
+
+    _set_spine(monkeypatch, True)
+    await workers.identity_signal_emitter(_validated_event(deepcopy(payload)), producer)
+    assert producer.publish.await_count == 1
+    published: Event = producer.publish.await_args.args[0]
+    assert published.payload["user_id"] == "u-9"
+    assert published.payload["confidence"] == 0.95

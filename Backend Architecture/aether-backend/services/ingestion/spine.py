@@ -111,7 +111,9 @@ def _correlation_id_from_context(context: Any) -> Optional[str]:
 # ── Envelope branch (additive observation_envelope key) ─────────────────────
 
 
-def _from_envelope(envelope: Mapping[str, Any]) -> ObservationView:
+def _from_envelope(
+    envelope: Mapping[str, Any], outer_payload: Mapping[str, Any]
+) -> ObservationView:
     observation = _as_dict(envelope.get("observation")) or {}
     tenancy = _as_dict(envelope.get("tenancy")) or {}
     source = _as_dict(envelope.get("source")) or {}
@@ -154,9 +156,9 @@ def _from_envelope(envelope: Mapping[str, Any]) -> ObservationView:
         anonymous_id=_first_subject_value(subjects, _ANONYMOUS_ID_SUBJECT),
         correlation_id=correlation.get("correlation_id"),
         payload_dict=_as_dict(envelope.get("payload")),
-        # The envelope carries the A-side context on the flat dict (still on the
-        # payload), not inside the envelope blocks — leave view.context None.
-        context=None,
+        # The A-side context is NOT inside the envelope blocks — it stays on the
+        # outer flat dict that always rides alongside the additive envelope key.
+        context=_as_dict(outer_payload.get("context")),
         envelope_source=True,
     )
 
@@ -259,7 +261,7 @@ def to_observation_view(payload: Mapping[str, Any]) -> ObservationView:
         return ObservationView()
     envelope = _as_dict(payload.get("observation_envelope"))
     if envelope is not None:
-        return _from_envelope(envelope)
+        return _from_envelope(envelope, payload)
     if _looks_like_aether_event(payload):
         return _from_aether_event(payload)
     if payload.get("event_type") is not None:
