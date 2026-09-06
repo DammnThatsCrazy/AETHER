@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -39,9 +40,7 @@ def wsd_flags():
         "silver_exact_money_enabled",
     )
 
-    def _set(**overrides) -> "SimpleNamespace":
-        from types import SimpleNamespace
-
+    def _set(**overrides) -> SimpleNamespace:
         state = {flag: False for flag in flags}
         state.update(overrides)
         config_settings.settings.backend_interpretation = SimpleNamespace(**state)

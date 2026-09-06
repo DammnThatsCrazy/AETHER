@@ -1159,7 +1159,7 @@ object Aether : DefaultLifecycleObserver {
     /** Remove acknowledged events (by id) from the queue and persist. */
     private fun acknowledge(batch: List<JSONObject>) {
         val acked = batch.mapNotNull { id ->
-            it.optString("id").takeIf { s -> s.isNotEmpty() }
+            id.optString("id").takeIf { s -> s.isNotEmpty() }
         }.toSet()
         if (acked.isEmpty()) return
         eventQueue.removeIf { it.optString("id") in acked }
