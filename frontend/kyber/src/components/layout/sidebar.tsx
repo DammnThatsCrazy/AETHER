@@ -78,6 +78,11 @@ export const KYBER_NAV_ITEMS: readonly NavItem[] = [
   { path: '/model-runtime/entitlements', label: 'Model Entitlements', destination: 'kyber-tenants', envFlag: 'enableModelHarness' },
   { path: '/model-runtime/usage', label: 'Model Usage', destination: 'kyber-ai-efficiency', envFlag: 'enableModelHarness' },
   { path: '/model-runtime/traces', label: 'Model Traces', destination: 'kyber-flow-trace', envFlag: 'enableModelHarness' },
+  // Ingestion control plane (WS-E, blueprint Gate G). Frontend-only flag mirrors
+  // the backend AETHER_INGESTION_OBSERVABILITY_ENABLED (default OFF); the
+  // /v1/kyber/ingest/observability + /v1/kyber/ingest/replay endpoints are the
+  // real grant gate. Icon taxonomy reuses the reliability destination.
+  { path: '/ingestion-ops', label: 'Ingestion Ops', destination: 'kyber-reliability', envFlag: 'enableIngestionOps' },
   { path: '/dune-feeder', label: 'Dune Feeder', destination: 'kyber-dune-feeder' },
   { path: '/revops',          label: 'RevOps',          destination: 'kyber-revops' },
   { path: '/sales-readiness', label: 'Sales Ready',     destination: 'kyber-sales-readiness' },

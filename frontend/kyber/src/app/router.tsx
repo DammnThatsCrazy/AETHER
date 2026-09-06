@@ -100,6 +100,13 @@ const ModelRuntimeHealthPage = lazy(() => import('@kyber/features/model-runtime'
 const EntitlementsPage = lazy(() => import('@kyber/features/model-runtime').then(m => ({ default: m.EntitlementsPage })));
 const UsagePage = lazy(() => import('@kyber/features/model-runtime').then(m => ({ default: m.UsagePage })));
 const TracesPage = lazy(() => import('@kyber/features/model-runtime').then(m => ({ default: m.TracesPage })));
+// Ingestion control plane (WS-E, blueprint Gate G). Routes mount only when the
+// enableIngestionOps frontend flag is on (default OFF, mirroring the backend
+// AETHER_INGESTION_OBSERVABILITY_ENABLED flag). The /v1/kyber/ingest/observability
+// + /v1/kyber/ingest/replay endpoints are Kyber-operator-only and gate every
+// request, so routing is not a grant; observability bodies report enabled:false
+// while the backend flag is OFF so the page renders honest disabled states.
+const IngestionOpsPage = lazy(() => import('@kyber/features/ingestion-ops').then(m => ({ default: m.IngestionOpsPage })));
 
 function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   return (
@@ -217,6 +224,10 @@ export function AppRouter() {
                     <Route path="/model-runtime/usage" element={<PageSuspense><UsagePage /></PageSuspense>} />
                     <Route path="/model-runtime/traces" element={<PageSuspense><TracesPage /></PageSuspense>} />
                   </>
+                )}
+                {/* Ingestion control plane (WS-E) — flag-gated (default OFF). */}
+                {isFeatureEnabled('enableIngestionOps') && (
+                  <Route path="/ingestion-ops" element={<PageSuspense><IngestionOpsPage /></PageSuspense>} />
                 )}
                 <Route path="*" element={<Navigate to="/mission" replace />} />
               </Routes>
