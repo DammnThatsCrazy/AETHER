@@ -297,16 +297,20 @@ code — only the marker bodies are generated, and hand-editing them is not supp
 | Android consent map | `packages/android/src/main/java/com/aether/sdk/Aether.kt` — `aether-consent-purposes/android-map` | per-event `"type" to "purpose"` mapOf |
 
 Primary purpose = `requiredPurposes[0]`, defaulting to `analytics` when empty (same rule
-the TS/Python twins use). Regions are byte-stable, so `python scripts/generate_contracts.py
---check` is idempotent.
+the TS/Python twins use). Regions are byte-stable, so `python scripts/generate_contracts.py --check`
+is idempotent.
 
 **Drift fix delivered by regeneration.** The hand-maintained native maps had drifted on 5
 agentic-trade/position events to purpose `agent` while the registry primary purpose is
 `financial_activity` — a consent-gating bug the old key-set parity gate could not see.
-Regeneration makes the registry authoritative:
-`agent_trade_order_observed`, `agent_trade_executed`, `agent_position_opened`,
-`agent_position_closed`, `agent_strategy_observed` → `financial_activity`;
-`agent_trade_intent_observed` and `agent_strategy_observed` (registry `agent`) stay `agent`.
+Regeneration makes the registry authoritative: the five agent events whose registry
+primary purpose is `financial_activity` — `agent_trade_order_observed`,
+`agent_trade_fill_observed`, `agent_position_observed`,
+`agent_portfolio_snapshot_observed`, `agent_performance_snapshot_observed` — now
+carry `financial_activity`, and every other agent event carries `agent`. (Ledger
+accuracy note, corrected in WS-A7: an earlier draft of this close-out cited
+phantom names `agent_trade_executed` / `agent_position_opened` /
+`agent_position_closed`, which are not registry event types.)
 
 **Validator hardening (value-aware, never-weaken rule).** `make ci-check` (repo-doctor)
 runs `validate_mobile_event_parity.py` but never the generator `--check`, so a
@@ -349,7 +353,87 @@ the full-program tip per the gate-policy directive (WS-A3/A4/A5 precedent).
 - Canonical gate green at the full-program tip: `make ci-check` = 0, `git status --short`
   empty, `docs_drift.py --strict` clean.
 - WS-A7 next (re-point metric/privacy/retention truth into the Spine + un-stale the
-  per-domain count prose recorded in WS-A4) — reserved below.
+  per-domain count prose recorded in WS-A4) — delivered in the WS-A7 section below.
+
+## WS-A7 — re-point metric/privacy/retention truth to the spine + un-stale docs
+
+Stacked on `feat/sdk-universal-ingestion` — generator/test at `8897cde4`, docs at
+`e247883a`, ledger close-out below (base = the WS-A6 tip `6e9b1fe4`), delivered in
+the consolidated program PR. Canonical gate deferred to the full-program tip per the
+gate-policy directive; the build-time self-checks below are the recorded evidence.
+
+WS-A7 closes the remaining WS-A contract-foundation debt recorded since WS-A4: the
+generated event table carried only privacy class while authored SOT docs pointed at
+it as the retention reference, and the authored `EVENT_REGISTRY.md` (plus six
+dependent prose docs) had drifted far from the 403-type / 25-family spine.
+
+**Retention Class made load-bearing (commit `8897cde4`).** `gen_event_table_md`
+(scripts/generate_contracts.py) now emits a Retention Class column between Privacy
+Class and Description, so `docs/_generated/event-registry-table.md` is the complete
+per-event metadata surface — Event Type | Family | Required Purposes | Privacy Class
+| Retention Class | Description (403 rows, deprecated marked). No other emitter
+changed (native regions, TS/Python twins, and the consent/metric/integration tables
+are byte-identical); the generator `--check` is idempotent. New pin suite
+`tests/unit/test_event_registry_table_md.py` (6 tests) asserts the 6-column header,
+one row per registry event in registry order, and — the backstop — that
+`privacyClass` + `retentionClass` reproduce the spine for all 403 events.
+
+**EVENT_REGISTRY.md rewritten (commit `e247883a`).** The doc claimed 248 types /
+v8.10.0; its family table was missing five families (derivatives, interaction,
+interop, privacy, stablecoin), carried a phantom `agentic` family, and the three
+"agentic account / trading / AgentMail" + x402-observation sections used phantom
+event-family labels `agentic_observability` / `x402_observability` (those events
+live in families `agent` / `x402`; only the *service* directory is
+`agentic_observability`). It falsely claimed the generated table shows Silver/Graph
+projections, asserted core is analytics-only (`experiment` is marketing), and printed
+an x402 "deprecated execution verbs" table the registry contradicts
+(`x402_payment_submitted` / `_settled` are active SDK lifecycle verbs; only
+`x402_payment` is deprecated). The rewrite now states the generated table is the authoritative per-event
+reference, lists all 25 families with registry-exact counts / sdkEmitable counts /
+consent purposes, catalogs the privacy and retention classes in use, and corrects the
+journey (15), agent (64, backend/observation-plane), and x402 (26) narratives.
+Prose counts were re-pointed to the current spine in six authored docs:
+`FIRST_RELEASE_INTELLIGENCE_TELEMETRY_OPERATIONS` (267/21 → 403/25),
+`COMMS_TRUTH_MATRIX` 1.1 (comms 15 → 23 events, now IMPL — closing the
+WS-A4-recorded stale count),
+`MEASUREMENT_INTEGRITY` (20 → 27 metrics, matching `registry.py` ↔ `metric-registry`
+parity), `PRODUCT_INTELLIGENCE` (11 → 12 interaction events),
+`UNIVERSAL_INTELLIGENCE_GRAPH_IMPLEMENTATION` validation log (248/8/20 → 403/12/25),
+and `STABLECOIN_EVENT_REGISTRY` (financial/governance privacy split + per-class
+retention made registry-exact). This ledger also absorbs two WS-A6-close-out accuracy
+fixes (phantom agent drift-event names; deferred-table EVENT_REGISTRY row retired).
+
+| Workstream item | Deliverable | Status |
+|---|---|---|
+| Retention Class column | `gen_event_table_md` emits Retention Class; `docs/_generated/event-registry-table.md` regenerated (403 rows, 6 columns); no other emitter changed; generator `--check` byte-stable | ✅ implemented (this slice) |
+| Generated-table pin suite | `tests/unit/test_event_registry_table_md.py` (6 tests: header/separator, row-per-event registry order, spine-exact privacy + retention for all 403, purposes column, deprecation markers, title) | ✅ implemented (this slice) |
+| EVENT_REGISTRY.md rewrite | 403 types / v8.12.0; 25-family table (counts + sdkEmitable + consent); phantom `agentic` / `agentic_observability` / `x402_observability` labels removed; Silver/Graph claim removed; core purpose corrected; x402 sole-deprecated truth; sdkEmitable taxonomy + privacy/retention class catalogs; generated-table pointer | ✅ implemented (this slice) |
+| Prose-count re-point | FIRST_RELEASE (267/21→403/25), COMMS_TRUTH_MATRIX (15→23 IMPL), MEASUREMENT_INTEGRITY (20→27), PRODUCT_INTELLIGENCE (11→12), UNIVERSAL_INTELLIGENCE_GRAPH_IMPLEMENTATION (248/8/20→403/12/25), STABLECOIN_EVENT_REGISTRY (retention-exact) | ✅ implemented (this slice) |
+| Ledger close-out | This section + WS-A row → complete; WS-A6 phantom-name + Deferred-row accuracy fixes | ✅ implemented (this slice) |
+
+Build-time self-checks (serial, no full gate): `generate_contracts.py --check`
+**exit 0**; pytest `test_event_registry_table_md.py` **6 passed**; EVENT_REGISTRY.md
+family table / sdkEmitable counts / deprecation sets / class catalogs cross-checked
+against `event-registry.json` (all match); 76 doc-named event types all resolve in
+the registry; markdown table column-consistency scan over the 7 touched docs: 0 issues.
+`docs_drift.py --update` / `make ci-check` restamp deferred to the full-program tip
+per the gate-policy directive (WS-A3/A4/A5/A6 precedent).
+
+### Definition of done (WS-A7)
+
+- The generated event table carries Retention Class, so per-event privacy **and**
+  retention are spine-derived and pinned by tests on a generated surface; the
+  generator stays byte-stable and `--check` idempotent.
+- `EVENT_REGISTRY.md` asserts only registry-true counts / families / purposes /
+  classes and points readers at the generated table for the authoritative per-event
+  enumeration; the six dependent prose docs carry current spine numbers.
+- No validators weakened; no new ADR (ADR-012 still reserved); authored docs updated
+  when the behavior (spine) changed; source-linked docs content-reviewed with
+  `docs_drift.py --update` restamp deferred to the tip.
+- Canonical gate green at the full-program tip: `make ci-check` = 0, `git status --short`
+  empty, `docs_drift.py --strict` clean.
+- WS-A (contract foundation) is complete — WS-B (adapter convergence) is next,
+  reserved below.
 
 ## Later phases (reserved)
 
@@ -359,7 +443,7 @@ built.
 
 | Workstream | Scope (reserved) | Opens when |
 |---|---|---|
-| WS-A — Contract foundation | **WS-A1 done — WS-A2 + WS-A3 + WS-A4 + WS-A5 + WS-A6 done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR; WS-A1 merged) — WS-A7: re-point metric/privacy/retention truth into the Spine + un-stale the per-domain count prose (Blueprint Points 2/3/10/13, Invariants #2/#16) | WS-A7 (next) |
+| WS-A — Contract foundation | **WS-A1 + WS-A2 + WS-A3 + WS-A4 + WS-A5 + WS-A6 + WS-A7 done** (WS-A1 merged to main via #600; A2–A7 stacked on `feat/sdk-universal-ingestion` for the consolidated PR). WS-A complete: field-trust + semantic-level spine, privacy family, Envelope-B, native event-type codegen, and registry-re-pointed metric/privacy/retention docs | — (complete) |
 | WS-B — Adapter convergence | SDK/webhook/connector/feed/import/harness/replay adapters that all produce Envelope B through one validated gateway; consent-on-every-path; idempotency-before-publish; ingestion-level replay with original-time preservation; kill deprecated `/v1/ingest` aliases (Invariants #1/#5/#8/#9/#15) | Phase 0 merged |
 | WS-C — SDK hardening | Native identity → subject hints (delete client `/sdk/identity/resolve` re-stamping); native encrypted persistent queues; remove/relocate shared interpretation modules; regenerate `web/src/types.ts`; add native correlation fields (Invariants #4/#12/#16) | Phase 0 merged |
 | WS-D — Backend interpretation | Typed `RelationshipFact` + `evidence_refs`; Episode engine; outcome truth store; Section-25 evidence dedupe; silver money → exact decimal/event-time valuation on by default (coordinate with `feat/financial-normalization` — do not build twice); mutation-gateway governance on by default (Invariants #7/#11/#13/#14) | Phase 0 merged |
@@ -377,7 +461,7 @@ built.
 | Consent/privacy on every ingress path | Server-authoritative on `/v1/batch` only today | WS-B |
 | Single observation model / normalization spine | ≥5 Bronze/Silver pipelines at baseline | WS-B |
 | Kyber Observation Inspector + funnel metrics | No surface exists at baseline | WS-E |
-| Stale source-linked docs (`EVENT_REGISTRY.md`, `INGESTION_CONTRACT.md`, `ENRICHMENT_LINEAGE.md`) | Contradict enforced code; corrected against sources in a later phase, not stamped | Deferred constraints |
+| Stale source-linked docs (`INGESTION_CONTRACT.md`, `ENRICHMENT_LINEAGE.md`) | Contradict enforced code; corrected against sources in a later phase, not stamped (`EVENT_REGISTRY.md` corrected against the spine in WS-A7) | Deferred constraints |
 
 ## Definitions of done (all phases)
 
