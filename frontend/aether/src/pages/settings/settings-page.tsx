@@ -88,8 +88,6 @@ export function SettingsPage() {
         {section === 'webhooks' && <WebhooksSection />}
       </div>
 
-      <TerminalSeparator />
-
       <div className="max-w-3xl">
         <DataExchangeGate />
       </div>
