@@ -19,7 +19,15 @@ canonical_owner: platform@aether
 > drift strict clean, generated docs regenerated, `git status` empty — runs
 > once at the **lane tip** after the final phase commit. **Result: the
 > lane-tip gate passed — env-stripped `make ci-check` = 78 gates / 0 failed
-> at `9f6158eb` (2026-09-06).**
+> at `9f6158eb` (2026-09-06).** Two genuine leaf-gate regressions surfaced
+> only after the push (outside the local gate's scope) and were fixed in code,
+> never weakened: `ea912bef` (sdk-js coverage — TS twin test sibling for the
+> 12 type guards + vocabularies) and `09cf26a7` (real-Postgres smoke — the
+> `observation_equivalence_keys` `window` column renamed `equivalence_window`;
+> `window` is a PostgreSQL reserved word that SQLite tolerates, so only the
+> postgres:16-alpine alembic lane caught it). Re-gated at the final tip:
+> env-stripped `make ci-check` = **78 gates / 0 failed at `8ecd55be`**
+> (2026-09-06), and all PR #609 leaf checks green on that tip.
 
 ## Phase 0 — managed-integration abstraction + reconcile skeleton
 
@@ -122,14 +130,23 @@ caveat).
   `make ci-check` = 0) ran once at the lane tip after the final commit: **78
   gates / 0 failed** at `9f6158eb` (2026-09-06), docs drift strict clean,
   generated docs regenerated, `git status` clean. Per-phase rows above are
-  targeted-test claims; the lane-tip gate is the full claim.
+  targeted-test claims; the lane-tip gate is the full claim. After the push,
+  GitHub leaf checks caught two genuine regressions outside the local gate's
+  scope — sdk-js coverage (no TS tests for the §0–40 vocabularies/guards) and
+  the real-Postgres alembic smoke (reserved-word `window` column, see header).
+  Both fixed in code (`ea912bef`, `09cf26a7`), docs re-reviewed + restamped
+  (`8ecd55be`), and the canonical gate re-run on the final tree: **78 gates /
+  0 failed at `8ecd55be`**, all PR #609 leaf checks green.
 
 ## Lane status
 
 Phase commits on this lane: Phase 0 `b0658b5d`, Phase 1 `7a3ae88f`, Phase 2
 `71dcbce2`, Phase 3 `5eb58d93`, Phase 4 `e265a938`; gate prep: source-linked
 doc review `2d6b1fd0` + `9f6158eb`, temporal-kernel delegation + generated-doc
-sync `4b0d0476`. Lane-tip gate: env-stripped `make ci-check` = **78 gates / 0
-failed** (2026-09-06). The post-gate remainder — release readiness, §41+
-review, and the stack onto the SDK-universal-ingestion PR program — is
-reserved.
+sync `4b0d0476`; post-push leaf-gate fixes: sdk-js TS-twin coverage `ea912bef`,
+PG reserved-word column rename `09cf26a7`, doc re-review restamp `8ecd55be`.
+Lane-tip gate: env-stripped `make ci-check` = **78 gates / 0 failed** at
+`9f6158eb` **and re-run 78 gates / 0 failed at the final tip `8ecd55be`**
+(2026-09-06), all PR #609 leaf checks green. The post-gate remainder —
+release readiness, §41+ review, and the stack onto the SDK-universal-ingestion
+PR program — is reserved.
