@@ -146,166 +146,433 @@ public enum AetherEventType: String, Codable, CaseIterable {
 // @generated — DO NOT EDIT. Source: packages/shared/contracts/event-registry.json
 // Contract version: 8.12.0 — Run: python scripts/generate_contracts.py
     // core
-    case track, page, screen, heartbeat, error, performance, experiment
+    case track
+    case page
+    case screen
+    case heartbeat
+    case error
+    case performance
+    case experiment
     // journey
-    case journey_started, journey_paused, journey_resumed, journey_continued, journey_completed
-    case journey_abandoned, journey_checkpoint, navigation_intent, navigation_arrival
-    case deep_link_opened, app_install_attributed, deferred_attribution_resolved, qr_code_scanned
-    case nfc_tag_read, app_clip_invoked
+    case journey_started
+    case journey_paused
+    case journey_resumed
+    case journey_continued
+    case journey_completed
+    case journey_abandoned
+    case journey_checkpoint
+    case navigation_intent
+    case navigation_arrival
+    case deep_link_opened
+    case app_install_attributed
+    case deferred_attribution_resolved
+    case qr_code_scanned
+    case nfc_tag_read
+    case app_clip_invoked
     // identity
     case identify
     // consent
     case consent
     // commerce
-    case conversion, payment_initiated, payment_completed, payment_failed, approval_requested
-    case approval_resolved, entitlement_granted, entitlement_revoked, access_granted, access_denied
+    case conversion
+    case payment_initiated
+    case payment_completed
+    case payment_failed
+    case approval_requested
+    case approval_resolved
+    case entitlement_granted
+    case entitlement_revoked
+    case access_granted
+    case access_denied
     // wallet
-    case wallet, transaction, contract_action
+    case wallet
+    case transaction
+    case contract_action
     // agent
-    case agent_task, agent_decision, a2h_interaction, agent_registered, agent_updated
-    case agent_authorized, agent_deauthorized, agent_capability_granted, agent_capability_revoked
-    case agent_task_created, agent_task_decomposed, agent_task_started, agent_task_completed
-    case agent_task_failed, agent_tool_called, agent_resource_requested, agent_delegated_task
-    case agent_subagent_spawned, agent_policy_evaluated, agent_handoff, agent_escalated_to_human
-    case agent_outcome_recorded, agentic_account_observed, agentic_account_connected_observed
-    case agentic_account_disconnected_observed, agent_budget_observed, agent_budget_changed_observed
-    case agent_permission_observed, agent_mcp_connection_observed, agent_tool_observed
-    case agent_tool_invocation_observed, agent_activity_observed, agent_risk_signal_observed
-    case agent_notification_observed, agent_strategy_observed, agent_trade_intent_observed
-    case agent_trade_order_observed, agent_trade_fill_observed, agent_trade_rejection_observed
-    case agent_position_observed, agent_portfolio_snapshot_observed
-    case agent_performance_snapshot_observed, agent_disconnect_observed, agent_inbox_observed
-    case agent_email_address_observed, agent_thread_observed, agent_message_received_observed
-    case agent_message_sent_observed, agent_reply_observed, agent_attachment_observed
-    case agent_attachment_parsed_observed, agent_otp_detected_observed
-    case agent_invoice_detected_observed, agent_receipt_detected_observed
-    case agent_calendar_intent_observed, agent_support_route_observed
-    case agent_semantic_search_observed, agent_data_extraction_observed, agent_evaluation_observed
-    case agent_cost_observed, ai_invocation_observed, agent_grounding_observed
-    case agent_guardrail_observed, agent_human_override_observed
+    case agent_task
+    case agent_decision
+    case a2h_interaction
+    case agent_registered
+    case agent_updated
+    case agent_authorized
+    case agent_deauthorized
+    case agent_capability_granted
+    case agent_capability_revoked
+    case agent_task_created
+    case agent_task_decomposed
+    case agent_task_started
+    case agent_task_completed
+    case agent_task_failed
+    case agent_tool_called
+    case agent_resource_requested
+    case agent_delegated_task
+    case agent_subagent_spawned
+    case agent_policy_evaluated
+    case agent_handoff
+    case agent_escalated_to_human
+    case agent_outcome_recorded
+    case agentic_account_observed
+    case agentic_account_connected_observed
+    case agentic_account_disconnected_observed
+    case agent_budget_observed
+    case agent_budget_changed_observed
+    case agent_permission_observed
+    case agent_mcp_connection_observed
+    case agent_tool_observed
+    case agent_tool_invocation_observed
+    case agent_activity_observed
+    case agent_risk_signal_observed
+    case agent_notification_observed
+    case agent_strategy_observed
+    case agent_trade_intent_observed
+    case agent_trade_order_observed
+    case agent_trade_fill_observed
+    case agent_trade_rejection_observed
+    case agent_position_observed
+    case agent_portfolio_snapshot_observed
+    case agent_performance_snapshot_observed
+    case agent_disconnect_observed
+    case agent_inbox_observed
+    case agent_email_address_observed
+    case agent_thread_observed
+    case agent_message_received_observed
+    case agent_message_sent_observed
+    case agent_reply_observed
+    case agent_attachment_observed
+    case agent_attachment_parsed_observed
+    case agent_otp_detected_observed
+    case agent_invoice_detected_observed
+    case agent_receipt_detected_observed
+    case agent_calendar_intent_observed
+    case agent_support_route_observed
+    case agent_semantic_search_observed
+    case agent_data_extraction_observed
+    case agent_evaluation_observed
+    case agent_cost_observed
+    case ai_invocation_observed
+    case agent_grounding_observed
+    case agent_guardrail_observed
+    case agent_human_override_observed
     // reward
-    case reward_action_queued, reward_proof_generated, reward_delivered, reward_claim_submitted
+    case reward_action_queued
+    case reward_proof_generated
+    case reward_delivered
+    case reward_claim_submitted
     // x402
-    case x402_payment, x402_resource_requested, x402_payment_required, x402_quote_received
-    case x402_authorization_requested, x402_authorization_resolved, x402_payment_intent_created
-    case x402_payment_submitted, x402_payment_settled, x402_payment_failed, x402_payment_timeout
-    case x402_receipt_verified, x402_access_granted, x402_access_denied, x402_refund_or_reversal
-    case x402_resource_request_observed, x402_challenge_observed, x402_payment_requirement_observed
-    case x402_signature_observed, x402_verification_observed, x402_settlement_observed
-    case x402_resource_access_observed, x402_resource_access_denied_observed, x402_failure_observed
-    case x402_replay_risk_observed, x402_provider_observed
+    case x402_payment
+    case x402_resource_requested
+    case x402_payment_required
+    case x402_quote_received
+    case x402_authorization_requested
+    case x402_authorization_resolved
+    case x402_payment_intent_created
+    case x402_payment_submitted
+    case x402_payment_settled
+    case x402_payment_failed
+    case x402_payment_timeout
+    case x402_receipt_verified
+    case x402_access_granted
+    case x402_access_denied
+    case x402_refund_or_reversal
+    case x402_resource_request_observed
+    case x402_challenge_observed
+    case x402_payment_requirement_observed
+    case x402_signature_observed
+    case x402_verification_observed
+    case x402_settlement_observed
+    case x402_resource_access_observed
+    case x402_resource_access_denied_observed
+    case x402_failure_observed
+    case x402_replay_risk_observed
+    case x402_provider_observed
     // exposure
-    case content_impression, recommendation_exposed, offer_exposed, feature_exposed
-    case search_result_exposed, ad_exposed, notification_presented, decision_observed
+    case content_impression
+    case recommendation_exposed
+    case offer_exposed
+    case feature_exposed
+    case search_result_exposed
+    case ad_exposed
+    case notification_presented
+    case decision_observed
     // outcome
-    case outcome_observed, goal_achieved, goal_failed, recommendation_accepted
-    case recommendation_rejected, feedback_submitted, retention_observed, churn_observed
+    case outcome_observed
+    case goal_achieved
+    case goal_failed
+    case recommendation_accepted
+    case recommendation_rejected
+    case feedback_submitted
+    case retention_observed
+    case churn_observed
     case human_override_observed
     // b2b
-    case organization_observed, workspace_created, workspace_updated, member_invited, member_joined
-    case member_removed, role_changed, seat_assigned, seat_released, integration_connected
-    case integration_disconnected, service_account_created, service_account_revoked, api_key_created
-    case api_key_revoked, project_created, project_archived, workflow_started, workflow_completed
+    case organization_observed
+    case workspace_created
+    case workspace_updated
+    case member_invited
+    case member_joined
+    case member_removed
+    case role_changed
+    case seat_assigned
+    case seat_released
+    case integration_connected
+    case integration_disconnected
+    case service_account_created
+    case service_account_revoked
+    case api_key_created
+    case api_key_revoked
+    case project_created
+    case project_archived
+    case workflow_started
+    case workflow_completed
     case workflow_failed
     // ecommerce
-    case product_viewed, cart_item_added, cart_item_removed, cart_updated, coupon_applied
-    case checkout_started, checkout_step_completed, order_completed, order_cancelled, order_refunded
-    case chargeback_observed, subscription_started, trial_started, trial_converted
-    case subscription_renewed, subscription_upgrade_observed, subscription_downgrade_observed
-    case subscription_cancelled, invoice_issued, invoice_paid, invoice_failed, dunning_started
+    case product_viewed
+    case cart_item_added
+    case cart_item_removed
+    case cart_updated
+    case coupon_applied
+    case checkout_started
+    case checkout_step_completed
+    case order_completed
+    case order_cancelled
+    case order_refunded
+    case chargeback_observed
+    case subscription_started
+    case trial_started
+    case trial_converted
+    case subscription_renewed
+    case subscription_upgrade_observed
+    case subscription_downgrade_observed
+    case subscription_cancelled
+    case invoice_issued
+    case invoice_paid
+    case invoice_failed
+    case dunning_started
     case dunning_resolved
     // friction
-    case dead_click_observed, rage_click_observed, scroll_depth_observed, form_started
-    case form_field_interaction, form_validation_failed, form_submitted, form_abandoned
-    case search_reformulated, retry_observed, journey_stalled, backtrack_observed
+    case dead_click_observed
+    case rage_click_observed
+    case scroll_depth_observed
+    case form_started
+    case form_field_interaction
+    case form_validation_failed
+    case form_submitted
+    case form_abandoned
+    case search_reformulated
+    case retry_observed
+    case journey_stalled
+    case backtrack_observed
     // interaction
-    case surface_entered, surface_exited, interaction_observed, ui_interaction_observed
-    case feature_started, feature_completed, feature_abandoned, action_attempted, action_succeeded
-    case action_failed, action_cancelled, active_interval_observed
+    case surface_entered
+    case surface_exited
+    case interaction_observed
+    case ui_interaction_observed
+    case feature_started
+    case feature_completed
+    case feature_abandoned
+    case action_attempted
+    case action_succeeded
+    case action_failed
+    case action_cancelled
+    case active_interval_observed
     // server
-    case api_request_observed, webhook_delivery_observed, connector_sync_started
-    case connector_sync_completed, connector_sync_failed, job_started, job_completed, job_failed
-    case rate_limit_observed, dependency_failure_observed, export_completed
+    case api_request_observed
+    case webhook_delivery_observed
+    case connector_sync_started
+    case connector_sync_completed
+    case connector_sync_failed
+    case job_started
+    case job_completed
+    case job_failed
+    case rate_limit_observed
+    case dependency_failure_observed
+    case export_completed
     // identity_lc
-    case signup_started, signup_completed, login_succeeded, login_failed, logout_observed
-    case sso_observed, mfa_challenge_observed, identity_verified, alias_link_requested
-    case alias_link_confirmed, alias_revoked, account_recovery_started, account_recovery_completed
-    case device_registered, device_revoked
+    case signup_started
+    case signup_completed
+    case login_succeeded
+    case login_failed
+    case logout_observed
+    case sso_observed
+    case mfa_challenge_observed
+    case identity_verified
+    case alias_link_requested
+    case alias_link_confirmed
+    case alias_revoked
+    case account_recovery_started
+    case account_recovery_completed
+    case device_registered
+    case device_revoked
     // web3_lc
-    case transaction_pending_observed, transaction_confirmed_observed, transaction_reverted_observed
-    case transaction_reorged_observed, token_approval_observed, allowance_changed_observed
-    case bridge_transfer_observed, settlement_finality_observed
+    case transaction_pending_observed
+    case transaction_confirmed_observed
+    case transaction_reverted_observed
+    case transaction_reorged_observed
+    case token_approval_observed
+    case allowance_changed_observed
+    case bridge_transfer_observed
+    case settlement_finality_observed
     // comms
-    case notification_delivered, notification_opened, notification_clicked, email_delivered
-    case email_opened, email_clicked, email_bounced, email_queued, email_processed, email_sent
-    case email_deferred, email_dropped, email_replied, email_spam_complaint, email_suppressed
-    case message_received_observed, message_sent_observed, message_replied_observed
-    case unsubscribe_observed, support_case_created, support_case_resolved, support_case_escalated
+    case notification_delivered
+    case notification_opened
+    case notification_clicked
+    case email_delivered
+    case email_opened
+    case email_clicked
+    case email_bounced
+    case email_queued
+    case email_processed
+    case email_sent
+    case email_deferred
+    case email_dropped
+    case email_replied
+    case email_spam_complaint
+    case email_suppressed
+    case message_received_observed
+    case message_sent_observed
+    case message_replied_observed
+    case unsubscribe_observed
+    case support_case_created
+    case support_case_resolved
+    case support_case_escalated
     case support_sla_breached
     // credit
-    case credit_signal_observed, credit_account_observed, credit_decision_observed
+    case credit_signal_observed
+    case credit_account_observed
+    case credit_decision_observed
     // location
-    case location_observed, geofence_transition_observed
+    case location_observed
+    case geofence_transition_observed
     // derivatives
-    case trading_account_connected, trading_account_disconnected, trading_account_authorized
-    case trading_account_deauthorized, trading_agent_enabled, trading_agent_disabled
-    case trade_intent_created, trade_approval_requested, trade_approval_resolved
-    case risk_policy_updated, human_trade_override_recorded, derivatives_venue_registered
-    case derivatives_venue_deployment_registered, derivatives_instrument_registered
-    case derivatives_market_registered, derivatives_strategy_registered
-    case derivatives_strategy_version_registered, derivatives_risk_policy_registered
-    case derivatives_account_linked, derivatives_account_link_revoked
-    case derivatives_balance_snapshot_observed, derivatives_collateral_change_observed
-    case derivatives_margin_snapshot_observed, derivatives_order_observed
-    case derivatives_order_updated_observed, derivatives_order_cancelled_observed
-    case derivatives_order_rejected_observed, derivatives_order_expired_observed
-    case derivatives_fill_observed, derivatives_fill_corrected, derivatives_position_opened_observed
-    case derivatives_position_increased_observed, derivatives_position_reduced_observed
-    case derivatives_position_closed_observed, derivatives_position_liquidated_observed
-    case derivatives_position_adl_observed, derivatives_position_settled_observed
-    case derivatives_position_corrected, derivatives_funding_payment_observed
-    case derivatives_fee_observed, derivatives_pnl_snapshot_materialized
-    case derivatives_exposure_snapshot_materialized, derivatives_price_observation_recorded
-    case derivatives_market_status_changed, derivatives_stream_gap_detected
-    case derivatives_stream_gap_recovered, derivatives_stream_checkpoint_advanced
-    case derivatives_adapter_conformance_run, derivatives_reconciliation_run_completed
-    case derivatives_reconciliation_variance_detected, derivatives_reconciliation_variance_resolved
+    case trading_account_connected
+    case trading_account_disconnected
+    case trading_account_authorized
+    case trading_account_deauthorized
+    case trading_agent_enabled
+    case trading_agent_disabled
+    case trade_intent_created
+    case trade_approval_requested
+    case trade_approval_resolved
+    case risk_policy_updated
+    case human_trade_override_recorded
+    case derivatives_venue_registered
+    case derivatives_venue_deployment_registered
+    case derivatives_instrument_registered
+    case derivatives_market_registered
+    case derivatives_strategy_registered
+    case derivatives_strategy_version_registered
+    case derivatives_risk_policy_registered
+    case derivatives_account_linked
+    case derivatives_account_link_revoked
+    case derivatives_balance_snapshot_observed
+    case derivatives_collateral_change_observed
+    case derivatives_margin_snapshot_observed
+    case derivatives_order_observed
+    case derivatives_order_updated_observed
+    case derivatives_order_cancelled_observed
+    case derivatives_order_rejected_observed
+    case derivatives_order_expired_observed
+    case derivatives_fill_observed
+    case derivatives_fill_corrected
+    case derivatives_position_opened_observed
+    case derivatives_position_increased_observed
+    case derivatives_position_reduced_observed
+    case derivatives_position_closed_observed
+    case derivatives_position_liquidated_observed
+    case derivatives_position_adl_observed
+    case derivatives_position_settled_observed
+    case derivatives_position_corrected
+    case derivatives_funding_payment_observed
+    case derivatives_fee_observed
+    case derivatives_pnl_snapshot_materialized
+    case derivatives_exposure_snapshot_materialized
+    case derivatives_price_observation_recorded
+    case derivatives_market_status_changed
+    case derivatives_stream_gap_detected
+    case derivatives_stream_gap_recovered
+    case derivatives_stream_checkpoint_advanced
+    case derivatives_adapter_conformance_run
+    case derivatives_reconciliation_run_completed
+    case derivatives_reconciliation_variance_detected
+    case derivatives_reconciliation_variance_resolved
     case derivatives_risk_threshold_breached
     // stablecoin
-    case stablecoin_transfer_observed, stablecoin_payment_observed, stablecoin_mint_observed
-    case stablecoin_burn_observed, stablecoin_bridge_outbound_observed
-    case stablecoin_bridge_inbound_observed, stablecoin_swap_observed
-    case stablecoin_x402_settlement_observed, stablecoin_treasury_movement_observed
-    case stablecoin_payout_observed, stablecoin_venue_deposit_observed
-    case stablecoin_venue_withdrawal_observed, stablecoin_balance_snapshot_observed
-    case stablecoin_supply_snapshot_observed, stablecoin_holder_concentration_observed
-    case stablecoin_valuation_observed, stablecoin_depeg_detected, stablecoin_depeg_resolved
-    case stablecoin_finality_confirmed, stablecoin_reorg_detected, stablecoin_observation_corrected
-    case stablecoin_reconciliation_run_completed, stablecoin_reconciliation_variance_detected
-    case stablecoin_reconciliation_variance_resolved, stablecoin_asset_registered
-    case stablecoin_deployment_registered, stablecoin_support_asserted, stablecoin_support_revoked
-    case stablecoin_flow_aggregate_materialized, stablecoin_checkpoint_advanced
+    case stablecoin_transfer_observed
+    case stablecoin_payment_observed
+    case stablecoin_mint_observed
+    case stablecoin_burn_observed
+    case stablecoin_bridge_outbound_observed
+    case stablecoin_bridge_inbound_observed
+    case stablecoin_swap_observed
+    case stablecoin_x402_settlement_observed
+    case stablecoin_treasury_movement_observed
+    case stablecoin_payout_observed
+    case stablecoin_venue_deposit_observed
+    case stablecoin_venue_withdrawal_observed
+    case stablecoin_balance_snapshot_observed
+    case stablecoin_supply_snapshot_observed
+    case stablecoin_holder_concentration_observed
+    case stablecoin_valuation_observed
+    case stablecoin_depeg_detected
+    case stablecoin_depeg_resolved
+    case stablecoin_finality_confirmed
+    case stablecoin_reorg_detected
+    case stablecoin_observation_corrected
+    case stablecoin_reconciliation_run_completed
+    case stablecoin_reconciliation_variance_detected
+    case stablecoin_reconciliation_variance_resolved
+    case stablecoin_asset_registered
+    case stablecoin_deployment_registered
+    case stablecoin_support_asserted
+    case stablecoin_support_revoked
+    case stablecoin_flow_aggregate_materialized
+    case stablecoin_checkpoint_advanced
     // interop
-    case interop_provider_registered, interop_gateway_registered, interop_path_registered
-    case interop_application_registered, interop_verification_actor_registered
-    case interop_message_discovered, interop_message_sent_observed, interop_message_source_confirmed
-    case interop_message_verification_observed, interop_message_verified
-    case interop_message_delivery_attempt_observed, interop_message_delivered
-    case interop_message_executed_observed, interop_message_settled, interop_message_failed
-    case interop_message_timeout, interop_message_expired, interop_message_cancelled
-    case interop_message_refunded_observed, interop_message_recovered, interop_message_reorged
-    case interop_message_corrected, interop_message_correlated, interop_intent_observed
-    case interop_intent_fulfilled_observed, interop_asset_leg_locked_observed
-    case interop_asset_leg_burned_observed, interop_asset_leg_minted_observed
-    case interop_asset_leg_released_observed, interop_fee_observed
-    case interop_security_policy_snapshot_recorded, interop_security_policy_changed
-    case interop_verification_quorum_observed, interop_provider_checkpoint_advanced
-    case interop_stream_gap_detected, interop_stream_gap_recovered
-    case interop_reconciliation_run_completed, interop_reconciliation_variance_detected
+    case interop_provider_registered
+    case interop_gateway_registered
+    case interop_path_registered
+    case interop_application_registered
+    case interop_verification_actor_registered
+    case interop_message_discovered
+    case interop_message_sent_observed
+    case interop_message_source_confirmed
+    case interop_message_verification_observed
+    case interop_message_verified
+    case interop_message_delivery_attempt_observed
+    case interop_message_delivered
+    case interop_message_executed_observed
+    case interop_message_settled
+    case interop_message_failed
+    case interop_message_timeout
+    case interop_message_expired
+    case interop_message_cancelled
+    case interop_message_refunded_observed
+    case interop_message_recovered
+    case interop_message_reorged
+    case interop_message_corrected
+    case interop_message_correlated
+    case interop_intent_observed
+    case interop_intent_fulfilled_observed
+    case interop_asset_leg_locked_observed
+    case interop_asset_leg_burned_observed
+    case interop_asset_leg_minted_observed
+    case interop_asset_leg_released_observed
+    case interop_fee_observed
+    case interop_security_policy_snapshot_recorded
+    case interop_security_policy_changed
+    case interop_verification_quorum_observed
+    case interop_provider_checkpoint_advanced
+    case interop_stream_gap_detected
+    case interop_stream_gap_recovered
+    case interop_reconciliation_run_completed
+    case interop_reconciliation_variance_detected
     case interop_reconciliation_variance_resolved
     // privacy
-    case data_subject_request_received, data_subject_request_queued, data_subject_request_denied
-    case erasure_completed, erasure_failed
+    case data_subject_request_received
+    case data_subject_request_queued
+    case data_subject_request_denied
+    case erasure_completed
+    case erasure_failed
 // @generated-end aether-event-types/ios-enum
 }
 

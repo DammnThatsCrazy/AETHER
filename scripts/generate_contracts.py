@@ -1289,33 +1289,21 @@ def _registry_family_groups(events: list[dict]) -> tuple[list[str], dict[str, li
     return family_order, by_family
 
 
-def _wrap_rows(tokens: list[str], prefix: str, width: int = 100) -> list[str]:
-    """Greedily pack ``tokens`` into ``prefix``-led rows no wider than ``width``
-    columns. Rows join tokens with ``, `` and carry no trailing comma; every row
-    begins with ``prefix``. Deterministic for a fixed token order (byte-stable)."""
-    rows: list[str] = []
-    cur = prefix
-    for token in tokens:
-        piece = token if cur == prefix else ", " + token
-        if len(cur) + len(piece) <= width:
-            cur += piece
-        else:
-            rows.append(cur)
-            cur = prefix + token
-    if cur:
-        rows.append(cur)
-    return rows
-
-
 def gen_ios_event_enum_section(event_reg: dict) -> str:
     """Registry-derived body of the iOS ``AetherEventType`` enum (the content
-    between the ios-enum markers). Grouped by registry family so the native enum
-    order is exactly registry order."""
+    between the ios-enum markers). One ``case`` per event type, grouped by
+    registry family so the native enum order is exactly registry order.
+
+    One case per line (not comma-packed rows) so every SDK event keeps its own
+    greppable ``case <type>`` anchor — a property the pre-codegen hand-maintained
+    enum exposed and the first-release foundations contract test pins
+    (``case ai_invocation_observed``)."""
     family_order, by_family = _registry_family_groups(event_reg["events"])
     lines: list[str] = [_native_banner(event_reg["contractVersion"])]
     for family in family_order:
         lines.append(f"    // {family}")
-        lines.extend(_wrap_rows([e["type"] for e in by_family[family]], "    case "))
+        for e in by_family[family]:
+            lines.append(f"    case {e['type']}")
     return "\n".join(lines) + "\n"
 
 
