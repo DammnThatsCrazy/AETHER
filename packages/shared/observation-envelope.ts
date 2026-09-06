@@ -16,6 +16,14 @@
  * Parity is enforced by tests/contracts/test_observation_envelope_parity.py.
  */
 
+// The field-authority trust-class TYPE is imported, not redeclared: its single
+// canonical home is the Contract Spine field-trust twin (./events, emitted from
+// event-registry.json#trustClasses). The barrel (index.ts) star-exports both
+// ./events and this file, so a second exported `TrustClass` type here would be
+// ambiguous (TS2308). The rank-ordered TRUST_CLASSES const below is still kept
+// as the self-contained Envelope-B mirror the parity test extracts structurally.
+import type { TrustClass } from './events';
+
 // ── Curated vocabularies (mirror of observation-envelope-registry.json) ───────
 
 /** Ingress source types (blueprint §5 adapter families). */
@@ -77,7 +85,8 @@ export const TRUST_CLASSES = [
   'PREDICTED',
   'OPERATOR_ASSERTED',
 ] as const;
-export type TrustClass = (typeof TRUST_CLASSES)[number];
+// The `TrustClass` type used by the blocks below is the imported canonical one
+// (see top of file); it is structurally identical to `(typeof TRUST_CLASSES)[number]`.
 
 export const OBSERVATION_ENVELOPE_SCHEMA_VERSION = '1.0.0';
 
