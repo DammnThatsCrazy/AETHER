@@ -4037,6 +4037,65 @@ policies:
     requires_consent_invalidation: false
     requires_permission_hash: false
 
+  # ---------------------------------------------------------------------------
+  # Data Exchange Plane metadata (M1/M3/M5) — envelope metadata registries.
+  # Payload bytes live in the shared ObjectStore, never these Postgres tables;
+  # each row is a pointer (object_key) plus governed metadata. Mirrors the
+  # export_artifacts policy: authoritative in Postgres, rows not externalized,
+  # hard-deleted only under lifecycle policy with legal-hold support.
+  # ---------------------------------------------------------------------------
+
+  - resource_type: data_artifacts
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  - resource_type: data_exchange_saved_mappings
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+  - resource_type: report_renders
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
   - resource_type: export_artifacts
     authoritative_store: postgres
     metadata_store: postgres

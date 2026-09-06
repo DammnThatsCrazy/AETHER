@@ -584,6 +584,31 @@ retrieval; tenant scope is server-authoritative; staging/production fail closed
 on missing credentials/config; no cross-tenant evidence leakage; the model never
 selects or overrides tenant scope.
 
+## Data Exchange Plane (v8.12.0, flag-gated)
+
+A governed tenant-facing import/export layer mounted under `/v1/data-exchange/*`
+(seven router groups: settings/capabilities/usage, import envelopes, saved
+import mappings, export envelopes, artifact history, signed transfers, and the
+PDF reports plane). Doctrine: *many ways in — one canonical graph — many ways
+out — one governed portability layer*. The plane is a control layer that
+composes onto the existing canonical seams (import FSM/commit/rollback,
+exporter registry, identity resolution, durable jobs, shared ObjectStore) — it
+is never a second ingestion path and never a third import state machine.
+Payload bytes live in the shared ObjectStore; Postgres holds only envelope
+metadata (`data_artifacts`, `data_exchange_saved_mappings`, `report_renders`,
+created by the `20260905_data_exchange` Alembic migration). `main.py` mounts
+each surface only behind the `settings.data_exchange.*` flags —
+`DATA_EXCHANGE_ENABLED` (envelope routers + the `data_exchange.migrate_legacy_artifact`
+job handler), `DATA_EXCHANGE_SIGNED_TRANSFERS_ENABLED`,
+`DATA_EXCHANGE_REPORTS_ENABLED` (reports plane + the `report.generate` handler),
+plus `DATA_EXCHANGE_OBJECT_STORE_ENABLED` / `DATA_EXCHANGE_PARQUET_ENABLED` for
+transport/storage features — all OFF by default. Routes enforce the `data_exchange`
+RBAC domain (added to `ALL_DOMAINS` / `TENANT_DOMAINS`, auto-granted to tenant
+owner/admin/viewer) via `services/data_exchange/authz.py`, resolving each
+dotted `data_exchange.*` grant to the legacy read/write/admin alias the proxied
+seam admits. See `BACKEND-API.md` ("Data Exchange Plane") and
+`docs/plans/data-exchange-api.md` for the full contract.
+
 ## Universal Provider Runtime (8.12.0)
 
 The Universal Provider Runtime (UPR) makes provider integrations pluggable: a

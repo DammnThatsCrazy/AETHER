@@ -32,6 +32,7 @@ import { SdkFleetSection } from './sdk-fleet-section';
 import { NotificationsSection } from './notifications-section';
 import { NotificationPreferencesSection } from './notification-preferences-section';
 import { WebhooksSection } from './webhooks-section';
+import { DataExchangeGate } from './data-exchange-section';
 
 function formatRelative(iso: string | null, ctx: TimeContext): string {
   if (!iso) return 'never';
@@ -408,6 +409,12 @@ export function SettingsPage() {
 
       <div className="max-w-3xl">
         <WebhooksSection />
+      </div>
+
+      <TerminalSeparator />
+
+      <div className="max-w-3xl">
+        <DataExchangeGate />
       </div>
     </div>
   );

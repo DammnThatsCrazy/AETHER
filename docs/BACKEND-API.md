@@ -3459,3 +3459,103 @@ dependency; the Aether (`models`, `tenant-default`) and Kyber (`registry`,
 `health`, `entitlements`, `usage`, `traces`) clients are typed to these exact
 paths in `frontend/aether/src/features/model-selection/types.ts` and
 `frontend/kyber/src/features/model-runtime/types.ts` respectively.
+
+## Data Exchange Plane (v8.12.0, flag-gated)
+
+The governed tenant-facing import/export layer. Doctrine: *many ways in — one
+canonical graph — many ways out — one governed portability layer*. The plane is
+a control layer that composes onto the existing canonical seams (import
+FSM/commit/rollback, exporter registry, identity resolution, durable jobs,
+shared ObjectStore) — it is never a second ingestion path and never a third
+import state machine. Payload bytes live in the shared ObjectStore; Postgres
+holds only envelope metadata (`data_artifacts`, `data_exchange_saved_mappings`,
+`report_renders`).
+
+**Availability:** every `/v1/data-exchange/*` router is mounted in `main.py`
+only behind the `settings.data_exchange.*` flags (`enabled`,
+`object_store_enabled`, `parquet_enabled`, `reports_enabled`,
+`signed_transfers_enabled`) — all OFF by default. Flags switch
+transport/storage/surface availability only, never semantics. The detailed
+contract-level spec is `docs/plans/data-exchange-api.md`.
+
+**Authorization:** routes enforce the canonical seam they proxy and are never
+weaker than it. Each dotted `data_exchange.*` grant is enforced *or* resolved
+to the legacy single-word permission the proxied seam admits (read / write /
+admin) via `services/data_exchange/authz.py`, so existing tenant JWTs/API keys
+keep working; the `admin` role short-circuits as always. Import mutations gate
+on `write`-equivalence, import approve/rollback and all egress
+(export/transfer-download/report) gate on `admin`-equivalence — matching the
+canonical `/v1/imports` and `/v1/exports` seams.
+
+### Settings, capabilities & usage (read)
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| GET | `/v1/data-exchange/settings` | Tenant data-exchange settings + flag state | Read-only adapters over the canonical capability surface. |
+| GET | `/v1/data-exchange/capabilities` | Per-format / per-destination availability | Drives M6 frontend control enablement. |
+| GET | `/v1/data-exchange/usage` | Per-tenant artifact usage | Computed over `data_artifacts` metadata (no metering service dependency). |
+
+### Import envelope (over the canonical import engine)
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| POST | `/v1/data-exchange/imports` | Open an import session envelope | `write`. |
+| GET | `/v1/data-exchange/imports` | List import envelopes | `read`. |
+| GET | `/v1/data-exchange/imports/{import_id}` | Fetch one envelope | `read`. |
+| POST | `/v1/data-exchange/imports/{import_id}/files` | Upload a source file (ObjectStore-backed) | `write`; requires `object_store_enabled`. |
+| POST | `/v1/data-exchange/imports/{import_id}/analyze` | Run analysis over the source | `write`. |
+| PUT | `/v1/data-exchange/imports/{import_id}/mapping` | Set the field/identity/temporal/currency mapping | `write`. |
+| POST | `/v1/data-exchange/imports/{import_id}/preview/identity` | Identity-resolution preview | `write`; delegates to the canonical identity seam. |
+| POST | `/v1/data-exchange/imports/{import_id}/preview/graph` | Graph-mutation preview | `write`; delegates to the canonical commit preview. |
+| POST | `/v1/data-exchange/imports/{import_id}/commit` | Commit the import | `admin`; enqueues the canonical `import.commit` durable job. |
+| POST | `/v1/data-exchange/imports/{import_id}/rollback` | Roll back a committed import | `admin`; uses canonical source-tag rollback. |
+
+### Saved import mappings
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| GET | `/v1/data-exchange/import-mappings` | List saved mappings | `read`. |
+| POST | `/v1/data-exchange/import-mappings` | Save a mapping | `write`. |
+| GET | `/v1/data-exchange/import-mappings/{mapping_id}` | Fetch one mapping | `read`; tenant-scoped (cross-tenant → 404). |
+| DELETE | `/v1/data-exchange/import-mappings/{mapping_id}` | Delete a mapping | `write`. |
+
+### Export envelope
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| GET | `/v1/data-exchange/exports/types` | Available exporter types | `read`. |
+| POST | `/v1/data-exchange/exports` | Request an export | `admin`; enqueues the canonical `export.generate` durable job. |
+| GET | `/v1/data-exchange/exports` | List export envelopes | `read`. |
+| GET | `/v1/data-exchange/exports/{export_id}` | Fetch one export envelope | `read`. |
+| DELETE | `/v1/data-exchange/exports/{export_id}` | Delete an export artifact | `admin`. |
+
+### Signed transfers (ObjectStore presigned URLs)
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| POST | `/v1/data-exchange/transfers/{artifact_id}/upload-url` | Short-TTL presigned PUT URL | `write`; requires `signed_transfers_enabled`. |
+| POST | `/v1/data-exchange/transfers/{artifact_id}/upload-complete` | Server-side size/hash/prefix verification | `write`. |
+| GET | `/v1/data-exchange/transfers/{artifact_id}/download-url` | Short-TTL presigned GET URL | `admin`; mirrors the canonical export-download audit. |
+
+### Artifact history (read)
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| GET | `/v1/data-exchange/artifacts` | Unified artifact history (paged) | `read`; filters: direction / artifact_type. |
+| GET | `/v1/data-exchange/artifacts/{artifact_id}` | One artifact envelope | `read`. |
+
+### Reports plane (PDF egress)
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| POST | `/v1/data-exchange/reports` | Request a report render | `admin`; requires `reports_enabled`. |
+| GET | `/v1/data-exchange/reports` | List report renders | `read`. |
+| GET | `/v1/data-exchange/reports/{report_id}` | Fetch one render | `read`. |
+| GET | `/v1/data-exchange/reports/{report_id}/download` | Download the rendered PDF | `admin`; bytes streamed from ObjectStore. |
+| DELETE | `/v1/data-exchange/reports/{report_id}` | Delete a render + object | `admin`. |
+
+Ops/hardening (M7) adds durable reconcile / expire / cleanup jobs
+(`data_exchange.reconcile_artifacts`, `data_exchange.expire_artifacts`,
+`data_exchange.cleanup_artifacts`, `data_exchange.finalize_pending_egress`)
+that reconcile `data_artifacts` metadata against ObjectStore state with
+strict tenant-prefix-scoped deletion.

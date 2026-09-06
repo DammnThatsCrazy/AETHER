@@ -292,7 +292,12 @@
       "name": "data exchange plane changed",
       "source_globs": [
         "Backend Architecture/**/services/data_exchange/**",
-        "packages/shared/data-exchange.ts"
+        "Backend Architecture/**/services/reports/**",
+        "Backend Architecture/**/repositories/data_artifacts.py",
+        "Backend Architecture/**/alembic/versions/*data_exchange*.py",
+        "packages/shared/data-exchange.ts",
+        "frontend/aether/src/features/data-exchange/**",
+        "frontend/aether/src/pages/settings/data-exchange-section.tsx"
       ],
       "required_changed_globs": [
         "packages/shared/data-exchange.ts",

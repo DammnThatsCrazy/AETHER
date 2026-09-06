@@ -100,6 +100,100 @@ Declared-but-dark. No route, table, or job consumes the contracts yet.
 - `Backend Architecture/aether-backend/tests/data_exchange/test_contracts.py` and `tests/contracts/test_data_exchange_parity.py`.
 - `docs/source-of-truth/repo_consistency_ownership.json` (+ `REPO_CONSISTENCY_OWNERSHIP.md`) — `data_exchange_plane` category.
 
+## M1 ledger (shipped — one working tree, single deferred gate)
+
+M1 moves artifact payload bytes onto the shared ObjectStore while Postgres BYTEA
+stays canonical for the legacy window (compat, not cutover). The metadata
+registry is net-new; payload migration is an idempotent durable job.
+
+- `Backend Architecture/aether-backend/services/data_exchange/storage.py` — ObjectStore import-storage seam + `object_key_for` tenant-scoped key scheme.
+- `Backend Architecture/aether-backend/repositories/data_artifacts.py` — `data_artifacts` metadata repo (in-memory fallback enables DB-free tests).
+- `Backend Architecture/aether-backend/services/data_exchange/jobs_migrate.py` — `data_exchange.migrate_legacy_artifact` idempotent durable job (canonical-id + object-existence probes; bytes-then-row ordering; orphan-safe retry).
+- `Backend Architecture/aether-backend/alembic/versions/20260905_data_exchange.py` — `data_artifacts` (+ M3 `data_exchange_saved_mappings`, M5 `report_renders`) schema, `DATA_ARTIFACTS_DDL` string-identical to the repo constant.
+- `config/storage_policies.yaml` — policy rows for `data_artifacts`, `data_exchange_saved_mappings`, `report_renders`.
+- `Backend Architecture/aether-backend/main.py` — flag-gated lifespan registration + router mounts (shared-surface, coordinator-applied).
+- `Backend Architecture/aether-backend/tests/data_exchange/test_storage_migration.py` (+ repo tests).
+- Exit: migration tests green DB-free; full `make ci-check` deferred.
+
+## M2 ledger (shipped)
+
+M2 adds short-TTL **presigned URL** transfers over the shared ObjectStore so
+artifact bytes move directly between tenant client and store, with server-side
+verification on upload-complete.
+
+- `Backend Architecture/aether-backend/shared/storage/object_store.py` — net-new presigned PUT/GET capability (`create_presigned_put_url` / `create_presigned_get_url`, memory + S3 impls).
+- `Backend Architecture/aether-backend/services/data_exchange/transfers.py` — `ObjectTransferService` orchestration (upload-url / upload-complete / download-url) + size/hash/tenant-prefix/token verification + canonical export-download audit mirror.
+- `Backend Architecture/aether-backend/services/data_exchange/routes_transfer.py` — `/v1/data-exchange/transfers` router (`upload-url` `write`, `upload-complete` `write`, `download-url` `admin`).
+- `Backend Architecture/aether-backend/services/data_exchange/events.py` → `Topic` (shared-surface): `DATA_EXCHANGE_ARTIFACT_UPLOADED` (net-new) + reuse of canonical `EXPORT_DOWNLOADED`.
+- `Backend Architecture/aether-backend/tests/data_exchange/test_transfers.py` (security-focused).
+- Exit: security tests green DB-free.
+
+## M3 ledger (shipped)
+
+M3 is the import control envelope over the *existing* canonical import engine
+(no third state machine): `/v1/data-exchange/imports*` proxies import FSM +
+`import.commit` / `import.replay` / `rollback_by_source_tag`; previews adapt the
+canonical identity-resolution and graph-preview seams; saved mappings and
+settings/capabilities/usage read adapters are net-new.
+
+- `services/data_exchange/routes_import.py` (`/v1/data-exchange/imports*`), `identity_preview.py`, `graph_preview.py`, `saved_mappings.py` (+ `data_exchange_saved_mappings` repo module), `capabilities.py` (`/v1/data-exchange/settings|capabilities|usage`).
+- RBAC (shared-surface): `data_exchange` added to `GovernanceDomain` twins (`services/security/contracts.py` + `packages/shared/security-governance.ts`) and `ALL_DOMAINS`/`TENANT_DOMAINS`; `policy.py` grants extended 10→13 (`transfer.upload`, `transfer.download`, `report.delete`); `services/data_exchange/authz.py` resolves each dotted grant *or* its legacy single-word alias — envelope gate never weaker than the canonical seam it proxies.
+- `Backend Architecture/aether-backend/tests/data_exchange/test_authz.py`, `test_import_envelope.py`, `test_saved_mappings.py` (repo-root `tests/contracts/test_data_exchange_parity.py` is M0's twin gate, still green).
+- Exit: envelope + authz parity tests green DB-free.
+
+## M4 ledger (shipped)
+
+M4 is the export control envelope + egress history over the canonical exporter
+registry; `parquet` joins the structured formats via pyarrow.
+
+- `services/data_exchange/routes_export.py` (`/v1/data-exchange/exports*`), `exporters.py` (control envelope over the canonical `EXPORTERS` registry), `parquet.py` (pyarrow serializer), `history.py` (`/v1/data-exchange/artifacts` read adapter).
+- `Backend Architecture/aether-backend/pyproject.toml` — `data_exchange` optional extra (`pyarrow>=15`, `reportlab>=4.1`), pulled into `all` (shared-surface, coordinator-combined).
+- `Backend Architecture/aether-backend/tests/data_exchange/test_export_envelope.py`, `test_parquet.py`.
+- (coordinator close-out, landed with M7) canonical `SUPPORTED_FORMATS`/`serialize_rows` parquet + the egress-completion bridge that materializes envelope rows — see the M7 ledger.
+- Exit: export/parquet tests green DB-free.
+
+## M5 ledger (shipped)
+
+M5 is the reports plane — human-readable PDF report artifacts through the same
+`data_artifacts` / ObjectStore substrate (`artifact_type="report"` egress), a
+`report_renders` metadata table, and `report.generate` job handlers. PDF is a
+report render, never a structured export format.
+
+- `services/reports/` — `service.py` (request/render orchestration over `data_artifacts` + `report_renders`), `routes.py` (`/v1/data-exchange/reports*`), PDF renderer (`renderers/pdf.py`, reportlab), report job handlers + `register()`.
+- `shared/events/events.py` `Topic` (shared-surface): `REPORT_REQUESTED` / `REPORT_AVAILABLE` / `REPORT_FAILED` / `REPORT_DOWNLOADED` (net-new members; emitters no-op until registered — now registered).
+- `Backend Architecture/aether-backend/tests/reports/`.
+- Exit: reports tests green DB-free.
+
+## M6 ledger (shipped — frontend, gate deferred)
+
+M6 is the tenant **Settings → Data Exchange** surface: feature module + section
+mounts + export/report dialogs + capability-driven controls, verified by unit /
+component tests and a Playwright E2E spec at the deferred gate.
+
+- `frontend/aether/src/features/data-exchange/` (`api.ts`, `use-*.ts`, `index.ts`), `frontend/aether/src/pages/settings/data-exchange-section.tsx` + `settings-page.tsx` mount, `frontend/aether/src/app/router.tsx` nav, `docs/audits/FRONTEND-ROUTE-STATE-MATRIX.md` rows.
+- `frontend/aether/src/test/unit/data-exchange.test.ts`, `frontend/aether/src/test/component/data-exchange-section.test.tsx`, `frontend/aether/src/test/e2e/data-exchange.spec.ts`.
+- Exit: unit/component/e2e at the deferred gate (repo precedent: network-enabled run).
+
+## M7 ledger (shipped — ops/hardening)
+
+M7 hardens the `data_artifacts` / ObjectStore plane: retention decisioning plus
+four durable tenant-scoped sweeps (expire / reconcile / cleanup /
+finalize-pending-egress) with strict object-key shape validation, and an M7
+metrics family.  It also lands the **M4 egress-completion delta** the M4 module
+docstrings deferred to the coordinator: the canonical `export.generate` handler
+now invokes the egress bridge (mirror bytes to the envelope object key + flip
+`generating` → `available`), and `finalize_pending_egress` reconciles that
+best-effort bridge's crash-window stragglers.
+
+- `services/data_exchange/retention.py` — DB-free `decide_artifact_retention` (HARD_DELETE / TOMBSTONE / PRESERVE) backed by the shared storage-policy registry (`shared/storage/manager.policy_for`).
+- `services/data_exchange/jobs_ops.py` — `data_exchange.expire_artifacts` / `reconcile_artifacts` / `cleanup_artifacts` / `finalize_pending_egress` durable jobs + idempotent `register()` (wired in the main.py lifespan under `settings.data_exchange.enabled` at integration). Paged per-tenant sweeps; deletion gated by a strict key-shape validator (tenant prefix + `direction/artifact_id` scheme) — never out-of-tenant.
+- `services/data_exchange/egress.py` — M4 egress-completion bridge: `finalize_egress_envelope` writes verified bytes to the row's own tenant-scoped key then `mark_available`s it (terminal-absorbing; object-key mismatch refused); `try_finalize_egress_envelope` is the best-effort entry the canonical handler calls.
+- `repositories/data_artifacts.py` — `mark_available` transition (verified sha256/size + `materialized: true`; idempotent on `available`, never resurrects a terminal row).
+- `services/data_exchange/metrics.py` — authoritative M7 `data_exchange_ops_*` metric-name set + `register_metrics()` seam (the shared collector auto-registers; no repo-wide allowlist edit needed).
+- `services/export/service.py` (coordinator delta) — `parquet` added to `SUPPORTED_FORMATS`; canonical `serialize_rows` delegates it to `parquet.py` (pyarrow lazy at call time). Envelope `_enqueue_export_job` now proxies canonical `request_export` for every format.
+- `Backend Architecture/aether-backend/tests/data_exchange/test_jobs_ops.py`, `test_ops_security.py`, `test_ops_metrics.py` (61 tests), `test_egress_bridge.py` (7) and the `serialize_rows`-parquet seam tests in `test_parquet.py`.
+- Exit: ops/security/metrics/bridge tests green DB-free; full `make ci-check` at the deferred gate.
+
 ## Notes for later milestones
 
 - PDF is never a structured export format: `ReportSpecContract` produces a PDF

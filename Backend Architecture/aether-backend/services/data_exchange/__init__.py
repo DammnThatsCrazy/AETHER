@@ -5,10 +5,16 @@ existing ``services/imports`` and ``services/export`` remain the domain
 executors.  Doctrine: *many ways in — one canonical graph — many ways out —
 one governed portability layer*.
 
-Milestone status (M0): declared-but-dark.  The contracts, policy intent, and
-event catalog are the canonical vocabulary; no route, table, or job consumes
-them until the object-store migration (M1), signed transfers (M2), and the
-import/export control surfaces (M3/M4) land on top.
+Milestone status (M1–M7 shipped): the envelope is a *control layer* that
+composes onto the canonical seams.  It owns the ``data_artifacts`` /
+``report_renders`` metadata + ObjectStore payload plane (M1), signed
+presigned-URL transfers (M2), the import control surface + previews +
+saved-mappings + settings/capabilities adapters (M3), the export control
+surface + parquet + egress bridge (M4), the PDF reports plane (M5), the
+Settings → Data Exchange frontend surface (M6), and the expire / reconcile /
+cleanup / finalize-pending-egress ops sweeps + metrics (M7).  Routes, jobs,
+and table registrations are flag-gated behind ``DataExchangeConfig``.
+See ``docs/plans/DATA_EXCHANGE_PHASES.md`` for the full ledger.
 """
 
 from services.data_exchange.contracts import (

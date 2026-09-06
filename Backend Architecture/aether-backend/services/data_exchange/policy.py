@@ -14,9 +14,14 @@ instead of inventing parallel ones:
 - Authorization is enforced at request time on the canonical RBAC registry
   (``services/security/contracts.py`` ``GovernanceDomain`` + ``ROLE_SPECS``
   in ``services/security/access_control.py``).  The permission ids below are
-  the intended Data Exchange domain grants; they are **not registered** until
-  M3 adds the domain to that registry and its TS mirror
-  (``packages/shared/security-governance.ts``).
+  the Data Exchange domain grants; the coordinator registered the
+  ``data_exchange`` domain in that registry and its TS mirror
+  (``packages/shared/security-governance.ts``) at M3 integration, and every
+  envelope route re-asserts the caller holds one of them at the edge
+  (see ``services/data_exchange/authz.py`` — the dotted grant id resolves
+  *or* the legacy single-word permission the proxied canonical seam admits,
+  so existing tenant sessions keep working and nothing is weaker than the
+  canonical seam).
 - Every artifact download is re-authorized at download time, never only at
   generation time; upload tokens are tenant + object-key scoped (M2 signed
   transfers).
@@ -26,9 +31,12 @@ from __future__ import annotations
 
 from typing import Final
 
-# Intended data-exchange permission ids (GovernanceDomain grants).  Registered
-# in services/security/contracts.py + packages/shared/security-governance.ts +
-# ROLE_SPECS when the first data-exchange routes mount (M3).
+# Intended data-exchange permission ids (GovernanceDomain grants).  Source of
+# grant names for every envelope route; registered in
+# services/security/contracts.py + packages/shared/security-governance.ts +
+# ROLE_SPECS (coordinator, M3 integration).  ``data_exchange.transfer.*`` and
+# ``data_exchange.report.delete`` are referenced by the M2 transfer and M5
+# report routes and are part of the same domain.
 DATA_EXCHANGE_PERMISSIONS: Final[tuple[str, ...]] = (
     "data_exchange.read",
     "data_exchange.import.create",
@@ -39,7 +47,10 @@ DATA_EXCHANGE_PERMISSIONS: Final[tuple[str, ...]] = (
     "data_exchange.export.create",
     "data_exchange.export.download",
     "data_exchange.report.create",
+    "data_exchange.report.delete",
     "data_exchange.settings.manage",
+    "data_exchange.transfer.upload",
+    "data_exchange.transfer.download",
 )
 
 # Classifications that are always safe to surface in tenant UI without

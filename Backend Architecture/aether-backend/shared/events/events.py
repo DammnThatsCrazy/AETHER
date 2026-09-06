@@ -438,6 +438,18 @@ class Topic(str, Enum):
     # (shared/graph/mutation_gateway.py); deduplicated replays do not re-emit.
     GRAPH_MUTATED = "aether.graph.mutated"
 
+    # ── Data Exchange Plane (M2 signed transfers / M5 reports) — appended block ──
+    # Registered at first emission. Transfer uploads publish this (distinct from
+    # the canonical bulk-import IMPORT_UPLOADED); report lifecycle has no prior
+    # canonical vocabulary, so the four REPORT_* members are net-new. Envelope
+    # import/export transitions deliberately reuse the existing IMPORT_* /
+    # EXPORT_* members above — no duplicate import/export vocabulary.
+    DATA_EXCHANGE_ARTIFACT_UPLOADED = "aether.data_exchange.artifact.uploaded"
+    REPORT_REQUESTED = "aether.report.requested"
+    REPORT_AVAILABLE = "aether.report.available"
+    REPORT_FAILED = "aether.report.failed"
+    REPORT_DOWNLOADED = "aether.report.downloaded"
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # EVENT SCHEMA

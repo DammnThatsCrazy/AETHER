@@ -37,7 +37,10 @@ logger = get_logger("aether.export")
 # content and leaves a tombstone (id, sha256, manifest).
 DEFAULT_ARTIFACT_TTL_DAYS = 7
 
-SUPPORTED_FORMATS = ("json", "csv", "ndjson")
+#: Structured formats the canonical engine can serialize.  ``parquet`` joined in
+#: M4 of the Data Exchange Plane (typed columnar binary; pyarrow is an optional
+#: extra imported lazily, never at module load).
+SUPPORTED_FORMATS = ("json", "csv", "ndjson", "parquet")
 
 _CSV_FORMULA_PREFIXES = ("=", "+", "-", "@")
 
@@ -96,6 +99,18 @@ def serialize_rows(rows: list[dict], fmt: str, columns: Optional[list[str]] = No
         for row in rows:
             writer.writerow({c: _csv_safe(row.get(c, "")) for c in cols})
         return buf.getvalue().encode("utf-8"), "text/csv", cols
+    if fmt == "parquet":
+        # M4 addition (Data Exchange Plane): typed columnar binary delegated to
+        # services/data_exchange/parquet.py.  Pyarrow is imported lazily at call
+        # time only, so a deployment without the parquet extra still imports this
+        # module and fails loudly on the actual parquet request.  No CSV-style
+        # formula escaping applies — no spreadsheet cell-evaluator runs over a
+        # parquet file.
+        from services.data_exchange.parquet import PARQUET_CONTENT_TYPE
+        from services.data_exchange.parquet import rows_to_parquet_bytes
+
+        content = rows_to_parquet_bytes(rows, columns=columns)
+        return content, PARQUET_CONTENT_TYPE, columns or []
     raise BadRequestError(f"Unsupported export format {fmt!r}. Valid: {list(SUPPORTED_FORMATS)}")
 
 
@@ -218,6 +233,25 @@ async def generate_export_artifact(payload: dict, ctx: Any) -> Any:
             status="failed",
             result={"artifact_id": artifact["id"]},
             error="artifact checksum verification failed after write",
+        )
+
+    # Data Exchange Plane M4 egress bridge (coordinator delta): when this
+    # canonical export was requested through the envelope
+    # (``/v1/data-exchange/exports`` → ``export.generate`` with an ``export_id``
+    # marker), mirror the now-verified bytes onto the envelope's own tenant-scoped
+    # object key and flip its ``generating`` row to ``available``.  Best-effort:
+    # the durable canonical artifact is already verified above, so a bridge
+    # failure is logged and left for the M7 ``finalize_pending_egress`` reconcile
+    # job — it never fails the export that already succeeded.
+    if (params or {}).get("export_id"):
+        from services.data_exchange.egress import try_finalize_egress_envelope
+
+        await try_finalize_egress_envelope(
+            ctx.tenant_id,
+            str(params["export_id"]),
+            content=content,
+            content_type=content_type,
+            canonical_artifact_id=artifact["id"],
         )
 
     metrics.increment("export_ready_total", labels={"export_type": export_type})

@@ -1,14 +1,17 @@
-"""Data Exchange Plane typed-event catalog (M0: declared, not yet emitted).
+"""Data Exchange Plane typed-event catalog.
 
 Events are emitted as telemetry/audit side effects through the canonical
 ``EventProducer`` (``shared/events/events.py``).  Topic names follow the
 repository's dotted convention ``aether.<domain>.<event>``.
 
-Milestone note (M0): these constants are inert.  The live ``Topic`` enum in
-``shared/events/events.py`` and its TS twin ``packages/shared/events.ts`` /
-``CANONICAL_EVENT_TYPES`` are only extended when the first emitter lands
-(M3 imports, M4 exports, M5 reports).  Adding a topic before an emitter
-exists would fail event-schema parity checks.
+Which entries are actually live: the ``Topic`` enum in
+``shared/events/events.py`` is extended only when a first emitter lands, and
+only for *genuinely net-new* envelope vocabulary.  Today that is
+``DATA_EXCHANGE_ARTIFACT_UPLOADED`` (transfer uploads) and the four
+``REPORT_*`` members.  The ``DATA_ARTIFACT_*`` / ``IMPORT_*`` / ``EXPORT_*``
+entries below document envelope *intents* that deliberately reuse the
+canonical ``IMPORT_*`` / ``EXPORT_*`` ``Topic`` members — they are not
+separately registered (no duplicate import/export vocabulary).
 """
 
 from __future__ import annotations
@@ -41,14 +44,22 @@ EXPORT_AVAILABLE: Final[str] = "aether.data_exchange.export.available"
 EXPORT_FAILED: Final[str] = "aether.data_exchange.export.failed"
 EXPORT_DOWNLOADED: Final[str] = "aether.data_exchange.export.downloaded"
 
-# ── reports ─────────────────────────────────────────────────────────────────
-REPORT_REQUESTED: Final[str] = "aether.data_exchange.report.requested"
-REPORT_AVAILABLE: Final[str] = "aether.data_exchange.report.available"
-REPORT_FAILED: Final[str] = "aether.data_exchange.report.failed"
+# ── reports (live: registered on the Topic enum at M5) ──────────────────────
+# Values mirror the live ``Topic`` members (``aether.report.*``): the reports
+# plane follows the top-level-domain naming of the canonical import/export
+# families (``aether.import.*`` / ``aether.export.*``) rather than nesting
+# under ``aether.data_exchange``.  ``REPORT_DOWNLOADED`` mirrors the canonical
+# export-download audit topic.
+REPORT_REQUESTED: Final[str] = "aether.report.requested"
+REPORT_AVAILABLE: Final[str] = "aether.report.available"
+REPORT_FAILED: Final[str] = "aether.report.failed"
+REPORT_DOWNLOADED: Final[str] = "aether.report.downloaded"
 
 
-# Every declared topic, in one place, so the M3 registration sweep is a diff of
-# this tuple onto the live Topic enum + CANONICAL_EVENT_TYPES.
+# Every declared topic, in one place.  Only the genuinely-net-new members
+# (``DATA_EXCHANGE_ARTIFACT_UPLOADED``, ``REPORT_*``) exist on the live
+# ``Topic`` enum; the ``DATA_ARTIFACT_*`` / ``IMPORT_*`` / ``EXPORT_*`` intents
+# reuse the canonical members and must NOT be registered separately.
 DATA_EXCHANGE_TOPICS: Final[tuple[str, ...]] = (
     DATA_ARTIFACT_CREATED,
     DATA_ARTIFACT_AVAILABLE,
@@ -73,4 +84,5 @@ DATA_EXCHANGE_TOPICS: Final[tuple[str, ...]] = (
     REPORT_REQUESTED,
     REPORT_AVAILABLE,
     REPORT_FAILED,
+    REPORT_DOWNLOADED,
 )

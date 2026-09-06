@@ -981,3 +981,48 @@ helpers (`components/domain-intelligence.tsx`) provide the
 Gated client-side by the `kyberStablecoinOps` / `kyberDerivativesOps` /
 `kyberInteropOps` feature flags (default OFF) via a shared `FlagGate`;
 Zod schemas in `lib/schemas/economic-ops.ts` parse the raw admin payloads.
+
+---
+
+## Data Exchange Settings Section (v8.12.0, Aether)
+
+The governed tenant import/export plane's Settings surface (M6). Backend routes
+are flag-gated OFF by default; the section is **not** client-feature-flagged —
+it is capability-gated by the backend and self-reports a not-enabled state,
+consistent with the runtime data-truth contract.
+
+**Route + placement.** `/settings/data-exchange` was added to
+`frontend/aether/src/app/router.tsx` (lazy-loads `SettingsPage`, as the other
+`/settings/*` routes do). `DataExchangeSection`
+(`frontend/aether/src/pages/settings/data-exchange-section.tsx`) is mounted on
+the shared `SettingsPage` after the webhooks section.
+
+**Feature module** (`frontend/aether/src/features/data-exchange/`):
+- `api.ts` — zod-typed tenant client against the frozen `/v1/data-exchange/*`
+  contract: `GET /settings`, `/capabilities`, `/usage` read adapters; history
+  lists for `/artifacts`, `/exports`, `/imports`, `/reports`; `POST /exports`
+  and `POST /reports` creation; `GET /transfers/{artifact_id}/download-url`
+  (signed object-store download). `dataExchangeSurfaceEnabled()` resolves each
+  surface (imports/exports/reports/signed transfers) against the capability
+  flags, failing closed when capabilities are absent. Wire transport parses the
+  canonical `{ data, status, timestamp }` API envelope.
+- `use-data-exchange.ts` — `useDataExchangeSettings/Capabilities/Usage/Artifacts/
+  Exports/Imports/Reports`, `useDataExchangeDownloadUrl`,
+  `useCreateDataExchangeExport`, `useCreateDataExchangeReport` via `@aether/ui`.
+- `index.ts` — feature re-export barrel.
+
+**Section behavior.** Reads capabilities first; while `data_exchange.enabled`
+is false it renders the "Data Exchange is not enabled for this workspace"
+EmptyState (never a hard error). When enabled it shows a capability-surface
+badge strip (Import engine / Exports / Reports / Signed transfers), a New
+export dialog (formats csv/json/ndjson/parquet with include-identifiers /
+include-provenance toggles), a New report dialog (standard/compliance/
+operations/full templates), and an artifact-history table (latest 25; kind,
+artifact, format, status indicator, created, size) with a Download action for
+terminal `available`/`committed` artifacts that resolves the signed download
+URL.
+Typed value tuples (`dataArtifactStatuses`, `dataExchangeDirections`,
+`dataExchangeClassifications`) and the `ExportSpecContract` /
+`ReportSpecContract` shapes come from `@aether/shared`
+(`packages/shared/data-exchange.ts`), the M0 parity twin of the backend
+contracts.

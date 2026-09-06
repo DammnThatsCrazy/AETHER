@@ -32,7 +32,7 @@ ALL_DOMAINS: tuple[GovernanceDomain, ...] = (
     'profile', 'graph', 'recommendations', 'decisions', 'actions', 'dispatches',
     'outcomes', 'playbooks', 'integrations', 'audit_exports', 'billing',
     'onboarding', 'customer_success', 'kyber_admin', 'security', 'governance',
-    'reliability', 'data_quality',
+    'reliability', 'data_quality', 'data_exchange',
 )
 TENANT_DOMAINS: tuple[GovernanceDomain, ...] = tuple(
     d for d in ALL_DOMAINS if d != 'kyber_admin'
