@@ -5372,6 +5372,23 @@
       "status": "stable"
     },
     {
+      "path": "docs/operations/ENDUSER_LIFECYCLE_E2E.md",
+      "title": "End-User Lifecycle E2E Runbook",
+      "slug": "operations/enduser-lifecycle-e2e",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/operations/UNIVERSAL_GRAPH_RUNBOOK.md",
       "title": "Universal Intelligence Graph Operations Runbook",
       "slug": "operations/universal-graph-runbook",
@@ -5430,6 +5447,23 @@
       "status": "experimental",
       "since_version": "8.12.0",
       "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/plans/ENDUSER_LIFECYCLE_PHASES.md",
+      "title": "End-User Lifecycle & Integration Management — Implementation Program",
+      "slug": "plans/enduser-lifecycle-phases",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 15,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/plans/FINANCIAL_NORMALIZATION_PHASES.md",
@@ -7005,6 +7039,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/source-of-truth/AETHER_END_USER_LIFECYCLE.md",
+      "title": "Aether End-User Lifecycle & Integration Management",
+      "slug": "architecture/aether-end-user-lifecycle",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "draft",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/source-of-truth/AETHER_MOBILE.md",
       "title": "Aether Mobile — App Architecture",
       "slug": "mobile/aether-app",
@@ -7113,6 +7163,7 @@
       ],
       "status": "draft",
       "estimated_read_minutes": 5,
+      "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
     {
@@ -7128,6 +7179,7 @@
       ],
       "status": "draft",
       "estimated_read_minutes": 6,
+      "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
     {
