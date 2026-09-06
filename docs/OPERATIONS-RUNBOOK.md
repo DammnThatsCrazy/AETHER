@@ -268,7 +268,7 @@ recovery < 0) fail closed at startup.
 
 ### Kafka Topic Provisioning
 
-All 114 Kafka topics are provisioned by `deploy/legacy-staging/kafka_topics.sh`, called automatically from `bootstrap.sh` after leader election. If topics are missing:
+All 135 Kafka topics are provisioned by `deploy/legacy-staging/kafka_topics.sh`, called automatically from `bootstrap.sh` after leader election. If topics are missing:
 
 1. Run `deploy/legacy-staging/kafka_topics.sh` manually — it uses `--if-not-exists` so re-running is safe
 2. Required env var: `KAFKA_BOOTSTRAP` (default: `localhost:9092`)
@@ -591,3 +591,21 @@ deploy-profile/compose/Terraform/topology-validator fan-out; running under
 `materializer` keeps scheduled sync on the same durable ledger without a new
 deploy artifact. Because it runs as the `materializer` principal (not a tenant
 principal), scheduled sync never elevates a tenant principal's rights.
+
+## Ingestion Bronze Replay (Kyber operator)
+
+An operator can re-drive one tenant's durable Bronze SDK events through the
+universal ingestion gateway with **original occurrence times preserved**
+(`AETHER_INGESTION_REPLAY_ENABLED`, default **false**):
+
+- `POST /v1/kyber/ingest/replay/events` — Kyber-operator run/preview.
+  `dry_run` defaults to **true** (counts only, zero publishes). A real run
+  (`dry_run=false`) is refused with HTTP 403 until the flag is ON.
+- `GET /v1/kyber/ingest/replay/status` — kill-switch state and the
+  `source_service` replayed events carry.
+
+Replay reads Bronze only and republishes to `aether.sdk.events.validated` with
+`source_service="ingestion.replay"`; the `sdk_bronze_writer` consumer **skips**
+those rows (the durable Bronze row already exists), incrementing
+`ingestion_bronze_replay_skip_total`, so a replay re-delivers the downstream
+pipeline without double-persisting.

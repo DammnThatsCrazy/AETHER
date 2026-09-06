@@ -178,6 +178,17 @@ The pipeline honors three invariants:
 - **Deterministic normalization.** A normalizer never depends on wall-clock,
   randomness, or provider I/O; anything it cannot translate is surfaced via
   `dropped`, never silently skipped.
+- **Ingress consent gate (WS-B3).** The event bridge scrubs sensitive values
+  from each `AetherEvent`'s `data`/`context` in place before the durable dump
+  (mandatory and unconditional — Bronze and the publish carry only scrubbed
+  payloads) and runs the shared ingress decision
+  (`services/ingestion/validation.evaluate_ingress_decision`) per event. A
+  denied event is rejected — no Bronze row, no publish,
+  `provider_runtime_consent_blocked_total` incremented — while the provider RAW
+  record stays intact for replay; a delivery is never failed wholesale. The
+  per-subject (S) server-receipt rejection applies only when
+  `PROVIDER_RUNTIME_CONSENT_ENFORCEMENT_ENABLED` is set (default True) AND the
+  authoritative consent flag is on AND the event resolves a purpose + subject.
 
 ## Feature flag & wiring
 

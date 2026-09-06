@@ -153,6 +153,17 @@ There is **no "no secret ⇒ trust" path**: this endpoint is public, so trust
 must come from cryptographic proof the caller holds the connection's secret.
 Never process an unverified delivery.
 
+Even after a delivery is verified and parsed, its normalized events are not
+immediately durable. The provider-runtime event bridge
+(`services/provider_runtime/bridge.py`) runs each event through the platform's
+**unconditional sensitive-value scrub** on `data`/`context` (server-authoritative
+minimization; redaction never rejects) plus a per-event **ingress
+consent/data-policy gate** (WS-B3) before the Bronze write and publish. A
+consent-denied event is skipped — no Bronze row, no publish, a metric and a
+warning — so individual events inside a verified delivery can be dropped by
+tenant data-policy or consent independently of `verify()`; the delivery itself
+is never silently failed wholesale.
+
 ## 5. Normalization contract
 
 `normalizer().normalize(raw: RawProviderRecord) -> NormalizationResult`

@@ -120,6 +120,23 @@ Tuning env vars: `OUTBOX_RELAY_BATCH_SIZE` (100),
 `OUTBOX_RELAY_POLL_INTERVAL_S` (2), `OUTBOX_RELAY_LEASE_SECONDS` (60),
 `OUTBOX_RELAY_MAX_ATTEMPTS` (8) — all on `settings.ingestion_v2`.
 
+## Ingestion-level replay (WS-B4)
+
+Operator-triggered re-delivery of a tenant's durable Bronze SDK events
+(`services/ingestion/replay.py`, mounted in `main.py` at
+`POST /v1/kyber/ingest/replay/events` and `GET /v1/kyber/ingest/replay/status`,
+Kyber-operator-only) is a synchronous service runner plus a minimal operator
+route — **not** a runtime role and not a durable-jobs control plane. A dry run
+(counts only, zero publishes) is always available; a real run
+(`dry_run=false`) republishes the Bronze rows onto `SDK_EVENTS_VALIDATED` with
+their original occurrence timestamps preserved (Invariant #15) only when
+`AETHER_INGESTION_REPLAY_ENABLED` (`settings.ingest_replay.enabled`, default
+OFF) is on — otherwise refused with 403. Republished events carry
+`source_service="ingestion.replay"`, and the Bronze-writer consumer
+(`services/ingestion/workers.py`) skips them for the same reason it skips
+relay-originated events: the durable Bronze row already exists, so writing
+again would mint a second Bronze row for the same original event.
+
 ## Reward & commerce plane workers
 
 Five supervised loops (`services/runtime/specs.py::build_worker_specs`, builders

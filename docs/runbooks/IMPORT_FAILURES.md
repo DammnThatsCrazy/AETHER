@@ -93,6 +93,31 @@ died mid-commit) is requeueable the same way once its requeue window elapses —
 commit resumes, it never restarts from scratch. Confirm via the detail endpoint
 that the session lands `committed`.
 
+### Import commit denied by consent policy (`import_consent_policy_denied`)
+The WS-B3 T-class commit gate runs **before any Bronze write** (after staging,
+so a denial fails the commit closed with no partial Bronze). It scrubs
+secret-key columns from the persisted Bronze payload copy (graph-building
+records keep the governor-approved mapped values) and can deny the commit when
+the staged rows fingerprint or map a tenant-prohibited data class. Denials
+raise `ConflictError("import_consent_policy_denied:...")`, land the session
+`failed`, and record the reason in `failure_reason`. Causes:
+
+- `mapping_source_column_unresolved` — a mapping `source_column` is empty or
+  does not resolve against the **real** staged columns. Default-deny: a client
+  cannot launder prohibited content under a label no policy ever sees.
+- `fingerprinting_not_authorized` / `data_classification_denied` — the staged
+  rows carry fingerprinting fields or a data class the tenant compliance
+  profile prohibits (`evaluate_data_policy` is default-allow, so a tenant with
+  no profile only ever trips on fingerprinting).
+- `enforcement_disabled` — `IMPORTS_CONSENT_POLICY_ENABLED=false`. Disabling
+  the flag does **not** bypass the gate; OFF **denies** the commit, because an
+  import must never skip data-policy.
+
+A requeue re-runs the gate and re-denies (each attempt increments
+`retry_count`, walking the session toward dead-letter), so this is **not** a
+transient commit failure: fix the source data / mapping (`source_column` must
+be a real staged column) or the tenant compliance profile, then re-drive.
+
 ### `partially_committed`
 Some rows failed a transform at commit time (rare — validation runs first). The
 committed rows are live; inspect `commits[].row_errors` for the failures. Options:

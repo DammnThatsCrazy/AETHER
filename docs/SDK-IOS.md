@@ -447,7 +447,7 @@ Emit using `Aether.shared.track()` with `campaignId`, `ruleId`, and `rewardIdemp
 
 47 new event types support passive observation of external agentic activity. All are registered in the SDK's `eventConsentPurpose` map and flow through `POST /v1/batch` like any other event.
 
-**Consent purpose:** `"agent"` for all agentic observation events; `"commerce"` for x402 protocol observation events.
+**Consent purpose:** `"agent"` for agentic observation events and `"commerce"` for x402 protocol observation events, with five exceptions: the Robinhood-style trading-state observations `agent_trade_order_observed`, `agent_trade_fill_observed`, `agent_position_observed`, `agent_portfolio_snapshot_observed`, and `agent_performance_snapshot_observed` are consent-gated on the explicit opt-in purpose `financial_activity` (grant it via `grantConsent(categories: ["financial_activity"])`; it is never included in `grantAll()`).
 
 **Agentic account / MCP / tool (12 types):**
 

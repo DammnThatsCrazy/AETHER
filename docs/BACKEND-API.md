@@ -413,6 +413,14 @@ Receives batched raw events from iOS and Android SDKs. Same schema as `/v1/event
 - Heatmap grid building from coordinate events
 - Rage click and dead click detection
 
+The deprecated server-to-server aliases `POST /v1/ingest/events` and
+`POST /v1/ingest/events/batch` are converged (WS-B2) onto this same canonical
+spine — validation, consent, scrub, Bronze-durable write, idempotency, and
+publish semantics match `/v1/batch`, and the aliases now require the same
+`write` permission. Setting `AETHER_KILL_DEPRECATED_INGEST_ALIASES=true`
+retires them with HTTP 410 (routes stay mounted; their bodies return the
+retired error and direct callers to `/v1/batch`).
+
 ---
 
 ### GET /v1/config
@@ -1921,6 +1929,18 @@ Ingest a single `EventPipelineEnvelope` (used by the replay feed to re-introduce
 ```json
 { "ingested": true, "id": "evt-uuid-v4" }
 ```
+
+### Operator ingestion replay (`/v1/kyber/ingest/replay/*`, WS-B4, v8.12.0)
+
+Kyber-operator re-delivery of a tenant's durable Bronze SDK events through the
+universal ingestion gateway, preserving original event times — distinct from
+the tenant-facing `/v1/events/replay` service above. The router is mounted in
+`main.py` and every route requires `require_kyber_operator`.
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/v1/kyber/ingest/replay/events` | Submit a replay scan for one tenant's Bronze SDK events (`tenant_id` required; optional `event_types`, `families`, `occurred_from`, `occurred_to`, `limit`, `replay_run_id`). `dry_run` defaults to `true` — previews rows scanned / would-replay / gateway-rejected / skipped with zero publishes. A real run (`dry_run=false`) is refused with HTTP 403 until `AETHER_INGESTION_REPLAY_ENABLED=true`. |
+| GET | `/v1/kyber/ingest/replay/status` | Gate state: `enabled` (the `AETHER_INGESTION_REPLAY_ENABLED` kill switch), the `source_service` label replayed events carry (`ingestion.replay`), and `dry_run_default`. |
 
 ---
 

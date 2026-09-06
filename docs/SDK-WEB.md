@@ -555,7 +555,7 @@ Browser DOM / Wallets
         │
     Event Queue (localStorage persistence, batch flush)
         │
-    POST /v1/events → Aether Backend
+    POST /v1/batch → Aether Backend
         │
     Backend Processing:
     ├── Identity resolution (cross-device matching)
