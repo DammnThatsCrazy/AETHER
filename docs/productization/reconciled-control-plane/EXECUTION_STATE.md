@@ -17,7 +17,9 @@ canonical_owner: platform@aether
 > program. Per the build directive, focused unit tests ran as each phase
 > landed; the canonical full gate — env-stripped `make ci-check` = 0, docs
 > drift strict clean, generated docs regenerated, `git status` empty — runs
-> once at the **lane tip** after the final phase commit.
+> once at the **lane tip** after the final phase commit. **Result: the
+> lane-tip gate passed — env-stripped `make ci-check` = 78 gates / 0 failed
+> at `9f6158eb` (2026-09-06).**
 
 ## Phase 0 — managed-integration abstraction + reconcile skeleton
 
@@ -116,13 +118,18 @@ caveat).
   declarations engage denial only when the routes are mounted **and**
   `KYBER_BACKEND_AUTHZ_ENFORCED` is on (default OFF in local/dev; default ON
   for deploy targets — the §21-console path is live-ready but inert here).
-- **Full gate pending.** Per the build directive the canonical gate
-  (env-stripped `make ci-check` = 0) runs at the lane tip after the final
-  commit; per-phase rows above are "targeted tests pass", not a gate claim.
+- **Full gate passed at the lane tip.** The canonical gate (env-stripped
+  `make ci-check` = 0) ran once at the lane tip after the final commit: **78
+  gates / 0 failed** at `9f6158eb` (2026-09-06), docs drift strict clean,
+  generated docs regenerated, `git status` clean. Per-phase rows above are
+  targeted-test claims; the lane-tip gate is the full claim.
 
 ## Lane status
 
 Phase commits on this lane: Phase 0 `b0658b5d`, Phase 1 `7a3ae88f`, Phase 2
-`71dcbce2`, Phase 3 `5eb58d93`, Phase 4 (pending commit at lane tip). The
-post-gate remainder — release readiness, §41+ review, and the stack onto the
-SDK-universal-ingestion PR program — is reserved.
+`71dcbce2`, Phase 3 `5eb58d93`, Phase 4 `e265a938`; gate prep: source-linked
+doc review `2d6b1fd0` + `9f6158eb`, temporal-kernel delegation + generated-doc
+sync `4b0d0476`. Lane-tip gate: env-stripped `make ci-check` = **78 gates / 0
+failed** (2026-09-06). The post-gate remainder — release readiness, §41+
+review, and the stack onto the SDK-universal-ingestion PR program — is
+reserved.

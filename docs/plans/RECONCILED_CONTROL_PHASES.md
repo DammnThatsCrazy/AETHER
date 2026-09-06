@@ -56,7 +56,7 @@ build, not per phase.
 | Durable `managed_integrations` + `reconcile_runs` tables (additive alembic) + direct-SQL repositories | §6, §12.4 | ✅ implemented |
 | Read-only operator surface `GET /v1/admin/kyber/managed-integrations[/{id}]` | — | ✅ implemented |
 | Tests: CP-12 distinctness, reconcile classification, flag-OFF parity, repo round-trip, twin/domain parity | — | ✅ targeted tests pass |
-| Full env-stripped `make ci-check` = 0 | — | ⏳ gate (deferred to lane tip) |
+| Full env-stripped `make ci-check` = 0 | — | ✅ passed at lane tip (`9f6158eb`, 78/0) |
 
 ### Phase-0 boundary (what the skeleton does not do)
 
@@ -217,4 +217,6 @@ capability declaration" caveat closes here).
 
 No phase is claimed complete ahead of `make ci-check` at that phase's tip (all
 phases land first on this lane, then one full gate at the lane tip per the
-build directive).
+build directive). **Lane-tip gate result:** env-stripped `make ci-check` = 78
+gates / 0 failed at `9f6158eb` (2026-09-06); docs drift strict clean,
+generated docs regenerated, `git status` empty.
