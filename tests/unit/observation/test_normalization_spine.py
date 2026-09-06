@@ -127,6 +127,9 @@ def test_envelope_present_view_projects_envelope_blocks() -> None:
     assert identifiers == ["anonymous_id", "user_id"]
     assert view.subjects[0].trust_class == "OBSERVED"
     assert view.subjects[1].trust_class == "CLIENT_HINT"
+    # the A-side context stays on the flat dict (envelope is additive) and is
+    # carried through so Silver projectors keep the full projector context
+    assert view.context == normalized["context"]  # type: ignore[comparison-overlap]
 
 
 def test_envelope_present_with_user_id_subject_synthesizes_user() -> None:
