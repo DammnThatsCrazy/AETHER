@@ -2,7 +2,7 @@
   "schemaVersion": "1.0.0",
   "contractVersion": "1.0.0",
   "description": "Canonical filter-field registry for the Unified Exploration Fabric. Every filterable field declares its category, data type, allowed operators (a subset of the FilterOperator union in packages/shared/graph-contract.ts — never a second filter system), sensitivity, and optional consent purpose / minimum cohort size. Generated artifacts: packages/shared/filter-fields.ts, Backend Architecture/aether-backend/shared/exploration/generated_fields.py, docs/_generated/filter-field-table.md (via scripts/generate_platform_contracts.py).",
-  "categories": ["entity", "time", "geography", "device", "graph", "risk", "campaign", "economic", "truth"],
+  "categories": ["entity", "time", "geography", "device", "graph", "risk", "campaign", "economic", "truth", "social", "relationship", "incentive", "source", "evidence", "path", "narrative"],
   "dataTypes": ["string", "number", "boolean", "datetime", "enum", "entity_ref", "geography"],
   "sensitivities": ["public", "tenant_internal", "sensitive", "restricted", "pii"],
   "fields": [
@@ -279,6 +279,142 @@
       "category": "truth",
       "dataType": "enum",
       "operators": ["eq", "neq", "in", "not_in"],
+      "sensitivity": "tenant_internal"
+    },
+    {
+      "id": "social.provider",
+      "label": "Social provider",
+      "category": "social",
+      "dataType": "string",
+      "operators": ["eq", "neq", "in", "not_in", "exists", "not_exists"],
+      "sensitivity": "tenant_internal"
+    },
+    {
+      "id": "social.account_type",
+      "label": "Social account type",
+      "category": "social",
+      "dataType": "enum",
+      "operators": ["eq", "neq", "in", "not_in"],
+      "sensitivity": "tenant_internal"
+    },
+    {
+      "id": "social.connection_type",
+      "label": "Social connection type",
+      "category": "social",
+      "dataType": "enum",
+      "operators": ["eq", "neq", "in", "not_in"],
+      "sensitivity": "tenant_internal"
+    },
+    {
+      "id": "social.interaction_type",
+      "label": "Social interaction type",
+      "category": "social",
+      "dataType": "enum",
+      "operators": ["eq", "neq", "in", "not_in"],
+      "sensitivity": "tenant_internal"
+    },
+    {
+      "id": "social.community_ref",
+      "label": "Social community",
+      "category": "social",
+      "dataType": "entity_ref",
+      "operators": ["eq", "neq", "in", "not_in", "exists", "not_exists"],
+      "sensitivity": "tenant_internal"
+    },
+    {
+      "id": "relationship.family",
+      "label": "Relationship family",
+      "category": "relationship",
+      "dataType": "enum",
+      "operators": ["eq", "neq", "in", "not_in"],
+      "sensitivity": "tenant_internal"
+    },
+    {
+      "id": "relationship.predicate",
+      "label": "Relationship predicate",
+      "category": "relationship",
+      "dataType": "enum",
+      "operators": ["eq", "neq", "in", "not_in"],
+      "sensitivity": "tenant_internal"
+    },
+    {
+      "id": "relationship.claim_type",
+      "label": "Relationship claim type",
+      "category": "relationship",
+      "dataType": "enum",
+      "operators": ["eq", "neq", "in", "not_in"],
+      "sensitivity": "tenant_internal"
+    },
+    {
+      "id": "relationship.persistence",
+      "label": "Relationship persistence",
+      "category": "relationship",
+      "dataType": "number",
+      "operators": ["gt", "gte", "lt", "lte", "between", "threshold"],
+      "sensitivity": "tenant_internal"
+    },
+    {
+      "id": "relationship.reciprocity",
+      "label": "Relationship reciprocity",
+      "category": "relationship",
+      "dataType": "number",
+      "operators": ["gt", "gte", "lt", "lte", "between", "threshold"],
+      "sensitivity": "tenant_internal"
+    },
+    {
+      "id": "relationship.context_diversity",
+      "label": "Relationship context diversity",
+      "category": "relationship",
+      "dataType": "number",
+      "operators": ["gt", "gte", "lt", "lte", "between", "threshold"],
+      "sensitivity": "tenant_internal"
+    },
+    {
+      "id": "incentive.status",
+      "label": "Incentive status",
+      "category": "incentive",
+      "dataType": "enum",
+      "operators": ["eq", "neq", "in", "not_in"],
+      "sensitivity": "sensitive"
+    },
+    {
+      "id": "incentive.campaign_ref",
+      "label": "Incentive campaign",
+      "category": "incentive",
+      "dataType": "entity_ref",
+      "operators": ["eq", "neq", "in", "not_in", "exists", "not_exists"],
+      "sensitivity": "tenant_internal"
+    },
+    {
+      "id": "source.scope",
+      "label": "Source scope",
+      "category": "source",
+      "dataType": "enum",
+      "operators": ["eq", "neq", "in", "not_in"],
+      "sensitivity": "tenant_internal"
+    },
+    {
+      "id": "evidence.basis",
+      "label": "Evidence basis",
+      "category": "evidence",
+      "dataType": "enum",
+      "operators": ["eq", "neq", "in", "not_in"],
+      "sensitivity": "tenant_internal"
+    },
+    {
+      "id": "path.type",
+      "label": "Path type",
+      "category": "path",
+      "dataType": "enum",
+      "operators": ["eq", "neq", "in", "not_in"],
+      "sensitivity": "tenant_internal"
+    },
+    {
+      "id": "narrative.ref",
+      "label": "Narrative",
+      "category": "narrative",
+      "dataType": "entity_ref",
+      "operators": ["eq", "neq", "in", "not_in", "exists", "not_exists"],
       "sensitivity": "tenant_internal"
     }
   ]

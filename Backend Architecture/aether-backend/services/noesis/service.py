@@ -488,6 +488,21 @@ class NoesisService:
             candidates.append(("communications_insight", 0.8))
         if any(k in low for k in ("campaign", "reward", "spending", "valuable", "loyalty", "incentive")):
             candidates.append(("campaign_reward_lookup", 0.78))
+        # Risk360 / Fraud360 read-only intents (flag-gated planes; placed
+        # before the generic risk_cluster rule so assessment/hypothesis phrasing
+        # resolves to the specific intent even though it also contains the
+        # generic "risk"/"fraud" tokens).
+        if any(k in low for k in ("risk assessment", "risk assessments", "assessed risk", "risk explain", "explain risk")):
+            if any(k in low for k in ("explain", "why", "what is", "what's", "detail", "describe", "score", "scored", "dimension", "summarize", "outcome", "policy", "show", "look")):
+                candidates.append(("risk_assessment_explain", 0.88))
+        if "fraud" in low and "hypoth" in low:
+            if any(k in low for k in ("summarize", "summary", "overview", "status", "state", "explain", "describe", "what is", "what's", "detail")):
+                candidates.append(("fraud_hypothesis_summarize", 0.87))
+            else:
+                candidates.append(("fraud_hypothesis_summarize", 0.8))
+        if any(k in low for k in ("contradict", "contradiction", "contradictory", "conflict", "conflicting", "conflicts", "inconsistent", "inconsistency", "disagree", "reconcile", "reconcil", "alignment between")):
+            if "risk" in low and "fraud" in low:
+                candidates.append(("risk_fraud_contradiction_lookup", 0.88))
         if any(k in low for k in ("risk", "cluster", "abnormal", "anomalous", "fraud", "risky", "suspicious", "anomaly", "anomalies")):
             candidates.append(("risk_cluster_lookup", 0.76))
         if "wallet" in low or _WALLET_RE.search(text):
@@ -534,6 +549,54 @@ class NoesisService:
             candidates.append(("job_status_lookup", 0.82))
         if any(k in low for k in ("metric", "metrics", "measurement", "value_state", "value state", "conversion rate")):
             candidates.append(("measurement_integrity_lookup", 0.83))
+        # Relationship / spine Intelligence (read-only, flag-gated on the
+        # Social360 relationship-intelligence surface — default OFF)
+        if any(k in low for k in (
+            "explain the relationship", "explain relationship",
+            "explain this relationship", "relationship between",
+            "relationship explain", "relationship basis",
+            "basis of the relationship", "underlying relationship",
+            "relationship evidence", "relationship context",
+            "relationship detail", "relationship quality",
+            "relationship motif", "relational basis", "relational structure",
+            "relational context", "relationship structure",
+            "what kind of relationship", "type of relationship",
+            "why is there a relationship", "how are they related",
+            "how are these two related", "what connects these",
+            "are these two related", "is there a relationship",
+            "nature of the relationship", "have a relationship",
+            "has a relationship", "share a relationship",
+        )):
+            candidates.append(("relationship_explain", 0.86))
+        if any(k in low for k in (
+            "influence path", "path of influence", "path for influence",
+            "influence propagation", "how does influence",
+            "influence propagate", "influence spread", "spread of influence",
+            "influence chain", "who influences", "who is influencing",
+            "who is influenced", "influence route", "influence decomposition",
+            "influence between", "trace influence", "influence analysis",
+            "amount of influence", "influence graph", "does influence",
+            "influence evidence", "influence flow",
+        )):
+            candidates.append(("influence_path", 0.87))
+        if any(k in low for k in (
+            "engagement fidelity", "relationship fidelity", "fidelity",
+            "interaction frequency", "interaction depth", "reciprocity",
+            "fidelity vector", "how engaged", "engagement strength",
+            "how strong is the engagement", "strength of engagement",
+            "fidelity of the relationship", "persistence of the relationship",
+        )):
+            candidates.append(("engagement_fidelity", 0.86))
+        if any(k in low for k in (
+            "incentive context", "incentive structure", "incentive design",
+            "incentive alignment", "what incentives", "incentives behind",
+            "underlying incentive", "why is this incentivized",
+            "incentivized to", "what motivates", "what motivation",
+            "motivation behind", "motivates this relationship",
+            "motivates this user", "reward structure", "incentive explain",
+            "incentive analysis", "incentives to engage",
+        )):
+            candidates.append(("incentive_context_explain", 0.86))
 
         if not candidates:
             # If conversation history provides a prior intent, carry it forward with low confidence
@@ -664,6 +727,19 @@ class NoesisService:
             "measurement_integrity_lookup",
         ):
             return await self._observability_dispatch(plan, scope)
+        if plan.intent in (
+            "relationship_explain",
+            "influence_path",
+            "engagement_fidelity",
+            "incentive_context_explain",
+        ):
+            return await self._relationship_spine_dispatch(plan, scope)
+        if plan.intent in (
+            "risk_assessment_explain",
+            "fraud_hypothesis_summarize",
+            "risk_fraud_contradiction_lookup",
+        ):
+            return await self._risk_fraud_dispatch(plan, scope)
         return self._unsupported_response(body, [])
 
     def _tenant_filter(self, scope: Scope) -> Optional[dict[str, Any]]:
@@ -1124,6 +1200,126 @@ class NoesisService:
             ],
             sufficient=bool(result.get("sufficient", True)),
             insufficient_reason=None if result.get("sufficient", True) else "No matching observations in tenant scope",
+        )
+        return self._response(
+            plan, result.get("answer", ""), result.get("results", []), [],
+            evidence=evidence, scope=scope,
+        )
+
+    async def _relationship_spine_dispatch(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
+        """Read-only delegation to the relationship / spine intelligence
+        adapter (relationship_explain / influence_path / engagement_fidelity /
+        incentive_context_explain).
+
+        The whole family is gated on the Social360 relationship-intelligence
+        noesis flag; a disabled surface answers honestly (``service_disabled``)
+        instead of 404ing so the conversation surface stays coherent. The flag
+        is read here (never inside the adapter). When enabled the adapter owns
+        consent + read resolution and degrades honestly when reads are absent.
+        """
+        from config.settings import settings as app_settings
+
+        if not app_settings.social360.noesis_enabled:
+            return NoesisResponse(
+                answer="Relationship Intelligence is not enabled for this deployment.",
+                mode="deterministic",
+                intent=plan.intent,
+                confidence=plan.confidence,
+                warnings=["Relationship Intelligence Noesis surface is disabled"],
+                error=NoesisError(
+                    code="service_disabled",
+                    message="Relationship Intelligence Noesis queries are feature-flagged off.",
+                ),
+                query_debug={"plan": plan.model_dump(), "read_only": True},
+            )
+
+        from .adapters.relationship_spine_adapter import RelationshipSpineNoesisAdapter
+
+        adapter = RelationshipSpineNoesisAdapter()
+        tenant_id = scope.effective_tenant_id
+        if plan.intent == "relationship_explain":
+            result = await adapter.relationship_explain(tenant_id, plan.target, plan.limit)
+        elif plan.intent == "influence_path":
+            result = await adapter.influence_path(tenant_id, plan.target, plan.limit)
+        elif plan.intent == "engagement_fidelity":
+            result = await adapter.engagement_fidelity(tenant_id, plan.target, plan.limit)
+        else:
+            result = await adapter.incentive_context_explain(tenant_id, plan.target, plan.limit)
+
+        fetched_at = utc_now()
+        evidence = EvidenceEnvelope(
+            sources=[
+                EvidenceSource(service="relationship_intelligence", resource_type=source, fetched_at=fetched_at)
+                for source in result.get("sources", [])
+            ],
+            sufficient=bool(result.get("sufficient", True)),
+            insufficient_reason=(
+                None
+                if result.get("sufficient", True)
+                else (result.get("reason") or "No matching observations in tenant scope")
+            ),
+        )
+        return self._response(
+            plan, result.get("answer", ""), result.get("results", []), [],
+            evidence=evidence, scope=scope,
+        )
+
+    async def _risk_fraud_dispatch(self, plan: QueryPlan, scope: Scope) -> NoesisResponse:
+        """Read-only delegation to the Risk360 / Fraud360 adapter.
+
+        Each plane is gated on its own flag (``settings.risk_fraud_360
+        .risk360_enabled`` for risk, ``.fraud360_enabled`` for fraud). The
+        contradiction intent reads BOTH planes, so it requires both flags.
+        Disabled planes surface a ``service_disabled`` NoesisError in the
+        response (mirroring ``_economic_dispatch``) rather than raising, so the
+        conversation surface stays coherent. Noesis never mutates risk or fraud
+        truth here — every call reads stored records only.
+        """
+        from .adapters.risk_fraud_adapter import RiskFraudNoesisAdapter
+
+        from config.settings import settings as app_settings
+
+        risk_enabled = app_settings.risk_fraud_360.risk360_enabled
+        fraud_enabled = app_settings.risk_fraud_360.fraud360_enabled
+
+        disabled_label: str | None = None
+        if plan.intent == "risk_assessment_explain" and not risk_enabled:
+            disabled_label = "Risk360 Intelligence"
+        elif plan.intent == "fraud_hypothesis_summarize" and not fraud_enabled:
+            disabled_label = "Fraud360 Intelligence"
+        elif plan.intent == "risk_fraud_contradiction_lookup" and not (risk_enabled and fraud_enabled):
+            disabled_label = "Risk360/Fraud360 Intelligence"
+        if disabled_label is not None:
+            return NoesisResponse(
+                answer=f"{disabled_label} is not enabled for this deployment.",
+                mode="deterministic",
+                intent=plan.intent,
+                confidence=plan.confidence,
+                warnings=[f"{disabled_label} Noesis surface is disabled"],
+                error=NoesisError(
+                    code="service_disabled",
+                    message=f"{disabled_label} Noesis queries are feature-flagged off.",
+                ),
+                query_debug={"plan": plan.model_dump(), "read_only": True},
+            )
+
+        tenant_id = scope.effective_tenant_id
+        adapter = RiskFraudNoesisAdapter()
+        if plan.intent == "risk_assessment_explain":
+            result = await adapter.risk_assessment_explain(tenant_id, plan.target, plan.limit)
+        elif plan.intent == "fraud_hypothesis_summarize":
+            result = await adapter.fraud_hypothesis_summarize(tenant_id, plan.target, plan.limit)
+        else:
+            result = await adapter.contradiction_surface(tenant_id, plan.target, plan.limit)
+
+        fetched_at = utc_now()
+        evidence = EvidenceEnvelope(
+            sources=[
+                EvidenceSource(service="risk_fraud_360", resource_type=source, fetched_at=fetched_at)
+                for source in result.get("sources", [])
+            ],
+            sufficient=bool(result.get("sufficient", True)),
+            insufficient_reason=None if result.get("sufficient", True) else "No matching Risk360/Fraud360 observations in tenant scope",
         )
         return self._response(
             plan, result.get("answer", ""), result.get("results", []), [],

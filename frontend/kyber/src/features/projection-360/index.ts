@@ -12,3 +12,8 @@ export { ProjectionSurfaceSummary } from './projection-surface-summary';
 export type { ProjectionSurfaceSummaryProps } from './projection-surface-summary';
 export { ProjectionSurfacePanel } from './projection-surface-panel';
 export type { ProjectionSurfacePanelProps } from './projection-surface-panel';
+export {
+  projectionSurfaceEvidenceReadiness,
+  type ProjectionSurfaceEvidenceReadiness,
+  type ProjectionSurfaceUnavailableReason,
+} from './projection-360-types';

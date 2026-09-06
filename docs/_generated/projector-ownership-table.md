@@ -27,6 +27,12 @@ Projectors in EXACT dispatcher order (ADR-C3). Activity ownership is ADR-C4: one
 | 16 | `InteropProjector` | `silver_interop_facts` | no_activity | `interop` | 31 | 0 |
 | 17 | `ConversionProjector` | `canonical_conversions` | fact_emitter | `ecommerce`, `identity_lc` | 10 | 6 |
 | 18 | `CardLinkedProjector` | `card_linked_flow_facts` | no_activity | `commerce`, `reward`, `wallet` | 6 | 0 |
+| 19 | `SocialIdentityProjector` | `silver_social_identity_facts` | no_activity | — | 1 | 0 |
+| 20 | `SocialConnectionProjector` | `silver_social_connection_facts` | no_activity | — | 1 | 0 |
+| 21 | `SocialInteractionProjector` | `silver_social_interaction_facts` | no_activity | — | 1 | 0 |
+| 22 | `SocialContentProjector` | `silver_social_content_facts` | no_activity | — | 1 | 0 |
+| 23 | `SocialCommunityMembershipProjector` | `silver_social_community_facts` | no_activity | — | 1 | 0 |
+| 24 | `SocialMetricProjector` | `silver_social_metric_facts` | no_activity | — | 1 | 0 |
 
 ## Convergent activity emitters
 
@@ -46,6 +52,12 @@ These projectors also emit canonical activity for the listed event types but con
 | `Web3TransactionProjector` | `transaction_confirmed`, `transaction_failed`, `transaction_initiated`, `transaction_submitted`, `wallet_connected`, `wallet_disconnected` |
 | `X402FlowProjector` | `x402_payment_failed_observed`, `x402_payment_initiated_observed`, `x402_payment_required_observed`, `x402_payment_verified_observed`, `x402_resource_unlocked_observed`, `x402_settlement_confirmed_observed` |
 | `ConversionProjector` | `checkout_completed`, `lead_created`, `opportunity_closed_won`, `payment_confirmed`, `reward_redeemed`, `x402_settled` |
+| `SocialIdentityProjector` | `social_identity_observed` |
+| `SocialConnectionProjector` | `social_connection_observed` |
+| `SocialInteractionProjector` | `social_interaction_observed` |
+| `SocialContentProjector` | `social_content_observed` |
+| `SocialCommunityMembershipProjector` | `social_community_membership_observed` |
+| `SocialMetricProjector` | `social_metric_observed` |
 
 ## Families with no projector
 

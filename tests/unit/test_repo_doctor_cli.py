@@ -96,6 +96,24 @@ def test_frontend_data_truth_source_and_bundle_gates_present() -> None:
     assert 'scripts/validate_frontend_branding.py"]' in source
 
 
+def test_universal_financial_assets_gate_wired_in_repo_doctor() -> None:
+    """repo_doctor.py must dispatch the universal financial-asset validator.
+
+    Keeps the financial-normalization gate in the same canonical check path as
+    every other release-blocking validator (financial value semantics, graph
+    write paths, …). Mirrors the sync convention for repo_doctor gates.
+    """
+    import inspect
+    from pathlib import Path
+
+    source = inspect.getsource(repo_doctor)
+    assert 'scripts/validate_universal_financial_assets.py"]' in source, (
+        "repo_doctor must dispatch scripts/validate_universal_financial_assets.py"
+    )
+    validator = Path("scripts/validate_universal_financial_assets.py")
+    assert validator.exists(), "validator script must exist next to its dispatch"
+
+
 def test_outcome_type_gate_wired_in_repo_doctor() -> None:
     """repo_doctor.py must track the Outcome360 outcome-type generated twins.
 
@@ -180,4 +198,32 @@ def test_intelligence_projection_gate_wired_in_repo_doctor() -> None:
     ), (
         "repo_doctor _check_clean must track the backend generated registry "
         "(intelligence_projections/generated_registry.py)"
+    )
+
+
+def test_spine_registry_gate_wired_in_repo_doctor() -> None:
+    """repo_doctor.py must dispatch and track the Spine Composition Kernel plane.
+
+    The spine registry is P0 CI enforcement (ADR-011): the architecture validator
+    must be dispatched by repo-doctor, and its generated twin artifacts (the
+    TypeScript registry twin and the backend generated registry) must be covered
+    by the unified-platform generated-contracts clean check.
+    """
+    import inspect
+
+    source = inspect.getsource(repo_doctor)
+    assert 'scripts/validate_spine_registry.py"]' in source, (
+        "repo_doctor must dispatch scripts/validate_spine_registry.py "
+        "as part of the Spine Composition Kernel gate"
+    )
+    assert "packages/shared/spine-registry.ts" in source, (
+        "repo_doctor _check_clean must track the generated TS registry twin "
+        "(packages/shared/spine-registry.ts)"
+    )
+    assert (
+        "Backend Architecture/aether-backend/shared/spine/generated_spine_registry.py"
+        in source
+    ), (
+        "repo_doctor _check_clean must track the backend generated spine registry "
+        "(spine/generated_spine_registry.py)"
     )

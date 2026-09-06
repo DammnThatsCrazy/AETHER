@@ -519,6 +519,14 @@ def main(argv: Sequence[str] | None = None) -> None:
                     "Backend Architecture/aether-backend/shared/projection_engine/generated_lenses.py",
                     "packages/shared/outcome-types_generated.ts",
                     "Backend Architecture/aether-backend/shared/measurement/generated_outcome_types.py",
+                    "packages/shared/relationship-predicate-registry.ts",
+                    "Backend Architecture/aether-backend/shared/relationship_spine/generated_relationship_predicate_registry.py",
+                    "packages/shared/relationship-motif-registry.ts",
+                    "Backend Architecture/aether-backend/shared/relationship_spine/generated_relationship_motif_registry.py",
+                    "packages/shared/social-provider-capability-vocabulary.ts",
+                    "Backend Architecture/aether-backend/shared/social_provider/generated_social_provider_capability_vocabulary.py",
+                    "packages/shared/spine-registry.ts",
+                    "Backend Architecture/aether-backend/shared/spine/generated_spine_registry.py",
                 ],
                 name="Unified-platform generated contracts — no uncommitted diff",
                 results=results,
@@ -705,6 +713,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="align packages/shared/contracts/projector-ownership-registry.json with services/silver/dispatcher.py, then regenerate via make repo-doctor-fix",
     )
     run(
+        [sys.executable, "scripts/validate_social360_guardrails.py"],
+        name="Social360 static guardrails (predicate-registry honesty vs live EdgeTypes + no legacy fabricated defaults)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="REGISTERED predicates must name live EdgeTypes present in shared.graph.relationship_layers; remove any fabricated followers=0 / influence='low' / fixed audience_overlap idioms from the governed social surfaces (services/social, services/silver, services/exploration/adapters/social360.py, services/relationship_fidelity, shared/social360)",
+    )
+    run(
         [sys.executable, "scripts/validate_intelligence_projections.py"],
         name="Intelligence projection architecture (registry, DAG, cross-registry, inventory, order-resilience)",
         results=results,
@@ -712,11 +727,25 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="align packages/shared/contracts/intelligence-projection-registry.json with the shared contracts, generated artifacts, and real routes/surfaces/services; declare unresolved cross-registry refs in pendingAuthority/pendingReference",
     )
     run(
+        [sys.executable, "scripts/validate_spine_registry.py"],
+        name="Spine Composition Kernel registry (schema, conformance, cross-registry, lifecycle, ownership, inventory)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="align packages/shared/contracts/spine-registry.json with the shared contracts, generated artifacts, and the real routes/surfaces/services its rows bind; declare unresolved bindings pending in unresolvedRefs with a reason and resolving milestone (ADR-011 D1/D2)",
+    )
+    run(
         [sys.executable, "scripts/validate_financial_value_semantics.py"],
         name="Financial value semantics (USD-first contract + no cross-currency sums)",
         results=results,
         stop_on_failure=stop,
         remediation="use services.value.safe_rollup and the canonical value contract; see docs/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md",
+    )
+    run(
+        [sys.executable, "scripts/validate_universal_financial_assets.py"],
+        name="Universal financial-asset normalization (namespaced ids, Decimal money, immutable valuation, observe-only)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="keep canonical asset/valuation surfaces on the namespaced Decimal immutable observe-only model; see docs/source-of-truth/FINANCIAL_NORMALIZATION.md",
     )
     run(
         [sys.executable, "scripts/validate_frontend_value_display.py"],

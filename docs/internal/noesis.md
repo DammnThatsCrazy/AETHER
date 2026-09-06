@@ -12,7 +12,7 @@ source_files:
   - Backend Architecture/aether-backend/services/noesis/provider.py
   - Backend Architecture/aether-backend/services/noesis/flags.py
   - frontend/shared/src/components/noesis-workspace.tsx
-last_synced_commit: "4e6fdad"
+last_synced_commit: "60a5c024"
 ---
 
 # Noesis
@@ -23,7 +23,14 @@ Noesis is Aether's graph-native natural-language intelligence layer. It exposes 
 
 ## GA contract
 
-### Supported intents (10)
+### Supported intents (30)
+
+The allowlist in `models.py::SUPPORTED_INTENTS` covers the ten original GA
+intents plus the read-only domain families added since. Every intent is
+read-only, tenant-scoped, and resolved through a repository or read-only
+adapter — never a write path.
+
+**Core GA surface intents (10)**
 
 | Intent | Description |
 |---|---|
@@ -37,6 +44,65 @@ Noesis is Aether's graph-native natural-language intelligence layer. It exposes 
 | `health_lookup` | SDK/provider health diagnostics |
 | `campaign_reward_lookup` | Campaign and reward listing |
 | `risk_cluster_lookup` | Risk-scored entity ranking |
+
+**Communications Intelligence** (read-only, evidence-backed)
+
+| Intent | Description |
+|---|---|
+| `communications_insight` | Evidence-backed communications intelligence: deliverability, human-qualified engagement, machine-activity inflation, campaign resolution coverage |
+
+**Suggestion Intelligence** (read-only — Noesis never mutates suggestions)
+
+| Intent | Description |
+|---|---|
+| `suggestion_lookup` | Look up individual suggestion records |
+| `suggestion_summary` | Summarize suggestion activity and acceptance rates |
+| `suggestion_review_queue` | Show the pending suggestion review queue |
+| `suggestion_explain` | Explain the rationale behind a specific suggestion |
+| `suggestion_outcome_lookup` | Look up outcomes and results for processed suggestions |
+
+**Semantic-Sentiment Intelligence** (read-only)
+
+| Intent | Description |
+|---|---|
+| `sentiment_explain` | Explain tenant-scoped, target-specific sentiment with evidence, freshness, model versions, and causal-confidence labels |
+| `narrative_analysis` | Analyze tenant-scoped narratives, claims, adoption, rejection, and diffusion without unsupported causal claims |
+| `semantic_profile_explain` | Summarize semantic state, stance, intent, active topics, evidence, and freshness for a Profile360 entity |
+
+**Economic & Interoperability Intelligence** (read-only, flag-gated)
+
+| Intent | Description |
+|---|---|
+| `stablecoin_flow_lookup` | Summarize observed stablecoin flow aggregates and peg status, including depeg signals |
+| `derivatives_exposure_lookup` | Report observed derivatives positions and P&L snapshots (observation-only) |
+| `derivatives_reconciliation_lookup` | Show reconciliation variances between venue-reported and projected derivatives state, plus unrecovered stream gaps |
+| `interop_message_trace` | Trace a cross-chain message's observed lifecycle by correlation key or message id (observation-only) |
+| `interop_path_reliability` | Summarize delivery outcomes per cross-chain path (delivered / failed / in-flight) |
+
+**Observability Intelligence** (read-only)
+
+| Intent | Description |
+|---|---|
+| `import_status_lookup` | Report observed tenant import sessions and lifecycle status |
+| `job_status_lookup` | Summarize observed background jobs and status distribution |
+| `measurement_integrity_lookup` | Report observed measurement results and value_state distribution (never recomputes or relabels a metric; a missing value is never reported as zero) |
+
+**Risk360 / Fraud360 Intelligence** (read-only, flag-gated — default OFF)
+
+| Intent | Description |
+|---|---|
+| `risk_assessment_explain` | Explain the stored Risk360 assessment for a subject: which risk dimensions are scored (with value states), the consolidated claim_state, the referenced decision policy, and any exposure summary. Requires `AETHER_RISK360_ENABLED` |
+| `fraud_hypothesis_summarize` | Summarize stored Fraud360 hypotheses for a subject: matched pattern display names/families, lifecycle state and phase, materiality when set, and risk/network/flow/decision cross-references. Requires `AETHER_FRAUD360_ENABLED` |
+| `risk_fraud_contradiction_lookup` | Surface honest contradictions or gaps between a subject's stored Risk360 assessment and its stored Fraud360 hypotheses (e.g., a material/confirmed fraud hypothesis whose subject's assessment has no scored fraud dimension). Requires both planes enabled |
+
+These three intents are served by the `RiskFraudNoesisAdapter`
+(`services/noesis/adapters/risk_fraud_adapter.py`) — read/list paths only over
+`RiskAssessmentRepository` and `FraudHypothesisRepository`, plus the declarative
+`FRAUD_PATTERNS` registry for display names. Noesis never creates, updates, or
+relabels an assessment or hypothesis; absent data returns an honest
+`sufficient=False` (a read that raises returns the same rather than crashing the
+surface), and a disabled plane surfaces a `service_disabled` NoesisError in the
+response.
 
 Any prompt that does not match a supported intent falls back to a safe refinement response. Unsupported intents never execute.
 
@@ -125,6 +191,11 @@ All flags are read from environment variables via `NoesisFlags`:
 | `NOESIS_DAILY_QUOTA` | 1000 | Daily query quota |
 | `NOESIS_PROVIDER_TOKEN_BUDGET` | 100000 | LLM token budget |
 | `NOESIS_CANARY_TENANTS` | (empty) | Comma-separated canary tenant IDs |
+
+The Risk360 / Fraud360 Intelligence intents are **not** gated by `NoesisFlags` —
+they follow the platform's `risk_fraud_360` convergence flags
+(`AETHER_RISK360_ENABLED` / `AETHER_FRAUD360_ENABLED`, both default OFF), read
+from `settings.risk_fraud_360` in `service.py::_risk_fraud_dispatch`.
 
 ## Audit logging
 

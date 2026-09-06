@@ -10,6 +10,8 @@ from typing import Optional
 
 from shared.logger.logger import get_logger
 
+from services.value.models import to_decimal
+
 from .commerce_models import (
     BudgetPolicy,
     PolicyDecision,
@@ -79,10 +81,23 @@ class PolicyEngine:
         active_rules.append("asset_compatibility")
         active_rules.append("chain_compatibility")
 
+        # Money comparisons happen in Decimal (exact) — a cap or price expressed
+        # as a fractional USD value is never compared on its binary-float form.
+        # Unknown/unparseable money is treated as "no trusted value": a cap that
+        # cannot be parsed is not silently treated as 0 (no cap); an amount that
+        # cannot be parsed is never coerced to 0 (so the boundary comparison
+        # simply reports a mismatch rather than asserting equality with 0).
+        amount_dec = to_decimal(amount_usd)
+
         # 2. Budget policy — per-transaction cap enforced if a policy exists for this requester
         budget_policy = await self._store.get_budget_policy(tenant_id, requester_id)
-        if budget_policy is not None and budget_policy.per_transaction_cap_usd > 0:
-            if amount_usd > budget_policy.per_transaction_cap_usd:
+        cap_dec = (
+            to_decimal(budget_policy.per_transaction_cap_usd)
+            if budget_policy is not None
+            else None
+        )
+        if cap_dec is not None and cap_dec > 0:
+            if amount_dec is not None and amount_dec > cap_dec:
                 decision = PolicyDecision(
                     tenant_id=tenant_id,
                     challenge_id=challenge_id,
@@ -100,7 +115,8 @@ class PolicyEngine:
             active_rules.append("budget_per_transaction_cap")
 
         # 3. Price sanity
-        if amount_usd != resource.price_usd:
+        price_dec = to_decimal(resource.price_usd)
+        if amount_dec != price_dec:
             rationale_parts.append(
                 f"amount_mismatch: challenge=${amount_usd} vs resource=${resource.price_usd}"
             )

@@ -10,6 +10,12 @@ Classifies graph edges into four relationship layers:
   outside the four-layer analytics graph (pure graph-topology or metadata edges).
   Edges classified as EXCLUDED are never counted in the four operational layers.
 
+  EXCLUDED is also the home of the Financial Normalization reference layer
+  (WP6a): financial/asset reference relationships between global reference
+  vertices (asset, deployment, chain, fiat currency, issuer, price provider,
+  venue, bridge) are non-actor edges and mirror the stablecoin-domain edges
+  below — they are never H2H/H2A/A2H/A2A.
+
 Used by: Analytics, Agent, Commerce, On-Chain services.
 """
 
@@ -510,6 +516,26 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     EdgeType.VALUED_AT:              RelationshipLayer.EXCLUDED,
     EdgeType.RECONCILED_WITH:        RelationshipLayer.EXCLUDED,
 
+    # ── Financial Normalization — reference edges (WP6a). Canonical asset /
+    #    deployment / chain / fiat reference relationships are graph-topology
+    #    edges between non-actor reference vertices. They intentionally live
+    #    OFF the four operational layers — mirroring the stablecoin-domain
+    #    precedent above (DEPLOYED_ON_CHAIN / PEGGED_TO / VALUED_AT /
+    #    RECONCILED_WITH are shared from that block; PRICED_BY is the existing
+    #    derivatives domain edge). ISSUED_BY (existing cross-domain edge) stays
+    #    on its historical H2H classification — flipping it is non-additive. ──
+    EdgeType.DENOMINATED_IN: RelationshipLayer.EXCLUDED,
+    EdgeType.PAID_WITH:      RelationshipLayer.EXCLUDED,
+    EdgeType.SETTLED_IN:     RelationshipLayer.EXCLUDED,
+    EdgeType.CHARGED_IN:     RelationshipLayer.EXCLUDED,
+    EdgeType.ASSESSED_IN:    RelationshipLayer.EXCLUDED,
+    EdgeType.WRAPS:          RelationshipLayer.EXCLUDED,
+    EdgeType.BRIDGED_FROM:   RelationshipLayer.EXCLUDED,
+    EdgeType.VALUED_IN:      RelationshipLayer.EXCLUDED,
+    EdgeType.DERIVED_FROM:   RelationshipLayer.EXCLUDED,
+    EdgeType.REVERSES:       RelationshipLayer.EXCLUDED,
+    EdgeType.DISPUTES:       RelationshipLayer.EXCLUDED,
+
     # ── Interoperability Intelligence — actor edges ────────────────────────
     EdgeType.INITIATED_CROSS_CHAIN_WITH: RelationshipLayer.H2H,
     EdgeType.SHARES_APPLICATION_WITH:    RelationshipLayer.H2H,
@@ -532,6 +558,32 @@ _EDGE_LAYER_MAP: dict[str, RelationshipLayer] = {
     EdgeType.HAS_ASSET_LEG:         RelationshipLayer.EXCLUDED,
     EdgeType.HAS_SECURITY_SNAPSHOT: RelationshipLayer.EXCLUDED,
     EdgeType.FULFILLED_INTENT:      RelationshipLayer.EXCLUDED,
+
+    # ── Relationship Intelligence Spine — Social360 predicate edges (M6) ──
+    # Every predicate registered in relationship-predicate-registry.json with a
+    # graphEdgeType resolves here. Registered edges are NEVER EXCLUDED.
+    #   entity→entity / principal relationship predicates          → H2H
+    #   RECIPROCAL_COMMUNICATION (aggregate over COMMUNICATES_WITH
+    #     substrate, which is itself A2A)                          → A2A
+    #   AGENT_MEDIATED_PRINCIPAL_INTERACTION is written between the
+    #     PRINCIPAL endpoints (USER/ENTITY), so it is H2H; the agent-chain
+    #     evidence that produced it stays on the assertion provenance.
+    EdgeType.MUTUAL_SOCIAL_CONNECTION:          RelationshipLayer.H2H,
+    EdgeType.SOCIAL_SUBSCRIBES_TO:              RelationshipLayer.H2H,
+    EdgeType.SOCIAL_INTERACTS_WITH:             RelationshipLayer.H2H,
+    EdgeType.COLLABORATES_WITH:                 RelationshipLayer.H2H,
+    EdgeType.PARTICIPATES_WITH:                 RelationshipLayer.H2H,
+    EdgeType.COMMUNITY_ASSOCIATION:             RelationshipLayer.H2H,
+    EdgeType.RECURRING_SOCIAL_INTERACTION:      RelationshipLayer.H2H,
+    EdgeType.RECIPROCAL_COMMUNICATION:          RelationshipLayer.A2A,
+    EdgeType.RECURRING_CO_PRESENCE:             RelationshipLayer.H2H,
+    EdgeType.PERSISTENT_MULTI_CONTEXT_ASSOCIATION: RelationshipLayer.H2H,
+    EdgeType.SHARES_AFFINITY_WITH:              RelationshipLayer.H2H,
+    EdgeType.AGENT_MEDIATED_PRINCIPAL_INTERACTION: RelationshipLayer.H2H,
+    EdgeType.REFERRED_BY:                       RelationshipLayer.H2H,
+    EdgeType.CO_EXPOSED:                        RelationshipLayer.H2H,
+    EdgeType.SHARES_RISK_CONTEXT_WITH:          RelationshipLayer.H2H,
+    EdgeType.CO_PRESENT_WITH:                   RelationshipLayer.H2H,
 }
 
 

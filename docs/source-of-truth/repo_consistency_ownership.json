@@ -347,6 +347,7 @@
         "Backend Architecture/services/delegation/**",
         "Backend Architecture/services/journey-service/**",
         "Backend Architecture/services/web3/**",
+        "!Backend Architecture/aether-backend/**",
         "!Data Ingestion Layer/**/package.json",
         "!Data Lake Architecture/**/package.json"
       ],
@@ -445,6 +446,99 @@
         "python -m pytest tests/unit/test_intelligence_projection_*.py -q"
       ],
       "remediation": "Align the intelligence projection registry with its shared contracts, generated artifacts, runtime package, and the real routes/surfaces/services its legacyBindings reference; declare any unresolved cross-registry ref in pendingAuthority/pendingReference; regenerate via python scripts/generate_platform_contracts.py; and update the projection tests."
+    },
+    {
+      "id": "relationship_spine_registries",
+      "name": "relationship spine registry changed",
+      "source_globs": [
+        "packages/shared/contracts/relationship-predicate-registry.json",
+        "packages/shared/contracts/relationship-motif-registry.json"
+      ],
+      "required_changed_globs": [
+        "packages/shared/relationship-predicate-registry.ts",
+        "packages/shared/relationship-motif-registry.ts",
+        "Backend Architecture/aether-backend/shared/relationship_spine/**",
+        "docs/_generated/relationship-predicate-registry-table.md",
+        "docs/_generated/relationship-motif-registry-table.md",
+        "docs/_generated/**",
+        "packages/shared/index.ts",
+        "tests/contracts/test_relationship_predicate_registry_parity.py",
+        "tests/contracts/test_relationship_motif_registry_parity.py",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/generate_platform_contracts.py --check"
+      ],
+      "remediation": "Regenerate the relationship predicate/motif registry twins and tables (python scripts/generate_platform_contracts.py), keep the packages/shared/index.ts barrel in sync, and update the relationship predicate/motif parity tests."
+    },
+    {
+      "id": "universal_asset_registry",
+      "name": "universal asset registry changed",
+      "source_globs": [
+        "Backend Architecture/aether-backend/services/assets/**",
+        "Backend Architecture/aether-backend/repositories/registry_repos.py"
+      ],
+      "required_changed_globs": [
+        "docs/BACKEND-API.md",
+        "docs/source-of-truth/**",
+        "docs/_generated/**",
+        "docs/REPO-INDEX.md",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/docs_extract/run_all.py",
+        "python scripts/validate_contracts.py",
+        "python scripts/docs_drift.py --strict"
+      ],
+      "remediation": "Keep the universal asset registry (canonical fiat:/crypto:/stablecoin:/token: identity, chain deployments, aliases, resolver, seeds, and /v1/assets routes) in sync with BACKEND-API.md, source-of-truth docs, and registry tests. Legacy stablecoin ids are bridged by aliases, never rewritten."
+    },
+    {
+      "id": "event_time_valuation",
+      "name": "event-time valuation plane changed",
+      "source_globs": [
+        "Backend Architecture/aether-backend/services/valuation/**"
+      ],
+      "required_changed_globs": [
+        "docs/BACKEND-API.md",
+        "docs/source-of-truth/**",
+        "docs/_generated/**",
+        "docs/REPO-INDEX.md",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/docs_extract/run_all.py",
+        "python scripts/validate_contracts.py",
+        "python scripts/docs_drift.py --strict"
+      ],
+      "remediation": "Preserve event-time valuation invariants (immutable superseding snapshots, decimal strings only, reporting_amount null = unavailable never zero, peg-aware stablecoins, unknown explicit) and keep valuation docs + tests in sync."
+    },
+    {
+      "id": "spine_composition_kernel_architecture",
+      "name": "spine composition kernel architecture changed",
+      "source_globs": [
+        "packages/shared/contracts/spine-registry.json",
+        "packages/shared/spine-registry.ts",
+        "Backend Architecture/aether-backend/shared/spine/**",
+        "scripts/validate_spine_registry.py",
+        "scripts/lib/spine_registry_validation.py"
+      ],
+      "required_changed_globs": [
+        "docs/_generated/**",
+        "docs/source-of-truth/**",
+        "docs/REPO-INDEX.md",
+        "docs/AUTOMATION.md",
+        "packages/shared/index.ts",
+        "tests/**",
+        "Backend Architecture/**/tests/**"
+      ],
+      "required_commands": [
+        "python scripts/generate_platform_contracts.py --check",
+        "python scripts/validate_spine_registry.py",
+        "python scripts/docs_drift.py --strict",
+        "make spine-registry-check",
+        "python -m pytest tests/unit/test_spine_registry_validation.py tests/unit/test_spine_envelope_parity.py -q"
+      ],
+      "remediation": "Align the canonical spine registry (ADR-011 Spine Composition Kernel) with its generated twins, runtime package, and the real routes/surfaces/services each spine row binds; a row must bind to machinery that exists (tetris inventory gate) \u2014 declare unresolved bindings pending in unresolvedRefs with a reason and resolving milestone; regenerate via python scripts/generate_platform_contracts.py; and update the spine tests."
     }
   ]
 }

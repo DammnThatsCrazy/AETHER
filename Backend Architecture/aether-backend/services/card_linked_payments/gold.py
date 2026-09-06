@@ -9,6 +9,7 @@ to user-level metrics. All materialized rows are tenant-scoped and
 from __future__ import annotations
 
 from collections import defaultdict
+from decimal import Decimal
 from typing import Any
 
 from shared.logger.logger import get_logger
@@ -18,6 +19,7 @@ from services.card_linked_payments.models import (
     assert_topup_spend_separated,
 )
 from services.card_linked_payments.repositories import get_card_linked_repositories
+from services.value.models import to_decimal
 
 logger = get_logger("aether.card_linked.gold")
 
@@ -26,13 +28,20 @@ _TOPUP_BASES = {CardActivityBasis.TOPUP.value, CardActivityBasis.FUNDING.value}
 
 
 def _sum_usd(rows: list[dict]) -> str:
-    total = 0.0
+    """Sum decimal-string USD amounts exactly — never float money.
+
+    An unparseable/absent amount contributes nothing (unknown != 0); the total
+    is Decimal math over the exact decimal-string amounts and is emitted as a
+    2-decimal string, preserving the historical rollup output contract.
+    """
+    total = Decimal(0)
     for row in rows:
-        try:
-            total += float(row.get("amount_usd") or 0)
-        except (TypeError, ValueError):
+        amount = to_decimal(row.get("amount_usd"))
+        if amount is None:
+            # not a finite number — never coerced to 0, contributes nothing
             continue
-    return f"{total:.2f}"
+        total += amount
+    return format(total, ".2f")
 
 
 def _breakdown(rows: list[dict], field: str) -> dict[str, int]:

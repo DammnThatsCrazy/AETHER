@@ -22,11 +22,19 @@ from repositories.repos import (
 from shared.common.common import utc_now
 
 
-def _decimal(value: Any) -> Decimal:
+def _decimal(value: Any) -> Optional[Decimal]:
+    """Parse a value into a Decimal, or None when absent/unparseable.
+
+    Unknown is never coerced to 0: an invalid/absent amount returns None so a
+    caller can skip it and no aggregate fabricates a zero. A parseable ``"0"``
+    (an explicit zero) still returns ``Decimal("0")``.
+    """
+    if value is None:
+        return None
     try:
         return Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError):
-        return Decimal("0")
+        return None
 
 
 def _top(counter: Counter[str], limit: int = 10) -> list[dict[str, Any]]:
@@ -78,6 +86,10 @@ class AgentProfile360EconomicComposer:
         for intent in intents:
             currency = intent.get("currency") or "UNKNOWN"
             amount = _decimal(intent.get("amount"))
+            if amount is None:
+                # Unknown/unparseable amount: contributes nothing — never a
+                # fabricated zero in a spend/abandoned rollup.
+                continue
             if intent.get("settlement_status") in {"settled", "paid", "success"}:
                 spend_by_currency[currency] += amount
             if intent.get("settlement_status") == "abandoned" or intent.get("abandoned_reason"):

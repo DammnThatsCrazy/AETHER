@@ -17,6 +17,7 @@
 import type { ExplorationResultEnvelope } from '@aether/shared/exploration-contract';
 import type { ProjectionId, SectionState } from '@aether/shared/intelligence-projection';
 import { intelligenceProjectionDefinitions } from '@aether/shared/intelligence-projections_generated';
+import { surfaceCapabilities } from '@aether/shared/surface-capabilities';
 
 /** Engine degradation level the projection surface reports (mirrors ProjectionDegradation.level). */
 export type ProjectionDegradationLevel = 'none' | 'partial' | 'full';
@@ -67,4 +68,62 @@ export type ProjectionSurfaceEnvelope = ExplorationResultEnvelope<ProjectionSurf
  */
 export function projectionDisplayName(projectionId: ProjectionId): string {
   return intelligenceProjectionDefinitions[projectionId]?.displayName ?? projectionId;
+}
+
+/**
+ * Why a projection surface cannot yet render evidence-backed content (M10).
+ *
+ * - `projection_not_registered` — the surface id is not a registered
+ *   intelligence projection.
+ * - `surface_capability_not_registered` — the projection's declared surface(s)
+ *   are not yet registered with the exploration fabric.
+ * - `no_evidence_backed_data_yet` — the Social360 / relationship-fidelity
+ *   (relationship_360) evidence plane is in_flight; there is no evidence-backed
+ *   data yet. This is the honest unavailable state: the surface never fabricates
+ *   follower counts, engagement, or influence values, and never defaults missing
+ *   data to zero. Lens-registry entries alone (M9) are not evidence — while the
+ *   lens capability list is empty/absent the surface stays unavailable.
+ */
+export type ProjectionSurfaceUnavailableReason =
+  | 'projection_not_registered'
+  | 'surface_capability_not_registered'
+  | 'no_evidence_backed_data_yet';
+
+/** Client-side evidence-readiness decision for a projection surface. */
+export interface ProjectionSurfaceEvidenceReadiness {
+  readonly ready: boolean;
+  readonly reason?: ProjectionSurfaceUnavailableReason | null;
+}
+
+/**
+ * Client-side honesty gate over the generated projection registry + the
+ * surface-capability registry.
+ *
+ * A surface may only query for / render evidence-backed content when it is a
+ * registered intelligence projection whose declared surface capability exists
+ * on the exploration fabric AND — for relationship_360-kind surfaces (the
+ * Social360 / relationship-fidelity product surfaces) — the canonical data
+ * plane is `implemented`. Until then the surface degrades to the explicit
+ * "not available / no evidence-backed data yet" state. This keeps the gate
+ * generic (no per-surface hardcoding): it reads the same registries the M9
+ * sibling extends, so a missing social lens entry degrades gracefully.
+ */
+export function projectionSurfaceEvidenceReadiness(
+  surface: ProjectionId,
+): ProjectionSurfaceEvidenceReadiness {
+  const definition = intelligenceProjectionDefinitions[surface];
+  if (!definition) {
+    return { ready: false, reason: 'projection_not_registered' };
+  }
+  const hasSurfaceCapability = definition.surfaceIds.some((id) =>
+    Object.prototype.hasOwnProperty.call(surfaceCapabilities, id),
+  );
+  if (!hasSurfaceCapability) {
+    return { ready: false, reason: 'surface_capability_not_registered' };
+  }
+  const isRelationshipFidelitySurface = definition.projectionKind === 'relationship_360';
+  if (isRelationshipFidelitySurface && definition.implementationState !== 'implemented') {
+    return { ready: false, reason: 'no_evidence_backed_data_yet' };
+  }
+  return { ready: true, reason: null };
 }

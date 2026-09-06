@@ -125,6 +125,38 @@ Unavailable →  Primary: "Value unavailable"  (never $0.00)
 Liability   →  Primary: -$4,200.00 USD  (labelled Liability, never an asset)
 ```
 
+## Generalization to multiple reporting assets
+
+The USD-first invariants above are the base case of a more general model this
+repository is moving toward: **Universal Financial Normalization**
+([FINANCIAL_NORMALIZATION.md](./FINANCIAL_NORMALIZATION.md)). Today the single
+reporting/display asset is USD (`USDValuation`). Under the generalized model,
+USD becomes one configured reporting asset among several (canonically
+`fiat:USD`, with other reporting assets seeded over time), while every invariant
+above is preserved and restated in reporting-asset-agnostic form:
+
+- **Reporting amount is null, never 0.** A missing/stale/unpriced/conflicted
+  reporting valuation is `reporting_amount: null` — never coerced to `"0"` in
+  any reporting asset.
+- **No mixed-currency scalar sums.** Native values in different currencies are
+  never added into one scalar; rollups key totals by reporting asset and keep
+  native amounts per native currency, exactly as `safe_rollup` does for USD
+  today.
+- **Native is preserved.** The native amount + currency/asset survives as the
+  secondary drilldown and is never discarded when a reporting valuation is
+  attached.
+- **Stablecoins remain peg-aware.** A stablecoin is never assumed to equal a
+  reporting asset at a fixed 1:1 rate, regardless of the reporting asset.
+- **Unknown stays unknown.** Unresolved/unpriced/conflicted values stay
+  explicit (`null`, `unavailable`) rather than guessed or zeroed.
+
+Migration toward the generalized model is additive: the existing USD-first
+contracts and invariants in this document remain authoritative until the
+reporting-asset layer lands (Phase 1–3 of the [Financial Normalization — Phased
+Implementation Program](../plans/FINANCIAL_NORMALIZATION_PHASES.md)), and the
+domain-by-domain move is tracked in the [Financial Domain Migration
+Status](./FINANCIAL_DOMAIN_MIGRATION_STATUS.md) ledger.
+
 ## Adoption status
 
 Profile360 financials + the Profile360 contextual panels render via the

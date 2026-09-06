@@ -4,6 +4,9 @@ The dispatcher produces rows; this writer stores them:
 
 - ``silver_comms_facts``               → CommsFactsRepository
 - ``silver_campaign_touchpoint_facts`` → TouchpointRepository
+- the six ``silver_social_*_facts`` tables (M3 Social Silver plane, the
+  ``social_*_observed`` projectors) → their named repositories in
+  ``services/silver/repositories/social_facts.py``
 - other silver tables                  → generic idempotent insert
   (column set introspected once per table and cached; unknown row keys are
   dropped rather than failing the write; ON CONFLICT DO NOTHING keeps
@@ -28,6 +31,17 @@ _local_tables: dict[str, dict[str, dict[str, Any]]] = {}
 _column_cache: dict[str, tuple[str, ...]] = {}
 
 _JSON_LIKE_KEYS = {"payload", "provenance", "properties"}
+
+# Social Silver (M3) tables routed to named repositories — the six tables the
+# social_*_observed projectors write (see services/silver/repositories/social_facts.py).
+_SOCIAL_FACT_TABLES = frozenset({
+    "silver_social_identity_facts",
+    "silver_social_connection_facts",
+    "silver_social_interaction_facts",
+    "silver_social_content_facts",
+    "silver_social_community_facts",
+    "silver_social_metric_facts",
+})
 
 
 def reset_local_tables() -> None:
@@ -65,6 +79,15 @@ class SilverFactWriter:
         if result.table == "silver_campaign_touchpoint_facts":
             from services.measurement.repositories.touchpoint_repo import TouchpointRepository
             repo = TouchpointRepository()
+            for row in result.rows:
+                await repo.upsert(row)
+            return len(result.rows)
+
+        if result.table in _SOCIAL_FACT_TABLES:
+            from services.silver.repositories.social_facts import (
+                SOCIAL_FACT_REPOSITORY_BY_TABLE,
+            )
+            repo = SOCIAL_FACT_REPOSITORY_BY_TABLE[result.table]()
             for row in result.rows:
                 await repo.upsert(row)
             return len(result.rows)

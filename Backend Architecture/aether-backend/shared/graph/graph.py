@@ -310,6 +310,21 @@ class VertexType:
     # STABLECOIN_ASSET; chains reuse CHAIN; bridges reuse BRIDGE_ROUTE) ──────
     STABLECOIN_DEPLOYMENT = "StablecoinDeployment"
 
+    # ── Financial Normalization — canonical reference vertices (WP6a) ──────
+    # Universal financial-registry reference data. These vertices live on the
+    # NON-actor reference layer (never H2H/H2A/A2H/A2A subject vertices) and are
+    # GLOBAL (tenant_scoped=False): tenant-owned records reference them by id,
+    # but the reference layer itself is not tenant-mutable. ASSET and CHAIN
+    # already exist above (Profile-360 generic abstraction + Web3 chain node);
+    # they are reused here as the canonical-asset / canonical-chain registry
+    # nodes. The remaining members are additive reference vertices.
+    ASSET_DEPLOYMENT = "AssetDeployment"    # deploy:<asset_id>@<chain>:<contract>
+    FIAT_CURRENCY = "FiatCurrency"          # ISO-4217 reference row (FIAT_REFERENCE_SEED)
+    ISSUER = "Issuer"                       # canonical issuer of an asset/stablecoin
+    PRICE_PROVIDER = "PriceProvider"        # price-feed / oracle provider
+    VENUE = "Venue"                         # trading / listing venue reference
+    BRIDGE = "Bridge"                       # bridge operator/router reference
+
     # ── Card-linked payment rails (V1: catalog dims + flow facts) ──
     CARD_PROGRAM = "CardProgram"
     CARD_ISSUER = "CardIssuer"
@@ -806,6 +821,24 @@ class EdgeType:
     VALUED_AT              = "VALUED_AT"               # Deployment → Valuation
     RECONCILED_WITH        = "RECONCILED_WITH"         # Observation → Reconciliation
 
+    # ── Financial Normalization — reference edges (WP6a, non-actor reference
+    #    layer). DEPLOYED_ON_CHAIN / PEGGED_TO / VALUED_AT / RECONCILED_WITH /
+    #    PRICED_BY are declared above (stablecoin + derivatives domains);
+    #    ISSUED_BY is the existing cross-domain edge. These members are additive
+    #    to complete the universal financial reference edge surface (see
+    #    docs/source-of-truth/FINANCIAL_NORMALIZATION.md §9). ────────────────
+    DENOMINATED_IN = "DENOMINATED_IN"        # Value leg/instrument → FiatCurrency|Asset
+    PAID_WITH = "PAID_WITH"                  # Payment/leg → Asset|AssetDeployment
+    SETTLED_IN = "SETTLED_IN"                # Settlement/leg → Asset|AssetDeployment|FiatCurrency
+    CHARGED_IN = "CHARGED_IN"                # Charge/leg → FiatCurrency|Asset
+    ASSESSED_IN = "ASSESSED_IN"              # Assessment/liability → FiatCurrency|Asset
+    WRAPS = "WRAPS"                          # AssetDeployment → AssetDeployment (wrapped)
+    BRIDGED_FROM = "BRIDGED_FROM"            # AssetDeployment → AssetDeployment (origin)
+    VALUED_IN = "VALUED_IN"                  # Event/Observation → FiatCurrency|Asset (native context)
+    DERIVED_FROM = "DERIVED_FROM"            # Projection/Valuation → source asset/observation
+    REVERSES = "REVERSES"                    # Flow/entry → Flow/entry (reversal)
+    DISPUTES = "DISPUTES"                    # Flow/entry → Flow/entry (dispute)
+
     # ── Interoperability Intelligence — actor edges ─────────────────────────
     INITIATED_CROSS_CHAIN_WITH = "INITIATED_CROSS_CHAIN_WITH"  # Human → Human (H2H)
     SHARES_APPLICATION_WITH    = "SHARES_APPLICATION_WITH"     # Human → Human (H2H)
@@ -829,6 +862,40 @@ class EdgeType:
     HAS_ASSET_LEG         = "HAS_ASSET_LEG"          # Message fact → AssetLeg fact
     HAS_SECURITY_SNAPSHOT = "HAS_SECURITY_SNAPSHOT"  # Message fact → Snapshot
     FULFILLED_INTENT      = "FULFILLED_INTENT"       # Message fact → Intent
+
+    # ── Relationship Intelligence Spine — registered Social360 predicate
+    #    edges (Milestone M6). One EdgeType per relationship predicate in
+    #    packages/shared/contracts/relationship-predicate-registry.json whose
+    #    graphRegistrationState is REGISTERED and whose graphEdgeType resolves
+    #    here. Two names are deliberately SOCIAL_-prefixed because the bare
+    #    predicate name already exists on this class with DIFFERENT semantics:
+    #      * SOCIAL_INTERACTS_WITH  (entity→entity social interaction) vs the
+    #        existing INTERACTS_WITH   (User → Protocol, H2A).
+    #      * SOCIAL_SUBSCRIBES_TO   (entity→entity social channel subscription)
+    #        vs the existing SUBSCRIBES_TO (User/Agent → ServicePlan, H2A).
+    #    FOLLOWS follows the same disambiguation precedent (FOLLOWS_SOCIAL).
+    #    Registered edges are NEVER classified RelationshipLayer.EXCLUDED;
+    #    entity→entity / principal relationship predicates are H2H, the
+    #    reciprocal-communication aggregate is A2A (its direct COMMUNICATES_WITH
+    #    substrate is A2A), and the agent-chain-principal predicate is H2H at the
+    #    principal endpoints the edge is written between. Layer map:
+    #    shared/graph/relationship_layers.py.
+    MUTUAL_SOCIAL_CONNECTION = "MUTUAL_SOCIAL_CONNECTION"   # Entity ↔ Entity (reciprocal follows)
+    SOCIAL_SUBSCRIBES_TO = "SOCIAL_SUBSCRIBES_TO"           # Entity → Entity (social channel subscription)
+    SOCIAL_INTERACTS_WITH = "SOCIAL_INTERACTS_WITH"         # Entity → Entity (durable social interaction)
+    COLLABORATES_WITH = "COLLABORATES_WITH"                 # Entity ↔ Entity (verified collaboration)
+    PARTICIPATES_WITH = "PARTICIPATES_WITH"                 # Entity ↔ Entity (shared participation)
+    COMMUNITY_ASSOCIATION = "COMMUNITY_ASSOCIATION"         # Entity ↔ Entity (shared community + interaction)
+    RECURRING_SOCIAL_INTERACTION = "RECURRING_SOCIAL_INTERACTION"  # Entity → Entity (aggregate interaction)
+    RECIPROCAL_COMMUNICATION = "RECIPROCAL_COMMUNICATION"   # Entity/Agent ↔ Entity/Agent (reciprocal comms)
+    RECURRING_CO_PRESENCE = "RECURRING_CO_PRESENCE"         # Entity ↔ Entity (recurring co-presence episodes)
+    PERSISTENT_MULTI_CONTEXT_ASSOCIATION = "PERSISTENT_MULTI_CONTEXT_ASSOCIATION"  # Entity ↔ Entity
+    SHARES_AFFINITY_WITH = "SHARES_AFFINITY_WITH"           # Entity/Agent → Entity/Agent (behavioral affinity)
+    AGENT_MEDIATED_PRINCIPAL_INTERACTION = "AGENT_MEDIATED_PRINCIPAL_INTERACTION"  # Principal ↔ Principal
+    REFERRED_BY = "REFERRED_BY"                             # Entity → Entity (campaign attribution)
+    CO_EXPOSED = "CO_EXPOSED"                               # Entity ↔ Entity (campaign exposure)
+    SHARES_RISK_CONTEXT_WITH = "SHARES_RISK_CONTEXT_WITH"   # Entity/Agent ↔ Entity/Agent (shared risk context)
+    CO_PRESENT_WITH = "CO_PRESENT_WITH"                     # Entity ↔ Entity (single-episode co-presence)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

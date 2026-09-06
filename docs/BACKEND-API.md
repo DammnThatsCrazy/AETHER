@@ -11,7 +11,8 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "f543a085"
+last_synced_commit: "f3f42b38"
+
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -1477,13 +1478,16 @@ A **360** is an intelligence projection over canonical Aether truth — never a
 competing system of record. The plane is a fail-isolated `ProviderRegistry` of
 `IntelligenceProjectionProvider`s over the shared
 `ProjectionRequest`/`ProjectionContext`/`ProjectionResult` contracts (TS +
-Python). Seven 360s are implemented native providers (`outcome360`,
-`economic360`, `infrastructure360`, `communication360`, `temporal360`,
-`population360`, `geographic360`); the rest are `in_flight`. `implementationState`
-is repo metadata, **not** readiness. `infrastructure360` was the first projection
-to expose a classified public route, and `communication360` follows the same
-read-only route template (every route a GET, tenant-scoped from the authenticated
-tenant, capability-gated on `infrastructure360.read` / `communication360.read`):
+Python). Nine 360s are implemented native providers (`outcome360`,
+`economic360`, `infrastructure360`, `communication360`, `risk360`, `fraud360`,
+`temporal360`, `population360`, `geographic360`); the rest are `in_flight`.
+`implementationState` is repo metadata, **not** readiness. `infrastructure360`
+was the first projection to expose a classified public route, and
+`communication360` follows the same read-only route template (every route a GET,
+tenant-scoped from the authenticated tenant, capability-gated on
+`infrastructure360.read` / `communication360.read`); `risk360` and `fraud360`
+expose the same pattern behind their convergence flags (below):
+
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -1498,6 +1502,25 @@ capability key (fail-closed). The infrastructure360 provider reads the
 communication360 provider reads the `communication360_facts` store over the comms
 silver path and the ratified information / knowledge / participant authorities.
 Both projections are `graphMutationPolicy: read_only` — there is no write path.
+
+`risk360` and `fraud360` expose the same classified read-only projection surface
+pattern — each is an `implemented` native provider with
+`legacyBindings.migrationMode: converged` (repo metadata, **not** readiness),
+`graphMutationPolicy: read_only`, and `ownsCanonicalTruth: false`. The routes are
+wired in `main.py` behind the convergence flags `AETHER_RISK360_ENABLED` /
+`AETHER_FRAUD360_ENABLED` (both default OFF — when a flag is off the router is
+not mounted, so the surface answers 404). Each
+mirrors the infrastructure360 surface pattern (every route a GET, tenant-scoped,
+no write path) under its own prefix, capability-gated on `risk360.read` /
+`fraud360.read`:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/risk360/{subject_kind}/{subject_id}` | Run the risk360 projection for the requesting tenant (`subject_kind` ∈ `entity` \| `relationship` \| `cluster` \| `population`); 404 for an unserved kind, 503 when the provider is unregistered |
+| GET | `/v1/risk360/health` | Plane probe: risk360 provider registered + contract-compatible (`availability()` only) |
+| GET | `/v1/fraud360/{subject_kind}/{subject_id}` | Run the fraud360 projection for the requesting tenant (`subject_kind` ∈ `entity` \| `relationship` \| `agent`); 404 for an unserved kind, 503 when the provider is unregistered |
+| GET | `/v1/fraud360/health` | Plane probe: fraud360 provider registered + contract-compatible (`availability()` only) |
+
 
 ---
 
@@ -2388,6 +2411,30 @@ Read-side behavioral profile output computed by the `BehaviorScorer` Profile 360
 | GET | `/v1/behavior/{entity_id}/history` | Historical behavior snapshots; `window` (e.g. `7d`) and `limit` query params |
 
 **Permissions:** `read`
+
+---
+
+## Relationship Intelligence Service (v8.12.0)
+
+Read-only relationship-fidelity surface over the Social360 / relationship spine,
+mounted at `/v1/relationships/{source_entity_id}/{target_entity_id}/*`. Every
+route is flag-gated (`AETHER_SOCIAL360_ENABLED`, default OFF) and, when the flag
+is ON, consent-gated for the read subject (the source entity). In the OFF state
+each route returns the same content-free `feature_disabled` degraded envelope the
+Social360 projection adapter uses; a consent-denied read returns a content-free
+`403`. Absent data is never a zero vector — every envelope keeps unavailable
+dimensions `null` and reports `available` / `degraded` state. Tenant scope comes
+from the authenticated API key; the routes require the `read` permission and
+never fabricate a fidelity or influence figure.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| `GET` | `/v1/relationships/{source}/{target}/fidelity` | read | Latest persisted fidelity-vector surface for the directed pair. Degrades `no_persisted_fidelity_run` when no run exists (fidelity unknown, never 0). |
+| `GET` | `/v1/relationships/{source}/{target}/explain` | read | Honest explain basis: registered predicate semantics + latest fidelity + degraded sections. |
+| `GET` | `/v1/relationships/{source}/{target}/influence` | read | Nine-way influence-propagation decomposition (optional `as_of`). Skeleton read: without caller-supplied path edges it honestly reports `insufficient_data` — never a synthesized influence figure. |
+
+Relationship refs and fidelity runs persist on the Computation Substrate (one run
+slot per relationship); see `docs/source-of-truth/COMPUTATION_SUBSTRATE.md`.
 
 ---
 
@@ -3459,3 +3506,157 @@ dependency; the Aether (`models`, `tenant-default`) and Kyber (`registry`,
 `health`, `entitlements`, `usage`, `traces`) clients are typed to these exact
 paths in `frontend/aether/src/features/model-selection/types.ts` and
 `frontend/kyber/src/features/model-runtime/types.ts` respectively.
+
+---
+
+## Universal Asset Registry API — `/v1/assets` (v8.12.0)
+
+The Universal Asset Registry (`services/assets/`) is the canonical reference
+registry for the financial-normalization program: global identity for fiat
+currencies, crypto natives, stablecoins, and tokens (namespaced ids
+`fiat:USD`, `crypto:ETH`, `stablecoin:USDC`, `token:<chain>:<contract>`),
+their chain deployments, and alias rows that bridge legacy ids. Registry rows
+are authoritative **global** reference data (no tenant), except one
+tenant-scoped observational table that records UNRESOLVED references. The
+registry observes and records; it never originates, signs, or settles
+transfers — `execution_by_aether` is always False.
+
+`registry_version` is a deterministic sha256 digest over the sorted canonical
+seed content — never a wall-clock timestamp — so identical registry seed states
+always hash to one version. Legacy stablecoin-domain ids (`usdc`,
+`usdc:eip155:8453`) are bridged via alias rows that resolve to universal ids;
+they are never rewritten. Canonicalization preserves the native payload
+verbatim; a reference the registry cannot verify is recorded as unresolved,
+never guessed.
+
+**Feature gating (all default OFF, fail-closed).** The router is mounted in
+`main.py` only when `settings.assets.api_enabled`
+(`AETHER_ASSETS_API_ENABLED`) is true — otherwise the surface is absent. Every
+route fail-closes on that flag. Registration, seed, and canonicalize
+additionally require `settings.assets.ingestion_enabled`
+(`AETHER_ASSETS_INGESTION_ENABLED`). GET routes require the base `READ`
+permission; POST register/seed/canonicalize routes require `ADMIN`. Runtime
+seeding is not enabled by default — the canonical seed ships as an ADMIN action
+(`POST /v1/assets/seed`), it is not run at startup.
+
+### Reference & observational reads (GET, `READ`)
+
+| Method | Path | Permission | Purpose |
+|---|---|---|---|
+| GET | `/v1/assets/assets` | read | List canonical assets. Filters: `kind`, `symbol`; `limit` (1–1000, default 100), `offset`. |
+| GET | `/v1/assets/assets/{asset_id}` | read | Get one canonical asset by canonical id. Response: `{ "asset_id", "found": true\|false, "asset" }`. |
+| GET | `/v1/assets/by-symbol/{symbol}` | read | Resolve a bare symbol to candidate canonical assets (case-insensitive; a bare symbol may match several — never guessed). |
+| GET | `/v1/assets/chains` | read | List chain references. Filter: `vm`; `limit`/`offset`. |
+| GET | `/v1/assets/chains/{chain_id}` | read | Get one chain reference. Response: `{ "chain_id", "found": true\|false, "chain" }`. |
+| GET | `/v1/assets/deployments` | read | List deployments. Filters: `asset_id`, `chain_id`; `limit`/`offset`. |
+| GET | `/v1/assets/deployments/{deployment_id}` | read | Get one deployment by canonical `deploy:<asset_id>@<chain>:<contract>` id. |
+| GET | `/v1/assets/aliases` | read | List alias rows. Filter: `target_asset_id`; `limit`/`offset`. |
+| GET | `/v1/assets/aliases/{alias}` | read | Resolve one alias (case-insensitive) to its canonical target asset/deployment. |
+| GET | `/v1/assets/meta` | read | Registry metadata: deterministic `registry_version` + the meta ledger row (counts by asset/chain/deployment/fiat/alias). |
+| GET | `/v1/assets/unresolved` | read | List the calling tenant's recorded unresolved-reference sightings. Filter: `reason`; `limit`/`offset`. |
+
+### Registration & canonicalization (POST, `ADMIN` + `ingestion_enabled`)
+
+| Method | Path | Permission | Purpose |
+|---|---|---|---|
+| POST | `/v1/assets/canonicalize` | admin | Canonicalize one native payload (`{ "native": {...} }`) into a resolution report under the resolver priority (chain+contract → namespaced id → legacy alias → symbol). Native preserved verbatim; unresolvable refs recorded unresolved on the tenant's observational table. Returns 200. |
+| POST | `/v1/assets/assets` | admin | Register a canonical asset (idempotent upsert on canonical id). Returns 201. |
+| POST | `/v1/assets/chains` | admin | Register a chain reference. Returns 201. |
+| POST | `/v1/assets/fiat` | admin | Register an ISO 4217 fiat currency **and** its `fiat:<ISO>` canonical asset. Returns 201. |
+| POST | `/v1/assets/deployments` | admin | Register a deployment; EVM contract is lowercased and the id recomputed as `deploy:<asset_id>@<chain>:<contract>`. Returns 201. |
+| POST | `/v1/assets/aliases` | admin | Register an alias row → canonical target (alias stored lowercase). Returns 201. |
+| POST | `/v1/assets/capabilities` | admin | Register an asset support capability. Returns 201. |
+| POST | `/v1/assets/seed` | admin | Run the full canonical seed: fiat → chains (+ native crypto) → x402-verified stablecoins → legacy aliases. Idempotent; rewrites the deterministic `registry_version` meta row from the digest. Returns 201. |
+
+### Operator console — `/v1/admin/assets` (W5, default OFF)
+
+The financial-normalization operator console (`services/assets/admin_routes.py`)
+is data-integrity scaffolding over the registry — human review-and-apply of
+reference data plus the automated-discovery lifecycle. Observation-only: the
+console records canonical reference data; it never originates, signs, or settles
+a transfer, and `execution_by_aether` stays False.
+
+**Feature gating (default OFF, fail-closed).** The router mounts only when
+`settings.assets.admin_enabled` (`AETHER_ASSETS_ADMIN_ENABLED`) is true —
+otherwise the surface is absent (an ADMIN principal gets 404). Every route is
+global-ADMIN gated; the write/apply routes (`POST …/discovery/apply` and the
+register routes) additionally require the apply capability `admin_mode`
+(`AETHER_ASSETS_ADMIN_MODE`). No new migration — the console reads/writes the
+existing registry tables (plus the typed in-memory repos under
+`AETHER_ENV=local`).
+
+**Discovery lifecycle (`unresolved → candidate → verified → active`).**
+`GET …/discovery/candidates` lists unresolved references a resolver seam (the
+stablecoin canonical-identity seam) can now plausibly map — suggestions only,
+never auto-applied. `POST …/discovery/confirm` marks one candidate verified for
+the reviewer (no write; a mapping no seam supports is 409). `POST
+…/discovery/apply` applies a verified mapping as an alias row — the sole write
+path, re-verified against the live registry state, idempotent on the lowercased
+alias, and gated on `admin_mode`. Nothing auto-advances and nothing auto-writes.
+
+| Method | Path | Permission | Purpose |
+|---|---|---|---|
+| GET | `/v1/admin/assets/status` | admin | Console status: registry reference counts + discovery-view availability. |
+| GET | `/v1/admin/assets/assets` | admin | List canonical assets (registry review). |
+| GET | `/v1/admin/assets/assets/{asset_id}` | admin | Get one canonical asset by canonical id. |
+| GET | `/v1/admin/assets/aliases` | admin | List alias rows (legacy-id bridging review). |
+| GET | `/v1/admin/assets/unresolved` | admin | List unresolved-reference sightings feeding discovery. |
+| GET | `/v1/admin/assets/discovery/candidates` | admin | Suggested mappings a resolver seam can now surface (never auto-applied). |
+| POST | `/v1/admin/assets/discovery/confirm` | admin | Confirm one candidate (unresolved → verified). No write; no-seam match → 409. |
+| POST | `/v1/admin/assets/discovery/apply` | admin + `admin_mode` | Apply a verified mapping (verified → active) as an alias row. Idempotent; re-verified live. |
+| POST | `/v1/admin/assets/assets` | admin + `admin_mode` | Register a canonical asset (idempotent upsert). Returns 201. |
+| POST | `/v1/admin/assets/chains` | admin + `admin_mode` | Register a chain reference. Returns 201. |
+| POST | `/v1/admin/assets/fiat` | admin + `admin_mode` | Register an ISO 4217 fiat currency + its `fiat:<ISO>` canonical asset. Returns 201. |
+| POST | `/v1/admin/assets/deployments` | admin + `admin_mode` | Register a deployment (`deploy:<asset_id>@<chain>:<contract>`). Returns 201. |
+| POST | `/v1/admin/assets/aliases` | admin + `admin_mode` | Register an alias row → canonical target. Returns 201. |
+
+## Event-Time Valuation API — `/v1/valuation`
+
+The event-time valuation surface (`services/valuation/`) values a native payload
+(the exact amount + currency a domain observed) into an **immutable tenant
+valuation snapshot** denominated in a canonical reporting asset, at an explicit
+`effective_at`, through the real asset registry. It is the persistence + API
+half of the financial-normalization valuation core: canonicalize (registry) →
+observe (append-only price facts) → value (pure event-time engine) → persist.
+
+House rules that the surface enforces:
+- **Append-only economics.** `valuation_snapshots` are immutable once written;
+  a correction appends a NEW superseding snapshot via `supersedes_snapshot_id`
+  and flips the prior row to `superseded` (back-pointer only — the economic fact
+  is never mutated in place). Price observations are append-only too.
+- **Resolve-never-invent.** `reporting_asset_id` / allowed ids must be canonical
+  assets the registry already knows (seeded or registered) — a phantom unit is
+  rejected, never guessed. A native payload whose currency is unverifiable is
+  persisted as an unresolved observation, never silently zeroed.
+- **NULL = UNAVAILABLE.** A missing/stale rate yields `price_status`
+  `missing_rate`/`stale_rate` and a `reporting_amount` of NULL — never coerced to
+  0. Stablecoins are valued peg-aware from their observed rate, never assumed $1.
+- **Observation-only.** The domain reports valuations; it never originates,
+  signs, or settles a transfer. Every persisted row carries
+  `execution_by_aether` False.
+
+**Feature gating (default OFF, fail-closed).** The router is mounted in
+`main.py` only when `settings.valuation.api_enabled`
+(`AETHER_VALUATION_API_ENABLED`) is true. Reads require the base `READ`
+permission; the observational writes (`observe`, `value`, policy) additionally
+require `settings.valuation.ingestion_enabled`
+(`AETHER_VALUATION_INGESTION_ENABLED`) + `ADMIN`. shared/auth has no
+`valuation:*` scope yet, so the surface reuses the existing permission constants
+rather than inventing one.
+
+### Reads (GET, `READ` + `valuation.api_enabled`)
+
+| Method | Path | Permission | Purpose |
+|---|---|---|---|
+| GET | `/v1/valuation/snapshots` | read | List the calling tenant's valuation snapshots (newest first). Filters: `canonical_asset_id`, `status`; `limit` (1–1000, default 100), `offset`. |
+| GET | `/v1/valuation/snapshots/{valuation_id}` | read | Get one tenant snapshot. Response: `{ "tenant_id", "valuation_id", "found": true\|false, "snapshot" }`. |
+| GET | `/v1/valuation/policy` | read | Get the tenant's current value policy. Response: `{ "tenant_id", "found": true\|false, "policy" }`. |
+| GET | `/v1/valuation/observations` | read | List recorded market-price observations (global market facts). Filters: `asset_id`, `provider`; `limit`/`offset`. |
+
+### Observational writes (POST/PUT, `ADMIN` + `valuation.ingestion_enabled`)
+
+| Method | Path | Permission | Purpose |
+|---|---|---|---|
+| POST | `/v1/valuation/observe` | admin | Record one price observation (idempotent single append path; a replay returns the existing observation). Returns 201. |
+| POST | `/v1/valuation/value` | admin | Canonicalize → value → persist one tenant snapshot at `effective_at`. Body: `{ "native", "effective_at", "reporting_asset_id"?, "deployment_id"?, "valuation_basis"?, "economic_role"?, "supersedes_snapshot_id"? }`. A `supersedes_snapshot_id` correction APPENDS a new superseding snapshot; replay of identical inputs is a no-op returning the persisted row. Returns 201. |
+| PUT | `/v1/valuation/policy` | admin | Create/update the tenant's current value policy (one row per tenant; `policy_version` advances monotonically, a re-PUT of the current policy is a no-op). Returns 200. |

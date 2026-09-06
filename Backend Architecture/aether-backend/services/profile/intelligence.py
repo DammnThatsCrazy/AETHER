@@ -351,7 +351,7 @@ class IntelligenceAggregator:
                     "following": d.get("following"),
                     "post_count": d.get("post_count") or d.get("posts"),
                     "engagement_rate": d.get("engagement_rate"),
-                    "verified": d.get("verified", False),
+                    "verified": d.get("verified"),
                     "computed_at": r.get("materialized_at"),
                 })
         platforms = [i.get("platform") for i in items if i.get("platform")]

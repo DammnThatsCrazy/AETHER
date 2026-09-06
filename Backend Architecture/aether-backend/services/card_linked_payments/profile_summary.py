@@ -12,6 +12,7 @@ from typing import Any
 
 from services.card_linked_payments.gold import entity_economic_activity
 from services.card_linked_payments.repositories import get_card_linked_repositories
+from services.value.models import to_decimal
 
 # Filters supported across Profile360/Campaign360/Graph surfaces.
 FILTERABLE_FIELDS = (
@@ -28,19 +29,26 @@ def apply_flow_filters(rows: list[dict], filters: dict[str, Any]) -> list[dict]:
         value = filters.get(field)
         if value is not None and value != "":
             out = [r for r in out if str(r.get(field) or "unknown") == str(value)]
-    volume_min = filters.get("volume_min")
-    volume_max = filters.get("volume_max")
 
-    def _usd(row: dict) -> float:
-        try:
-            return float(row.get("amount_usd") or 0)
-        except (TypeError, ValueError):
-            return 0.0
+    def _volume_bound(name: str):
+        raw = filters.get(name)
+        if raw is None:
+            return None
+        bound = to_decimal(raw)
+        if bound is None:
+            raise ValueError(f"{name} must be a valid decimal amount, got {raw!r}")
+        return bound
 
+    volume_min = _volume_bound("volume_min")
+    volume_max = _volume_bound("volume_max")
     if volume_min is not None:
-        out = [r for r in out if _usd(r) >= float(volume_min)]
+        # A flow whose amount is unknown/unparseable is never coerced to 0 —
+        # it cannot be proven in-range, so it is excluded from the subset.
+        out = [r for r in out if (amt := to_decimal(r.get("amount_usd"))) is not None
+               and amt >= volume_min]
     if volume_max is not None:
-        out = [r for r in out if _usd(r) <= float(volume_max)]
+        out = [r for r in out if (amt := to_decimal(r.get("amount_usd"))) is not None
+               and amt <= volume_max]
     since = filters.get("since")
     until = filters.get("until")
     if since:

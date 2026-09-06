@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from decimal import Decimal
 
 import pytest
 
@@ -155,3 +156,57 @@ class TestMetricHelpers:
         ):
             assert key in summary
         assert summary["fact_count"] == 1
+
+
+class TestMoneyAggregationExactness:
+    """Regression (agent-cost audit): money aggregation is exact Decimal.
+
+    Three fractional cost rows sum to the exact decimal total with no float
+    artifact, and aggregated money stays ``Decimal`` on the model/aggregation
+    surface — a float shape appears only as the terminal wire conversion, never
+    as a summed/rounded intermediate (program money rule).
+    """
+
+    async def test_fractional_rows_sum_exactly_no_float_artifact(self):
+        # $0.10 + $0.20 + $0.30 == exactly $0.60. IEEE-754 float addition of
+        # these three doubles yields 0.6000000000000001, so a float-sum
+        # regression is caught by the exactness assertions below.
+        assert 0.10 + 0.20 + 0.30 != 0.6
+        facts = [
+            fact_record(selected_cost=0.10, cost_basis="billed"),
+            fact_record(selected_cost=0.20, cost_basis="billed"),
+            fact_record(selected_cost=0.30, cost_basis="billed"),
+        ]
+        # Internal per-currency total is an exact Decimal sum.
+        assert ai_aggregation._total_cost_by_currency(facts) == {"USD": Decimal("0.60")}
+        # Public aggregate is the terminal Decimal→float conversion of the exact
+        # total, not a float-summed intermediate.
+        assert ai_aggregation.total_cost_by_currency(facts) == {"USD": 0.6}
+
+    async def test_unknown_row_never_zeroed_in_exact_sum(self):
+        # An unknown-cost row contributes nothing to the exact decimal total
+        # (never coerced to 0.0): $0.10 + unknown + $0.30 == $0.40.
+        facts = [
+            fact_record(selected_cost=0.10, cost_basis="billed"),
+            fact_record(selected_cost=None, cost_basis="unknown"),
+            fact_record(selected_cost=0.30, cost_basis="billed"),
+        ]
+        assert ai_aggregation._total_cost_by_currency(facts) == {"USD": Decimal("0.40")}
+        assert ai_aggregation.total_cost_by_currency(facts) == {"USD": 0.4}
+
+    async def test_recompute_aggregates_fractional_rows_exactly(self):
+        # End-to-end store round trip: fractional billed costs persist through
+        # the JSON wire shape and aggregate back to the exact decimal total on
+        # the AIWorkflowEconomics model surface (no float artifact).
+        tenant, run_id = new_tenant(), f"wf-{uuid.uuid4().hex[:8]}"
+        await _seed_fact(tenant, workflow_run_id=run_id, billed_cost=0.10)
+        await _seed_fact(tenant, workflow_run_id=run_id, billed_cost=0.20)
+        await _seed_fact(tenant, workflow_run_id=run_id, billed_cost=0.30)
+        economics = await ai_aggregation.recompute_workflow(tenant, run_id)
+        assert economics is not None
+        assert economics.total_invocations == 3
+        # Money on the model output surface is Decimal and exactly $0.60.
+        assert isinstance(economics.total_model_cost, Decimal)
+        assert economics.total_model_cost == Decimal("0.60")
+        assert economics.fully_loaded_cost == Decimal("0.60")
+        assert economics.currency == "USD"

@@ -21,6 +21,8 @@ export const ROUTES = {
   FRAUD_NETWORK_DETAIL: '/fraud-networks/:networkId',
   FLOW_TRACE: '/fraud-networks/flow-trace',
   FLOW_TRACE_DETAIL: '/fraud-networks/flow-trace/:traceId',
+  RISK_360: '/fraud-networks/risk-360',
+  FRAUD_360: '/fraud-networks/fraud-360',
 } as const;
 
 export function entityDetailPath(type: string, id: string): string {

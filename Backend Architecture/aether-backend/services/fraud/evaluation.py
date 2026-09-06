@@ -26,9 +26,11 @@ Design:
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import urlencode
 from uuid import uuid4
 
 from repositories.repos import (
@@ -41,13 +43,17 @@ from repositories.repos import (
     TransferRepository,
     WalletRepository,
 )
+from services.fraud.evidence import (
+    SIGNAL_TO_EVIDENCE_TYPE,
+    normalize_persisted_evidence_refs,
+)
 from services.fraud.models import (
-    EvidenceRef,
     FraudDecision,
     RiskAnnotation,
     decision_from_score,
     risk_tier_from_score,
 )
+from services.operational_intelligence.models import EvidenceRef
 from services.fraud_networks.detectors import (
     detect_agentic_delegation_abuse,
     detect_circular_transfers,
@@ -157,6 +163,20 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _evidence_uri(signal: str, detail: dict) -> str:
+    """Encode one detector result into an internal (non-fetchable) aether:// ref.
+
+    The canonical ``EvidenceRef`` has no free-form description/metadata slot, so
+    the detector signal name and its detail payload are carried in the internal
+    ``uri`` — the same convention ``services/fraud_networks/evidence.py`` uses —
+    preserving traceability without re-introducing a fraud-local shape.
+    """
+    payload = json.dumps(detail, sort_keys=True, default=str, separators=(",", ":"))
+    return "aether://fraud/decision/evidence?" + urlencode(
+        {"signal": signal, "detail": payload}
+    )
+
+
 def _build_annotation_from_decision(decision: FraudDecision) -> RiskAnnotation:
     return RiskAnnotation(
         risk_score=decision.risk_score,
@@ -243,7 +263,16 @@ class FraudEvaluationService:
                         - datetime.fromisoformat(evaluated_at.replace("Z", "+00:00"))
                     ).total_seconds()
                     if age < _EVALUATION_TTL_SECONDS:
-                        return FraudDecision(**existing)
+                        # One-way legacy compat: JSONB rows written before the
+                        # EvidenceRef convergence may hold the old fraud-local
+                        # shape (ref_id/ref_type/...), which the canonical
+                        # EvidenceRef would reject. Normalize to canonical.
+                        row = dict(existing)
+                        if existing.get("evidence_refs"):
+                            row["evidence_refs"] = normalize_persisted_evidence_refs(
+                                existing["evidence_refs"]
+                            )
+                        return FraudDecision(**row)
                 except (ValueError, TypeError):
                     pass
 
@@ -377,12 +406,18 @@ class FraudEvaluationService:
 
         signal_types = list({r[0] for r in all_results})
         reason_codes = self._signal_to_reason_codes(signal_types)
+
+        now = _utc_now()
+        # Canonical EvidenceRef (id/type/source/observedAt/confidence/uri).
+        # Detector outputs render per signal like fraud_networks/evidence.py;
+        # the signal + detail payload ride in the internal uri.
         evidence_refs = [
             EvidenceRef(
-                ref_type=signal,
-                ref_source="fraud_evaluator",
-                description=str(detail),
-                metadata=detail,
+                id=str(uuid4()),
+                type=SIGNAL_TO_EVIDENCE_TYPE.get(signal, "model_output"),
+                source="fraud_evaluator",
+                observedAt=now,
+                uri=_evidence_uri(signal, detail),
             )
             for signal, _, detail in all_results
         ]
@@ -397,7 +432,6 @@ class FraudEvaluationService:
         outcome = decision_from_score(risk_score)
         review_required = risk_tier in ("high", "critical")
 
-        now = _utc_now()
         explanation = (
             f"Detected {len(signal_types)} signal(s): {', '.join(signal_types) or 'none'}. "
             f"Risk score: {risk_score:.1f}/{100}."

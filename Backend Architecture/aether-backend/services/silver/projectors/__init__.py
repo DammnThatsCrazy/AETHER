@@ -17,6 +17,12 @@ from .interop_projector import InteropProjector
 from .touchpoint_projector import TouchpointProjector
 from .conversion_projector import ConversionProjector
 from .card_linked_projector import CardLinkedProjector
+from .social_identity_projector import SocialIdentityProjector
+from .social_connection_projector import SocialConnectionProjector
+from .social_interaction_projector import SocialInteractionProjector
+from .social_content_projector import SocialContentProjector
+from .social_community_projector import SocialCommunityMembershipProjector
+from .social_metric_projector import SocialMetricProjector
 
 __all__ = [
     "BaseProjector",
@@ -38,4 +44,10 @@ __all__ = [
     "TouchpointProjector",
     "ConversionProjector",
     "CardLinkedProjector",
+    "SocialIdentityProjector",
+    "SocialConnectionProjector",
+    "SocialInteractionProjector",
+    "SocialContentProjector",
+    "SocialCommunityMembershipProjector",
+    "SocialMetricProjector",
 ]

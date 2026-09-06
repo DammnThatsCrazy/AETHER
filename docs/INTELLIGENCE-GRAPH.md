@@ -12,7 +12,7 @@ source_files:
 canonical_owner: graph@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "f543a085"
+last_synced_commit: "c587eb8b"
 ---
 # Unified On-Chain Intelligence Graph v8.12.0
 
@@ -178,6 +178,16 @@ Captures orchestration, hiring, payments, and protocol composition between auton
 - **Edges:** `HIRED` (agent->agent), `PAYS` (agent->agent+amount), `CONSUMES` (agent->service), `DEPLOYED` (agent->contract), `CALLED` (agent->contract+method)
 - **Behaviors:** Multi-hop hiring chains, payment splitting, SLA tracking
 - **Protocol composition:** Agents consuming other agents' exposed services via x402 micropayments
+
+> **Social360 relationship-spine additions (M6, flag-gated OFF):** the
+> Social360/relationship-fidelity extension registers additional entity↔entity
+> social predicate edges on the shared `EdgeType` enum and its relationship-layer
+> map (`shared/graph/relationship_layers.py`), classified into the H2H / A2A
+> layers above (e.g. `SOCIAL_INTERACTS_WITH`, `SOCIAL_SUBSCRIBES_TO`,
+> `MUTUAL_SOCIAL_CONNECTION`, `COLLABORATES_WITH`, `REFERRED_BY` → H2H; the
+> aggregate `RECIPROCAL_COMMUNICATION` → A2A). They are distinct from the
+> classic edges (`SOCIAL_INTERACTS_WITH` ≠ `INTERACTS_WITH`) and are inert
+> taxonomy-level registrations while the Social360 feature flags default OFF.
 
 ## Graph Schema
 

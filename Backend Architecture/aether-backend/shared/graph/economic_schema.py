@@ -1,9 +1,15 @@
 """
-Aether Graph — Commerce Vertex/Edge Schema Documentation (L3b+).
+Aether Graph — Vertex/Edge Schema Documentation (L3b+).
 
 Documents owner, tenant isolation, provenance, audit requirements, DSR
-treatment, and Kyber visualization binding for every commerce vertex and
-edge type added by the Agentic Commerce control plane.
+treatment, and Kyber visualization binding for:
+  - every commerce vertex/edge type added by the Agentic Commerce control
+    plane (COMMERCE_* lists), and
+  - the Financial Normalization reference layer (WP6a) — the global
+    canonical-asset/chain/deployment/fiat reference vertices and their
+    non-actor reference edges (REFERENCE_* lists). Reference vertices are
+    GLOBAL (tenant_scoped=False), mirroring how global/domain vertices such
+    as Facilitator and StablecoinAsset declare tenant isolation today.
 
 This module is documentation-as-code: it is imported by tests and
 `validate_contracts.py` to assert completeness.  Nothing here creates
@@ -383,14 +389,238 @@ COMMERCE_EDGE_SCHEMAS: list[EdgeSchema] = [
 ]
 
 
+# ── Financial Normalization — Reference Vertex Schemas (WP6a) ──────────────
+# Reference vertices are canonical financial-registry data (asset / deployment /
+# chain / fiat currency / issuer / price provider / venue / bridge). They are
+# GLOBAL — tenant_scoped=False (matching Facilitator / StablecoinAsset) — and
+# non-actor: tenant-owned records reference them by id, but the reference layer
+# itself is not tenant-mutable (FINANCIAL_NORMALIZATION.md §9).
+
+REFERENCE_VERTEX_SCHEMAS: list[VertexSchema] = [
+    VertexSchema(
+        vertex_type="Asset",
+        owner_service="assets",
+        tenant_scoped=False,  # global canonical registry row (fiat/crypto/stablecoin/token)
+        provenance_event="registry.asset.seeded",
+        audit_required=True,
+        dsr_action="N/A",
+        source_of_truth="asset_registry",
+        kyber_surfaces=["Entities", "Noesis"],
+    ),
+    VertexSchema(
+        vertex_type="AssetDeployment",
+        owner_service="assets",
+        tenant_scoped=False,  # global registry row: deploy:<asset_id>@<chain>:<contract>
+        provenance_event="registry.deployment.seeded",
+        audit_required=True,
+        dsr_action="N/A",
+        source_of_truth="deployment_registry",
+        kyber_surfaces=["Entities", "Noesis"],
+    ),
+    VertexSchema(
+        vertex_type="Chain",
+        owner_service="assets",
+        tenant_scoped=False,  # global registry row (CAIP-2 chain namespace)
+        provenance_event="registry.chain.seeded",
+        audit_required=True,
+        dsr_action="N/A",
+        source_of_truth="chain_registry",
+        kyber_surfaces=["Entities", "Noesis"],
+    ),
+    VertexSchema(
+        vertex_type="FiatCurrency",
+        owner_service="assets",
+        tenant_scoped=False,  # global ISO-4217 reference data (FIAT_REFERENCE_SEED)
+        provenance_event="registry.fiat.seeded",
+        audit_required=True,
+        dsr_action="N/A",
+        source_of_truth="fiat_reference",
+        kyber_surfaces=["Entities", "Noesis"],
+    ),
+    VertexSchema(
+        vertex_type="Issuer",
+        owner_service="assets",
+        tenant_scoped=False,  # global canonical issuer reference (stablecoin/token project)
+        provenance_event="registry.issuer.seeded",
+        audit_required=True,
+        dsr_action="N/A",
+        source_of_truth="asset_registry",
+        kyber_surfaces=["Entities", "Noesis"],
+    ),
+    VertexSchema(
+        vertex_type="PriceProvider",
+        owner_service="valuation",
+        tenant_scoped=False,  # global price-feed / oracle provider reference
+        provenance_event="registry.price_provider.seeded",
+        audit_required=True,
+        dsr_action="N/A",
+        source_of_truth="price_provider_registry",
+        kyber_surfaces=["Entities", "Noesis"],
+    ),
+    VertexSchema(
+        vertex_type="Venue",
+        owner_service="assets",
+        tenant_scoped=False,  # global trading/listing venue reference
+        provenance_event="registry.venue.seeded",
+        audit_required=True,
+        dsr_action="N/A",
+        source_of_truth="venue_registry",
+        kyber_surfaces=["Entities", "Noesis"],
+    ),
+    VertexSchema(
+        vertex_type="Bridge",
+        owner_service="assets",
+        tenant_scoped=False,  # global bridge operator/router reference
+        provenance_event="registry.bridge.seeded",
+        audit_required=True,
+        dsr_action="N/A",
+        source_of_truth="bridge_registry",
+        kyber_surfaces=["Entities", "Noesis"],
+    ),
+]
+
+
+# ── Financial Normalization — Reference Edge Schemas (WP6a) ────────────────
+# Reference edges connect a domain/tenant subject OR another reference vertex
+# to the global reference vertices above. They classify as EXCLUDED in
+# relationship_layers.py (non-actor reference layer) and are written by the
+# versioned registry → graph projectors. Edges whose enum literal pre-existed
+# in other domains (DEPLOYED_ON_CHAIN, ISSUED_BY, PEGGED_TO, PRICED_BY,
+# VALUED_AT, RECONCILED_WITH) are registered here for their canonical
+# reference-layer usage; the graph carries one literal per edge type.
+
+REFERENCE_EDGE_SCHEMAS: list[EdgeSchema] = [
+    EdgeSchema(
+        edge_type="DENOMINATED_IN",
+        from_type="Instrument",
+        to_type="FiatCurrency",
+        properties=["iso_code"],
+        creation_path="financial_normalization.denomination_projection",
+    ),
+    EdgeSchema(
+        edge_type="PAID_WITH",
+        from_type="Payment",
+        to_type="Asset",
+        properties=["economic_role", "amount"],
+        creation_path="financial_normalization.payment_projection",
+    ),
+    EdgeSchema(
+        edge_type="SETTLED_IN",
+        from_type="Settlement",
+        to_type="AssetDeployment",
+        properties=["amount", "settled_at"],
+        creation_path="financial_normalization.settlement_projection",
+    ),
+    EdgeSchema(
+        edge_type="CHARGED_IN",
+        from_type="Payment",
+        to_type="Asset",
+        properties=["economic_role", "amount"],
+        creation_path="financial_normalization.charge_projection",
+    ),
+    EdgeSchema(
+        edge_type="ASSESSED_IN",
+        from_type="FinancialAccount",
+        to_type="FiatCurrency",
+        properties=["amount", "assessed_at"],
+        creation_path="financial_normalization.assessment_projection",
+    ),
+    EdgeSchema(
+        edge_type="DEPLOYED_ON_CHAIN",
+        from_type="AssetDeployment",
+        to_type="Chain",
+        properties=["contract_or_mint", "decimals", "canonical_vs_bridged", "deployment_status"],
+        creation_path="assets.deployment_projection",
+    ),
+    EdgeSchema(
+        edge_type="ISSUED_BY",
+        from_type="Asset",
+        to_type="Issuer",
+        properties=["issuer_role"],
+        creation_path="assets.registry",
+    ),
+    EdgeSchema(
+        edge_type="PEGGED_TO",
+        from_type="Asset",
+        to_type="Asset",
+        properties=["peg_basis", "target_ratio"],
+        creation_path="assets.peg_registry",
+    ),
+    EdgeSchema(
+        edge_type="WRAPS",
+        from_type="AssetDeployment",
+        to_type="AssetDeployment",
+        properties=["wrapped_contract", "canonical_vs_bridged"],
+        creation_path="assets.deployment_projection",
+    ),
+    EdgeSchema(
+        edge_type="BRIDGED_FROM",
+        from_type="AssetDeployment",
+        to_type="AssetDeployment",
+        properties=["bridge_id", "origin_deployment_id"],
+        creation_path="assets.bridge_projection",
+    ),
+    EdgeSchema(
+        edge_type="PRICED_BY",
+        from_type="Asset",
+        to_type="PriceProvider",
+        properties=["quote_asset_id", "freshness_window_seconds"],
+        creation_path="valuation.price_projection",
+    ),
+    EdgeSchema(
+        edge_type="VALUED_IN",
+        from_type="Payment",
+        to_type="FiatCurrency",
+        properties=["native_currency", "native_amount"],
+        creation_path="valuation.snapshot_projection",
+    ),
+    EdgeSchema(
+        edge_type="VALUED_AT",
+        from_type="AssetDeployment",
+        to_type="Asset",
+        properties=["reporting_asset_id", "valuation_basis", "valuation_method", "price_status"],
+        creation_path="valuation.snapshot_projection",
+    ),
+    EdgeSchema(
+        edge_type="DERIVED_FROM",
+        from_type="AssetDeployment",
+        to_type="AssetDeployment",
+        properties=["derivation", "source_refs"],
+        creation_path="financial_normalization.derivation_projection",
+    ),
+    EdgeSchema(
+        edge_type="RECONCILED_WITH",
+        from_type="AssetDeployment",
+        to_type="AssetDeployment",
+        properties=["reconciliation_state", "observed_balance", "expected_balance"],
+        creation_path="assets.reconciliation_projection",
+    ),
+    EdgeSchema(
+        edge_type="REVERSES",
+        from_type="Payment",
+        to_type="Payment",
+        properties=["economic_role", "reason"],
+        creation_path="financial_normalization.reversal_projection",
+    ),
+    EdgeSchema(
+        edge_type="DISPUTES",
+        from_type="Payment",
+        to_type="Payment",
+        properties=["economic_role", "reason"],
+        creation_path="financial_normalization.dispute_projection",
+    ),
+]
+
+
 # ── Lookup helpers ─────────────────────────────────────────────────────────
+# Maps cover commerce AND WP6a financial-reference schemas (registered types).
 
 VERTEX_SCHEMA_MAP: dict[str, VertexSchema] = {
-    s.vertex_type: s for s in COMMERCE_VERTEX_SCHEMAS
+    s.vertex_type: s for s in [*COMMERCE_VERTEX_SCHEMAS, *REFERENCE_VERTEX_SCHEMAS]
 }
 
 EDGE_SCHEMA_MAP: dict[str, EdgeSchema] = {
-    s.edge_type: s for s in COMMERCE_EDGE_SCHEMAS
+    s.edge_type: s for s in [*COMMERCE_EDGE_SCHEMAS, *REFERENCE_EDGE_SCHEMAS]
 }
 
 

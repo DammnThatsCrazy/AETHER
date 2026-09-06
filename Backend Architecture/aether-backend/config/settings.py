@@ -1590,6 +1590,41 @@ class InteropIntelligenceConfig:
     kyber_enabled: bool = _env_bool("KYBER_INTEROP_OPS_ENABLED", False)
 
 
+@dataclass(frozen=True)
+class UniversalAssetRegistryConfig:
+    """Universal financial-normalization asset registry (services/assets) — the
+    canonical reference registry (financial-normalization WP2/WP3). Reference +
+    observational domain: it registers canonical assets/chains/deployments and
+    records UNRESOLVED references; no execution capability exists behind any
+    flag. All flags default False (fail-closed) until staging validation.
+
+    W5 (C5-ADMIN) adds the registry-admin + automated-discovery surface:
+    ``admin_enabled`` mounts the /v1/admin/assets console (registry reference
+    data reads + suggested discovery candidates, global-ADMIN gated) and
+    ``admin_mode`` is the apply capability that lets an explicitly-posted,
+    human/global-admin-confirmed reference-data write actually register an
+    alias/asset/chain/deployment. Both default False: the surface is absent
+    until enabled, and even when mounted in review mode it never auto-applies
+    a discovery suggestion."""
+    ingestion_enabled: bool = _env_bool("AETHER_ASSETS_INGESTION_ENABLED", False)
+    graph_enabled: bool = _env_bool("AETHER_ASSETS_GRAPH_ENABLED", False)
+    api_enabled: bool = _env_bool("AETHER_ASSETS_API_ENABLED", False)
+    admin_enabled: bool = _env_bool("AETHER_ASSETS_ADMIN_ENABLED", False)
+    admin_mode: bool = _env_bool("AETHER_ASSETS_ADMIN_MODE", False)
+
+
+@dataclass(frozen=True)
+class ValuationConfig:
+    """Universal financial-normalization event-time valuation
+    (services/valuation) — observation/reporting surface over the asset registry
+    (financial-normalization WP2/WP3 lane C3). Reads and writes OBSERVE and
+    REPORT tenant-scoped valuation snapshots; no execution capability exists
+    behind any flag (execution_by_aether is always False). All flags default
+    False (fail-closed) until staging validation."""
+    api_enabled: bool = _env_bool("AETHER_VALUATION_API_ENABLED", False)
+    ingestion_enabled: bool = _env_bool("AETHER_VALUATION_INGESTION_ENABLED", False)
+
+
 # ---------------------------------------------------------------------------
 # Unified Intelligence Plane — capability flags (all default OFF; safety
 # defaults ON). New planes must add zero runtime cost while disabled: every
@@ -1680,6 +1715,50 @@ class MobileConfig:
 @dataclass(frozen=True)
 class ComparisonConfig:
     enabled: bool = _env_bool("AETHER_COMPARISON_INTELLIGENCE_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
+# Social360 + Relationship Fidelity — product-surface rollout flags
+# (docs/blueprints/social360.md §121-122 rollout_controls). The rollout_controls
+# flags below mirror the blueprint verbatim (the trailing noesis gate is an
+# extra read-only NL surface knob, not a rollout_control); every flag defaults
+# OFF / "off" until the corresponding plane is implemented and verified. New
+# product behavior behind these flags stays inert while disabled. Consumers
+# read these defensively and must NOT flip the defaults here.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Social360Config:
+    """Feature flags for the Social360 + Relationship Fidelity spine surfaces.
+
+    All flags default OFF / "off" (flag-gated rollout, blueprint §121-122).
+    AETHER_RELATIONSHIP_FIDELITY_MODE follows the shared off → shadow → warn →
+    enforce mode ladder; validated in Settings.__post_init__.
+    """
+    # Master switch: any Social360 product surface is inert until true.
+    social360_enabled: bool = _env_bool("AETHER_SOCIAL360_ENABLED", False)
+    # Universal Provider Runtime social provider convergence (M2).
+    social_upr_enabled: bool = _env_bool("AETHER_SOCIAL_UPR_ENABLED", False)
+    # Relationship-motif detection (registry-driven higher-order structure).
+    relationship_motifs_enabled: bool = _env_bool("AETHER_RELATIONSHIP_MOTIFS_ENABLED", False)
+    # Relationship-fidelity enforcement mode: off | shadow | warn | enforce.
+    relationship_fidelity_mode: str = _env("AETHER_RELATIONSHIP_FIDELITY_MODE", "off")
+    # Fidelity-aware, relationship-intelligent path composition (M8).
+    path_fidelity_enabled: bool = _env_bool("AETHER_PATH_FIDELITY_ENABLED", False)
+    # Social lens capability on the product surfaces (M9/M10 exploration fabric).
+    social_lenses_enabled: bool = _env_bool("AETHER_SOCIAL_LENSES_ENABLED", False)
+    # Relationship / spine read-only Noesis surface (Wave 3a). Observation-only
+    # NL answers over relationship spine evidence; default False (fail-closed)
+    # until the read plane and its consent evaluation are verified.
+    noesis_enabled: bool = _env_bool("AETHER_RELATIONSHIP_SPINE_NOESIS_ENABLED", False)
+
+@dataclass(frozen=True)
+class RiskFraud360Config:
+    # Risk360 / Fraud360 intelligence-projection convergence planes
+    # (services/risk360, services/fraud360). Default OFF: flag-gated until the
+    # registry rows flip to implemented and the re-cut runs the full ci-check.
+    risk360_enabled: bool = _env_bool("AETHER_RISK360_ENABLED", False)
+    fraud360_enabled: bool = _env_bool("AETHER_FRAUD360_ENABLED", False)
 
 
 @dataclass
@@ -1818,9 +1897,12 @@ class Settings:
     one_person_ops: OnePersonOpsConfig = field(default_factory=OnePersonOpsConfig)
 
     # Stablecoin / Derivatives / Interoperability economic-intelligence domains
+    # and the universal asset registry (financial-normalization WP2/WP3).
     stablecoin: StablecoinDomainConfig = field(default_factory=StablecoinDomainConfig)
     derivatives: DerivativesIntelligenceConfig = field(default_factory=DerivativesIntelligenceConfig)
     interop: InteropIntelligenceConfig = field(default_factory=InteropIntelligenceConfig)
+    assets: UniversalAssetRegistryConfig = field(default_factory=UniversalAssetRegistryConfig)
+    valuation: ValuationConfig = field(default_factory=ValuationConfig)
 
     # Unified Intelligence Plane
     temporal_integrity: TemporalIntegrityConfig = field(default_factory=TemporalIntegrityConfig)
@@ -1832,6 +1914,10 @@ class Settings:
     client_sync: ClientSyncConfig = field(default_factory=ClientSyncConfig)
     mobile: MobileConfig = field(default_factory=MobileConfig)
     comparison: ComparisonConfig = field(default_factory=ComparisonConfig)
+    risk_fraud_360: RiskFraud360Config = field(default_factory=RiskFraud360Config)
+
+    # Social360 + Relationship Fidelity product-surface rollout flags
+    social360: Social360Config = field(default_factory=Social360Config)
 
     def __post_init__(self):
         _is_non_local = self.env != Environment.LOCAL
@@ -1854,6 +1940,13 @@ class Settings:
             raise RuntimeError(
                 "AETHER_MUTATION_GATEWAY_MODE must be one of off, shadow, enforce "
                 f"(got: {self.temporal_observatory.mutation_gateway_mode!r})"
+            )
+
+        # ── Social360 / relationship-fidelity mode ladder (blueprint §121-122) ──
+        if self.social360.relationship_fidelity_mode not in ("off", "shadow", "warn", "enforce"):
+            raise RuntimeError(
+                "AETHER_RELATIONSHIP_FIDELITY_MODE must be one of off, shadow, warn, enforce "
+                f"(got: {self.social360.relationship_fidelity_mode!r})"
             )
 
         # ── Interop flag coherence ────────────────────────────────────────────

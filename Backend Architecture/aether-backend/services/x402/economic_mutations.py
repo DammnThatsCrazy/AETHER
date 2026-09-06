@@ -16,6 +16,8 @@ from shared.graph.mutation_gateway import GraphMutationGateway
 from shared.graph.mutation_intents import edge_intent, vertex_intent
 from shared.logger.logger import get_logger
 
+from services.value.models import to_decimal_string
+
 from .commerce_models import (
     AccessGrant,
     ApprovalDecision,
@@ -35,6 +37,19 @@ logger = get_logger("aether.service.x402.economic_mutations")
 
 def _tkey(tenant_id: str, vid: str) -> str:
     return f"{tenant_id}:{vid}"
+
+
+def _money_str(value: object) -> str:
+    """Canonical decimal-string money for graph legs (never a JSON number).
+
+    Converts via ``to_decimal_string`` so a float amount is normalized to its
+    plain decimal form. An unparseable amount is a hard error — it is never
+    silently coerced to 0.
+    """
+    s = to_decimal_string(value)
+    if s is None:
+        raise ValueError(f"cannot project non-numeric money amount onto the graph: {value!r}")
+    return s
 
 
 class EconomicGraphMutations:
@@ -81,7 +96,7 @@ class EconomicGraphMutations:
                 "resource_id": resource.resource_id,
                 "name": resource.name,
                 "resource_class": resource.resource_class.value,
-                "price_usd": str(resource.price_usd),
+                "price_usd": _money_str(resource.price_usd),
                 "owner_service": resource.owner_service,
                 "tenant_id": resource.tenant_id,
             },
@@ -95,7 +110,7 @@ class EconomicGraphMutations:
             vertex_id=_tkey(req.tenant_id, req.challenge_id),
             properties={
                 "challenge_id": req.challenge_id,
-                "amount_usd": str(req.amount_usd),
+                "amount_usd": _money_str(req.amount_usd),
                 "asset": req.asset_symbol,
                 "chain": req.chain,
                 "protocol_version": req.protocol_version,
@@ -110,7 +125,7 @@ class EconomicGraphMutations:
             edge_type=EdgeType.REQUIRES_PAYMENT,
             from_vertex_id=_tkey(req.tenant_id, resource.resource_id),
             to_vertex_id=_tkey(req.tenant_id, req.challenge_id),
-            properties={"amount_usd": str(req.amount_usd)},
+            properties={"amount_usd": _money_str(req.amount_usd)},
         )
         await self._put_edge(edge, req.tenant_id, subject_id=_tkey(req.tenant_id, resource.resource_id))
         self._trace("edge", EdgeType.REQUIRES_PAYMENT, edge.properties)
@@ -146,7 +161,7 @@ class EconomicGraphMutations:
                 "approval_id": approval.approval_id,
                 "status": approval.status.value,
                 "priority": approval.priority.value,
-                "amount_usd": str(approval.amount_usd),
+                "amount_usd": _money_str(approval.amount_usd),
                 "requester_id": approval.requester_id,
                 "tenant_id": approval.tenant_id,
             },
@@ -197,7 +212,7 @@ class EconomicGraphMutations:
             vertex_id=_tkey(auth.tenant_id, auth.authorization_id),
             properties={
                 "authorization_id": auth.authorization_id,
-                "amount_usd": str(auth.amount_usd),
+                "amount_usd": _money_str(auth.amount_usd),
                 "facilitator_id": auth.facilitator_id,
                 "tenant_id": auth.tenant_id,
             },
@@ -213,7 +228,7 @@ class EconomicGraphMutations:
                 "receipt_id": receipt.receipt_id,
                 "verified": str(receipt.verified),
                 "tx_hash": receipt.tx_hash,
-                "amount_usd": str(receipt.amount_usd),
+                "amount_usd": _money_str(receipt.amount_usd),
                 "tenant_id": receipt.tenant_id,
             },
         )
@@ -227,7 +242,7 @@ class EconomicGraphMutations:
                 "settlement_id": settlement.settlement_id,
                 "state": settlement.state.value,
                 "chain": settlement.chain,
-                "amount_usd": str(settlement.amount_usd),
+                "amount_usd": _money_str(settlement.amount_usd),
                 "tenant_id": settlement.tenant_id,
             },
         )

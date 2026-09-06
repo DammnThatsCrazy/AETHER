@@ -1,0 +1,326 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "aether://contracts/social-silver-facts.schema.json",
+  "title": "Aether SocialSilver canonical fact contracts",
+  "description": "Canonical record shapes for the Social360 bounded social-evidence domain (blueprint §§6-11). Provider-native records normalize into these silver facts through UPR social normalizers (§18); facts are immutable, tenant-scoped, rights-checked, replay-safe. Provider-native meaning is preserved in provenance while terminology normalizes to canonical vocabulary. Honesty rules enforced: unknown metrics are null with an explicit status (unavailable | not_authorized | not_supported) and never default to 0; private communication content stays governed by Communication360; 'friend' is never manufactured from mutual_follow. Graph projection of these facts is governed separately (blueprint §51) and relationship promotion consumes them at M6.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "tenant_scope",
+    "facts"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "tenant_scope": { "type": "string", "minLength": 1 },
+    "source_scope": { "$ref": "#/$defs/sourceScope" },
+    "facts": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          { "$ref": "#/$defs/socialIdentityFact" },
+          { "$ref": "#/$defs/socialConnectionFact" },
+          { "$ref": "#/$defs/socialInteractionFact" },
+          { "$ref": "#/$defs/socialContentFact" },
+          { "$ref": "#/$defs/socialCommunityMembership" },
+          { "$ref": "#/$defs/socialMetricObservation" }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "sourceScope": {
+      "type": "string",
+      "enum": ["olympus_corpus", "tenant_connected", "tenant_imported", "tenant_first_party"],
+      "description": "Acquisition class of the evidence (blueprint §17)."
+    },
+    "evidenceBasis": {
+      "type": "string",
+      "enum": ["provider_record", "provider_api", "imported_source", "first_party_sdk", "derived_aggregate", "semantic_classification", "unknown"],
+      "description": "Basis on which this fact was asserted (blueprint §13)."
+    },
+    "rightsRef": {
+      "type": "string",
+      "description": "Reference to the data-rights / consent authorization the fact was collected under."
+    },
+    "consentRef": { "type": "string" },
+    "claimType": {
+      "type": "string",
+      "enum": ["observed", "verified", "resolved", "derived", "inferred", "predicted", "correlated", "unknown"]
+    },
+    "socialIdentityFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fact_type",
+        "social_identity_id",
+        "tenant_scope",
+        "provider_identity",
+        "provider_account_id",
+        "account_type",
+        "first_observed_at",
+        "last_observed_at",
+        "valid_from",
+        "source_scope",
+        "evidence_basis",
+        "rights_ref"
+      ],
+      "properties": {
+        "fact_type": { "const": "social_identity" },
+        "social_identity_id": { "type": "string", "minLength": 1 },
+        "tenant_scope": { "type": "string", "minLength": 1 },
+        "canonical_entity_ref": { "type": ["string", "null"] },
+        "provider_identity": { "type": "string", "minLength": 1 },
+        "provider_account_id": { "type": "string", "minLength": 1 },
+        "handle": { "type": ["string", "null"] },
+        "display_name": { "type": ["string", "null"] },
+        "canonical_url": { "type": ["string", "null"] },
+        "account_type": {
+          "type": "string",
+          "enum": ["human", "agent", "organization", "brand", "community", "protocol", "service", "unknown"],
+          "description": "A SocialIdentity is not automatically a canonical Human; binding belongs to Identity Resolution."
+        },
+        "verification_state": {
+          "type": "string",
+          "enum": ["none", "self_asserted", "provider_verified", "email_verified", "phone_verified", "government_verified", "unknown"]
+        },
+        "platform_role": { "type": "string" },
+        "created_at": { "type": ["string", "null"], "format": "date-time" },
+        "first_observed_at": { "type": "string", "format": "date-time" },
+        "last_observed_at": { "type": "string", "format": "date-time" },
+        "valid_from": { "type": "string", "format": "date-time" },
+        "valid_to": { "type": ["string", "null"], "format": "date-time" },
+        "resolution_state": {
+          "type": "string",
+          "enum": ["unresolved", "resolved", "merged", "split_pending", "blocked"]
+        },
+        "resolution_confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "identity_evidence_refs": { "type": "array", "items": { "type": "string" } },
+        "source_scope": { "$ref": "#/$defs/sourceScope" },
+        "evidence_basis": { "$ref": "#/$defs/evidenceBasis" },
+        "rights_ref": { "$ref": "#/$defs/rightsRef" },
+        "consent_ref": { "$ref": "#/$defs/consentRef" },
+        "provenance": { "type": "string" },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "schema_version": { "type": "string" }
+      }
+    },
+    "socialConnectionFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fact_type",
+        "fact_id",
+        "source_social_identity_ref",
+        "target_social_identity_ref",
+        "connection_type",
+        "directionality",
+        "observed_at",
+        "valid_from",
+        "provider_identity",
+        "provider_record_ref",
+        "proof_level",
+        "source_scope",
+        "evidence_basis",
+        "rights_ref",
+        "claim_type",
+        "ingested_at",
+        "recorded_at"
+      ],
+      "properties": {
+        "fact_type": { "const": "social_connection" },
+        "fact_id": { "type": "string", "minLength": 1 },
+        "source_social_identity_ref": { "type": "string", "minLength": 1 },
+        "target_social_identity_ref": { "type": "string", "minLength": 1 },
+        "connection_type": {
+          "type": "string",
+          "enum": ["follows", "followed_by", "mutual_follow", "friend", "subscriber", "subscribes_to", "member_of", "moderates", "contributes_to", "collaborator_of", "blocks", "unfollowed", "left_community"],
+          "description": "Normalized provider-native terminology. 'friend' requires an explicit provider assertion; it is NEVER manufactured from mutual_follow."
+        },
+        "directionality": {
+          "type": "string",
+          "enum": ["directed", "undirected", "reciprocal_pair"]
+        },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "valid_from": { "type": "string", "format": "date-time" },
+        "valid_to": { "type": ["string", "null"], "format": "date-time" },
+        "provider_identity": { "type": "string", "minLength": 1 },
+        "provider_record_ref": { "type": "string", "minLength": 1 },
+        "proof_level": {
+          "type": "string",
+          "enum": ["provider_observed", "provider_declared", "verified_authoritative", "aggregated_independent", "inferred_with_limitations", "unknown"]
+        },
+        "source_scope": { "$ref": "#/$defs/sourceScope" },
+        "evidence_basis": { "$ref": "#/$defs/evidenceBasis" },
+        "rights_ref": { "$ref": "#/$defs/rightsRef" },
+        "claim_type": { "$ref": "#/$defs/claimType" },
+        "evidence_refs": { "type": "array", "items": { "type": "string" } },
+        "contradictory_evidence_refs": { "type": "array", "items": { "type": "string" } },
+        "ingested_at": { "type": "string", "format": "date-time" },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "schema_version": { "type": "string" }
+      }
+    },
+    "socialInteractionFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fact_type",
+        "interaction_id",
+        "actor_social_identity_ref",
+        "interaction_type",
+        "occurred_at",
+        "observed_at",
+        "provider_identity",
+        "provider_record_ref",
+        "source_scope",
+        "evidence_basis",
+        "rights_ref"
+      ],
+      "properties": {
+        "fact_type": { "const": "social_interaction" },
+        "interaction_id": { "type": "string", "minLength": 1 },
+        "actor_social_identity_ref": { "type": "string", "minLength": 1 },
+        "target_social_identity_ref": { "type": ["string", "null"] },
+        "content_ref": { "type": ["string", "null"] },
+        "parent_content_ref": { "type": ["string", "null"] },
+        "community_ref": { "type": ["string", "null"] },
+        "interaction_type": {
+          "type": "string",
+          "enum": ["post", "reply", "mention", "quote", "repost", "share", "reaction", "like", "comment", "message_metadata", "collaboration", "invite", "join", "leave", "moderation_action"]
+        },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "provider_identity": { "type": "string", "minLength": 1 },
+        "provider_record_ref": { "type": "string", "minLength": 1 },
+        "machine_classification": { "type": ["string", "null"] },
+        "human_qualification": { "type": ["string", "null"] },
+        "semantic_ref": { "type": ["string", "null"] },
+        "campaign_ref": { "type": ["string", "null"] },
+        "incentive_context_ref": { "type": ["string", "null"] },
+        "source_scope": { "$ref": "#/$defs/sourceScope" },
+        "evidence_basis": { "$ref": "#/$defs/evidenceBasis" },
+        "rights_ref": { "$ref": "#/$defs/rightsRef" },
+        "evidence_refs": { "type": "array", "items": { "type": "string" } },
+        "schema_version": { "type": "string" }
+      }
+    },
+    "socialContentFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fact_type",
+        "content_id",
+        "author_social_identity_ref",
+        "provider_content_id",
+        "content_type",
+        "published_at",
+        "content_hash",
+        "provider_identity",
+        "source_scope",
+        "evidence_basis",
+        "rights_ref"
+      ],
+      "properties": {
+        "fact_type": { "const": "social_content" },
+        "content_id": { "type": "string", "minLength": 1 },
+        "author_social_identity_ref": { "type": "string", "minLength": 1 },
+        "provider_content_id": { "type": "string", "minLength": 1 },
+        "content_type": {
+          "type": "string",
+          "enum": ["post", "article", "video", "image", "audio", "event", "comment", "reply", "other"],
+          "description": "message_metadata content is governed by Communication360; Social360 references authorized metadata only."
+        },
+        "parent_content_ref": { "type": ["string", "null"] },
+        "root_content_ref": { "type": ["string", "null"] },
+        "published_at": { "type": "string", "format": "date-time" },
+        "edited_at": { "type": ["string", "null"], "format": "date-time" },
+        "deleted_at": { "type": ["string", "null"], "format": "date-time" },
+        "content_hash": { "type": "string", "minLength": 1 },
+        "semantic_ref": { "type": ["string", "null"] },
+        "narrative_refs": { "type": "array", "items": { "type": "string" } },
+        "campaign_ref": { "type": ["string", "null"] },
+        "incentive_context_ref": { "type": ["string", "null"] },
+        "provider_identity": { "type": "string", "minLength": 1 },
+        "source_scope": { "$ref": "#/$defs/sourceScope" },
+        "evidence_basis": { "$ref": "#/$defs/evidenceBasis" },
+        "rights_ref": { "$ref": "#/$defs/rightsRef" },
+        "evidence_refs": { "type": "array", "items": { "type": "string" } },
+        "schema_version": { "type": "string" }
+      }
+    },
+    "socialCommunityMembership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fact_type",
+        "membership_id",
+        "social_identity_ref",
+        "community_ref",
+        "membership_role",
+        "valid_from",
+        "observed_at",
+        "provider_identity",
+        "rights_ref"
+      ],
+      "properties": {
+        "fact_type": { "const": "social_community_membership" },
+        "membership_id": { "type": "string", "minLength": 1 },
+        "social_identity_ref": { "type": "string", "minLength": 1 },
+        "community_ref": { "type": "string", "minLength": 1 },
+        "membership_role": {
+          "type": "string",
+          "enum": ["member", "subscriber", "moderator", "administrator", "contributor", "founder", "unknown"]
+        },
+        "valid_from": { "type": "string", "format": "date-time" },
+        "valid_to": { "type": ["string", "null"], "format": "date-time" },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "provider_identity": { "type": "string", "minLength": 1 },
+        "evidence_refs": { "type": "array", "items": { "type": "string" } },
+        "rights_ref": { "$ref": "#/$defs/rightsRef" },
+        "source_scope": { "$ref": "#/$defs/sourceScope" },
+        "evidence_basis": { "$ref": "#/$defs/evidenceBasis" },
+        "schema_version": { "type": "string" }
+      }
+    },
+    "socialMetricObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fact_type",
+        "metric_observation_id",
+        "social_identity_ref",
+        "metric_name",
+        "unit",
+        "status",
+        "observed_at",
+        "provider_identity"
+      ],
+      "properties": {
+        "fact_type": { "const": "social_metric_observation" },
+        "metric_observation_id": { "type": "string", "minLength": 1 },
+        "social_identity_ref": { "type": "string", "minLength": 1 },
+        "metric_name": { "type": "string", "examples": ["follower_count", "following_count", "post_count", "provider_reported_impressions", "provider_reported_engagements"] },
+        "value": {
+          "type": ["number", "null"],
+          "description": "null unless the provider actually supplied the metric. NEVER default to 0 for unavailable data; 0 is only a measurement, unknown is a state (blueprint §11)."
+        },
+        "unit": { "type": "string", "minLength": 1 },
+        "status": {
+          "type": "string",
+          "enum": ["observed", "unavailable", "not_authorized", "not_supported"]
+        },
+        "window": { "type": ["object", "null"], "additionalProperties": true },
+        "population": { "type": ["string", "null"] },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "provider_identity": { "type": "string", "minLength": 1 },
+        "computation_ref": { "type": ["string", "null"] },
+        "evidence_refs": { "type": "array", "items": { "type": "string" } },
+        "quality": { "type": ["string", "null"] },
+        "source_scope": { "$ref": "#/$defs/sourceScope" },
+        "rights_ref": { "$ref": "#/$defs/rightsRef" },
+        "schema_version": { "type": "string" }
+      }
+    }
+  }
+}

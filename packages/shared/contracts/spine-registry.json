@@ -1,0 +1,3607 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractVersion": "1.0.0",
+  "description": "Canonical Aether spine registry (Spine Composition Kernel, ADR-011). Every spine is a governed authority or cross-cutting control boundary — no spine is a private platform inside the platform. Each row declares what it owns, what it may read or write, which canonical contracts it uses, which authorities it depends on, what it publishes, how it degrades, and how it is exposed. Refs resolve against the registry that owns each id (surface, readiness, consent, metric, graph-mutation, evidence, projection, provider, …); a row that re-defines an id owned elsewhere, or leaves a reference unresolved and undeclared `pending`, is a validator failure. `implementationState` is repo metadata, never readiness (ADR-010 D3 unchanged).",
+  "planes": [
+    "governance_contract",
+    "observation_acquisition",
+    "resolution_canonical_data",
+    "relationship_graph",
+    "intelligence_projection",
+    "decision_action",
+    "interaction_product",
+    "horizontal_controls"
+  ],
+  "spineKinds": [
+    "truth_authority",
+    "composition_authority",
+    "runtime_authority",
+    "protective_overlay",
+    "program_capability"
+  ],
+  "implementationStates": [
+    "pending",
+    "in_flight",
+    "implemented",
+    "canonical",
+    "deprecated"
+  ],
+  "graphMutationPolicies": [
+    "read_only",
+    "canonical_gateway_only"
+  ],
+  "conformanceChecks": [
+    {
+      "id": "authority_non_ownership_statement",
+      "title": "Authority and non-ownership statement"
+    },
+    {
+      "id": "canonical_contract_registration",
+      "title": "Canonical contract registration"
+    },
+    {
+      "id": "port_adapter_declaration",
+      "title": "Port and adapter declaration"
+    },
+    {
+      "id": "dependency_dag_validation",
+      "title": "Dependency DAG validation"
+    },
+    {
+      "id": "typed_degradation_behavior",
+      "title": "Typed degradation behavior"
+    },
+    {
+      "id": "temporal_watermark_behavior",
+      "title": "Temporal and watermark behavior"
+    },
+    {
+      "id": "evidence_restatement_behavior",
+      "title": "Evidence and restatement behavior"
+    },
+    {
+      "id": "tenant_consent_rights_retention_residency_export",
+      "title": "Tenant, consent, rights, retention, residency, and export behavior"
+    },
+    {
+      "id": "graph_mutation_policy",
+      "title": "Graph mutation policy"
+    },
+    {
+      "id": "api_event_ui_kyber_integration",
+      "title": "API / event / UI / Kyber integration"
+    },
+    {
+      "id": "readiness_entitlement_integration",
+      "title": "Readiness and entitlement integration"
+    },
+    {
+      "id": "security_compliance_observability_evidence",
+      "title": "Security / compliance / observability evidence"
+    },
+    {
+      "id": "migration_recompute_rollback_compatibility",
+      "title": "Migration, recomputation, rollback, and compatibility plan"
+    },
+    {
+      "id": "positive_negative_replay_isolation_golden_tests",
+      "title": "Positive, negative, replay, isolation, and golden-scenario tests"
+    }
+  ],
+  "spines": [
+    {
+      "id": "contract_spine",
+      "displayName": "Contract Spine (Truth Kernel: TS contracts + JSON registries + Pydantic mirrors + generation gates)",
+      "description": "The canonical-schema layer of Aether: the TS contracts, JSON registries under packages/shared/contracts, their Pydantic mirrors, and the unbypassable generation/validation gates. It is the governed substrate inside which the Spine Composition Kernel is implemented, never beside it.",
+      "plane": "governance_contract",
+      "spineKind": "truth_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": true,
+      "authorityDeclaration": "Authoritatively owns canonical contract vocabulary, schema ids, registry content, and the generation/validation gates that keep code and JSON registries in lockstep.",
+      "nonOwnershipStatement": "Does not own tenant facts, graph state, or runtime behavior — those belong to the resolution/relationship/decision spines that register their ids against these contracts.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/readiness-vocabulary.json",
+          "refIds": [
+            "scaffolded",
+            "replay_validated",
+            "partner_live"
+          ]
+        },
+        {
+          "registry": "packages/shared/contracts/evidence-manifest.schema.json",
+          "refIds": [
+            "certificationState",
+            "evidenceItem"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [],
+        "published": [
+          "schema_registry",
+          "generation_gate",
+          "validator_contract"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [],
+        "soft": [],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": false,
+        "consentRequired": false,
+        "rightsBoundary": "contract_authority"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": true,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [],
+      "securityCompliance": {
+        "tenantIsolation": "platform_internal",
+        "exportClass": "internal",
+        "distillationRisk": "none"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "registry_drift",
+          "generation_gate"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "contract_spine",
+          "truth_kernel",
+          "contract_registry",
+          "canonical_schema_layer"
+        ],
+        "services": [
+          "packages/shared/contracts",
+          "packages/shared/graph-mutation.ts",
+          "scripts/generate_contracts.py",
+          "scripts/generate_platform_contracts.py",
+          "scripts/validate_contracts.py"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": null
+    },
+    {
+      "id": "identity_resolution",
+      "displayName": "Identity Resolution",
+      "description": "Resolves observed identifiers into a canonical entity identity (EntityRef) or an explicitly unresolved state. Owns the canonical identity alias graph and the merge/split/redirect semantics that keep one entity identity stable across sources.",
+      "plane": "resolution_canonical_data",
+      "spineKind": "truth_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": true,
+      "authorityDeclaration": "Authoritatively owns the resolution of entity identity from aliases/identifiers into a canonical EntityRef and the identity alias state behind that resolution.",
+      "nonOwnershipStatement": "Does not own entity attribute facts, evidence, or timestamps — those belong to evidence_provenance and temporal_kernel; identity resolution consumes them and never guesses a resolved identity from stale or missing evidence.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/graph-mutation-registry.json",
+          "refIds": [
+            "identity_merged",
+            "identity_split",
+            "identity_redirected"
+          ]
+        },
+        {
+          "registry": "packages/shared/contracts/consent-registry.json",
+          "refIds": [
+            "analytics",
+            "personalization"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "evidence_ref",
+          "temporal_watermark"
+        ],
+        "published": [
+          "entity_ref",
+          "identity_watermark"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "contract_spine"
+        ],
+        "soft": [
+          "evidence_provenance",
+          "temporal_kernel",
+          "consent"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "canonical_gateway_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "tenant_identity_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": true,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "profile360"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "identity_watermark",
+          "unresolved_rate"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "identity",
+          "entity_resolution",
+          "entity_ref_resolution"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/identity",
+          "Backend Architecture/aether-backend/services/resolution",
+          "docs/source-of-truth/IDENTITY_RESOLUTION.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": "docs/source-of-truth/IDENTITY_RESOLUTION.md"
+    },
+    {
+      "id": "evidence_provenance",
+      "displayName": "Evidence / Lineage / Truth-State / Restatement",
+      "description": "Retains evidence before derived interpretation and owns provenance, lineage, truth-state, and restatement semantics. It is the authority that makes every canonical fact evidence-backed and every restatement attributable.",
+      "plane": "resolution_canonical_data",
+      "spineKind": "truth_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": true,
+      "authorityDeclaration": "Authoritatively owns the retention of evidence, the provenance/lineage of each canonical fact, and the truth-state plus restatement record that lets derived state be recomputed and re-verified.",
+      "nonOwnershipStatement": "Does not own entity identity, time assignment, or graph structure — identity_resolution, temporal_kernel, and graph own those; evidence provenance is consumed by every other spine, never re-defined by them.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/evidence-manifest.schema.json",
+          "refIds": [
+            "evidenceItem",
+            "certificationState"
+          ]
+        },
+        {
+          "registry": "packages/shared/contracts/graph-mutation-registry.json",
+          "refIds": [
+            "historical_correction_applied",
+            "projection_rebuilt"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "entity_ref",
+          "time_ref"
+        ],
+        "published": [
+          "evidence_ref",
+          "lineage_ref",
+          "truth_state"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "contract_spine"
+        ],
+        "soft": [
+          "temporal_kernel"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "canonical_gateway_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "evidence_retention_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": true,
+        "replaySupported": true
+      },
+      "readinessKey": null,
+      "surfaces": [],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "evidence_contradiction",
+          "lineage_gap",
+          "truth_state_drift"
+        ],
+        "replaySupported": true
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "evidence",
+          "provenance",
+          "lineage",
+          "truth_state",
+          "restatement",
+          "evidence_and_restatement"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/shared/integrity",
+          "Backend Architecture/aether-backend/services/integrity",
+          "Backend Architecture/aether-backend/shared/cis/provenance.py",
+          "docs/source-of-truth/ENRICHMENT_LINEAGE.md",
+          "docs/DATA-QUALITY.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": "docs/source-of-truth/ENRICHMENT_LINEAGE.md"
+    },
+    {
+      "id": "temporal_kernel",
+      "displayName": "Temporal Kernel",
+      "description": "Owns the bitemporal time model — event time, ingestion time, valid time, system time, timezone, watermarks — and the historical reconstruction semantics over the replayable event/ingestion ledger. No downstream consumer may silently replace ambiguous time with a guess.",
+      "plane": "resolution_canonical_data",
+      "spineKind": "truth_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": true,
+      "authorityDeclaration": "Authoritatively owns time assignment and the bitemporal ledger of every fact/event, including watermark position and historical reconstruction semantics.",
+      "nonOwnershipStatement": "Does not own entity identity, evidence content, or graph structure; it supplies the time/watermark context that identity_resolution, evidence_provenance, and graph consume.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/temporal-policy-registry.json",
+          "refIds": [
+            "enforce",
+            "warn",
+            "reject",
+            "quarantine",
+            "accept"
+          ]
+        },
+        {
+          "registry": "packages/shared/contracts/graph-mutation-registry.json",
+          "refIds": [
+            "historical_correction_applied"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [],
+        "published": [
+          "valid_time",
+          "data_watermark",
+          "replay_stream"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "contract_spine"
+        ],
+        "soft": [],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "canonical_gateway_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "temporal_retention_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": true
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "temporal_observatory",
+        "timeline"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "watermark_lag",
+          "clock_skew",
+          "lateness"
+        ],
+        "replaySupported": true
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "temporal",
+          "bitemporal_ledger",
+          "time_kernel",
+          "temporal_integrity"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/shared/temporal",
+          "Backend Architecture/aether-backend/services/events",
+          "docs/source-of-truth/TEMPORAL_INTEGRITY.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": "docs/source-of-truth/TEMPORAL_INTEGRITY.md"
+    },
+    {
+      "id": "relationship_fidelity",
+      "displayName": "Relational Intelligence / Relationship Fidelity",
+      "description": "Determines whether a connection is an observed association, an interaction, a sequence, an attribution, an inferred relationship, a trust signal, a risk signal, or a causal claim. It keeps the graph honest about the fidelity class of every edge.",
+      "plane": "relationship_graph",
+      "spineKind": "truth_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": true,
+      "authorityDeclaration": "Authoritatively owns the fidelity classification of graph relationships — observed, inferred, trust, risk, and causal association semantics — over canonical relationship facts.",
+      "nonOwnershipStatement": "Does not own graph structure, identity, or time; graph owns topology, identity_resolution owns entities, temporal_kernel owns valid time — relationship fidelity classifies on top of them.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/graph-mutation-registry.json",
+          "refIds": [
+            "observed_sequence",
+            "declared_reason",
+            "attributed_influence",
+            "inferred_influence",
+            "direct_cause",
+            "correlation_only",
+            "unknown"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "entity_ref",
+          "graph_snapshot"
+        ],
+        "published": [
+          "relationship_ref",
+          "fidelity_class"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "graph",
+          "identity_resolution"
+        ],
+        "soft": [
+          "temporal_kernel",
+          "evidence_provenance"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "canonical_gateway_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "tenant_graph_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": true,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "graph"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "fidelity_distribution",
+          "edge_evidence_gap"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "relationships",
+          "relationship_fidelity",
+          "relational_intelligence",
+          "semantic_intelligence"
+        ],
+        "services": [
+          "docs/source-of-truth/GRAPH_LAYER_PARITY.md",
+          "Backend Architecture/aether-backend/services/semantic_intelligence"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": null
+    },
+    {
+      "id": "graph",
+      "displayName": "Graph Mutation / State Transition / History",
+      "description": "Owns the canonical relationship graph and the Graph Mutation Gateway that checks identity, evidence, time, consent, rights, authorization, idempotency, and audit before any mutation is written to the state-transition/history ledger.",
+      "plane": "relationship_graph",
+      "spineKind": "truth_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": true,
+      "authorityDeclaration": "Authoritatively owns canonical graph state, the mutation ledger, and the gateway policy that gates every state transition (MutationIntent to apply).",
+      "nonOwnershipStatement": "Does not own identity, evidence, time, or consent decisions — those live in identity_resolution, evidence_provenance, temporal_kernel, and consent and are checked by the gateway, not re-created by it.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/graph-mutation-registry.json",
+          "refIds": [
+            "node_created",
+            "edge_versioned",
+            "identity_merged",
+            "cluster_created",
+            "attribution_versioned",
+            "policy_state_changed",
+            "consent_state_changed",
+            "model_version_changed",
+            "projection_rebuilt",
+            "historical_correction_applied"
+          ]
+        },
+        {
+          "registry": "packages/shared/contracts/graph-mutation-registry.json",
+          "refIds": [
+            "service",
+            "human",
+            "agent",
+            "system",
+            "provider",
+            "import"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "entity_ref",
+          "evidence_ref",
+          "consent_decision",
+          "rights_decision"
+        ],
+        "published": [
+          "graph_snapshot",
+          "mutation_ledger",
+          "mutation_intent_gate"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "identity_resolution",
+          "evidence_provenance",
+          "temporal_kernel",
+          "consent"
+        ],
+        "soft": [
+          "rights_irrl"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "canonical_gateway_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "graph_mutation_gateway"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": true
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "graph"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "rejected_mutation",
+          "gateway_latency",
+          "ledger_watermark"
+        ],
+        "replaySupported": true
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "graph",
+          "graph_mutation",
+          "graph_mutation_gateway",
+          "state_transition_history",
+          "graph_layer"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/gateway",
+          "Backend Architecture/aether-backend/shared/graph",
+          "docs/source-of-truth/GRAPH_CONTRACT.md",
+          "docs/source-of-truth/GRAPH_LAYER_PARITY.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": "docs/source-of-truth/GRAPH_CONTRACT.md"
+    },
+    {
+      "id": "context_capsule",
+      "displayName": "Context Capsule",
+      "description": "Owns the ContextCapsule contract — the bounded, policy-scoped context package (location semantics, precision, conflict states, context states, retention class, capsule transitions) carried across an interaction.",
+      "plane": "resolution_canonical_data",
+      "spineKind": "truth_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": true,
+      "authorityDeclaration": "Authoritatively owns the ContextCapsule taxonomy and the policy-scoped capsule state describing where/what an interaction context is.",
+      "nonOwnershipStatement": "Does not own consent decisions or retention enforcement; consent and rights_irrl own those and the capsule simply references the policy/consent decision ids.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/context-capsule-registry.json",
+          "refIds": [
+            "server_network_ip",
+            "device_precise",
+            "verified_venue",
+            "organization_registered",
+            "precise",
+            "explainable",
+            "contradictory",
+            "normal_primary",
+            "location_conflict",
+            "insufficient_evidence"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "identity_watermark",
+          "consent_decision"
+        ],
+        "published": [
+          "context_ref",
+          "context_capsule"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "identity_resolution",
+          "temporal_kernel"
+        ],
+        "soft": [
+          "evidence_provenance",
+          "consent"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "context_capsule_policy"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": true,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "geo"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "context_conflict",
+          "capsule_staleness"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "context_capsule",
+          "context_plane",
+          "context_intelligence"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/shared/context_capsule",
+          "docs/source-of-truth/CONTEXT_INTELLIGENCE.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": "docs/source-of-truth/CONTEXT_INTELLIGENCE.md"
+    },
+    {
+      "id": "consent",
+      "displayName": "Consent / Privacy / Deletion",
+      "description": "Owns consent purpose state, privacy policy evaluation, and deletion (DSR) semantics across collection, processing, disclosure, and retention. It is the authority the graph gateway and every acquisition path check before data use.",
+      "plane": "resolution_canonical_data",
+      "spineKind": "protective_overlay",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": true,
+      "authorityDeclaration": "Authoritatively owns the consent purpose registry, per-tenant consent decisions, revocation behavior, and deletion/DSR scope decisions.",
+      "nonOwnershipStatement": "Does not own the graph, identity, or evidence — it constrains how those spines may collect, link, project, and train; the owning spines register against the consent-registry instead of re-defining consent state.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/consent-registry.json",
+          "refIds": [
+            "analytics",
+            "marketing",
+            "personalization",
+            "web3",
+            "agent",
+            "commerce",
+            "financial_activity",
+            "credit",
+            "location",
+            "economic_observability",
+            "cross_chain_observability",
+            "fraud_prevention"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "purpose_ref"
+        ],
+        "published": [
+          "consent_decision",
+          "consent_state",
+          "dsr_request"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "contract_spine"
+        ],
+        "soft": [
+          "rights_irrl"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "canonical_gateway_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "consent_policy_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "consent_drift",
+          "revocation_lag"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "consent",
+          "consent_privacy_deletion",
+          "privacy",
+          "dsr"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/policy",
+          "Backend Architecture/aether-backend/services/consent",
+          "Backend Architecture/aether-backend/services/dsr_propagation",
+          "docs/source-of-truth/CONSENT_MODEL.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": "docs/source-of-truth/CONSENT_MODEL.md"
+    },
+    {
+      "id": "rights_irrl",
+      "displayName": "Rights / IRRL runtime",
+      "description": "The Information Rights, Retention & Learning runtime: a first-class rights spine (DataRightsEnvelope, UseAuthority, DerivationClass, RetentionPolicy, Generalization Gateway, RightsDecision) mapped as a naming overlay onto the existing DataRightsGrant / ConsentPolicyDecision / storage-lifecycle machinery.",
+      "plane": "governance_contract",
+      "spineKind": "truth_authority",
+      "implementationState": "in_flight",
+      "ownsCanonicalTruth": true,
+      "authorityDeclaration": "Authoritatively owns rights decisions over data use, retention, derivation, model-training permission, and the generalization gateway at the Graph-of-Graphs boundary.",
+      "nonOwnershipStatement": "Does not own consent purpose state or collection-time privacy evaluation (consent owns those); IRRL consumes ConsentPolicyDecision and retention machinery and must never fork a parallel rights registry.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/consent-registry.json",
+          "refIds": [
+            "personalization",
+            "commerce",
+            "financial_activity",
+            "economic_observability"
+          ]
+        },
+        {
+          "registry": "packages/shared/contracts/readiness-vocabulary.json",
+          "refIds": [
+            "not_entitled",
+            "unavailable"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "consent_decision",
+          "retention_policy"
+        ],
+        "published": [
+          "rights_decision",
+          "use_authority",
+          "derivation_class",
+          "rights_decision_ref"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "consent",
+          "contract_spine"
+        ],
+        "soft": [
+          "graph"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "canonical_gateway_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "graph_of_graphs_rights_filter"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "medium"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "rights_decision_drift",
+          "training_gate"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [
+        {
+          "ref": "DataRightsEnvelope / UseAuthority / DerivationClass / RetentionPolicy / Generalization Gateway / RightsDecision",
+          "kind": "vocabulary",
+          "reason": "IRRL terms are ASPIRATIONAL labels; the machinery exists under current names (DataRightsGrant, ConsentPolicyDecision, storage lifecycle, DATA_RIGHTS_LEDGER.md) but the IRRL naming overlay has not landed yet",
+          "resolvesIn": "Spine P0 phase 5 (IRRL naming overlay)"
+        }
+      ],
+      "legacyBindings": {
+        "aliases": [
+          "irrl",
+          "rights_runtime",
+          "data_rights",
+          "information_rights_retention_learning"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/integrations/data_rights",
+          "Backend Architecture/aether-backend/services/policy",
+          "Backend Architecture/aether-backend/services/dsr_propagation",
+          "Backend Architecture/aether-backend/services/storage_lifecycle",
+          "docs/source-of-truth/DATA_RIGHTS_LEDGER.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": "docs/source-of-truth/DATA_RIGHTS_LEDGER.md"
+    },
+    {
+      "id": "upr",
+      "displayName": "Universal Provider Runtime",
+      "description": "The provider-neutral runtime that acquires, authorizes, and normalizes observations from tenant-provided, third-party, and Olympus/Aether-owned sources, attaching source, schema, connection, and health metadata.",
+      "plane": "observation_acquisition",
+      "spineKind": "runtime_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Authoritatively owns provider connection state, source descriptors, and governed normalization of observations into provider-neutral ingestion contracts.",
+      "nonOwnershipStatement": "Does not own canonical entity/evidence/time truth — the resolved observation is retained by evidence_provenance and timed by temporal_kernel; the SDK stays thin and never resolves identity, infers relationships, or decides learning rights.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/readiness-vocabulary.json",
+          "refIds": [
+            "credential_waiting",
+            "replay_validated",
+            "credential_supplied",
+            "connection_validated",
+            "sandbox_validated",
+            "partner_live"
+          ]
+        },
+        {
+          "registry": "packages/shared/contracts/consent-registry.json",
+          "refIds": [
+            "marketing",
+            "agent",
+            "web3",
+            "commerce"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "consent_decision",
+          "purpose_ref"
+        ],
+        "published": [
+          "observation_envelope",
+          "source_descriptor",
+          "connection_state"
+        ]
+      },
+      "adapters": [
+        "connector_normalization"
+      ],
+      "dependencies": {
+        "hard": [
+          "consent"
+        ],
+        "soft": [
+          "evidence_provenance",
+          "temporal_kernel",
+          "connector_normalization"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "canonical_gateway_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "credential_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": true,
+        "recomputeSafe": false,
+        "replaySupported": true
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "connection360"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "provider_health",
+          "sync_state",
+          "credential_state"
+        ],
+        "replaySupported": true
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "upr",
+          "universal_provider_runtime",
+          "provider_runtime",
+          "provider_neutral_runtime"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/provider_runtime",
+          "Backend Architecture/aether-backend/services/providers",
+          "docs/UNIVERSAL-PROVIDER-RUNTIME.md",
+          "docs/source-of-truth/IMPORTS.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": "docs/UNIVERSAL-PROVIDER-RUNTIME.md"
+    },
+    {
+      "id": "connector_normalization",
+      "displayName": "Connector Normalization + SDK & Universal Alignment",
+      "description": "Normalizes raw provider/connector payloads into canonical provider-neutral contracts and aligns SDK, API, and universal connector behavior so every source emits governed observations through the same observation envelope.",
+      "plane": "observation_acquisition",
+      "spineKind": "runtime_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Authoritatively owns connector decode/mapping normalization and SDK/API universal alignment so heterogeneous sources converge on canonical observation contracts.",
+      "nonOwnershipStatement": "Does not own canonical fact truth or provider runtime state; it produces normalized observations consumed by upr, and its decode/mapping correctness is proven by replay against recorded provider traffic, not by owning a registry.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/readiness-vocabulary.json",
+          "refIds": [
+            "replay_validated",
+            "connection_validated",
+            "sandbox_validated"
+          ]
+        },
+        {
+          "registry": "packages/shared/contracts/consent-registry.json",
+          "refIds": [
+            "commerce",
+            "agent"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "source_schema"
+        ],
+        "published": [
+          "normalized_observation",
+          "decode_mapping"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "contract_spine"
+        ],
+        "soft": [
+          "upr"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "source_normalization_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": true
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "connection360"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "decode_coverage",
+          "mapping_replay_status"
+        ],
+        "replaySupported": true
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "connector_normalization",
+          "sdk_universal_alignment",
+          "universal_alignment",
+          "sdk_alignment"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/imports",
+          "Backend Architecture/aether-backend/services/integrations/connectors",
+          "docs/source-of-truth/SDK_RUNTIME_PARITY.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": null
+    },
+    {
+      "id": "measurement_outcome_contract",
+      "displayName": "Measurement / Metrics / Algebra",
+      "description": "Owns the canonical metric registry and the measurement/outcome algebra — how measures are defined, computed, compared, and attributed so every metric read is contractually bounded (unit, range, min sample) and honest.",
+      "plane": "intelligence_projection",
+      "spineKind": "composition_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": true,
+      "authorityDeclaration": "Authoritatively owns the canonical metric vocabulary (metric-registry.json) and the outcome-measure contract that bounds every measurement computation.",
+      "nonOwnershipStatement": "Does not own the underlying outcome instance facts — those are canonical graph/evidence facts; measurement defines the algebra over them and never becomes a competing system of record.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/metric-registry.json",
+          "refIds": [
+            "conversion_rate",
+            "attributed_conversions",
+            "revenue",
+            "touchpoints",
+            "journey_completion_rate"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "graph_snapshot",
+          "entity_ref"
+        ],
+        "published": [
+          "measure_ref",
+          "metric_read",
+          "outcome_measure"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "graph",
+          "temporal_kernel"
+        ],
+        "soft": [
+          "identity_resolution",
+          "relationship_fidelity"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "measurement_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": true,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "campaign360",
+        "outcome360",
+        "economic360",
+        "comparison_workbench"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "medium"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "metric_drift",
+          "sample_size",
+          "measurement_integrity"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "measurement",
+          "metrics",
+          "measurement_outcome",
+          "measurement_contract",
+          "metric_algebra"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/measurement",
+          "Backend Architecture/aether-backend/shared/measurement",
+          "docs/source-of-truth/MEASUREMENT_INTEGRITY.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": "docs/source-of-truth/MEASUREMENT_INTEGRITY.md"
+    },
+    {
+      "id": "attribution_architecture",
+      "displayName": "Attribution Architecture",
+      "description": "Owns the attribution model and credit algebra that distributes outcome credit across touchpoints and journeys under the active attribution policy, producing attributed conversions and revenue. Registration row for the attribution authority the ledger folds under Measurement/Algebra.",
+      "plane": "intelligence_projection",
+      "spineKind": "composition_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Authoritatively owns the attribution credit model — which touchpoints receive credit for an outcome and how credits are versioned and re-attributed under an attribution policy change.",
+      "nonOwnershipStatement": "Does not own the underlying conversion/outcome facts or the metric definitions; graph and measurement_outcome_contract own those, and attribution is recomputed from them whenever the attribution policy or facts change.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/metric-registry.json",
+          "refIds": [
+            "attributed_conversions",
+            "revenue",
+            "touchpoints"
+          ]
+        },
+        {
+          "registry": "packages/shared/contracts/graph-mutation-registry.json",
+          "refIds": [
+            "attribution_versioned"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "graph_snapshot",
+          "measure_ref"
+        ],
+        "published": [
+          "attribution_credit",
+          "attribution_model"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "measurement_outcome_contract",
+          "graph",
+          "temporal_kernel"
+        ],
+        "soft": [
+          "relationship_fidelity",
+          "identity_resolution"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "attribution_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": true,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "campaign360",
+        "outcome360"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "medium"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "attribution_staleness",
+          "credit_consistency"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "attribution",
+          "attribution_architecture",
+          "attribution_model",
+          "credit_algebra"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/attribution",
+          "Backend Architecture/aether-backend/services/measurement",
+          "docs/source-of-truth/AI_AGENT_REFERRAL_ATTRIBUTION.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": null
+    },
+    {
+      "id": "exploration_fabric",
+      "displayName": "Lens / Projection Algebra + Exploration Fabric",
+      "description": "The unified exploration layer over canonical truth — lenses, projection algebra, filter semantics, and the fabric every 360/lens consumes. Reports each filter's disposition honestly instead of silently dropping it.",
+      "plane": "intelligence_projection",
+      "spineKind": "composition_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Authoritatively owns the exploration surface contract set (filter categories, temporal modes, views) that every surface must declare against so a projection can report what was applied, translated, or suppressed.",
+      "nonOwnershipStatement": "Does not own canonical facts or measures; graph, evidence_provenance, and measurement_outcome_contract own those, and the fabric composes them into explorable reads — never a competing system of record.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/surface-capability-registry.json",
+          "refIds": [
+            "graph",
+            "profile360",
+            "campaign360",
+            "comparison_workbench"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "entity_ref",
+          "graph_snapshot",
+          "measure_ref"
+        ],
+        "published": [
+          "filter_disposition",
+          "lens_read",
+          "projection_request"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "graph",
+          "temporal_kernel",
+          "identity_resolution",
+          "evidence_provenance"
+        ],
+        "soft": [
+          "relationship_fidelity"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "exploration_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": true,
+        "recomputeSafe": true,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "graph",
+        "profile360",
+        "campaign360",
+        "comparison_workbench"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "medium"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "filter_dropped",
+          "surface_capability_drift"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "exploration_fabric",
+          "exploration",
+          "lens_algebra",
+          "projection_algebra",
+          "unified_exploration_fabric"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/exploration",
+          "Backend Architecture/aether-backend/shared/exploration",
+          "docs/source-of-truth/EXPLORATION_FABRIC.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": "docs/source-of-truth/EXPLORATION_FABRIC.md"
+    },
+    {
+      "id": "projection_plane",
+      "displayName": "360 projections",
+      "description": "The intelligence projection plane (ADR-010): the eighteen in-flight 360 projections plus the doctrine that a projection reads canonical authorities and is never a competing system of record. Row registers the aggregate plane authority; each projection remains an entry in intelligence-projection-registry.json.",
+      "plane": "intelligence_projection",
+      "spineKind": "composition_authority",
+      "implementationState": "in_flight",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Authoritatively owns the projection plane composition — projection kinds, subject kinds, section/limitation honesty, temporal modes, and the read-only projection doctrine over canonical truth.",
+      "nonOwnershipStatement": "Does not own any canonical fact or measure; every projection reads through the owning graph/evidence/measurement authorities and declares ownsCanonicalTruth false by construction.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/intelligence-projection-registry.json",
+          "refIds": [
+            "profile360",
+            "agent360",
+            "relationship360",
+            "social360",
+            "episode360",
+            "communication360",
+            "execution360",
+            "temporal360",
+            "geographic360",
+            "population360",
+            "cluster360",
+            "outcome360",
+            "economic360",
+            "campaign360",
+            "risk360",
+            "fraud360",
+            "source360",
+            "connection360"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "projection_request",
+          "filter_disposition"
+        ],
+        "published": [
+          "projection_read",
+          "section_state",
+          "rights_context"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "exploration_fabric",
+          "measurement_outcome_contract"
+        ],
+        "soft": [
+          "graph",
+          "model_governance",
+          "temporal_kernel"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "rights_filtered_intelligence"
+      },
+      "lifecycle": {
+        "typedDegradation": true,
+        "recomputeSafe": true,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "graph",
+        "profile360",
+        "campaign360",
+        "cluster360",
+        "geo",
+        "journeys",
+        "timeline",
+        "product_intelligence",
+        "temporal_observatory",
+        "comparison_workbench",
+        "outcome360",
+        "economic360",
+        "connection360"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "medium"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "projection_freshness",
+          "limitation_state",
+          "section_state"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "projection_plane",
+          "intelligence_projection",
+          "360s",
+          "intelligence_projection_plane"
+        ],
+        "services": [
+          "docs/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md",
+          "Backend Architecture/aether-backend/shared/intelligence_projections"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": "docs/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md"
+    },
+    {
+      "id": "model_governance",
+      "displayName": "ML / model contracts",
+      "description": "Governs ML model contracts, model-registry lifecycle, and model-derived intelligence so risk/fraud/agentic outputs carry model provenance, capability/version context, and governed usage — never silent model substitution.",
+      "plane": "intelligence_projection",
+      "spineKind": "composition_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Authoritatively owns model registration, model lifecycle status, capability flags, and the governance rules model-derived projections must carry (model_refs, version, provenance).",
+      "nonOwnershipStatement": "Does not own training data, tenant facts, or rights decisions; those live in consent/rights_irrl, and model governance constrains model use rather than re-defining data ownership.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/model-registry.json",
+          "refIds": [
+            "claude-opus-5",
+            "claude-sonnet-5",
+            "gpt-4o-mini",
+            "deepseek-chat",
+            "qwen2.5-72b-instruct"
+          ]
+        },
+        {
+          "registry": "packages/shared/contracts/model-registry.json",
+          "refIds": [
+            "anthropic",
+            "openai",
+            "kimi",
+            "deepseek",
+            "qwen"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "evidence_ref",
+          "rights_decision"
+        ],
+        "published": [
+          "model_ref",
+          "model_version",
+          "governance_decision"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "computation_substrate",
+          "evidence_provenance"
+        ],
+        "soft": [
+          "consent",
+          "rights_irrl"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "model_training_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": true,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "medium"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "model_version_drift",
+          "capability_flag_drift"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "model_governance",
+          "ml_model_contracts",
+          "model_contracts",
+          "ml_contracts"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/model_governance",
+          "Backend Architecture/aether-backend/shared/model_governance",
+          "Backend Architecture/aether-backend/services/model_runtime",
+          "docs/source-of-truth/MODEL_GOVERNANCE.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": "docs/source-of-truth/MODEL_GOVERNANCE.md"
+    },
+    {
+      "id": "computation_substrate",
+      "displayName": "Computation Substrate",
+      "description": "The analytic compute substrate that executes cluster/community, risk, and model computations as versioned, observable jobs over canonical truth. Registration row for the resolved computation_substrate spine, whose machinery the ledger folds under execution/compute services.",
+      "plane": "decision_action",
+      "spineKind": "runtime_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Authoritatively owns the compute execution substrate (jobs/flows/computation) on which cluster, risk, and model workloads run with attributable execution records.",
+      "nonOwnershipStatement": "Does not own the inputs or outputs it computes — canonical facts belong to graph/evidence, and the resulting scores/projections are owned by their producing authorities, not by the substrate that ran the job.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/graph-mutation-registry.json",
+          "refIds": [
+            "score_versioned",
+            "projection_rebuilt"
+          ]
+        },
+        {
+          "registry": "packages/shared/contracts/readiness-vocabulary.json",
+          "refIds": [
+            "replay_validated",
+            "degraded"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "graph_snapshot",
+          "evidence_ref"
+        ],
+        "published": [
+          "computation_result",
+          "execution_record"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "contract_spine"
+        ],
+        "soft": [
+          "temporal_kernel",
+          "evidence_provenance",
+          "graph"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "canonical_gateway_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "compute_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": true,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "internal",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "job_health",
+          "substrate_capacity"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "computation_substrate",
+          "computation",
+          "compute_substrate"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/computation",
+          "Backend Architecture/aether-backend/services/jobs",
+          "Backend Architecture/aether-backend/services/flows",
+          "docs/source-of-truth/COMPUTATION_SUBSTRATE.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": "docs/source-of-truth/COMPUTATION_SUBSTRATE.md"
+    },
+    {
+      "id": "agentic_runtime_access",
+      "displayName": "Agent / Execution contracts",
+      "description": "Governing authority over agentic runtime access — which agents may act, on which tenant scope, with which tools, against which approvals — and the agent/execution contracts that record authorized agent behavior.",
+      "plane": "decision_action",
+      "spineKind": "runtime_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Authoritatively owns agentic runtime access decisions and the agent/execution contract set that bounds delegated, tool-using agent action.",
+      "nonOwnershipStatement": "Does not own the execution facts agents produce or the underlying canonical facts they consume — evidence_provenance, graph, and temporal_kernel own those; this spine gates access and records authorization, not domain truth.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/consent-registry.json",
+          "refIds": [
+            "agent"
+          ]
+        },
+        {
+          "registry": "packages/shared/contracts/graph-mutation-registry.json",
+          "refIds": [
+            "agent",
+            "human",
+            "service"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "consent_decision",
+          "rights_decision"
+        ],
+        "published": [
+          "agent_access_decision",
+          "execution_contract",
+          "approval_state"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "consent",
+          "rights_irrl"
+        ],
+        "soft": [
+          "computation_substrate",
+          "decision_contracts"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "canonical_gateway_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "agentic_access_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "medium"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "agent_access_denials",
+          "approval_staleness"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "agentic_runtime_access",
+          "agent_execution",
+          "agent_runtime",
+          "execution_contracts"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/agent",
+          "Backend Architecture/aether-backend/services/agent_access_intelligence",
+          "docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md",
+          "docs/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": "docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md"
+    },
+    {
+      "id": "tenant_readiness",
+      "displayName": "Product Runtime / Tenant Activation & Readiness",
+      "description": "Resolves whether a capability can be used for a tenant by joining implementation state, deployment state, dependencies, entitlements, provider credentials, freshness, policy, security, compliance, and surface support. Readiness is a presentation-only join, never a certification emitter.",
+      "plane": "decision_action",
+      "spineKind": "runtime_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Authoritatively owns the tenant activation decision and the readiness join that resolves capability availability for a tenant across implementation, entitlement, credential, and policy state.",
+      "nonOwnershipStatement": "Does not own any readiness/certification token and never emits production_ready; readiness-vocabulary.json is presentation-only (ADR-010 D3) and this spine only joins state that other spines own.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/readiness-vocabulary.json",
+          "refIds": [
+            "not_entitled",
+            "not_configured",
+            "credential_required",
+            "connection_testing",
+            "live",
+            "stale",
+            "degraded",
+            "unavailable"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "capability_state",
+          "credential_state",
+          "entitlement_state"
+        ],
+        "published": [
+          "readiness_resolution",
+          "activation_decision"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "contract_spine"
+        ],
+        "soft": [
+          "upr",
+          "measurement_outcome_contract",
+          "model_governance",
+          "platform_authority"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": false,
+        "rightsBoundary": "tenant_capability_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": true,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "internal",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "capability_readiness",
+          "activation_gate"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "tenant_readiness",
+          "tenant_activation",
+          "product_runtime",
+          "activation_readiness",
+          "capability_readiness"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/activation",
+          "Backend Architecture/aether-backend/services/tenant_readiness",
+          "docs/source-of-truth/ACTIVATION.md",
+          "docs/source-of-truth/CAPABILITY_MANIFEST.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": null
+    },
+    {
+      "id": "platform_authority",
+      "displayName": "Platform Authority",
+      "description": "The horizontal platform authority that continuously compares desired state with observed state and turns differences into actionable drift (provider disconnected, schema changed, data stale, identity watermark behind, rights decision changed).",
+      "plane": "governance_contract",
+      "spineKind": "runtime_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Authoritatively owns the desired-state/observed-state reconciliation record and the audit/conformance decision that every drift, repair, rollback, and replay is attributable to.",
+      "nonOwnershipStatement": "Does not own any domain spine's facts or state — it observes and reconciles the state that contract_spine, graph, temporal_kernel, and the runtime authorities own.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/readiness-vocabulary.json",
+          "refIds": [
+            "live",
+            "degraded",
+            "disabled",
+            "suspended",
+            "kill_switch_active"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "observed_state",
+          "desired_state"
+        ],
+        "published": [
+          "drift_record",
+          "audit_decision",
+          "remediation_action"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "contract_spine"
+        ],
+        "soft": [
+          "graph",
+          "temporal_kernel",
+          "rights_irrl"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": false,
+        "consentRequired": false,
+        "rightsBoundary": "platform_operations_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": true,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [],
+      "securityCompliance": {
+        "tenantIsolation": "platform_internal",
+        "exportClass": "internal",
+        "distillationRisk": "none"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "drift_delta",
+          "remediation_health"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "platform_authority",
+          "platform_control",
+          "desired_observed_state"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/reliability",
+          "Backend Architecture/aether-backend/services/diagnostics",
+          "docs/source-of-truth/PLATFORM_PARITY.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": null
+    },
+    {
+      "id": "decision_contracts",
+      "displayName": "Findings / Investigations / Decision contracts",
+      "description": "Owns the contract set for human- or agent-reviewed findings, investigations, and decisions so every decision is evidence-linked, attributable, and replayable rather than an unrecorded action.",
+      "plane": "decision_action",
+      "spineKind": "composition_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Authoritatively owns the findings/investigations/decision contract vocabulary and the decision-record shape that binds a decision to its evidence refs and its actor.",
+      "nonOwnershipStatement": "Does not own the facts a finding summarizes or the graph it references — evidence_provenance and graph own those; decision contracts record reviewed conclusions over them.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/graph-mutation-registry.json",
+          "refIds": [
+            "human",
+            "agent",
+            "service"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "evidence_ref",
+          "graph_snapshot"
+        ],
+        "published": [
+          "finding_ref",
+          "decision_record",
+          "investigation_state"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "evidence_provenance",
+          "graph",
+          "identity_resolution"
+        ],
+        "soft": [
+          "temporal_kernel"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "decision_record_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "medium"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "decision_evidence_gap",
+          "investigation_state"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "decision_contracts",
+          "findings",
+          "investigations",
+          "findings_investigations_decisions"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/operational_intelligence",
+          "Backend Architecture/aether-backend/services/investigation",
+          "docs/DECISION-OUTCOME-INTELLIGENCE.md",
+          "docs/INVESTIGATION-WORKSPACE.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": null
+    },
+    {
+      "id": "kyber",
+      "displayName": "Kyber (operator control surface)",
+      "description": "The operator control surface where desired state, observed state, dependency health, rights decisions, provider health, graph quality, evidence quality, readiness, and remediation are joined, and where an operator can discover, map, classify, reconcile, authorize, simulate, approve, activate, observe, repair, roll back, or replay.",
+      "plane": "decision_action",
+      "spineKind": "runtime_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Authoritatively owns the operator control workflow surface and the Kyber access model that scopes what an operator may discover, simulate, approve, and remediate.",
+      "nonOwnershipStatement": "Does not own any underlying spine state — it renders and commands over platform_authority, graph, upr, rights_irrl, and tenant_readiness state, and every action it takes is executed by the owning authority.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/readiness-vocabulary.json",
+          "refIds": [
+            "live",
+            "degraded",
+            "not_entitled",
+            "unavailable",
+            "kill_switch_active"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "drift_record",
+          "projection_read",
+          "readiness_resolution"
+        ],
+        "published": [
+          "control_workflow",
+          "operator_action"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "platform_authority",
+          "graph"
+        ],
+        "soft": [
+          "upr",
+          "tenant_readiness",
+          "rights_irrl",
+          "projection_plane"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "canonical_gateway_only",
+      "tenantBoundary": {
+        "tenantScoped": false,
+        "consentRequired": false,
+        "rightsBoundary": "operator_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [],
+      "securityCompliance": {
+        "tenantIsolation": "platform_internal",
+        "exportClass": "internal",
+        "distillationRisk": "none"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "control_workflow_health",
+          "operator_action_ledger"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "kyber",
+          "operator_control_surface",
+          "kyber_control_plane"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/kyber",
+          "Backend Architecture/aether-backend/services/kyber_operator",
+          "docs/source-of-truth/KYBER_ACCESS_CONTROL.md",
+          "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": null
+    },
+    {
+      "id": "aether_surfaces",
+      "displayName": "Aether surfaces / Noesis",
+      "description": "The interaction/product surface authority over the tenant-safe exploration, operational, notification, and product workflows exposed through Aether surfaces and Noesis. It composes underlying spine capabilities into tenant-safe product reads and actions.",
+      "plane": "interaction_product",
+      "spineKind": "runtime_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Authoritatively owns the product surface composition — which surface presents which governed capability and how a surface action routes back through the owning spine.",
+      "nonOwnershipStatement": "Does not own canonical truth, projections, or operator control; it consumes projection_plane/exploration_fabric reads and routes actions to the owning spine, never answering a question itself.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/surface-capability-registry.json",
+          "refIds": [
+            "graph",
+            "profile360",
+            "campaign360",
+            "timeline",
+            "journeys"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "projection_read",
+          "readiness_resolution"
+        ],
+        "published": [
+          "product_read",
+          "surface_action"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "projection_plane",
+          "exploration_fabric",
+          "graph"
+        ],
+        "soft": [
+          "kyber",
+          "tenant_readiness"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "canonical_gateway_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "tenant_surface_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "graph",
+        "profile360",
+        "campaign360",
+        "timeline",
+        "journeys"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "surface_health",
+          "surface_action_routing"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "aether_surfaces",
+          "noesis",
+          "product_surfaces",
+          "interaction_surfaces"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/noesis",
+          "Backend Architecture/aether-backend/services/me",
+          "docs/source-of-truth/UNIFIED_PLATFORM_BASELINE_AUDIT.md"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": null
+    },
+    {
+      "id": "infrastructure_model",
+      "displayName": "Infrastructure Model",
+      "description": "Owns the canonical model of the platform's infrastructure — deployment topology, declared resources, runtime state, and health classification for subject kinds `deployment` and `infrastructure`. Infrastructure360 reads over this model as a read-only observability projection; no consumer may treat stale, partial, or unresolved infrastructure state as current fact.",
+      "plane": "resolution_canonical_data",
+      "spineKind": "truth_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": true,
+      "authorityDeclaration": "Authoritatively owns the canonical infrastructure model and its state authorities (`infrastructure_facts`, `infrastructure_state`, `deployments`): what is deployed, its declared resources, and the classified runtime/health state that Infrastructure360 and the readiness model read.",
+      "nonOwnershipStatement": "Does not own the control plane that mutates deployments — that is the platform's operational runtime, outside this model. It owns the read model over infrastructure state and never fabricates a value where deployment state is unknown or stale.",
+      "canonicalContractRefs": [],
+      "ports": {
+        "consumed": [
+          "entity_ref",
+          "time_ref",
+          "evidence_ref"
+        ],
+        "published": [
+          "infrastructure_snapshot",
+          "deployment_state",
+          "health_classification"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "contract_spine",
+          "temporal_kernel"
+        ],
+        "soft": [
+          "evidence_provenance",
+          "measurement_outcome_contract"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": false,
+        "rightsBoundary": "platform_infrastructure_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": true,
+        "recomputeSafe": false,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "infrastructure360"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "deployment_health",
+          "runtime_health",
+          "state_freshness"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "infrastructure",
+          "infrastructure_model",
+          "infra_model"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/infrastructure"
+        ],
+        "migrationMode": "formalize_existing"
+      },
+      "implementationBlueprint": null
+    },
+    {
+      "id": "journey_continuity",
+      "displayName": "journey_continuity (pending projection spine)",
+      "description": "Pending projection-plane spine: owns continuity semantics that let one exploration context and one journey survive movement across profiles, relationships, campaigns, journeys, maps, timelines, findings, and investigations. Declared pending by episode360 until the spine plane formalizes it.",
+      "plane": "intelligence_projection",
+      "spineKind": "truth_authority",
+      "implementationState": "pending",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Intended authority over cross-episode journey continuity — linking the segments of a journey so an exploration context survives movement across surfaces and episodes.",
+      "nonOwnershipStatement": "Does not yet own any canonical fact; the journey/episode facts that will feed it belong to graph and temporal_kernel today, and it is not declared as a canonical authority by any projection until formalized.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/surface-capability-registry.json",
+          "refIds": [
+            "journeys",
+            "timeline"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "graph_snapshot",
+          "time_ref"
+        ],
+        "published": [
+          "continuity_link",
+          "journey_context"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "temporal_kernel",
+          "graph"
+        ],
+        "soft": [
+          "evidence_provenance",
+          "relationship_fidelity"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "journey_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "journeys",
+        "timeline"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "continuity_gap"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [
+        {
+          "ref": "journey continuity authority",
+          "kind": "spine",
+          "reason": "journey continuity plane not yet formalized (projection episode360 declares it pendingAuthority; continuation machinery exists under service/continuation but no canonical authority shape)",
+          "resolvesIn": "Spine P0 phase 4 derivation of the projection SPINE_INDEX from this registry"
+        }
+      ],
+      "legacyBindings": {
+        "aliases": [
+          "journey_continuity",
+          "journey_continuity_spine",
+          "continuation"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/continuation",
+          "Backend Architecture/aether-backend/services/journeys",
+          "docs/source-of-truth/CROSS_DEVICE_CONTINUITY.md"
+        ],
+        "migrationMode": "net_new"
+      },
+      "implementationBlueprint": null
+    },
+    {
+      "id": "graph_history_replay",
+      "displayName": "Graph History Replay",
+      "description": "Owns historical graph-state reconstruction — replaying the bitemporal graph mutation ledger (node/edge versioned, restored, tombstoned rows) into as-of graph snapshots and correction deltas, so temporal360 can reconstruct graph state at any historical as-of.",
+      "plane": "relationship_graph",
+      "spineKind": "truth_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Authoritative over historical graph reconstruction: consumes the bitemporal mutation ledger (shared/graph replay_state + services/temporal360 GraphHistoryReplay) to answer as-of graph snapshot queries and corrections_between deltas.",
+      "nonOwnershipStatement": "Does not own the mutation ledger or temporal kernel it replays over — graph and temporal_kernel own those; graph_history_replay is a reader/rebuilder authority, not a new system of record.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/graph-mutation-registry.json",
+          "refIds": [
+            "node_versioned",
+            "edge_versioned",
+            "node_restored",
+            "node_tombstoned",
+            "edge_tombstoned"
+          ]
+        },
+        {
+          "registry": "packages/shared/contracts/surface-capability-registry.json",
+          "refIds": [
+            "temporal_observatory",
+            "timeline"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "mutation_ledger",
+          "time_ref"
+        ],
+        "published": [
+          "graph_snapshot_ref",
+          "replay_stream"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "graph",
+          "temporal_kernel"
+        ],
+        "soft": [
+          "evidence_provenance"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "graph_history_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": true
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "temporal_observatory",
+        "timeline"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "replay_freshness"
+        ],
+        "replaySupported": true
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "graph_history_replay",
+          "graph_history_replay_spine",
+          "history_replay"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/temporal360",
+          "Backend Architecture/aether-backend/shared/graph",
+          "Backend Architecture/aether-backend/shared/temporal",
+          "docs/source-of-truth/TEMPORAL_INTEGRITY.md"
+        ],
+        "migrationMode": "net_new"
+      },
+      "implementationBlueprint": "docs/source-of-truth/TEMPORAL_INTEGRITY.md"
+    },
+    {
+      "id": "context_capsule_semantics",
+      "displayName": "Context Capsule Semantics",
+      "description": "Owns the capsule → canonical-geographic interpretation layer — role, precision class, location-fact extraction, and fact-row normalisation (services/geographic360/capsule_semantics, consumed through the provider’s reader seam and covered by DSR erasure) so projections read context capsule state and transitions coherently.",
+      "plane": "resolution_canonical_data",
+      "spineKind": "truth_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Authoritative over cross-capsule semantic interpretation: how context capsule state and transition types compose into a coherent geographic/context read (geographic360 capsule_semantics reading rules).",
+      "nonOwnershipStatement": "Does not yet own the capsule taxonomy or its enforcement; context_capsule owns the ContextCapsule contract today, and consent/rights own the policy that bounds it.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/context-capsule-registry.json",
+          "refIds": [
+            "identity_resolved",
+            "journey_handoff",
+            "consent_change",
+            "normal_primary",
+            "location_conflict",
+            "insufficient_evidence"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "context_ref"
+        ],
+        "published": [
+          "capsule_semantics",
+          "context_interpretation"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "context_capsule",
+          "temporal_kernel"
+        ],
+        "soft": [
+          "graph",
+          "consent"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "context_semantics_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "geo"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "capsule_semantic_drift"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "context_capsule_semantics",
+          "context_capsule_semantics_spine"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/geographic360",
+          "Backend Architecture/aether-backend/shared/context_capsule",
+          "docs/source-of-truth/CONTEXT_INTELLIGENCE.md"
+        ],
+        "migrationMode": "net_new"
+      },
+      "implementationBlueprint": "docs/source-of-truth/CONTEXT_INTELLIGENCE.md"
+    },
+    {
+      "id": "grouping_membership",
+      "displayName": "Grouping Membership",
+      "description": "Owns governed population membership — the MEMBER_OF-via-gateway PopulationMembershipGovernor and the append-only population_definition_versions ledger (services/population) — so population membership is a governed, versioned fact rather than per-projection state. Cohort/cluster governed membership remains owned by the graph/cluster surfaces until declared here.",
+      "plane": "relationship_graph",
+      "spineKind": "truth_authority",
+      "implementationState": "implemented",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Authoritative over canonical population membership: which entity belongs to which population under a versioned membership contract (PopulationMembershipGovernor + PopulationDefinitionRepository, DSR-covered).",
+      "nonOwnershipStatement": "Does not yet own membership facts; cluster membership edges are owned by graph today and population/cluster definitions by the computing projection until this spine is formalized.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/graph-mutation-registry.json",
+          "refIds": [
+            "cluster_created",
+            "cluster_member_added",
+            "cluster_member_removed",
+            "cluster_merged",
+            "cluster_split"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "entity_ref",
+          "graph_snapshot"
+        ],
+        "published": [
+          "membership_ref",
+          "grouping_definition"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "graph",
+          "identity_resolution"
+        ],
+        "soft": [
+          "relationship_fidelity",
+          "temporal_kernel"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "canonical_gateway_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": true,
+        "rightsBoundary": "membership_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "comparison_workbench",
+        "cluster360"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "governed",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "membership_staleness"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "grouping_membership",
+          "grouping_membership_spine",
+          "cohort_membership"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/population",
+          "Backend Architecture/aether-backend/services/population360",
+          "Backend Architecture/aether-backend/services/cluster"
+        ],
+        "migrationMode": "net_new"
+      },
+      "implementationBlueprint": null
+    },
+    {
+      "id": "reconciled_control_plane",
+      "displayName": "reconciled_control_plane (pending projection spine)",
+      "description": "Pending projection-plane spine: owns the reconciled operator control-plane rollup over provider runtime and credential readiness so connection360 and Kyber see one reconciled activation/control state. Declared pending by connection360 after the harness control-plane rollup (PR #529) merged.",
+      "plane": "decision_action",
+      "spineKind": "runtime_authority",
+      "implementationState": "pending",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Intended authority over the reconciled control-plane view — joining provider runtime, credential readiness, and activation state into one operator-visible rollup.",
+      "nonOwnershipStatement": "Does not own provider runtime, credential, or activation state; upr and tenant_readiness own those and reconciled_control_plane joins them without becoming a parallel control store.",
+      "canonicalContractRefs": [
+        {
+          "registry": "packages/shared/contracts/readiness-vocabulary.json",
+          "refIds": [
+            "not_configured",
+            "credential_required",
+            "connection_testing",
+            "live",
+            "degraded"
+          ]
+        }
+      ],
+      "ports": {
+        "consumed": [
+          "connection_state",
+          "credential_state",
+          "activation_decision"
+        ],
+        "published": [
+          "reconciled_control_state"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [
+          "platform_authority",
+          "upr"
+        ],
+        "soft": [
+          "consent",
+          "rights_irrl",
+          "tenant_readiness"
+        ],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": true,
+        "consentRequired": false,
+        "rightsBoundary": "control_plane_boundary"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [
+        "connection360"
+      ],
+      "securityCompliance": {
+        "tenantIsolation": "tenant_scoped",
+        "exportClass": "internal",
+        "distillationRisk": "low"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "control_plane_reconciliation"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {
+        "authority_non_ownership_statement": "open",
+        "canonical_contract_registration": "open",
+        "port_adapter_declaration": "open",
+        "dependency_dag_validation": "open",
+        "typed_degradation_behavior": "open",
+        "temporal_watermark_behavior": "open",
+        "evidence_restatement_behavior": "open",
+        "tenant_consent_rights_retention_residency_export": "open",
+        "graph_mutation_policy": "open",
+        "api_event_ui_kyber_integration": "open",
+        "readiness_entitlement_integration": "open",
+        "security_compliance_observability_evidence": "open",
+        "migration_recompute_rollback_compatibility": "open",
+        "positive_negative_replay_isolation_golden_tests": "open"
+      },
+      "unresolvedRefs": [
+        {
+          "ref": "reconciled control-plane authority",
+          "kind": "spine",
+          "reason": "harness control-plane rollup (PR #529) merged; reconciled control-plane spine not yet formalized as a projection-plane authority (connection360 declares it pendingAuthority)",
+          "resolvesIn": "Spine P0 phase 4 derivation of the projection SPINE_INDEX from this registry"
+        }
+      ],
+      "legacyBindings": {
+        "aliases": [
+          "reconciled_control_plane",
+          "reconciled_control_plane_spine",
+          "control_plane_rollup"
+        ],
+        "services": [
+          "Backend Architecture/aether-backend/services/provider_runtime",
+          "Backend Architecture/aether-backend/services/activation"
+        ],
+        "migrationMode": "net_new"
+      },
+      "implementationBlueprint": null
+    },
+    {
+      "id": "spine_composition_kernel",
+      "displayName": "Spine Composition Kernel (program capability)",
+      "description": "Program deliverable: the composition kernel (registry + envelope + adapters + lifecycle + conformance + mutation policy + evidence + temporal + readiness) implemented inside the Contract Spine. Exactly what this program is building now.",
+      "plane": "governance_contract",
+      "spineKind": "program_capability",
+      "implementationState": "in_flight",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Program capability: ships the governing statement of what a spine is and what a spine PR must declare (ADR-011).",
+      "nonOwnershipStatement": "Does not own any canonical domain authority; the kernel composes and governs the spines that own truth — it must never fork a parallel metric, readiness, surface, consent, evidence, or provider registry.",
+      "canonicalContractRefs": [],
+      "ports": {
+        "consumed": [],
+        "published": [
+          "spine_conformance_gate"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [],
+        "soft": [],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": false,
+        "consentRequired": false,
+        "rightsBoundary": "governance_kernel"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [],
+      "securityCompliance": {
+        "tenantIsolation": "platform_internal",
+        "exportClass": "internal",
+        "distillationRisk": "none"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "kernel_conformance"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {},
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "spine_composition_kernel",
+          "composition_kernel",
+          "spine_kernel"
+        ],
+        "services": [
+          "packages/shared/contracts/spine-registry.json",
+          "docs/decisions/ADR-011-spine-composition-kernel.md"
+        ],
+        "migrationMode": "net_new"
+      },
+      "implementationBlueprint": "docs/decisions/ADR-011-spine-composition-kernel.md"
+    },
+    {
+      "id": "spine_registry",
+      "displayName": "spine-registry (program capability)",
+      "description": "Program deliverable: this file — the one canonical machine-readable registry of spine identity, owner, ports, dependencies, mutation policy, lifecycle, readiness, and conformance that references (never re-defines) every owning registry.",
+      "plane": "governance_contract",
+      "spineKind": "program_capability",
+      "implementationState": "in_flight",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Program capability: ships the canonical spine-registry governing model whose ids become the single spine vocabulary.",
+      "nonOwnershipStatement": "Does not own the registries it references — surface, readiness, consent, metric, graph-mutation, evidence, and projection registries each keep owning their ids; a spine row that re-defines an owned id is a validator failure.",
+      "canonicalContractRefs": [],
+      "ports": {
+        "consumed": [],
+        "published": [
+          "spine_id_vocabulary"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [],
+        "soft": [],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": false,
+        "consentRequired": false,
+        "rightsBoundary": "governance_kernel"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [],
+      "securityCompliance": {
+        "tenantIsolation": "platform_internal",
+        "exportClass": "internal",
+        "distillationRisk": "none"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "registry_validator"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {},
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "spine_registry",
+          "spine-registry",
+          "spine_composition_registry"
+        ],
+        "services": [
+          "packages/shared/contracts/spine-registry.json"
+        ],
+        "migrationMode": "net_new"
+      },
+      "implementationBlueprint": null
+    },
+    {
+      "id": "common_spine_envelope",
+      "displayName": "Common spine envelope (program capability)",
+      "description": "Program deliverable: the SpineEnvelope that every cross-spine interaction resolves to — composing canonical primitives (EntityRef, EvidenceRef, temporal envelope fields, ContextCapsule, provenance) plus the envelope fields the architecture calls for, with absent producers declared present-but-unpopulated.",
+      "plane": "governance_contract",
+      "spineKind": "program_capability",
+      "implementationState": "in_flight",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Program capability: ships the one governed envelope (tenant_id, scope_ref, subject_refs, as_of, watermarks, policy/consent/rights refs, evidence refs, quality, contract versions, model refs, lineage refs) for cross-spine interactions.",
+      "nonOwnershipStatement": "Does not own any producer state; envelope fields with no producer yet (identity_watermark, rights_decision_ref) are declared present-but-unpopulated until a producer ships.",
+      "canonicalContractRefs": [],
+      "ports": {
+        "consumed": [],
+        "published": [
+          "spine_envelope"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [],
+        "soft": [],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": false,
+        "consentRequired": false,
+        "rightsBoundary": "governance_kernel"
+      },
+      "lifecycle": {
+        "typedDegradation": true,
+        "recomputeSafe": false,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [],
+      "securityCompliance": {
+        "tenantIsolation": "platform_internal",
+        "exportClass": "internal",
+        "distillationRisk": "none"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "envelope_field_gap"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {},
+      "unresolvedRefs": [
+        {
+          "ref": "identity_watermark producer",
+          "kind": "envelope_field",
+          "reason": "no identity-resolution watermark producer exists yet; field ships present-but-unpopulated (@unpopulated)",
+          "resolvesIn": "Spine P0 phase 3 (common spine envelope; @unpopulated producers)"
+        },
+        {
+          "ref": "rights_decision_ref producer",
+          "kind": "envelope_field",
+          "reason": "no IRRL rights-decision producer exists yet; field ships present-but-unpopulated (@unpopulated)",
+          "resolvesIn": "Spine P0 phase 3 (common spine envelope; @unpopulated producers)"
+        }
+      ],
+      "legacyBindings": {
+        "aliases": [
+          "common_spine_envelope",
+          "spine_envelope",
+          "SpineEnvelope"
+        ],
+        "services": [
+          "docs/source-of-truth/SPINE_P0_ARCHITECTURE.md"
+        ],
+        "migrationMode": "net_new"
+      },
+      "implementationBlueprint": null
+    },
+    {
+      "id": "irrl_naming_overlay",
+      "displayName": "IRRL naming overlay (program capability)",
+      "description": "Program deliverable: makes Information Rights, Retention & Learning a first-class naming overlay on the rights machinery that already exists (DataRightsGrant, ConsentPolicyDecision, DSR, storage lifecycle, DATA_RIGHTS_LEDGER) — never a parallel rights registry.",
+      "plane": "governance_contract",
+      "spineKind": "program_capability",
+      "implementationState": "in_flight",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Program capability: ships the IRRL vocabulary mapped onto existing rights ids (DataRightsEnvelope, UseAuthority, DerivationClass, RetentionPolicy, Generalization Gateway, RightsDecision).",
+      "nonOwnershipStatement": "Does not create a rights runtime; enforcement continues to live in the owning services (data_rights, policy, dsr_propagation, storage_lifecycle) and the label must never drift from enforced behavior.",
+      "canonicalContractRefs": [],
+      "ports": {
+        "consumed": [],
+        "published": [
+          "irrl_vocabulary"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [],
+        "soft": [],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": false,
+        "consentRequired": false,
+        "rightsBoundary": "governance_kernel"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [],
+      "securityCompliance": {
+        "tenantIsolation": "platform_internal",
+        "exportClass": "internal",
+        "distillationRisk": "none"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "irrl_label_drift"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {},
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "irrl_naming_overlay",
+          "irrl_overlay",
+          "irrl_naming"
+        ],
+        "services": [
+          "docs/source-of-truth/DATA_RIGHTS_LEDGER.md",
+          "docs/source-of-truth/GRAPH_OF_GRAPHS_DATA_USE.md"
+        ],
+        "migrationMode": "net_new"
+      },
+      "implementationBlueprint": null
+    },
+    {
+      "id": "spine_conformance_contract",
+      "displayName": "14-item conformance contract (program capability)",
+      "description": "Program deliverable: the 14-item per-spine conformance contract enforced by the contract validator, mapping each item to concrete evidence and refusing a state flip while a conformance gap is open.",
+      "plane": "governance_contract",
+      "spineKind": "program_capability",
+      "implementationState": "in_flight",
+      "ownsCanonicalTruth": false,
+      "authorityDeclaration": "Program capability: ships the spine-wide 14-item conformance gate (ownership, canonical-contract registration, ports/adapters, dependency DAG, typed degradation, temporal/watermark, evidence/restatement, tenant/consent/rights/retention/residency/export, mutation policy, API/event/UI/Kyber, readiness/entitlement, security/compliance/observability, migration/recompute/rollback, tests).",
+      "nonOwnershipStatement": "Does not gate projections or program deliverables — it gates governed spine rows; every check id in this registry is declared open until enforcement lands in a later phase.",
+      "canonicalContractRefs": [],
+      "ports": {
+        "consumed": [],
+        "published": [
+          "conformance_check"
+        ]
+      },
+      "adapters": [],
+      "dependencies": {
+        "hard": [],
+        "soft": [],
+        "runtime": [],
+        "policy": []
+      },
+      "graphMutationPolicy": "read_only",
+      "tenantBoundary": {
+        "tenantScoped": false,
+        "consentRequired": false,
+        "rightsBoundary": "governance_kernel"
+      },
+      "lifecycle": {
+        "typedDegradation": false,
+        "recomputeSafe": false,
+        "replaySupported": false
+      },
+      "readinessKey": null,
+      "surfaces": [],
+      "securityCompliance": {
+        "tenantIsolation": "platform_internal",
+        "exportClass": "internal",
+        "distillationRisk": "none"
+      },
+      "observabilityRecovery": {
+        "healthKeys": [
+          "conformance_state_flip_gate"
+        ],
+        "replaySupported": false
+      },
+      "conformance": {},
+      "unresolvedRefs": [],
+      "legacyBindings": {
+        "aliases": [
+          "spine_conformance_contract",
+          "conformance_contract",
+          "14_item_conformance"
+        ],
+        "services": [
+          "docs/source-of-truth/SPINE_P0_ARCHITECTURE.md",
+          "packages/shared/contracts/spine-registry.json"
+        ],
+        "migrationMode": "net_new"
+      },
+      "implementationBlueprint": null
+    }
+  ]
+}

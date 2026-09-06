@@ -20,9 +20,11 @@ Design rules:
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, Optional
 
 from repositories.repos import BaseRepository
+from services.value.models import to_decimal, to_decimal_string
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.service.commerce.metering")
@@ -54,13 +56,19 @@ def _build_meter_record(
 ) -> dict:
     import uuid
 
+    # Money boundary: the caller hands us a float (legacy wire shape), but the
+    # persisted fact must be a canonical decimal string so float never reaches
+    # the typed metering store or any downstream Decimal rollup. An unpriced /
+    # unparseable amount is persisted as None — never coerced to 0.
+    amount_canonical = to_decimal_string(amount_usd)
+
     return {
         "meter_record_id": f"mtr_{uuid.uuid4().hex[:16]}",
         "tenant_id": tenant_id,
         "resource_id": resource_id,
         "holder_id": holder_id,
         "meter_type": meter_type,
-        "amount_usd": float(amount_usd or 0.0),
+        "amount_usd": amount_canonical,
         "chain": chain,
         "asset_symbol": asset_symbol,
         "challenge_id": challenge_id,
@@ -169,14 +177,36 @@ class CommerceMeteringService:
         )
 
     async def summarize(self, tenant_id: str) -> dict:
-        """Tenant rollup keyed by meter_type with counts and summed USD."""
+        """Tenant rollup keyed by meter_type with counts and summed USD.
+
+        The rollup arithmetic is exact: each stored ``amount_usd`` is a
+        canonical decimal string (see ``_build_meter_record``), parsed to
+        ``Decimal`` and summed in Decimal — float never participates, so there
+        is no binary-float accumulation artifact (0.1 + 0.2 totals to exactly
+        0.3). The per-type ``amount_usd`` response value is kept as a float
+        for backward compatibility with existing consumers; it is derived from
+        the exact Decimal total at the presentation boundary. A meter type
+        whose records carry no parseable amount reports ``amount_usd=None``
+        (never an invented zero).
+        """
         rows = await self._repo.list_for_tenant(tenant_id, limit=10000)
         by_type: dict[str, dict[str, Any]] = {}
         for r in rows:
             t = r.get("meter_type", "unknown")
-            agg = by_type.setdefault(t, {"count": 0, "amount_usd": 0.0})
+            agg = by_type.setdefault(
+                t, {"count": 0, "amount_usd": Decimal("0"), "_priced": False}
+            )
             agg["count"] += 1
-            agg["amount_usd"] += float(r.get("amount_usd") or 0.0)
+            amount = to_decimal(r.get("amount_usd"))
+            if amount is not None:
+                agg["amount_usd"] += amount
+                agg["_priced"] = True
+        for agg in by_type.values():
+            if agg["_priced"]:
+                agg["amount_usd"] = float(agg["amount_usd"])
+            else:
+                agg["amount_usd"] = None
+            del agg["_priced"]
         return {
             "tenant_id": tenant_id,
             "by_type": by_type,

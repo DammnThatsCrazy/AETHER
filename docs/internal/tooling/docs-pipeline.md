@@ -128,6 +128,10 @@ make validate-profile-doctor    # per-profile readiness doctor (§27) + deployme
 make production-status    # advisory readiness report (scripts/production_status.py)
 make release-gate         # repo consistency (CI) + strict production status + ops readiness + founding-tenant control spine
 
+# Contract-registry architecture gates (registry integrity, DAG, cross-registry, inventory)
+make spine-registry-check    # Spine Composition Kernel (ADR-011): spine-registry schema, conformance, cross-registry, lifecycle, ownership, inventory
+make intelligence-projection-check  # intelligence projection architecture (registry, DAG, cross-registry, inventory, order-resilience)
+
 # Graph integrity and release gate
 make graph-test           # run all tests/graph/ suites
 make graph-replay         # synthetic H2H/H2A/A2H/A2A replay workload

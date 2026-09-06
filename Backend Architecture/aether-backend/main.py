@@ -386,6 +386,7 @@ from services.measurement.routes.kyber import router as measurement_kyber_router
 from services.measurement.routes.integrity import router as measurement_integrity_router
 from services.measurement.routes.experiments import router as measurement_experiments_router
 from services.computation.routes import router as computation_router
+from services.relationship_intelligence.routes import router as relationship_intelligence_router  # GET /v1/relationships/* — Relationship Intelligence read surface
 from services.imports.routes import router as imports_router
 from services.imports.kyber_routes import router as imports_kyber_router
 
@@ -1000,6 +1001,7 @@ def create_app() -> FastAPI:
     app.include_router(measurement_quality_router)       # GET /v1/measurement/*
     app.include_router(measurement_integrity_router)     # GET /v1/measurement/definitions|results|results/{id}/explain
     app.include_router(computation_router)               # GET /v1/computations/definitions|results|results/{id}/explain|runs/{id}
+    app.include_router(relationship_intelligence_router) # GET /v1/relationships/{source}/{target}/fidelity|explain|influence
     app.include_router(measurement_kyber_router)         # GET/POST /v1/kyber/measurement/*
     app.include_router(measurement_experiments_router)   # GET/POST /v1/experiments
     logger.info("Canonical Measurement: 6 routers mounted")
@@ -1224,6 +1226,32 @@ def create_app() -> FastAPI:
     else:
         logger.info("Risk Overlays: disabled (set FEATURE_RISK_OVERLAYS=true to enable)")
 
+    # ── Risk360 / Fraud360 intelligence-projection convergence (flag-gated) ──
+    # Read-only projection planes over the shipped fraud/risk subsystems
+    # (services/risk360, services/fraud360). Each plane's provider is registered
+    # on the global projection_registry so /v1/explore + Noesis projection reads
+    # can serve it, and its thin read-only router is mounted. Default OFF.
+    rf = settings.risk_fraud_360
+    if rf.risk360_enabled:
+        from shared.intelligence_projections.registry import projection_registry
+        from services.risk360.provider import register_provider as register_risk360
+        from services.risk360.routes import router as risk360_router
+        register_risk360(projection_registry)
+        app.include_router(risk360_router)
+        logger.info("Risk360: provider registered + routes mounted (/v1/risk360)")
+    else:
+        logger.info("Risk360: disabled (set AETHER_RISK360_ENABLED=true to enable)")
+
+    if rf.fraud360_enabled:
+        from shared.intelligence_projections.registry import projection_registry
+        from services.fraud360.provider import register_provider as register_fraud360
+        from services.fraud360.routes import router as fraud360_router
+        register_fraud360(projection_registry)
+        app.include_router(fraud360_router)
+        logger.info("Fraud360: provider registered + routes mounted (/v1/fraud360)")
+    else:
+        logger.info("Fraud360: disabled (set AETHER_FRAUD360_ENABLED=true to enable)")
+
     # Agentic Observability Layer — observation-only; AETHER never executes.
     agentic_flags = settings.agentic_observability
     if agentic_flags.enabled:
@@ -1441,6 +1469,37 @@ def create_app() -> FastAPI:
         logger.info("Kyber Interop Ops mounted (/v1/admin/kyber/interop)")
     else:
         logger.info("Kyber Interop Ops disabled (KYBER_INTEROP_OPS_ENABLED=false)")
+
+    # ── Universal asset registry — canonical reference data; the registry
+    #    observes and records; it never executes (financial-normalization
+    #    WP2/WP3) ──────────────────────────────────────────────────────────
+    if settings.assets.api_enabled:
+        from services.assets.routes import router as assets_router
+        app.include_router(assets_router, tags=["Universal Asset Registry"])
+        logger.info("Universal Asset Registry API mounted (/v1/assets)")
+    else:
+        logger.info("Universal Asset Registry API disabled (AETHER_ASSETS_API_ENABLED=false)")
+
+    # ── Universal asset registry admin + automated discovery — data-integrity
+    #    scaffolding (unresolved→candidate→verified→active with human apply);
+    #    observation-only, global-ADMIN gated, never executes
+    #    (financial-normalization W5 C5-ADMIN) ─────────────────────────────
+    if settings.assets.admin_enabled:
+        from services.assets.admin_routes import admin_router as assets_admin_router
+        app.include_router(assets_admin_router, tags=["Universal Asset Registry Admin"])
+        logger.info("Universal Asset Registry admin mounted (/v1/admin/assets)")
+    else:
+        logger.info("Universal Asset Registry admin disabled (AETHER_ASSETS_ADMIN_ENABLED=false)")
+
+    # ── Event-time valuation — observe/report tenant valuation snapshots over
+    #    the asset registry; Aether observes and reports, it never executes
+    #    (financial-normalization WP2/WP3 lane C3) ─────────────────────────
+    if settings.valuation.api_enabled:
+        from services.valuation.routes import router as valuation_router
+        app.include_router(valuation_router, tags=["Event-time Valuation"])
+        logger.info("Event-time Valuation API mounted (/v1/valuation)")
+    else:
+        logger.info("Event-time Valuation API disabled (AETHER_VALUATION_API_ENABLED=false)")
 
     # ═══════════════════════════════════════════════════════════════════════
     # Unified Intelligence Plane — all routers in this block are flag-gated

@@ -75,6 +75,10 @@ export * from './interoperability';
 // Canonical financial value semantics (USD-first, native-preserving)
 export * from './value';
 
+// Universal financial normalization (C1): canonical asset/chain/deployment/alias
+// identity, price observations, valuation snapshots, and tenant value policy.
+export * from './financial-assets';
+
 // Production-readiness platform contracts
 export * from './ingestion-contract';
 export * from './problem-details';
@@ -109,5 +113,21 @@ export * from './intelligence-projection';
 export * from './model-registry';
 export * from './task-profile';
 
+// Relational Intelligence Spine registries (Social360 + Relationship Fidelity,
+// generated from packages/shared/contracts/relationship-*-registry.json)
+export * from './relationship-predicate-registry';
+export * from './relationship-motif-registry';
+
+// UPR social provider capability vocabulary (M2 runtime-enforced canonical
+// surface; generated from packages/shared/contracts/social-provider-capability-vocabulary.json)
+export * from './social-provider-capability-vocabulary';
+
 // Commerce bridge (S2): SDK signal ↔ server snapshot reconciliation contract.
 export * from './commerce-bridge';
+
+// ADR-011 D3 common spine envelope (composes canonical primitives; redefines nothing).
+export * from './spine-envelope';
+
+// ADR-011 Spine Composition Kernel — generated registry twin
+// (packages/shared/contracts/spine-registry.json → scripts/generate_platform_contracts.py).
+export * from './spine-registry';

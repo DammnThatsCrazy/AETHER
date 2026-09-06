@@ -59,11 +59,16 @@ export function projectionSurfaceContext(
  * @param focus    optional subject anchor the projection is asked about
  *                 (e.g. { kind: 'campaign', id })
  */
-export function useProjectionSurface(surface: ProjectionId, focus?: ExplorationAnchor | null) {
+export function useProjectionSurface(
+  surface: ProjectionId,
+  focus?: ExplorationAnchor | null,
+  options?: { readonly enabled?: boolean },
+) {
   const client = useExplorationClient();
   const base = useExplorationContext();
   const context = useMemo(() => projectionSurfaceContext(base, surface, focus), [base, surface, focus]);
   const contextKey = encodeExplorationContext(context);
+  const enabled = options?.enabled ?? true;
   const result = useQuery<ProjectionSurfaceEnvelope>({
     key: `projection:${surface}:${contextKey}:first`,
     fetcher: () => client.queryLatest<ProjectionSurfaceSummary>(
@@ -71,6 +76,10 @@ export function useProjectionSurface(surface: ProjectionId, focus?: ExplorationA
       { key: `aether:${surface}` },
     ),
     staleTime: 30_000,
+    // Honesty gate (M10): when the client registry says the surface has no
+    // evidence-backed data yet, disable the query entirely — the surface never
+    // asks for (or renders) content it cannot evidence.
+    enabled,
   });
   return { ...result, client, context };
 }

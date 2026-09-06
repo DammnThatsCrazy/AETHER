@@ -65,6 +65,18 @@ SUPPORTED_INTENTS: frozenset[str] = frozenset({
     "import_status_lookup",
     "job_status_lookup",
     "measurement_integrity_lookup",
+    # Relationship / spine intelligence (read-only, flag-gated on the
+    # Social360 relationship-intelligence surface — default OFF)
+    "relationship_explain",
+    "influence_path",
+    "engagement_fidelity",
+    "incentive_context_explain",
+    # Risk360 / Fraud360 Intelligence (read-only — Noesis explains and
+    # summarizes stored risk/fraud truth and surfaces honest contradictions;
+    # it never mutates either plane. Flag-gated on risk_fraud_360.*_enabled.)
+    "risk_assessment_explain",
+    "fraud_hypothesis_summarize",
+    "risk_fraud_contradiction_lookup",
 })
 
 SUPPORTED_ENTITY_TYPES: frozenset[str] = frozenset({
@@ -213,6 +225,15 @@ class QueryPlan(BaseModel):
         "import_status_lookup",
         "job_status_lookup",
         "measurement_integrity_lookup",
+        # Relationship / spine intelligence intents (read-only, flag-gated)
+        "relationship_explain",
+        "influence_path",
+        "engagement_fidelity",
+        "incentive_context_explain",
+        # Risk360 / Fraud360 intelligence intents (read-only, flag-gated)
+        "risk_assessment_explain",
+        "fraud_hypothesis_summarize",
+        "risk_fraud_contradiction_lookup",
         # Agentic intelligence intents (must mirror _agentic_dispatch keys)
         "agent_inventory_lookup",
         "agent_activity_lookup",

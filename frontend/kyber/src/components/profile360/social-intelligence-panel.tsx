@@ -14,7 +14,7 @@ interface SocialPlatformData {
 interface SocialIntelligenceData {
   computed_at: string | null;
   total_followers: number | null;
-  influence_level: 'high' | 'medium' | 'low';
+  influence_level: 'high' | 'medium' | 'low' | null;
   platforms: Record<string, SocialPlatformData | null>;
 }
 
@@ -23,7 +23,7 @@ interface SocialIntelligenceData {
 // { data: { entity_id, kind, window, items: [...], summary?: {...}, provenance } }
 // items[] entries carry platform, handle, followers, verified, engagement_rate
 function normalise(raw: unknown): SocialIntelligenceData {
-  const fallback: SocialIntelligenceData = { computed_at: null, total_followers: null, influence_level: 'low', platforms: {} };
+  const fallback: SocialIntelligenceData = { computed_at: null, total_followers: null, influence_level: null, platforms: {} };
   if (!raw || typeof raw !== 'object') return fallback;
   const inner = raw as Record<string, unknown>;
   const items = Array.isArray(inner.items) ? (inner.items as Array<Record<string, unknown>>) : [];
@@ -45,7 +45,7 @@ function normalise(raw: unknown): SocialIntelligenceData {
   return {
     computed_at: (inner.computed_at as string) ?? null,
     total_followers: ((summary?.total_followers_deduped ?? inner.total_followers) as number) ?? null,
-    influence_level: ((summary?.influence_level ?? 'low') as 'high' | 'medium' | 'low'),
+    influence_level: ((summary?.influence_level ?? null) as 'high' | 'medium' | 'low' | null),
     platforms,
   };
 }
@@ -96,7 +96,7 @@ export function KyberSocialIntelligencePanel({ entityId, window = '30d' }: Props
 
   const data: SocialIntelligenceData = normalise(raw);
   const platforms = data.platforms ?? {};
-  const influenceLevel = data.influence_level ?? 'low';
+  const influenceLevel = data.influence_level ?? null;
 
   return (
     <div className="space-y-4 pt-2">
@@ -109,9 +109,13 @@ export function KyberSocialIntelligencePanel({ entityId, window = '30d' }: Props
               {fmtFollowers(data.total_followers ?? undefined)}
             </div>
           </div>
-          <Badge variant={influenceBadgeVariant(influenceLevel)}>
-            {influenceLevel} influence
-          </Badge>
+          {influenceLevel ? (
+            <Badge variant={influenceBadgeVariant(influenceLevel)}>
+              {influenceLevel} influence
+            </Badge>
+          ) : (
+            <span className="text-[10px] uppercase text-text-muted font-mono">influence unknown</span>
+          )}
         </div>
         {Boolean(data.computed_at) && (
           <FreshnessIndicator computedAt={String(data.computed_at)} />

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
+from decimal import Decimal, ROUND_HALF_EVEN
 from typing import Optional
 
 from shared.graph.graph import Edge, EdgeType, GraphClient, Vertex, VertexType
@@ -15,11 +16,36 @@ from shared.graph.mutation_gateway import GraphMutationGateway
 from shared.graph.mutation_intents import edge_intent, vertex_intent
 from shared.logger.logger import get_logger, metrics
 
+from services.value.models import to_decimal, to_decimal_string
+
 from .models import CapturedX402Transaction, SpendingSummary, X402Node
 
 logger = get_logger("aether.service.x402.economic_graph")
 
 SNAPSHOT_INTERVAL_S = 30
+
+
+def _round_usd(value: Decimal, dp: int) -> Decimal:
+    """Round a money Decimal to `dp` decimal places (half-even)."""
+    quantum = Decimal(1).scaleb(-dp)
+    return value.quantize(quantum, rounding=ROUND_HALF_EVEN)
+
+
+def _money_add(current: object, increment: object) -> float:
+    """Exact-Decimal running sum converted to float only at the model boundary.
+
+    The X402Node money fields are float-typed (in-memory graph metrics), but
+    summing floats directly produces binary-float artifacts (e.g. 0.10 + 0.10 +
+    0.10 -> 0.30000000000000004). Each step is therefore summed in Decimal and
+    only the result is converted to the float the model carries.
+    """
+    left = to_decimal(current)
+    right = to_decimal(increment)
+    if left is None or right is None:
+        # Unparseable money is never coerced to 0; fall back to the raw value
+        # rather than inventing a number (callers validate amounts upstream).
+        return float(current) + float(increment)
+    return float(left + right)
 
 
 class X402EconomicGraph:
@@ -48,9 +74,11 @@ class X402EconomicGraph:
                 payer_key,
                 X402Node(node_id=tx.payer_agent_id, node_type="agent"),
             )
-            payer.total_paid_usd += tx.amount_usd
+            payer.total_paid_usd = _money_add(payer.total_paid_usd, tx.amount_usd)
             payer.transaction_count += 1
-            payer.fee_eliminated_usd += tx.fee_eliminated_usd
+            payer.fee_eliminated_usd = _money_add(
+                payer.fee_eliminated_usd, tx.fee_eliminated_usd
+            )
 
             # Track unique services on the node
             if not hasattr(payer, '_seen_services') or not isinstance(payer._seen_services, set):
@@ -64,7 +92,7 @@ class X402EconomicGraph:
                 payee_key,
                 X402Node(node_id=tx.payee_service_id, node_type="service"),
             )
-            payee.total_received_usd += tx.amount_usd
+            payee.total_received_usd = _money_add(payee.total_received_usd, tx.amount_usd)
             payee.transaction_count += 1
 
             # Append to pending-flush buffer (store with tenant_id for scoped graph writes)
@@ -133,7 +161,11 @@ class X402EconomicGraph:
                             to_vertex_id=payee_vid,
                             properties={
                                 "edge_id": f"{tenant_id}:{tx.capture_id}:pays",
-                                "amount": str(tx.amount_usd),
+                                # Economic-graph money is a decimal-string amount —
+                                # never a JSON number that carries binary-float drift.
+                                # (amount_usd is a validated float, so the
+                                # decimal-string form always parses.)
+                                "amount": to_decimal_string(tx.amount_usd),
                                 "token": tx.terms.token,
                                 "chain": tx.terms.chain,
                                 "capture_id": tx.capture_id,
@@ -188,24 +220,44 @@ class X402EconomicGraph:
         return edges_created
 
     def get_spending_patterns(self, agent_id: str, tenant_id: str = "") -> SpendingSummary:
-        """Get spending patterns for an agent using node-level cumulative data."""
+        """Get spending patterns for an agent using node-level cumulative data.
+
+        Aggregates are computed in Decimal (spending total, per-tx average,
+        fee elimination) and rounded at the reporting boundary, so a series of
+        fractional payments never sums to a binary-float artifact.
+        """
         node_key = f"{tenant_id}:{agent_id}" if tenant_id else agent_id
         node = self._nodes.get(node_key)
-        total_spent = node.total_paid_usd if node else 0.0
         total_tx = node.transaction_count if node else 0
-        unique_services = node.unique_services if node else 0
-        fee_eliminated = node.fee_eliminated_usd if node else 0.0
+        if node is None:
+            return SpendingSummary(
+                agent_id=agent_id,
+                total_spent_usd=0.0,
+                total_transactions=0,
+                unique_services=0,
+                avg_payment_usd=0.0,
+                fee_eliminated_usd=0.0,
+                payments=[],
+            )
+
+        total_dec = to_decimal(node.total_paid_usd)
+        fee_dec = to_decimal(node.fee_eliminated_usd)
+        total_dec = Decimal(0) if total_dec is None else total_dec
+        fee_dec = Decimal(0) if fee_dec is None else fee_dec
+        avg_dec = (
+            total_dec / Decimal(total_tx) if total_tx > 0 else Decimal(0)
+        )
 
         # Get last 20 payments from bounded deque
         recent = self._recent_payments.get(node_key, deque(maxlen=20))
 
         return SpendingSummary(
             agent_id=agent_id,
-            total_spent_usd=round(total_spent, 4),
+            total_spent_usd=float(_round_usd(total_dec, 4)),
             total_transactions=total_tx,
-            unique_services=unique_services,
-            avg_payment_usd=round(total_spent / total_tx, 4) if total_tx > 0 else 0.0,
-            fee_eliminated_usd=round(fee_eliminated, 4),
+            unique_services=node.unique_services,
+            avg_payment_usd=float(_round_usd(avg_dec, 4)),
+            fee_eliminated_usd=float(_round_usd(fee_dec, 4)),
             payments=[p.model_dump() for p in recent],
         )
 
@@ -219,12 +271,19 @@ class X402EconomicGraph:
         else:
             filtered_nodes = self._nodes
 
+        # Total volume is a money rollup — summed in Decimal (never float
+        # accumulation), rounded half-even at 2 dp at the reporting boundary.
+        volume_dec = Decimal(0)
+        for n in filtered_nodes.values():
+            if n.node_type != "agent":
+                continue
+            node_total = to_decimal(n.total_paid_usd)
+            if node_total is not None:
+                volume_dec += node_total
+
         return {
             "nodes": {nid: n.model_dump() for nid, n in filtered_nodes.items()},
             "node_count": len(filtered_nodes),
             "pending_payments": len(self._payments),
-            "total_volume_usd": round(
-                sum(n.total_paid_usd for n in filtered_nodes.values() if n.node_type == "agent"),
-                2,
-            ),
+            "total_volume_usd": float(_round_usd(volume_dec, 2)),
         }

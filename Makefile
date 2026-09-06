@@ -496,6 +496,9 @@ generate-contracts-check: ## CI gate — exits 1 if generated contract artifacts
 intelligence-projection-check: ## CI gate — intelligence projection architecture (registry integrity, DAG, cross-registry, inventory, order-resilience)
 	$(GATE_PY) scripts/validate_intelligence_projections.py --check
 
+spine-registry-check: ## CI gate — Spine Composition Kernel registry (schema, conformance, cross-registry, lifecycle, ownership, inventory)
+	$(GATE_PY) scripts/validate_spine_registry.py --check
+
 # ---------------------------------------------------------------------------
 # Mobile / continuity / notification productization gates (program C0-C8)
 # ---------------------------------------------------------------------------

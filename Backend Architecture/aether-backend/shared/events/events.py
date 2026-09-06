@@ -366,6 +366,19 @@ class Topic(str, Enum):
     FRAUD_EVALUATION_FAILED    = "aether.fraud.evaluation.failed"
     RISK_ANNOTATION_UPDATED    = "aether.risk.annotation.updated"
 
+    # Risk360 / Fraud360 projection plane (phase 5+ emitters; read_only, never
+    # mutation). Risk signals / assessments and fraud hypotheses are first-class
+    # projection-plane records — their lifecycle events mirror the decision and
+    # network event naming above.
+    RISK_SIGNAL_CREATED       = "aether.risk.signal.created"
+    RISK_SIGNAL_SUPERSEDED    = "aether.risk.signal.superseded"
+    RISK_ASSESSMENT_CREATED   = "aether.risk.assessment.created"
+    RISK_ASSESSMENT_SUPERSEDED = "aether.risk.assessment.superseded"
+    FRAUD_HYPOTHESIS_CREATED    = "aether.fraud.hypothesis.created"
+    FRAUD_HYPOTHESIS_UPDATED    = "aether.fraud.hypothesis.updated"
+    FRAUD_HYPOTHESIS_CONFIRMED  = "aether.fraud.hypothesis.confirmed"
+    FRAUD_HYPOTHESIS_SUPERSEDED = "aether.fraud.hypothesis.superseded"
+
     # Canonical Activity
     CANONICAL_ACTIVITY_INGESTED = "aether.canonical.activity.ingested"
     CANONICAL_ACTIVITY_RISK_UPDATED = "aether.canonical.activity.risk_updated"

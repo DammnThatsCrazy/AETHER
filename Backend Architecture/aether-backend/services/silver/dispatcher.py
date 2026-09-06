@@ -50,6 +50,12 @@ from .projectors import (
     StablecoinProjector,
     DerivativesProjector,
     InteropProjector,
+    SocialIdentityProjector,
+    SocialConnectionProjector,
+    SocialInteractionProjector,
+    SocialContentProjector,
+    SocialCommunityMembershipProjector,
+    SocialMetricProjector,
 )
 from .projectors.silver_graph_projector import SilverGraphProjector
 from services.comms.projector import CommsProjector, COMMS_TABLE
@@ -84,6 +90,15 @@ _ALL_PROJECTORS: list[BaseProjector] = [
     InteropProjector(),         # cross-network message facts
     ConversionProjector(),
     CardLinkedProjector(),    # card-linked context on payment/commerce events (never activity owner)
+    # Social Silver plane (M3) — observation-only facts, never activity owners.
+    # Event types are not yet registered in event-registry.json (the M2 UPR
+    # social normalizer lands them in parallel); declared honestly below.
+    SocialIdentityProjector(),
+    SocialConnectionProjector(),
+    SocialInteractionProjector(),
+    SocialContentProjector(),
+    SocialCommunityMembershipProjector(),
+    SocialMetricProjector(),
 ]
 
 # event_type → ordered list of projectors (order == _ALL_PROJECTORS order)

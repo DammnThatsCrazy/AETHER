@@ -1,0 +1,325 @@
+# =============================================================================
+# Aether — Social360 + Relationship Fidelity extension to the Relational
+# Intelligence Spine — PROGRAM STATE LEDGER
+#
+# Blueprint:  docs/blueprints/social360.md (M1-authored home doc; status: experimental).
+#              (authoritative text: "Aether Social360 + Relationship Fidelity
+#               Extension to the Relational Intelligence Spine", dated 2026-08-21)
+# Doctrine:   "The graph is the product." — extension/convergence, no parallel system.
+# This file is the canonical, honest program record. Nothing is marked complete
+# that is not implemented and validated in-repo.
+#
+# Ledger conventions follow config/implementation_ledger.yaml.
+# status: not_started | in_progress | implemented | externally_blocked
+#         | verified_complete | blocked_on_review
+# =============================================================================
+
+schema_version: 1
+program: SOCIAL360_RELATIONSHIP_FIDELITY
+program_id: S360RF
+
+blueprint:
+  title: Social360 + Relationship Fidelity Extension to the Relational Intelligence Spine
+  date: 2026-08-21
+  status: implementation_authority
+  full_text_location: "~/Desktop/Aether Social360 + Relationship Fidelity Extension to the Relational Intelligence Spine — Full Development & Implementation Blueprint.md"
+  repo_home_doc: reports/social360/ (this directory)
+
+gate_notes_2026_09_03:
+  make_repo_doctor: "not completed in-session (exceeded 10-min ceiling; heavy multi-validator gate)"
+  make_docs_check: "1/11 failed: 'Generated artifacts — no uncommitted diff'. No current diff on
+    docs/_generated (git diff empty). Cause not attributable to M0 slice (report-only files;
+    generators do not read reports/). Working tree is concurrently written by another lane
+    (docs/plans/RISK_FRAUD_360_PHASES.md authored by another session at 09:29 during the run).
+    Recorded per blueprint §2 defect rule as a pre-existing/attributed follow-up: run
+    `make repo-doctor-fix` in a quiescent tree on the base lane; not part of this program."
+
+gate_notes_2026_09_04:
+  make_ci_check: "make ci-check (env-stripped) GREEN 63 passed / 0 failed at b89edb3f
+    (waves 1-4 M2-M10 build + integration). Sequence of gate fixes recorded for
+    reproducibility: (1) stage regenerated artifacts before --ci (diff checks are
+    unstaged-git-diff based); (2) re-run sync_docs AFTER staging (REPO-INDEX counts
+    git-tracked files, so pre-stage sync is stale by the slice's added files);
+    (3) temporal-integrity NEW offenders (M5 incentive_context/segments, M8
+    path_fidelity) resolved by delegating the naive-UTC policy to
+    shared.temporal.instant.coerce_utc_lenient -- no allowlist growth; (4) surface
+    parity _EXPECTED_SURFACES + lens-registry count (28->31) updated to registry
+    truth after M9-A. Residual seams recorded below (D-04, D-05) are NOT
+    runtime-wired by this slice (all new behavior flag-gated OFF)."
+  make_ci_check_close_m11_m12: >-
+    M11/M12 integrator close-out (2026-09-04). make ci-check (env-stripped) re-run GREEN
+    after adding static guardrail gate #64 (scripts/validate_social360_guardrails.py,
+    closes G058): 64 passed / 0 failed. M11 migration/decommission and M12
+    hardening/release-evidence close-out reports authored under reports/social360/.
+    Source-of-truth doc decision recorded as D-06 (release-gated residual; G067 stays
+    MISSING). NO release-readiness claim made (M12 report section 7).
+  make_ci_check_a_b_read_surface: >-
+    A&B read-surface slice (M13, 2026-09-04). Combined targeted sweep across the new
+    relationship_intelligence / relationship_fidelity / social-silver-write-path / noesis /
+    influence-propagation suites GREEN 159 passed / 0 failed under BOTH single-process
+    (-n 0, deterministic collection order) and the default xdist scheduling; full-plane
+    integration tests/relationship_intelligence/test_full_plane.py 4 passed / 0 failed.
+    Fixed a latent route-test order-dependence exposed when xdist co-scheduled the seed and
+    the no-run route tests: tests/relationship_intelligence/conftest.py now installs a fresh
+    Computation-Substrate store per test (test_consent_granted_explain_returns_basis no longer
+    sees a run seeded by a sibling test). D-04 seam FILLED (superseded_by D-07); D-05 consent
+    enforced on the new read surface (legacy aggregator unchanged until surface activation);
+    NO release-readiness claim made (D-07). Canonical gate re-run GREEN 2026-09-05: make
+    ci-check (env-stripped) 64 passed / 0 failed (CI_CHECK_EXIT=0). Post-fix gate findings
+    recorded for reproducibility: (1) source-of-truth ownership gate required a derived
+    surface with the new /v1/relationships router mount -> read surface documented in
+    docs/BACKEND-API.md (Relationship Intelligence Service v8.12.0 section); (2) default-deny
+    route-policy ratchet (test_route_registry_coverage) -> /v1/relationships registered in
+    config/route_registry.yaml known_prefixes (plain read-only domain, parity with
+    /v1/computations + /v1/measurement); (3) storage-policy coverage gate -> six
+    silver_social_*_facts tables given policies in config/storage_policies.yaml
+    (403 checks pass).
+
+defect_social_program_attributed:   # recorded per blueprint §2 (see LEGACY_SOCIAL_TRUTH_MATRIX.md §2)
+  - social_stub_shadows_real_handler
+  - aether_socialtab_shape_mismatch
+  - gold_social_ddl_vs_live_repo_drift
+
+base_state:                    # recorded 2026-09-03 (M0); RE-BASED onto the 360 foundation (D-03)
+  branch: feat/social360-relationship-fidelity
+  base_commit: fced2960         # cut from feat/aether-360-program head (S1-S6 360 foundation)
+  base_branch: feat/aether-360-program
+  origin_main_commit: e288320f  # origin/main DIVERGES from the base lane (advance 2026-09-03:
+                                #   staging-only PRs #591/#592; no surface collision with this program)
+  working_tree_clean_at_start: true
+  base_decision: "Re-parented onto feat/aether-360-program @ fced2960 (D-03; supersedes D-01):
+    the '360 foundation' carrying the three-360 vertical slices, exploration fabric, and
+    shared/projection_engine/ (required by Milestone M9 lenses). Financial-normalization W1-W5
+    commits removed from ancestry (unrelated domain program; re-obtainable when it merges to main)."
+  note: "M0 re-verifies this base per blueprint §2 when open-PR inventory completes.
+    Pre-reparent HEAD preserved at ref backup/social360-m0-at-financial-base."
+
+architecture_posture:
+  create_social360_as: bounded social evidence and state domain
+  create_relationship_spine_extension: [predicate_semantics, promotion, motifs,
+    incentive_context, relationship_fidelity, fidelity_aware_paths]
+  forbidden: [second_graph, second_identity_resolver, second_provider_framework,
+    second_computation_system, second_traversal_engine, second_semantic_engine,
+    second_findings_system, socialfi_backend, universal_social_score]
+
+milestones:
+  - id: M0
+    title: Reconnaissance and Truth Ledger
+    status: verified_complete          # user-unblocked 2026-09-03 ("begin M1 ... in parallel");
+                                       # authority map re-verified same session (recon agent): no drift
+                                       # beyond ledger records; only open PRs #584/#586 unchanged;
+                                       # origin/main advanced via staging #591/#592 only (non-colliding)
+    gate: "no implementation until authority map complete (blueprint §139)"
+    deliverables:
+      - reports/social360/PROGRAM_STATE.yaml        # this file
+      - reports/social360/CURRENT_STATE.md
+      - reports/social360/GAP_LEDGER.csv
+      - reports/social360/FILE_OWNERSHIP.md
+      - reports/social360/DEPENDENCY_MAP.md
+      - reports/social360/LEGACY_SOCIAL_TRUTH_MATRIX.md
+      - reports/social360/OPEN_PR_COLLISIONS.md
+  - id: M1
+    title: Canonical Contracts and Registries
+    status: verified_complete          # gated 2026-09-03: make ci-check (env-stripped) 63/0 GREEN
+                                       # at 76e1ab56. Commits: eff417c1 (home doc + M0 ledger
+                                       # reconcile), a876b32c (social-silver-facts / incentive /
+                                       # fidelity-vector / UPR social capability-vocab contracts +
+                                       # honesty tests), fba320a2 (predicate + motif registries
+                                       # wired into unified-platform generator; §84 filter-field
+                                       # categories/fields; ARCHITECTURE.md contract-table rows),
+                                       # 76e1ab56 (REPO-INDEX sync to fba320a2 tracked set).
+                                       # M1 tests: 29 contract/parity tests green (16 schema +
+                                       # 13 registry-parity incl. REGISTERED-edge honesty vs
+                                       # shared.graph.graph.EdgeType).
+    gate: "canonical repo gate make ci-check (env-stripped), 63 passed / 0 failed"
+    deliverables:
+      - docs/blueprints/social360.md                  # program home doc (eff417c1)
+      - packages/shared/contracts/social-silver-facts.schema.json
+      - packages/shared/contracts/incentive-context.schema.json
+      - packages/shared/contracts/relationship-fidelity-vector.schema.json
+      - packages/shared/contracts/social-provider-capability-vocabulary.json
+      - packages/shared/contracts/relationship-predicate-registry.json   # 20 predicates; honest
+        # graphRegistrationState: 4 REGISTERED vs live EdgeTypes, 16 PENDING_M6_REGISTRATION
+      - packages/shared/contracts/relationship-motif-registry.json       # M1-M10 motif library
+      - packages/shared/contracts/filter-field-registry.json             # +7 §84 categories, +16 fields
+      - generated twins + parity tests (relationship_spine/ package; test_relationship_*_parity.py)
+  - id: M2
+    title: UPR Social Provider Convergence
+    status: implemented                # waves-1-4 build 2026-09-04: social-provider capability
+                                       # vocabulary py/ts twins + parity, capability-honesty
+                                       # validation, provider plugin seam; M2-A tests 107/0;
+                                       # integrated ci-check 63/0 @ b89edb3f
+  - id: M3
+    title: Social Silver Plane
+    status: implemented                # 8 social projectors (identity/connection/interaction/
+                                       # content/community/metric + base/common), dispatcher +
+                                       # ownership registry (24 projectors), canonical enums;
+                                       # M3-tests 61/0; integrated ci-check 63/0 @ b89edb3f
+  - id: M4
+    title: Legacy Social Honesty Migration
+    status: implemented                # social_aggregator.py + gold_social_intelligence.py DDL
+                                       # removed; routes.py = legacy wrapper over canonical
+                                       # aggregator; aether SocialTab shape migrated; kyber
+                                       # influence unknown->'low' + verified-False fabrication
+                                       # fixed in integration; M4 tests 14/0; ci-check 63/0
+  - id: M5
+    title: Incentive Context
+    status: implemented                # temporal segmentation engine, campaign/economic
+                                       # integration, recorded boundary assumptions; consumes
+                                       # shared/temporal (naive-UTC policy delegated to kernel);
+                                       # M5 tests 61/0; integrated ci-check 63/0 @ b89edb3f
+  - id: M6
+    title: Relationship Promotion and Motifs
+    status: implemented                # 16 EdgeTypes registered (SOCIAL_INTERACTS_WITH,
+                                       # SOCIAL_SUBSCRIBES_TO; FOLLOWS_SOCIAL preserved),
+                                       # predicate registry 20/20 REGISTERED, relationship_layers
+                                       # exhaustive, evidence grouping/contradiction, bounded motif
+                                       # indicators under graph_motifs; M6 tests 68/0; ci-check 63/0
+  - id: M7
+    title: Relationship Fidelity
+    status: implemented                # 23 ComputationDefinitions self-registering;
+                                       # multidimensional vector (never one scalar); 0.4
+                                       # correlation damping; independence-gated dims degrade
+                                       # to UNKNOWN when the M6 resolver is absent (see D-04);
+                                       # M7 tests 29/0; integrated ci-check 63/0 @ b89edb3f
+  - id: M8
+    title: Fidelity-Aware Path Intelligence
+    status: implemented                # hop contract, epistemic ceiling, snapshot staleness;
+                                       # bitemporal discipline via temporal kernel; M8 tests
+                                       # 17/0; integrated ci-check 63/0 @ b89edb3f
+  - id: M9
+    title: Exploration Fabric Lenses (SocialFi/EngagementFi/Narrative)
+    status: implemented                # socialfi/engagementfi/narrative overlays + social360
+                                       # surface (registry, Social360SurfaceAdapter, parity);
+                                       # 31 lenses = 1 base + 30 overlays; M9-A tests 20/0;
+                                       # integrated ci-check 63/0 @ b89edb3f (projection_engine
+                                       # is present on the feat/aether-360-program base)
+  - id: M10
+    title: Product Surfaces (Aether, Kyber, Noesis)
+    status: implemented                # Social360Config rollout flags (6); projection-360
+                                       # social-readiness on Aether + Kyber; kyber
+                                       # social-intelligence-panel influence-unknown honesty fix;
+                                       # M10 tests 35/0; integrated ci-check 63/0 @ b89edb3f
+  - id: M11
+    title: Migration, Replay, Backfill, Decommission
+    status: implemented                # close-out 2026-09-04: decommission ledger +
+                                       # classification outcome + migration/replay/backfill
+                                       # posture + compatibility contract + acceptance evidence
+                                       # (see reports/social360/M11_MIGRATION_DECOMMISSION.md);
+                                       # residuals D-04/D-05/D-OPEN recorded, not fabricated
+  - id: M12
+    title: Hardening and Release Evidence
+    status: implemented                # close-out 2026-09-04: G058 static guardrail gate #64
+                                       # + section-151 disposition matrix + gate evidence 64/0
+                                       # + G067 recorded residual (D-06); NO release-readiness
+                                       # claim (see reports/social360/M12_HARDENING_EVIDENCE.md)
+  - id: M13
+    title: "A&B read surface + spine activation seams (Address A & B)"
+    status: implemented                # A&B slice 2026-09-04: D-04 seam FILLED (Wave 1 resolver +
+                                       # services.relationship_intelligence.coordinator as first
+                                       # runtime caller); relationship read APIs G046 + consent
+                                       # enforcement surface (D-05) + spine-run meters G059;
+                                       # Noesis relationship-spine intents G048; influence-as-
+                                       # propagation G043; six silver_social_*_facts DDL+repos;
+                                       # full-plane integration 4/0 (test_full_plane.py). Combined
+                                       # targeted sweep 159/0 (single-process + xdist). All new
+                                       # behavior flag-gated OFF; NO release-readiness claim; B
+                                       # tail (live provider, enforce flip, SLO baselines)
+                                       # release-gated (D-07).
+
+rollout_controls:               # blueprint §121-122; all OFF until activated
+  flags:
+    AETHER_SOCIAL360_ENABLED: "false"
+    AETHER_SOCIAL_UPR_ENABLED: "false"
+    AETHER_RELATIONSHIP_MOTIFS_ENABLED: "false"
+    AETHER_RELATIONSHIP_FIDELITY_MODE: "off"
+    AETHER_PATH_FIDELITY_ENABLED: "false"
+    AETHER_SOCIAL_LENSES_ENABLED: "false"
+    AETHER_RELATIONSHIP_SPINE_NOESIS_ENABLED: "false"
+  modes: [off, shadow, warn, enforce]
+
+key_decisions:
+  - id: D-01
+    date: 2026-09-03
+    decision: Base branch = feat/financial-normalization head (7b69a028), not origin/main.
+    reason: projection_engine/ + infrastructure360 + newest registries are branch-only.
+    superseded_by: D-03
+  - id: D-02
+    date: 2026-09-03
+    decision: Execute M0 first as an isolated, reviewed slice; no product code until M0 approved.
+    reason: blueprint §139 gate; user-selected sequencing.
+  - id: D-03
+    date: 2026-09-03
+    decision: Re-parent M0 onto feat/aether-360-program @ fced2960 (the 360 foundation, S1-S6),
+      removing feat/financial-normalization W1-W5 from the branch ancestry. Supersedes D-01.
+    reason: Social360 is a 360-family program; financial-normalization is an unrelated domain
+      program and keeping it in ancestry would tangle future Social360 PRs with its diff. The
+      360 foundation carries all Social360 substrate (projection engine, exploration fabric,
+      registries). Pre-reparent HEAD preserved at backup/social360-m0-at-financial-base.
+  - id: D-04
+    date: 2026-09-04
+    decision: "M6<->M7 independence composition = documented future seam, NOT a forced bridge."
+    reason: M6 evidence grouping is endpoint-aware (source_entity_id/target_entity_id) while M7
+      observations carry no endpoints (built in parallel). M7's own docstring makes M6 grouping
+      authoritative; bucketing M7 observations into coarse family/source groups would fabricate an
+      independence answer at lower resolution than M6's authoritative grouping -- an honesty
+      violation. M7's loader keeps degrading independence-gated dims to UNKNOWN until the reserved
+      seam (services.relationship_promotion.evidence_independence::resolve_independent_groups,
+      named in M7's M6_EVIDENCE_INDEPENDENCE_MODULE) is filled by the promotion->fidelity runtime
+      call chain (post-program / M11-M12 hardening). Fidelity is flag-gated OFF today; no caller
+      invokes it.
+    superseded_by: D-07    # A&B slice (2026-09-04) fills this seam (resolver + first runtime caller)
+  - id: D-05
+    date: 2026-09-04
+    decision: "Historical-consent evaluation for legacy social reads deferred to surface activation."
+    reason: >-
+      M4 rewrote services/social/routes.py as a legacy wrapper over the canonical
+      IntelligenceAggregator.social_intelligence. The aggregator enforces read permission but not
+      the social360.requiresHistoricalConsentEvaluation consent model. Flipping a consent gate on
+      now would change legacy API behavior outside the AETHER_SOCIAL360_ENABLED flag; the consent
+      model belongs to social360-surface activation (M10 operational / M11). Recorded residual:
+      when the social360 surface activates under its flag, gate historical social reads on the
+      registered consent model before projection.
+  - id: D-06
+    date: 2026-09-04
+    decision: "Section-154 standalone source-of-truth docs (SOCIAL360,
+      RELATIONAL_INTELLIGENCE_SPINE, RELATIONSHIP_FIDELITY, SOCIAL_PROVIDER_CONTRACT,
+      RELATIONSHIP_PREDICATE_REGISTRY, RELATIONSHIP_PATH_SEMANTICS, SOCIAL_DATA_RIGHTS)
+      recorded as a release-gated residual, NOT authored in M11/M12."
+    reason: >-
+      The docs are source-linked and drift-governed; their linked sources live on a
+      flag-gated, unactivated plane whose projection row is in_flight. Authoring them now
+      would document behavior no runtime caller exercises. Authority is currently held
+      honestly by docs/blueprints/social360.md (home doc) + this ledger + the M11/M12
+      close-out reports. Correct authoring belongs to spine productization when the
+      surface leaves in_flight (make release-gate + docs_drift --strict then demand them).
+      G067 accordingly stays MISSING with the decision recorded; the docs genuinely do not exist.
+  - id: D-OPEN
+    date: pending_M0
+    decision: "Olympus corpus → tenant overlay projection rule (§14 P0 prerequisite)"
+    status: unresolved
+    disposition: "must be resolved+documented (or recorded EXTERNALLY_BLOCKED) before
+      corpus-derived relationships are written to the tenant-scoped graph"
+  - id: D-07
+    date: 2026-09-04
+    decision: "Address A & B slice (M13) builds the relationship read surface + spine activation seams."
+    reason: >-
+      Resolves D-04: the reserved seam (services.relationship_promotion.evidence_independence,
+      the M6 module M7 names) is FILLED by Wave 1's resolver, and
+      services.relationship_intelligence.coordinator is its first runtime caller — proven end to
+      end by the hermetic full-plane integration test (tests/relationship_intelligence/
+      test_full_plane.py). D-05's consent model now has an enforcement surface
+      (services.relationship_intelligence.consent gates the new /v1/relationships read routes
+      when AETHER_SOCIAL360_ENABLED is on); the legacy social aggregator is unchanged until
+      social360-surface activation. Also lands the relationship read APIs (G046), Noesis
+      read-only relationship-spine intents (G048), influence-as-propagation decomposition
+      (G043), the six silver_social_*_facts DDL + repositories, and spine-run meters (G059).
+      All new behavior stays flag-gated OFF. The B tail (live provider pull + credentials,
+      enforce-flag flip, real SLO baselines, D-06 source-of-truth docs at productization) stays
+      recorded residual; NO release-readiness claim is made by this slice.
+
+owner: relational-intelligence-spine-program
+integrator_owns: [canonical registries, migrations, main.py, generated contracts,
+  final docs, conflict resolution]     # blueprint §152
+
+validated_by: scripts/repo_doctor.py (make ci-check)   # canonical completion gate

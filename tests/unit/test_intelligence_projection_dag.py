@@ -159,9 +159,25 @@ def test_implemented_with_unresolved_dependency_reported() -> None:
 
 
 def test_in_flight_with_pending_ok() -> None:
-    pending = [{"id": "pending_spine", "kind": "spine", "reason": "wip", "resolvesInProjection": "a"}]
+    # Skip-ahead is legal for an in_flight projection ONLY toward a spine the
+    # canonical spine registry marks "pending" (the spine plane's vocabulary is
+    # spine-registry.json). journey_continuity is such a pending row.
+    pending = [{"id": "journey_continuity", "kind": "spine", "reason": "wip", "resolvesInProjection": "a"}]
     reg = _mk_reg([_entry("a", state="in_flight", pending_auth=pending)])
     assert validate_dependency_dag(reg) == []
+
+
+def test_in_flight_pending_to_undeclared_spine_reported() -> None:
+    # The spine plane does not accept ad-hoc future spines: a kind:"spine"
+    # pendingAuthority must target a spine the registry marks "pending", not an
+    # invented id. Formalize the row in spine-registry.json or fix the decl.
+    pending = [{"id": "not_a_registry_spine", "kind": "spine", "reason": "wip", "resolvesInProjection": "a"}]
+    reg = _mk_reg([_entry("a", state="in_flight", pending_auth=pending)])
+    violations = validate_dependency_dag(reg)
+    assert any(
+        "undeclared pending spine" in m and "not_a_registry_spine" in m
+        for m in _messages(violations)
+    )
 
 
 def test_dangling_pending_projection_reported() -> None:

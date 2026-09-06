@@ -1013,11 +1013,10 @@ function RelationshipsTab({ userId }: { userId: string }) {
 // ── Profile page ──────────────────────────────────────────────────────────────
 
 // ── Social Intelligence tab ────────────────────────────────────────────────────
-
-const SOCIAL_PLATFORMS = [
-  'twitter', 'youtube', 'instagram', 'tiktok', 'reddit',
-  'linkedin', 'spotify', 'telegram', 'discord', 'github', 'farcaster', 'lens',
-] as const;
+// Renders the canonical social-intelligence envelope (the Profile360
+// IntelligenceAggregator output). Honesty contract: an empty result means "no
+// observed data", never zero activity — Aether does not render unobserved
+// metrics as 0 followers, 0% engagement, or a default "low" influence level.
 
 const PLATFORM_LABELS: Record<string, string> = {
   twitter: 'Twitter / X', youtube: 'YouTube', instagram: 'Instagram',
@@ -1026,6 +1025,15 @@ const PLATFORM_LABELS: Record<string, string> = {
   github: 'GitHub', farcaster: 'Farcaster', lens: 'Lens',
 };
 
+interface ObservedSocialFact {
+  platform?: string | null;
+  handle?: string | null;
+  followers?: number | null;
+  engagement_rate?: number | null;
+  post_count?: number | null;
+  verified?: boolean | null;
+}
+
 function SocialTab({ userId, window }: { userId: string; window: TimeWindow }) {
   const timeCtx = useTimeContext();
   const { data, isLoading, error } = useUserSocialIntelligence(userId, window);
@@ -1033,67 +1041,89 @@ function SocialTab({ userId, window }: { userId: string; window: TimeWindow }) {
   if (isLoading) return <LoadingState lines={6} />;
   if (error) return <ErrorState message="Failed to load social intelligence" />;
 
-  const influenceVariant = data?.influence_level === 'high' ? 'accent' : 'default';
+  const items = (data?.items ?? []) as ObservedSocialFact[];
+  const computedAt = data?.computed_at ?? null;
 
-  const platformMap = new Map(
-    (data?.platforms ?? []).map(p => [p.platform, p])
-  );
+  // Deduplicate by platform; only evidence-backed facts with a named platform
+  // are rendered. Absent platforms are unknown, not zero.
+  const byPlatform = new Map<string, ObservedSocialFact>();
+  for (const fact of items) {
+    if (typeof fact?.platform === 'string' && fact.platform.length > 0) {
+      byPlatform.set(fact.platform, fact);
+    }
+  }
+  const observedFacts = [...byPlatform.values()];
+
+  if (observedFacts.length === 0) {
+    return (
+      <div className="space-y-4">
+        <EmptyState
+          title="No observed social data"
+          description="No evidence-backed social facts are available for this profile yet. Aether reports only observed data — unknown activity is never shown as zero followers, 0% engagement, or low influence."
+        />
+        {computedAt != null && <FreshnessIndicator computedAt={computedAt} />}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
-      {/* Influence summary */}
       <div className="flex items-center gap-4 flex-wrap">
-        {data?.influence_level && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-text-muted font-mono">Influence</span>
-            <Badge variant={influenceVariant} size="sm">{data.influence_level.toUpperCase()}</Badge>
-          </div>
-        )}
-        {data?.total_followers_deduped != null && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-text-muted font-mono">Total reach (deduped)</span>
-            <span className="text-xl font-mono text-accent">{formatCount(data.total_followers_deduped, timeCtx)}</span>
-          </div>
-        )}
-        {data?.computed_at && (
-          <FreshnessIndicator computedAt={data.computed_at} className="ml-auto" />
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-text-muted font-mono">Observed platforms</span>
+          <span className="text-xl font-mono text-accent">{observedFacts.length}</span>
+        </div>
+        {computedAt != null && (
+          <FreshnessIndicator computedAt={computedAt} className="ml-auto" />
         )}
       </div>
 
-      {/* 12-platform grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {SOCIAL_PLATFORMS.map(platform => {
-          const p = platformMap.get(platform);
-          const linked = !!p?.handle;
+        {observedFacts.map(fact => {
+          const label = PLATFORM_LABELS[fact.platform ?? ''] ?? fact.platform ?? 'Unknown platform';
+          const hasAnyMetric =
+            fact.handle != null || fact.followers != null ||
+            fact.engagement_rate != null || fact.post_count != null;
           return (
             <div
-              key={platform}
-              className={`border rounded-md p-3 ${linked ? 'border-border-default bg-surface-raised' : 'border-border-subtle bg-surface-base opacity-50'}`}
+              key={fact.platform}
+              className="border rounded-md p-3 border-border-default bg-surface-raised"
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-text-primary">{PLATFORM_LABELS[platform]}</span>
-                {p?.verified && <Badge variant="success" size="sm">✓</Badge>}
+                <span className="text-xs font-medium text-text-primary">{label}</span>
+                {fact.verified === true && <Badge variant="success" size="sm">✓</Badge>}
               </div>
-              {linked ? (
+              {hasAnyMetric ? (
                 <div className="space-y-1">
-                  <p className="text-xs font-mono text-accent">@{p.handle}</p>
-                  {p.followers != null && (
+                  {fact.handle != null && (
+                    <p className="text-xs font-mono text-accent">@{fact.handle}</p>
+                  )}
+                  {fact.followers != null && (
                     <p className="text-xs text-text-secondary">
-                      {formatCount(p.followers, timeCtx)} followers
-                      {p.engagement_rate != null && ` · ${(p.engagement_rate * 100).toFixed(1)}% eng.`}
+                      {formatCount(fact.followers, timeCtx)} followers
+                      {fact.engagement_rate != null && ` · ${(fact.engagement_rate * 100).toFixed(1)}% eng.`}
                     </p>
                   )}
-                  {p.content_count != null && (
-                    <p className="text-xs text-text-muted">{formatCount(p.content_count, timeCtx)} posts</p>
+                  {fact.followers == null && fact.engagement_rate != null && (
+                    <p className="text-xs text-text-secondary">
+                      {(fact.engagement_rate * 100).toFixed(1)}% eng.
+                    </p>
+                  )}
+                  {fact.post_count != null && (
+                    <p className="text-xs text-text-muted">{formatCount(fact.post_count, timeCtx)} posts</p>
                   )}
                 </div>
               ) : (
-                <p className="text-xs text-text-muted font-mono">Not linked</p>
+                <p className="text-xs text-text-muted font-mono">Observed · metrics unavailable</p>
               )}
             </div>
           );
         })}
       </div>
+
+      <p className="text-xs text-text-muted">
+        Platforms absent from this list have no observed data — absence is unknown, not zero.
+      </p>
     </div>
   );
 }

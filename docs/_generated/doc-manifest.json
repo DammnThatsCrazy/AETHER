@@ -4061,6 +4061,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/blueprints/fraud360.md",
+      "title": "Fraud360 Vertical Slice Blueprint",
+      "slug": "blueprints/fraud360",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/blueprints/geographic360.md",
       "title": "Geographic360 Vertical Slice Blueprint",
       "slug": "blueprints/geographic360",
@@ -4125,6 +4141,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/blueprints/risk360.md",
+      "title": "Risk360 Vertical Slice Blueprint",
+      "slug": "blueprints/risk360",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/blueprints/sdk-universal-ingestion-alignment.md",
       "title": "Aether SDK + Universal Ingestion Alignment Blueprint",
       "slug": "blueprints/sdk-universal-ingestion-alignment",
@@ -4137,6 +4169,22 @@
       "status": "stable",
       "since_version": "8.12.0",
       "estimated_read_minutes": 45,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/blueprints/social360.md",
+      "title": "Social360 Blueprint — Relationship-Fidelity Extension to the Relational Intelligence Spine",
+      "slug": "blueprints/social360",
+      "section": "blueprints",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
@@ -4941,6 +4989,20 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/decisions/ADR-011-spine-composition-kernel.md",
+      "title": "ADR-011: Spine Composition Kernel",
+      "slug": "decisions/adr-011-spine-composition-kernel",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/deployment/WEB_ECOSYSTEM_DEPLOYMENT.md",
       "title": "Web Ecosystem — Deployment Contract",
       "slug": "deployment/web-ecosystem-deployment",
@@ -5353,6 +5415,51 @@
       "status": "experimental",
       "since_version": "8.12.0",
       "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/plans/FINANCIAL_NORMALIZATION_PHASES.md",
+      "title": "Financial Normalization — Phased Implementation Program",
+      "slug": "plans/financial-normalization-phases",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/plans/RISK_FRAUD_360_PHASES.md",
+      "title": "Risk360 + Fraud360 — Phased Convergence Program",
+      "slug": "plans/risk-fraud-360-phases",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/plans/SPINE_P0_PHASES.md",
+      "title": "Aether Spine P0 — Phased Implementation Program",
+      "slug": "plans/spine-p0-phases",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/plans/UNIVERSAL_INTELLIGENCE_GRAPH_IMPLEMENTATION.md",
@@ -7218,6 +7325,41 @@
       "path": "docs/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md"
     },
     {
+      "path": "docs/source-of-truth/FINANCIAL_DOMAIN_MIGRATION_STATUS.md",
+      "title": "Financial Normalization — Domain Migration Status",
+      "slug": "architecture/financial-domain-migration-status",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/source-of-truth/FINANCIAL_NORMALIZATION.md",
+      "title": "Financial Normalization — Architecture",
+      "slug": "architecture/financial-normalization",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec",
+        "compliance"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "backend@aether"
+    },
+    {
       "path": "docs/source-of-truth/FIRST_RELEASE_INTELLIGENCE_TELEMETRY_OPERATIONS.md"
     },
     {
@@ -7399,6 +7541,23 @@
       ],
       "status": "stable",
       "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/IRRL_NAMING_OVERLAY.md",
+      "title": "Aether Spine P0 — IRRL Naming Overlay (Phase 5)",
+      "slug": "architecture/irrl-naming-overlay",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
     {
@@ -7625,6 +7784,23 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/source-of-truth/RISK_FRAUD_360.md",
+      "title": "Risk360 and Fraud360 Architecture",
+      "slug": "source-of-truth/risk-fraud-360",
+      "section": "source-of-truth",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 10,
+      "toc_depth": 3,
+      "canonical_owner": "backend@aether"
+    },
+    {
       "path": "docs/source-of-truth/SOURCE_TO_MODEL_MATRIX.md",
       "title": "Source to Model Matrix",
       "slug": "architecture/source-to-model-matrix",
@@ -7638,6 +7814,57 @@
       "status": "draft",
       "estimated_read_minutes": 6,
       "canonical_owner": "ml@aether"
+    },
+    {
+      "path": "docs/source-of-truth/SPINE_P0_ARCHITECTURE.md",
+      "title": "Aether Spine P0 — Ground Zero Founding Spine",
+      "slug": "architecture/spine-p0-architecture",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 25,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/SPINE_P0_CONFORMANCE_CHECKLIST.md",
+      "title": "Aether Spine P0 — Spine Conformance Checklist (Phase 6)",
+      "slug": "architecture/spine-p0-conformance-checklist",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 7,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/SPINE_REGISTRY_STATUS.md",
+      "title": "Aether Spine P0 — Spine Registry Status",
+      "slug": "architecture/spine-registry-status",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/STABLECOIN_CONSENT_MODEL.md",

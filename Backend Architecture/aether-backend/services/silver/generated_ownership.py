@@ -26,6 +26,12 @@ PROJECTOR_ORDER: tuple[str, ...] = (
     "InteropProjector",
     "ConversionProjector",
     "CardLinkedProjector",
+    "SocialIdentityProjector",
+    "SocialConnectionProjector",
+    "SocialInteractionProjector",
+    "SocialContentProjector",
+    "SocialCommunityMembershipProjector",
+    "SocialMetricProjector",
 )
 
 # Silver table each projector writes.
@@ -48,6 +54,12 @@ PROJECTOR_TABLES: dict[str, str] = {
     "InteropProjector": "silver_interop_facts",
     "ConversionProjector": "canonical_conversions",
     "CardLinkedProjector": "card_linked_flow_facts",
+    "SocialIdentityProjector": "silver_social_identity_facts",
+    "SocialConnectionProjector": "silver_social_connection_facts",
+    "SocialInteractionProjector": "silver_social_interaction_facts",
+    "SocialContentProjector": "silver_social_content_facts",
+    "SocialCommunityMembershipProjector": "silver_social_community_facts",
+    "SocialMetricProjector": "silver_social_metric_facts",
 }
 
 # Canonical-activity role per projector (ADR-C4).
@@ -70,6 +82,12 @@ PROJECTOR_ACTIVITY_ROLES: dict[str, str] = {
     "InteropProjector": "no_activity",
     "ConversionProjector": "fact_emitter",
     "CardLinkedProjector": "no_activity",
+    "SocialIdentityProjector": "no_activity",
+    "SocialConnectionProjector": "no_activity",
+    "SocialInteractionProjector": "no_activity",
+    "SocialContentProjector": "no_activity",
+    "SocialCommunityMembershipProjector": "no_activity",
+    "SocialMetricProjector": "no_activity",
 }
 
 # Event-registry families each projector projects facts for.
@@ -92,6 +110,12 @@ PROJECTOR_EVENT_FAMILIES: dict[str, tuple[str, ...]] = {
     "InteropProjector": ("interop",),
     "ConversionProjector": ("ecommerce", "identity_lc"),
     "CardLinkedProjector": ("commerce", "reward", "wallet"),
+    "SocialIdentityProjector": (),
+    "SocialConnectionProjector": (),
+    "SocialInteractionProjector": (),
+    "SocialContentProjector": (),
+    "SocialCommunityMembershipProjector": (),
+    "SocialMetricProjector": (),
 }
 
 # Exact dispatcher handles per projector.
@@ -457,6 +481,24 @@ PROJECTOR_EVENT_TYPES: dict[str, tuple[str, ...]] = {
         "payment_initiated",
         "reward_action_queued",
         "transaction",
+    ),
+    "SocialIdentityProjector": (
+        "social_identity_observed",
+    ),
+    "SocialConnectionProjector": (
+        "social_connection_observed",
+    ),
+    "SocialInteractionProjector": (
+        "social_interaction_observed",
+    ),
+    "SocialContentProjector": (
+        "social_content_observed",
+    ),
+    "SocialCommunityMembershipProjector": (
+        "social_community_membership_observed",
+    ),
+    "SocialMetricProjector": (
+        "social_metric_observed",
     ),
 }
 

@@ -120,6 +120,18 @@ export interface ProjectionDegradation {
   missingDependencies?: string[];
 }
 
+/** Engine-level (A8) degradation summary for a projection result. */
+export interface ProjectionDegradation {
+  /** "none" | "partial" | "full" */
+  level: 'none' | 'partial' | 'full';
+  /** Engine-computed, content-free with respect to provider diagnostics. */
+  reasons: string[];
+  /** Lens ids that conflicted during composition, if any. */
+  conflictedLenses?: string[];
+  /** Projection dependencies that could not be satisfied. */
+  missingDependencies?: string[];
+}
+
 /** The result of running a projection over canonical Aether truth. */
 export interface ProjectionResult {
   projectionId: ProjectionId;

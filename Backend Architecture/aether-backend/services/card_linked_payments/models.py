@@ -8,8 +8,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from decimal import Decimal
 from enum import StrEnum
 from typing import Any, Literal
+
+from services.value.models import to_decimal
 
 
 class CardActivityBasis(StrEnum):
@@ -253,19 +256,20 @@ class CardBenchmarkObservation:
 CARD_LINKED_SCHEMA_VERSION = "card_linked.v1"
 
 # Amount buckets keep user-level volume filterable without exposing exact
-# amounts on restricted surfaces.
+# amounts on restricted surfaces. Ceilings are Decimal (exact money thresholds)
+# — the amount is parsed with ``to_decimal`` and never runs through float.
 _AMOUNT_BUCKETS = (
-    ("0-10", 10.0), ("10-100", 100.0), ("100-1k", 1_000.0),
-    ("1k-10k", 10_000.0), ("10k-100k", 100_000.0),
+    ("0-10", Decimal("10")), ("10-100", Decimal("100")), ("100-1k", Decimal("1000")),
+    ("1k-10k", Decimal("10000")), ("10k-100k", Decimal("100000")),
 )
 
 
 def amount_bucket(amount_usd: str | float | None) -> str | None:
     if amount_usd is None:
         return None
-    try:
-        value = float(amount_usd)
-    except (TypeError, ValueError):
+    value = to_decimal(amount_usd)
+    if value is None:
+        # Not a finite number — unknown is never bucketed as 0 / "100k+".
         return None
     for label, ceiling in _AMOUNT_BUCKETS:
         if value < ceiling:

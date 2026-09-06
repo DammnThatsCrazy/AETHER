@@ -207,6 +207,49 @@ EVAL_CASES: list[tuple[str, str]] = [
     ("Explain this measurement result", "measurement_integrity_lookup"),
     ("Why is this metric insufficient_data?", "measurement_integrity_lookup"),
     ("Show the value_state and lineage for this measurement", "measurement_integrity_lookup"),
+
+    # relationship_explain (5 examples)
+    ("Explain the relationship between entity ent_100 and entity ent_200", "relationship_explain"),
+    ("Why is there a relationship edge between these two profiles?", "relationship_explain"),
+    ("What is the basis of the relationship between Alice and Bob?", "relationship_explain"),
+    ("Show the relationship context for profile p_42", "relationship_explain"),
+    ("What kind of relationship exists between these two entities?", "relationship_explain"),
+
+    # influence_path (4 examples)
+    ("Show the influence path between ent_1 and ent_4", "influence_path"),
+    ("How does influence propagate from user_a to user_b?", "influence_path"),
+    ("Who influences profile p_9 the most?", "influence_path"),
+    ("Is there an influence chain from ent_1 to ent_4?", "influence_path"),
+
+    # engagement_fidelity (4 examples)
+    ("What is the engagement fidelity of entity ent_789?", "engagement_fidelity"),
+    ("Show the fidelity vector for relationship rel_12", "engagement_fidelity"),
+    ("How strong is the engagement between Alice and Bob?", "engagement_fidelity"),
+    ("Show reciprocity and persistence for profile p_5", "engagement_fidelity"),
+
+    # incentive_context_explain (5 examples)
+    ("Explain the incentive context for this relationship", "incentive_context_explain"),
+    ("What is the incentive context behind Alice's activity?", "incentive_context_explain"),
+    ("Why is this user incentivized to share content?", "incentive_context_explain"),
+    ("Show the incentive structure for this relationship", "incentive_context_explain"),
+    ("What motivates this user to participate?", "incentive_context_explain"),
+
+
+    # risk_assessment_explain (3 examples)
+    ("Explain the risk assessment for entity ent_123", "risk_assessment_explain"),
+    ("Why does entity ent_123 carry this risk assessment?", "risk_assessment_explain"),
+    ("Show which dimensions were scored in the risk assessment of agent ag_1", "risk_assessment_explain"),
+
+    # fraud_hypothesis_summarize (3 examples)
+    ("Summarize the fraud hypothesis for entity ent_123", "fraud_hypothesis_summarize"),
+    ("What is the state of the fraud hypothesis on entity ent_123?", "fraud_hypothesis_summarize"),
+    ("Show fraud hypothesis status for agent ag_1", "fraud_hypothesis_summarize"),
+
+    # risk_fraud_contradiction_lookup (3 examples)
+    ("Are the risk and fraud views contradictory for entity ent_123?", "risk_fraud_contradiction_lookup"),
+    ("Reconcile the risk assessment and fraud hypotheses for entity ent_123", "risk_fraud_contradiction_lookup"),
+    ("Does the fraud hypothesis conflict with the risk assessment for agent ag_1?", "risk_fraud_contradiction_lookup"),
+
 ]
 
 

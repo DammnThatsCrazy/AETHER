@@ -4,7 +4,7 @@
  * Each method extracts `.data` automatically unless noted.
  */
 import { z } from 'zod';
-import { restClient } from './rest/client';
+import { RestClientError, restClient } from './rest/client';
 import { log } from '@kyber/lib/logging';
 import { fleetHealthResponseSchema, tenantDiagnosticsResponseSchema } from '@kyber/types/payment-rails';
 import type {
@@ -60,6 +60,39 @@ const buildQS = (params: Record<string, string | number | boolean | undefined>) 
   const s = qs.toString();
   return s ? `?${s}` : '';
 };
+
+// ─── Intelligence-projection plane helpers (risk360 / fraud360) ──────────────
+// The read-only plane routes (/v1/risk360, /v1/fraud360) return a bare
+// `ProjectionResult.model_dump(mode="json")` (and a bare health dict) — they do
+// NOT add the shared { data, status, timestamp } envelope most Kyber REST routes
+// return. A proxy/gateway MAY still add the envelope. `projectionPayload`
+// accepts both shapes and normalizes to the inner payload so a bare model_dump
+// never fails schema validation.
+const projectionEnvelopeSchema = z.object({
+  data: z.unknown(),
+  status: z.string(),
+  timestamp: z.string(),
+});
+
+function projectionPayload(value: unknown): unknown {
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    const envelope = projectionEnvelopeSchema.safeParse(value);
+    if (envelope.success) return envelope.data.data;
+  }
+  return value;
+}
+
+// 400/404/503 from a projection route means the plane cannot serve this request
+// right now — routes not mounted (plane disabled), provider not registered, or
+// subject kind unserved. Resolve those to `null` so the operator surfaces render
+// a graceful "plane not enabled / not found" empty state instead of crashing on
+// an error. Every other failure still throws to the caller.
+function planeUnavailableToNull(err: unknown): null {
+  if (err instanceof RestClientError && (err.status === 400 || err.status === 404 || err.status === 503)) {
+    return null;
+  }
+  throw err;
+}
 
 // ─── Provider Runtime (Universal Provider Runtime) contract schemas ──────────
 // The manifest-driven catalog shape for the Kyber provider-connections UI.
@@ -2681,5 +2714,46 @@ export const api = {
 
     tenantEnvelope: (tenantId: string) =>
       restClient.get(`/v1/kyber/tenants/${encodeURIComponent(tenantId)}/operational-envelope`, wrap(unknownSchema)).then(r => r.data),
+  },
+
+  // ── Risk 360 (read-only intelligence projection plane) ──────────────────────
+  // Subject kinds served by the risk360 registry row: entity | relationship |
+  // cluster | population. Routes are flag-gated server-side
+  // (AETHER_RISK360_ENABLED, default OFF) — a 404/503 resolves to `null` (see
+  // `planeUnavailableToNull`) so the operator workbench renders its "plane not
+  // enabled / not found" empty state. The payload is a bare ProjectionResult
+  // model_dump (tolerant of an added {data,status,timestamp} envelope).
+  risk360: {
+    projection: (subject: { subjectKind: string; subjectId: string }) =>
+      restClient.get(
+        `/v1/risk360/${encodeURIComponent(subject.subjectKind)}/${encodeURIComponent(subject.subjectId)}`,
+        unknownSchema,
+      )
+        .then(projectionPayload)
+        .catch(planeUnavailableToNull),
+
+    health: () =>
+      restClient.get('/v1/risk360/health', unknownSchema)
+        .then(projectionPayload)
+        .catch(planeUnavailableToNull),
+  },
+
+  // ── Fraud 360 (read-only domain-synthesis projection plane) ─────────────────
+  // Subject kinds served by the fraud360 registry row: entity | relationship |
+  // agent. Same flag-gated server-side behavior (AETHER_FRAUD360_ENABLED,
+  // default OFF) and bare-ProjectionResult payload as risk360.
+  fraud360: {
+    projection: (subject: { subjectKind: string; subjectId: string }) =>
+      restClient.get(
+        `/v1/fraud360/${encodeURIComponent(subject.subjectKind)}/${encodeURIComponent(subject.subjectId)}`,
+        unknownSchema,
+      )
+        .then(projectionPayload)
+        .catch(planeUnavailableToNull),
+
+    health: () =>
+      restClient.get('/v1/fraud360/health', unknownSchema)
+        .then(projectionPayload)
+        .catch(planeUnavailableToNull),
   },
 };

@@ -14,6 +14,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
 last_synced_commit: "f543a085"
+
 ---
 # Aether vNext — Architecture Guide
 
@@ -455,17 +456,22 @@ Canonical contract plane (single source of truth, codegen twins via
 | Model catalog | `packages/shared/contracts/model-registry.json` | `packages/shared/model-registry.ts`; `shared/model_governance/generated_model_registry.py`; `docs/_generated/model-registry-table.md` |
 | Task profiles | `packages/shared/contracts/task-profile-registry.json` | `packages/shared/task-profile.ts`; `shared/model_governance/generated_task_profiles.py`; `docs/_generated/task-profile-table.md` |
 | Intelligence projections | `packages/shared/contracts/intelligence-projection-registry.json` | `packages/shared/intelligence-projections_generated.ts`; `shared/intelligence_projections/generated_registry.py`; `docs/_generated/intelligence-projection-registry-table.md`; `docs/_generated/intelligence-projection-dependency-graph.md` |
+| Relationship predicates (Relational Intelligence Spine) | `packages/shared/contracts/relationship-predicate-registry.json` | `packages/shared/relationship-predicate-registry.ts`; `shared/relationship_spine/generated_relationship_predicate_registry.py`; `docs/_generated/relationship-predicate-registry-table.md` |
+| Relationship motifs (Relational Intelligence Spine) | `packages/shared/contracts/relationship-motif-registry.json` | `packages/shared/relationship-motif-registry.ts`; `shared/relationship_spine/generated_relationship_motif_registry.py`; `docs/_generated/relationship-motif-registry-table.md` |
+| Spine registry | `packages/shared/contracts/spine-registry.json` | `packages/shared/spine-registry.ts` (exported from `packages/shared/index.ts` beside the ADR-011 D3 envelope); `shared/spine/generated_spine_registry.py`; `docs/_generated/spine-registry-table.md`. Each spine row carries a 14-item conformance vocabulary that lives in-registry ([ADR-011](decisions/ADR-011-spine-composition-kernel.md)) |
 
 ### Intelligence projection plane
 
 A **360** is an intelligence projection over canonical Aether truth — it is
 never a competing system of record. The intelligence projection plane owns the
-single canonical registry (19 projections, seven of which — `outcome360`,
-`economic360`, `infrastructure360`, `communication360`, the context-360 time leaf
-`temporal360`, the context-360 WHO/SET leaf `population360` and the context-360
-WHERE leaf `geographic360` — are now implemented native
-providers) and the shared request/context/result contracts (TS + Python) that
-every future 360 provider implements against. `implementationState` is repo metadata describing
+single canonical registry (19 projections, nine of which — `outcome360`,
+`economic360`, `infrastructure360`, `communication360`, `risk360`, `fraud360`,
+the context-360 time leaf `temporal360`, the context-360 WHO/SET leaf
+`population360` and the context-360 WHERE leaf `geographic360` — are now
+implemented native providers) and the shared request/context/result contracts
+(TS + Python) that every future 360 provider implements against.
+`implementationState` is repo metadata describing
+
 how far a projection has been converged onto the plane (`in_flight` = an
 existing implementation that is not yet a native provider) — it is NOT a
 readiness signal and is never surfaced as `production_ready`. The runtime is a
@@ -482,6 +488,7 @@ projection surface answers live instead of degrading to `provider_unavailable`
 (a provider is not live until registered at this mount; the enforcement note is
 in the source-of-truth). Exploration surfaces compose over the engine through
 projection-backed surface adapters
+
 (`services/exploration/adapters/projection.py`).
 The design decision is [ADR-010](decisions/ADR-010-intelligence-projection-plane.md);
 the source-of-truth is
@@ -701,6 +708,86 @@ one exception is the Agentic Commerce control plane
 (`COMMERCE_CONTROL_PLANE_ENABLED`), which defaults on. See
 `docs/INTELLIGENCE-GRAPH.md` for the full specification, edge schemas, and
 rollout guide.
+
+---
+
+## Universal Asset Registry & Financial Normalization Surface
+
+The financial-normalization program surfaces a canonical financial-registry
+trunk on the backend plane. Its authoritative architecture is
+[FINANCIAL_NORMALIZATION.md](source-of-truth/FINANCIAL_NORMALIZATION.md); this
+subsection is a pointer, not a replacement.
+
+**Universal Asset Registry service domain** (`services/assets/`). Global
+reference identity for fiat currencies, crypto natives, stablecoins, and tokens
+(namespaced ids `fiat:USD`, `crypto:ETH`, `stablecoin:USDC`,
+`token:<chain>:<contract>`), their chain deployments, and alias rows that
+bridge legacy ids (`usdc`, `usdc:eip155:8453`) — never rewriting them. The
+registry is reference + observational data only: it records UNRESOLVED
+references and never originates, signs, or settles transfers.
+`registry_version` is a deterministic sha256 over the sorted canonical seed
+content — never a wall-clock timestamp — so valuations and graph projections
+can cite it as registry provenance.
+
+**Flag-gated `/v1/assets` API.** Mounted only when `settings.assets.api_enabled`
+(`AETHER_ASSETS_API_ENABLED`, default OFF); registration/seed/canonicalize
+additionally require `settings.assets.ingestion_enabled`
+(`AETHER_ASSETS_INGESTION_ENABLED`, default OFF). Reads require the base `READ`
+permission; writes require `ADMIN`. Runtime seeding is not enabled by default —
+the seed ships as an ADMIN action, it is not run at startup.
+
+**Event-time valuation + persistence** (`services/valuation/`). The pure
+`value_at` engine and the `observe_price` ingest path price a native value into
+a tenant-scoped `ValuationSnapshot` in a reporting asset at `effective_at`,
+persisted as an immutable append-only row — a correction appends a NEW
+superseding snapshot and flips the prior row to `superseded`, never mutating the
+economic fact in place. Stablecoin amounts are peg-aware via the real
+`classify_peg` (never assumed $1); unknown/unpriced is `missing_rate` with a
+null reporting amount — never coerced to 0. Persistence (migration B:
+`valuation_price_observations` / `valuation_snapshots` / `tenant_value_policies`)
+and the flag-gated `/v1/valuation` API are landed: the router mounts only when
+`settings.valuation.api_enabled` (`AETHER_VALUATION_API_ENABLED`, default OFF),
+and the observational writes (`observe` / `value` / policy) additionally require
+`AETHER_VALUATION_INGESTION_ENABLED` + ADMIN. `execution_by_aether` is always
+False — the domain observes and reports, never executes.
+
+**Reporting-asset-keyed safe rollup (W4a shared seam)** (`services/value/rollups.py`).
+`safe_rollup` accepts a reporting context — a canonical `reporting_asset_id`
+(`fiat:USD` default) and an optional `amount_in_reporting_asset` resolver — and
+returns an additive `reporting_totals` envelope keyed by that asset (priced /
+unpriced / excluded / stale counts, `coverage_percentage`, `rollup_status`) with
+opt-in `value_lineage`. With no reporting context the output is byte-identical
+to the USD-first contract, so existing consumers are unchanged. Conversion to a
+non-USD reporting asset is never guessed: a record without a trustworthy amount
+in that asset counts as unpriced-for-reporting and contributes nothing
+(reporting total `None`, never `"0"`), and ownership rules
+(testnet/spam/liability/counterparty) gate the reporting view exactly as they
+gate the USD view. `ValuationService.reporting_asset_id_for` resolves a
+tenant's reporting asset from `tenant_value_policies` (default `fiat:USD`) for
+rollup/display entry points. The TS mirror (`packages/shared/value.ts`) adds
+optional `reporting_totals` / `value_lineage` to `RollupResult`. This is the
+Phase-4 shared seam; per-domain ingestion adapters and viewer-display
+convergence follow.
+
+**Registry → graph reference projector** (`services/assets/graph_projector.py`).
+Projects the canonical seed's asset / chain / fiat / deployment rows into GLOBAL
+reference vertices plus DEPLOYED_ON_CHAIN edges (platform tenant, EXCLUDED
+layer). Opt-in and never run at startup: the seeder projects only when invoked
+with graph projection enabled (`AETHER_ASSETS_GRAPH_ENABLED`, default OFF).
+Idempotency is storage-spelling neutral — an unchanged vertex is skipped and a
+changed vertex is rewritten in place (`node_versioned`), never a duplicate
+insert on its id.
+
+**Graph reference surface.** New reference `VertexType`/`EdgeType` members
+(`AssetDeployment`, `FiatCurrency`, `Issuer`, `PriceProvider`, `Venue`,
+`Bridge`; `DENOMINATED_IN`, `PAID_WITH`, `SETTLED_IN`, `CHARGED_IN`,
+`ASSESSED_IN`, `WRAPS`, `BRIDGED_FROM`, `VALUED_IN`, `DERIVED_FROM`,
+`REVERSES`, `DISPUTES`) register canonical assets/deployments/chains/fiat as
+**global** (`tenant_scoped=False`) reference vertices/edges on the non-actor
+reference layer — the `EXCLUDED` bucket, never H2H/H2A/A2H/A2A. Tenant
+isolation and the four actor layers are unchanged; the shared
+`Asset`/`Chain` vertex types and pre-existing edge literals are reused, with
+one literal per edge type.
 
 ---
 
