@@ -3921,3 +3921,41 @@ Ops/hardening (M7) adds durable reconcile / expire / cleanup jobs
 `data_exchange.cleanup_artifacts`, `data_exchange.finalize_pending_egress`)
 that reconcile `data_artifacts` metadata against ObjectStore state with
 strict tenant-prefix-scoped deletion.
+
+## Reconciled Control Plane (operator surface, v8.12.0, flag-gated)
+
+The Reconciled Control Plane converges managed integrations (SDKs, connectors,
+provider connections, webhooks, imports, curated feeds) toward an authorized,
+healthy, supportable desired state — *install once, continuously reconcile*.
+This section documents the operator **read surface**; the engines behind it
+(reconcile classification, ChangeSet planning/execution, admission +
+simulation, §40 rollout + §29 fleet controller) are flag-gated OFF and
+exercised by tests only. Full architecture + boundaries:
+`docs/architecture/RECONCILED_CONTROL_PLANE.md`; close-out evidence in
+`docs/productization/reconciled-control-plane/EXECUTION_STATE.md`.
+
+**Availability:** the router is mounted in `main.py` only behind
+`settings.reconciled_control.enabled` AND `settings.reconciled_control.kyber_route_enabled`
+(`AETHER_RECONCILED_CONTROL_PLANE_ENABLED` + `AETHER_RECONCILED_CONTROL_KYBER_ROUTE_ENABLED`)
+— OFF by default. Routes are read-only; there is no tenant-facing counterpart.
+
+**Authorization:** every route requires the Kyber operator gate
+(`kyber:operator` permission; fail-closed denial otherwise). The surface is
+declared in the Kyber console vocabulary: capability
+`kyber.reconciled_control.read` (domain `reconciled_control`, action `read`,
+scope `all_tenants_aggregate`, disclosure D4 event evidence) rides the
+`_READ_EVIDENCE` role-template grant beside `kyber.audit.read`, and each route
+below carries a `kyber_routes` registry declaration
+(`config/route_registry.yaml`) that engages denial once backend authorization
+enforcement is on.
+
+### Managed-integration registry + review surface (all GET)
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| GET | `/v1/admin/kyber/managed-integrations` | List managed integrations | Filters: tenant/environment/kind; registry + last-reconcile evidence |
+| GET | `/v1/admin/kyber/managed-integrations/{managed_integration_id}` | One integration detail | Includes last reconcile run + drift summary |
+| GET | `/v1/admin/kyber/managed-integrations/change-sets` | List ChangeSets | Planning + status + risk/guard fields |
+| GET | `/v1/admin/kyber/managed-integrations/change-sets/{changeset_id}` | One ChangeSet detail | Status history, risk, approvals evidence |
+| GET | `/v1/admin/kyber/managed-integrations/approvals` | Approval records | §21 role-gated review queue |
+| GET | `/v1/admin/kyber/managed-integrations/action-required` | ActionRequired items | §12.14 exceptions awaiting an operator decision |

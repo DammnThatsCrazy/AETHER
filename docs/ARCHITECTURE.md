@@ -667,6 +667,32 @@ only, not auth; connection loads enforce tenant ownership (cross-tenant id →
 carry `safe_message` only; manifest capability claims are verified against
 actual adapters at registration and certification.
 
+## Reconciled Control Plane (§0–40 lane, flag-gated)
+
+The **Reconciled Control Plane** is Aether's operational authority that
+converges every managed integration (SDKs, connectors, provider connections,
+webhooks, imports, curated feeds) toward an authorized, healthy, supportable
+desired state — *install once, continuously reconcile*. Doctrine: *the SDK
+observes; the control plane manages; the backend reasons*. The §0–40 lane
+ships the loop end to end: reconcile **classification** (desired state vs
+evidence-backed observed state; never `actionable` from missing evidence),
+typed ChangeSet **planning** with §39 risk + automation authority, §34
+state-machine **execution** with verify-or-rollback and
+last-known-good-after-verify, §16 admission + discovery/schema-mapping/
+source-authority + §37 simulation/shadow, a flag-gated §32/§35 scheduler, and
+**§40 progressive rings** driven by the §12.9 health-gated rollout engine + §29
+fleet controller. The plane is **operator-only**: a read-only GET surface
+under `/v1/admin/kyber/managed-integrations` (`/change-sets`, `/approvals`,
+`/action-required`) gated by `require_kyber_operator`, surfaced in the Kyber
+console vocabulary via the `kyber.reconciled_control.read` capability (D4
+evidence) + `kyber_routes` declarations. Everything is **flag-gated OFF**
+(`AETHER_RECONCILED_CONTROL_*`): engines are exercised by tests only, the
+scheduler is idle until its master switch + kill-switch flip, and day-1
+production activation sits behind the §41+ blueprint review. No tenant grant,
+no self-service delivery, no hidden rewriting of customer-controlled binaries.
+See `docs/architecture/RECONCILED_CONTROL_PLANE.md` for the architecture and
+boundaries.
+
 ## Unified On-Chain Intelligence Graph
 
 The Identity Graph above captures **who** a user is across devices and wallets. The Intelligence Graph extends it with four relationship layers that track **what** humans, agents, and protocols do — and how they interact with each other.

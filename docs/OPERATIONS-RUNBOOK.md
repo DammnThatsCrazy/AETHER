@@ -593,6 +593,33 @@ deploy-profile/compose/Terraform/topology-validator fan-out; running under
 deploy artifact. Because it runs as the `materializer` principal (not a tenant
 principal), scheduled sync never elevates a tenant principal's rights.
 
+### Reconciled Control Plane reconcile scheduler (flag-gated OFF)
+
+The Reconciled Control Plane lane adds `reconciled_control_scheduler`, a
+periodic loop that reconciles managed integrations against desired state,
+plans actionable drift, and rides the governed §34/§35 execution path:
+
+```
+AETHER_RECONCILED_CONTROL_PLANE_ENABLED=true        → plane master switch (gates the
+                                                      scheduler factory)
+AETHER_RECONCILED_CONTROL_SCHEDULER_ENABLED=true    → scheduler kill-switch; the loop
+                                                      runs only when the master switch
+                                                      AND this flag are both on
+```
+
+Both default OFF. Pass-to-pass sleep is
+`AETHER_RECONCILED_CONTROL_SCHEDULER_INTERVAL_SECONDS` (default 300s, mirrors
+the §32 freshness window). Architecture + flag semantics:
+`docs/architecture/RECONCILED_CONTROL_PLANE.md`; production activation sits
+behind the §41+ blueprint review — no deploy flips these today.
+
+**Scheduler role:** `reconciled_control_scheduler` rides the existing
+**`maintenance`** role (exact precedent: the UPR/provider loops above — a
+single periodic loop does not justify a new runtime role and its
+deploy-profile/compose/Terraform/topology-validator fan-out). It runs as the
+`maintenance` principal (never a tenant principal), and it executes nothing
+until admission, tenant update policy, and §21 approvals admit a change.
+
 ## Ingestion Bronze Replay (Kyber operator)
 
 An operator can re-drive one tenant's durable Bronze SDK events through the
