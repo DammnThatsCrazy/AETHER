@@ -138,8 +138,10 @@ per-field enforcement) remain ledger rows Blueprint §3 / §10 / §11 / WS-B.
 
 ## Ingress adapters & credential classes
 
-Read-only credential authority. The blueprint defines seven ingress credential
-classes — **zero repo hits in Phase 0**:
+Registry-bound credential authority. The blueprint's seven ingress credential
+classes are declared on the Envelope-B spine
+(`observation-envelope-registry.json` → `shared/observation/envelope.py`
+`CREDENTIAL_CLASSES`, parity-tested):
 
 ```text
 PUBLIC_CLIENT
@@ -151,11 +153,21 @@ AETHER_INTERNAL
 OPERATOR_REPLAY
 ```
 
-A public SDK credential must be scoped to `observation:write` + `config:read`
-only (never `graph:read`, `identity:merge`, `export`, `admin`, …). Universal
-ingress adapters — SDK / webhook / connector / API-feed / import / harness /
-replay — do not yet exist; each ingress path today is bespoke and inconsistent
-(ledger rows Blueprint §4, §9, §12, §15).
+**WS-B1 (flag-gated, default OFF): universal ingress adapter registry + one
+validated gateway.** The adapter registry ships in
+`Backend Architecture/aether-backend/services/ingestion/adapters/`: all seven
+families (SDK / webhook / connector / API-feed / import / harness / replay)
+declared with their Envelope-B `source_type`, blueprint adapter name, and
+allowed credential classes; the SDK family is the first converged adapter
+(`SdkIngressAdapter`, `PUBLIC_CLIENT`).
+`services/ingestion/gateway.py` is the gateway core that validates + stamps the
+Envelope-B observations adapters build (schema/type/family/tenant checks,
+credential + source-trust provenance). A public SDK credential must be scoped
+to `observation:write` + `config:read` only (never `graph:read`,
+`identity:merge`, `export`, `admin`, …). Webhook/connector/feed/import/harness/
+replay adapters and the durable/idempotency publish-spine convergence remain
+WS-B2..WS-B5 — those ingress paths are still bespoke today (ledger rows
+Blueprint §4, §9, §12, §15).
 
 `execution_by_aether = false` applies at every layer per **ADR-011**: DB CHECK
 constraints, `Literal[False]` model fields, `check_no_execution` on write routes,

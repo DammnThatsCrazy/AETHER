@@ -435,6 +435,92 @@ per the gate-policy directive (WS-A3/A4/A5/A6 precedent).
 - WS-A (contract foundation) is complete — WS-B (adapter convergence) is next,
   reserved below.
 
+## WS-B1 — universal ingress adapter registry + one validated gateway
+
+Stacked on `feat/sdk-universal-ingestion` — adapters/registry at `add87dad`, gateway
+core + flag at `a1002211`, `/v1/batch` adoption at `fc0bba24`, suites at `dd9ca821`
+(whole WS-A2..A7 + WS-B1 stack rebased onto `origin/main` @ `59a7fb24`, PR #608's
+four-lane convergence), delivered in the consolidated program PR. Canonical gate
+deferred to the full-program tip per the gate-policy directive; the build-time
+self-checks below are the recorded evidence.
+
+WS-B1 opens Workstream B (adapter convergence) with a faithful, flag-gated,
+non-shrinking first slice: the seven-ingress-family adapter authority and the one
+validated gateway the blueprint's "one validated gateway" diagram block requires,
+registered under the Envelope-B contract (WS-A5). Every other ingress path
+(webhook/connector/feed/import/harness/replay) remains bespoke today and converges
+in WS-B2..WS-B5 — nothing is dropped (the reserved WS-B row below tracks the
+remainder).
+
+**Registry-bound credential authority (commit `add87dad`).**
+`services/ingestion/adapters/` now owns the universal ingress adapter registry:
+`base.py` defines `UniversalIngressAdapter(ABC)` (ClassVar `adapter_id`/`family`/
+`credential_class`/`adapter_version`/`description`; `__init_subclass__` rejects a
+concrete subclass whose family ∉ the seven `SOURCE_TYPES` or credential ∉ the seven
+`CREDENTIAL_CLASSES`, or that omits `adapter_id`/`description`); `sdk.py` implements
+`SdkIngressAdapter` (adapter_id "sdk", family "sdk", `PUBLIC_CLIENT`, delegates to
+`build_sdk_observation_envelope`, default ingress path `/v1/batch`); `registry.py`
+declares all seven family specs in `SOURCE_TYPES` order with their blueprint adapter
+names and allowed credential classes per family, a `declared` status for the six
+unconverged families, `REGISTERED_ADAPTERS = {"sdk": SdkIngressAdapter}`, and
+module-end asserts binding the registry to the Envelope-B vocabulary. The SDK
+provenance block in `observation_envelope.py` now stamps `adapter="sdk"` /
+`adapter_version="1.0.0"`.
+
+**One validated gateway (commit `a1002211`).** `services/ingestion/gateway.py`
+implements `validate_and_stamp(envelope_dict, *, adapter, tenant_id) -> GatewayResult`:
+rebuilds the `UniversalObservationEnvelope` (field-exact `extra="forbid"`), rejects
+unknown-observation-type / event-family-mismatch / tenancy-mismatch / schema-invalid
+envelopes, and stamps `ProvenanceBlock` (credential_class, signature_status passthrough,
+adapter id/version, `source_trust` = adapter-asserted or credential_class) +
+`QualityBlock(validation_state="gateway:accepted")`, returning the stamped
+`to_bronze_additive()` dict. A new default-OFF `ingress_gateway` config block
+(`AETHER_UNIVERSAL_INGRESS_GATEWAY_ENABLED=false`) is documented in
+`.env.production.example`.
+
+**Degrade-safe `/v1/batch` adoption (commit `fc0bba24`).** Under the WS-A5
+`observation_envelope.enabled` block, batch.py builds the SDK envelope through
+`SdkIngressAdapter`; when the gateway flag is on it runs `validate_and_stamp` and only
+attaches `normalized["observation_envelope"]` on `accepted` (else warns + increments
+the gateway-rejection metric and leaves the key off — no fail-open, no 500), and when
+off it attaches the adapter envelope directly. Any build/gateway exception degrades to
+a warning + metric, preserving the existing V1 contract.
+
+| Workstream item | Deliverable | Status |
+|---|---|---|
+| Ingress adapter registry | `services/ingestion/adapters/` — base ABC + `SdkIngressAdapter` + family registry (7 families in `SOURCE_TYPES` order, 6 `declared`), module-end binds to Envelope-B tuples | ✅ implemented (this slice) |
+| SDK adapter | `SdkIngressAdapter` (PUBLIC_CLIENT, blueprint §11) delegating to `build_sdk_observation_envelope`; provenance block stamps `adapter="sdk"` | ✅ implemented (this slice) |
+| Validated gateway | `services/ingestion/gateway.py` `validate_and_stamp` — schema/type/family/tenant rejects + provenance/quality stamping + additive result | ✅ implemented (this slice) |
+| Flag + operator block | `AETHER_UNIVERSAL_INGRESS_GATEWAY_ENABLED=false` (Settings `ingress_gateway` + `.env.production.example`) | ✅ implemented (this slice) |
+| Batch adoption | flag-gated adapter+gateway adoption under the WS-A5 envelope block; degrade-safe (reject leaves no envelope key, no 500) | ✅ implemented (this slice) |
+| Suites | `tests/unit/observation/test_ingress_adapter_registry.py` (8) + `test_ingress_gateway.py` (7) + updated envelope grep guard | ✅ implemented (this slice) |
+| Ownership | `ingress_adapter_registry` category (JSON) + row (`REPO_CONSISTENCY_OWNERSHIP.md`) + `TARGET_ARCHITECTURE.md` registry/gateway prose | ✅ implemented (this slice) |
+
+Build-time self-checks (serial, no full gate): pytest `tests/unit/observation`
+**36 passed**; envelope parity `tests/contracts/test_observation_envelope_parity.py`
+**10 passed**; both flag-on code paths simulated (accepted attach; tenant-mismatch
+degrade leaves no envelope key); batch.py compiles; ruff clean.
+`docs_drift.py --update` / `make ci-check` restamp deferred to the full-program
+tip per the gate-policy directive (WS-A precedent).
+
+### Definition of done (WS-B1)
+
+- Seven ingress families are registered against the Envelope-B vocabulary with a
+  credential-class authority per family, and `SdkIngressAdapter` (PUBLIC_CLIENT,
+  blueprint §11) produces Envelope B — the first universal ingress adapter (one
+  observation model after adapters, Invariant #1 begins).
+- `validate_and_stamp` enforces one validated-gateway path for adapter envelopes:
+  schema/type/family/tenant rejects before stamping provenance + quality, and the
+  `/v1/batch` V1 flow adopts it flag-gated and degrade-safe.
+- No validators weakened; no new ADR (ADR-012 still reserved); authored docs updated
+  when behavior changed; source-linked docs content-reviewed with
+  `docs_drift.py --update` restamp deferred to the tip.
+- Canonical gate green at the full-program tip: `make ci-check` = 0, `git status --short`
+  empty, `docs_drift.py --strict` clean.
+- WS-B1 complete — webhook/connector/feed/import/harness/replay path convergence,
+  consent-on-every-path, idempotency-before-publish, and replay original-time remain
+  WS-B2..WS-B5 (reserved row below).
+
 ## Later phases (reserved)
 
 Workstreams A–E (the blueprint's own sequencing) begin after Phase 0 converges.
@@ -444,7 +530,7 @@ built.
 | Workstream | Scope (reserved) | Opens when |
 |---|---|---|
 | WS-A — Contract foundation | **WS-A1 + WS-A2 + WS-A3 + WS-A4 + WS-A5 + WS-A6 + WS-A7 done** (WS-A1 merged to main via #600; A2–A7 stacked on `feat/sdk-universal-ingestion` for the consolidated PR). WS-A complete: field-trust + semantic-level spine, privacy family, Envelope-B, native event-type codegen, and registry-re-pointed metric/privacy/retention docs | — (complete) |
-| WS-B — Adapter convergence | SDK/webhook/connector/feed/import/harness/replay adapters that all produce Envelope B through one validated gateway; consent-on-every-path; idempotency-before-publish; ingestion-level replay with original-time preservation; kill deprecated `/v1/ingest` aliases (Invariants #1/#5/#8/#9/#15) | Phase 0 merged |
+| WS-B — Adapter convergence | **WS-B1 done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR): universal ingress adapter registry (7 families declared, 6 `declared`; `SdkIngressAdapter` PUBLIC_CLIENT) + one validated gateway (`services/ingestion/gateway.py`) + flag-gated `/v1/batch` adoption. Remaining — WS-B2..B5: webhook/connector/feed/import/harness/replay adapters producing Envelope B through the gateway; consent-on-every-path; idempotency-before-publish; ingestion-level replay with original-time preservation; kill deprecated `/v1/ingest` aliases (Invariants #1/#5/#8/#9/#15) | Phase 0 merged |
 | WS-C — SDK hardening | Native identity → subject hints (delete client `/sdk/identity/resolve` re-stamping); native encrypted persistent queues; remove/relocate shared interpretation modules; regenerate `web/src/types.ts`; add native correlation fields (Invariants #4/#12/#16) | Phase 0 merged |
 | WS-D — Backend interpretation | Typed `RelationshipFact` + `evidence_refs`; Episode engine; outcome truth store; Section-25 evidence dedupe; silver money → exact decimal/event-time valuation on by default (coordinate with `feat/financial-normalization` — do not build twice); mutation-gateway governance on by default (Invariants #7/#11/#13/#14) | Phase 0 merged |
 | WS-E — Operations | Ingestion funnel telemetry; Kyber ingestion control plane + Observation Inspector; mount the already-built SDK-fleet view; golden cross-path fixture; SDK version-compatibility tiers; shadow/staged enforcement (Invariant #17, Gates G/H) | Phase 0 merged |

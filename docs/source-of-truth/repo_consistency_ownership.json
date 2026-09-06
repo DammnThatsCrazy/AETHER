@@ -594,6 +594,29 @@
       ],
       "remediation": "Keep the three Envelope-B surfaces in lock-step - packages/shared/contracts/observation-envelope-registry.json (canonical field registry), Backend Architecture/aether-backend/shared/observation/envelope.py (pydantic runtime model), and packages/shared/observation-envelope.ts (passive TS twin) - held by tests/contracts/test_observation_envelope_parity.py; extend tests/unit/observation/test_observation_envelope.py when the model or the SDK mapping (services/ingestion/observation_envelope.py) changes."
     },
+  {
+      "id": "ingress_adapter_registry",
+      "name": "universal ingress adapter registry / gateway (WS-B1) changed",
+      "source_globs": [
+        "Backend Architecture/aether-backend/services/ingestion/adapters/**",
+        "Backend Architecture/aether-backend/services/ingestion/gateway.py",
+        "Backend Architecture/aether-backend/services/ingestion/observation_envelope.py",
+        "Backend Architecture/aether-backend/services/ingestion/batch.py"
+      ],
+      "required_changed_globs": [
+        "docs/source-of-truth/**",
+        "Backend Architecture/aether-backend/services/ingestion/adapters/**",
+        "Backend Architecture/aether-backend/services/ingestion/gateway.py",
+        "Backend Architecture/aether-backend/config/settings.py",
+        ".env.production.example",
+        "tests/**",
+        "Backend Architecture/**/tests/**"
+      ],
+      "required_commands": [
+        "python -m pytest tests/unit/observation -q"
+      ],
+      "remediation": "Keep the adapter registry (Backend Architecture/aether-backend/services/ingestion/adapters/registry.py) and the universal ingestion gateway (services/ingestion/gateway.py) consistent with the Envelope-B surfaces they consume (shared/observation/envelope.py source_type/credential_class vocabulary + packages/shared/contracts/observation-envelope-registry.json) and the Contract Spine they enforce (generated_registry CANONICAL_EVENT_TYPES/EVENT_FAMILY); register a new adapter class under the family it implements and extend tests/unit/observation/test_ingress_adapter_registry.py + test_ingress_gateway.py when the registry, an adapter, or the gateway changes."
+    },
     {
       "id": "mobile_native_regions",
       "name": "native iOS/Android event-type + consent-purpose regions changed (generator emitter, parity gate, or the region files)",
