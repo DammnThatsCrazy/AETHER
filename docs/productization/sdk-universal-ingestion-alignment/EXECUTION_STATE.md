@@ -672,10 +672,10 @@ knob, no production default flip. Scopes gap rows 7/8/9/22/24/26/31.
 
 | Item | Flag (default OFF) | Deliverable |
 |---|---|---|
-| 1 Typed `RelationshipFact` | `AETHER_BACKEND_RELATIONSHIP_FACT_ENABLED` | `RelationshipFact` + `evidence_refs` / `resolution_method` / validity window; promotion forwards evidence + correlation onto the mutation ledger when ON (#14) |
-| 2 Episode engine | `AETHER_BACKEND_EPISODE_ENGINE_ENABLED` | canonical episode primitive + `episode360` read surface; deterministic digest ids; durable; provider fail-isolated — registry row stays `in_flight` (honest, not flipped) |
+| 1 Typed `RelationshipFact` | `AETHER_BACKEND_RELATIONSHIP_FACT_ENABLED` | `RelationshipFact` + `evidence_refs` / `resolution_method` / validity window; promotion forwards evidence + correlation onto the mutation ledger when ON (#14). Boundary: the typed model + `RelationshipFactStore` are delivered but no live production seam persists a typed fact — today the flag gates only the #14 ledger-evidence forward (`promotion.py:476`); a writer seam stays `in_flight` |
+| 2 Episode engine | `AETHER_BACKEND_EPISODE_ENGINE_ENABLED` | canonical episode primitive + `episode360` read surface; deterministic digest ids; durable; provider fail-isolated. Boundary: the flag currently gates no runtime seam — no episode-engine write path calls `episode_engine_enabled()`; engine adoption stays `in_flight` (honest, not flipped) |
 | 3 Outcome truth store | `AETHER_OUTCOME_TRUTH_STORE_ENABLED` | durable mirror of projected silver outcome rows with evidence lineage (`workers.py` recorder hook, best-effort) (#14) |
-| 4 Section-25 dedupe | `AETHER_EVIDENCE_DEDUPE_ENABLED` | one outcome, many evidence refs |
+| 4 Section-25 dedupe | `AETHER_EVIDENCE_DEDUPE_ENABLED` | dedupe primitive (`shared/backend_interpretation/dedupe.py`) delivered: one outcome, many evidence refs. Boundary: the flag currently gates no production write seam — a collation caller stays `in_flight` |
 | 5 Temporal envelope → Silver | `AETHER_SILVER_TEMPORAL_ENVELOPE_ENABLED` | server temporal block replaces the raw client timestamp at the Silver projector boundary (#11) |
 | 6 Correlation first-class | `AETHER_CORRELATION_FIRST_CLASS_ENABLED` | canonical registry, not opaque JSONB (#12) |
 | 7 Silver exact money | `AETHER_SILVER_EXACT_MONEY_ENABLED` | exact `Decimal`; missing-never-0.0, currency never `'USD'`; alembic `20260906_wsd_silver_exact_money` (#13) |
@@ -710,9 +710,26 @@ Stacked on `feat/sdk-universal-ingestion` for the consolidated PR at `08e46a1b`
 OPERATIONS-RUNBOOK, FRONTEND-ARCHITECTURE, BACKEND-API — 11 verified-accurate
 restamps, `ea658fba`); `FRONTEND-ROUTE-STATE-MATRIX.md` registered the new
 `/ingestion-ops` route with only genuinely-asserted states (empty + gating `A`,
-loading/error/populated `I`) — `c098c109`. The head is not yet pushed; GitHub
-leaf checks (typescript / e2e / mobile / sdk-js / staging) run after push to
-`origin/feat/sdk-universal-ingestion`.
+loading/error/populated `I`) — `c098c109`. The head was pushed to
+`origin/feat/sdk-universal-ingestion` at `095c45ce`; GitHub leaf checks ran
+green (35/35, only path-filtered skips: docs-sync / ml-tests / pr-size /
+release-gate, gated on the passing detect-changes job).
+
+Audit remediation (independent 11-agent adversarial pass over head `095c45ce`,
+2026-09-06): one genuine code defect surfaced — the WS-D item-8 governance seam
+read a nonexistent top-level `Settings` attribute, so
+`AETHER_MUTATION_GATEWAY_MODE=shadow|enforce` never reached derived-truth
+writes (governance always resolved `off`). Fixed at `cc31d70e`:
+`flags.mutation_gateway_mode()` now reads the frozen
+`settings.temporal_observatory` block (the same nested path
+`shared.graph.mutation_gateway` reads), and the `mutation_mode` test fixture
+swaps that block via `dataclasses.replace` so the mode-ladder tests drive the
+real env→settings path. The audit also over-stated close-out framing on WS-D
+items 1/2/4 — primitives delivered, but no live production write seam consumes
+them yet — corrected in the table above with honest `in_flight` boundaries
+(consistent with `docs/architecture/BACKEND_INTERPRETATION_WS_D.md` §9).
+Env-stripped `make ci-check` re-run on `cc31d70e`: **78 passed / 0 failed**;
+GitHub leaf checks re-ran green on the pushed head.
 
 ## Workstreams A–E (ledger)
 
