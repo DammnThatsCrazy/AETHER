@@ -20,6 +20,10 @@ from __future__ import annotations
 
 import os
 
+from shared.backend_interpretation.flags import (
+    outcome_truth_store_enabled,
+    silver_temporal_envelope_enabled,
+)
 from shared.events.events import Event, EventConsumer, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
 from repositories.lake import BronzeRepository, SilverRepository
@@ -225,6 +229,61 @@ def _project_sdk_envelope(view: ObservationView) -> dict:
     }
 
 
+def _apply_silver_temporal(payload: dict, envelope: dict) -> dict:
+    """WS-D item 5: carry the server-built temporal envelope to the Silver edge.
+
+    Temporal enforcement (``enforce_temporal``) already rides the normalized
+    Bronze payload as a ``temporal`` block when active; today the Silver
+    projectors DROP it because they re-read the raw client ``timestamp``. When
+    ``AETHER_SILVER_TEMPORAL_ENVELOPE_ENABLED`` is ON and the payload carries a
+    server temporal block, its authoritative ``occurred_at`` replaces the raw
+    client timestamp on the projector envelope so Silver facts are stamped with
+    server time. OFF (default) is byte-for-byte unchanged.
+    """
+    if not silver_temporal_envelope_enabled():
+        return envelope
+    temporal = payload.get("temporal")
+    if not isinstance(temporal, dict) or not temporal.get("occurred_at"):
+        return envelope
+    authoritative = dict(envelope)
+    authoritative["temporal"] = temporal
+    authoritative["timestamp"] = temporal["occurred_at"]
+    return authoritative
+
+
+async def _record_outcome_truth(
+    tenant_id: str, payload: dict, results: list
+) -> None:
+    """WS-D item 3: mirror projected Silver outcome rows into the durable
+    outcome-truth store with evidence lineage. Best-effort; failures log."""
+    try:
+        from services.measurement.outcome.truth_recorder import (
+            record_from_silver_outcome,
+        )
+        from services.operational_intelligence.models import EntityRef
+
+        for result in results or ():
+            table = getattr(result, "table", None)
+            if table != "silver_outcome_facts":
+                continue
+            for row in getattr(result, "rows", None) or []:
+                subject_id = row.get("user_id") or row.get("actor_id")
+                subject = (
+                    EntityRef(kind="user", id=str(subject_id)) if subject_id else None
+                )
+                event_id = str(
+                    row.get("source_event_id") or payload.get("event_id") or ""
+                )
+                await record_from_silver_outcome(
+                    tenant_id=tenant_id,
+                    row=row,
+                    event_id=event_id,
+                    subject=subject,
+                )
+    except Exception as exc:  # noqa: BLE001 - recorder must never fail projection
+        logger.warning("outcome-truth record skipped: %s", exc)
+
+
 async def silver_fact_projector(event: Event) -> None:
     """Fan the validated event out to Silver fact projectors and persist rows.
 
@@ -251,6 +310,10 @@ async def silver_fact_projector(event: Event) -> None:
         return
 
     envelope = _bus_payload_to_sdk_envelope(payload)
+    # WS-D item 5: when enabled, the server-built temporal envelope (if the
+    # Bronze payload carries one) overrides the raw client timestamp so Silver
+    # facts are stamped with server-authoritative time.
+    envelope = _apply_silver_temporal(payload, envelope)
     try:
         outcome = await dispatcher.project_with_outcome(envelope)
         if outcome.results:
@@ -265,6 +328,12 @@ async def silver_fact_projector(event: Event) -> None:
                 "silver_projection_dead_letters_total",
                 labels={"tenant_id": tenant_id, "projector": failed},
             )
+        # WS-D item 3: when the durable outcome-truth store is enabled, mirror
+        # every projected outcome Silver row into the lineaged outcome-truth
+        # store (best-effort — Bronze is durable and replay recovers missed
+        # rows; a recorder failure never fails the projection).
+        if outcome_truth_store_enabled():
+            await _record_outcome_truth(tenant_id, payload, outcome.results)
     except Exception as exc:
         logger.error(
             "silver_fact_projector failed for event %s: %s",
