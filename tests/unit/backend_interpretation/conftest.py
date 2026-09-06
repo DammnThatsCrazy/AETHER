@@ -7,6 +7,7 @@ these tests run (same pattern as tests/unit/observation/conftest.py).
 """
 from __future__ import annotations
 
+import dataclasses
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -52,13 +53,22 @@ def wsd_flags():
 
 @pytest.fixture
 def mutation_mode():
-    """Read/restore the derived-truth mutation-gateway mode (item 8)."""
+    """Read/restore the derived-truth mutation-gateway mode (item 8).
+
+    The mode lives on the frozen ``Settings.temporal_observatory`` block
+    (``AETHER_MUTATION_GATEWAY_MODE``) — the same nested path
+    ``shared.graph.mutation_gateway`` and ``backend_interpretation.flags`` read.
+    A frozen dataclass field cannot be assigned in place, so the whole block is
+    swapped in and out via ``dataclasses.replace``.
+    """
     import config.settings as config_settings
 
-    original = getattr(config_settings.settings, "mutation_gateway_mode", "off")
+    original = config_settings.settings.temporal_observatory
 
     def _set(mode: str) -> None:
-        config_settings.settings.mutation_gateway_mode = mode
+        config_settings.settings.temporal_observatory = dataclasses.replace(
+            original, mutation_gateway_mode=mode
+        )
 
     yield _set
-    config_settings.settings.mutation_gateway_mode = original
+    config_settings.settings.temporal_observatory = original

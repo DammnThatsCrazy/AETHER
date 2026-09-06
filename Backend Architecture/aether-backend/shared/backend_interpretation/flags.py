@@ -87,11 +87,20 @@ def mutation_gateway_mode() -> str:
 
     Reuses ``AETHER_MUTATION_GATEWAY_MODE`` (off|shadow|enforce) so WS-D item 8
     rides the existing governance knob instead of introducing a parallel one.
+    The knob lives on the frozen ``Settings.temporal_observatory`` block — the
+    same nested path the graph mutation gateway reads
+    (``shared.graph.mutation_gateway``) — so ``shadow``/``enforce`` reach this
+    derived-truth seam exactly when they reach the graph projector.
     """
     try:
         from config.settings import get_settings
 
-        return str(getattr(get_settings(), "mutation_gateway_mode", "off") or "off")
+        return str(
+            getattr(
+                get_settings().temporal_observatory, "mutation_gateway_mode", "off"
+            )
+            or "off"
+        )
     except Exception:  # noqa: BLE001
         return "off"
 
