@@ -99,7 +99,24 @@ def _measurement_outcome_store() -> Optional[OutcomeStore]:
     outcome repository (S6); the wiring point is asserted here so the provider
     is never a competing system of record — it reads measurement canonical
     truth when one exists.
+
+    WS-D item 3 (durable outcome truth store): when
+    ``AETHER_OUTCOME_TRUTH_STORE_ENABLED`` is ON and the durable
+    :class:`~shared.backend_interpretation.stores.OutcomeTruthStore` is empty
+    of lineage-carrying rows for the tenant, the provider still degrades to
+    ``missing``/``empty`` exactly as before; when durable rows exist they are
+    read through :class:`OutcomeTruthStoreReader` (which satisfies this
+    protocol and maps records onto :class:`Outcome` while retaining evidence +
+    model/policy lineage on the durable row). OFF (default) keeps this function
+    returning ``None`` — the provider behavior is unchanged.
     """
+    try:
+        from shared.backend_interpretation.flags import outcome_truth_store_enabled
+        from shared.backend_interpretation.stores import OutcomeTruthStoreReader
+    except Exception:  # noqa: BLE001 - defensive: never crash the plane
+        return None
+    if not outcome_truth_store_enabled():
+        return None
     try:
         from services.measurement.engine.journey_compiler import (  # noqa: F401
             JourneyCompiler,
@@ -113,7 +130,10 @@ def _measurement_outcome_store() -> Optional[OutcomeStore]:
         )
     except Exception:  # noqa: BLE001 - defensive: never crash the plane
         return None
-    return None  # outcome repository adapter lands with the vertical slice
+    try:
+        return OutcomeTruthStoreReader()
+    except Exception:  # noqa: BLE001 - durable store unavailable at runtime
+        return None
 
 
 class Outcome360Provider:
@@ -174,11 +194,15 @@ class Outcome360Provider:
 
     # ── Reading canonical truth (tenant-scoped) ──────────────────────────────
 
+    def _effective_store(self) -> Optional[OutcomeStore]:
+        """Resolve the injected store, else the best-effort canonical backing."""
+        if self._outcome_store is not None:
+            return self._outcome_store
+        return _measurement_outcome_store()
+
     async def _load_outcomes(self, request: ProjectionRequest) -> list[Outcome]:
         """Outcome rows for the request, strictly scoped to its tenant."""
-        store = self._outcome_store
-        if store is None:
-            store = _measurement_outcome_store()
+        store = self._effective_store()
         if store is None:
             # No backing source available at runtime: degrade to an empty set.
             # The sections render as typed `missing`; the plane stays up.
@@ -195,7 +219,7 @@ class Outcome360Provider:
         temporal: Optional[ProjectionDependencyState],
         warnings: list[str],
     ) -> list[ProjectionSection]:
-        store_present = self._outcome_store is not None
+        store_present = self._effective_store() is not None
         evidence = _collect_evidence(outcomes)
         findings = self._derive_findings(outcomes)
 

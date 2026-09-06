@@ -55,6 +55,12 @@ from .relationship_registry import (
     predicate_entry,
 )
 
+# WS-D item 1: typed RelationshipFact evidence carry to the mutation ledger.
+from shared.backend_interpretation.flags import (  # noqa: E402
+    correlation_first_class_enabled,
+    relationship_fact_enabled,
+)
+
 # Canonical promotion policy ref recorded on every promoted assertion. The
 # registry's per-predicate ``defaultEvidenceRequirements`` is the substantive
 # policy; this ref names the M6 promotion policy that evaluates them.
@@ -462,6 +468,12 @@ async def project_assertion(
         key,
     ):
         return "skipped_existing"
+    # WS-D item 1 (typed RelationshipFact + evidence_refs): when the WS-D
+    # relationship-fact flag is ON, forward the assertion's per-signal
+    # evidence_refs onto the gateway intent so the mutation LEDGER record (the
+    # identity audit) carries them — today it drops them (evidence_refs=None).
+    # OFF keeps the pre-WS-D call byte-for-byte identical.
+    carry_ledger_evidence = relationship_fact_enabled()
     await gw.apply(
         edge_intent(
             edge,
@@ -470,8 +482,38 @@ async def project_assertion(
             subject_kind="entity",
             subject_id=assertion.target_entity_id,
             causality_class="observed_sequence",
+            evidence_refs=(
+                assertion.evidence_refs if carry_ledger_evidence else None
+            ),
+            correlation_id=(
+                str(edge.properties.get("correlation_id") or "")
+                if carry_ledger_evidence
+                else None
+            ),
         )
     )
+    # WS-D item 6 (correlation first-class): when enabled, the promoted edge's
+    # correlation family is registered in the durable CorrelationRegistry so
+    # correlation is a first-class registry row, not only an edge-property
+    # string. Best-effort: a registry failure never fails the projection.
+    if correlation_first_class_enabled():
+        try:
+            from shared.backend_interpretation.observe import (
+                register_correlation_from_observation,
+            )
+
+            family_id = str(edge.properties.get("correlation_id") or "")
+            if family_id:
+                await register_correlation_from_observation(
+                    assertion.tenant_id,
+                    {
+                        "correlation": {"correlation_id": family_id},
+                        "event": {"id": family_id},
+                        "source": {"type": "relationship_promotion"},
+                    },
+                )
+        except Exception:  # noqa: BLE001 - registry write is best-effort
+            pass
     return "projected"
 
 

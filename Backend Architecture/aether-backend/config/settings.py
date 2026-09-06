@@ -1068,6 +1068,83 @@ class NormalizationSpineConfig:
 
 
 # ---------------------------------------------------------------------------
+# Backend interpretation (WS-D) — the SDK + Universal Ingestion blueprint's
+# backend-interpretation slice (REPO_TRUTH_AND_GAP_MATRIX rows 7/8/9/22/24/26/31,
+# invariants #7/#11/#12/#13/#14). Every behavior-changing mechanism in WS-D is
+# gated by ONE of the default-OFF flags below; nothing changes while they are
+# OFF. Flip sequences are documented per item in docs/architecture/
+# BACKEND_INTERPRETATION_WS_D.md (authored WS-D close-out surface).
+#
+#   relationship_fact_enabled     AETHER_BACKEND_RELATIONSHIP_FACT_ENABLED —
+#                                 Typed canonical RelationshipFact
+#                                 (resolution-method + validity) and carrying
+#                                 evidence_refs on relationships/edges and on
+#                                 derived-claim writes (Invariant #14; row 26).
+#   episode_engine_enabled        AETHER_BACKEND_EPISODE_ENGINE_ENABLED —
+#                                 canonical episode primitive + episode360
+#                                 surface over the outcome truth store
+#                                 (rows 24/26/31).
+#   outcome_truth_store_enabled   AETHER_OUTCOME_TRUTH_STORE_ENABLED —
+#                                 durable outcome truth store; derived claims
+#                                 retain evidence + model/policy lineage
+#                                 instead of the outcome store returning None
+#                                 (Invariant #14; row 26/31).
+#   evidence_dedupe_enabled       AETHER_EVIDENCE_DEDUPE_ENABLED —
+#                                 Section-25 evidence dedupe (several source
+#                                 observations may evidence ONE canonical
+#                                 outcome; blueprint §25). WS-A/B evidence
+#                                 back-links rely on the dedupe fingerprint.
+#   silver_temporal_envelope_enabled  AETHER_SILVER_TEMPORAL_ENVELOPE_ENABLED —
+#                                 carry the server-built EventTemporalEnvelope
+#                                 through to the Silver projection boundary so
+#                                 projectors stop re-reading the raw client
+#                                 timestamp once the flag is on (Invariant #11;
+#                                 rows 7/22).
+#   correlation_first_class_enabled  AETHER_CORRELATION_FIRST_CLASS_ENABLED —
+#                                 correlation promoted from opaque JSONB to
+#                                 canonical columns/registry and carried end-to-
+#                                 end on the promotion path (Invariant #12;
+#                                 row 8).
+#   silver_exact_money_enabled    AETHER_SILVER_EXACT_MONEY_ENABLED —
+#                                 ingestion→Silver money path consumes the
+#                                 financial-normalization Decimal/exact-money
+#                                 machinery so missing/empty/zero/degraded stay
+#                                 DISTINCT instead of collapsing missing→0.0 and
+#                                 currency→'USD' (Invariant #13; row 13).
+#
+# Derived-truth governance (row 658) is NOT a separate flag: it rides the
+# existing mutation-gateway ladder (AETHER_MUTATION_GATEWAY_MODE, default
+# "off" → off|shadow|enforce) plus this block's relationship_fact_enabled /
+# outcome_truth_store_enabled switches where they stamp lineage on derived
+# writes. The gateway itself is pre-existing shared/graph/mutation_gateway.py
+# (default OFF); WS-D only wires derived-truth writers through its governance
+# semantics and completes the claim_type/model-version/evidence lineage.
+@dataclass(frozen=True)
+class BackendInterpretationConfig:
+    relationship_fact_enabled: bool = _env_bool(
+        "AETHER_BACKEND_RELATIONSHIP_FACT_ENABLED", False
+    )
+    episode_engine_enabled: bool = _env_bool(
+        "AETHER_BACKEND_EPISODE_ENGINE_ENABLED", False
+    )
+    outcome_truth_store_enabled: bool = _env_bool(
+        "AETHER_OUTCOME_TRUTH_STORE_ENABLED", False
+    )
+    evidence_dedupe_enabled: bool = _env_bool(
+        "AETHER_EVIDENCE_DEDUPE_ENABLED", False
+    )
+    silver_temporal_envelope_enabled: bool = _env_bool(
+        "AETHER_SILVER_TEMPORAL_ENVELOPE_ENABLED", False
+    )
+    correlation_first_class_enabled: bool = _env_bool(
+        "AETHER_CORRELATION_FIRST_CLASS_ENABLED", False
+    )
+    silver_exact_money_enabled: bool = _env_bool(
+        "AETHER_SILVER_EXACT_MONEY_ENABLED", False
+    )
+
+
+# ---------------------------------------------------------------------------
 # Storage Plane (PR 7 / FT-7 + PR 8 / FT-8) — Elastic Data Plane descriptor +
 # object layer, object-backed Bronze compaction, and cross-store lifecycle.
 #
@@ -1953,6 +2030,9 @@ class Settings:
     deprecated_ingest_aliases: DeprecatedIngestAliasesConfig = field(default_factory=DeprecatedIngestAliasesConfig)
     ingest_replay: IngestReplayConfig = field(default_factory=IngestReplayConfig)
     normalization_spine: NormalizationSpineConfig = field(default_factory=NormalizationSpineConfig)
+    backend_interpretation: BackendInterpretationConfig = field(
+        default_factory=BackendInterpretationConfig
+    )
     storage_plane: StoragePlaneConfig = field(default_factory=StoragePlaneConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
     stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
