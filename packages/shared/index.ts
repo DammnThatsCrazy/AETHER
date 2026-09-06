@@ -104,6 +104,7 @@ export * from './mobile-config';
 export * from './mobile-projection';
 export * from './imports';
 export * from './data-exchange';
+export * from './managed-integrations';
 
 // Unified-platform registries (generated from packages/shared/contracts/*.json
 // by scripts/generate_platform_contracts.py)

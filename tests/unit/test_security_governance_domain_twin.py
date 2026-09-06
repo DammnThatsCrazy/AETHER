@@ -78,5 +78,16 @@ def test_data_exchange_domain_is_in_both_sides() -> None:
     assert "data_exchange" in _py_governance_domains()
 
 
+def test_reconciled_control_domain_is_in_both_sides() -> None:
+    """Regression anchor for the Reconciled Control Plane domain (Phase 0).
+
+    ``reconciled_control`` is an Olympus-only operating domain (kept out of
+    ``ALL_DOMAINS`` like the kyber operating-plane domains), so the twin test is
+    what pins both the TS union and the backend Literal to the same membership.
+    """
+    assert "reconciled_control" in _ts_governance_domains()
+    assert "reconciled_control" in _py_governance_domains()
+
+
 if __name__ == "__main__":  # pragma: no cover
     pytest.main([__file__, "-q"])

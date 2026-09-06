@@ -1162,6 +1162,29 @@ def create_app() -> FastAPI:
     else:
         logger.info("Provider Source Catalog: disabled (set KYBER_PROVIDER_SOURCE_CATALOG_ENABLED=true to enable)")
 
+    # ── Reconciled Control Plane operator surface (feature-flagged, read-only) ──
+    # Phase 0 exposes ONLY read-only operator GETs over managed-integration
+    # registration + reconcile evidence. No live reconcile trigger and no
+    # actuator exist in Phase 0 (CP-08 boundary): drift classification is
+    # exercised by tests only until a later phase mounts a scheduler.
+    rcp = settings.reconciled_control
+    if rcp.enabled and rcp.kyber_route_enabled:
+        from services.managed_integrations.routes import (
+            admin_router as reconciled_control_admin_router,
+        )
+
+        app.include_router(reconciled_control_admin_router)
+        logger.info(
+            "Reconciled Control Plane: read-only operator routes mounted "
+            "(/v1/admin/kyber/managed-integrations)"
+        )
+    else:
+        logger.info(
+            "Reconciled Control Plane: disabled (set "
+            "AETHER_RECONCILED_CONTROL_PLANE_ENABLED=true and "
+            "AETHER_RECONCILED_CONTROL_KYBER_ROUTE_ENABLED=true to enable)"
+        )
+
     # ── Data Rights Ledger (feature-flagged) ───────────────────────────
     if pc.connector_data_rights_enabled:
         from services.integrations.data_rights.routes import (

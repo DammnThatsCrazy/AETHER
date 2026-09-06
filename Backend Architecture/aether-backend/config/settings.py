@@ -1278,6 +1278,26 @@ class DataExchangeConfig:
 
 
 # ---------------------------------------------------------------------------
+# Reconciled Control Plane (managed-integration desired/observed reconciliation)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ReconciledControlPlaneConfig:
+    """Reconciled Control Plane surface toggles (all OFF until the plane ships).
+
+    Phase 0 establishes the ManagedIntegration abstraction + reconcile *loop
+    machinery* only. ``enabled`` is the plane master switch; ``reconciler_enabled``
+    gates the reconciliation skeleton (exercised by tests only in Phase 0 — there
+    is no live scheduler yet); ``kyber_route_enabled`` gates the read-only
+    operator surface under ``/v1/admin/kyber/managed-integrations``. No flag here
+    ever enables a mutation of a managed integration's desired or observed state.
+    """
+    enabled: bool = _env_bool("AETHER_RECONCILED_CONTROL_PLANE_ENABLED", False)
+    reconciler_enabled: bool = _env_bool("AETHER_RECONCILED_CONTROL_RECONCILER_ENABLED", False)
+    kyber_route_enabled: bool = _env_bool("AETHER_RECONCILED_CONTROL_KYBER_ROUTE_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
 # External billing / payment provider readiness (behind flags)
 # ---------------------------------------------------------------------------
 
@@ -2146,6 +2166,12 @@ class Settings:
 
     # Data Exchange Plane (governed tenant import/export layer; all OFF in M0)
     data_exchange: DataExchangeConfig = field(default_factory=DataExchangeConfig)
+
+    # Reconciled Control Plane (managed-integration desired/observed reconcile;
+    # all OFF in Phase 0 — no live reconcile trigger or actuator)
+    reconciled_control: ReconciledControlPlaneConfig = field(
+        default_factory=ReconciledControlPlaneConfig
+    )
 
     # External billing / payment provider readiness (behind flags)
     external_billing: ExternalBillingConfig = field(default_factory=ExternalBillingConfig)

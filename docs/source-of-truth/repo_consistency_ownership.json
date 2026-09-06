@@ -342,6 +342,35 @@
       "remediation": "Keep the data exchange contract twin (packages/shared/data-exchange.ts \u2194 services/data_exchange/contracts.py) in sync, refresh the DATA_EXCHANGE_PHASES plan, and update the data exchange tests; regenerate docs."
     },
     {
+      "id": "reconciled_control_plane",
+      "name": "reconciled control plane changed",
+      "source_globs": [
+        "Backend Architecture/**/services/managed_integrations/**",
+        "Backend Architecture/**/alembic/versions/20260906_rcp_managed_integrations.py",
+        "packages/shared/managed-integrations.ts",
+        "Backend Architecture/**/services/security/contracts.py",
+        "Backend Architecture/**/services/security/access_control.py",
+        "packages/shared/security-governance.ts"
+      ],
+      "required_changed_globs": [
+        "packages/shared/managed-integrations.ts",
+        "packages/shared/security-governance.ts",
+        "Backend Architecture/**/services/managed_integrations/**",
+        "docs/architecture/RECONCILED_CONTROL_PLANE.md",
+        "docs/plans/RECONCILED_CONTROL_PHASES.md",
+        "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",
+        "docs/_generated/**",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/validate_contracts.py",
+        "python scripts/docs_drift.py --strict",
+        "python -m pytest tests/contracts/test_managed_integrations_parity.py -q",
+        "python -m pytest tests/unit/reconciled_control -q"
+      ],
+      "remediation": "Keep the reconciled-control contract twin (packages/shared/managed-integrations.ts \u2194 services/managed_integrations/contracts.py) and the reconciled_control governance domain in sync, refresh the RECONCILED_CONTROL_PHASES plan, and update the managed-integration tests; regenerate docs."
+    },
+    {
       "id": "measurement_integrity",
       "name": "measurement integrity plane changed",
       "source_globs": [
