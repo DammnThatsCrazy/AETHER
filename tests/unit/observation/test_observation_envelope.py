@@ -236,11 +236,14 @@ def test_flag_gated_batch_attach_is_additive() -> None:
 
 # ── /v1/batch adoption site (flag-gated, default OFF) ────────────────────────
 
-def test_batch_v1_accepted_path_guards_on_flag() -> None:
-    """The accepted-path block must reference the flag and degrade on failure."""
+def test_batch_v1_accepted_path_guards_on_flags_and_gateway() -> None:
+    """The accepted-path block must reference both flags (WS-A5 envelope build +
+    WS-B1 gateway) plus the SDK adapter / gateway and degrade on failure."""
     source = inspect.getsource(batch)
     assert "settings.observation_envelope.enabled" in source
-    assert "build_sdk_observation_envelope" in source
+    assert "settings.ingress_gateway.enabled" in source
+    assert "SdkIngressAdapter" in source
+    assert "validate_and_stamp" in source
     assert 'normalized["observation_envelope"]' in source
     assert "except Exception" in source
 
