@@ -119,6 +119,25 @@ def _age_seconds(iso_value: Optional[str], now: datetime) -> Optional[float]:
     return max(0.0, (now - parsed).total_seconds())
 
 
+def _ingress_scrub_webhook_parsed(parsed: dict[str, Any]) -> dict[str, Any]:
+    """WS-B3 payment-rails ingress scrub (``payment_rails_ingress_scrub_enabled``).
+
+    Redacts sensitive values on the VERIFIED parsed webhook body (keys retained,
+    values replaced by ``[REDACTED]``) before ``parse_webhook``/reconciliation,
+    so a secret value can never reach event construction, reconciliation writes,
+    or alert evaluation. ``payload_hash`` must be computed from the ORIGINAL
+    parsed body before this call so provider redeliveries still dedupe
+    (idempotency semantics preserved). This is a C-class scrub-only seam — the
+    domain gate ``_consent_permits_session`` is unchanged. Scrub never rejects.
+    """
+    if not settings.ingress_consent.payment_rails_ingress_scrub_enabled:
+        return parsed
+    from services.ingestion.validation import scrub_sensitive_fields
+
+    scrubbed, _found = scrub_sensitive_fields(parsed)
+    return scrubbed
+
+
 def provider_enabled(provider: str) -> bool:
     flags = settings.payment_rails
     if not flags.enabled:
@@ -204,7 +223,11 @@ class PaymentRailsService:
         from services.integrations.providers.payment_rails.base import _resolve_environment
 
         env = _resolve_environment(None)
-        events = adapter.parse_webhook(tenant_id, parsed, payload_hash(parsed))
+        # raw_hash over the ORIGINAL parsed body (idempotency preserved), then
+        # scrub values before parse_webhook/reconciliation (WS-B3, scrub-only).
+        raw_hash = payload_hash(parsed)
+        parsed = _ingress_scrub_webhook_parsed(parsed)
+        events = adapter.parse_webhook(tenant_id, parsed, raw_hash)
         results = [
             await self._process_event(tenant_id, adapter, event, environment=env)
             for event in events
@@ -315,7 +338,11 @@ class PaymentRailsService:
         if not isinstance(parsed, dict):
             raise BadRequestError("Webhook payload must be a JSON object")
 
-        events = adapter.parse_webhook(tenant_id, parsed, payload_hash(parsed))
+        # raw_hash over the ORIGINAL parsed body (idempotency preserved), then
+        # scrub values before parse_webhook/reconciliation (WS-B3, scrub-only).
+        raw_hash = payload_hash(parsed)
+        parsed = _ingress_scrub_webhook_parsed(parsed)
+        events = adapter.parse_webhook(tenant_id, parsed, raw_hash)
         results = [
             await self._process_event(
                 tenant_id, adapter, event,

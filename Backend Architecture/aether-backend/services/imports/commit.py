@@ -29,6 +29,7 @@ here are also directly callable (and tested) without a worker.
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -172,6 +173,97 @@ def plan_graph(tenant_id: str, records: list[dict]) -> tuple[list[dict], list[di
     return list(vertices.values()), edges
 
 
+def _norm_column(name: Any) -> str:
+    """Normalize a column name for policy classification (lowercase, non-alnum
+    stripped) — mirrors the fingerprint classifier's key normalization."""
+    return re.sub(r"[^a-z0-9]", "", str(name or "").lower())
+
+
+async def _enforce_imports_consent_policy(
+    tenant_id: str, fields: list[FieldMapping], staged_rows: list[dict]
+) -> None:
+    """WS-B3 T-class commit data-policy gate (mandatory, before any Bronze write).
+
+    An import commit is a tenant back-office (T) attestation — the FSM approve
+    transition is the consent gate — so there is deliberately NO per-subject
+    server-receipt lookup here. The mandatory T-class layer is scrub (the caller
+    applies it to every Bronze payload copy) PLUS this data-policy check, which
+    runs BEFORE any Bronze write so a denial fails the commit closed with no
+    partial Bronze. There is no per-path S toggle on the import path, so the
+    ``imports_consent_policy_enabled`` flag cannot be a bypass: if an operator
+    disables it the commit DENIES instead of ingesting with the policy layer
+    switched off.
+
+    Classification never trusts the client-supplied mapping ``source_column``
+    label in isolation:
+      * fingerprinting is detected from the ACTUAL staged column names (the
+        schema of the ingested rows), not mapping labels, and is default-deny;
+      * per-column data classes are only evaluated for a mapping source_column
+        that is PROVEN present among the real ingested columns. An empty or
+        phantom source_column (not resolvable against the staged data) is
+        DENIED by default (``mapping_source_column_unresolved``) rather than
+        skipped — a client cannot launder prohibited content under a label no
+        policy ever sees.
+    ``evaluate_data_policy`` is default-allow when no tenant compliance profile
+    exists, so a tenant without a profile only ever trips on fingerprinting.
+    """
+    from config.settings import settings
+
+    if not settings.ingress_consent.imports_consent_policy_enabled:
+        # Fail closed: the mandatory T-class policy layer cannot be bypassed by
+        # disabling the flag (an import must never skip data-policy).
+        raise ConflictError("import_consent_policy_denied:enforcement_disabled")
+    from services.consent.authority import evaluate_data_policy
+    from services.ingestion.validation import classify_fingerprints
+
+    denied: list[str] = []
+
+    # 1. Fingerprinting over the ACTUAL staged columns (schema/content, never
+    #    the mapping labels; values are never kept).
+    fingerprint_seen = False
+    for staged in staged_rows:
+        for row in staged["rows"]:
+            if classify_fingerprints(row):
+                fingerprint_seen = True
+                break
+        if fingerprint_seen:
+            break
+    if fingerprint_seen:
+        allowed, reason = await evaluate_data_policy(tenant_id, "fingerprint")
+        if not allowed:
+            denied.append(reason or "fingerprinting_not_authorized")
+
+    # 2. Tenant-prohibited data classes. Only columns PROVEN present in the
+    #    staged data are classified; unresolved mapping source_columns deny by
+    #    default instead of being skipped.
+    real_columns = {
+        _norm_column(key)
+        for staged in staged_rows
+        for row in staged["rows"]
+        for key in row
+    }
+    for fm in fields:
+        data_class = _norm_column(fm.source_column)
+        if not data_class or data_class not in real_columns:
+            denied.append("mapping_source_column_unresolved")
+            continue
+        allowed, reason = await evaluate_data_policy(tenant_id, data_class)
+        if not allowed:
+            denied.append(reason or "data_classification_denied")
+
+    if denied:
+        unique = sorted(set(denied))
+        logger.warning(
+            "import_consent_policy_denied tenant=%s import_class=tenants reasons=%s",
+            tenant_id, unique,
+        )
+        metrics.increment(
+            "import_consent_policy_blocked_total",
+            labels={"reason": "|".join(unique), "tenant_id": tenant_id},
+        )
+        raise ConflictError(f"import_consent_policy_denied:{'|'.join(unique)}")
+
+
 async def _stage_and_mutate(
     tenant_id: str, import_id: str, session: dict, commit_id: str
 ) -> dict:
@@ -198,6 +290,10 @@ async def _stage_and_mutate(
     bronze_rows = 0
     all_records: list[dict] = []
     row_errors: list[dict] = []
+    # WS-B3: rows are staged in full (per file) before any Bronze write so the
+    # consent-policy gate can run against every row up front — a denial must
+    # fail the commit closed with no partial Bronze.
+    staged_rows: list[dict] = []
     for schema in schemas:
         file_id = schema.get("file_id")
         if not file_id:
@@ -210,12 +306,26 @@ async def _stage_and_mutate(
             rec["file_id"] = file_id  # lineage for the Silver projection
         all_records.extend(records)
         row_errors.extend(errors)
-        for idx, row in enumerate(rows):
+        staged_rows.append({"file_id": file_id, "rows": rows})
+
+    # T-class data-policy gate before any durable write (no partial Bronze).
+    await _enforce_imports_consent_policy(tenant_id, fields, staged_rows)
+
+    # Scrub is the MANDATORY T-class minimization layer and runs UNCONDITIONALLY
+    # (redaction never rejects). It is applied to the Bronze payload copy ONLY:
+    # secret-key columns are redacted in what is persisted under tenant_import,
+    # while the graph-building records keep the governor-approved mapped values.
+    from services.ingestion.validation import scrub_sensitive_fields
+
+    for staged in staged_rows:
+        file_id = staged["file_id"]
+        for idx, row in enumerate(staged["rows"]):
+            payload, _ = scrub_sensitive_fields(row)
             _rec, is_new = await bronze.ingest(
                 source=BRONZE_DOMAIN,
                 source_tag=commit_id,
                 provider_record_id=f"{file_id}:{idx}",
-                payload=row,
+                payload=payload,
                 tenant_id=tenant_id,
                 license_status="tenant_owned",
                 terms_status="approved",
