@@ -38,7 +38,6 @@ degrade per-row without taking the run down.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 
 from pydantic import ValidationError
@@ -52,6 +51,7 @@ from shared.observation.envelope import (
     SourceBlock,
     UniversalObservationEnvelope,
 )
+from shared.temporal.instant import coerce_utc_lenient
 
 from services.ingestion.adapters.base import UniversalIngressAdapter
 from services.ingestion.observation_envelope import (
@@ -65,18 +65,6 @@ DEFAULT_REPLAY_INGRESS_PATH = "/v1/ingest/replay"
 # The runner injects this key into the per-row normalized copy it hands the
 # adapter; it is stripped from the payload that is actually published.
 REPLAY_CONTEXT_KEY = "_replay"
-
-
-def _parse_replay_instant(value: Any) -> Optional[datetime]:
-    """Parse an ISO-8601 replay stamp into an aware UTC datetime."""
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except (ValueError, TypeError):
-        return None
 
 
 class ReplayIngressAdapter(UniversalIngressAdapter):
@@ -125,8 +113,12 @@ class ReplayIngressAdapter(UniversalIngressAdapter):
             return None
 
         original_event_id = replay.get("original_event_id") or envelope.observation.observation_id
-        replay_received = _parse_replay_instant(replay.get("replay_received_at"))
-        replay_ingested = _parse_replay_instant(replay.get("replay_ingested_at"))
+        # Runner-injected operational stamps: the kernel's lenient coercer
+        # (shared/temporal/instant) accepts an ISO-8601 string or datetime,
+        # assuming UTC on a naive value and returning None on empty/unparseable
+        # input — never raising, so a bad stamp degrades per-row not per-run.
+        replay_received = coerce_utc_lenient(replay.get("replay_received_at"))
+        replay_ingested = coerce_utc_lenient(replay.get("replay_ingested_at"))
         if replay_received is None or replay_ingested is None:
             logger.warning(
                 "replay adapter: unparseable replay instants, skipping event %s",
