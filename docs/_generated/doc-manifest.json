@@ -5417,6 +5417,21 @@
       "canonical_owner": "backend@aether"
     },
     {
+      "path": "docs/plans/DATA_EXCHANGE_PHASES.md",
+      "title": "Data Exchange Plane — Day-1 Implementation Program",
+      "slug": "plans/data-exchange-phases",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "canonical_owner": "backend@aether"
+    },
+    {
       "path": "docs/plans/FINANCIAL_NORMALIZATION_PHASES.md",
       "title": "Financial Normalization — Phased Implementation Program",
       "slug": "plans/financial-normalization-phases",
@@ -5490,6 +5505,20 @@
       "status": "experimental",
       "since_version": "8.12.0",
       "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/plans/data-exchange-api.md",
+      "title": "Data Exchange Plane — Frozen API Surface",
+      "slug": "plans/data-exchange-api",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "canonical_owner": "backend@aether"
     },
     {
       "path": "docs/privacy/traffic-intelligence-data-retention.md",
