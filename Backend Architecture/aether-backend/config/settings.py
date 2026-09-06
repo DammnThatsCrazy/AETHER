@@ -1160,6 +1160,42 @@ class BackendInterpretationConfig:
 
 
 # ---------------------------------------------------------------------------
+# Ingestion funnel observability + Kyber ingestion control plane (WS-E 1/2/3).
+# Default OFF: when ON, services/ingestion/ingestion_observability.py records
+# per-stage ingestion-funnel telemetry (RECEIVED → VALIDATED → BRONZE →
+# NORMALIZED → PROJECTIONS; blueprint §17 ladder) and per-observation traces
+# keyed by ``{tenant_id}:{event_id}`` for the Kyber Observation Inspector, and
+# the Kyber operator surfaces (GET /v1/kyber/ingest/observability/*) plus
+# GET /v1/health/pipeline serve live from that ledger. OFF = zero recording and
+# every surface reports the feature disabled (routes stay mounted; bodies are
+# flag-gated — the same adoption posture as the replay kill switch). The ledger
+# is in-process (it mirrors the existing in-process MetricsCollector
+# conventions), never changes event dispositions, and never rejects.
+@dataclass(frozen=True)
+class IngestionObservabilityConfig:
+    enabled: bool = _env_bool("AETHER_INGESTION_OBSERVABILITY_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
+# SDK version-compatibility tiers (Invariant #18, WS-E 6): the version-band
+# model (supported / deprecated / read-compatible / blocked-after-date) served
+# as the SDK capability manifest at GET /v1/config/sdk/versions. Default OFF:
+# when ON, /v1/batch ALSO consults each event's ``context.library.version`` and
+# attaches an advisory tier label (normalized["sdk_tier"]) — advisory only
+# unless MODE=enforce, which additionally REJECTS events whose SDK band is past
+# its blocked_after date (see services/ingestion/sdk_version_tiers.py). OFF keeps
+# every SDK client treated identically (today's behavior).
+@dataclass(frozen=True)
+class SdkVersionCompatibilityConfig:
+    enabled: bool = _env_bool("AETHER_SDK_VERSION_COMPAT_ENABLED", False)
+    # Enforcement switch for the ingress consultation once ENABLED is ON
+    # (mirrors the stack's shadow/observe conventions): "off"/"shadow"/"warn"
+    # attach the advisory sdk_tier label only (identical behavior, differing
+    # recorded mode); "enforce" additionally rejects blocked-after-date bands.
+    mode: str = _env("AETHER_SDK_VERSION_COMPAT_MODE", "off")
+
+
+# ---------------------------------------------------------------------------
 # Storage Plane (PR 7 / FT-7 + PR 8 / FT-8) — Elastic Data Plane descriptor +
 # object layer, object-backed Bronze compaction, and cross-store lifecycle.
 #
@@ -2048,6 +2084,12 @@ class Settings:
     subject_hints: SubjectHintsConfig = field(default_factory=SubjectHintsConfig)
     backend_interpretation: BackendInterpretationConfig = field(
         default_factory=BackendInterpretationConfig
+    )
+    ingestion_observability: IngestionObservabilityConfig = field(
+        default_factory=IngestionObservabilityConfig,
+    )
+    sdk_version_compat: SdkVersionCompatibilityConfig = field(
+        default_factory=SdkVersionCompatibilityConfig,
     )
     storage_plane: StoragePlaneConfig = field(default_factory=StoragePlaneConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)

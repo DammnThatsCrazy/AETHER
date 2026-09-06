@@ -2578,6 +2578,27 @@ export const api = {
       restClient.get('/v1/health/pipeline', wrap(unknownSchema)).then(r => r.data),
   },
 
+  // WS-E Kyber ingestion control plane (blueprint Gate G). The observability and
+  // replay surfaces are Kyber-operator-only router surfaces; bodies report
+  // `enabled:false`/disabled while AETHER_INGESTION_OBSERVABILITY_ENABLED is OFF,
+  // so the UI renders honest disabled/empty states rather than errors.
+  ingestionOps: {
+    versionTiers: () =>
+      restClient.get('/v1/config/sdk/versions', wrap(unknownSchema)).then(r => r.data),
+    observabilityStatus: () =>
+      restClient.get('/v1/kyber/ingest/observability', wrap(unknownSchema)).then(r => r.data),
+    funnel: () =>
+      restClient.get('/v1/kyber/ingest/observability/funnel', wrap(unknownSchema)).then(r => r.data),
+    trace: (eventId: string, tenantId: string) =>
+      restClient
+        .get(`/v1/kyber/ingest/observability/traces/${encodeURIComponent(eventId)}${buildQS({ tenant_id: tenantId })}`, wrap(unknownSchema))
+        .then(r => r.data),
+    recentTraces: (limit = 50) =>
+      restClient.get(`/v1/kyber/ingest/observability/traces${buildQS({ limit })}`, wrap(unknownSchema)).then(r => r.data),
+    replayStatus: () =>
+      restClient.get('/v1/kyber/ingest/replay/status', wrap(unknownSchema)).then(r => r.data),
+  },
+
   measurement: {
     overview: (window = '30d') =>
       restClient.get(`/v1/measurement/overview${buildQS({ window })}`, wrap(unknownSchema)).then(r => r.data),

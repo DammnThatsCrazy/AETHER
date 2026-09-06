@@ -52,6 +52,15 @@ from services.ingestion.bronze_bulk import (
     OutboxEvent,
     ingest_many,
 )
+from services.ingestion.ingestion_observability import (
+    record_degraded,
+    record_stage,
+)
+from services.ingestion.sdk_version_tiers import (
+    classify_sdk_version,
+    sdk_version_advisory,
+    sdk_version_ingress_blocked,
+)
 from services.ingestion.sequence_integrity import analyze_batch_sequences
 from services.ingestion.validation import (
     EventValidationResult,
@@ -361,6 +370,23 @@ async def ingest_events(
     metrics.increment("ingestion_batch_received_total", labels={"tenant_id": tenant_id})
 
     for sdk_event in events:
+        # WS-E funnel telemetry: every observation that reaches the spine is
+        # RECEIVED (flag-gated; no-op while observability is OFF).
+        record_stage(
+            tenant_id=tenant_id,
+            event_id=sdk_event.id,
+            event_type=sdk_event.type,
+            stage="received",
+            status="observed",
+            path="sdk",
+        )
+        # WS-E Invariant #18: enforce-mode SDK version-tier blocking. Inert by
+        # default (flag OFF / mode != enforce / blocked-after date not reached).
+        if sdk_version_ingress_blocked(sdk_event.context.library):
+            reason = _sdk_version_block_reason(sdk_event.context.library)
+            results.append(EventResult(id=sdk_event.id, status="rejected", reason=reason))
+            continue
+
         validation = await validate_event(
             sdk_event=sdk_event,
             tenant_id=tenant_id,
@@ -392,6 +418,11 @@ async def ingest_events(
             normalized = validation.normalized_event
             if normalized is None:  # pragma: no cover - typed invariant
                 raise RuntimeError("accepted validation missing normalized event")
+            # WS-E Invariant #18: advisory SDK version-tier label on the
+            # normalized payload (additive; only when the compat flag is ON).
+            _advisory = sdk_version_advisory(sdk_event.context.library)
+            if _advisory is not None:
+                normalized["sdk_tier"] = _advisory
             if server_context is not None:
                 normalized["server_context"] = server_context
             if settings.observation_envelope.enabled:
@@ -434,6 +465,12 @@ async def ingest_events(
                                 metrics.increment(
                                     "ingestion_observation_envelope_gateway_rejected_total",
                                     labels={"tenant_id": tenant_id},
+                                )
+                                # WS-E funnel: flag fail-open degrade (accepted A-side,
+                                # envelope rejected → flat dict). No-op while OFF.
+                                record_degraded(
+                                    tenant_id=tenant_id,
+                                    event_id=normalized.get("event_id"),
                                 )
                         else:
                             normalized["observation_envelope"] = envelope.to_bronze_additive()
@@ -586,6 +623,19 @@ async def ingest_events(
         batch_id, n_accepted, n_duplicates, n_rejected, tenant_id,
     )
 
+    # WS-E funnel: final per-event VALIDATED disposition + durable BRONZE for
+    # accepted events (flag-gated; no-op while ingestion observability is OFF).
+    for _res in results:
+        record_stage(
+            tenant_id=tenant_id, event_id=_res.id, stage="validated",
+            status=_res.status, path="sdk",
+        )
+        if _res.status == "accepted":
+            record_stage(
+                tenant_id=tenant_id, event_id=_res.id, stage="bronze",
+                status="accepted", path="sdk",
+            )
+
     # Family seam: durable meter + evidence for accepted ingestion only
     # (advisory — no entitlement gate; metering never breaks the request).
     if n_accepted > 0:
@@ -638,6 +688,25 @@ async def _ingest_batch_v2(
     candidate_deployments: list[Optional[str]] = []
 
     for sdk_event in body.batch:
+        # WS-E funnel telemetry: RECEIVED (flag-gated; no-op while OFF).
+        record_stage(
+            tenant_id=tenant.tenant_id,
+            event_id=sdk_event.id,
+            event_type=sdk_event.type,
+            stage="received",
+            status="observed",
+            path="sdk",
+        )
+        # WS-E Invariant #18: enforce-mode SDK version-tier blocking (inert by
+        # default — flag OFF / mode != enforce / blocked-after date not reached).
+        if sdk_version_ingress_blocked(sdk_event.context.library):
+            results.append(EventResult(
+                id=sdk_event.id,
+                status="rejected",
+                reason=_sdk_version_block_reason(sdk_event.context.library),
+            ))
+            continue
+
         validation = await validate_event(
             sdk_event=sdk_event,
             tenant_id=tenant.tenant_id,
@@ -672,6 +741,11 @@ async def _ingest_batch_v2(
         results[-1] = temporal_result
         if temporal_result.status != "accepted":
             continue
+        # WS-E Invariant #18: advisory SDK version-tier label (additive; only
+        # when the compat flag is ON).
+        _advisory = sdk_version_advisory(sdk_event.context.library)
+        if _advisory is not None:
+            normalized["sdk_tier"] = _advisory
         if server_context is not None:
             normalized["server_context"] = server_context
 
@@ -743,6 +817,19 @@ async def _ingest_batch_v2(
         "Batch %s processed (v2): accepted=%d duplicates=%d rejected=%d tenant=%s",
         batch_id, n_accepted, n_duplicates, n_rejected, tenant.tenant_id,
     )
+
+    # WS-E funnel: final per-event VALIDATED disposition + durable BRONZE for
+    # accepted events (flag-gated; no-op while ingestion observability is OFF).
+    for _res in results:
+        record_stage(
+            tenant_id=tenant.tenant_id, event_id=_res.id, stage="validated",
+            status=_res.status, path="sdk",
+        )
+        if _res.status == "accepted":
+            record_stage(
+                tenant_id=tenant.tenant_id, event_id=_res.id, stage="bronze",
+                status="accepted", path="sdk",
+            )
 
     # Family seam: durable meter + evidence for accepted ingestion only
     # (advisory — no entitlement gate; metering never breaks the request).
@@ -971,6 +1058,15 @@ def _build_normalized_payload(
 def _get_event_family(event_type: str) -> str:
     """Compatibility wrapper over the generated-registry family lookup."""
     return _validated_event_family(event_type)
+
+
+def _sdk_version_block_reason(library: Optional[dict[str, Any]]) -> str:
+    """Rejection reason for enforce-mode SDK version-tier blocking."""
+    band = classify_sdk_version(
+        (library or {}).get("version"), (library or {}).get("name")
+    )
+    label = (band.label or band.id).lower().replace(" ", "-")
+    return f"sdk_version_blocked:{band.id}:{label}"
 
 
 def _strip_canonical_entity_id(obj: Any) -> Any:

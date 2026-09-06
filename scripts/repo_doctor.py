@@ -748,6 +748,20 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="keep canonical asset/valuation surfaces on the namespaced Decimal immutable observe-only model; see docs/source-of-truth/FINANCIAL_NORMALIZATION.md",
     )
     run(
+        [sys.executable, "scripts/validate_kyber_ops_surface.py"],
+        name="Kyber operations surface (Gate G: source/schema health, ingestion lag, quality, rejection, replay, lineage via operator-only Kyber control plane)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="keep the WS-E/WS-B4 Kyber control-plane surfaces mounted + operator-only: /v1/health/pipeline, /v1/config/sdk/versions, the /v1/kyber/ingest/observability router (funnel + Observation Inspector), and the /v1/kyber/ingest/replay router; see docs/source-of-truth/INGESTION_OPS.md",
+    )
+    run(
+        [sys.executable, "scripts/validate_sdk_compat_tiers.py"],
+        name="SDK version-compatibility tiers (Gate H: supported/deprecated/read-compatible bands preserved, fail-closed date enforcement staged behind default-OFF flags)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="keep services/ingestion/sdk_version_tiers.py on the honest tier table (never block a served band before its date; never weaken staged default-OFF enforcement); see docs/source-of-truth/INGESTION_OPS.md",
+    )
+    run(
         [sys.executable, "scripts/validate_frontend_value_display.py"],
         name="Frontend value-display guardrail (canonical ValueDisplay/formatUSD)",
         results=results,

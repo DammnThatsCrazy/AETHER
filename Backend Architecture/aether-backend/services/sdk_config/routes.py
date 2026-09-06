@@ -19,6 +19,7 @@ from shared.common.common import APIResponse, BadRequestError
 from shared.logger.logger import get_logger
 from shared.observability import trace_request, emit_latency
 
+from services.ingestion.sdk_version_tiers import tiers_payload
 from services.sdk_config.service import get_sdk_config_service
 
 logger = get_logger("aether.service.sdk_config.routes")
@@ -95,6 +96,22 @@ async def get_active_manifest(request: Request):
 
     emit_latency("sdk_manifest_active_fetch", ctx.elapsed_ms())
     return APIResponse(data=manifest.to_dict()).to_dict()
+
+
+@router.get("/versions")
+async def get_sdk_version_tiers(request: Request):
+    """
+    SDK version-compatibility tiers (Invariant #18, WS-E 6) — the capability
+    manifest behind the per-band model (supported / deprecated /
+    read-compatible / blocked-after-date + per-band capabilities).
+
+    Static, non-secret policy data: the block declares the authoritative band
+    table served to SDKs and operators, plus the ``enabled`` / ``mode`` of the
+    ingress *consultation* seam (AETHER_SDK_VERSION_COMPAT_ENABLED /
+    AETHER_SDK_VERSION_COMPAT_MODE). Reading it never depends on the flag —
+    the tier table is always served; only the ingress advisory label does.
+    """
+    return APIResponse(data=tiers_payload()).to_dict()
 
 
 @router.put("/manifest")

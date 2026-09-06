@@ -110,3 +110,18 @@ async def root():
 async def get_metrics():
     """Internal metrics endpoint (JSON format)."""
     return APIResponse(data=metrics.snapshot()).to_dict()
+
+
+@router.get("/v1/health/pipeline")
+async def health_pipeline():
+    """Ingestion funnel pipeline health (WS-E 3).
+
+    Fixes the previously-phantom ``GET /v1/health/pipeline`` the Kyber operator
+    hook called. Reports the ingestion funnel the same way the other health
+    routes report components: a 200-shaped payload with ``status`` healthy /
+    degraded / disabled. ``enabled: false`` (with zeroed counters) while the
+    ingestion-observability flag is OFF, so the liveness surface stays stable.
+    """
+    from services.ingestion.ingestion_observability import pipeline_snapshot
+
+    return pipeline_snapshot()

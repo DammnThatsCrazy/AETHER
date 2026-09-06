@@ -24,6 +24,11 @@ interface FeatureFlags {
   readonly enableProviderRuntime: boolean;
   /** Model-runtime control-plane operator admin surfaces (ADR-008 D8/D9). Default OFF. */
   readonly enableModelHarness: boolean;
+  /** Ingestion control plane (Kyber Observation Inspector + ingestion funnel +
+   * SDK-fleet mount). Mirrors AETHER_INGESTION_OBSERVABILITY_ENABLED (default
+   * OFF); the /v1/kyber/ingest/observability + /v1/kyber/ingest/replay endpoints
+   * are the real grant gate, so routing is not a grant. */
+  readonly enableIngestionOps: boolean;
 }
 
 const DEFAULT_FLAGS: FeatureFlags = {
@@ -56,6 +61,10 @@ const DEFAULT_FLAGS: FeatureFlags = {
   // environment flips the flag on together with the model-runtime control-plane
   // backend; routing is never a grant — the /v1/model-runtime/* endpoints gate.
   enableModelHarness: false,
+  // Ingestion control plane mirrors the backend ingestion-observability flag
+  // (default OFF); the page renders honest disabled/empty states from what the
+  // backend reports, and /v1/kyber/* endpoints gate every request.
+  enableIngestionOps: false,
 };
 
 function loadFlags(): FeatureFlags {
