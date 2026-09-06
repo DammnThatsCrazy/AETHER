@@ -96,14 +96,18 @@ class IngressAdapterFamilySpec:
 # registry is the single dispatch point (and so a misconfigured adapter fails at
 # import time, not first use).
 from services.ingestion.adapters.sdk import SdkIngressAdapter  # noqa: E402
+from services.ingestion.adapters.replay import ReplayIngressAdapter  # noqa: E402
 
 REGISTERED_ADAPTERS: dict[str, Type[UniversalIngressAdapter]] = {
     "sdk": SdkIngressAdapter,
+    "replay": ReplayIngressAdapter,
 }
 
 _IMPLEMENTED_STATUS = {
     "sdk": "implemented — SdkIngressAdapter (WS-B1); public SDK credential, "
     "observation:write + config:read",
+    "replay": "implemented — ReplayIngressAdapter (WS-B4); OPERATOR_REPLAY "
+    "credential, original-time preservation (Invariant #15)",
 }
 
 # Family specs in canonical Envelope-B SOURCE_TYPES order.

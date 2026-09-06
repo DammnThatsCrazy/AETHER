@@ -977,6 +977,21 @@ class DeprecatedIngestAliasesConfig:
     kill_enabled: bool = _env_bool("AETHER_KILL_DEPRECATED_INGEST_ALIASES", False)
 
 
+# Ingestion-level replay (WS-B4): the OPERATOR-triggered, scan-run re-delivery
+# of durable Bronze SDK events through the universal ingestion gateway with
+# original-time preservation (Invariant #15). Default OFF: an operator may
+# always dry-run a replay (counts only, zero publishes); a REAL run
+# (services/ingestion/replay_routes.py POST /events with dry_run=false) is
+# refused with 403 until this flag is ON. Replay reads Bronze only and
+# publishes to Topic.SDK_EVENTS_VALIDATED with source_service
+# "ingestion.replay" (the Bronze writer consumer skips those — the durable row
+# already exists). Service runner + minimal operator route; NOT a durable-jobs
+# control plane in this slice.
+@dataclass(frozen=True)
+class IngestReplayConfig:
+    enabled: bool = _env_bool("AETHER_INGESTION_REPLAY_ENABLED", False)
+
+
 # ---------------------------------------------------------------------------
 # Storage Plane (PR 7 / FT-7 + PR 8 / FT-8) — Elastic Data Plane descriptor +
 # object layer, object-backed Bronze compaction, and cross-store lifecycle.
@@ -1839,6 +1854,7 @@ class Settings:
     observation_envelope: ObservationEnvelopeConfig = field(default_factory=ObservationEnvelopeConfig)
     ingress_gateway: IngressGatewayConfig = field(default_factory=IngressGatewayConfig)
     deprecated_ingest_aliases: DeprecatedIngestAliasesConfig = field(default_factory=DeprecatedIngestAliasesConfig)
+    ingest_replay: IngestReplayConfig = field(default_factory=IngestReplayConfig)
     storage_plane: StoragePlaneConfig = field(default_factory=StoragePlaneConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
     stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)

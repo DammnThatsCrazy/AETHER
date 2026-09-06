@@ -1,9 +1,14 @@
-"""Registry tests for the universal ingress adapters (WS-B1).
+"""Registry tests for the universal ingress adapters (WS-B1 / WS-B4).
 
 Covers the canonical family registry (all seven Envelope-B ``source_type``
 families declared with blueprint adapter names + allowed credential classes),
-the single registered adapter today (SdkIngressAdapter), the lookup helpers,
-and the import-time fail-fast for a misconfigured concrete adapter.
+the registered adapters today (SdkIngressAdapter + ReplayIngressAdapter), the
+lookup helpers, and the import-time fail-fast for a misconfigured concrete
+adapter.
+
+WS-B4 note: ``replay`` became the second *registered* family when
+ReplayIngressAdapter converged (WS-B4); the other five families remain
+*declared* with a WS-B convergence status — never silent stubs.
 """
 
 from __future__ import annotations
@@ -16,6 +21,7 @@ from shared.observation.envelope import (
     UniversalObservationEnvelope,
 )
 from services.ingestion import adapters
+from services.ingestion.adapters.replay import ReplayIngressAdapter
 from services.ingestion.observation_envelope import (
     build_sdk_observation_envelope as delegate_build,
 )
@@ -46,12 +52,13 @@ def test_each_family_carries_a_blueprint_adapter_name() -> None:
     }
 
 
-def test_only_sdk_family_is_registered_today() -> None:
-    """WS-B1 ships the SDK adapter; the other six families are *declared* with a
-    WS-B2..B5 convergence status — never silent stubs."""
-    assert adapters.registered_families() == ("sdk",)
+def test_sdk_and_replay_families_are_registered_today() -> None:
+    """WS-B1 ships the SDK adapter and WS-B4 the replay adapter; the other five
+    families are *declared* with a WS-B convergence status — never silent
+    stubs."""
+    assert adapters.registered_families() == ("sdk", "replay")
     for spec in adapters.FAMILY_SPECS:
-        if spec.source_type == "sdk":
+        if spec.source_type in ("sdk", "replay"):
             assert spec.adapter_class is not None
             assert spec.status.startswith("implemented")
         else:
@@ -62,10 +69,13 @@ def test_only_sdk_family_is_registered_today() -> None:
 
 def test_lookup_helpers() -> None:
     assert adapters.get_adapter("sdk") is adapters.SdkIngressAdapter
+    assert adapters.get_adapter("replay") is ReplayIngressAdapter
     assert adapters.get_adapter("webhook") is None
     spec = adapters.get_family_spec("sdk")
     assert spec.source_type == "sdk"
     assert spec.allowed_credential_classes == ("PUBLIC_CLIENT",)
+    replay_spec = adapters.get_family_spec("replay")
+    assert replay_spec.allowed_credential_classes == ("OPERATOR_REPLAY",)
     with pytest.raises(ValueError):
         adapters.get_family_spec("carrier_pigeon")
 

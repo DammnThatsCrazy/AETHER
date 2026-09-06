@@ -54,6 +54,16 @@ async def sdk_bronze_writer(event: Event) -> None:
         metrics.increment("ingestion_bronze_relay_skip_total")
         return
 
+    # Ingestion-level replay events (WS-B4) are skipped for the same reason:
+    # the event's durable Bronze row already exists — it is exactly what the
+    # replay re-delivered (original-time preservation, Invariant #15). Writing
+    # here would mint a SECOND Bronze row for the same original event.
+    from services.ingestion.replay import REPLAY_SOURCE_SERVICE
+
+    if event.source_service == REPLAY_SOURCE_SERVICE:
+        metrics.increment("ingestion_bronze_replay_skip_total")
+        return
+
     payload = event.payload
     tenant_id = event.tenant_id or payload.get("tenant_id", "")
     event_id = payload.get("event_id", event.event_id)
