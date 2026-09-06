@@ -965,6 +965,19 @@ class IngressGatewayConfig:
 
 
 # ---------------------------------------------------------------------------
+# Deprecated ingest aliases (WS-B2): the POST /v1/ingest/events and
+# /v1/ingest/events/batch aliases are already converged onto the canonical V1
+# spine (services/ingestion/batch.ingest_events — validation/consent/scrub/
+# Bronze-durable/idempotency/publish), flag-gated OFF below. Turning the kill
+# flag ON retires them with HTTP 410 (routes stay mounted for gateway
+# discovery; only their bodies go away) so SDKs MUST use POST /v1/batch.
+# Default OFF: flag-off callers still reach the converged canonical path.
+@dataclass(frozen=True)
+class DeprecatedIngestAliasesConfig:
+    kill_enabled: bool = _env_bool("AETHER_KILL_DEPRECATED_INGEST_ALIASES", False)
+
+
+# ---------------------------------------------------------------------------
 # Storage Plane (PR 7 / FT-7 + PR 8 / FT-8) — Elastic Data Plane descriptor +
 # object layer, object-backed Bronze compaction, and cross-store lifecycle.
 #
@@ -1825,6 +1838,7 @@ class Settings:
     ingestion_v2: IngestionV2Config = field(default_factory=IngestionV2Config)
     observation_envelope: ObservationEnvelopeConfig = field(default_factory=ObservationEnvelopeConfig)
     ingress_gateway: IngressGatewayConfig = field(default_factory=IngressGatewayConfig)
+    deprecated_ingest_aliases: DeprecatedIngestAliasesConfig = field(default_factory=DeprecatedIngestAliasesConfig)
     storage_plane: StoragePlaneConfig = field(default_factory=StoragePlaneConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
     stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
