@@ -22,7 +22,13 @@ import pytest
 
 from services.ingestion import observation_envelope as oe
 from services.ingestion import workers
-from services.ingestion.spine import ObservationView, normalization_spine_enabled, to_observation_view
+from services.ingestion.spine import (
+    ObservationView,
+    normalization_spine_enabled,
+    to_observation_view,
+)
+from services.resolution.consumer import ResolutionEventConsumer
+from services.semantic_intelligence.consumer import _to_semantic_payload
 from services.silver.dispatcher import ProjectionOutcome
 from shared.events.events import Event, Topic
 
@@ -511,3 +517,56 @@ async def test_identity_signal_emitter_aether_subject_flag_on(monkeypatch) -> No
     published: Event = producer.publish.await_args.args[0]
     assert published.payload["user_id"] == "u-9"
     assert published.payload["confidence"] == 0.95
+
+
+# ── semantic_intelligence consumer mapping ───────────────────────────────────
+
+
+def test_semantic_to_semantic_payload_aether_subject_flag_off(monkeypatch) -> None:
+    """Flag OFF: semantic mapping keeps the legacy flat reads (no user_id)."""
+    _set_spine(monkeypatch, False)
+    sem = _to_semantic_payload(_validated_event(_aether_event_dump()))
+    assert sem["user_id"] is None
+    assert sem["anonymous_id"] is None
+    assert sem["actor_ref"] == "anonymous"
+    assert sem["occurred_at"] is None
+    assert sem["session_id"] is None
+
+
+def test_semantic_to_semantic_payload_aether_subject_flag_on(monkeypatch) -> None:
+    """Flag ON: the AetherEvent subject_id is reachable as the semantic user."""
+    _set_spine(monkeypatch, True)
+    sem = _to_semantic_payload(
+        _validated_event(_aether_event_dump(event_type="commerce.order.created"))
+    )
+    assert sem["user_id"] == "u-9"
+    assert sem["actor_ref"] == "u-9"
+    assert sem["occurred_at"] == "2026-09-05T00:00:00.000Z"
+    assert sem["source_type"] == "commerce.order.created"
+
+
+# ── resolution consumer ──────────────────────────────────────────────────────
+
+
+async def test_resolution_consumer_aether_subject_flag_on(monkeypatch) -> None:
+    engine = SimpleNamespace(resolve_event=AsyncMock(return_value=None))
+    producer = SimpleNamespace(publish=AsyncMock())
+    consumer = ResolutionEventConsumer(engine=engine, producer=producer)  # type: ignore[arg-type]
+    payload = _aether_event_dump()
+
+    _set_spine(monkeypatch, False)
+    await consumer.on_event_validated(_validated_event(deepcopy(payload)))
+    assert engine.resolve_event.await_count == 0  # legacy gate skips (no user_id)
+    assert producer.publish.await_count == 0
+
+    _set_spine(monkeypatch, True)
+    await consumer.on_event_validated(_validated_event(deepcopy(payload)))
+    assert engine.resolve_event.await_count == 1
+    called_tenant, called_payload = engine.resolve_event.await_args.args
+    assert called_tenant == "t1"
+    # the engine receives a shallow copy whose user_id is the subject_id
+    assert called_payload["user_id"] == "u-9"
+    assert called_payload["subject_id"] == "u-9"
+    assert producer.publish.await_count == 1
+    resolution: Event = producer.publish.await_args.args[0]
+    assert resolution.payload["user_id"] == "u-9"
