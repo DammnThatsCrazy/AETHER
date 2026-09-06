@@ -5352,6 +5352,20 @@
       "canonical_owner": "graph@aether"
     },
     {
+      "path": "docs/plans/data-exchange-api.md",
+      "title": "Data Exchange Plane — Frozen API Surface",
+      "slug": "plans/data-exchange-api",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "canonical_owner": "backend@aether"
+    },
+    {
       "path": "docs/privacy/traffic-intelligence-data-retention.md",
       "title": "Traffic Intelligence Data Retention",
       "slug": "privacy/traffic-intelligence-data-retention",
