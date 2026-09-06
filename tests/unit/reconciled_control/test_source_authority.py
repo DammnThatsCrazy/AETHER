@@ -222,7 +222,7 @@ async def test_key_create_get_list_delete_round_trip(_authority_db_free) -> None
             environment_id=ENV_1,
             normalization_rules=["trim", "lower"],
             semantic_dedupe_policy="keep_first",
-            window="30s",
+            equivalence_window="30s",
         )
     )
     assert created["key_components"] == ["transaction_ref"]
@@ -231,7 +231,7 @@ async def test_key_create_get_list_delete_round_trip(_authority_db_free) -> None
     row = await repo.get(key_id="key-1", tenant_id=TENANT_A)
     assert row is not None
     assert row["semantic_dedupe_policy"] == "keep_first"
-    assert row["window"] == "30s"
+    assert row["equivalence_window"] == "30s"
 
     # CP-11: private keys are invisible cross-tenant and to the global read.
     assert await repo.get(key_id="key-1", tenant_id=TENANT_B) is None

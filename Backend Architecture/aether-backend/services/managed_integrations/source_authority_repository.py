@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS observation_equivalence_keys (
     domain TEXT NOT NULL,
     candidate_types JSONB NOT NULL DEFAULT '[]'::jsonb,
     key_components JSONB NOT NULL DEFAULT '[]'::jsonb,
-    window TEXT,
+    equivalence_window TEXT,
     normalization_rules JSONB,
     semantic_dedupe_policy TEXT,
     tenant_id TEXT,
@@ -151,7 +151,7 @@ class ObservationEquivalenceKeyRow(BaseModel):
     domain: str
     candidate_types: list[str] = Field(default_factory=list)
     key_components: list[str] = Field(default_factory=list)
-    window: Optional[str] = None
+    equivalence_window: Optional[str] = None
     normalization_rules: Optional[list[str]] = None
     semantic_dedupe_policy: Optional[str] = None
     tenant_id: Optional[str] = None
@@ -368,14 +368,14 @@ class ObservationEquivalenceKeyRepository(_AuthorityRepo):
             return dict(row)
         await pool.execute(
             "INSERT INTO observation_equivalence_keys (key_id, domain, "
-            "candidate_types, key_components, window, normalization_rules, "
+            "candidate_types, key_components, equivalence_window, normalization_rules, "
             "semantic_dedupe_policy, tenant_id, environment_id) "
             "VALUES ($1,$2,$3::jsonb,$4::jsonb,$5,$6::jsonb,$7,$8,$9)",
             view.key_id,
             view.domain,
             _json.dumps(view.candidate_types),
             _json.dumps(view.key_components),
-            view.window,
+            view.equivalence_window,
             _json.dumps(view.normalization_rules) if view.normalization_rules is not None else None,
             view.semantic_dedupe_policy,
             view.tenant_id,

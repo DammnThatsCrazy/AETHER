@@ -230,7 +230,8 @@ async def equivalence_group(
     Returns ``{"groups": list[list[dict]], "unmatched_domain": bool,
     "warning": Optional[str]}``. Groups and members keep input order; the
     original observation dicts are preserved untouched — grouping never
-    discards source evidence. The key row's ``window`` / ``candidate_types`` /
+    discards source evidence. The key row's ``equivalence_window`` /
+    ``candidate_types`` /
     ``semantic_dedupe_policy`` are downstream-resolution metadata (§9.2) and do
     not constrain grouping here.
     """

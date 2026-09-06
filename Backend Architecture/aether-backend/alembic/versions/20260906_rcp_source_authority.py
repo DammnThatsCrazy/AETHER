@@ -17,7 +17,7 @@ The tables below are the control plane's own rule/equivalence configuration:
   rows. Semantic-equivalence keys that separate *transport idempotency* from
   *semantic deduplication* (§19): which candidate types may be equivalent, which
   ``key_components`` must match (after ``normalization_rules``), inside which
-  ``window``, under which ``semantic_dedupe_policy``.
+  ``equivalence_window``, under which ``semantic_dedupe_policy``.
 
 The ALTER-less DDL below is additive-only: every table and index is
 ``CREATE ... IF NOT EXISTS`` and nothing is dropped or widened. Tenancy is
@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS observation_equivalence_keys (
     domain TEXT NOT NULL,
     candidate_types JSONB NOT NULL DEFAULT '[]'::jsonb,
     key_components JSONB NOT NULL DEFAULT '[]'::jsonb,
-    window TEXT,
+    equivalence_window TEXT,
     normalization_rules JSONB,
     semantic_dedupe_policy TEXT,
     tenant_id TEXT,

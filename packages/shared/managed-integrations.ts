@@ -740,7 +740,7 @@ export interface ObservationEquivalenceKeyView {
   domain: string;
   candidate_types: string[];
   key_components: string[];
-  window?: string | null;
+  equivalence_window?: string | null;
   normalization_rules?: string[] | null;
   semantic_dedupe_policy?: string | null;
   tenant_id?: string | null;

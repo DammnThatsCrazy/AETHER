@@ -900,7 +900,7 @@ class ObservationEquivalenceKeyView(BaseModel):
     domain: str = Field(..., min_length=1)
     candidate_types: list[str] = Field(default_factory=list)
     key_components: list[str] = Field(default_factory=list)
-    window: Optional[str] = None
+    equivalence_window: Optional[str] = None
     normalization_rules: Optional[list[str]] = None
     semantic_dedupe_policy: Optional[str] = None
     tenant_id: Optional[str] = None
