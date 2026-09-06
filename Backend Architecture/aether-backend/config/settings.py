@@ -792,6 +792,63 @@ class ConsentAuthorityConfig:
 
 
 # ---------------------------------------------------------------------------
+# Ingress consent-on-every-path (WS-B3) — per-seam controls for the non-batch
+# ingestion paths. Each path is classified S / C / T (module docstring of
+# services/ingestion/validation.py):
+#   - feed (T): tenant back-office attestation; data-policy + scrub only.
+#   - connector/comm (C): scrub + data-policy removal default ON; a per-subject
+#     (S) rejection ALSO requires the authoritative server-receipt flag AND a
+#     subject-resolvable event, so a connector that never populated receipts is
+#     never fail-closed on them (degrade-safe).
+#   - provider runtime (C): scrub + data-policy default ON; the S gate requires
+#     the authoritative flag AND a resolvable subject.
+#   - imports (T): scrub secret-key columns on staged rows + data-policy check.
+#   - payment rails (C): ingress value-redaction before reconciliation writes.
+#
+# Rationale for the defaults: scrubbing + data-policy REMOVAL of an active
+# Invariant #9 violation (fingerprinting / prohibited data classes) defaults ON
+# for every path because services.consent.authority.evaluate_data_policy is
+# default-allow (a prohibition needs an explicit tenant compliance profile) and
+# scrubbing never rejects. Per-subject SERVER-receipt (S) rejection defaults are
+# gated on settings.consent_authority.authoritative_consent_enforcement_enabled
+# (ON in staging/production) so a path is never fail-closed on receipts the
+# channel never populated. Explicit env vars always win per flag.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class IngressConsentConfig:
+    # T class — API feed (POST /v1/ingest/feed): scrub + strip client-asserted
+    # canonical entity ids + data-policy before the durable Bronze write.
+    feed_ingress_consent_enforcement_enabled: bool = _env_bool(
+        "FEED_INGRESS_CONSENT_ENFORCEMENT_ENABLED", True
+    )
+    # C class — connector/communication durability seam (services/comms/ingest):
+    # scrub + policy ON; the S rejection additionally requires the authoritative
+    # flag AND a subject-resolvable event.
+    connector_comms_consent_enforcement_enabled: bool = _env_bool(
+        "CONNECTOR_COMMS_CONSENT_ENFORCEMENT_ENABLED", True
+    )
+    # C class — payment-rails webhook ingress value redaction before
+    # reconciliation writes (the existing domain _consent_permits_session gate
+    # is untouched).
+    payment_rails_ingress_scrub_enabled: bool = _env_bool(
+        "PAYMENT_RAILS_INGRESS_SCRUB_ENABLED", True
+    )
+    # C class — provider runtime event bridge (services/provider_runtime/bridge):
+    # scrub + policy ON; the S rejection additionally requires the authoritative
+    # flag AND a resolvable subject.
+    provider_runtime_consent_enforcement_enabled: bool = _env_bool(
+        "PROVIDER_RUNTIME_CONSENT_ENFORCEMENT_ENABLED", True
+    )
+    # T class — import engine commit seam (services/imports/commit): scrub
+    # secret-key columns on staged rows + data-policy for the mapping's data
+    # classes before any Bronze('tenant_import') write.
+    imports_consent_policy_enabled: bool = _env_bool(
+        "IMPORTS_CONSENT_POLICY_ENABLED", True
+    )
+
+
+# ---------------------------------------------------------------------------
 # Semantic Intelligence — durable semantic/sentiment pipeline.
 #
 # All flags default OFF/inert in local so `make ci-check` and unit tests keep
@@ -1819,6 +1876,7 @@ class Settings:
     kyber_workforce: KyberWorkforceConfig = field(default_factory=KyberWorkforceConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     consent_authority: ConsentAuthorityConfig = field(default_factory=ConsentAuthorityConfig)
+    ingress_consent: IngressConsentConfig = field(default_factory=IngressConsentConfig)
     semantic: SemanticIntelligenceConfig = field(default_factory=SemanticIntelligenceConfig)
     integration_consent: IntegrationConsentConfig = field(default_factory=IntegrationConsentConfig)
     credential_platform: CredentialPlatformConfig = field(default_factory=CredentialPlatformConfig)
