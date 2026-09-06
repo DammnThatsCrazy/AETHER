@@ -24,6 +24,11 @@ from shared.events.events import Event, EventConsumer, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
 from repositories.lake import BronzeRepository, SilverRepository
 from services.ingestion.acquisition_privacy import sanitize_acquisition_payload
+from services.ingestion.spine import (
+    ObservationView,
+    normalization_spine_enabled,
+    to_observation_view,
+)
 
 logger = get_logger("aether.service.ingestion.workers")
 
@@ -98,28 +103,48 @@ async def silver_normalizer(event: Event) -> None:
     Silver is the entity-normalized view: one record per (entity, source)
     pair, merged from all SDK events.  Only a safe subset of fields is
     included — raw PII is never written to Silver.
+
+    WS-B5: when the normalization-spine flag is ON the entity identity and
+    occurrence reads go through :func:`to_observation_view` (so an additive
+    envelope or an AetherEvent ``subject_id`` is reachable); when OFF every
+    read is the legacy flat-key read (byte/row parity).
     """
     payload = event.payload
     tenant_id = event.tenant_id or payload.get("tenant_id", "")
     event_id = payload.get("event_id", event.event_id)
     event_type = payload.get("event_type", "")
 
-    entity_id = payload.get("user_id") or payload.get("anonymous_id", "")
+    view = to_observation_view(payload) if normalization_spine_enabled() else None
+    user_id = payload.get("user_id")
+    anonymous_id = payload.get("anonymous_id")
+    session_id = payload.get("session_id")
+    last_event_at = payload.get("timestamp", "")
+    if view is not None:
+        if view.user_id is not None:
+            user_id = view.user_id
+        if view.anonymous_id is not None:
+            anonymous_id = view.anonymous_id
+        if view.session_id is not None:
+            session_id = view.session_id
+        if view.occurred_at is not None:
+            last_event_at = view.occurred_at
+
+    entity_id = user_id or anonymous_id or ""
     entity_type = "user"
 
     # Normalize to a stable Silver shape (no raw PII)
     normalized = {
         "last_event_type": event_type,
-        "last_event_at": payload.get("timestamp", ""),
-        "last_session_id": payload.get("session_id", ""),
+        "last_event_at": last_event_at,
+        "last_session_id": session_id or "",
         "schema_version": payload.get("schema_version", SCHEMA_VERSION),
     }
 
     # Merge identity fields without exposing raw PII
-    if payload.get("user_id"):
-        normalized["user_id"] = payload["user_id"]
-    if payload.get("anonymous_id"):
-        normalized["anonymous_id"] = payload["anonymous_id"]
+    if user_id:
+        normalized["user_id"] = user_id
+    if anonymous_id:
+        normalized["anonymous_id"] = anonymous_id
 
     try:
         await _silver.upsert_record(
@@ -141,7 +166,21 @@ async def silver_normalizer(event: Event) -> None:
 
 def _bus_payload_to_sdk_envelope(payload: dict) -> dict:
     """Translate the normalized bus payload back to the SDK envelope shape
-    the Silver projectors consume (type/messageId/context/properties)."""
+    the Silver projectors consume (type/messageId/context/properties).
+
+    WS-B5: when the normalization-spine flag is ON the envelope is projected
+    off :func:`to_observation_view`, so an AetherEvent dump gains its subject/
+    occurrence instead of silently dropping them; when OFF (default) this is the
+    legacy flat mapping, field-for-field (byte/row parity — the branch the
+    existing Silver write-path tests assert).
+    """
+    if normalization_spine_enabled():
+        return _project_sdk_envelope(to_observation_view(payload))
+    return _legacy_sdk_envelope(payload)
+
+
+def _legacy_sdk_envelope(payload: dict) -> dict:
+    """The pre-spine flat mapping (kept verbatim so flag OFF is byte-identical)."""
     context = dict(payload.get("context") or {})
     # ``payload.tenant_id`` was bound from the authenticated ingestion context.
     # Never let an SDK-supplied context.tenantId override that authority when
@@ -159,6 +198,30 @@ def _bus_payload_to_sdk_envelope(payload: dict) -> dict:
         "properties": payload.get("properties") or {},
         "context": context,
         "family": payload.get("event_family", ""),
+    }
+
+
+def _project_sdk_envelope(view: ObservationView) -> dict:
+    """Project an observation view onto the Silver projector envelope.
+
+    Mirrors ``_legacy_sdk_envelope`` field-for-field for the flat SDK/comms
+    view so flag ON and OFF stay byte-parallel for legacy fixtures.
+    """
+    context = dict(view.context or {})
+    # Tenant authority is preserved from the view's tenancy/tenant read (never
+    # let a payload/context-supplied tenantId override it).
+    context["tenantId"] = view.tenant_id
+    return {
+        "type": view.observation_type or "",
+        "messageId": view.observation_id,
+        "userId": view.user_id,
+        "anonymousId": view.anonymous_id,
+        "sessionId": view.session_id,
+        "timestamp": view.occurred_at,
+        "receivedAt": view.received_at,
+        "properties": dict(view.payload_dict) if view.payload_dict else {},
+        "context": context,
+        "family": view.family or "",
     }
 
 
@@ -279,6 +342,11 @@ async def identity_signal_emitter(event: Event, producer: EventProducer) -> None
     - wallet: wallet address → IDENTITY_RESOLVED
 
     Fingerprint-only signals are never used as high-confidence identity anchors.
+
+    WS-B5: when the normalization-spine flag is ON the identity reads go
+    through :func:`to_observation_view`, so an AetherEvent ``subject_id`` (or an
+    additive envelope user subject) becomes reachable; when OFF every read is
+    the legacy flat-key read.
     """
     payload = event.payload
     tenant_id = event.tenant_id or payload.get("tenant_id", "")
@@ -287,20 +355,34 @@ async def identity_signal_emitter(event: Event, producer: EventProducer) -> None
     if event_type not in {"identify", "wallet"}:
         return
 
+    view = to_observation_view(payload) if normalization_spine_enabled() else None
+    user_id = payload.get("user_id")
+    anonymous_id = payload.get("anonymous_id", "")
+    session_id = payload.get("session_id", "")
+    if view is not None:
+        if view.user_id is not None:
+            user_id = view.user_id
+        if view.anonymous_id is not None:
+            anonymous_id = view.anonymous_id
+        if view.session_id is not None:
+            session_id = view.session_id
+
     signal: dict = {
         "tenant_id": tenant_id,
-        "anonymous_id": payload.get("anonymous_id", ""),
-        "session_id": payload.get("session_id", ""),
+        "anonymous_id": anonymous_id,
+        "session_id": session_id,
         "source": "sdk",
         "confidence": 0.0,
     }
 
-    if event_type == "identify" and payload.get("user_id"):
-        signal["user_id"] = payload["user_id"]
+    if event_type == "identify" and user_id:
+        signal["user_id"] = user_id
         signal["confidence"] = 0.95  # strong signal: explicit identification
 
     if event_type == "wallet":
-        props = payload.get("properties", {})
+        props = dict(payload.get("properties") or {})
+        if not props and view is not None and view.payload_dict:
+            props = dict(view.payload_dict)
         wallet_addr = props.get("address") or props.get("wallet_address", "")
         if wallet_addr:
             signal["wallet_address"] = wallet_addr

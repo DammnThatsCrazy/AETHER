@@ -992,6 +992,21 @@ class IngestReplayConfig:
     enabled: bool = _env_bool("AETHER_INGESTION_REPLAY_ENABLED", False)
 
 
+# Consumption-side normalization spine (WS-B5). Default OFF: when ON, downstream
+# consumers on SDK_EVENTS_VALIDATED (ingestion workers, semantic_intelligence,
+# resolution) read validated-topic payloads through
+# services/ingestion/spine.to_observation_view — one spine that projects the
+# additive ``observation_envelope`` key when present (Envelope B, WS-A5) and
+# maps the legacy flat SDK/comms dict or the provider_runtime AetherEvent
+# model_dump() otherwise. OFF keeps every legacy flat-key read (byte/row parity
+# for the Silver write path); ON additionally makes AetherEvent subject_id/
+# actor_id reachable as user_id/agent_id subjects. Emission convergence (every
+# publisher attaching an envelope) stays deferred to WS-B2/WS-B3.
+@dataclass(frozen=True)
+class NormalizationSpineConfig:
+    enabled: bool = _env_bool("AETHER_NORMALIZATION_SPINE_ENABLED", False)
+
+
 # ---------------------------------------------------------------------------
 # Storage Plane (PR 7 / FT-7 + PR 8 / FT-8) — Elastic Data Plane descriptor +
 # object layer, object-backed Bronze compaction, and cross-store lifecycle.
@@ -1855,6 +1870,7 @@ class Settings:
     ingress_gateway: IngressGatewayConfig = field(default_factory=IngressGatewayConfig)
     deprecated_ingest_aliases: DeprecatedIngestAliasesConfig = field(default_factory=DeprecatedIngestAliasesConfig)
     ingest_replay: IngestReplayConfig = field(default_factory=IngestReplayConfig)
+    normalization_spine: NormalizationSpineConfig = field(default_factory=NormalizationSpineConfig)
     storage_plane: StoragePlaneConfig = field(default_factory=StoragePlaneConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
     stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
