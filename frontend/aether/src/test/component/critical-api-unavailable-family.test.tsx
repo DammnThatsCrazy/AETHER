@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { ThemeProvider, ToastProvider } from '@aether/ui';
+import { CapabilityProvider, ThemeProvider, ToastProvider, type Capabilities } from '@aether/ui';
 import { BillingPage } from '@aether-app/pages/billing/billing-page';
 import { AuditExportsPage } from '@aether-app/pages/audit-exports';
 import { CampaignsPage } from '@aether-app/pages/campaigns';
@@ -442,13 +442,48 @@ vi.mock('@aether-app/features/notifications/use-inbox', () => ({
   useArchiveInbox: () => ({ mutate: vi.fn(), isLoading: false, error: null }),
 }));
 
+/**
+ * Settings renders the Data Exchange section behind the canonical capability
+ * gate (DataExchangeGate), which reads useCapabilities(). Every page is wrapped
+ * in a plane-disabled CapabilityProvider so the gate sees a resolved, DX-off
+ * contract synchronously — it renders the not-enabled EmptyState and makes zero
+ * Data Exchange requests — while the rest of the surface under test behaves
+ * exactly as before.
+ */
+const DISABLED_CAPS: Capabilities = {
+  tenant_id: 'tenant-local',
+  release: {
+    deployment_profile: 'local',
+    environment: 'local',
+    release_class: null,
+    enforcement: {
+      policy_enforcement: false,
+      route_registry_enforced: false,
+      kyber_operator_gate: false,
+    },
+    enabled_route_prefixes: [],
+    excluded_domains: [],
+  },
+  profile_sub_resources: [],
+  providers: [],
+  consent_purposes_granted: [],
+  consent_purposes_all: [],
+  feature_flags: {},
+  evaluated_at: '2026-01-01T00:00:00.000Z',
+};
+
 function renderRoute(Page: ComponentType, route = '/', routePattern = route) {
   return render(
     <ThemeProvider>
       <ToastProvider>
-        <MemoryRouter initialEntries={[route]}>
-          <Routes><Route path={routePattern} element={<Page />} /></Routes>
-        </MemoryRouter>
+        <CapabilityProvider
+          fetchCapabilities={() => Promise.resolve(DISABLED_CAPS)}
+          enabled={false}
+        >
+          <MemoryRouter initialEntries={[route]}>
+            <Routes><Route path={routePattern} element={<Page />} /></Routes>
+          </MemoryRouter>
+        </CapabilityProvider>
       </ToastProvider>
     </ThemeProvider>,
   );

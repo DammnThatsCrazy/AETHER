@@ -609,3 +609,44 @@ Replay reads Bronze only and republishes to `aether.sdk.events.validated` with
 those rows (the durable Bronze row already exists), incrementing
 `ingestion_bronze_replay_skip_total`, so a replay re-delivers the downstream
 pipeline without double-persisting.
+
+---
+
+## Data Exchange Plane
+
+The governed tenant import/export plane mounts conditionally in `main.py`
+(flag-gated, all default OFF):
+
+```
+DATA_EXCHANGE_ENABLED=true                  → mounts the envelope routers at
+                                              /v1/data-exchange/settings, /capabilities,
+                                              /usage, /imports, /import-mappings,
+                                              /exports, /artifacts; registers the
+                                              data_exchange.migrate_legacy_artifact job
+                                              handler and the canonical envelope exporters
+DATA_EXCHANGE_SIGNED_TRANSFERS_ENABLED=true → additionally mounts /v1/data-exchange/transfers
+DATA_EXCHANGE_REPORTS_ENABLED=true          → additionally mounts /v1/data-exchange/reports
+                                              and registers the report.generate job handler
+```
+
+`DATA_EXCHANGE_OBJECT_STORE_ENABLED` and `DATA_EXCHANGE_PARQUET_ENABLED` switch
+transport/storage features within the enabled plane (object-store file upload,
+parquet export); the envelope routers mount as soon as
+`DATA_EXCHANGE_ENABLED` is on. Routes enforce the `data_exchange` RBAC domain —
+auto-granted to tenant owner / admin / viewer — with each dotted
+`data_exchange.*` grant resolved to the legacy read/write/admin permission by
+`services/data_exchange/authz.py`, so existing tenant tokens keep working.
+
+**Migration required in hosted modes:** run Alembic before enabling — the
+`20260905_data_exchange` migration creates `data_artifacts`,
+`data_exchange_saved_mappings`, and `report_renders` (envelope metadata only;
+payload bytes live in the shared ObjectStore, never Postgres). Enable by
+setting the flags and restarting; disable by clearing the flags and restarting
+— stored artifacts, saved mappings, and report renders are preserved and become
+reachable again when the flags are re-enabled.
+
+When enabled, artifact history is visible at `GET /v1/data-exchange/artifacts`
+and per-tenant usage at `GET /v1/data-exchange/usage`; failed export/report
+renders surface as `failed`-status artifacts with the durable job recorded on
+the artifact envelope. See `docs/BACKEND-API.md` (the "Data Exchange Plane"
+section) and `docs/plans/data-exchange-api.md` for the full contract.

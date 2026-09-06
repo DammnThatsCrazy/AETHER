@@ -13,7 +13,7 @@ source_files:
   - Backend Architecture/aether-backend/services/export/routes.py
   - Backend Architecture/aether-backend/repositories/artifacts.py
   - Backend Architecture/aether-backend/services/security/export_governance.py
-last_synced_commit: "845b1c14"
+last_synced_commit: "5b974b02"
 ---
 
 # Runbook — Export Failures
@@ -38,6 +38,11 @@ safe) → `build_manifest` (sha256 + size + params-with-secrets-redacted) →
 Registered export domains (`GET /v1/exports/types`): `audit_log` (reference),
 `targeting_package`, `governance_evidence_pack`. All exporters are read-only and
 tenant-scoped.
+
+Supported serialization formats on the canonical engine are `json`, `csv`,
+`ndjson`, and `parquet` (`parquet` joined in M4 of the Data Exchange Plane; as a
+typed columnar binary it has no spreadsheet formula-evaluator surface, so the
+CSV formula-injection escaping does not apply to it).
 
 ## Triage
 

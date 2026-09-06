@@ -619,6 +619,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     register_semantic_replay_handler()  # semantic.replay (durable Bronze backfill)
 
+    # Data Exchange Plane — durable jobs + canonical exporter registration
+    # (flag-gated; registration is idempotent per process and the surfaces only
+    # exist when the matching availability flag is ON).
+    dex = settings.data_exchange
+    if dex.enabled:
+        from services.data_exchange.jobs_migrate import register as register_data_exchange_migrate_handlers
+        from services.data_exchange.exporters import register_data_exchange_exporters
+        from services.data_exchange.jobs_ops import register as register_data_exchange_ops_jobs
+        from services.data_exchange.metrics import register_metrics as register_data_exchange_metrics
+
+        register_data_exchange_migrate_handlers()  # data_exchange.migrate_legacy_artifact
+        register_data_exchange_exporters()  # canonical EXPORTERS += data-exchange envelope exporters
+        register_data_exchange_ops_jobs()  # M7 ops: expire / reconcile / cleanup / finalize-pending-egress
+        register_data_exchange_metrics()  # M7 metric-family no-op seam (collector auto-registers)
+    if dex.reports_enabled:
+        from services.reports.jobs_reports import register_report_jobs
+
+        register_report_jobs()  # report.generate (PDF report artifacts)
+
     # Supervised long-running loop workers: event replay, billing overage
     # cron, notification SLA expiry, Dune polling (canonical scheduler only —
     # the legacy services.integrations.dune_feeder loop is no longer started),
@@ -1084,6 +1103,38 @@ def create_app() -> FastAPI:
     if dq.kyber_intelligence_quality_enabled:
         app.include_router(data_quality_admin_router)
         logger.info("Intelligence Quality: Kyber admin routes mounted (/v1/admin/kyber/intelligence-quality)")
+
+    # ── Data Exchange Plane (governed tenant import/export layer) ─────────
+    # Flag-gated envelope: DATA_EXCHANGE_ENABLED gates the M3 import +
+    # M4 export/artifact + read-adapter routers; DATA_EXCHANGE_SIGNED_
+    # TRANSFERS_ENABLED and DATA_EXCHANGE_REPORTS_ENABLED gate their own M2/M5
+    # surfaces. Sub-routers mount lazily so a disabled plane imports nothing.
+    dex = settings.data_exchange
+    if dex.enabled:
+        from services.data_exchange.routes_import import router as data_exchange_import_router
+        from services.data_exchange.saved_mappings import router as data_exchange_saved_mappings_router
+        from services.data_exchange.capabilities import router as data_exchange_capabilities_router
+        from services.data_exchange.routes_export import router as data_exchange_export_router
+        from services.data_exchange.history import router as data_exchange_artifacts_router
+
+        app.include_router(data_exchange_capabilities_router)   # /v1/data-exchange/settings|capabilities|usage
+        app.include_router(data_exchange_import_router)         # /v1/data-exchange/imports
+        app.include_router(data_exchange_saved_mappings_router) # /v1/data-exchange/import-mappings
+        app.include_router(data_exchange_export_router)         # /v1/data-exchange/exports
+        app.include_router(data_exchange_artifacts_router)      # /v1/data-exchange/artifacts
+        logger.info("Data Exchange: envelope routes mounted (/v1/data-exchange)")
+    else:
+        logger.info("Data Exchange: envelope routes disabled (set DATA_EXCHANGE_ENABLED=true)")
+    if dex.signed_transfers_enabled:
+        from services.data_exchange.routes_transfer import router as data_exchange_transfer_router
+
+        app.include_router(data_exchange_transfer_router)
+        logger.info("Data Exchange: signed-transfer routes mounted (/v1/data-exchange/transfers)")
+    if dex.reports_enabled:
+        from services.reports.routes import router as data_exchange_reports_router
+
+        app.include_router(data_exchange_reports_router)
+        logger.info("Data Exchange: report routes mounted (/v1/data-exchange/reports)")
 
     # ── Dune Analytics feeder (admin-only, always mounted) ──────────────
     from services.dune_feeder.routes import router as dune_feeder_router

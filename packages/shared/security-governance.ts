@@ -47,6 +47,7 @@ export type GovernanceDomain =
   | 'governance'
   | 'reliability'
   | 'data_quality'
+  | 'data_exchange'
   // Kyber operating-plane domains. `kyber_workforce` covers operator identity,
   // devices and role administration; `kyber_tenant` covers scoped tenant
   // inspection (Tenant Mirror + raw tenant reads); `kyber_command` covers the

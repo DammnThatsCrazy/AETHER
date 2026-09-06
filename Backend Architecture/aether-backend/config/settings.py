@@ -1129,6 +1129,27 @@ class DataQualityConfig:
 
 
 # ---------------------------------------------------------------------------
+# Data Exchange Plane (governed tenant import/export layer)
+# ---------------------------------------------------------------------------
+# The plane is a policy/control layer that composes onto the existing
+# import/export engines and the shared ObjectStore — never a second ingestion
+# or storage path.  These flags gate *surface availability* only and default
+# OFF (declared-but-dark M0).  Rollout order is tracked in
+# docs/plans/DATA_EXCHANGE_PHASES.md: M1 object-store migration, M2 signed
+# transfers, M3 import control surface, M4 export control surface,
+# M5 reports.
+
+@dataclass(frozen=True)
+class DataExchangeConfig:
+    """Data Exchange Plane surface toggles (all OFF until the plane ships)."""
+    enabled: bool = _env_bool("DATA_EXCHANGE_ENABLED", False)
+    object_store_enabled: bool = _env_bool("DATA_EXCHANGE_OBJECT_STORE_ENABLED", False)
+    parquet_enabled: bool = _env_bool("DATA_EXCHANGE_PARQUET_ENABLED", False)
+    reports_enabled: bool = _env_bool("DATA_EXCHANGE_REPORTS_ENABLED", False)
+    signed_transfers_enabled: bool = _env_bool("DATA_EXCHANGE_SIGNED_TRANSFERS_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
 # External billing / payment provider readiness (behind flags)
 # ---------------------------------------------------------------------------
 
@@ -1984,6 +2005,9 @@ class Settings:
 
     # Data Quality / Drift / Intelligence Quality
     data_quality: DataQualityConfig = field(default_factory=DataQualityConfig)
+
+    # Data Exchange Plane (governed tenant import/export layer; all OFF in M0)
+    data_exchange: DataExchangeConfig = field(default_factory=DataExchangeConfig)
 
     # External billing / payment provider readiness (behind flags)
     external_billing: ExternalBillingConfig = field(default_factory=ExternalBillingConfig)
