@@ -950,6 +950,21 @@ class ObservationEnvelopeConfig:
 
 
 # ---------------------------------------------------------------------------
+# Universal ingress gateway (WS-B1): the one validated gateway that Envelope-B
+# observations (built by the ingress adapters) route through. Default OFF:
+# when ON together with the observation-envelope flag, /v1/batch ALSO runs each
+# accepted SDK envelope through services/ingestion/gateway.validate_and_stamp —
+# Envelope-B schema re-validation, canonical type/family checks against the
+# Contract Spine, tenant match, and credential/source-trust provenance + quality
+# stamping. A rejected envelope degrades to the flat SDK path (the A-side event
+# is already accepted) so the flag can never take ingestion down. Consent /
+# idempotency / durable-Bronze ordering is adopted per family in WS-B2..WS-B5.
+@dataclass(frozen=True)
+class IngressGatewayConfig:
+    enabled: bool = _env_bool("AETHER_UNIVERSAL_INGRESS_GATEWAY_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
 # Storage Plane (PR 7 / FT-7 + PR 8 / FT-8) — Elastic Data Plane descriptor +
 # object layer, object-backed Bronze compaction, and cross-store lifecycle.
 #
@@ -1809,6 +1824,7 @@ class Settings:
     credential_platform: CredentialPlatformConfig = field(default_factory=CredentialPlatformConfig)
     ingestion_v2: IngestionV2Config = field(default_factory=IngestionV2Config)
     observation_envelope: ObservationEnvelopeConfig = field(default_factory=ObservationEnvelopeConfig)
+    ingress_gateway: IngressGatewayConfig = field(default_factory=IngressGatewayConfig)
     storage_plane: StoragePlaneConfig = field(default_factory=StoragePlaneConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
     stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
