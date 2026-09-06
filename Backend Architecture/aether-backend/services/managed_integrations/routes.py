@@ -1,16 +1,18 @@
-"""Reconciled Control Plane — read-only operator surface (Phase 0).
+"""Reconciled Control Plane — read-only operator surface (Phase 0 + Phase 1).
 
 Mounts under ``/v1/admin/kyber/managed-integrations`` (mounted in main.py behind
 ``settings.reconciled_control.kyber_route_enabled``, default OFF). Every handler
 is operator-gated via :func:`require_kyber_operator` — an Aether tenant can never
 read the fleet surface.
 
-Phase-0 scope discipline: this router has **no** POST/PUT/DELETE. It exposes the
+Scope discipline: this router has **no** POST/PUT/DELETE. Phase 0 exposes the
 durable ``managed_integrations`` registration rows and the evidence ``reconcile_runs``
-rows (desired-vs-observed classification + DRAFT change summaries). Nothing here
-mutates an integration — applying a ChangeSet is explicitly deferred (CP-08
-boundary). The repo singleton injection seam mirrors provider_runtime so tests
-can point the routes at an in-memory store.
+rows (desired-vs-observed classification + DRAFT change summaries). Phase 1 adds
+the durable ``change_sets`` **plan** rows (§32 step 12) — candidate changes with
+their blast radius, risk assessment and guard status. Nothing here mutates an
+integration — applying a ChangeSet is explicitly deferred (CP-08 boundary). The
+repo singleton injection seam mirrors provider_runtime so tests can point the
+routes at an in-memory store.
 """
 
 from __future__ import annotations
@@ -23,9 +25,16 @@ from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.logger.logger import get_logger
 
 from services.managed_integrations.contracts import (
+    CHANGE_ACTION_KINDS,
+    CHANGE_RISK_CLASSES,
+    CHANGESET_STATUSES,
+    DRIFT_TAXONOMY_TYPES,
     MANAGED_DRIFT_TYPES,
     MANAGED_INTEGRATION_KINDS,
     RECONCILE_RESULT_VALUES,
+)
+from services.managed_integrations.change_sets_repository import (
+    get_change_set_repository,
 )
 from services.managed_integrations.repository import (
     get_managed_integration_repository,
@@ -101,6 +110,91 @@ async def list_managed_integrations(
     )
     return APIResponse(
         data={"managed_integrations": rows, "count": len(rows)}
+    ).to_dict()
+
+
+def _validate_change_set_status(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    if value not in CHANGESET_STATUSES:
+        raise BadRequestError(
+            f"invalid change-set status {value!r} — expected one of the §34 "
+            f"statuses: {CHANGESET_STATUSES}"
+        )
+    return value
+
+
+# NOTE: the literal ``/change-sets`` routes MUST stay declared before the
+# ``/{managed_integration_id}`` capture route below, or FastAPI would swallow
+# ``/change-sets`` as a managed-integration id.
+@admin_router.get("/change-sets")
+async def list_change_sets(
+    request: Request,
+    tenant_id: Optional[str] = Query(default=None, description="Narrow to one tenant"),
+    environment_id: Optional[str] = Query(
+        default=None, description="Narrow to one environment"
+    ),
+    status: Optional[str] = Query(
+        default=None, description="Narrow to one §34 ChangeSet status"
+    ),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """ChangeSet plans (operator aggregate/read, §32 step 12 evidence).
+
+    No filters -> fleet-wide newest-created-first view. Filters are ANDed.
+    ``status`` accepts the §34 ChangeSet status vocabulary. Plans are candidate
+    changes only — Phase 1 never executes them.
+    """
+    _require_operator(request)
+    status = _validate_change_set_status(status)
+    repo = get_change_set_repository()
+    rows = await repo.list(
+        tenant_id=tenant_id,
+        environment_id=environment_id,
+        status=status,
+        limit=limit,
+        offset=offset,
+    )
+    return APIResponse(data={"change_sets": rows, "count": len(rows)}).to_dict()
+
+
+@admin_router.get("/change-sets/{changeset_id}")
+async def get_change_set(
+    changeset_id: str,
+    request: Request,
+    tenant_id: Optional[str] = Query(default=None),
+    environment_id: Optional[str] = Query(default=None),
+):
+    """One ChangeSet plan + its planning vocabularies.
+
+    Scoped when both ``tenant_id`` and ``environment_id`` are supplied (refuses
+    absent rows); with neither supplied the operator aggregate lookup by the
+    global ``changeset_id`` key is used. Supplying exactly one scope parameter
+    is an error — a partial scope cannot be honoured safely.
+    """
+    _require_operator(request)
+    repo = get_change_set_repository()
+    if (tenant_id is None) != (environment_id is None):
+        raise BadRequestError(
+            "supply both tenant_id and environment_id to scope the lookup, or "
+            "neither for the aggregate lookup"
+        )
+    if tenant_id is not None and environment_id is not None:
+        row = await repo.get(tenant_id, environment_id, changeset_id)
+    else:
+        row = await repo.get_by_key(changeset_id)
+    if row is None:
+        raise NotFoundError("change set")
+    return APIResponse(
+        data={
+            "change_set": row,
+            # Constants echoed for operator convenience (contract is stable).
+            "change_set_statuses": list(CHANGESET_STATUSES),
+            "risk_classes": list(CHANGE_RISK_CLASSES),
+            "change_action_kinds": list(CHANGE_ACTION_KINDS),
+            "drift_taxonomy_types": list(DRIFT_TAXONOMY_TYPES),
+        }
     ).to_dict()
 
 

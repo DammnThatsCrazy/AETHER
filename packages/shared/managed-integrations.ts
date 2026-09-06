@@ -7,10 +7,15 @@
  * state. Governing principles: *the SDK observes; the control plane manages;
  * the backend reasons*; "install once, continuously reconcile".
  *
- * Phase 0 ships the ManagedIntegration abstraction + reconcile *skeleton* only.
- * Nothing here enables a mutation: there is no live reconcile trigger and no
- * actuator. Drift is classified and evidence is persisted; applying a
- * ChangeSet is explicitly deferred (CP-08 boundary).
+ * Phase 0 shipped the ManagedIntegration abstraction + reconcile *skeleton*:
+ * no live reconcile trigger and no actuator; drift was classified and evidence
+ * persisted (CP-08 boundary — a ChangeSet was never applied).
+ *
+ * Phase 1 (the additions below) ships the *planning* half of the reconcile
+ * loop: the canonical §33 drift taxonomy, the §34 ChangeSet status vocabulary,
+ * the §39 risk classes, the §36 change-action kinds, and the ChangeSet plan /
+ * risk-assessment / blast-radius views. A plan is still never applied —
+ * execution (actuator engine, approval, rollout) is a later phase.
  *
  * The Python mirror lives at
  * `Backend Architecture/aether-backend/services/managed_integrations/contracts.py`;
@@ -27,12 +32,26 @@
  * - tenant update channels         §28
  * - reconcile result               §32 (steps 10–11)
  * - observed-state provenance      §12.2
- * - drift types                    §33. `managedDriftTypes` is the Phase-0
- *                                     *emitted* subset (six dimensions the Phase-0
- *                                     reconciler actually diffs); the full §33
- *                                     taxonomy (contract/mapping/config/policy/
- *                                     consent/... drift) is reserved for later
- *                                     phases and must not be narrowed here.
+ * - drift types (emitted subset)   §33. `managedDriftTypes` is the Phase-0
+ *                                     *emitted* subset — the six dimensions the
+ *                                     Phase-0 reconciler diffs. Every emitted
+ *                                     value is a member of the canonical
+ *                                     taxonomy; the two must never drift apart.
+ * - drift taxonomy (canonical)     §33. `driftTaxonomyTypes` is the full 22-type
+ *                                     taxonomy. Not every drift requires a
+ *                                     mutation; planning may treat many as
+ *                                     non-actionable.
+ * - ChangeSet status vocabulary    §34. `changeSetStatuses` models the full
+ *                                     state-machine vocabulary. Illegal
+ *                                     transitions fail closed; transition
+ *                                     *legality* is enforced by the executor
+ *                                     (a later phase), not by this vocabulary.
+ * - risk classes                   §39. `changeRiskClasses` = R0 trivial →
+ *                                     R5 destructive/high-consequence, plus the
+ *                                     security-emergency class governed by
+ *                                     Security Blueprint policy.
+ * - change-action kinds            §36. `changeActionKinds` names the typed
+ *                                     operations the Day-1 actuators perform.
  */
 
 // ── §6 supported kinds ──────────────────────────────────────────────────────
@@ -126,6 +145,88 @@ export const managedDriftTypes = [
 ] as const;
 export type ManagedDriftType = (typeof managedDriftTypes)[number];
 
+// ── §33 canonical drift taxonomy (full 22-type set) ─────────────────────────
+
+export const driftTaxonomyTypes = [
+  'version_drift',
+  'capability_drift',
+  'contract_drift',
+  'schema_drift',
+  'mapping_drift',
+  'config_drift',
+  'policy_drift',
+  'authority_drift',
+  'consent_drift',
+  'platform_permission_drift',
+  'provider_scope_drift',
+  'provider_terms_drift',
+  'endpoint_drift',
+  'health_drift',
+  'data_quality_drift',
+  'release_support_drift',
+  'fleet_identity_drift',
+  'region_drift',
+  'credential_drift',
+  'source_authority_drift',
+  'volume_drift',
+  'cost_drift',
+] as const;
+export type DriftTaxonomyType = (typeof driftTaxonomyTypes)[number];
+
+// ── §34 ChangeSet status vocabulary ─────────────────────────────────────────
+
+export const changeSetStatuses = [
+  'draft',
+  'planned',
+  'preparing',
+  'validating',
+  'simulating',
+  'waiting_approval',
+  'ready',
+  'canary',
+  'rolling_out',
+  'verifying',
+  'committed',
+  'rolling_back',
+  'rolled_back',
+  'cancelled',
+  'blocked',
+  'failed',
+  'superseded',
+] as const;
+export type ChangeSetStatus = (typeof changeSetStatuses)[number];
+
+// ── §39 change-risk classes ─────────────────────────────────────────────────
+
+export const changeRiskClasses = [
+  'R0',
+  'R1',
+  'R2',
+  'R3',
+  'R4',
+  'R5',
+  'security_emergency',
+] as const;
+export type ChangeRiskClass = (typeof changeRiskClasses)[number];
+
+// ── §36 change-action kinds (Day-1 typed actuator operations) ───────────────
+
+export const changeActionKinds = [
+  'remote_manifest_change',
+  'managed_connector_change',
+  'provider_runtime_change',
+  'mapping_change',
+  'compatibility_projection_change',
+  'repository_upgrade',
+  'authorization_change',
+  'quarantine',
+  'replay',
+  'backfill',
+  'rollback',
+  'notification_action',
+] as const;
+export type ChangeActionKind = (typeof changeActionKinds)[number];
+
 // ── §12.2 observed-state provenance ─────────────────────────────────────────
 
 export const observedProvenanceValues = [
@@ -154,6 +255,22 @@ export function isReconcileResult(value: string): value is ReconcileResult {
 
 export function isManagedDriftType(value: string): value is ManagedDriftType {
   return (managedDriftTypes as readonly string[]).includes(value);
+}
+
+export function isDriftTaxonomyType(value: string): value is DriftTaxonomyType {
+  return (driftTaxonomyTypes as readonly string[]).includes(value);
+}
+
+export function isChangeSetStatus(value: string): value is ChangeSetStatus {
+  return (changeSetStatuses as readonly string[]).includes(value);
+}
+
+export function isChangeRiskClass(value: string): value is ChangeRiskClass {
+  return (changeRiskClasses as readonly string[]).includes(value);
+}
+
+export function isChangeActionKind(value: string): value is ChangeActionKind {
+  return (changeActionKinds as readonly string[]).includes(value);
 }
 
 // ── §6 ManagedIntegrationView (Phase-0 operator read surface) ───────────────
@@ -273,4 +390,66 @@ export interface ReconcileRunView {
   /** DRAFT change summary — evidence only. Never applied by Phase 0 (CP-08). */
   drift: DriftRecord[];
   created_at: string;
+}
+
+// ── §36 ChangeSpec — one typed mutation a plan may carry ─────────────────────
+
+export interface ChangeSpec {
+  /** The typed operation (named after the §36 Day-1 actuator that would run
+   * it). Vocabulary only in Phase 1 — nothing executes a plan. */
+  action: ChangeActionKind;
+  /** The managed integration / contract / artifact the action targets. */
+  target_ref: string;
+  /** Action-specific parameters; typed by the owning actuator in Phase 2. */
+  params?: Record<string, unknown> | null;
+  reason?: string | null;
+}
+
+// ── §32-14 risk assessment (§12.6 RiskAssessmentContract subset) ────────────
+
+export interface RiskAssessmentView {
+  risk_class: ChangeRiskClass;
+  /** True when the class may proceed automatically under policy. Every other
+   * class routes to the approval/action authority (§32 step 15). */
+  automation_allowed: boolean;
+  required_approval_refs: string[];
+  explanation_refs: string[];
+}
+
+// ── §32-13 control-topology blast radius ────────────────────────────────────
+
+export interface BlastRadiusView {
+  integration_count: number;
+  tenant_count: number;
+  environment_count: number;
+  source_origins: IntegrationSourceOrigin[];
+  /** Canonical drift types the candidate change would actually touch. */
+  actionable_drift_types: DriftTaxonomyType[];
+}
+
+// ── §32 step 12 + §12.5 ChangeSetPlanView (planning subset, never applied) ──
+
+export interface ChangeSetPlanView {
+  changeset_id: string;
+  tenant_id: string;
+  environment_id: string;
+  /** Control-topology scope: managed integrations the change would reach. */
+  integration_scope: string[];
+  /** §35 concurrency guard: never execute a plan whose guard revisions do not
+   * match the state a later run reconciled against. */
+  desired_revision: string;
+  observed_revision: string;
+  reconcile_sequence: string;
+  idempotency_key: string;
+  changes: ChangeSpec[];
+  reason?: string | null;
+  initiator: string;
+  policy_ref?: string | null;
+  risk: RiskAssessmentView;
+  blast_radius: BlastRadiusView;
+  /** §34 status. Phase 1 plans reach at most `planned`; a guard invalidation
+   * moves a plan to `superseded`. Execution statuses are unreachable here. */
+  status: ChangeSetStatus;
+  created_at: string;
+  superseded_at?: string | null;
 }

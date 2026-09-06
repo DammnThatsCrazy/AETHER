@@ -7374,3 +7374,26 @@ policies:
     allow_historical_table_storage: true
     requires_consent_invalidation: false
     requires_permission_hash: false
+
+  # ---------------------------------------------------------------------------
+  # Reconciled Control Plane (Phase 1) — ChangeSet plans. Candidate change
+  # transactions (never executed until a later phase): tenant-scoped, internal
+  # operator metadata, no consent data, never materialized/externalized.
+  # ---------------------------------------------------------------------------
+
+  - resource_type: change_sets
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false

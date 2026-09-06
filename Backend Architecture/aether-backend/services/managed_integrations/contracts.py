@@ -7,15 +7,22 @@ imports, feeds) toward an authorized, healthy, supportable desired state.
 Governing principles: *the SDK observes; the control plane manages; the backend
 reasons*; "install once, continuously reconcile".
 
-Phase 0 ships the ManagedIntegration abstraction + reconcile *skeleton* only.
-Nothing here enables a mutation: there is no live reconcile trigger and no
-actuator. Drift is classified and evidence is persisted; applying a ChangeSet
-is explicitly deferred (CP-08 boundary).
+Phase 0 shipped the ManagedIntegration abstraction + reconcile *skeleton*: no
+live reconcile trigger and no actuator; drift was classified and evidence
+persisted (CP-08 boundary — a ChangeSet was never applied).
+
+Phase 1 (the additions below) ships the *planning* half of the reconcile loop:
+the canonical §33 drift taxonomy, the §34 ChangeSet status vocabulary, the §39
+risk classes, the §36 change-action kinds, and the ChangeSet plan / risk-
+assessment / blast-radius views. A plan is still never applied — execution
+(actuator engine, approval, rollout) is a later phase.
 
 The TS twin and this module are kept in lockstep by
 ``tests/contracts/test_managed_integrations_parity.py`` (const-array equality on
 kinds, source origins/owners, release channels, availability, reconcile results,
-provenance and the Phase-0 emitted drift-type subset, plus the barrel export).
+provenance, the Phase-0 emitted drift-type subset, and — Phase 1 — the canonical
+§33 taxonomy, §34 statuses, §39 risk classes and §36 action kinds, plus the
+barrel export).
 
 Vocabulary provenance (Reconciled Control Plane Blueprint):
 - Managed integration kinds      §6
@@ -27,12 +34,22 @@ Vocabulary provenance (Reconciled Control Plane Blueprint):
 - tenant update channels         §28
 - reconcile result               §32 (steps 10-11)
 - observed-state provenance      §12.2
-- drift types                    §33. ``MANAGED_DRIFT_TYPES`` is the Phase-0
-                                     *emitted* subset (six dimensions the
-                                     Phase-0 reconciler actually diffs); the
-                                     full §33 taxonomy (contract/mapping/
-                                     config/policy/consent/... drift) is
-                                     reserved for later phases.
+- drift types (emitted subset)   §33. ``MANAGED_DRIFT_TYPES`` is the Phase-0
+                                     *emitted* subset. Every emitted value is a
+                                     member of the canonical taxonomy.
+- drift taxonomy (canonical)     §33. ``DRIFT_TAXONOMY_TYPES`` is the full
+                                     22-type taxonomy. Not every drift requires
+                                     a mutation; planning may treat many as
+                                     non-actionable.
+- ChangeSet status vocabulary    §34. ``CHANGESET_STATUSES`` models the full
+                                     state-machine vocabulary; transition
+                                     legality is enforced by the executor (a
+                                     later phase).
+- risk classes                   §39. ``CHANGE_RISK_CLASSES`` = R0 trivial →
+                                     R5 destructive/high-consequence, plus the
+                                     security-emergency class.
+- change-action kinds            §36. ``CHANGE_ACTION_KINDS`` names the typed
+                                     operations the Day-1 actuators perform.
 """
 
 from __future__ import annotations
@@ -152,6 +169,142 @@ MANAGED_DRIFT_TYPES: tuple[str, ...] = (
     "health_drift",
     "release_support_drift",
     "fleet_identity_drift",
+)
+
+
+# ── §33 canonical drift taxonomy (full 22-type set) ──────────────────────────
+
+DriftTaxonomyType = Literal[
+    "version_drift",
+    "capability_drift",
+    "contract_drift",
+    "schema_drift",
+    "mapping_drift",
+    "config_drift",
+    "policy_drift",
+    "authority_drift",
+    "consent_drift",
+    "platform_permission_drift",
+    "provider_scope_drift",
+    "provider_terms_drift",
+    "endpoint_drift",
+    "health_drift",
+    "data_quality_drift",
+    "release_support_drift",
+    "fleet_identity_drift",
+    "region_drift",
+    "credential_drift",
+    "source_authority_drift",
+    "volume_drift",
+    "cost_drift",
+]
+DRIFT_TAXONOMY_TYPES: tuple[str, ...] = (
+    "version_drift",
+    "capability_drift",
+    "contract_drift",
+    "schema_drift",
+    "mapping_drift",
+    "config_drift",
+    "policy_drift",
+    "authority_drift",
+    "consent_drift",
+    "platform_permission_drift",
+    "provider_scope_drift",
+    "provider_terms_drift",
+    "endpoint_drift",
+    "health_drift",
+    "data_quality_drift",
+    "release_support_drift",
+    "fleet_identity_drift",
+    "region_drift",
+    "credential_drift",
+    "source_authority_drift",
+    "volume_drift",
+    "cost_drift",
+)
+
+
+# ── §34 ChangeSet status vocabulary ──────────────────────────────────────────
+
+ChangeSetStatus = Literal[
+    "draft",
+    "planned",
+    "preparing",
+    "validating",
+    "simulating",
+    "waiting_approval",
+    "ready",
+    "canary",
+    "rolling_out",
+    "verifying",
+    "committed",
+    "rolling_back",
+    "rolled_back",
+    "cancelled",
+    "blocked",
+    "failed",
+    "superseded",
+]
+CHANGESET_STATUSES: tuple[str, ...] = (
+    "draft",
+    "planned",
+    "preparing",
+    "validating",
+    "simulating",
+    "waiting_approval",
+    "ready",
+    "canary",
+    "rolling_out",
+    "verifying",
+    "committed",
+    "rolling_back",
+    "rolled_back",
+    "cancelled",
+    "blocked",
+    "failed",
+    "superseded",
+)
+
+
+# ── §39 change-risk classes ──────────────────────────────────────────────────
+
+ChangeRiskClass = Literal[
+    "R0", "R1", "R2", "R3", "R4", "R5", "security_emergency",
+]
+CHANGE_RISK_CLASSES: tuple[str, ...] = (
+    "R0", "R1", "R2", "R3", "R4", "R5", "security_emergency",
+)
+
+
+# ── §36 change-action kinds (Day-1 typed actuator operations) ────────────────
+
+ChangeActionKind = Literal[
+    "remote_manifest_change",
+    "managed_connector_change",
+    "provider_runtime_change",
+    "mapping_change",
+    "compatibility_projection_change",
+    "repository_upgrade",
+    "authorization_change",
+    "quarantine",
+    "replay",
+    "backfill",
+    "rollback",
+    "notification_action",
+]
+CHANGE_ACTION_KINDS: tuple[str, ...] = (
+    "remote_manifest_change",
+    "managed_connector_change",
+    "provider_runtime_change",
+    "mapping_change",
+    "compatibility_projection_change",
+    "repository_upgrade",
+    "authorization_change",
+    "quarantine",
+    "replay",
+    "backfill",
+    "rollback",
+    "notification_action",
 )
 
 
@@ -287,6 +440,70 @@ class ReconcileRunView(BaseModel):
     created_at: datetime
 
 
+class ChangeSpec(BaseModel):
+    """One typed mutation a plan may carry (blueprint §12.5 / §36).
+
+    Vocabulary only in Phase 1 — nothing executes a plan. ``params`` are
+    action-specific and typed by the owning actuator in Phase 2.
+    """
+
+    action: ChangeActionKind
+    target_ref: str = Field(..., min_length=1)
+    params: Optional[dict[str, Any]] = None
+    reason: Optional[str] = None
+
+
+class RiskAssessmentView(BaseModel):
+    """Risk decision for a candidate change (§32 step 14 / §12.6 subset).
+
+    ``automation_allowed`` True only when the risk class may proceed
+    automatically under policy; every other class routes to the
+    approval/action authority (§32 step 15).
+    """
+
+    risk_class: ChangeRiskClass
+    automation_allowed: bool
+    required_approval_refs: list[str] = Field(default_factory=list)
+    explanation_refs: list[str] = Field(default_factory=list)
+
+
+class BlastRadiusView(BaseModel):
+    """Control-topology blast radius for a candidate change (§32 step 13)."""
+
+    integration_count: int = Field(..., ge=0)
+    tenant_count: int = Field(..., ge=0)
+    environment_count: int = Field(..., ge=0)
+    source_origins: list[IntegrationSourceOrigin] = Field(default_factory=list)
+    actionable_drift_types: list[DriftTaxonomyType] = Field(default_factory=list)
+
+
+class ChangeSetPlanView(BaseModel):
+    """A ChangeSet *plan* (§32 step 12 / §12.5 planning subset) — never applied.
+
+    ``status`` reaches at most ``planned`` in Phase 1; a guard invalidation
+    moves a plan to ``superseded``. Execution statuses are unreachable while no
+    executor exists (illegal transitions fail closed from the start, §34).
+    """
+
+    changeset_id: str
+    tenant_id: str = Field(..., min_length=1)
+    environment_id: str = Field(..., min_length=1)
+    integration_scope: list[str] = Field(default_factory=list)
+    desired_revision: str
+    observed_revision: str
+    reconcile_sequence: str
+    idempotency_key: str
+    changes: list[ChangeSpec] = Field(default_factory=list)
+    reason: Optional[str] = None
+    initiator: str
+    policy_ref: Optional[str] = None
+    risk: RiskAssessmentView
+    blast_radius: BlastRadiusView
+    status: ChangeSetStatus = "draft"
+    created_at: datetime
+    superseded_at: Optional[datetime] = None
+
+
 # Convenience guards mirroring the TS ``is*`` helpers.
 def is_managed_integration_kind(value: str) -> bool:
     return value in MANAGED_INTEGRATION_KINDS
@@ -302,3 +519,19 @@ def is_reconcile_result(value: str) -> bool:
 
 def is_managed_drift_type(value: str) -> bool:
     return value in MANAGED_DRIFT_TYPES
+
+
+def is_drift_taxonomy_type(value: str) -> bool:
+    return value in DRIFT_TAXONOMY_TYPES
+
+
+def is_change_set_status(value: str) -> bool:
+    return value in CHANGESET_STATUSES
+
+
+def is_change_risk_class(value: str) -> bool:
+    return value in CHANGE_RISK_CLASSES
+
+
+def is_change_action_kind(value: str) -> bool:
+    return value in CHANGE_ACTION_KINDS

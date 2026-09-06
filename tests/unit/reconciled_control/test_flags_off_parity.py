@@ -2,8 +2,8 @@
 
 All three toggles default OFF; with them OFF nothing about the plane is visible
 or active: no route is mounted (the main.py conditional reads these flags) and
-the flag reads fail safe. The operator router itself is read-only — two GETs
-and no mutation verb — regardless of flag state.
+the flag reads fail safe. The operator router itself is read-only — GETs and no
+mutation verb — regardless of flag state.
 """
 
 from __future__ import annotations
@@ -61,8 +61,9 @@ def test_toggling_flags_on_is_reflected_in_flag_reads(rcp_flags) -> None:
 
 
 def test_operator_router_is_read_only() -> None:
-    # Phase-0 scope discipline: no POST/PUT/PATCH/DELETE anywhere on the
-    # managed-integrations operator surface. Two GETs only.
+    # Phase-0 + Phase-1 scope discipline: no POST/PUT/PATCH/DELETE anywhere on
+    # the managed-integrations operator surface. Four GETs only (managed
+    # integrations list/detail + Phase-1 change-sets list/detail).
     from services.managed_integrations.routes import admin_router
 
     methods: set[str] = set()
@@ -70,13 +71,24 @@ def test_operator_router_is_read_only() -> None:
         route_methods = getattr(route, "methods", None) or set()
         methods |= {str(m).upper() for m in route_methods}
     assert methods == {"GET"}
-    assert len(admin_router.routes) == 2
+    assert len(admin_router.routes) == 4
 
 
 def test_operator_router_prefix_is_admin_kyber() -> None:
     from services.managed_integrations.routes import admin_router
 
     assert admin_router.prefix == "/v1/admin/kyber/managed-integrations"
+
+
+def test_change_sets_routes_precede_the_id_capture_route() -> None:
+    # ``/change-sets`` is a literal that must not be swallowed by the
+    # ``/{managed_integration_id}`` capture route, so it must be declared first.
+    from services.managed_integrations.routes import admin_router
+
+    paths = [r.path for r in admin_router.routes]
+    assert paths.index("/v1/admin/kyber/managed-integrations/change-sets") < paths.index(
+        "/v1/admin/kyber/managed-integrations/{managed_integration_id}"
+    )
 
 
 def test_desired_state_and_reconcile_import_without_flags_on() -> None:

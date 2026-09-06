@@ -24,14 +24,20 @@ _RCP_FLAG_NAMES = ("enabled", "reconciler_enabled", "kyber_route_enabled")
 
 @pytest.fixture(autouse=True)
 def _reset_rcp_stores():
-    """Empty the module-local managed-integration / reconcile-run stores."""
+    """Empty the module-local managed-integration / reconcile-run / change-set
+    stores (managed_integrations.repository + change_sets_repository)."""
+    from services.managed_integrations.change_sets_repository import (
+        reset_change_set_in_memory_store,
+    )
     from services.managed_integrations.repository import (
         reset_managed_integration_in_memory_store,
     )
 
     reset_managed_integration_in_memory_store()
+    reset_change_set_in_memory_store()
     yield
     reset_managed_integration_in_memory_store()
+    reset_change_set_in_memory_store()
 
 
 @pytest.fixture
