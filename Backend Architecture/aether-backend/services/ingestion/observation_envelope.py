@@ -186,5 +186,8 @@ def build_sdk_observation_envelope(
         correlation=correlation,
         temporal=temporal,
         payload=payload_block,
-        provenance=ProvenanceBlock(adapter="ingestion.batch", adapter_version="1.0.0"),
+        provenance=ProvenanceBlock(
+            adapter="sdk",  # canonical SDK adapter identity (SdkIngressAdapter.adapter_id)
+            adapter_version="1.0.0",
+        ),
     )
