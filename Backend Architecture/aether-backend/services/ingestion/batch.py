@@ -352,20 +352,48 @@ async def ingest_batch(
             if server_context is not None:
                 normalized["server_context"] = server_context
             if settings.observation_envelope.enabled:
-                # WS-A5 flag-gated adoption (default OFF). Builds the canonical
-                # Envelope-B observation for this accepted SDK event and persists
-                # it additively as normalized["observation_envelope"] — consumers
-                # keep reading the flat dict until WS-B converges every adapter
-                # onto Envelope B. Degrades to the flat path on any mapping
-                # failure so the flag can never take ingestion down.
+                # WS-A5/WS-B1 flag-gated adoption (default OFF). Builds the
+                # canonical Envelope-B observation for this accepted SDK event
+                # through the SDK adapter (services/ingestion/adapters/sdk.py),
+                # then — when the WS-B1 gateway flag is also ON — validates and
+                # stamps it through the universal ingestion gateway
+                # (services/ingestion/gateway.py). Persisted additively as
+                # normalized["observation_envelope"]; consumers keep reading the
+                # flat dict until WS-B converges every adapter onto Envelope B.
+                # Any mapping/validation failure degrades to the flat path, so
+                # the flags can never take ingestion down.
                 try:
-                    from services.ingestion.observation_envelope import (
-                        build_sdk_observation_envelope,
-                    )
+                    from services.ingestion.adapters.sdk import SdkIngressAdapter
+                    from services.ingestion.gateway import validate_and_stamp
 
-                    envelope = build_sdk_observation_envelope(normalized)
+                    adapter = SdkIngressAdapter()
+                    envelope = adapter.build_observation_envelope(normalized)
                     if envelope is not None:
-                        normalized["observation_envelope"] = envelope.to_bronze_additive()
+                        if settings.ingress_gateway.enabled:
+                            result = validate_and_stamp(
+                                envelope.to_bronze_additive(),
+                                adapter=adapter,
+                                tenant_id=tenant.tenant_id,
+                            )
+                            if result.accepted:
+                                normalized["observation_envelope"] = result.envelope
+                            else:
+                                # Gateway rejected this envelope (schema / type /
+                                # family / tenant). The A-side event is already
+                                # accepted — degrade to the flat dict.
+                                logger.warning(
+                                    "observation_envelope gateway-rejected for batch "
+                                    "%s event_id=%s reason=%s",
+                                    batch_id,
+                                    normalized.get("event_id"),
+                                    result.reasons,
+                                )
+                                metrics.increment(
+                                    "ingestion_observation_envelope_gateway_rejected_total",
+                                    labels={"tenant_id": tenant.tenant_id},
+                                )
+                        else:
+                            normalized["observation_envelope"] = envelope.to_bronze_additive()
                     else:
                         metrics.increment(
                             "ingestion_observation_envelope_skipped_total",
