@@ -24,6 +24,7 @@ from shared.events.events import Event, EventConsumer, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
 from repositories.lake import BronzeRepository, SilverRepository
 from services.ingestion.acquisition_privacy import sanitize_acquisition_payload
+from services.ingestion.ingestion_observability import record_stage
 from services.ingestion.spine import (
     ObservationView,
     normalization_spine_enabled,
@@ -157,6 +158,15 @@ async def silver_normalizer(event: Event) -> None:
             tenant_id=tenant_id,
         )
         metrics.increment("ingestion_silver_written_total", labels={"tenant_id": tenant_id})
+        # WS-E funnel: NORMALIZED stage (flag-gated; no-op while observability OFF).
+        record_stage(
+            tenant_id=tenant_id,
+            event_id=event_id,
+            event_type=event_type,
+            stage="normalized",
+            status="accepted",
+            path=event.source_service or "ingestion.workers",
+        )
     except Exception as exc:
         logger.error(
             "silver_normalizer failed for event %s: %s", event_id, exc, exc_info=True
@@ -264,6 +274,17 @@ async def silver_fact_projector(event: Event) -> None:
             metrics.increment(
                 "silver_projection_dead_letters_total",
                 labels={"tenant_id": tenant_id, "projector": failed},
+            )
+        # WS-E funnel: PROJECTIONS stage for events this dispatcher handled
+        # (flag-gated; no-op while ingestion observability is OFF).
+        if outcome.results:
+            record_stage(
+                tenant_id=tenant_id,
+                event_id=payload.get("event_id"),
+                event_type=event_type,
+                stage="projections",
+                status="accepted",
+                path=event.source_service or "ingestion.workers",
             )
     except Exception as exc:
         logger.error(

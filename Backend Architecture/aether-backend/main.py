@@ -211,6 +211,7 @@ from services.gateway.routes import router as gateway_router
 from services.ingestion.routes import router as ingestion_router
 from services.ingestion.batch import router as batch_router
 from services.ingestion.replay_routes import kyber_replay_router
+from services.ingestion.observability_routes import ingestion_observability_router
 from services.identity.routes import router as identity_router
 from services.identity.reconciliation_routes import router as identity_reconciliation_router
 from services.analytics.routes import router as analytics_router
@@ -841,6 +842,7 @@ def create_app() -> FastAPI:
     app.include_router(batch_router)      # POST /v1/batch — canonical SDK ingestion
     app.include_router(ingestion_router)  # POST /v1/ingest/feed (server-side feed)
     app.include_router(kyber_replay_router)  # /v1/kyber/ingest/replay — operator Bronze replay (WS-B4)
+    app.include_router(ingestion_observability_router)  # /v1/kyber/ingest/observability — funnel + Observation Inspector (WS-E)
     app.include_router(identity_router)
     app.include_router(identity_reconciliation_router)
     app.include_router(analytics_router)
