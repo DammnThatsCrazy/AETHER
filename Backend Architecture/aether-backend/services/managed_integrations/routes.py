@@ -1,18 +1,21 @@
-"""Reconciled Control Plane — read-only operator surface (Phase 0 + Phase 1).
+"""Reconciled Control Plane — read-only operator surface (Phase 0-3).
 
 Mounts under ``/v1/admin/kyber/managed-integrations`` (mounted in main.py behind
 ``settings.reconciled_control.kyber_route_enabled``, default OFF). Every handler
 is operator-gated via :func:`require_kyber_operator` — an Aether tenant can never
-read the fleet surface.
+read the fleet surface (the ``reconciled_control`` governance domain carries no
+tenant grant).
 
 Scope discipline: this router has **no** POST/PUT/DELETE. Phase 0 exposes the
 durable ``managed_integrations`` registration rows and the evidence ``reconcile_runs``
 rows (desired-vs-observed classification + DRAFT change summaries). Phase 1 adds
 the durable ``change_sets`` **plan** rows (§32 step 12) — candidate changes with
-their blast radius, risk assessment and guard status. Nothing here mutates an
-integration — applying a ChangeSet is explicitly deferred (CP-08 boundary). The
-repo singleton injection seam mirrors provider_runtime so tests can point the
-routes at an in-memory store.
+their blast radius, risk assessment and guard status. Phase 3 adds the review
+surface for approvals (§21 role-gated decisions) and ActionRequired exceptions
+(§12.14) that automation routes. Nothing here mutates an integration — applying
+a ChangeSet is explicitly deferred (CP-08 boundary). The repo singleton
+injection seam mirrors provider_runtime so tests can point the routes at an
+in-memory store.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ from shared.common.common import APIResponse, BadRequestError, NotFoundError
 from shared.logger.logger import get_logger
 
 from services.managed_integrations.contracts import (
+    ACTION_REQUIRED_STATUSES,
     CHANGE_ACTION_KINDS,
     CHANGE_RISK_CLASSES,
     CHANGESET_STATUSES,
@@ -35,6 +39,10 @@ from services.managed_integrations.contracts import (
 )
 from services.managed_integrations.change_sets_repository import (
     get_change_set_repository,
+)
+from services.managed_integrations.execution_records_repository import (
+    get_action_required_repository,
+    get_change_set_approval_repository,
 )
 from services.managed_integrations.repository import (
     get_managed_integration_repository,
@@ -195,6 +203,91 @@ async def get_change_set(
             "change_action_kinds": list(CHANGE_ACTION_KINDS),
             "drift_taxonomy_types": list(DRIFT_TAXONOMY_TYPES),
         }
+    ).to_dict()
+
+
+_APPROVAL_DECISIONS = ("approved", "denied")
+
+
+def _validate_approval_decision(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    if value not in _APPROVAL_DECISIONS:
+        raise BadRequestError(
+            f"invalid approval decision {value!r} — expected one of "
+            f"{_APPROVAL_DECISIONS}"
+        )
+    return value
+
+
+def _validate_action_required_status(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    if value not in ACTION_REQUIRED_STATUSES:
+        raise BadRequestError(
+            f"invalid action-required status {value!r} — expected one of "
+            f"{ACTION_REQUIRED_STATUSES} (§12.14)"
+        )
+    return value
+
+
+# Phase 3 review surface: approvals + exceptions that automation routes (§39
+# required-approval tokens, §32 step 23 / §12.14 ActionRequired). Read-only —
+# deciding an approval or resolving an action stays with the role-gated
+# surfaces, never here. Literal paths MUST stay declared before the
+# /{managed_integration_id} capture route below.
+@admin_router.get("/approvals")
+async def list_change_set_approvals(
+    request: Request,
+    tenant_id: Optional[str] = Query(default=None, description="Narrow to one tenant"),
+    environment_id: Optional[str] = Query(
+        default=None, description="Narrow to one environment"
+    ),
+    changeset_ref: Optional[str] = Query(default=None),
+    decision: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """ChangeSet approval decisions (operator aggregate/read, §21).
+
+    Fleet-wide newest-decided-first by default; filters ANDed. The approval
+    rows record which §21 role granted/denied which required-approval token —
+    the review surface for approvals that automation routes.
+    """
+    _require_operator(request)
+    decision = _validate_approval_decision(decision)
+    repo = get_change_set_approval_repository()
+    rows = await repo.list(
+        tenant_id=tenant_id,
+        environment_id=environment_id,
+        changeset_ref=changeset_ref,
+        decision=decision,
+        limit=limit,
+        offset=offset,
+    )
+    return APIResponse(data={"approvals": rows, "count": len(rows)}).to_dict()
+
+
+@admin_router.get("/action-required")
+async def list_action_required(
+    request: Request,
+    tenant_id: Optional[str] = Query(default=None, description="Narrow to one tenant"),
+    status: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """Open/resolved ActionRequired items (operator aggregate/read, §12.14).
+
+    Exceptions that automation routes for operator/tenant action — blocked R2
+    rollouts, data-loss decisions, unresolvable changes. Read-only: resolving
+    an item stays on the role-gated write surface.
+    """
+    _require_operator(request)
+    status = _validate_action_required_status(status)
+    repo = get_action_required_repository()
+    rows = await repo.list(tenant_ref=tenant_id, status=status, limit=limit + offset)
+    return APIResponse(
+        data={"action_required": rows[offset : offset + limit], "count": len(rows)}
     ).to_dict()
 
 

@@ -4,13 +4,14 @@ Function-local ``get_settings()`` reads mirror the WS-D pattern
 (``shared/backend_interpretation/flags.py``): this package is imported by the
 route module, the reconciliation skeleton and (in later phases) workers, so a
 module-level settings import would drag the full settings graph into every one
-of those surfaces. All three flags live on the frozen
+of those surfaces. All four flags live on the frozen
 :class:`config.settings.ReconciledControlPlaneConfig` (``Settings.reconciled_control``)
 and default OFF:
 
 * ``enabled``             ``AETHER_RECONCILED_CONTROL_PLANE_ENABLED``          plane master switch
 * ``reconciler_enabled``  ``AETHER_RECONCILED_CONTROL_RECONCILER_ENABLED``     reconcile skeleton (tests-only in Phase 0)
 * ``kyber_route_enabled`` ``AETHER_RECONCILED_CONTROL_KYBER_ROUTE_ENABLED``    read-only operator route mount
+* ``scheduler_enabled``   ``AETHER_RECONCILED_CONTROL_SCHEDULER_ENABLED``      Phase-3 continuous reconcile scheduler (WorkerSpec gate)
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ _FLAG_ATTRS: tuple[str, ...] = (
     "enabled",
     "reconciler_enabled",
     "kyber_route_enabled",
+    "scheduler_enabled",
 )
 
 
@@ -51,9 +53,32 @@ def kyber_route_enabled() -> bool:
     return reconciled_control_enabled("kyber_route_enabled")
 
 
+def scheduler_enabled() -> bool:
+    return reconciled_control_enabled("scheduler_enabled")
+
+
+def scheduler_interval_seconds() -> int:
+    """Pass-to-pass sleep of the Phase-3 reconcile scheduler (default 300 s,
+    mirroring the managed-integration freshness window)."""
+    try:
+        from config.settings import get_settings
+
+        return int(
+            getattr(
+                get_settings().reconciled_control,
+                "scheduler_interval_seconds",
+                300,
+            )
+        )
+    except Exception:  # noqa: BLE001 - import-defensive
+        return 300
+
+
 __all__ = [
     "reconciled_control_enabled",
     "enabled",
     "reconciler_enabled",
     "kyber_route_enabled",
+    "scheduler_enabled",
+    "scheduler_interval_seconds",
 ]

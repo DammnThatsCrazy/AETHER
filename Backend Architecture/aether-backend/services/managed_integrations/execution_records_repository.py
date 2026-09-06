@@ -683,6 +683,57 @@ class ChangeSetApprovalRepository(_ExecutionRepo):
         )
         return [_approval_row(dict(r)) for r in records]
 
+    async def list(
+        self,
+        *,
+        tenant_id: Optional[str] = None,
+        environment_id: Optional[str] = None,
+        changeset_ref: Optional[str] = None,
+        decision: Optional[str] = None,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> list[dict]:
+        """Fleet/aggregate approval read (§21 role-gated approvals surface).
+
+        Operator review surface backing: filters are ANDed, newest-decided
+        first. The tenant/environment pair is deliberately optional — the
+        Olympus operator reads the aggregate; tenant-scoped reads are not a
+        grant this domain carries.
+        """
+        limit = max(0, int(limit))
+        offset = max(0, int(offset))
+        pool = await self._ensure()
+        if pool is None:
+            rows = [
+                r
+                for r in self._store.values()
+                if (tenant_id is None or r.get("tenant_id") == tenant_id)
+                and (environment_id is None or r.get("environment_id") == environment_id)
+                and (changeset_ref is None or r.get("changeset_ref") == changeset_ref)
+                and (decision is None or r.get("decision") == decision)
+            ]
+            rows.sort(key=lambda r: r.get("decided_at") or "", reverse=True)
+            return [dict(r) for r in rows[offset : offset + limit]]
+        where: list[str] = []
+        args: list[Any] = []
+        for col, value in (
+            ("tenant_id", tenant_id),
+            ("environment_id", environment_id),
+            ("changeset_ref", changeset_ref),
+            ("decision", decision),
+        ):
+            if value is not None:
+                args.append(value)
+                where.append(f"{col} = ${len(args)}")
+        args.extend([limit, offset])
+        sql_where = f"WHERE {' AND '.join(where)}" if where else ""
+        records = await pool.fetch(
+            f"SELECT * FROM change_set_approvals {sql_where} "
+            f"ORDER BY decided_at DESC LIMIT ${len(args)-1} OFFSET ${len(args)}",
+            *args,
+        )
+        return [_approval_row(dict(r)) for r in records]
+
 
 def _approval_row(row: dict) -> dict:
     row = dict(row)

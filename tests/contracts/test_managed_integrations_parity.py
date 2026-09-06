@@ -21,10 +21,13 @@ if str(BACKEND) not in sys.path:
 
 from services.managed_integrations.contracts import (  # noqa: E402
     ACTION_REQUIRED_STATUSES,
+    ADMISSION_STAGES,
     CHANGE_ACTION_KINDS,
     CHANGE_RISK_CLASSES,
     CHANGESET_STATUSES,
+    CONTINUOUS_LIFECYCLE_ACTIONS,
     CONTROL_FINDING_KINDS,
+    DISCOVERY_DATA_CLASSES,
     DRIFT_TAXONOMY_TYPES,
     EVIDENCE_CONFIDENCE_VALUES,
     INTEGRATION_AVAILABILITY_VALUES,
@@ -33,9 +36,13 @@ from services.managed_integrations.contracts import (  # noqa: E402
     MANAGED_DRIFT_TYPES,
     MANAGED_INTEGRATION_KINDS,
     MANAGED_RELEASE_CHANNELS,
+    MAPPING_METHOD_VALUES,
+    MAPPING_REVIEW_STATES,
     OBSERVED_PROVENANCE_VALUES,
     RECONCILE_RESULT_VALUES,
     ROLLBACK_STATUSES,
+    SCHEMA_MAPPING_AUTO_PROMOTE_GATES,
+    SIMULATION_RESULT_VALUES,
     VERIFY_OUTCOMES,
 )
 
@@ -167,6 +174,113 @@ def test_action_required_statuses_parity():
     assert ts == list(ACTION_REQUIRED_STATUSES), (
         f"action-required-status drift: TS={ts} PY={list(ACTION_REQUIRED_STATUSES)}"
     )
+
+
+def test_admission_stages_parity():
+    ts = _const_array("admissionStages")
+    assert ts == list(ADMISSION_STAGES), (
+        f"admission-stage drift: TS={ts} PY={list(ADMISSION_STAGES)}"
+    )
+
+
+def test_continuous_lifecycle_actions_parity():
+    ts = _const_array("continuousLifecycleActions")
+    assert ts == list(CONTINUOUS_LIFECYCLE_ACTIONS), (
+        f"continuous-lifecycle drift: TS={ts} PY={list(CONTINUOUS_LIFECYCLE_ACTIONS)}"
+    )
+
+
+def test_discovery_data_classes_parity():
+    ts = _const_array("discoveryDataClasses")
+    assert ts == list(DISCOVERY_DATA_CLASSES), (
+        f"discovery-data-class drift: TS={ts} PY={list(DISCOVERY_DATA_CLASSES)}"
+    )
+
+
+def test_mapping_method_values_parity():
+    ts = _const_array("mappingMethodValues")
+    assert ts == list(MAPPING_METHOD_VALUES), (
+        f"mapping-method drift: TS={ts} PY={list(MAPPING_METHOD_VALUES)}"
+    )
+
+
+def test_mapping_review_states_parity():
+    ts = _const_array("mappingReviewStates")
+    assert ts == list(MAPPING_REVIEW_STATES), (
+        f"mapping-review-state drift: TS={ts} PY={list(MAPPING_REVIEW_STATES)}"
+    )
+
+
+def test_simulation_result_values_parity():
+    ts = _const_array("simulationResultValues")
+    assert ts == list(SIMULATION_RESULT_VALUES), (
+        f"simulation-result drift: TS={ts} PY={list(SIMULATION_RESULT_VALUES)}"
+    )
+
+
+def test_schema_mapping_auto_promote_gates_parity():
+    ts = _const_array("schemaMappingAutoPromoteGates")
+    assert ts == list(SCHEMA_MAPPING_AUTO_PROMOTE_GATES), (
+        f"auto-promote-gate drift: TS={ts} "
+        f"PY={list(SCHEMA_MAPPING_AUTO_PROMOTE_GATES)}"
+    )
+
+
+def test_admission_stages_are_the_canonical_s16_lifecycle():
+    # §16: DISCOVER → UNDERSTAND → CLASSIFY → RECONCILE SOURCE AUTHORITY →
+    # AUTHORIZE → SIMULATE → APPROVE → COMPILE → ACTIVATE → OBSERVE. The
+    # continuous lifecycle (monitor/drift/reconcile/change/review/suspend/
+    # revoke) is a separate vocabulary — never fused into the stage list.
+    assert list(ADMISSION_STAGES) == [
+        "discover",
+        "understand",
+        "classify",
+        "reconcile_source_authority",
+        "authorize",
+        "simulate",
+        "approve",
+        "compile",
+        "activate",
+        "observe",
+    ]
+    assert set(ADMISSION_STAGES).isdisjoint(CONTINUOUS_LIFECYCLE_ACTIONS)
+
+
+def test_discovery_default_is_metadata_only():
+    # §17: metadata_only by default; source code and production values are not
+    # uploaded by default — the classes exist, the default does not include them.
+    assert DISCOVERY_DATA_CLASSES[0] == "metadata_only"
+    assert DISCOVERY_DATA_CLASSES == (
+        "metadata_only",
+        "source_code",
+        "production_values",
+    )
+
+
+def test_mapping_methods_are_the_s81_five():
+    assert set(MAPPING_METHOD_VALUES) == {
+        "static", "provider_known", "heuristic", "model_assisted", "human",
+    }
+
+
+def test_simulation_results_follow_the_s127_vocabulary():
+    assert set(SIMULATION_RESULT_VALUES) == {"pass", "conditional", "fail"}
+
+
+def test_auto_promote_gates_are_exactly_the_s38_conditions():
+    # §38: automatic promotion is allowed only when all of these are true —
+    # a single gate list, never silently narrowed.
+    assert set(SCHEMA_MAPPING_AUTO_PROMOTE_GATES) == {
+        "high_confidence",
+        "no_new_data_category",
+        "no_new_sensitive_field",
+        "no_new_processing_purpose",
+        "no_new_platform_provider_permission",
+        "no_material_semantic_loss",
+        "shadow_result_passes",
+        "health_within_gates",
+    }
+    assert len(SCHEMA_MAPPING_AUTO_PROMOTE_GATES) == 8
 
 
 def test_drift_taxonomy_is_exactly_the_22_canonical_types():

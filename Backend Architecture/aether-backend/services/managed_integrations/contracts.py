@@ -726,3 +726,215 @@ def is_rollback_status(value: str) -> bool:
 
 def is_action_required_status(value: str) -> bool:
     return value in ACTION_REQUIRED_STATUSES
+
+
+# ── Phase-3 vocabulary: §16 admission / §17 discovery / §8.1 mapping /
+# ── §9 source authority / §12.7 simulation / §38 automation gates ─────────────
+# Python mirror of the Phase-3 additions to packages/shared/managed-integrations.ts.
+
+ADMISSION_STAGES: tuple[str, ...] = (
+    "discover",
+    "understand",
+    "classify",
+    "reconcile_source_authority",
+    "authorize",
+    "simulate",
+    "approve",
+    "compile",
+    "activate",
+    "observe",
+)
+
+CONTINUOUS_LIFECYCLE_ACTIONS: tuple[str, ...] = (
+    "monitor",
+    "drift",
+    "reconcile",
+    "change",
+    "review",
+    "suspend",
+    "revoke",
+)
+
+DISCOVERY_DATA_CLASSES: tuple[str, ...] = (
+    "metadata_only",  # §17 default — source code / production values are not
+    "source_code",  # uploaded by default
+    "production_values",
+)
+
+MAPPING_METHOD_VALUES: tuple[str, ...] = (
+    "static",
+    "provider_known",
+    "heuristic",
+    "model_assisted",
+    "human",
+)
+
+# §8.1 confidence policy: >=0.98 auto-propose only; 0.80-0.979 review
+# recommended; <0.80 unresolved. Sensitive mappings still require
+# authorization regardless of confidence.
+MAPPING_REVIEW_STATES: tuple[str, ...] = (
+    "auto_propose",
+    "review",
+    "unresolved",
+)
+
+SIMULATION_RESULT_VALUES: tuple[str, ...] = ("pass", "conditional", "fail")
+
+# §38: automatic promotion is allowed only when ALL gates hold; otherwise a
+# review/action is generated.
+SCHEMA_MAPPING_AUTO_PROMOTE_GATES: tuple[str, ...] = (
+    "high_confidence",
+    "no_new_data_category",
+    "no_new_sensitive_field",
+    "no_new_processing_purpose",
+    "no_new_platform_provider_permission",
+    "no_material_semantic_loss",
+    "shadow_result_passes",
+    "health_within_gates",
+)
+
+
+def is_admission_stage(value: str) -> bool:
+    return value in ADMISSION_STAGES
+
+
+def is_discovery_data_class(value: str) -> bool:
+    return value in DISCOVERY_DATA_CLASSES
+
+
+def is_mapping_method(value: str) -> bool:
+    return value in MAPPING_METHOD_VALUES
+
+
+def is_mapping_review_state(value: str) -> bool:
+    return value in MAPPING_REVIEW_STATES
+
+
+def is_simulation_result(value: str) -> bool:
+    return value in SIMULATION_RESULT_VALUES
+
+
+def is_schema_mapping_auto_promote_gate(value: str) -> bool:
+    return value in SCHEMA_MAPPING_AUTO_PROMOTE_GATES
+
+
+class DiscoveryManifestView(BaseModel):
+    """Metadata-first structural discovery output (§7.4 DiscoveryManifestContract).
+
+    ``uploaded_data_class`` defaults to ``metadata_only`` (§17): source code and
+    production values are never uploaded by default.
+    """
+
+    discovery_id: str = Field(..., min_length=1)
+    source_ref: str = Field(..., min_length=1)
+    discovery_engine_version: str = Field(..., min_length=1)
+    artifact_hash: str = Field(..., min_length=1)
+    frameworks: list[str] = Field(default_factory=list)
+    packages: list[str] = Field(default_factory=list)
+    routes: list[str] = Field(default_factory=list)
+    models: list[str] = Field(default_factory=list)
+    schemas: list[str] = Field(default_factory=list)
+    events: list[str] = Field(default_factory=list)
+    analytics_contracts: list[str] = Field(default_factory=list)
+    identity_contracts: list[str] = Field(default_factory=list)
+    commerce_contracts: list[str] = Field(default_factory=list)
+    payment_contracts: list[str] = Field(default_factory=list)
+    consent_contracts: list[str] = Field(default_factory=list)
+    agent_contracts: list[str] = Field(default_factory=list)
+    network_contracts: list[str] = Field(default_factory=list)
+    sensitive_candidates: list[str] = Field(default_factory=list)
+    secret_candidates: list[str] = Field(default_factory=list)
+    uploaded_data_class: str = "metadata_only"
+    tenant_id: Optional[str] = None
+    environment_id: Optional[str] = None
+    discovered_at: datetime
+
+
+class SemanticMappingCandidateView(BaseModel):
+    """A proposed semantic mapping (§8.1 SemanticMappingCandidateContract).
+
+    Candidates are epistemic proposals, never truth; the §8.1 confidence
+    policy decides ``review_state`` and sensitive mappings always require
+    authorization regardless of confidence.
+    """
+
+    candidate_id: str = Field(..., min_length=1)
+    source_ref: str = Field(..., min_length=1)
+    source_path: str = Field(..., min_length=1)
+    canonical_target: str = Field(..., min_length=1)
+    mapping_method: str = "heuristic"
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    rationale: Optional[str] = None
+    sensitivity_class: Optional[str] = None
+    transform_ref: Optional[str] = None
+    review_state: str = "review"
+    tenant_id: Optional[str] = None
+    environment_id: Optional[str] = None
+    created_at: datetime
+
+
+class SourceAuthorityRuleView(BaseModel):
+    """Domain/property-specific source precedence (§9.1 SourceAuthorityRuleContract).
+
+    Authority is never a blanket statement that one provider is always
+    superior; rules carry ``source_precedence`` per ``property_path``.
+    """
+
+    rule_id: str = Field(..., min_length=1)
+    domain: str = Field(..., min_length=1)
+    property_path: str = Field(..., min_length=1)
+    source_precedence: list[str] = Field(default_factory=list)
+    conflict_strategy: Optional[str] = None
+    valid_from: Optional[datetime] = None
+    valid_to: Optional[datetime] = None
+    policy_ref: Optional[str] = None
+    tenant_id: Optional[str] = None
+    environment_id: Optional[str] = None
+
+
+class ObservationEquivalenceKeyView(BaseModel):
+    """Semantic-equivalence key separating transport idempotency from semantic
+    deduplication (§9.2 ObservationEquivalenceKeyContract)."""
+
+    key_id: str = Field(..., min_length=1)
+    domain: str = Field(..., min_length=1)
+    candidate_types: list[str] = Field(default_factory=list)
+    key_components: list[str] = Field(default_factory=list)
+    window: Optional[str] = None
+    normalization_rules: Optional[list[str]] = None
+    semantic_dedupe_policy: Optional[str] = None
+    tenant_id: Optional[str] = None
+    environment_id: Optional[str] = None
+
+
+class SimulationResultView(BaseModel):
+    """Simulation/digital-twin outcome (§12.7 SimulationResultContract).
+
+    A shadow result never mutates canonical graph state (§37) — it compares an
+    authoritative current path against a non-authoritative candidate path and
+    reports deltas plus unknowns/warnings.
+    """
+
+    simulation_id: str = Field(..., min_length=1)
+    changeset_ref: Optional[str] = None
+    input_snapshot_refs: list[str] = Field(default_factory=list)
+    fixture_refs: list[str] = Field(default_factory=list)
+    contract_result: Optional[str] = None
+    schema_result: Optional[str] = None
+    mapping_result: Optional[str] = None
+    privacy_result: Optional[str] = None
+    authorization_result: Optional[str] = None
+    volume_result: Optional[str] = None
+    metric_reconciliation: Optional[str] = None
+    identity_continuity: Optional[str] = None
+    journey_continuity: Optional[str] = None
+    outcome_continuity: Optional[str] = None
+    latency_delta: Optional[str] = None
+    cost_delta: Optional[str] = None
+    unknowns: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    result: str = "conditional"
+    tenant_id: Optional[str] = None
+    environment_id: Optional[str] = None
+    simulation_mode: Optional[str] = None  # digital_twin | shadow (§37)
+    ran_at: datetime

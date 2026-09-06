@@ -7509,3 +7509,126 @@ policies:
     allow_historical_table_storage: true
     requires_consent_invalidation: false
     requires_permission_hash: false
+
+  # ---------------------------------------------------------------------------
+  # Reconciled Control Plane (Phase 3) — admission lifecycle, simulation/shadow
+  # runs, schema/mapping candidates + promotion runs, source-authority rules and
+  # observation-equivalence keys. Internal operator metadata: tenant-scoped,
+  # no consent data, never materialized/consumed by the consent surface, never
+  # auto-externalized. Simulation/shadow rows are the no-mutation evidence of
+  # §37 candidate evaluation; mapping candidates are epistemic proposals (§18),
+  # never applied truth.
+  # ---------------------------------------------------------------------------
+
+  - resource_type: admission_records
+    # §16 integration admission lifecycle records
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+
+  - resource_type: simulation_runs
+    # §37/§12.7 simulation + shadow run evidence
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+
+  - resource_type: mapping_candidates
+    # §18/§8.1 semantic-mapping candidate proposals
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+
+  - resource_type: schema_mapping_runs
+    # §25/§38 schema-fingerprint promotion-run records
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+
+  - resource_type: source_authority_rules
+    # §9.1 domain/property-specific source precedence
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+
+  - resource_type: observation_equivalence_keys
+    # §9.2 semantic-equivalence key definitions
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false

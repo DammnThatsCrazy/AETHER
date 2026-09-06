@@ -222,6 +222,13 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
             # build_worker_specs but unmapped — an orphan spec that would never
             # run in a dedicated/consolidated deployment.)
             "ledger_chain_verifier",
+            # Reconciled Control Plane continuous reconcile scheduler: one
+            # periodic governed loop (reconcile → plan → execute through the
+            # §34/§35 path), so it rides maintenance like readiness
+            # revalidation rather than justifying a runtime role of its own.
+            # Flag-gated OFF by default; idle until both the plane master
+            # switch and the scheduler kill-switch are live.
+            "reconciled_control_scheduler",
         }
     ),
 }

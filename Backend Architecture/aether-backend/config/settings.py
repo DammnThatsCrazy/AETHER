@@ -1289,12 +1289,17 @@ class ReconciledControlPlaneConfig:
     machinery* only. ``enabled`` is the plane master switch; ``reconciler_enabled``
     gates the reconciliation skeleton (exercised by tests only in Phase 0 — there
     is no live scheduler yet); ``kyber_route_enabled`` gates the read-only
-    operator surface under ``/v1/admin/kyber/managed-integrations``. No flag here
-    ever enables a mutation of a managed integration's desired or observed state.
+    operator surface under ``/v1/admin/kyber/managed-integrations``;
+    ``scheduler_enabled`` gates the Phase-3 continuous reconcile scheduler
+    (a WorkerSpec, supervised, never auto-enabled by ``enabled`` alone).
+    No flag here ever enables a mutation of a managed integration's desired or
+    observed state outside the governed executor path.
     """
     enabled: bool = _env_bool("AETHER_RECONCILED_CONTROL_PLANE_ENABLED", False)
     reconciler_enabled: bool = _env_bool("AETHER_RECONCILED_CONTROL_RECONCILER_ENABLED", False)
     kyber_route_enabled: bool = _env_bool("AETHER_RECONCILED_CONTROL_KYBER_ROUTE_ENABLED", False)
+    scheduler_enabled: bool = _env_bool("AETHER_RECONCILED_CONTROL_SCHEDULER_ENABLED", False)
+    scheduler_interval_seconds: int = _env_int("AETHER_RECONCILED_CONTROL_SCHEDULER_INTERVAL_SECONDS", 300)
 
 
 # ---------------------------------------------------------------------------

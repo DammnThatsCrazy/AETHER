@@ -612,3 +612,184 @@ export interface ActionRequiredView {
   status: ActionRequiredStatus;
   created_at: string;
 }
+
+// ── §16 admission lifecycle ──────────────────────────────────────────────────
+
+export const admissionStages = [
+  'discover',
+  'understand',
+  'classify',
+  'reconcile_source_authority',
+  'authorize',
+  'simulate',
+  'approve',
+  'compile',
+  'activate',
+  'observe',
+] as const;
+export type AdmissionStage = (typeof admissionStages)[number];
+
+/** §16 continuous-lifecycle moves once an integration is admitted and observed:
+ * monitor → drift → reconcile → change / review / suspend / revoke. */
+export const continuousLifecycleActions = [
+  'monitor',
+  'drift',
+  'reconcile',
+  'change',
+  'review',
+  'suspend',
+  'revoke',
+] as const;
+export type ContinuousLifecycleAction = (typeof continuousLifecycleActions)[number];
+
+// ── §17 / §7.4 discovery manifest data classes ───────────────────────────────
+
+/** Local-first discovery upload behavior — `metadata_only` by default; source
+ * code and production values are never uploaded by default (§17). */
+export const discoveryDataClasses = [
+  'metadata_only',
+  'source_code',
+  'production_values',
+] as const;
+export type DiscoveryDataClass = (typeof discoveryDataClasses)[number];
+
+/** §7.4 DiscoveryManifestContract — metadata-first structural discovery output. */
+export interface DiscoveryManifestView {
+  discovery_id: string;
+  source_ref: string;
+  discovery_engine_version: string;
+  artifact_hash: string;
+  frameworks: string[];
+  packages: string[];
+  routes: string[];
+  models: string[];
+  schemas: string[];
+  events: string[];
+  analytics_contracts: string[];
+  identity_contracts: string[];
+  commerce_contracts: string[];
+  payment_contracts: string[];
+  consent_contracts: string[];
+  agent_contracts: string[];
+  network_contracts: string[];
+  sensitive_candidates: string[];
+  secret_candidates: string[];
+  /** `metadata_only` by default — source/production values need explicit opt-in. */
+  uploaded_data_class: DiscoveryDataClass;
+  tenant_id?: string | null;
+  environment_id?: string | null;
+  discovered_at: string;
+}
+
+// ── §8.1 SemanticMappingCandidateContract ────────────────────────────────────
+
+export const mappingMethodValues = [
+  'static',
+  'provider_known',
+  'heuristic',
+  'model_assisted',
+  'human',
+] as const;
+export type MappingMethod = (typeof mappingMethodValues)[number];
+
+/** §8.1 confidence policy: >=0.98 auto-propose only; 0.80–0.979 review
+ * recommended; <0.80 unresolved. Sensitive mappings still require
+ * authorization regardless of confidence. */
+export const mappingReviewStates = ['auto_propose', 'review', 'unresolved'] as const;
+export type MappingReviewState = (typeof mappingReviewStates)[number];
+
+export interface SemanticMappingCandidateView {
+  candidate_id: string;
+  source_ref: string;
+  source_path: string;
+  canonical_target: string;
+  mapping_method: MappingMethod;
+  confidence: number;
+  rationale?: string | null;
+  sensitivity_class?: string | null;
+  transform_ref?: string | null;
+  /** `auto_propose` / `review` / `unresolved` per §8.1 confidence policy. */
+  review_state: MappingReviewState;
+  tenant_id?: string | null;
+  environment_id?: string | null;
+  created_at: string;
+}
+
+// ── §9.1 SourceAuthorityRuleContract ─────────────────────────────────────────
+
+/** Authority is domain/property specific — never a blanket statement that one
+ * provider is always superior (§9.1). */
+export interface SourceAuthorityRuleView {
+  rule_id: string;
+  domain: string;
+  property_path: string;
+  source_precedence: string[];
+  conflict_strategy?: string | null;
+  valid_from?: string | null;
+  valid_to?: string | null;
+  policy_ref?: string | null;
+  tenant_id?: string | null;
+  environment_id?: string | null;
+}
+
+// ── §9.2 ObservationEquivalenceKeyContract ───────────────────────────────────
+
+/** Separates transport idempotency from semantic equivalence (§9.2). */
+export interface ObservationEquivalenceKeyView {
+  key_id: string;
+  domain: string;
+  candidate_types: string[];
+  key_components: string[];
+  window?: string | null;
+  normalization_rules?: string[] | null;
+  semantic_dedupe_policy?: string | null;
+  tenant_id?: string | null;
+  environment_id?: string | null;
+}
+
+// ── §12.7 SimulationResultContract ───────────────────────────────────────────
+
+export const simulationResultValues = ['pass', 'conditional', 'fail'] as const;
+export type SimulationResult = (typeof simulationResultValues)[number];
+
+export interface SimulationResultView {
+  simulation_id: string;
+  changeset_ref?: string | null;
+  input_snapshot_refs: string[];
+  fixture_refs: string[];
+  contract_result?: string | null;
+  schema_result?: string | null;
+  mapping_result?: string | null;
+  privacy_result?: string | null;
+  authorization_result?: string | null;
+  volume_result?: string | null;
+  metric_reconciliation?: string | null;
+  identity_continuity?: string | null;
+  journey_continuity?: string | null;
+  outcome_continuity?: string | null;
+  latency_delta?: string | null;
+  cost_delta?: string | null;
+  unknowns: string[];
+  warnings: string[];
+  result: SimulationResult;
+  tenant_id?: string | null;
+  environment_id?: string | null;
+  simulation_mode?: string | null;
+  ran_at: string;
+}
+
+// ── §38 schema/mapping drift automation gates ────────────────────────────────
+
+/** Automatic promotion is allowed only when ALL gates hold (§38); otherwise a
+ * review/action is generated. */
+export const schemaMappingAutoPromoteGates = [
+  'high_confidence',
+  'no_new_data_category',
+  'no_new_sensitive_field',
+  'no_new_processing_purpose',
+  'no_new_platform_provider_permission',
+  'no_material_semantic_loss',
+  'shadow_result_passes',
+  'health_within_gates',
+] as const;
+export type SchemaMappingAutoPromoteGate = (typeof schemaMappingAutoPromoteGates)[number];

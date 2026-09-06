@@ -19,13 +19,24 @@ BACKEND = REPO_ROOT / "Backend Architecture" / "aether-backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-_RCP_FLAG_NAMES = ("enabled", "reconciler_enabled", "kyber_route_enabled")
+_RCP_FLAG_NAMES = (
+    "enabled",
+    "reconciler_enabled",
+    "kyber_route_enabled",
+    "scheduler_enabled",
+    "scheduler_interval_seconds",
+)
 
 
 @pytest.fixture(autouse=True)
 def _reset_rcp_stores():
     """Empty the module-local managed-integration / reconcile-run / change-set
-    stores (managed_integrations.repository + change_sets_repository)."""
+    stores (managed_integrations.repository + change_sets_repository) and the
+    Phase-3 engine stores (admission / simulation / schema-mapping /
+    source-authority)."""
+    from services.managed_integrations.admission_repository import (
+        reset_admission_record_stores,
+    )
     from services.managed_integrations.change_sets_repository import (
         reset_change_set_in_memory_store,
     )
@@ -35,14 +46,31 @@ def _reset_rcp_stores():
     from services.managed_integrations.repository import (
         reset_managed_integration_in_memory_store,
     )
+    from services.managed_integrations.schema_mapping_repository import (
+        reset_schema_mapping_stores,
+    )
+    from services.managed_integrations.simulation_repository import (
+        reset_simulation_stores,
+    )
+    from services.managed_integrations.source_authority_repository import (
+        reset_source_authority_stores,
+    )
 
     reset_managed_integration_in_memory_store()
     reset_change_set_in_memory_store()
     reset_execution_record_stores()
+    reset_admission_record_stores()
+    reset_simulation_stores()
+    reset_schema_mapping_stores()
+    reset_source_authority_stores()
     yield
     reset_managed_integration_in_memory_store()
     reset_change_set_in_memory_store()
     reset_execution_record_stores()
+    reset_admission_record_stores()
+    reset_simulation_stores()
+    reset_schema_mapping_stores()
+    reset_source_authority_stores()
 
 
 @pytest.fixture

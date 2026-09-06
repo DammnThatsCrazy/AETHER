@@ -17,6 +17,10 @@ def test_all_flags_default_off() -> None:
     assert flags.enabled() is False
     assert flags.reconciler_enabled() is False
     assert flags.kyber_route_enabled() is False
+    assert flags.scheduler_enabled() is False
+    # The scheduler pass-to-pass interval still reads a sane default while the
+    # scheduler is OFF (mirrors the managed-integration freshness window).
+    assert flags.scheduler_interval_seconds() == 300
 
 
 def test_settings_block_defaults_all_off() -> None:
@@ -26,6 +30,7 @@ def test_settings_block_defaults_all_off() -> None:
     assert block.enabled is False
     assert block.reconciler_enabled is False
     assert block.kyber_route_enabled is False
+    assert block.scheduler_enabled is False
 
 
 def test_unknown_flag_attribute_fails_safe_false() -> None:
@@ -61,9 +66,10 @@ def test_toggling_flags_on_is_reflected_in_flag_reads(rcp_flags) -> None:
 
 
 def test_operator_router_is_read_only() -> None:
-    # Phase-0 + Phase-1 scope discipline: no POST/PUT/PATCH/DELETE anywhere on
-    # the managed-integrations operator surface. Four GETs only (managed
-    # integrations list/detail + Phase-1 change-sets list/detail).
+    # Phase-0-3 scope discipline: no POST/PUT/PATCH/DELETE anywhere on the
+    # managed-integrations operator surface. Six GETs only (managed
+    # integrations list/detail, Phase-1 change-sets list/detail, Phase-3
+    # approvals + action-required review lists).
     from services.managed_integrations.routes import admin_router
 
     methods: set[str] = set()
@@ -71,7 +77,7 @@ def test_operator_router_is_read_only() -> None:
         route_methods = getattr(route, "methods", None) or set()
         methods |= {str(m).upper() for m in route_methods}
     assert methods == {"GET"}
-    assert len(admin_router.routes) == 4
+    assert len(admin_router.routes) == 6
 
 
 def test_operator_router_prefix_is_admin_kyber() -> None:
@@ -80,15 +86,18 @@ def test_operator_router_prefix_is_admin_kyber() -> None:
     assert admin_router.prefix == "/v1/admin/kyber/managed-integrations"
 
 
-def test_change_sets_routes_precede_the_id_capture_route() -> None:
-    # ``/change-sets`` is a literal that must not be swallowed by the
-    # ``/{managed_integration_id}`` capture route, so it must be declared first.
+def test_literal_routes_precede_the_id_capture_route() -> None:
+    # ``/change-sets``, ``/approvals`` and ``/action-required`` are literals
+    # that must not be swallowed by the ``/{managed_integration_id}`` capture
+    # route, so they must be declared first.
     from services.managed_integrations.routes import admin_router
 
+    prefix = "/v1/admin/kyber/managed-integrations"
     paths = [r.path for r in admin_router.routes]
-    assert paths.index("/v1/admin/kyber/managed-integrations/change-sets") < paths.index(
-        "/v1/admin/kyber/managed-integrations/{managed_integration_id}"
-    )
+    for literal in ("/change-sets", "/approvals", "/action-required"):
+        assert paths.index(prefix + literal) < paths.index(
+            prefix + "/{managed_integration_id}"
+        ), f"{literal} must precede the id-capture route"
 
 
 def test_desired_state_and_reconcile_import_without_flags_on() -> None:
