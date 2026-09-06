@@ -21,6 +21,12 @@ if str(BACKEND) not in sys.path:
 
 from services.managed_integrations.contracts import (  # noqa: E402
     ACTION_REQUIRED_STATUSES,
+    HEALTH_GATE_OPERATORS,
+    HEALTH_SNAPSHOT_AXES,
+    PLATFORM_UPGRADE_BEHAVIORS,
+    ROLLOUT_ARTIFACT_KINDS,
+    ROLLOUT_RINGS,
+    UPGRADE_BEHAVIOR_VALUES,
     ADMISSION_STAGES,
     CHANGE_ACTION_KINDS,
     CHANGE_RISK_CLASSES,
@@ -390,3 +396,120 @@ def test_availability_preserves_cp12_distinctness():
 def test_barrel_exports_managed_integrations_contract():
     index = (REPO_ROOT / "packages" / "shared" / "index.ts").read_text(encoding="utf-8")
     assert "export * from './managed-integrations';" in index
+
+
+# ── Phase-4 vocabulary: §40 rings, §12.9 health axes, §30 behaviors ──────────
+
+
+def _const_array_permissive(name: str) -> list[str]:
+    """Like :func:`_const_array` but admits ``%`` inside tokens (§40 rings are
+    ``'1%'…'100%'``). The shared helper stays strict for every other array."""
+    text = TS_PATH.read_text(encoding="utf-8")
+    m = re.search(rf"export const {name}\b[^=]*=\s*\[(.*?)\]\s*as const", text, re.S)
+    assert m, f"const array {name!r} not found in managed-integrations.ts"
+    return re.findall(r"'([A-Za-z0-9_%]+)'", m.group(1))
+
+
+def test_rollout_rings_parity():
+    ts = _const_array_permissive("rolloutRingValues")
+    assert ts == list(ROLLOUT_RINGS), (
+        f"§40 ring drift: TS={ts} PY={list(ROLLOUT_RINGS)}"
+    )
+
+
+def test_rollout_rings_are_the_canonical_s40_sequence():
+    # §40: Olympus internal → test tenants → 1% → 5% → 20% → 50% → 100%.
+    # Exact order is law; olympus_internal is stage zero, 100% terminal.
+    assert list(ROLLOUT_RINGS) == [
+        "olympus_internal",
+        "test_tenants",
+        "1%",
+        "5%",
+        "20%",
+        "50%",
+        "100%",
+    ]
+
+
+def test_rollout_artifact_kinds_parity():
+    ts = _const_array("rolloutArtifactKinds")
+    assert ts == list(ROLLOUT_ARTIFACT_KINDS), (
+        f"§40 artifact-kind drift: TS={ts} PY={list(ROLLOUT_ARTIFACT_KINDS)}"
+    )
+
+
+def test_rollout_artifact_kinds_are_the_s40_applicability_list():
+    # §40 applies the rings to: runtime config, SDK compatible projections,
+    # connector releases, mapping revisions, schema projections, classifier
+    # versions, endpoint migrations, operational policy — never narrowed.
+    assert set(ROLLOUT_ARTIFACT_KINDS) == {
+        "runtime_config",
+        "sdk_compatible_projection",
+        "connector_release",
+        "mapping_revision",
+        "schema_projection",
+        "classifier_version",
+        "endpoint_migration",
+        "operational_policy",
+    }
+    assert len(ROLLOUT_ARTIFACT_KINDS) == 8
+
+
+def test_health_snapshot_axes_parity():
+    ts = _const_array("healthSnapshotAxes")
+    assert ts == list(HEALTH_SNAPSHOT_AXES), (
+        f"§12.9 axis drift: TS={ts} PY={list(HEALTH_SNAPSHOT_AXES)}"
+    )
+
+
+def test_health_snapshot_axes_are_the_s129_metric_fields():
+    # §12.9 HealthContract: availability through metric_reconciliation — the
+    # metadata fields (health_id/subject_ref/window/status/violations/
+    # computed_at) are not axes. 13 metric axes, never narrowed.
+    assert len(HEALTH_SNAPSHOT_AXES) == 13
+    assert "latency" in HEALTH_SNAPSHOT_AXES and "drop_rate" in HEALTH_SNAPSHOT_AXES
+    for meta in ("health_id", "subject_ref", "window", "status", "violations", "computed_at"):
+        assert meta not in HEALTH_SNAPSHOT_AXES, f"{meta} is metadata, not an axis"
+
+
+def test_health_gate_operators_parity():
+    ts = _const_array("healthGateOperators")
+    assert ts == list(HEALTH_GATE_OPERATORS)
+
+
+def test_upgrade_behaviors_parity():
+    ts = _const_array("upgradeBehaviorValues")
+    assert ts == list(UPGRADE_BEHAVIOR_VALUES), (
+        f"§30 behavior drift: TS={ts} PY={list(UPGRADE_BEHAVIOR_VALUES)}"
+    )
+
+
+def test_platform_upgrade_behaviors_match_the_s30_table():
+    # §30 runtime → managed behavior. Parse the TS record literal and compare
+    # key/value pairs exactly with the Python map.
+    text = TS_PATH.read_text(encoding="utf-8")
+    m = re.search(
+        r"export const platformUpgradeBehaviors = \{(.*?)\} as const", text, re.S
+    )
+    assert m, "platformUpgradeBehaviors record not found"
+    ts_pairs = re.findall(r"([a-z_]+):\s*'([a-z_]+)'", m.group(1))
+    ts_map = dict(ts_pairs)
+    assert ts_map == dict(PLATFORM_UPGRADE_BEHAVIORS), (
+        f"§30 platform-behavior drift: TS={ts_map} PY={dict(PLATFORM_UPGRADE_BEHAVIORS)}"
+    )
+    assert ts_map["ios_native_sdk"] == "host_release"
+    assert ts_map["android_native_sdk"] == "host_release"
+    assert ts_map["aether_hosted_connector"] == "fully_managed"
+    assert len(ts_map) == 11
+
+
+def test_no_hidden_promise_to_rewrite_customer_binaries():
+    # §30: "No hidden promise that Olympus can independently rewrite a
+    # customer-controlled binary" — the SDK rows resolve to host_release or
+    # deployment_model_dependent, never fully_managed.
+    for platform in ("ios_native_sdk", "android_native_sdk", "desktop_sdk"):
+        assert PLATFORM_UPGRADE_BEHAVIORS[platform] in (
+            "host_release",
+            "host_updater_or_build",
+        )
+    assert PLATFORM_UPGRADE_BEHAVIORS["react_native_native_module"] == "host_release"

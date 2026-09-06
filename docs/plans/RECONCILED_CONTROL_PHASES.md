@@ -67,7 +67,7 @@ build, not per phase.
 
 ---
 
-## Phase 1 — ChangeSet planning + change-risk engine (in progress on this lane)
+## Phase 1 — ChangeSet planning + change-risk engine (landed)
 
 **Shape:** the *planning half* of the reconciliation loop. Drift that Phase 0
 classifies as `actionable` now becomes a **typed, risk-assessed, concurrency-
@@ -77,18 +77,18 @@ future execution decision is pre-computed and durable.
 
 | Deliverable | Spec anchor | Status |
 |---|---|---|
-| Canonical drift taxonomy — all 22 §33 types as first-class vocabulary (distinct from the 6-type Phase-0 *emitted* subset; nothing narrowed) | §33 | ⏳ pending |
-| ChangeSet status vocabulary (`draft→planned→…→committed/rolled_back` + `cancelled/blocked/failed/superseded`) | §34 | ⏳ pending |
-| Risk classes `R0 trivial … R5 destructive` + `security_emergency` with automation rules | §39 | ⏳ pending |
-| Change-action kinds (the typed operations an actuator may perform; §36 actuator names as vocabulary) | §36 (Day-1 list) | ⏳ pending |
-| `change_planning.py` — `plan_from_drift`: candidate ChangeSet generation | §32 step 12, §12.5 | ⏳ pending |
-| Control-topology blast-radius calculator over the managed-integration graph (tenant / env / kind / source-origin fan-out) | §32 step 13 | ⏳ pending |
-| Risk engine `assess_risk` → `risk_class/automation_allowed/required_approval_refs` | §32 step 14, §12.6 | ⏳ pending |
-| Automation-authority decision — which risk classes may auto-proceed; everything else routes to approval/action | §32 step 15 | ⏳ pending |
-| Concurrency + idempotency guard: `desired_revision`/`observed_revision`/`reconcile_sequence`/`changeset_id`/`idempotency_key`/`lease_owner`/`lease_expiry`; invalidation check "never apply a stale ChangeSet" | §35 | ⏳ pending |
-| Durable `change_sets` table (planning rows: scope, revisions, changes, risk_ref, status, guards) + repository + additive alembic + storage policy | §12.5 | ⏳ pending |
-| Read-only operator surface for change-sets (list/detail, flags + risk/guard fields) | — | ⏳ pending |
-| Tests: taxonomy distinctness, planning, blast radius, risk classes, automation authority, guard invalidation, repo round-trip, flag-OFF parity, twin/domain parity | — | ⏳ pending |
+| Canonical drift taxonomy — all 22 §33 types as first-class vocabulary (distinct from the 6-type Phase-0 *emitted* subset; nothing narrowed) | §33 | ✅ implemented |
+| ChangeSet status vocabulary (`draft→planned→…→committed/rolled_back` + `cancelled/blocked/failed/superseded`) | §34 | ✅ implemented |
+| Risk classes `R0 trivial … R5 destructive` + `security_emergency` with automation rules | §39 | ✅ implemented |
+| Change-action kinds (the typed operations an actuator may perform; §36 actuator names as vocabulary) | §36 (Day-1 list) | ✅ implemented |
+| `change_planning.py` — `plan_from_drift`: candidate ChangeSet generation | §32 step 12, §12.5 | ✅ implemented |
+| Control-topology blast-radius calculator over the managed-integration graph (tenant / env / kind / source-origin fan-out) | §32 step 13 | ✅ implemented |
+| Risk engine `assess_risk` → `risk_class/automation_allowed/required_approval_refs` | §32 step 14, §12.6 | ✅ implemented |
+| Automation-authority decision — which risk classes may auto-proceed; everything else routes to approval/action | §32 step 15 | ✅ implemented |
+| Concurrency + idempotency guard: `desired_revision`/`observed_revision`/`reconcile_sequence`/`changeset_id`/`idempotency_key`/`lease_owner`/`lease_expiry`; invalidation check "never apply a stale ChangeSet" | §35 | ✅ implemented |
+| Durable `change_sets` table (planning rows: scope, revisions, changes, risk_ref, status, guards) + repository + additive alembic + storage policy | §12.5 | ✅ implemented |
+| Read-only operator surface for change-sets (list/detail, flags + risk/guard fields) | — | ✅ implemented |
+| Tests: taxonomy distinctness, planning, blast radius, risk classes, automation authority, guard invalidation, repo round-trip, flag-OFF parity, twin/domain parity | — | ✅ targeted tests pass |
 
 ### Phase-1 boundary
 
@@ -103,7 +103,7 @@ future execution decision is pre-computed and durable.
 
 ---
 
-## Phase 2 — Typed actuator engine + execution (CP-08 lift, scoped)
+## Phase 2 — Typed actuator engine + execution (CP-08 lift, scoped) (landed)
 
 **Shape:** the *execution half*. Lifts CP-08 for changes the control plane
 itself can drive through typed actuators, with the §34 state machine as the
@@ -113,18 +113,18 @@ live reconcile/ChangeSet that is flag-gated OFF.**
 
 | Deliverable | Spec anchor | Status |
 |---|---|---|
-| Typed actuator interface + registry: `plan/preflight/apply/verify/rollback(?)` per actuator | §36 | ⏳ pending |
-| Day-1 actuator vocabulary bound to existing write-authorities where substrate exists (remote-manifest, connector, provider-runtime, mapping, repository-upgrade, authorization, quarantine, replay, backfill, rollback, notification) | §36 | ⏳ pending |
-| ChangeSet state machine executor (guarded transitions; illegal transitions fail closed) | §34, §32 step 18 | ⏳ pending |
-| Verify step (technical + semantic health) | §32 step 19, §12.9 | ⏳ pending |
-| Commit-or-rollback; rollback with last-known-good ref + queue/replay policy | §32 steps 20–21, §12.11–12.12 | ⏳ pending |
-| LKG established **only after** verification passes | §12.12 | ⏳ pending |
-| Evidence record on every executed/attempted change (before/after refs, claim type, confidence, contradictory evidence) | §32 step 22, §12.13 | ⏳ pending |
-| `ActionRequired`/exception surfaced when a change cannot resolve | §32 step 23, §12.14 | ⏳ pending |
-| Approval gating by §21 role; evidence records which authority was exercised | §21, §32 step 17 | ⏳ pending |
-| Control-finding epistemic discipline (`observed/verified/correlated/inferred/predicted`; never label correlation as causality) | §12.15–12.16 | ⏳ pending |
-| Durable execution tables (change-set state history, evidence, LKG, rollback) + repositories + alembic + storage policies | §12.5, 12.11–12.14 | ⏳ pending |
-| Tests: state-machine transition legality, actuator registry, verify/rollback decisioning, LKG-after-verify, evidence completeness, approval-role gating, flag-OFF parity | — | ⏳ pending |
+| Typed actuator interface + registry: `plan/preflight/apply/verify/rollback(?)` per actuator | §36 | ✅ implemented |
+| Day-1 actuator vocabulary bound to existing write-authorities where substrate exists (remote-manifest, connector, provider-runtime, mapping, repository-upgrade, authorization, quarantine, replay, backfill, rollback, notification) | §36 | ✅ implemented |
+| ChangeSet state machine executor (guarded transitions; illegal transitions fail closed) | §34, §32 step 18 | ✅ implemented |
+| Verify step (technical + semantic health) | §32 step 19, §12.9 | ✅ implemented (§32.19 verify-or-rollback; §12.9 health *axes* arrive with the Phase-4 rollout engine) |
+| Commit-or-rollback; rollback with last-known-good ref + queue/replay policy | §32 steps 20–21, §12.11–12.12 | ✅ implemented |
+| LKG established **only after** verification passes | §12.12 | ✅ implemented |
+| Evidence record on every executed/attempted change (before/after refs, claim type, confidence, contradictory evidence) | §32 step 22, §12.13 | ✅ implemented |
+| `ActionRequired`/exception surfaced when a change cannot resolve | §32 step 23, §12.14 | ✅ implemented |
+| Approval gating by §21 role; evidence records which authority was exercised | §21, §32 step 17 | ✅ implemented |
+| Control-finding epistemic discipline (`observed/verified/correlated/inferred/predicted`; never label correlation as causality) | §12.15–12.16 | ✅ implemented |
+| Durable execution tables (change-set state history, evidence, LKG, rollback) + repositories + alembic + storage policies | §12.5, 12.11–12.14 | ✅ implemented |
+| Tests: state-machine transition legality, actuator registry, verify/rollback decisioning, LKG-after-verify, evidence completeness, approval-role gating, flag-OFF parity | — | ✅ targeted tests pass |
 
 ### Phase-2 boundary
 
@@ -139,7 +139,7 @@ live reconcile/ChangeSet that is flag-gated OFF.**
 
 ---
 
-## Phase 3 — Admission, discovery/mapping/source-authority, scheduler, simulation
+## Phase 3 — Admission, discovery/mapping/source-authority, scheduler, simulation (landed)
 
 **Shape:** close the loop from *real integrations* into the machinery —
 registration of discovered integrations through the §16 admission lifecycle, a
@@ -151,16 +151,16 @@ shadow plane that later phases require before moderate-risk automation (§37,
 
 | Deliverable | Spec anchor | Status |
 |---|---|---|
-| Integration admission: registration of integrations discovered from the existing authorities (SDK installs, provider connections, connectors, imports, feeds) through the §16 lifecycle states | §16 | ⏳ pending |
-| Local-first discovery manifests (metadata-only by default; source code / production values never uploaded by default) | §17 | ⏳ pending |
-| Automatic semantic-mapping candidate engine (`SemanticMappingCandidate[]`; candidates are epistemic proposals, never truth) + authorization/shadow remain separate | §18, §8.1 | ⏳ pending |
-| Source-authority rules + observation-equivalence keys + candidate grouping (multi-source reconciliation); transport idempotency ≠ semantic dedup | §19, §9.1–9.2 | ⏳ pending |
-| Real schema fingerprinting + schema/mapping drift automation pipeline (profile→diff→compile→candidate→sensitivity→authorization→confidence/semantic-loss), auto-promote only when all gates hold | §25, §38 | ⏳ pending |
-| Dry-run + lightweight operational Digital Twin for an IntegrationPlan / ManagedIntegration (safe simulation without raw production data) | §20 | ⏳ pending |
-| Simulation + shadow plane: authoritative current path vs non-authoritative candidate path; compare schema/mapping/policy/joinability/continuity/metrics/latency/drops/dupes/cost; **no shadow result mutates canonical graph state** | §37, §12.7 | ⏳ pending |
-| Flag-gated scheduler: periodic reconcile + plan + execute through the governed path; honours §32 freshness window and §35 guards | §32, §35 | ⏳ pending |
-| Operator + tenant surfaces for review/action items that automation routes (approvals, exceptions) | §21, §12.14 | ⏳ pending |
-| Tests: admission-state legality, mapping-candidate gating, source-authority equivalence, schema/mapping auto-promotion gates, shadow no-mutation, scheduler fresh/guard behaviour (flag OFF), flag-OFF parity | — | ⏳ pending |
+| Integration admission: registration of integrations discovered from the existing authorities (SDK installs, provider connections, connectors, imports, feeds) through the §16 lifecycle states | §16 | ✅ implemented |
+| Local-first discovery manifests (metadata-only by default; source code / production values never uploaded by default) | §17 | ✅ implemented |
+| Automatic semantic-mapping candidate engine (`SemanticMappingCandidate[]`; candidates are epistemic proposals, never truth) + authorization/shadow remain separate | §18, §8.1 | ✅ implemented |
+| Source-authority rules + observation-equivalence keys + candidate grouping (multi-source reconciliation); transport idempotency ≠ semantic dedup | §19, §9.1–9.2 | ✅ implemented |
+| Real schema fingerprinting + schema/mapping drift automation pipeline (profile→diff→compile→candidate→sensitivity→authorization→confidence/semantic-loss), auto-promote only when all gates hold | §25, §38 | ✅ implemented |
+| Dry-run + lightweight operational Digital Twin for an IntegrationPlan / ManagedIntegration (safe simulation without raw production data) | §20 | ✅ implemented |
+| Simulation + shadow plane: authoritative current path vs non-authoritative candidate path; compare schema/mapping/policy/joinability/continuity/metrics/latency/drops/dupes/cost; **no shadow result mutates canonical graph state** | §37, §12.7 | ✅ implemented |
+| Flag-gated scheduler: periodic reconcile + plan + execute through the governed path; honours §32 freshness window and §35 guards | §32, §35 | ✅ implemented |
+| Operator + tenant surfaces for review/action items that automation routes (approvals, exceptions) | §21, §12.14 | ✅ implemented — operator surface (approvals + action-required review routes); the *tenant* console is deliberately deferred — the `reconciled_control` domain carries no tenant grant (Phase-0 governance decision) |
+| Tests: admission-state legality, mapping-candidate gating, source-authority equivalence, schema/mapping auto-promotion gates, shadow no-mutation, scheduler fresh/guard behaviour (flag OFF), flag-OFF parity | — | ✅ targeted tests pass |
 
 ### Phase-3 boundary
 
@@ -175,7 +175,7 @@ shadow plane that later phases require before moderate-risk automation (§37,
 
 ---
 
-## Phase 4 — Progressive delivery + fleet upgrade controller + console vocabulary
+## Phase 4 — Progressive delivery + fleet upgrade controller + console vocabulary (landed)
 
 **Shape:** make §40 progressive delivery generic infrastructure over every
 managed artifact, drive the §29 fleet-upgrade controller through it, and expose
@@ -184,14 +184,14 @@ capability declaration" caveat closes here).
 
 | Deliverable | Spec anchor | Status |
 |---|---|---|
-| Universal progressive-delivery rings (Olympus internal → test tenants → 1% → 5% → 20% → 50% → 100%) as generic rollout infrastructure | §40 | ⏳ pending |
-| Rollout engine: cohorts, current stage/percentage, health gates, advance/pause/rollback conditions | §12.8 | ⏳ pending |
-| Health-gated canary + auto-pause/auto-rollback on gate breach | §12.9, §39 R2 | ⏳ pending |
-| Fleet upgrade controller composition: release registry ↔ artifact manifest ↔ fleet version inventory ↔ lifecycle ↔ compatibility matrix ↔ tenant update policy ↔ upgrade planner → rollout/rollback/evidence | §29 | ⏳ pending |
-| Tenant update channels operationalized over delivery rings (pinned/security_auto/patch_auto/compatible_auto/managed_stable; **never** equate `managed_stable` with uncontrolled `latest`) | §28–29 | ⏳ pending |
-| Platform-specific upgrade-behavior policy table (fully-managed vs host/builder-mediated vs prohibited) | §30 | ⏳ pending |
-| Kyber console: capability vocabulary entry for the reconciled-control domain + `kyber_routes` registry declarations + workforce grant surfacing | §21, §3.2 | ⏳ pending |
-| Tests: ring ordering/gating, health-gate pause/rollback, canary advance, update-channel→ring resolution, fleet-controller planning, console vocabulary, flag-OFF parity | — | ⏳ pending |
+| Universal progressive-delivery rings (Olympus internal → test tenants → 1% → 5% → 20% → 50% → 100%) as generic rollout infrastructure | §40 | ✅ implemented |
+| Rollout engine: cohorts, current stage/percentage, health gates, advance/pause/rollback conditions | §12.8 | ✅ implemented |
+| Health-gated canary + auto-pause/auto-rollback on gate breach | §12.9, §39 R2 | ✅ implemented |
+| Fleet upgrade controller composition: release registry ↔ artifact manifest ↔ fleet version inventory ↔ lifecycle ↔ compatibility matrix ↔ tenant update policy ↔ upgrade planner → rollout/rollback/evidence | §29 | ✅ implemented (planner composition; rollout/rollback/evidence ride the Phase-2 executor + §40 delivery facts) |
+| Tenant update channels operationalized over delivery rings (pinned/security_auto/patch_auto/compatible_auto/managed_stable; **never** equate `managed_stable` with uncontrolled `latest`) | §28–29 | ✅ implemented |
+| Platform-specific upgrade-behavior policy table (fully-managed vs host/builder-mediated vs prohibited) | §30 | ✅ implemented (11-row §30 table mirrored; host-mediated rows resolve to the `action` path — no hidden promise; nothing in §30 is prohibited, so none is invented) |
+| Kyber console: capability vocabulary entry for the reconciled-control domain + `kyber_routes` registry declarations + workforce grant surfacing | §21, §3.2 | ✅ implemented (`kyber.reconciled_control.read` + evidence-read role-template grants + 6 route declarations; closes the Phase-0 "no route-registry capability declaration" caveat) |
+| Tests: ring ordering/gating, health-gate pause/rollback, canary advance, update-channel→ring resolution, fleet-controller planning, console vocabulary, flag-OFF parity | — | ✅ targeted tests pass |
 
 ### Phase-4 boundary
 

@@ -7632,3 +7632,69 @@ policies:
     allow_historical_table_storage: true
     requires_consent_invalidation: false
     requires_permission_hash: false
+
+
+  # Reconciled Control Plane (Phase 4) — §40 progressive-delivery rollouts and
+  # §29 fleet upgrade policies + composed upgrade plans. Internal operator
+  # metadata: tenant-scoped delivery facts, no consent data, never
+  # materialized/consumed by the consent surface, never auto-externalized.
+  # Rollout rows are the §12.8 delivery evidence (stages/percentages/gates/
+  # conditions); fleet policy rows are the tenant-set channel/ring ceilings
+  # (§28/§29) and plan rows the composed, never-executed §29 upgrade plans.
+  # ---------------------------------------------------------------------------
+
+  - resource_type: rollouts
+    # §12.8/§40 progressive-delivery rollout records (stage + health-gate facts)
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+
+  - resource_type: fleet_update_policies
+    # §28/§29 tenant update-channel policy (one per tenant/environment/channel)
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false
+
+
+  - resource_type: fleet_upgrade_plans
+    # §29 composed upgrade plans (eligibility verdict + execution path + ring)
+    authoritative_store: postgres
+    metadata_store: postgres
+    projection_stores: []
+    codec: none
+    format: row
+    cache_ttl_seconds: 0
+    materialization_mode: none
+    retention_class: standard
+    delete_behavior: hard_delete
+    legal_hold_supported: true
+    allow_adaptive_materialization: false
+    allow_object_externalization: false
+    allow_historical_table_storage: true
+    requires_consent_invalidation: false
+    requires_permission_hash: false

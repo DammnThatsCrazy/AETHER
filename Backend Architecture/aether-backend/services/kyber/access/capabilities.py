@@ -208,6 +208,16 @@ CAPABILITIES: dict[str, Capability] = {
              ACTION_CLASS_READ, _D.D1_FLEET_AGGREGATE,
              "Read policy, consent coverage and disclosure decisions."),
 
+        # Reconciled control plane — operator-only convergence + decision
+        # evidence over managed integrations (fleet inventory, change-set
+        # plans, approvals, action-required review items). The domain carries
+        # no tenant grant; the whole surface is operator-derived records that
+        # never exist for tenants, so evidence-level disclosure.
+        _cap("kyber.reconciled_control.read", "reconciled_control", "read",
+             "all_tenants_aggregate", ACTION_CLASS_READ, _D.D4_EVENT_EVIDENCE,
+             "Reconciled control plane: managed-integration convergence, "
+             "change-set plans and operator decision evidence."),
+
         # Workforce administration. Separated from every read capability so an
         # operator who can see everything still cannot grant themselves more.
         _cap("kyber.device.approve", "kyber_workforce", "approve", "all_tenants_admin",

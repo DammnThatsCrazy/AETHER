@@ -793,3 +793,142 @@ export const schemaMappingAutoPromoteGates = [
   'health_within_gates',
 ] as const;
 export type SchemaMappingAutoPromoteGate = (typeof schemaMappingAutoPromoteGates)[number];
+
+// ── §40 universal progressive delivery rings ─────────────────────────────────
+
+/** Canonical §40 sequence for every managed artifact. Exact order is law: a
+ * rollout advances one ring at a time, never skipping a stage. */
+export const rolloutRingValues = [
+  'olympus_internal',
+  'test_tenants',
+  '1%',
+  '5%',
+  '20%',
+  '50%',
+  '100%',
+] as const;
+export type RolloutRing = (typeof rolloutRingValues)[number];
+
+/** The §40 applicability list — what rings deliver (every managed artifact). */
+export const rolloutArtifactKinds = [
+  'runtime_config',
+  'sdk_compatible_projection',
+  'connector_release',
+  'mapping_revision',
+  'schema_projection',
+  'classifier_version',
+  'endpoint_migration',
+  'operational_policy',
+] as const;
+export type RolloutArtifactKind = (typeof rolloutArtifactKinds)[number];
+
+// ── §12.9 health snapshot axes + gate evaluation ─────────────────────────────
+
+/** §12.9 HealthContract metric axes a health gate may reference. */
+export const healthSnapshotAxes = [
+  'availability',
+  'freshness',
+  'ingestion_success',
+  'queue_depth',
+  'drop_rate',
+  'retry_rate',
+  'latency',
+  'schema_validity',
+  'mapping_coverage',
+  'identity_continuity',
+  'authorization_validity',
+  'consent_validity',
+  'metric_reconciliation',
+] as const;
+export type HealthSnapshotAxis = (typeof healthSnapshotAxes)[number];
+
+/** Comparison operators a §12.9 health gate applies to its axis. */
+export const healthGateOperators = ['lt', 'le', 'gt', 'ge'] as const;
+export type HealthGateOperator = (typeof healthGateOperators)[number];
+
+/** One §12.9 health gate: axis compared against a numeric threshold. */
+export interface HealthGateSpec {
+  axis: HealthSnapshotAxis;
+  operator: HealthGateOperator;
+  threshold: number;
+}
+
+/** §12.9 HealthContract snapshot (gate evaluation input). */
+export interface HealthSnapshotView {
+  health_id: string;
+  subject_ref: string;
+  window: string;
+  availability: string; // §6/CP-12 typed availability
+  freshness: number | null;
+  ingestion_success: number | null;
+  queue_depth: number | null;
+  drop_rate: number | null;
+  retry_rate: number | null;
+  latency: number | null;
+  schema_validity: string | null;
+  mapping_coverage: string | null;
+  identity_continuity: string | null;
+  authorization_validity: string | null;
+  consent_validity: string | null;
+  metric_reconciliation: string | null;
+  status: string;
+  violations: string[];
+  computed_at: string;
+}
+
+// ── §30 platform-specific upgrade behavior ───────────────────────────────────
+
+/** §30 normalized managed-behavior tokens (host application releases and
+ * native releases are both `host_release`). */
+export const upgradeBehaviorValues = [
+  'fully_managed',
+  'remotely_managed',
+  'repository_or_build',
+  'compatible_managed_artifact',
+  'host_updater_or_build',
+  'deployment_model_dependent',
+  'host_release',
+] as const;
+export type UpgradeBehavior = (typeof upgradeBehaviorValues)[number];
+
+/** §30 runtime → managed-behavior table. Aether never claims it can rewrite a
+ * customer-controlled binary: non-managed rows resolve to host_release /
+ * repository_or_build / deployment_model_dependent. */
+export const platformUpgradeBehaviors = {
+  aether_hosted_connector: 'fully_managed',
+  aether_backend_ingestion: 'fully_managed',
+  runtime_config_mapping: 'remotely_managed',
+  web_pinned_package: 'repository_or_build',
+  web_managed_loader: 'compatible_managed_artifact',
+  server_sdk: 'repository_or_build',
+  desktop_sdk: 'host_updater_or_build',
+  react_native_js_only: 'deployment_model_dependent',
+  react_native_native_module: 'host_release',
+  ios_native_sdk: 'host_release',
+  android_native_sdk: 'host_release',
+} as const;
+export type PlatformUpgradeBehaviorKey = keyof typeof platformUpgradeBehaviors;
+
+// ── §12.8 RolloutContract ────────────────────────────────────────────────────
+
+/** §12.8 RolloutContract mirror. Rollout records are the §40 delivery facts;
+ * execution rides the §34/§35 governed path and a completed rollout is never
+ * LKG until §32-step-19 verification passes (§12.12). */
+export interface RolloutView {
+  rollout_id: string;
+  changeset_ref?: string | null;
+  artifact_kind: RolloutArtifactKind;
+  strategy: string;
+  cohorts: string[];
+  current_stage: RolloutRing;
+  percentage: number;
+  health_gates: HealthGateSpec[];
+  advance_conditions: string[];
+  pause_conditions: string[];
+  rollback_conditions: string[];
+  tenant_id: string;
+  environment_id: string;
+  started_at?: string | null;
+  last_transition_at?: string | null;
+  completed_at?: string | null;
+}

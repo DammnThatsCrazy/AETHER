@@ -938,3 +938,209 @@ class SimulationResultView(BaseModel):
     environment_id: Optional[str] = None
     simulation_mode: Optional[str] = None  # digital_twin | shadow (§37)
     ran_at: datetime
+
+
+# ── §40 universal progressive delivery ────────────────────────────────────────
+
+# Canonical §40 ring sequence. Exact order is law: a rollout advances one ring
+# at a time and never skips a stage (``olympus_internal`` is stage zero — the
+# operator/console surface, not tenant traffic).
+ROLLOUT_RINGS: tuple[str, ...] = (
+    "olympus_internal",
+    "test_tenants",
+    "1%",
+    "5%",
+    "20%",
+    "50%",
+    "100%",
+)
+
+
+def is_rollout_ring(value: str) -> bool:
+    return value in ROLLOUT_RINGS
+
+
+def ring_percentage(ring: str) -> float:
+    """Tenant-traffic share a ring represents (§40 tokens carry ``%``)."""
+    if not is_rollout_ring(ring):
+        raise ValueError(f"unknown §40 rollout ring {ring!r}")
+    if ring in ("olympus_internal", "test_tenants"):
+        return 0.0
+    return float(ring[:-1]) / 100.0
+
+
+# §40 applicability list — every managed artifact rides the same rings.
+ROLLOUT_ARTIFACT_KINDS: tuple[str, ...] = (
+    "runtime_config",
+    "sdk_compatible_projection",
+    "connector_release",
+    "mapping_revision",
+    "schema_projection",
+    "classifier_version",
+    "endpoint_migration",
+    "operational_policy",
+)
+
+
+def is_rollout_artifact_kind(value: str) -> bool:
+    return value in ROLLOUT_ARTIFACT_KINDS
+
+
+# ── §12.9 health snapshot axes + gate evaluation ─────────────────────────────
+
+# The §12.9 HealthContract metric axes a health gate may reference (the
+# metadata fields health_id/subject_ref/window/status/violations/computed_at
+# are not axes).
+HEALTH_SNAPSHOT_AXES: tuple[str, ...] = (
+    "availability",
+    "freshness",
+    "ingestion_success",
+    "queue_depth",
+    "drop_rate",
+    "retry_rate",
+    "latency",
+    "schema_validity",
+    "mapping_coverage",
+    "identity_continuity",
+    "authorization_validity",
+    "consent_validity",
+    "metric_reconciliation",
+)
+
+
+def is_health_snapshot_axis(value: str) -> bool:
+    return value in HEALTH_SNAPSHOT_AXES
+
+
+# Comparison operators a health gate applies to its axis (coordinator-authored
+# engineering vocabulary — the blueprint defines the gate inputs, not the op
+# set; lower-is-better vs higher-is-better is an axis property, so the gate
+# names the comparison explicitly).
+HEALTH_GATE_OPERATORS: tuple[str, ...] = ("lt", "le", "gt", "ge")
+
+
+def is_health_gate_operator(value: str) -> bool:
+    return value in HEALTH_GATE_OPERATORS
+
+
+class HealthGateSpec(BaseModel):
+    """One §12.9 health gate: axis compared against a numeric threshold."""
+
+    axis: str = Field(..., min_length=1)
+    operator: str = "lt"
+    threshold: float = 0.0
+
+    def __init__(self, **data: Any) -> None:
+        super().__init__(**data)
+        if not is_health_snapshot_axis(self.axis):
+            raise ValueError(
+                f"unknown §12.9 health axis {self.axis!r} — expected one of "
+                f"{HEALTH_SNAPSHOT_AXES}"
+            )
+        if not is_health_gate_operator(self.operator):
+            raise ValueError(
+                f"unknown health-gate operator {self.operator!r} — expected "
+                f"one of {HEALTH_GATE_OPERATORS}"
+            )
+
+
+class HealthSnapshotView(BaseModel):
+    """§12.9 HealthContract snapshot (the gate-evaluation input shape)."""
+
+    health_id: str = Field(..., min_length=1)
+    subject_ref: str = Field(..., min_length=1)
+    window: str = Field(..., min_length=1)
+    availability: str = "unknown"  # §6/CP-12 typed availability
+    freshness: Optional[float] = None
+    ingestion_success: Optional[float] = None
+    queue_depth: Optional[float] = None
+    drop_rate: Optional[float] = None
+    retry_rate: Optional[float] = None
+    latency: Optional[float] = None
+    schema_validity: Optional[str] = None
+    mapping_coverage: Optional[str] = None
+    identity_continuity: Optional[str] = None
+    authorization_validity: Optional[str] = None
+    consent_validity: Optional[str] = None
+    metric_reconciliation: Optional[str] = None
+    status: str = "unknown"
+    violations: list[str] = Field(default_factory=list)
+    computed_at: datetime
+
+
+# ── §30 platform-specific upgrade behavior ───────────────────────────────────
+
+# §30 runtime → managed-behavior table (normalized behavior tokens; host
+# application releases and native releases are both ``host_release``). Aether
+# never claims it can rewrite a customer-controlled binary: non-managed rows
+# resolve to host_release / repository_or_build /
+# deployment_model_dependent.
+UPGRADE_BEHAVIOR_VALUES: tuple[str, ...] = (
+    "fully_managed",
+    "remotely_managed",
+    "repository_or_build",
+    "compatible_managed_artifact",
+    "host_updater_or_build",
+    "deployment_model_dependent",
+    "host_release",
+)
+
+
+def is_upgrade_behavior(value: str) -> bool:
+    return value in UPGRADE_BEHAVIOR_VALUES
+
+
+PLATFORM_UPGRADE_BEHAVIORS: dict[str, str] = {
+    "aether_hosted_connector": "fully_managed",
+    "aether_backend_ingestion": "fully_managed",
+    "runtime_config_mapping": "remotely_managed",
+    "web_pinned_package": "repository_or_build",
+    "web_managed_loader": "compatible_managed_artifact",
+    "server_sdk": "repository_or_build",
+    "desktop_sdk": "host_updater_or_build",
+    "react_native_js_only": "deployment_model_dependent",
+    "react_native_native_module": "host_release",
+    "ios_native_sdk": "host_release",
+    "android_native_sdk": "host_release",
+}
+
+
+# ── §12.8 RolloutContract ────────────────────────────────────────────────────
+
+class RolloutView(BaseModel):
+    """§12.8 RolloutContract mirror.
+
+    Rollout records are the §40 delivery facts; execution rides the §34/§35
+    governed path, and a completed rollout is never LKG until §32-step-19
+    verification passes (§12.12).
+    """
+
+    rollout_id: str = Field(..., min_length=1)
+    changeset_ref: Optional[str] = None
+    artifact_kind: str = Field(..., min_length=1)
+    strategy: str = "canary"
+    cohorts: list[str] = Field(default_factory=list)
+    current_stage: str = "olympus_internal"
+    percentage: float = 0.0
+    health_gates: list[HealthGateSpec] = Field(default_factory=list)
+    advance_conditions: list[str] = Field(default_factory=list)
+    pause_conditions: list[str] = Field(default_factory=list)
+    rollback_conditions: list[str] = Field(default_factory=list)
+    tenant_id: Optional[str] = None
+    environment_id: Optional[str] = None
+    started_at: Optional[datetime] = None
+    last_transition_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+    def __init__(self, **data: Any) -> None:
+        super().__init__(**data)
+        if not is_rollout_artifact_kind(self.artifact_kind):
+            raise ValueError(
+                f"unknown §40 rollout artifact kind {self.artifact_kind!r} — "
+                f"expected one of {ROLLOUT_ARTIFACT_KINDS}"
+            )
+        if not is_rollout_ring(self.current_stage):
+            raise ValueError(
+                f"unknown §40 rollout ring {self.current_stage!r} — expected "
+                f"one of {ROLLOUT_RINGS}"
+            )
