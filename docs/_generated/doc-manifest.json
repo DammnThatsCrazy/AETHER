@@ -3885,6 +3885,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/architecture/BACKEND_INTERPRETATION_WS_D.md",
+      "title": "Backend Interpretation (WS-D) Architecture",
+      "slug": "architecture/backend-interpretation-ws-d",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "experimental",
+      "estimated_read_minutes": 20,
+      "toc_depth": 4,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/architecture/CAMPAIGN_360_ARCHITECTURE.md",
       "title": "Campaign 360 Architecture",
       "slug": "architecture/campaign-360",
@@ -7511,6 +7527,24 @@
       "path": "docs/source-of-truth/IMPORTS.md",
       "title": "Tenant Import Engine Source of Truth",
       "status": "stable"
+    },
+    {
+      "path": "docs/source-of-truth/INGESTION_OPS.md",
+      "title": "Ingestion Operations — Control Plane + SDK Version-Compatibility Tiers",
+      "slug": "architecture/ingestion-ops",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "backend@aether"
     },
     {
       "path": "docs/source-of-truth/INTEGRATION_CONSENT_REGISTRY.md",
