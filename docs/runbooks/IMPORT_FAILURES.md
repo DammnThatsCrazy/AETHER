@@ -14,7 +14,7 @@ source_files:
   - Backend Architecture/aether-backend/services/imports/kyber_routes.py
   - Backend Architecture/aether-backend/repositories/imports_repo.py
   - Backend Architecture/aether-backend/shared/graph/graph.py
-last_synced_commit: "0e967a68"
+last_synced_commit: "cf6a8c30"
 ---
 
 # Runbook — Tenant Import Failures
@@ -44,10 +44,10 @@ backend error is a hard stop; rerun cleanup after the graph backend is healthy.
 The **authoritative** lifecycle is the import-session FSM (`lifecycle_state`:
 `CREATED → UPLOADED → VALIDATING → VALIDATED → NORMALIZING → COMMITTING →
 PROJECTING → RECONCILING → COMPLETED`, plus `REJECTED`, `FAILED`, and the
-terminal `DEAD_LETTERED`). The lowercase `status` above is a **parity-locked
-legacy projection** (`services/card_linked_payments/import_session.py`), kept so
-the frontend and existing commit/approve surfaces keep parsing. When the two
-could disagree, trust `lifecycle_state`.
+terminals `DEAD_LETTERED` / `ROLLED_BACK`). The lowercase `status` above is a
+**parity-locked legacy projection** (`services/card_linked_payments/import_session.py`),
+kept so the frontend and existing commit/approve surfaces keep parsing. When the
+two could disagree, trust `lifecycle_state`.
 
 ## Triage
 
@@ -61,18 +61,23 @@ could disagree, trust `lifecycle_state`.
 ### Import stuck in `committing`
 A commit job is in-flight or its worker died mid-flight. Check the job platform:
 `GET /v1/kyber/jobs/timeline?tenant_id=…` for the `import.commit` job. If the job
-is `failed`/`expired`, the import session will be `failed` — recover it (below).
-If the job is genuinely running, wait; the commit is idempotent (edge creation is
-existence-checked, Bronze ingest de-dupes on `provider_record_id`). A session that
-has sat in `committing` past its requeue window with no live worker is
-**stranded**: requeue it (below) to **resume** — never restart — the commit.
+is `failed`, the import session is `failed` too (the handler marks it) — recover
+it (below). If the job is genuinely running, wait; the commit is idempotent
+(edge creation is existence-checked, Bronze ingest de-dupes on
+`provider_record_id`). A session that has sat in `committing` past its requeue
+window with no live worker is **stranded**: the commit can only be *resumed*, never
+restarted. `commit_import` re-enters `COMMITTING` (its re-entrant self-arc) under
+the preserved commit id (`active_commit_id`) and resumes idempotently, so a
+re-run never double-applies staging. Note the Kyber status-requeue endpoint
+below accepts only sessions whose legacy `status` is `failed`; a stranded
+`committing` / mid-finalization session is resumed by re-driving the
+`import.commit` job (its own retry path), not by that status route.
 
 A session stranded **mid-finalization** (`projecting` / `reconciling` — a
 transient failure *between* finalization transitions, after staging succeeded)
-is resumable the same way: requeueing re-enters `commit_import`, which advances
-only the remaining lifecycle arcs to `completed` — nothing is re-staged and the
-commit row is never re-created, so the resume cannot double-apply
-projections/commits.
+is resumable the same way: re-running `commit_import` advances only the remaining
+lifecycle arcs to `completed` — nothing is re-staged and the commit row is never
+re-created, so the resume cannot double-apply projections/commits.
 
 ### Import stuck in `validating`
 A transient failure during the validation dry-run (file retrieval, parsing,
@@ -85,13 +90,16 @@ occur.
 
 ### Import in `failed`
 The commit raised before completing. **Recover:** `POST /v1/kyber/imports/{id}/requeue`
-— this re-stages the session into `COMMITTING` (legacy `status` projects
-`committing`) and re-enqueues `import.commit` under the same id. The mapping and
+(accepts only sessions whose legacy `status` is `failed`) — it resets the
+session's `status` to `approved` and re-enqueues `import.commit`; when the job
+runs, `commit_import` re-enters `COMMITTING` (legacy `status` projects
+`committing`) and resumes under the preserved commit id. The mapping and
 validation are stored and unchanged, so the replay is safe; `failure_reason` and
 `retry_count` are preserved for audit. A **stranded** `committing` session (worker
-died mid-commit) is requeueable the same way once its requeue window elapses — the
-commit resumes, it never restarts from scratch. Confirm via the detail endpoint
-that the session lands `committed`.
+died mid-commit) is resumed — never restarted — only when the `import.commit` job
+is re-driven (see above); the status-requeue endpoint itself never accepts a
+`committing` session. Confirm via the detail endpoint that the session lands
+`committed`.
 
 ### Import commit denied by consent policy (`import_consent_policy_denied`)
 The WS-B3 T-class commit gate runs **before any Bronze write** (after staging,
@@ -128,8 +136,10 @@ tenant-side) which revokes the prior commit's edges and re-stages.
 **Roll it back:** `POST /v1/imports/{id}/rollback` (tenant admin) revokes exactly
 the commit's graph edges and deletes its Bronze rows — the uploaded file bytes are
 never touched, so the import can be corrected and re-committed via **replay**.
-Note: upserted vertices persist (the graph client has no vertex delete; a vertex
-may be shared) — revoking the edges disconnects the import's contribution.
+Upserted vertices are never force-deleted: rollback garbage-collects only vertices
+the backend proves orphaned and owned by this commit (see below) — shared or
+historically foreign vertices persist, and revoking the edges disconnects the
+import's contribution.
 
 ### `POST /v1/imports` returns 409 "imports in flight (max …)"
 The tenant hit the per-tenant concurrent-import cap (`MAX_CONCURRENT_IMPORTS`,

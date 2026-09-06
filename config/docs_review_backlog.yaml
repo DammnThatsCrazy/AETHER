@@ -12,17 +12,12 @@
 # updating content where contradicted, stamping, and deleting the entry.
 #
 # The AWS deployment and CI/CD pages were re-reviewed in the current delivery
-# contract. Entries below record docs whose source_files moved at the #608
-# main-merge squash (59a7fb24 — social360 / relationship-fidelity / risk360 /
-# fraud360 / financial-normalization / spine-P0 convergences) WITHOUT a
-# co-moving last_synced restamp from the owning program, so their review
-# recency is unverifiable and they fail --strict. They are listed here so the
-# gate is honest (stale is reported as advisory) until the owning program does
-# a genuine content re-review and clears each entry.
-docs:
-  - path: docs/productization/economic-interoperability-intelligence/DEPLOYMENT_PROFILE_MATRIX.md
-    reason: source_files changed at main-merge 59a7fb24 (#608) and again by the sdk-universal-ingestion lane (new default-OFF ingestion replay/spine/consent flag blocks in config/settings.py + env examples). Economic-interop profile tables need a genuine re-review by the platform/economic maintainer before stamping.
-    owner: platform@aether
-  - path: docs/productization/economic-interoperability-intelligence/TARGET_ARCHITECTURE.md
-    reason: source_files changed at main-merge 59a7fb24 (#608) and again by the sdk-universal-ingestion lane (new default-OFF ingestion replay/spine/consent flag blocks). Economic-interop architecture doc needs a genuine re-review by the platform/economic maintainer before stamping.
-    owner: platform@aether
+# contract. The two economic-interoperability-intelligence entries that were
+# here (DEPLOYMENT_PROFILE_MATRIX.md, TARGET_ARCHITECTURE.md) were cleared
+# after a genuine content re-review in the lane0 basefix delivery: the docs'
+# capability/flag inventories were checked against config/settings.py +
+# .env.example at HEAD (cf6a8c30), the new default-OFF sdk-universal-ingestion
+# flag blocks were assessed and found to belong to a separate /v1/batch-plane
+# outside these docs' scope, prose was confirmed accurate unchanged, and the
+# docs were re-stamped to cf6a8c30. The backlog is now empty.
+docs: []
