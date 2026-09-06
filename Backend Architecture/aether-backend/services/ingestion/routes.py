@@ -12,7 +12,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, BadRequestError, utc_now
+from shared.common.common import APIResponse, BadRequestError, ForbiddenError, utc_now
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
 from dependencies.providers import get_producer
@@ -46,6 +46,21 @@ class APIFeedEvent(BaseModel):
         min_length=1,
         max_length=256,
         description="Deterministic provider record ID used for idempotency",
+    )
+    # Optional per-subject (S-class) escalation: a feed is normally T-class
+    # (tenant back-office attests rights). When a caller also declares the
+    # subject + purpose, the feed runs the same server-receipt consent gate as
+    # the batch path (via the shared ingress facade) and a denial is a 403.
+    subject_id: Optional[str] = Field(
+        default=None,
+        description="Optional subject id; presence (with purpose) escalates the "
+        "feed to a per-subject server-consent check",
+    )
+    anonymous_id: Optional[str] = Field(default=None)
+    purpose: Optional[str] = Field(
+        default=None,
+        description="Optional consent purpose; presence (with a subject) escalates "
+        "the feed to a per-subject server-consent check",
     )
 
 
@@ -126,11 +141,50 @@ async def ingest_api_feed(
     tenant.require_permission(Permissions.WRITE)
 
     received_at = utc_now().isoformat()
+
+    # WS-B3 ingress consent (T class): scrub sensitive values + strip any
+    # client-asserted canonical entity ids from the feed payload, then run the
+    # purpose-less data-policy decision before any durable Bronze write. When a
+    # caller ALSO declares subject+purpose (the optional APIFeedEvent fields),
+    # the same facade runs the per-subject (S) server-consent gate. Denials are
+    # 403s — the feed is idempotent, so reject-and-retry is correct (no
+    # quarantine). Flag defaults ON; scrubbing never rejects.
+    from config.settings import settings
+    from services.ingestion.validation import (
+        evaluate_ingress_decision,
+        format_ingress_rejection,
+        scrub_sensitive_fields,
+        strip_canonical_entity_id,
+    )
+
+    data = feed_event.data
+    if settings.ingress_consent.feed_ingress_consent_enforcement_enabled:
+        data, _ = scrub_sensitive_fields(data)
+        data = strip_canonical_entity_id(data)
+        purpose = (feed_event.purpose or "").strip() or None
+        subject = (feed_event.subject_id or "").strip() or None
+        anon = (feed_event.anonymous_id or "").strip() or None
+        allowed, reason_code, decisions = await evaluate_ingress_decision(
+            tenant_id=tenant.tenant_id,
+            subject_id=subject,
+            anonymous_id=anon,
+            purpose=purpose,
+            fingerprint_obj=data,
+        )
+        if not allowed:
+            metrics.increment(
+                "ingestion_feed_consent_blocked_total",
+                labels={"reason": reason_code or "unknown"},
+            )
+            raise ForbiddenError(
+                f"ingress_consent_denied:{format_ingress_rejection(reason_code, decisions)}"
+            )
+
     payload = {
         "source": feed_event.source,
         "entity_type": feed_event.entity_type,
         "external_id": feed_event.external_id,
-        "data": feed_event.data,
+        "data": data,
         "tenant_id": tenant.tenant_id,
         "received_at": received_at,
         "schema_version": "1.0",
