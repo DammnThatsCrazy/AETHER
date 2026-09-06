@@ -13,22 +13,13 @@ spine so an AetherEvent ``subject_id``/``actor_id`` becomes a reachable
 
 from __future__ import annotations
 
-from copy import deepcopy
+import inspect
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 
 from services.ingestion import observation_envelope as oe
-from services.ingestion.spine import ObservationView, SubjectView, to_observation_view
-from shared.observation.envelope import (
-    CorrelationBlock,
-    ObservationBlock,
-    SourceBlock,
-    SubjectRef,
-    TenancyBlock,
-    UniversalObservationEnvelope,
-)
+from services.ingestion.spine import ObservationView, normalization_spine_enabled, to_observation_view
 
 
 def _core_normalized() -> dict:
@@ -243,6 +234,37 @@ def test_envelope_wins_over_flat_sdk_shape() -> None:
     view = to_observation_view(payload)
     assert view.envelope_source is True
     assert view.user_id == "u-1"  # envelope subject, not the flat user_id
+
+
+# ── Adoption flag (config/settings.py, default OFF) ──────────────────────────
+
+
+def test_settings_flag_exists_and_defaults_off() -> None:
+    from config import settings as settings_module
+
+    cfg = settings_module.settings.normalization_spine
+    assert isinstance(cfg, settings_module.NormalizationSpineConfig)
+    assert cfg.enabled is False
+    assert "AETHER_NORMALIZATION_SPINE_ENABLED" in inspect.getsource(
+        settings_module.NormalizationSpineConfig
+    )
+
+
+def test_spine_enabled_helper_follows_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    from config import settings as settings_module
+
+    monkeypatch.setattr(
+        settings_module.settings,
+        "normalization_spine",
+        SimpleNamespace(enabled=False),
+    )
+    assert normalization_spine_enabled() is False
+    monkeypatch.setattr(
+        settings_module.settings,
+        "normalization_spine",
+        SimpleNamespace(enabled=True),
+    )
+    assert normalization_spine_enabled() is True
 
 
 # ── Never-raises guarantee ───────────────────────────────────────────────────
