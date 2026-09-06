@@ -618,6 +618,31 @@
       "remediation": "Keep the adapter registry (Backend Architecture/aether-backend/services/ingestion/adapters/registry.py) and the universal ingestion gateway (services/ingestion/gateway.py) consistent with the Envelope-B surfaces they consume (shared/observation/envelope.py source_type/credential_class vocabulary + packages/shared/contracts/observation-envelope-registry.json) and the Contract Spine they enforce (generated_registry CANONICAL_EVENT_TYPES/EVENT_FAMILY); register a new adapter class under the family it implements and extend tests/unit/observation/test_ingress_adapter_registry.py + test_ingress_gateway.py when the registry, an adapter, or the gateway changes."
     },
     {
+      "id": "ingestion_replay_spine_convergence",
+      "name": "ingestion replay + consumption normalization-spine convergence (WS-B4/B5) changed",
+      "source_globs": [
+        "Backend Architecture/aether-backend/services/ingestion/replay.py",
+        "Backend Architecture/aether-backend/services/ingestion/replay_routes.py",
+        "Backend Architecture/aether-backend/services/ingestion/spine.py",
+        "Backend Architecture/aether-backend/services/ingestion/workers.py",
+        "Backend Architecture/aether-backend/services/semantic_intelligence/consumer.py",
+        "Backend Architecture/aether-backend/services/resolution/consumer.py"
+      ],
+      "required_changed_globs": [
+        "docs/source-of-truth/**",
+        "docs/productization/sdk-universal-ingestion-alignment/**",
+        "Backend Architecture/aether-backend/config/settings.py",
+        ".env.example",
+        ".env.production.example",
+        "tests/**",
+        "Backend Architecture/**/tests/**"
+      ],
+      "required_commands": [
+        "python -m pytest tests/unit/observation -q"
+      ],
+      "remediation": "Keep the WS-B4 replay surface (services/ingestion/replay.py runner + services/ingestion/replay_routes.py Kyber-operator routes + services/ingestion/adapters/replay.py, which also co-moves the ingress_adapter_registry category) and the WS-B5 consumption normalization spine (services/ingestion/spine.py::to_observation_view) in lock-step with their flag blocks (config/settings.py IngestReplayConfig + NormalizationSpineConfig and the AETHER_INGESTION_REPLAY_ENABLED / AETHER_NORMALIZATION_SPINE_ENABLED env examples) and the consumers that read through the spine (services/ingestion/workers.py Bronze-writer consumer original-time/replay-skip logic, services/semantic_intelligence/consumer.py, services/resolution/consumer.py); a replay/spine surface change must co-move the settings/env flag block, extend tests/unit/observation (test_ingest_replay.py / test_replay_adapter.py / test_normalization_spine.py / test_replay_route_mount.py), and update the SOT + alignment docs."
+    },
+    {
       "id": "mobile_native_regions",
       "name": "native iOS/Android event-type + consent-purpose regions changed (generator emitter, parity gate, or the region files)",
       "source_globs": [

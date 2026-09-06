@@ -78,16 +78,22 @@ legacy trees; it does **not** delete them (see
 Every downstream predicate in the blueprint (observation boundary, identity
 subject-hints, field trust, event semantics) hangs off Envelope B.
 
-**Live status: Envelope B model shipped (WS-A5), adapter convergence is WS-B.**
-The canonical field registry (`packages/shared/contracts/observation-envelope-registry.json`),
+**Live status: Envelope B model shipped (WS-A5); the WS-B adapter-convergence
+workstream (B1..B5) has shipped flag-gated default-OFF on the feat branch.** The
+canonical field registry (`packages/shared/contracts/observation-envelope-registry.json`),
 the pydantic runtime model (`Backend Architecture/aether-backend/shared/observation/envelope.py`)
 and the passive TS twin (`packages/shared/observation-envelope.ts`) now exist and are held in
 lock-step by a parity test; `/v1/batch` can build the envelope per accepted SDK event behind a
 default-OFF flag (`AETHER_OBSERVATION_ENVELOPE_ENABLED`, additive
-`normalized["observation_envelope"]`, degrade-safe). `BaseEvent` (Envelope A) remains the
-public/client envelope and the flat dict the consumption surface until WS-B converges every
-ingress adapter onto Envelope B. See the ledger row for Blueprint §3 and the gap matrix in
-[`REPO_TRUTH_AND_GAP_MATRIX.md`](./REPO_TRUTH_AND_GAP_MATRIX.md).
+`normalized["observation_envelope"]`, degrade-safe). WS-B ships the ingest-side convergence
+machinery, each behind its own default-OFF flag: the universal ingress adapter registry + one
+validated gateway (B1), deprecated-alias convergence onto the `/v1/batch` core (B2),
+server-authoritative consent/minimization on every non-batch ingress seam (B3), ingestion-level
+replay with original-time preservation (B4), and the single consumption normalization spine that
+retires heterogeneous-envelope branching in downstream consumers (B5). `BaseEvent` (Envelope A)
+remains the public/client envelope; the flat dict stays the default consumption surface until the
+WS-B gateway/envelope/spine flags turn on. See the ledger rows for Blueprint §3/§4/§9/§12/§15 and
+the gap matrix in [`REPO_TRUTH_AND_GAP_MATRIX.md`](./REPO_TRUTH_AND_GAP_MATRIX.md).
 
 ## Field-trust taxonomy
 
@@ -127,14 +133,24 @@ per-field enforcement) remain ledger rows Blueprint §3 / §10 / §11 / WS-B.
   `Backend Architecture/aether-backend/services/ingestion/batch.py`.
 - SDK endpoints target `https://api.aether.io` / `https://ingest.aether.so` —
   never the legacy port `3001`.
-- Consent/privacy/scrub/minimization is server-authoritative **on `/v1/batch`
-  only today** (acquisition-privacy referrer/token digesting, sensitive-key
-  scrub, fingerprint-policy gating, GPC/DNT parse, server-authoritative consent,
-  and `strip_canonical_entity_id`). Other ingress paths do not yet enforce it —
-  ledger rows Blueprint §9/§10.
-- Deprecated aliases `POST /v1/ingest/events[/batch]` remain mounted and publish
-  un-validated events onto the topic downstream consumers treat as validated —
-  ledger row Blueprint §4.
+- Consent/privacy/scrub/minimization is server-authoritative on `/v1/batch`
+  (acquisition-privacy referrer/token digesting, sensitive-key scrub,
+  fingerprint-policy gating, GPC/DNT parse, server-authoritative consent, and
+  `strip_canonical_entity_id`) and, since WS-B3 (flag-gated default-OFF), runs
+  the **same facade on every non-batch ingress seam** — API feeds, connector-comms
+  ingest, payment-rails webhooks, provider-runtime events, and tenant import
+  commits. The mandatory minimization layer (scrub of sensitive values, strip of
+  client-asserted canonical entity ids, T-class tenant data-policy) is
+  **unconditional on every path** (never behind the per-path flags); only the
+  per-subject (S) server-receipt rejection is a per-path toggle, and an OFF state
+  denies rather than silently skipping (imports raise `ConflictError`) — ledger
+  rows Blueprint §9/§10.
+- Deprecated aliases `POST /v1/ingest/events[/batch]` stay mounted (so gateway
+  discovery sees them) but, since WS-B2 (flag-gated default-OFF), route through
+  the same `/v1/batch` core — validation / consent / scrub / Bronze-durable /
+  idempotency / publish — instead of publishing un-validated events onto the
+  validated topic; `AETHER_KILL_DEPRECATED_INGEST_ALIASES` retires both with
+  HTTP 410 — ledger row Blueprint §4.
 
 ## Ingress adapters & credential classes
 
@@ -164,10 +180,17 @@ allowed credential classes; the SDK family is the first converged adapter
 Envelope-B observations adapters build (schema/type/family/tenant checks,
 credential + source-trust provenance). A public SDK credential must be scoped
 to `observation:write` + `config:read` only (never `graph:read`,
-`identity:merge`, `export`, `admin`, …). Webhook/connector/feed/import/harness/
-replay adapters and the durable/idempotency publish-spine convergence remain
-WS-B2..WS-B5 — those ingress paths are still bespoke today (ledger rows
-Blueprint §4, §9, §12, §15).
+`identity:merge`, `export`, `admin`, …). The rest of the WS-B workstream has
+shipped flag-gated default-OFF on the feat branch: the feed/provider-runtime/
+payment-rails/import seams run the same validated facade with **unconditional**
+scrub + strip + T-class data-policy minimization (WS-B3); deprecated aliases
+converge onto the `/v1/batch` core with a kill-flag → HTTP 410 (WS-B2); an
+ingestion-level replay adapter + Kyber-operator route deliver durable Bronze
+re-drive with original-time preservation (WS-B4); and downstream consumers read
+through one normalization spine instead of branching on heterogeneous envelopes
+(WS-B5). Universal enforcement on every family is still behind the default-OFF
+flags (gateway/envelope/spine/replay kill-switch) — ledger rows Blueprint §4,
+§9, §12, §15.
 
 `execution_by_aether = false` applies at every layer per **ADR-011**: DB CHECK
 constraints, `Literal[False]` model fields, `check_no_execution` on write routes,
@@ -205,8 +228,13 @@ Bronze (raw, hash-chained) ──► Normalizers/projectors/resolvers (Silver)
 (SDK-normalized dict, comms-normalized dict, provider_runtime `AetherEvent`), so
 Silver workers branch on `source_service`/payload keys; five+ Bronze/Silver
 pipelines exist instead of one normalization spine; graph/ledger governance is
-off by default (`mutation_gateway_mode='off'`). Ledger rows Blueprint §1, §15,
-§20–§26.
+off by default (`mutation_gateway_mode='off'`). WS-B5 ships the consumption-side
+spine (`services/ingestion/spine.py::to_observation_view`, flag-gated default-OFF):
+the additive Envelope-B `observation_envelope` key wins when present, otherwise the
+legacy flat SDK/comms dict or the provider_runtime `AetherEvent` dump is mapped —
+so the ingestion worker + semantic-intelligence + resolution consumers can read
+through one normalization view instead of branching on envelope shape. Ledger rows
+Blueprint §1, §15, §20–§26.
 
 ## Architecture invariants — checklist
 

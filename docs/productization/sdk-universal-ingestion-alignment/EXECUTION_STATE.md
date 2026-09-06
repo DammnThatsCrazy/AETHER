@@ -521,6 +521,129 @@ tip per the gate-policy directive (WS-A precedent).
   consent-on-every-path, idempotency-before-publish, and replay original-time remain
   WS-B2..WS-B5 (reserved row below).
 
+## WS-B2 — deprecated-alias convergence (canonical spine + kill flag)
+
+Merged onto `feat/sdk-universal-ingestion` at `bf18f8cc`. Extracts the canonical V1
+pipeline into one async spine and converges the two deprecated aliases onto it so no
+ingress path bypasses validation/consent/scrub/idempotency/Bronze/publish.
+
+- **Canonical spine extraction (`d6f3340b`).** `batch.py` now exposes
+  `ingest_events(events, *, tenant_id, request_privacy, server_context,
+  granted_consents, sent_at, producer) -> BatchResponse` — the full V1 spine
+  (validate → consent/scrub → normalized dict → observation-envelope block →
+  Bronze-before-publish → identity fire-and-forget → `set_nx` idempotency →
+  publish `SDK_EVENTS_VALIDATED`) that `/v1/batch` and the aliases share.
+- **Operator kill config (`7bf8609f`).** `DeprecatedIngestAliasesConfig.kill_enabled`
+  = `AETHER_KILL_DEPRECATED_INGEST_ALIASES` (default False).
+- **Alias convergence + kill (`1e3b3621`).** `routes.py` `/events` + `/events/batch`
+  now converge onto the canonical spine: WRITE permission first, kill → HTTP 410,
+  lazy imports, and `_alias_event_to_canonical` maps the legacy SDKEvent shape to
+  `BaseEvent` (`anonymousId`→`session_id`, device under `context.device.id`,
+  lowercased event `type`, fresh `id`). Envelope block stays inside `batch.py`
+  (WS-A5 grep guard).
+- **Deviation (documented).** `ingest_batch` returns `response.model_dump()` (the
+  legacy route contract asserts dict access, not the awaited result).
+- **Suites:** `tests/unit/ingestion_alias/` — 10 tests (`a92102c4`).
+
+## WS-B3 — consent-on-every-path (fail-closed across all ingress seams)
+
+Merged onto `feat/sdk-universal-ingestion` at `6b338285` (feature commits
+`69a0c5d2`→`175718e3`, hardening + regression tests at `907ee9b7`). Closes the
+Invariant #9 gap (server-authoritative consent on `/v1/batch` only) by putting every
+non-batch ingress seam through the same facade as the batch path.
+
+- **Shared facade (`2ce0b24e`).** `validation.py::evaluate_ingress_decision` mirrors
+  `validate_event`'s ordering (request-privacy signals → server consent receipt →
+  fingerprint data-policy) and the WS-B3 rule: the MANDATORY minimization layer
+  (scrub of sensitive values + strip of client-asserted canonical entity ids +
+  T-class tenant data-policy) runs UNCONDITIONALLY on every path; ONLY the
+  per-subject (S) server-receipt rejection is a per-path toggle.
+- **Seams.** `/feed` T-class gate with optional S escalation (`a3e13d7f`, `routes.py`);
+  comms connector durable seam C-class gate (`c22a1c15`, `services/comms/ingest.py`);
+  provider-runtime bridge per-event gate (`364f4011`, `bridge.py`); tenant-import
+  commit data-policy gate + Bronze scrub (`6cde296c`, `imports/commit.py`);
+  payment-rails webhook ingress scrub (`175718e3`). Config: `IngressConsentConfig`
+  (`69a0c5d2`) — five flags, all default **True** (mandatory layer ON by default);
+  each flag enables only the optional S escalation for its path.
+- **Post-commit security review + hardening (`907ee9b7`).** Four automated MEDIUM
+  fail-open findings (facade authoritative-ON skip, `/feed` scrub behind the flag,
+  imports `source_column` label trust + `continue` skip, comms flag-OFF bypass) were
+  fixed before merge: authoritative-ON + purpose now consults the server receipt for
+  every purposed request (`evaluate_consent` is itself fail-closed on an unresolvable
+  subject → `consent_receipt_missing`); scrub/strip/data-policy moved OUT of every
+  per-path flag (unconditional); import classification validates the mapping
+  `source_column` against the ACTUAL staged columns and denies unresolved columns
+  (`mapping_source_column_unresolved`) instead of skipping; the import flag's OFF
+  state denies the commit (`ConflictError`) rather than bypassing the policy layer.
+- **Suites:** `tests/ingestion/` — facade consent regressions (5) + import seam
+  label-trust/fail-closed regressions (5) (`907ee9b7`). Existing seam suites green on
+  the merged tree: imports/provider/journey/card-linked/payment (92) + comms/routes/
+  security/batch-endpoint (344).
+
+## WS-B4 — replay adapter + original-time preservation (Invariant #15)
+
+Merged onto `feat/sdk-universal-ingestion` at `888ea003` (commits `9f9f6446` +
+`6992654f`; main.py operator-route mount + route-mount test at `d1c95a39`). Operator-
+triggered re-delivery of durable Bronze SDK events with ORIGINAL occurrence times
+preserved.
+
+- **`ReplayIngressAdapter` (`9f9f6446`, `adapters/replay.py`).** Family `replay`,
+  `OPERATOR_REPLAY`, v1.0.0 — revalidates a stored envelope or rebuilds an
+  SDK-equivalent, rewrites `source_type="replay"` while keeping the ORIGINAL
+  `occurred_at`/`observation_id`/flat `timestamp`; only `received_at`/`ingested_at`
+  and replay provenance (`adapter="replay"`,
+  `lineage.raw_record_ref=bronze_ref`) are fresh. Registered in the ingress registry
+  as the 2nd implemented family.
+- **Runner + operator surface (`6992654f`).** `services/ingestion/replay.py`
+  (`REPLAY_SOURCE_SERVICE="ingestion.replay"`, `replay_events`, dry-run counts, run-
+  journal idempotency) + `replay_routes.py` (`/v1/kyber/ingest/replay` POST /events +
+  GET /status, Kyber-operator-only; dry_run defaults True, real run refused with 403
+  while `AETHER_INGESTION_REPLAY_ENABLED` is OFF). Worker skip: the Bronze writer
+  consumer skips `source_service == "ingestion.replay"` rows (the durable row already
+  exists; metric `ingestion_bronze_replay_skip_total`). Config `IngestReplayConfig`.
+- **Route mount (`d1c95a39`).** `kyber_replay_router` mounted on `main.app`; routes
+  classify under the route-policy registry via the `/v1/kyber` operator-required
+  fallback (no registry entry needed); no route conflicts.
+- **Suites:** `test_replay_adapter.py` + `test_ingest_replay.py` + route-mount
+  regressions (`d1c95a39`) — 4.
+
+## WS-B5 — single normalization-spine convergence (consumption side, flag-gated)
+
+Merged onto `feat/sdk-universal-ingestion` at `7a1b73f5` (commits `0ffd30d0`→
+`1692755d`). Retires the heterogeneous-envelope branching on the consumption side with
+one Envelope-B-projection spine (Invariant #1).
+
+- **Spine (`0ffd30d0`, `services/ingestion/spine.py`).** `ObservationView`/
+  `SubjectView` (all-Optional) + `to_observation_view(payload)`: envelope-first (the
+  additive `observation_envelope` key wins), else AetherEvent `model_dump()`, else the
+  legacy flat SDK/comms dict, else all-None; `normalization_spine_enabled()`.
+- **Config (`70ff4f51`).** `NormalizationSpineConfig.enabled` =
+  `AETHER_NORMALIZATION_SPINE_ENABLED` (default False).
+- **Consumers (`6dfc53b3`, `b1f73b59`).** Ingestion workers (`silver_normalizer`,
+  `identity_signal_emitter`, `_bus_payload_to_sdk_envelope`) and the
+  semantic_intelligence + resolution consumers read via the view when ON; the legacy
+  flat path is kept byte-identical when OFF (`_legacy_sdk_envelope`).
+- **Suites (`1692755d` + new `test_normalization_spine.py`):** 23 spine tests; blast
+  radius re-run on the integrated tree (observation 47, silver 119,
+  semantic/social/provider 479, parity 22, staging/comms 388) green at the slice tip.
+
+## WS-B close-out (invariant delta)
+
+| Invariant | WS-B delta |
+|---|---|
+| #1 single observation model after adapters | B5 consumption-side spine (flag-gated); B1 gateway + B4 replay adapter emission |
+| #5 idempotency-before-publish | B2 alias convergence onto the canonical `set_nx` spine |
+| #8 no un-stamped durability | B2 aliases now Bronze-before-publish like `/v1/batch` |
+| #9 consent/privacy on every path | B3 mandatory scrub/strip/data-policy unconditional on feed/comm/provider/import/payment seams (default-ON); S server-receipt is a per-path toggle, fail-closed under the authoritative flag |
+| #15 original occurrence time never rewritten | B4 replay preserves `occurred_at`/`event_id`/`timestamp`; only receive/ingest time + provenance are fresh |
+
+Post-merge build-time evidence (full canonical gate deferred to the full-program tip):
+focused suites **73 passed** (B2 aliases 10 + B3 `tests/ingestion` 10 + B4 replay +
+B5 spine) and broad regression net **185 passed** (observation full 93 incl.
+outbox/workers, imports/provider/journey/card-linked/payment, comms 344, route-mount
++ registry coverage); settings/import smoke clean across all seams and the four new
+flag blocks (all default OFF except the five B3 ingress-consent flags, default True).
+
 ## Later phases (reserved)
 
 Workstreams A–E (the blueprint's own sequencing) begin after Phase 0 converges.
@@ -530,7 +653,7 @@ built.
 | Workstream | Scope (reserved) | Opens when |
 |---|---|---|
 | WS-A — Contract foundation | **WS-A1 + WS-A2 + WS-A3 + WS-A4 + WS-A5 + WS-A6 + WS-A7 done** (WS-A1 merged to main via #600; A2–A7 stacked on `feat/sdk-universal-ingestion` for the consolidated PR). WS-A complete: field-trust + semantic-level spine, privacy family, Envelope-B, native event-type codegen, and registry-re-pointed metric/privacy/retention docs | — (complete) |
-| WS-B — Adapter convergence | **WS-B1 done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR): universal ingress adapter registry (7 families declared, 6 `declared`; `SdkIngressAdapter` PUBLIC_CLIENT) + one validated gateway (`services/ingestion/gateway.py`) + flag-gated `/v1/batch` adoption. Remaining — WS-B2..B5: webhook/connector/feed/import/harness/replay adapters producing Envelope B through the gateway; consent-on-every-path; idempotency-before-publish; ingestion-level replay with original-time preservation; kill deprecated `/v1/ingest` aliases (Invariants #1/#5/#8/#9/#15) | Phase 0 merged |
+| WS-B — Adapter convergence | **WS-B1..B5 done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR): universal ingress adapter registry (7 families declared; `SdkIngressAdapter` + `ReplayIngressAdapter` implemented) + one validated gateway (`services/ingestion/gateway.py`) + flag-gated `/v1/batch` adoption; deprecated `/v1/ingest` aliases converged onto the canonical spine (kill flag `AETHER_KILL_DEPRECATED_INGEST_ALIASES`); consent-on-every-path across feed/comm/provider/import/payment seams (B3, mandatory scrub/policy default-ON, S server-receipt fail-closed toggle); ingestion-level replay with original-time preservation (`AETHER_INGESTION_REPLAY_ENABLED`, operator surface mounted); consumption-side normalization spine (`AETHER_NORMALIZATION_SPINE_ENABLED`) retiring heterogeneous-envelope branching (Invariants #1/#5/#8/#9/#15) | Phase 0 merged |
 | WS-C — SDK hardening | Native identity → subject hints (delete client `/sdk/identity/resolve` re-stamping); native encrypted persistent queues; remove/relocate shared interpretation modules; regenerate `web/src/types.ts`; add native correlation fields (Invariants #4/#12/#16) | Phase 0 merged |
 | WS-D — Backend interpretation | Typed `RelationshipFact` + `evidence_refs`; Episode engine; outcome truth store; Section-25 evidence dedupe; silver money → exact decimal/event-time valuation on by default (coordinate with `feat/financial-normalization` — do not build twice); mutation-gateway governance on by default (Invariants #7/#11/#13/#14) | Phase 0 merged |
 | WS-E — Operations | Ingestion funnel telemetry; Kyber ingestion control plane + Observation Inspector; mount the already-built SDK-fleet view; golden cross-path fixture; SDK version-compatibility tiers; shadow/staged enforcement (Invariant #17, Gates G/H) | Phase 0 merged |

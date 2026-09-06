@@ -48,7 +48,11 @@ drift-exempt on purpose.
 
 One row per blueprint section (1–34). Classification reflects the repository at
 the Phase-0 baseline, before this slice's deprecations/gates. Evidence paths are
-repo-relative.
+repo-relative. Post-baseline deltas landed by the WS-A/WS-B slices (e.g. the
+WS-B5 consumption normalization spine superseding envelope-shape branching, the
+WS-B4 replay adapter, the WS-B3 per-path consent facade) are **not** rewritten
+into these frozen rows — they are tracked live in
+[`EXECUTION_STATE.md`](./EXECUTION_STATE.md).
 
 | Blueprint § | Classification | File evidence | Owning phase |
 |---|---|---|---|
