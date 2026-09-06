@@ -321,9 +321,14 @@ def validate_field_trust(event_reg: dict) -> None:
     """Validate the WS-A2 field-trust taxonomy + WS-A3 semantic boundary.
 
     Descriptive in A2 (enforced at the SDK/ingress boundary in A3). Rules:
-    - fieldTrustSchemaVersion is present iff >=1 event declares fieldTrust.fields.
-    - trustClasses (when the block is on) equals the canonical rank; every spec's
-      trustClass / minimumTrust is one of them; trustClass is required per spec.
+    - fieldTrustSchemaVersion is present iff >=1 event declares fieldTrust.fields
+      (fieldTrustDefaults likewise must not appear without field content).
+      trustClasses alone is permitted: the WS-A3 boundary machinery requires the
+      shared rank vocabulary even for a registry whose events carry no per-field
+      specs, so a lone trustClasses is not block advertisement.
+    - trustClasses equals the canonical rank whenever any event declares
+      fieldTrust.fields; every spec's trustClass / minimumTrust is one of them;
+      trustClass is required per spec.
     - A field spec's level, when present, is A/B/C; sourceEmit is a bool.
     - sourceEmit:false requires the field's trustClass rank >= SERVER_STAMPED.
     - WS-A3 semantic-level + SDK-boundary rules (see _validate_semantic_boundary).
@@ -337,10 +342,16 @@ def validate_field_trust(event_reg: dict) -> None:
     any_fields = any(bool(e.get("fieldTrust", {}).get("fields")) for e in events)
 
     if not any_fields:
-        if ftsv is not None or classes is not None or defaults is not None:
+        # The per-field block is advertised only by fieldTrustSchemaVersion /
+        # fieldTrustDefaults. trustClasses is shared rank vocabulary that the
+        # WS-A3 boundary machinery requires even when no event declares per-field
+        # specs (_validate_semantic_boundary derives server_rank from it and pins
+        # aetherInternal.assertableTrustClasses to it), so a lone trustClasses is
+        # not an orphan block — a boundary-only 2.2.0 registry is valid.
+        if ftsv is not None or defaults is not None:
             print(
-                "ERROR: field-trust top-level block present but no event declares "
-                "fieldTrust.fields — add content or remove the block",
+                "ERROR: fieldTrustSchemaVersion/fieldTrustDefaults present but no "
+                "event declares fieldTrust.fields — add content or remove the block",
                 file=sys.stderr,
             )
             sys.exit(1)
