@@ -13,7 +13,7 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: "0e967a68"
+last_synced_commit: "c50a1061"
 reviewed_source_commits:
   - commit: "7ba83380"
     reason: "Reviewed the Kyber component-test synchronization change; frontend architecture and runtime contracts are unaffected."
@@ -1051,10 +1051,18 @@ it is capability-gated by the backend and self-reports a not-enabled state,
 consistent with the runtime data-truth contract.
 
 **Route + placement.** `/settings/data-exchange` was added to
-`frontend/aether/src/app/router.tsx` (lazy-loads `SettingsPage`, as the other
-`/settings/*` routes do). `DataExchangeSection`
-(`frontend/aether/src/pages/settings/data-exchange-section.tsx`) is mounted on
-the shared `SettingsPage` after the webhooks section.
+`frontend/aether/src/app/router.tsx` (lazy-loads the nested settings shell,
+`SettingsPage`, as the other `/settings/*` routes do). The shell's integration
+point is the `DataExchangeGate` from
+`frontend/aether/src/pages/settings/data-exchange-section.tsx`, mounted
+persistently at the foot of the shell beneath the settings sub-nav on every
+`/settings/*` tab — it is **not** a `SETTINGS_NAV` section. The shell's sub-nav
+resolver does not map `/settings/data-exchange` to a dedicated section, so
+visiting that route renders the default API Keys section with the Data Exchange
+card mounted below it. The gate is capability-gated on the backend-published
+`feature_flags.data_exchange_enabled`: while off it renders the not-enabled
+EmptyState and never mounts the full `DataExchangeSection` (its data fetches
+never fire on a disabled plane); when on it mounts the section.
 
 **Feature module** (`frontend/aether/src/features/data-exchange/`):
 - `api.ts` — zod-typed tenant client against the frozen `/v1/data-exchange/*`
