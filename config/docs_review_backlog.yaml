@@ -20,33 +20,9 @@
 # gate is honest (stale is reported as advisory) until the owning program does
 # a genuine content re-review and clears each entry.
 docs:
-  - path: docs/AGENTIC_COMMERCE_BUILD_SPEC.md
-    reason: source_files changed at main-merge 59a7fb24 (#608); owning commerce lane merged without a last_synced restamp. Genuine content re-review pending with commerce@aether before stamp + entry removal.
-    owner: commerce@aether
-  - path: docs/COMMERCE-OPERATOR-RUNBOOK.md
-    reason: source_files changed at main-merge 59a7fb24 (#608); owning commerce lane merged without a last_synced restamp. Genuine content re-review pending with commerce@aether before stamp + entry removal.
-    owner: commerce@aether
-  - path: docs/PROFILE-360-AGGREGATION.md
-    reason: source_files changed at main-merge 59a7fb24 (#608); owning backend lane merged without a last_synced restamp. Genuine content re-review pending with backend@aether before stamp + entry removal.
-    owner: backend@aether
-  - path: docs/X402_AUDIT_REPORT.md
-    reason: source_files changed at main-merge 59a7fb24 (#608); owning security lane merged without a last_synced restamp. Genuine content re-review pending with security@aether before stamp + entry removal.
-    owner: security@aether
-  - path: docs/frontend/PROFILE360_ARCHITECTURE.md
-    reason: source_files changed at main-merge 59a7fb24 (#608); owning frontend lane merged without a last_synced restamp. Genuine content re-review pending with frontend@aether before stamp + entry removal.
-    owner: frontend@aether
   - path: docs/productization/economic-interoperability-intelligence/DEPLOYMENT_PROFILE_MATRIX.md
     reason: source_files changed at main-merge 59a7fb24 (#608) and again by the sdk-universal-ingestion lane (new default-OFF ingestion replay/spine/consent flag blocks in config/settings.py + env examples). Economic-interop profile tables need a genuine re-review by the platform/economic maintainer before stamping.
     owner: platform@aether
   - path: docs/productization/economic-interoperability-intelligence/TARGET_ARCHITECTURE.md
     reason: source_files changed at main-merge 59a7fb24 (#608) and again by the sdk-universal-ingestion lane (new default-OFF ingestion replay/spine/consent flag blocks). Economic-interop architecture doc needs a genuine re-review by the platform/economic maintainer before stamping.
-    owner: platform@aether
-  - path: docs/productization/economic-interoperability-intelligence/GRAPH_PROJECTION_MODEL.md
-    reason: source_files changed at main-merge 59a7fb24 (#608); owning platform lane merged without a last_synced restamp. Genuine content re-review pending with platform@aether before stamp + entry removal.
-    owner: platform@aether
-  - path: docs/productization/economic-interoperability-intelligence/OLYMPUS_INTELLIGENCE_SURFACES.md
-    reason: source_files changed at main-merge 59a7fb24 (#608); owning platform lane merged without a last_synced restamp. Genuine content re-review pending with platform@aether before stamp + entry removal.
-    owner: platform@aether
-  - path: docs/runbooks/CARD_LINKED_RUNBOOK.md
-    reason: source_files changed at main-merge 59a7fb24 (#608); owning platform lane merged without a last_synced restamp. Genuine content re-review pending with platform@aether before stamp + entry removal.
     owner: platform@aether
