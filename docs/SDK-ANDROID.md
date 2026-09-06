@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "c4f33e58"
+last_synced_commit: "21fc22d1"
 ---
 
 # Aether Android SDK v8.12.0 — Integration Guide
