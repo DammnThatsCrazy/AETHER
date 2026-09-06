@@ -26,9 +26,6 @@ docs:
   - path: docs/COMMERCE-OPERATOR-RUNBOOK.md
     reason: source_files changed at main-merge 59a7fb24 (#608); owning commerce lane merged without a last_synced restamp. Genuine content re-review pending with commerce@aether before stamp + entry removal.
     owner: commerce@aether
-  - path: docs/OPERATIONAL-INTELLIGENCE-AUDIT.md
-    reason: source_files changed at main-merge 59a7fb24 (#608); owning intelligence/risk lane merged without a last_synced restamp. Genuine content re-review pending before stamp + entry removal.
-    owner: platform@aether
   - path: docs/PROFILE-360-AGGREGATION.md
     reason: source_files changed at main-merge 59a7fb24 (#608); owning backend lane merged without a last_synced restamp. Genuine content re-review pending with backend@aether before stamp + entry removal.
     owner: backend@aether
