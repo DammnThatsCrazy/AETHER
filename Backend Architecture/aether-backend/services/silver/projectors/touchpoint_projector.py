@@ -6,6 +6,7 @@ import hashlib
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
+from config.settings import settings
 from services.silver.projectors.base import BaseProjector, ProjectionResult
 from services.traffic.classifier import SourceClassifier
 
@@ -349,9 +350,14 @@ class TouchpointProjector(BaseProjector):
             "link_id": comms_fact.get("link_id") or props.get("link_id"),
             "engagement_confidence": comms_fact.get("engagement_confidence"),
             "machine_activity_probability": comms_fact.get("machine_activity_probability"),
-            "identity_resolution_method": ctx.get("identityResolutionMethod"),
-            "identity_confidence": ctx.get("identityConfidence"),
-            "identity_version": ctx.get("identityVersion"),
+            # WS-C / Invariant #4 (subject-hints-only, default OFF): when ON the
+            # client is no longer an authority on identity resolution, so its
+            # self-asserted resolution method/confidence/version never persist
+            # verbatim; server-side resolution derives them. Legacy mode keeps
+            # the client claims until the coordinator flips the flag.
+            "identity_resolution_method": None if settings.subject_hints.enabled else ctx.get("identityResolutionMethod"),
+            "identity_confidence": None if settings.subject_hints.enabled else ctx.get("identityConfidence"),
+            "identity_version": None if settings.subject_hints.enabled else ctx.get("identityVersion"),
             "consent_snapshot_id": consent_id,
             "privacy_class": self._privacy_class(event),
             "provenance": {

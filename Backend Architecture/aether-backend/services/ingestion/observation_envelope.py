@@ -129,6 +129,16 @@ def build_sdk_observation_envelope(
             )
         )
 
+    # WS-C / Invariant #12 (correlation is additive — source-native correlation
+    # is never overwritten). The SDK ships correlation either as the nested
+    # camelCase ``context.correlation`` dict (the A-side CorrelationContext
+    # tuple in packages/shared/events.ts) or as legacy flat
+    # context.correlationId/causationId/traceId/spanId keys. We map ONLY those
+    # source-native values into the CorrelationBlock: nothing here re-stamps or
+    # overwrites an id the source provided, and an explicitly-shipped nested
+    # ``correlation`` block wins over any legacy flat keys on the same event.
+    # ``parentObservationId`` (camelCase) is carried additively so a native
+    # parent link survives end-to-end into the envelope correlation block.
     correlation: Optional[CorrelationBlock] = None
     if isinstance(context.get("correlation"), dict):
         corr = context["correlation"]
@@ -136,7 +146,10 @@ def build_sdk_observation_envelope(
             correlation_id=corr.get("correlationId") or context.get("correlationId"),
             causation_id=corr.get("causationId") or context.get("causationId"),
             trace_id=corr.get("traceId") or context.get("traceId"),
-            span_id=corr.get("spanId"),
+            span_id=corr.get("spanId") or context.get("spanId"),
+            parent_observation_id=(
+                corr.get("parentObservationId") or corr.get("parent_observation_id")
+            ),
         )
     elif context.get("correlationId") or context.get("traceId"):
         correlation = CorrelationBlock(

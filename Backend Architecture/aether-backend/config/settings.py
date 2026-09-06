@@ -1067,6 +1067,21 @@ class NormalizationSpineConfig:
     enabled: bool = _env_bool("AETHER_NORMALIZATION_SPINE_ENABLED", False)
 
 
+# Native identity -> subject-hints convergence (WS-C / Invariant #4). Default
+# OFF: the legacy SDK contract (client-stamped canonical top-level ids +
+# identityConfidence/identitySignals persisted verbatim to Silver) is honored
+# unchanged. When ON, the backend treats the SDK as subject-hints-only — the
+# client is no longer an authority on canonical entity id / identity confidence,
+# so normalization neutralizes client-asserted identityConfidence/identitySignals
+# instead of persisting them verbatim and resolution drives identity from the
+# additive ``subjects`` hint list (Envelope B). Validation and projectors honor
+# BOTH modes until the flip; this flag is the deployment switch the coordinator
+# turns on after native + web SDKs converge.
+@dataclass(frozen=True)
+class SubjectHintsConfig:
+    enabled: bool = _env_bool("AETHER_SUBJECT_HINTS_ONLY_ENABLED", False)
+
+
 # ---------------------------------------------------------------------------
 # Storage Plane (PR 7 / FT-7 + PR 8 / FT-8) — Elastic Data Plane descriptor +
 # object layer, object-backed Bronze compaction, and cross-store lifecycle.
@@ -1953,6 +1968,7 @@ class Settings:
     deprecated_ingest_aliases: DeprecatedIngestAliasesConfig = field(default_factory=DeprecatedIngestAliasesConfig)
     ingest_replay: IngestReplayConfig = field(default_factory=IngestReplayConfig)
     normalization_spine: NormalizationSpineConfig = field(default_factory=NormalizationSpineConfig)
+    subject_hints: SubjectHintsConfig = field(default_factory=SubjectHintsConfig)
     storage_plane: StoragePlaneConfig = field(default_factory=StoragePlaneConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
     stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)

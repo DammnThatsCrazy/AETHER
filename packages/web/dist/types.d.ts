@@ -391,12 +391,19 @@ export interface ProtocolInfo {
     logoUrl?: string;
 }
 /**
- * Canonical EventType — mirrors packages/shared/events.ts.
+ * Canonical EventType — registry-generated, re-exported from @aether/shared
+ * (scripts/generate_contracts.py splices it into packages/shared/events.ts from
+ * packages/shared/contracts/event-registry.json). This file previously carried
+ * a hand-written EventType union that silently fell behind the registry (e.g.
+ * missing navigation_intent and later registry events) and broke parity with the
+ * canonical contract. Do NOT declare EventType here again.
  *
- * Do NOT add web3 sub-type events (defi_interaction, whale_alert, etc.) —
- * those are computed backend-side from `wallet`/`transaction` events.
+ * Note: web3 sub-type events (defi_interaction, whale_alert, etc.) are computed
+ * backend-side from `wallet`/`transaction` events; they are emitted by the SDK
+ * only as the parent observation types above.
  */
-export type EventType = 'track' | 'page' | 'screen' | 'heartbeat' | 'error' | 'performance' | 'experiment' | 'journey_started' | 'journey_paused' | 'journey_resumed' | 'journey_continued' | 'journey_completed' | 'journey_abandoned' | 'journey_checkpoint' | 'identify' | 'consent' | 'conversion' | 'payment_initiated' | 'payment_completed' | 'payment_failed' | 'approval_requested' | 'approval_resolved' | 'entitlement_granted' | 'entitlement_revoked' | 'access_granted' | 'access_denied' | 'wallet' | 'transaction' | 'contract_action' | 'agent_task' | 'agent_decision' | 'a2h_interaction' | 'agent_registered' | 'agent_updated' | 'agent_authorized' | 'agent_deauthorized' | 'agent_capability_granted' | 'agent_capability_revoked' | 'agent_task_created' | 'agent_task_decomposed' | 'agent_task_started' | 'agent_task_completed' | 'agent_task_failed' | 'agent_tool_called' | 'agent_resource_requested' | 'agent_delegated_task' | 'agent_subagent_spawned' | 'agent_policy_evaluated' | 'agent_handoff' | 'agent_escalated_to_human' | 'agent_outcome_recorded' | 'x402_payment' | 'x402_resource_requested' | 'x402_payment_required' | 'x402_quote_received' | 'x402_authorization_requested' | 'x402_authorization_resolved' | 'x402_payment_intent_created' | 'x402_payment_submitted' | 'x402_payment_settled' | 'x402_payment_failed' | 'x402_payment_timeout' | 'x402_receipt_verified' | 'x402_access_granted' | 'x402_access_denied' | 'x402_refund_or_reversal';
+import type { EventType } from '@aether/shared/events';
+export type { EventType };
 export type JourneyLifecycleEventType = 'journey_started' | 'journey_paused' | 'journey_resumed' | 'journey_continued' | 'journey_completed' | 'journey_abandoned' | 'journey_checkpoint';
 export type JourneyStatus = 'started' | 'paused' | 'resumed' | 'continued' | 'completed' | 'abandoned' | 'checkpoint';
 export interface JourneyPayload {

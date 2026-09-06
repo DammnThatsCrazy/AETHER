@@ -18,6 +18,11 @@ Generated outputs:
   docs/_generated/metric-registry-table.md
   packages/web/src/core/generated-consent-map.ts
 
+EventType consumers (guarded, NOT spliced — WS-C row 4 / Invariant #16):
+  packages/web/src/types.ts             re-exports the generated EventType from
+                                        '@aether/shared/events' (a local hand-
+                                        mirror union is a generator failure)
+
 Usage:
   python scripts/generate_contracts.py           # write all outputs in-place
   python scripts/generate_contracts.py --check   # exit 1 if any output differs (CI gate)
@@ -32,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import textwrap
 from pathlib import Path
@@ -58,6 +64,7 @@ METRIC_TABLE_MD = ROOT / "docs" / "_generated" / "metric-registry-table.md"
 WEB_CONSENT_MAP_TS = (
     ROOT / "packages" / "web" / "src" / "core" / "generated-consent-map.ts"
 )
+WEB_TYPES_TS = ROOT / "packages" / "web" / "src" / "types.ts"
 INTEGRATION_CONSENT_TS = ROOT / "packages" / "shared" / "integration-consent.ts"
 INTEGRATION_CONSENT_PY = (
     ROOT / "Backend Architecture" / "aether-backend" / "shared" / "privacy" / "generated_integration_consent.py"
@@ -543,6 +550,34 @@ def validate_integration_consent(integration_reg: dict, consent_reg: dict) -> No
 
 def _ts_literal(value) -> str:
     return json.dumps(value, indent=2)
+
+
+def validate_web_eventtype_reimport() -> None:
+    """WS-C row 4 / Invariant #16: web must re-export the generated EventType.
+
+    packages/web/src/types.ts used to carry a hand-written EventType union that
+    silently fell behind the registry (it was missing navigation_intent and later
+    registry events). The canonical EventType is generated into
+    packages/shared/events.ts (this script); web now imports + re-exports it
+    (``import type { EventType } from '@aether/shared/events'; export type {
+    EventType };``). Guard against re-introducing a hand-mirror union: a local
+    ``export type EventType =`` declaration, or losing the re-export entirely,
+    fails the generator (write and --check modes) so the drift cannot recur.
+    """
+    if not WEB_TYPES_TS.is_file():
+        return
+    text = WEB_TYPES_TS.read_text(encoding="utf-8")
+    if re.search(r"\bexport type EventType\s*=", text):
+        raise ValueError(
+            f"{WEB_TYPES_TS} declares a local `export type EventType =` union — "
+            "remove it and re-export the generated EventType from "
+            "'@aether/shared/events' (Invariant #16)"
+        )
+    if "export type { EventType }" not in text or "'@aether/shared/events'" not in text:
+        raise ValueError(
+            f"{WEB_TYPES_TS} does not re-export the generated EventType from "
+            "'@aether/shared/events' (Invariant #16)"
+        )
 
 
 def validate_traffic_source(traffic_reg: dict) -> None:
@@ -2043,6 +2078,7 @@ def main() -> int:
     validate_metrics(metric_reg)
     validate_integration_consent(integration_reg, consent_reg)
     validate_traffic_source(traffic_reg)
+    validate_web_eventtype_reimport()
 
     diffs: list[str] = []
 

@@ -207,6 +207,33 @@ def get_event_family(event_type: str) -> str:
     return EVENT_FAMILY.get(event_type, "core")
 
 
+_CLIENT_IDENTITY_CONFIDENCE_KEYS = frozenset({
+    "identityConfidence",
+    "identitySignals",
+})
+
+
+def neutralize_client_identity_claims(context: dict[str, Any]) -> dict[str, Any]:
+    """Drop client-asserted identity-confidence claims from an SDK context dict.
+
+    Native identity -> subject-hints convergence (WS-C / Invariant #4). Under
+    the legacy contract the client may self-report ``identityConfidence`` /
+    ``identitySignals`` (a client-side resolution claim) and the backend
+    persists them verbatim. Under subject-hints-only the SDK is not an
+    authority on its own resolution confidence — identity is driven server-side
+    from the additive ``subjects`` hint list — so those verbatim claims must not
+    reach Silver. Gate: ``settings.subject_hints.enabled`` (default OFF), so the
+    legacy mode is byte-identical until the coordinator flips the flag.
+    """
+    if not settings.subject_hints.enabled:
+        return context
+    return {
+        key: value
+        for key, value in context.items()
+        if key not in _CLIENT_IDENTITY_CONFIDENCE_KEYS
+    }
+
+
 def build_normalized_payload(
     sdk_event: Any,
     tenant_id: str,
@@ -223,8 +250,10 @@ def build_normalized_payload(
         "anonymous_id": sdk_event.anonymousId,
         "user_id": sdk_event.userId,
         "properties": strip_canonical_entity_id(sdk_event.properties or {}),
-        "context": strip_canonical_entity_id(
-            sdk_event.context.model_dump(exclude_none=True)
+        "context": neutralize_client_identity_claims(
+            strip_canonical_entity_id(
+                sdk_event.context.model_dump(exclude_none=True)
+            )
         ),
         "timestamp": sdk_event.timestamp,
         "received_at": received_at,

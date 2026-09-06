@@ -5,6 +5,7 @@
 
 import Foundation
 import CryptoKit
+import Security
 import Network
 
 #if canImport(UIKit)
@@ -42,6 +43,20 @@ public struct AetherConfig {
     public var manifestVerificationKey: String? = nil
     public var autoResumeJourney: Bool = true
     public var onJourneyResumed: ((_ resolvedAnonymousId: String, _ resolvedUserId: String?) -> Void)? = nil
+    // Native identity -> subject-hints convergence (WS-C / Invariant #4).
+    // Default OFF = legacy behavior: after /sdk/identity/resolve the SDK
+    // re-stamps the resolved canonical user id into its persisted identity and
+    // emits journey_resumed with the resolved tuple. When ON the SDK no longer
+    // re-stamps a canonical user id client-side (the backend resolves identity
+    // from the source-asserted subject hints it carries); the resolved id is
+    // still reported inside the journey_resumed observation for server use.
+    public var subjectHintsOnly: Bool = false
+    // Durable encrypted queue with ack semantics (WS-C row 12). Default OFF =
+    // legacy delete-before-ack queue persisted as a plaintext JSON file. When
+    // ON the persisted queue file is AES-GCM encrypted with a key held in the
+    // Keychain, and events are only removed after the server acknowledges the
+    // batch (2xx), preserving order and idempotency across kills.
+    public var encryptedDurableQueue: Bool = false
 
     public init(apiKey: String) {
         self.apiKey = apiKey
@@ -622,10 +637,38 @@ public struct EventContext: Codable {
     public var utcOffsetMinutes: Int?
     public var timeZoneSource: String?
     public var clockSource: String?
+    // Source-native correlation (WS-C / Invariant #12). Mirrors the A-side
+    // CorrelationContext tuple in packages/shared/events.ts (camelCase). The
+    // backend Envelope-B correlation block is additive: source-native values
+    // are never overwritten during normalization, and the optional
+    // parentObservationId is carried end-to-end into parent_observation_id.
+    public var correlation: CorrelationContext? = nil
 
     public struct LibraryInfo: Codable {
         public let name: String
         public let version: String
+    }
+
+    public struct CorrelationContext: Codable {
+        public var correlationId: String?
+        public var causationId: String?
+        public var traceId: String?
+        public var spanId: String?
+        public var parentObservationId: String?
+
+        public init(
+            correlationId: String? = nil,
+            causationId: String? = nil,
+            traceId: String? = nil,
+            spanId: String? = nil,
+            parentObservationId: String? = nil
+        ) {
+            self.correlationId = correlationId
+            self.causationId = causationId
+            self.traceId = traceId
+            self.spanId = spanId
+            self.parentObservationId = parentObservationId
+        }
     }
 
     public struct DeviceInfo: Codable {
@@ -765,6 +808,10 @@ public final class Aether: NSObject {
     private var currentJourneyStatus: String? = nil
     private var anonymousId: String = ""
     private var userId: String?
+    /// Source-native correlation stamped on every outgoing event's
+    /// context.correlation (WS-C / Invariant #12). Set by the host app so
+    /// native events carry the correlation context end-to-end.
+    private var sourceCorrelation: EventContext.CorrelationContext?
     private var walletAddress: String?
     private var email: String?
     private var traits: [String: AnyCodable] = [:]
@@ -1405,6 +1452,14 @@ public final class Aether: NSObject {
         serialQueue.sync { eventQueue.count }
     }
 
+    /// Stamp source-native correlation context on every outgoing event's
+    /// context.correlation (WS-C / Invariant #12). Values are carried verbatim
+    /// and never overwritten by the backend normalization. Thread-safe: applied
+    /// on the SDK serial queue.
+    public func setCorrelationContext(_ correlation: EventContext.CorrelationContext?) {
+        serialQueue.async { [weak self] in self?.sourceCorrelation = correlation }
+    }
+
     public func startJourney(_ nameOrType: String, properties: [String: AnyCodable] = [:]) {
         currentJourneyId = properties["journeyId"]?.value as? String ?? UUID().uuidString
         currentJourneyName = nameOrType
@@ -1576,7 +1631,11 @@ public final class Aether: NSObject {
                 savedAt: ISO8601DateFormatter().string(from: Date()),
                 events: Array(eventQueue.suffix(Aether.maxQueueSize))
             )
-            let data = try JSONEncoder().encode(envelope)
+            var data = try JSONEncoder().encode(envelope)
+            if encryptedDurableQueueEnabled(),
+               let encrypted = encryptQueueEnvelope(data) {
+                data = encrypted
+            }
             try data.write(to: url, options: .atomic)
         } catch {
             log("Failed to persist durable queue: \(type(of: error))")
@@ -1588,9 +1647,13 @@ public final class Aether: NSObject {
               FileManager.default.fileExists(atPath: url.path) else { return }
         do {
             let data = try Data(contentsOf: url)
+            // Self-describing ciphertext (magic prefix) is decrypted whenever
+            // present; a legacy plaintext file is accepted as-is (upgrade path
+            // when the encrypted flag was just enabled).
+            let plain = decryptQueueEnvelope(data) ?? data
             let decoder = JSONDecoder()
             let events: [AetherEvent]
-            if let envelope = try? decoder.decode(PersistedQueueEnvelope.self, from: data) {
+            if let envelope = try? decoder.decode(PersistedQueueEnvelope.self, from: plain) {
                 guard envelope.version == 1 else {
                     throw CocoaError(.fileReadCorruptFile)
                 }
@@ -1626,6 +1689,79 @@ public final class Aether: NSObject {
 
     private func clearPersistedQueue() {
         if let url = persistedQueueURL { try? FileManager.default.removeItem(at: url) }
+    }
+
+    // MARK: - Encrypted durable queue with ack semantics (WS-C row 12)
+    //
+    // Gated on AetherConfig.encryptedDurableQueue (default OFF). When ON the
+    // persisted queue file is AES-GCM encrypted with a 256-bit key held in the
+    // Keychain (kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly), and events
+    // are removed only after the server acknowledges the batch (2xx) instead of
+    // the legacy delete-before-ack. The legacy plaintext file format is still
+    // read (upgrade path) and the file format is self-describing via a magic
+    // prefix, so a flag flip in either direction never strands the queue.
+
+    private static let queueCipherMagic = Data("AETHERQ1".utf8)
+    private static let queueKeyService = "com.aether.sdk.queue"
+    private static let queueKeyAccount = "aes-gcm-key-v1"
+
+    private func encryptedDurableQueueEnabled() -> Bool {
+        config?.encryptedDurableQueue ?? false
+    }
+
+    private func loadOrCreateQueueCipherKey() -> SymmetricKey? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.queueKeyService,
+            kSecAttrAccount as String: Self.queueKeyAccount,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var item: CFTypeRef?
+        if SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+           let data = item as? Data, data.count == 32 {
+            return SymmetricKey(data: data)
+        }
+        var bytes = [UInt8](repeating: 0, count: 32)
+        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
+            return nil
+        }
+        let add: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.queueKeyService,
+            kSecAttrAccount as String: Self.queueKeyAccount,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecValueData as String: Data(bytes),
+        ]
+        SecItemDelete(add as CFDictionary)
+        guard SecItemAdd(add as CFDictionary, nil) == errSecSuccess else { return nil }
+        return SymmetricKey(data: Data(bytes))
+    }
+
+    private func encryptQueueEnvelope(_ data: Data) -> Data? {
+        guard let key = loadOrCreateQueueCipherKey(),
+              let sealed = try? AES.GCM.seal(data, using: key),
+              let combined = sealed.combined else { return nil }
+        return Self.queueCipherMagic + combined
+    }
+
+    private func decryptQueueEnvelope(_ data: Data) -> Data? {
+        guard data.count > Self.queueCipherMagic.count,
+              data.prefix(Self.queueCipherMagic.count) == Self.queueCipherMagic,
+              let key = loadOrCreateQueueCipherKey(),
+              let sealed = try? AES.GCM.SealedBox(combined: data.dropFirst(Self.queueCipherMagic.count)),
+              let opened = try? AES.GCM.open(sealed, using: key) else { return nil }
+        return opened
+    }
+
+    /// Remove acknowledged events (by id) from the in-memory queue and persist.
+    private func acknowledge(_ batch: [AetherEvent]) {
+        serialQueue.async { [weak self] in
+            guard let self = self else { return }
+            let ackedIDs = Set(batch.map(\.id))
+            self.eventQueue.removeAll { ackedIDs.contains($0.id) }
+            self.persistQueueLocked()
+        }
     }
 
     // MARK: - Deep Link / Universal Link Attribution
@@ -2484,11 +2620,76 @@ public final class Aether: NSObject {
     private func sendBatch() {
         guard !eventQueue.isEmpty, let config = config else { return }
 
+        if encryptedDurableQueueEnabled() {
+            // Durable ack mode (WS-C row 12): events stay queued until the
+            // server acknowledges the batch (2xx) — never delete-before-ack.
+            sendDurableAckBatch(
+                batch: Array(eventQueue.prefix(config.batchSize)),
+                config: config,
+                retryCount: 0
+            )
+            return
+        }
+
         let batch = Array(eventQueue.prefix(config.batchSize))
         eventQueue.removeFirst(min(batch.count, eventQueue.count))
         persistQueueLocked()
 
         sendBatchWithRetry(batch: batch, config: config, retryCount: 0)
+    }
+
+    /// Durable ack-mode batch sender. Unlike the legacy delete-before-ack path,
+    /// the batch is NOT removed from the queue before the request completes.
+    /// A 2xx response acknowledges the batch (events removed by id, preserving
+    /// order); transient/network failures retain the events for the next flush;
+    /// terminal client errors (>= 400) are acknowledged-removed as permanently
+    /// rejected (the server will not accept them on retry). Because the request
+    /// is idempotent server-side (per-event id), overlapping flushes/retries
+    /// cannot create duplicate durable facts.
+    private func sendDurableAckBatch(batch: [AetherEvent], config: AetherConfig, retryCount: Int) {
+        let maxRetries = 3
+        guard !batch.isEmpty,
+              let url = URL(string: "\(config.endpoint)/v1/batch") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("ios", forHTTPHeaderField: "X-Aether-SDK")
+        request.timeoutInterval = 10.0
+
+        let encodedBatch = batch.map { try? JSONEncoder().encode($0) }
+            .compactMap { $0 }
+            .map { try? JSONSerialization.jsonObject(with: $0) }
+            .compactMap { $0 }
+        let payload: [String: Any] = ["batch": encodedBatch, "sentAt": ISO8601DateFormatter().string(from: Date())]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+
+            if error == nil, statusCode >= 200, statusCode < 300 {
+                // Acknowledged: remove exactly the events the server accepted.
+                self.acknowledge(batch)
+                self.emitBatchHealth(sentCount: batch.count, responseBody: data)
+            } else if statusCode == 429 || statusCode >= 500 || statusCode == 408 || statusCode == 425 || error != nil {
+                // Transient / network: retain the batch for the next flush.
+                if retryCount < maxRetries {
+                    let retryAfter = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After")
+                        .flatMap { Double($0) } ?? min(pow(2.0, Double(retryCount)), 30.0)
+                    DispatchQueue.global().asyncAfter(deadline: .now() + retryAfter) {
+                        self.sendDurableAckBatch(batch: batch, config: config, retryCount: retryCount + 1)
+                    }
+                } else {
+                    self.log("Durable batch retained after \(maxRetries) retries (status \(statusCode))")
+                }
+            } else {
+                // Terminal client error (>= 400): the server rejects permanently.
+                self.acknowledge(batch)
+                self.healthAgent?.recordDroppedEvents(batch.count)
+                self.log("Durable batch rejected (client error \(statusCode)) — not retrying")
+            }
+        }.resume()
     }
 
     private func sendBatchWithRetry(batch: [AetherEvent], config: AetherConfig, retryCount: Int) {
@@ -2654,7 +2855,9 @@ public final class Aether: NSObject {
             timezone: TimeZone.current.identifier,
             utcOffsetMinutes: TimeZone.current.secondsFromGMT(for: eventDate) / 60,
             timeZoneSource: "device",
-            clockSource: "device"
+            clockSource: "device",
+            // Source-native correlation rides on every event (WS-C / #12).
+            correlation: self.sourceCorrelation
         )
     }
 
@@ -2879,7 +3082,13 @@ public final class Aether: NSObject {
             guard !resolvedAnonymousId.isEmpty, resolvedAnonymousId != self.anonymousId else { return }
 
             self.serialQueue.async {
-                if let uid = resolvedUserId {
+                // WS-C / Invariant #4: in subject-hints-only mode the SDK stops
+                // re-stamping the resolved canonical user id into its persisted
+                // identity (no client-side canonical restamp); the backend
+                // resolves identity from the source-asserted hints. Legacy mode
+                // keeps the re-stamp.
+                let hintsOnly = self.config?.subjectHintsOnly ?? false
+                if !hintsOnly, let uid = resolvedUserId {
                     self.userId = uid
                     self.defaults.set(uid, forKey: "userId")
                 }

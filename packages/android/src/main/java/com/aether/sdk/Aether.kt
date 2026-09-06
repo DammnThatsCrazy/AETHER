@@ -14,16 +14,24 @@ import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.SystemClock
 import android.provider.Settings
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import android.util.Log
 import androidx.lifecycle.*
 import kotlinx.coroutines.*
+import kotlin.jvm.Volatile
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.KeyStore
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 
 // =============================================================================
 // CONFIGURATION
@@ -45,9 +53,45 @@ data class AetherConfig(
      */
     val manifestVerificationKey: String? = null,
     val autoResumeJourney: Boolean = true,
-    val onJourneyResumed: ((resolvedAnonymousId: String, resolvedUserId: String?) -> Unit)? = null
+    val onJourneyResumed: ((resolvedAnonymousId: String, resolvedUserId: String?) -> Unit)? = null,
+    // Native identity -> subject-hints convergence (WS-C / Invariant #4).
+    // Default OFF = legacy behavior: after /sdk/identity/resolve the SDK
+    // re-stamps the resolved canonical user id into its persisted identity.
+    // When ON the SDK no longer re-stamps a canonical user id client-side (the
+    // backend resolves identity from the source-asserted subject hints it
+    // carries); the resolved id is still reported inside journey_resumed.
+    val subjectHintsOnly: Boolean = false,
+    // Durable encrypted queue with ack semantics (WS-C row 12). Default OFF =
+    // legacy delete-before-ack queue persisted as a plaintext JSON file. When
+    // ON the persisted queue file is AES-GCM encrypted with a key held in the
+    // Android Keystore, and events are only removed after the server
+    // acknowledges the batch (2xx), preserving order and idempotency.
+    val encryptedDurableQueue: Boolean = false
 ) {
     enum class Environment { PRODUCTION, STAGING, DEVELOPMENT }
+}
+
+/**
+ * Source-native correlation context (WS-C / Invariant #12). Mirrors the A-side
+ * CorrelationContext tuple in packages/shared/events.ts (camelCase). The
+ * backend Envelope-B correlation block is additive: source-native values are
+ * never overwritten during normalization, and the optional parentObservationId
+ * is carried end-to-end into parent_observation_id.
+ */
+data class CorrelationContext(
+    val correlationId: String? = null,
+    val causationId: String? = null,
+    val traceId: String? = null,
+    val spanId: String? = null,
+    val parentObservationId: String? = null,
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        correlationId?.let { put("correlationId", it) }
+        causationId?.let { put("causationId", it) }
+        traceId?.let { put("traceId", it) }
+        spanId?.let { put("spanId", it) }
+        parentObservationId?.let { put("parentObservationId", it) }
+    }
 }
 
 data class ModuleConfig(
@@ -156,8 +200,16 @@ object Aether : DefaultLifecycleObserver {
     private var flushJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    // Source-native correlation stamped on every outgoing event's
+    // context.correlation (WS-C / Invariant #12). Thread-safety: guarded by the
+    // Dispatchers.IO scope writes and reads on the same IO dispatcher.
+    @Volatile
+    private var sourceCorrelation: CorrelationContext? = null
+
     private const val MAX_QUEUE_SIZE = 1000
     private const val QUEUE_FORMAT_VERSION = 1
+    private const val QUEUE_CIPHER_MAGIC = "AETHERQ1"
+    private const val QUEUE_KEY_ALIAS = "com.aether.sdk.queue.aes-gcm-v1"
     private const val SESSION_TIMEOUT_MS = 30 * 60 * 1000L // 30 min
 
     private var healthAgent: AetherHealthAgent? = null
@@ -894,6 +946,15 @@ object Aether : DefaultLifecycleObserver {
     fun getUserId(): String? = userId
     fun getFingerprintId(): String = fingerprintId
 
+    /**
+     * Stamp source-native correlation context on every outgoing event's
+     * context.correlation (WS-C / Invariant #12). Values are carried verbatim
+     * and never overwritten by the backend normalization. Pass null to clear.
+     */
+    fun setCorrelationContext(correlation: CorrelationContext?) {
+        sourceCorrelation = correlation
+    }
+
     fun reset() {
         flush()
         flushJob?.cancel()
@@ -950,9 +1011,15 @@ object Aether : DefaultLifecycleObserver {
                 put("events", events)
             }
             val temp = file.resolveSibling(file.name + ".tmp")
-            temp.writeText(envelope.toString())
+            val serialized = envelope.toString().toByteArray(Charsets.UTF_8)
+            val out = if (encryptedDurableQueueEnabled()) {
+                encryptQueuePayload(serialized) ?: serialized
+            } else {
+                serialized
+            }
+            temp.writeBytes(out)
             if (!temp.renameTo(file)) {
-                file.writeText(temp.readText())
+                file.writeBytes(out)
                 temp.delete()
             }
         } catch (error: Exception) {
@@ -964,7 +1031,16 @@ object Aether : DefaultLifecycleObserver {
         val file = queueFile() ?: return
         if (!file.exists()) return
         try {
-            val text = file.readText()
+            val bytes = file.readBytes()
+            val text = if (hasQueueCipherMagic(bytes)) {
+                val decrypted = decryptQueuePayload(bytes)
+                    ?: throw IllegalStateException("durable queue decryption failed")
+                String(decrypted, Charsets.UTF_8)
+            } else {
+                // Legacy plaintext file (written before the encrypted flag) is
+                // accepted as-is — upgrade path when the flag was just enabled.
+                String(bytes, Charsets.UTF_8)
+            }
             val events = if (text.trimStart().startsWith("[")) {
                 JSONArray(text) // v0 compatibility
             } else {
@@ -1000,6 +1076,95 @@ object Aether : DefaultLifecycleObserver {
     }
 
     private fun clearPersistedQueue() { queueFile()?.delete() }
+
+    // =========================================================================
+    // ENCRYPTED DURABLE QUEUE WITH ACK SEMANTICS (WS-C row 12)
+    // Gated on AetherConfig.encryptedDurableQueue (default OFF). When ON the
+    // persisted queue file is AES-GCM encrypted with a 256-bit key held in the
+    // Android Keystore (never leaves secure hardware-backed storage), and events
+    // are removed only after the server acknowledges the batch (2xx) instead of
+    // the legacy delete-before-ack. The legacy plaintext format is still read
+    // (upgrade path) and ciphertext is self-describing via a magic prefix, so a
+    // flag flip in either direction never strands the queue.
+    // =========================================================================
+
+    private fun encryptedDurableQueueEnabled() = config?.encryptedDurableQueue == true
+
+    private fun hasQueueCipherMagic(bytes: ByteArray): Boolean {
+        if (bytes.size < QUEUE_CIPHER_MAGIC.length) return false
+        return String(bytes.copyOfRange(0, QUEUE_CIPHER_MAGIC.length), Charsets.UTF_8) == QUEUE_CIPHER_MAGIC
+    }
+
+    @Synchronized
+    private fun getOrCreateQueueCipherKey(): SecretKey? {
+        // Android Keystore AES-GCM requires API 23+; below that we fall back to
+        // the legacy plaintext file (documented in the manifest) rather than
+        // weakening the on-device guarantee silently on supported devices.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
+        return try {
+            val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            if (keyStore.containsAlias(QUEUE_KEY_ALIAS)) {
+                keyStore.getKey(QUEUE_KEY_ALIAS, null) as? SecretKey
+            } else {
+                val generator = KeyGenerator.getInstance(
+                    KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore"
+                )
+                generator.init(
+                    KeyGenParameterSpec.Builder(
+                        QUEUE_KEY_ALIAS,
+                        KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+                    )
+                        .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                        .setKeySize(256)
+                        .build()
+                )
+                generator.generateKey()
+            }
+        } catch (error: Exception) {
+            log("Failed to load/create queue cipher key: " + error.javaClass.simpleName)
+            null
+        }
+    }
+
+    private fun encryptQueuePayload(plain: ByteArray): ByteArray? {
+        val key = getOrCreateQueueCipherKey() ?: return null
+        return try {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, key)
+            val iv = cipher.iv
+            val ciphertext = cipher.doFinal(plain)
+            QUEUE_CIPHER_MAGIC.toByteArray(Charsets.UTF_8) + iv + ciphertext
+        } catch (error: Exception) {
+            log("Failed to encrypt durable queue: " + error.javaClass.simpleName)
+            null
+        }
+    }
+
+    private fun decryptQueuePayload(data: ByteArray): ByteArray? {
+        val key = getOrCreateQueueCipherKey() ?: return null
+        return try {
+            val magic = QUEUE_CIPHER_MAGIC.toByteArray(Charsets.UTF_8)
+            val iv = data.copyOfRange(magic.size, magic.size + 12)
+            val ciphertext = data.copyOfRange(magic.size + 12, data.size)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
+            cipher.doFinal(ciphertext)
+        } catch (error: Exception) {
+            log("Failed to decrypt durable queue: " + error.javaClass.simpleName)
+            null
+        }
+    }
+
+    /** Remove acknowledged events (by id) from the queue and persist. */
+    private fun acknowledge(batch: List<JSONObject>) {
+        val acked = batch.mapNotNull { id ->
+            it.optString("id").takeIf { s -> s.isNotEmpty() }
+        }.toSet()
+        if (acked.isEmpty()) return
+        eventQueue.removeIf { it.optString("id") in acked }
+        persistQueue()
+    }
 
     // =========================================================================
     // DEEP-LINK & INSTALL ATTRIBUTION
@@ -1751,6 +1916,15 @@ object Aether : DefaultLifecycleObserver {
         val cfg = config ?: return@withContext
         if (eventQueue.isEmpty()) return@withContext
 
+        if (encryptedDurableQueueEnabled()) {
+            // Durable ack mode (WS-C row 12): events stay queued until the
+            // server acknowledges the batch (2xx) — never delete-before-ack.
+            val durableBatch = eventQueue.toList().take(minOf(cfg.batchSize, eventQueue.size))
+            if (durableBatch.isEmpty()) return@withContext
+            sendBatchDurableAck(durableBatch, cfg, retryCount = 0)
+            return@withContext
+        }
+
         val batch = mutableListOf<JSONObject>()
         repeat(minOf(cfg.batchSize, eventQueue.size)) {
             eventQueue.poll()?.let { batch.add(it) }
@@ -1759,6 +1933,97 @@ object Aether : DefaultLifecycleObserver {
         persistQueue()
 
         sendBatchWithRetry(batch, cfg, retryCount = 0)
+    }
+
+    /**
+     * Durable ack-mode batch sender. Unlike the legacy delete-before-ack path,
+     * the batch is NOT removed from the queue before the request completes. A
+     * 2xx response acknowledges the batch (events removed by id, preserving
+     * order); transient/network failures retain the events for the next flush;
+     * terminal client errors (>= 400) are acknowledged-removed as permanently
+     * rejected (the server will not accept them on retry). Because the request
+     * is idempotent server-side (per-event id), overlapping flushes/retries
+     * cannot create duplicate durable facts.
+     */
+    private suspend fun sendBatchDurableAck(
+        batch: List<JSONObject>,
+        cfg: AetherConfig,
+        retryCount: Int,
+    ): Unit = withContext(Dispatchers.IO) {
+        val maxRetries = 3
+        try {
+            val url = URL("${cfg.endpoint}/v1/batch")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("Authorization", "Bearer ${cfg.apiKey}")
+            connection.setRequestProperty("X-Aether-SDK", "android")
+            connection.doOutput = true
+            connection.connectTimeout = 10000
+            connection.readTimeout = 10000
+
+            val payload = JSONObject().apply {
+                put("batch", JSONArray(batch))
+                put("sentAt", dateFormat.format(Date()))
+            }
+
+            val sendStart = System.currentTimeMillis()
+            connection.outputStream.use { it.write(payload.toString().toByteArray()) }
+            val responseCode = connection.responseCode
+            val latencyMs = (System.currentTimeMillis() - sendStart).toDouble()
+            val responseBody = if (responseCode in 200..299) {
+                try { connection.inputStream.bufferedReader().readText() } catch (_: Exception) { "" }
+            } else ""
+            connection.disconnect()
+
+            when {
+                responseCode in 200..299 -> {
+                    healthAgent?.recordBatchAttempt(true, latencyMs)
+                    acknowledge(batch)
+                    emitBatchHealth(batch.size, responseBody)
+                }
+                responseCode == 429 -> {
+                    val retryAfterSec = connection.getHeaderField("Retry-After")?.toLongOrNull() ?: 5L
+                    if (retryCount < maxRetries) {
+                        healthAgent?.recordRetry()
+                        delay(retryAfterSec * 1000)
+                        sendBatchDurableAck(batch, cfg, retryCount + 1)
+                    } else {
+                        healthAgent?.recordBatchAttempt(false, latencyMs)
+                        log("Durable batch retained after $maxRetries retries (rate limited)")
+                    }
+                }
+                responseCode == 408 || responseCode == 425 || responseCode >= 500 -> {
+                    if (retryCount < maxRetries) {
+                        healthAgent?.recordRetry()
+                        val backoff = minOf(1000L * (1L shl retryCount), 30000L)
+                        delay(backoff)
+                        sendBatchDurableAck(batch, cfg, retryCount + 1)
+                    } else {
+                        healthAgent?.recordBatchAttempt(false, latencyMs)
+                        log("Durable batch retained after $maxRetries retries (retryable error $responseCode)")
+                    }
+                }
+                responseCode >= 400 -> {
+                    healthAgent?.recordBatchAttempt(false, latencyMs)
+                    healthAgent?.recordDroppedEvents(batch.size)
+                    acknowledge(batch)
+                    log("Durable batch rejected (client error $responseCode) — not retrying")
+                }
+            }
+        } catch (e: Exception) {
+            log("Durable batch send failed: ${e.message}")
+            if (retryCount < maxRetries) {
+                healthAgent?.recordRetry()
+                val backoff = minOf(1000L * (1L shl retryCount), 30000L)
+                delay(backoff)
+                sendBatchDurableAck(batch, cfg, retryCount + 1)
+            } else {
+                healthAgent?.recordBatchAttempt(false, 0.0)
+                // Retained (never removed) for a later flush cycle.
+                log("Durable batch retained after $maxRetries retries (transport failure)")
+            }
+        }
     }
 
     private suspend fun sendBatchWithRetry(
@@ -1956,6 +2221,8 @@ object Aether : DefaultLifecycleObserver {
         put("sequence", JSONObject().apply {
             put("event", eventSequence)
         })
+        // Source-native correlation rides on every event (WS-C / #12).
+        sourceCorrelation?.let { put("correlation", it.toJson()) }
     }
 
     private fun loadOrCreateAnonymousId(): String {
@@ -2170,7 +2437,16 @@ object Aether : DefaultLifecycleObserver {
 
             if (resolvedAnonymousId.isEmpty() || resolvedAnonymousId == anonymousId) return@withContext
 
-            resolvedUserId?.let { uid -> this@Aether.userId = uid; prefs?.edit()?.putString("userId", uid)?.apply() }
+            // WS-C / Invariant #4: in subject-hints-only mode the SDK stops
+            // re-stamping the resolved canonical user id into its persisted
+            // identity (no client-side canonical restamp); the backend resolves
+            // identity from the source-asserted hints. Legacy mode keeps it.
+            if (config?.subjectHintsOnly != true) {
+                resolvedUserId?.let { uid ->
+                    this@Aether.userId = uid
+                    prefs?.edit()?.putString("userId", uid)?.apply()
+                }
+            }
             enqueueEvent("journey_resumed", mapOf(
                 "resolvedAnonymousId" to resolvedAnonymousId,
                 "resolvedUserId" to (resolvedUserId ?: "")
