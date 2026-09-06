@@ -7,11 +7,24 @@ before any durable write or publish.
 Consent-class model shared by the WS-B3 ingress paths (``evaluate_ingress_decision``):
   - **S** = per-subject server receipt (``services.consent.authority.evaluate_consent``).
   - **C** = credential/connection-class (install/config is the grant; no per-subject
-    lookup unless resolvable). Connector/payment/provider are C with an S check only
-    when subject+purpose are both resolvable AND the authoritative flag is on.
+    lookup unless a purpose resolves AND the authoritative flag is on).
   - **T** = tenant-server/back-office (tenant attests rights; data-policy + scrub only).
     API feeds and imports are T.
 Batch = S (``validate_event``). Feeds/imports = T. Connector/comm/payment/provider = C.
+
+WS-B3 rule applied by every seam (see ``evaluate_ingress_decision``):
+  * the MANDATORY minimization layer -- scrub of sensitive values, strip of
+    client-asserted canonical entity ids, and T-class tenant data-policy removal
+    of fingerprinting -- runs UNCONDITIONALLY on every path (default ON; never
+    behind a per-path flag). Scrub never rejects and data-policy is
+    default-allow, so this layer closes the Invariant #9 gap without new denials;
+  * the per-subject (S) SERVER-receipt rejection is the ONLY per-path toggle. It
+    applies when a purpose is present under the authoritative flag; it is
+    fail-closed like ``validate_event`` -- ``evaluate_consent`` returns
+    ``consent_receipt_missing`` for an event with no resolvable subject/anonymous
+    identifier, so an authoritative-ON, purposed, subject-less request is never
+    silently fail-opened to allowed. A caller that wants NO per-subject gate
+    supplies no purpose (C/T minimization), never a subject-less purpose.
 """
 
 from __future__ import annotations
@@ -483,10 +496,17 @@ async def evaluate_ingress_decision(
     the tuple of policy decisions (same dict vocabulary as ``validate_event``'s
     privacy_decisions).
 
-    Order mirrors ``validate_event``:
+    Order mirrors ``validate_event`` EXACTLY (so no ingress seam can diverge
+    from the /v1/batch path):
       1. request-privacy signals (GPC/DNT) suppress a supplied purpose;
-      2. when subject/purpose are both supplied → server consent receipt via
-         ``evaluate_consent`` under ``authoritative_consent_enforcement_enabled``;
+      2. when a purpose is supplied and
+         ``authoritative_consent_enforcement_enabled`` is ON → server consent
+         receipt via ``evaluate_consent`` UNCONDITIONALLY. ``evaluate_consent``
+         itself is fail-closed on an unresolvable subject: no subject/anonymous
+         identifier → ``consent_receipt_missing`` (absence of a server receipt
+         is NOT permission). A caller that wants to skip the per-subject (S)
+         gate entirely supplies NO purpose (T/C class), never a subject-less
+         purpose under the authoritative flag;
       3. when ``fingerprint_obj`` is supplied → classify + tenant data-policy
          (``evaluate_data_policy(tenant_id, "fingerprint")``).
     Reject reason codes reuse this module's ``REJECT_*`` constants and the
@@ -515,7 +535,12 @@ async def evaluate_ingress_decision(
 
         subject = (subject_id or "").strip() or None
         anon = (anonymous_id or "").strip() or None
-        if (subject or anon) and settings.consent_authority.authoritative_consent_enforcement_enabled:
+        # Mirror validate_event: under the authoritative flag the server receipt
+        # is consulted for EVERY purposed event. evaluate_consent denies
+        # (CONSENT_RECEIPT_MISSING) when no subject/anonymous identifier is
+        # resolvable, so an authoritative-ON, purposed, subject-less request is
+        # REJECTED — never silently fail-opened to allowed.
+        if settings.consent_authority.authoritative_consent_enforcement_enabled:
             allowed, reason_code = await evaluate_consent(
                 tenant_id=tenant_id,
                 subject_id=subject,
@@ -527,7 +552,7 @@ async def evaluate_ingress_decision(
                 "outcome": "allowed" if allowed else "denied",
                 "reason_code": reason_code,
                 "purpose": purpose,
-                "subject_resolvable": True,
+                "subject_resolvable": bool(subject or anon),
             })
             if not allowed:
                 metrics.increment(

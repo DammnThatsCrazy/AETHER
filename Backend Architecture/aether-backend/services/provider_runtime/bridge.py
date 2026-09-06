@@ -94,7 +94,13 @@ class EventBridge:
 
         Returns True when the event may be ingested. Scrub redacts sensitive
         values in ``data``/``context`` in place so the Bronze dump and the
-        publish both carry only scrubbed payloads. Never raises.
+        publish both carry only scrubbed payloads. Scrubbing is the MANDATORY
+        minimization layer and runs UNCONDITIONALLY — it is never gated by the
+        per-path flag (redaction never rejects). The shared ingress decision
+        runs for every event: tenant data-policy removal of fingerprinting
+        always, and the per-subject (S) server-receipt rejection only when the
+        provider S-gate is enabled AND the event resolves a purpose + a subject
+        under the authoritative flag. Never raises.
         """
         from config.settings import settings
         from services.ingestion.generated_registry import EVENT_CONSENT_PURPOSE
@@ -103,16 +109,21 @@ class EventBridge:
             scrub_sensitive_fields,
         )
 
-        if not settings.ingress_consent.provider_runtime_consent_enforcement_enabled:
-            return True
         event.data, _ = scrub_sensitive_fields(event.data or {})
         event.context, _ = scrub_sensitive_fields(event.context or {})
         subject = str(event.subject_id or "").strip() or None
+        purpose = EVENT_CONSENT_PURPOSE.get(event.event_type)
+        if not settings.ingress_consent.provider_runtime_consent_enforcement_enabled:
+            # S-class server-receipt escalation disabled for the provider-runtime
+            # path: fall back to the unconditional scrub + data-policy decision
+            # (no per-subject lookup or purpose gate; the event is processed
+            # under C/T minimization).
+            subject = purpose = None
         allowed, reason_code, _decisions = await evaluate_ingress_decision(
             tenant_id=tenant_id,
             subject_id=subject,
             anonymous_id=None,
-            purpose=EVENT_CONSENT_PURPOSE.get(event.event_type),
+            purpose=purpose,
             fingerprint_obj={"data": event.data, "context": event.context},
         )
         if not allowed:

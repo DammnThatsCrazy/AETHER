@@ -142,13 +142,17 @@ async def ingest_api_feed(
 
     received_at = utc_now().isoformat()
 
-    # WS-B3 ingress consent (T class): scrub sensitive values + strip any
-    # client-asserted canonical entity ids from the feed payload, then run the
-    # purpose-less data-policy decision before any durable Bronze write. When a
-    # caller ALSO declares subject+purpose (the optional APIFeedEvent fields),
-    # the same facade runs the per-subject (S) server-consent gate. Denials are
-    # 403s — the feed is idempotent, so reject-and-retry is correct (no
-    # quarantine). Flag defaults ON; scrubbing never rejects.
+    # WS-B3 ingress consent (T class). scrub_sensitive_fields + strip of any
+    # client-asserted canonical entity ids + the tenant data-policy decision are
+    # the MANDATORY T-class minimization layer and run UNCONDITIONALLY before any
+    # durable Bronze write — they are never gated by the per-path flag (scrub
+    # never rejects and data-policy is default-allow, so this is a pure
+    # convergence). Only the per-subject (S) server-receipt escalation is a
+    # per-path toggle: when a caller ALSO declares subject+purpose (the optional
+    # APIFeedEvent fields) AND the feed S-gate is enabled, the same facade runs
+    # the server-consent check (itself gated by the authoritative flag). Denials
+    # are 403s — the feed is idempotent, so reject-and-retry is correct (no
+    # quarantine).
     from config.settings import settings
     from services.ingestion.validation import (
         evaluate_ingress_decision,
@@ -157,28 +161,30 @@ async def ingest_api_feed(
         strip_canonical_entity_id,
     )
 
-    data = feed_event.data
-    if settings.ingress_consent.feed_ingress_consent_enforcement_enabled:
-        data, _ = scrub_sensitive_fields(data)
-        data = strip_canonical_entity_id(data)
-        purpose = (feed_event.purpose or "").strip() or None
-        subject = (feed_event.subject_id or "").strip() or None
-        anon = (feed_event.anonymous_id or "").strip() or None
-        allowed, reason_code, decisions = await evaluate_ingress_decision(
-            tenant_id=tenant.tenant_id,
-            subject_id=subject,
-            anonymous_id=anon,
-            purpose=purpose,
-            fingerprint_obj=data,
+    data, _ = scrub_sensitive_fields(feed_event.data)
+    data = strip_canonical_entity_id(data)
+    purpose = (feed_event.purpose or "").strip() or None
+    subject = (feed_event.subject_id or "").strip() or None
+    anon = (feed_event.anonymous_id or "").strip() or None
+    if not settings.ingress_consent.feed_ingress_consent_enforcement_enabled:
+        # S-class escalation disabled for the feed path: fall back to the
+        # unconditional T-class decision (data-policy only, no server-receipt).
+        purpose = subject = anon = None
+    allowed, reason_code, decisions = await evaluate_ingress_decision(
+        tenant_id=tenant.tenant_id,
+        subject_id=subject,
+        anonymous_id=anon,
+        purpose=purpose,
+        fingerprint_obj=data,
+    )
+    if not allowed:
+        metrics.increment(
+            "ingestion_feed_consent_blocked_total",
+            labels={"reason": reason_code or "unknown"},
         )
-        if not allowed:
-            metrics.increment(
-                "ingestion_feed_consent_blocked_total",
-                labels={"reason": reason_code or "unknown"},
-            )
-            raise ForbiddenError(
-                f"ingress_consent_denied:{format_ingress_rejection(reason_code, decisions)}"
-            )
+        raise ForbiddenError(
+            f"ingress_consent_denied:{format_ingress_rejection(reason_code, decisions)}"
+        )
 
     payload = {
         "source": feed_event.source,

@@ -173,35 +173,53 @@ def plan_graph(tenant_id: str, records: list[dict]) -> tuple[list[dict], list[di
     return list(vertices.values()), edges
 
 
+def _norm_column(name: Any) -> str:
+    """Normalize a column name for policy classification (lowercase, non-alnum
+    stripped) — mirrors the fingerprint classifier's key normalization."""
+    return re.sub(r"[^a-z0-9]", "", str(name or "").lower())
+
+
 async def _enforce_imports_consent_policy(
     tenant_id: str, fields: list[FieldMapping], staged_rows: list[dict]
 ) -> None:
-    """WS-B3 T-class commit gate (``imports_consent_policy_enabled``).
+    """WS-B3 T-class commit data-policy gate (mandatory, before any Bronze write).
 
     An import commit is a tenant back-office (T) attestation — the FSM approve
     transition is the consent gate — so there is deliberately NO per-subject
-    server-receipt lookup here. Enforcement instead is: (1) the caller scrubs
-    sensitive secret-key columns out of the Bronze payload copy before the
-    ``tenant_import`` write (scrub never rejects), and (2) this data-policy
-    check on the mapping's classified data classes, which runs BEFORE any
-    Bronze write so a denial fails the commit closed with no partial Bronze.
+    server-receipt lookup here. The mandatory T-class layer is scrub (the caller
+    applies it to every Bronze payload copy) PLUS this data-policy check, which
+    runs BEFORE any Bronze write so a denial fails the commit closed with no
+    partial Bronze. There is no per-path S toggle on the import path, so the
+    ``imports_consent_policy_enabled`` flag cannot be a bypass: if an operator
+    disables it the commit DENIES instead of ingesting with the policy layer
+    switched off.
 
-    Data classes are derived from the mapping source-column names (normalized:
-    lowercased, punctuation stripped) plus ``fingerprint`` whenever any staged
-    value column classifies as fingerprinting (default-deny). ``evaluate_data_policy``
-    is default-allow when no tenant compliance profile exists, so a tenant
-    without a profile only ever trips on fingerprinting.
+    Classification never trusts the client-supplied mapping ``source_column``
+    label in isolation:
+      * fingerprinting is detected from the ACTUAL staged column names (the
+        schema of the ingested rows), not mapping labels, and is default-deny;
+      * per-column data classes are only evaluated for a mapping source_column
+        that is PROVEN present among the real ingested columns. An empty or
+        phantom source_column (not resolvable against the staged data) is
+        DENIED by default (``mapping_source_column_unresolved``) rather than
+        skipped — a client cannot launder prohibited content under a label no
+        policy ever sees.
+    ``evaluate_data_policy`` is default-allow when no tenant compliance profile
+    exists, so a tenant without a profile only ever trips on fingerprinting.
     """
     from config.settings import settings
 
     if not settings.ingress_consent.imports_consent_policy_enabled:
-        return
+        # Fail closed: the mandatory T-class policy layer cannot be bypassed by
+        # disabling the flag (an import must never skip data-policy).
+        raise ConflictError("import_consent_policy_denied:enforcement_disabled")
     from services.consent.authority import evaluate_data_policy
     from services.ingestion.validation import classify_fingerprints
 
     denied: list[str] = []
 
-    # 1. Fingerprinting over the staged row values (key-based; values never kept).
+    # 1. Fingerprinting over the ACTUAL staged columns (schema/content, never
+    #    the mapping labels; values are never kept).
     fingerprint_seen = False
     for staged in staged_rows:
         for row in staged["rows"]:
@@ -215,11 +233,20 @@ async def _enforce_imports_consent_policy(
         if not allowed:
             denied.append(reason or "fingerprinting_not_authorized")
 
-    # 2. Tenant-prohibited data classes derived from mapping source columns.
+    # 2. Tenant-prohibited data classes. Only columns PROVEN present in the
+    #    staged data are classified; unresolved mapping source_columns deny by
+    #    default instead of being skipped.
+    real_columns = {
+        _norm_column(key)
+        for staged in staged_rows
+        for row in staged["rows"]
+        for key in row
+    }
     for fm in fields:
-        data_class = re.sub(r"[^a-z0-9]", "", str(fm.source_column or "").lower())
-        if not data_class:
-            continue  # no class to classify
+        data_class = _norm_column(fm.source_column)
+        if not data_class or data_class not in real_columns:
+            denied.append("mapping_source_column_unresolved")
+            continue
         allowed, reason = await evaluate_data_policy(tenant_id, data_class)
         if not allowed:
             denied.append(reason or "data_classification_denied")
@@ -284,23 +311,16 @@ async def _stage_and_mutate(
     # T-class data-policy gate before any durable write (no partial Bronze).
     await _enforce_imports_consent_policy(tenant_id, fields, staged_rows)
 
-    from config.settings import settings
-
-    scrub_bronze_payload = (
-        settings.ingress_consent.imports_consent_policy_enabled
-    )
-    if scrub_bronze_payload:
-        from services.ingestion.validation import scrub_sensitive_fields
+    # Scrub is the MANDATORY T-class minimization layer and runs UNCONDITIONALLY
+    # (redaction never rejects). It is applied to the Bronze payload copy ONLY:
+    # secret-key columns are redacted in what is persisted under tenant_import,
+    # while the graph-building records keep the governor-approved mapped values.
+    from services.ingestion.validation import scrub_sensitive_fields
 
     for staged in staged_rows:
         file_id = staged["file_id"]
         for idx, row in enumerate(staged["rows"]):
-            # Scrub is applied to the Bronze payload copy ONLY: secret-key
-            # columns are redacted in what is persisted under tenant_import,
-            # while the graph-building records keep the approved mapped values.
-            payload = row
-            if scrub_bronze_payload:
-                payload, _ = scrub_sensitive_fields(row)
+            payload, _ = scrub_sensitive_fields(row)
             _rec, is_new = await bronze.ingest(
                 source=BRONZE_DOMAIN,
                 source_tag=commit_id,

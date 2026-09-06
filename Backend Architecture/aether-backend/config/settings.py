@@ -794,55 +794,58 @@ class ConsentAuthorityConfig:
 # ---------------------------------------------------------------------------
 # Ingress consent-on-every-path (WS-B3) — per-seam controls for the non-batch
 # ingestion paths. Each path is classified S / C / T (module docstring of
-# services/ingestion/validation.py):
-#   - feed (T): tenant back-office attestation; data-policy + scrub only.
-#   - connector/comm (C): scrub + data-policy removal default ON; a per-subject
-#     (S) rejection ALSO requires the authoritative server-receipt flag AND a
-#     subject-resolvable event, so a connector that never populated receipts is
-#     never fail-closed on them (degrade-safe).
-#   - provider runtime (C): scrub + data-policy default ON; the S gate requires
-#     the authoritative flag AND a resolvable subject.
-#   - imports (T): scrub secret-key columns on staged rows + data-policy check.
-#   - payment rails (C): ingress value-redaction before reconciliation writes.
+# services/ingestion/validation.py).
 #
-# Rationale for the defaults: scrubbing + data-policy REMOVAL of an active
-# Invariant #9 violation (fingerprinting / prohibited data classes) defaults ON
-# for every path because services.consent.authority.evaluate_data_policy is
-# default-allow (a prohibition needs an explicit tenant compliance profile) and
-# scrubbing never rejects. Per-subject SERVER-receipt (S) rejection defaults are
-# gated on settings.consent_authority.authoritative_consent_enforcement_enabled
-# (ON in staging/production) so a path is never fail-closed on receipts the
-# channel never populated. Explicit env vars always win per flag.
+# WS-B3 rule: every path runs the MANDATORY minimization layer UNCONDITIONALLY
+# (default ON, never gated by these flags) — scrub of sensitive values, strip of
+# client-asserted canonical entity ids, and T-class tenant data-policy removal.
+# That layer is a pure convergence (scrub never rejects and
+# services.consent.authority.evaluate_data_policy is default-allow — a
+# prohibition needs an explicit tenant compliance profile), so closing the
+# Invariant #9 gap cannot be switched off. Each flag below authorizes ONLY the
+# per-subject (S) SERVER-receipt rejection for its path; an S toggle OFF degrades
+# the path to the mandatory scrub/data-policy layer (no per-subject lookup).
+# Disabling a T-class flag cannot bypass its mandatory layer either: the import
+# flag's OFF state DENIES the commit (fail closed). The authoritative receipt
+# check is additionally gated on
+# settings.consent_authority.authoritative_consent_enforcement_enabled (ON in
+# staging/production). Explicit env vars always win per flag.
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class IngressConsentConfig:
-    # T class — API feed (POST /v1/ingest/feed): scrub + strip client-asserted
-    # canonical entity ids + data-policy before the durable Bronze write.
+    # T class — API feed (POST /v1/ingest/feed): mandatory scrub + strip + data-
+    # policy always run; the flag enables the optional per-subject escalation
+    # declared via APIFeedEvent.subject_id/anonymous_id/purpose.
     feed_ingress_consent_enforcement_enabled: bool = _env_bool(
         "FEED_INGRESS_CONSENT_ENFORCEMENT_ENABLED", True
     )
     # C class — connector/communication durability seam (services/comms/ingest):
-    # scrub + policy ON; the S rejection additionally requires the authoritative
-    # flag AND a subject-resolvable event.
+    # scrub + data-policy always run; the flag enables the per-subject (S)
+    # server-receipt rejection (additionally gated by the authoritative flag AND
+    # a subject-resolvable event).
     connector_comms_consent_enforcement_enabled: bool = _env_bool(
         "CONNECTOR_COMMS_CONSENT_ENFORCEMENT_ENABLED", True
     )
     # C class — payment-rails webhook ingress value redaction before
     # reconciliation writes (the existing domain _consent_permits_session gate
-    # is untouched).
+    # is untouched). Scrub-only seam; redaction is unconditional when enabled.
     payment_rails_ingress_scrub_enabled: bool = _env_bool(
         "PAYMENT_RAILS_INGRESS_SCRUB_ENABLED", True
     )
     # C class — provider runtime event bridge (services/provider_runtime/bridge):
-    # scrub + policy ON; the S rejection additionally requires the authoritative
-    # flag AND a resolvable subject.
+    # scrub + data-policy always run; the flag enables the per-subject (S)
+    # server-receipt rejection (additionally gated by the authoritative flag AND
+    # a resolvable subject).
     provider_runtime_consent_enforcement_enabled: bool = _env_bool(
         "PROVIDER_RUNTIME_CONSENT_ENFORCEMENT_ENABLED", True
     )
-    # T class — import engine commit seam (services/imports/commit): scrub
-    # secret-key columns on staged rows + data-policy for the mapping's data
-    # classes before any Bronze('tenant_import') write.
+    # T class — import engine commit seam (services/imports/commit): scrub of
+    # secret-key columns on staged rows + the data-policy gate are the MANDATORY
+    # T-class layer and run unconditionally BEFORE any Bronze('tenant_import')
+    # write. There is no per-path S toggle on the import path, so disabling this
+    # flag cannot bypass the policy layer: OFF DENIES the commit (fail closed)
+    # instead of ingesting without data-policy.
     imports_consent_policy_enabled: bool = _env_bool(
         "IMPORTS_CONSENT_POLICY_ENABLED", True
     )
