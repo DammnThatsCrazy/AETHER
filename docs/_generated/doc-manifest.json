@@ -3929,6 +3929,19 @@
       "since_version": "9.0.0"
     },
     {
+      "path": "docs/architecture/RECONCILED_CONTROL_PLANE.md",
+      "title": "Reconciled Control Plane — Architecture (§0–40 lane)",
+      "slug": "architecture/reconciled-control-plane",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0"
+    },
+    {
       "path": "docs/architecture/RELIABILITY-PHASE-2-PROGRAM.md",
       "title": "Aether Reliability Phase 2 — Architectural Programs",
       "slug": "architecture/reliability-phase-2-program",
@@ -5497,6 +5510,21 @@
       "canonical_owner": "backend@aether"
     },
     {
+      "path": "docs/plans/RECONCILED_CONTROL_PHASES.md",
+      "title": "Reconciled Control Plane — Phases",
+      "slug": "plans/reconciled-control-phases",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "canonical_owner": "backend@aether"
+    },
+    {
       "path": "docs/plans/RISK_FRAUD_360_PHASES.md",
       "title": "Risk360 + Fraud360 — Phased Convergence Program",
       "slug": "plans/risk-fraud-360-phases",
@@ -5987,6 +6015,21 @@
         "exec"
       ],
       "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/reconciled-control-plane/EXECUTION_STATE.md",
+      "title": "Execution State — Reconciled Control Plane (Phases 0–4)",
+      "slug": "productization/reconciled-control-plane/execution-state",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "experimental",
       "since_version": "8.12.0",
       "canonical_owner": "platform@aether"
     },

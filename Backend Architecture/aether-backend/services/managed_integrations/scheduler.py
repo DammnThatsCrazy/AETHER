@@ -40,6 +40,8 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional
 
+from shared.temporal.instant import coerce_utc_lenient
+
 if TYPE_CHECKING:
     from services.managed_integrations.contracts import (
         DesiredStateSpec,
@@ -57,10 +59,15 @@ def _utc_now() -> datetime:
 
 
 def _as_utc(instant: datetime) -> datetime:
-    """Normalize an instant for comparisons (naive instants assume UTC)."""
-    if instant.tzinfo is None:
-        return instant.replace(tzinfo=timezone.utc)
-    return instant
+    """Normalize an instant for comparisons (naive instants assume UTC).
+
+    Delegates to the temporal kernel: ``coerce_utc_lenient`` is the sanctioned
+    home of the assume-UTC-on-naive policy (temporal-integrity gate), so the
+    replace-with-tz logic lives there, not here.
+    """
+    coerced = coerce_utc_lenient(instant)
+    assert coerced is not None  # a datetime input always coerces
+    return coerced
 
 
 def _parse_last_reconcile_at(raw: Any) -> Optional[datetime]:
@@ -68,16 +75,12 @@ def _parse_last_reconcile_at(raw: Any) -> Optional[datetime]:
 
     Mirrors the registration store's ``_parse_ts`` handling of TIMESTAMPTZ:
     in-memory rows store ``isoformat()`` strings; an unparseable value is
-    treated as never-reconciled (stale), never as fresh.
+    treated as never-reconciled (stale), never as fresh. Parsing + naive-input
+    policy come from the temporal kernel (``coerce_utc_lenient``).
     """
     if raw is None or isinstance(raw, bool):
         return None
-    if isinstance(raw, datetime):
-        return _as_utc(raw)
-    try:
-        return _as_utc(datetime.fromisoformat(str(raw).replace("Z", "+00:00")))
-    except (TypeError, ValueError):
-        return None
+    return coerce_utc_lenient(raw)
 
 
 def _is_fresh(now: datetime, raw_last_reconcile_at: Any, window_seconds: int) -> bool:

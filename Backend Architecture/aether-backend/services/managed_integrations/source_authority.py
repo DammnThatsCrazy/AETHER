@@ -40,6 +40,7 @@ from services.managed_integrations.source_authority_repository import (
     get_observation_equivalence_key_repository,
     get_source_authority_rule_repository,
 )
+from shared.temporal.instant import coerce_utc_lenient
 
 # Normalization rules supported by §9.2 equivalence keys. Applied in listed
 # order, string values only:
@@ -58,17 +59,12 @@ _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
 def _parse_ts(raw: Any) -> Optional[datetime]:
-    """Lenient instant parse that assumes UTC for naive input (mirrors
-    ``shared/temporal/instant.py`` coercion policy)."""
+    """Lenient instant parse that assumes UTC for naive input. Delegated to the
+    temporal kernel — ``coerce_utc_lenient`` is the sanctioned home of the
+    assume-UTC-on-naive policy (temporal-integrity gate)."""
     if raw is None or isinstance(raw, bool):
         return None
-    if isinstance(raw, datetime):
-        return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
-    try:
-        parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
-    except (TypeError, ValueError):
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return coerce_utc_lenient(raw)
 
 
 def _obs_instant(observed_at: Any) -> datetime:
