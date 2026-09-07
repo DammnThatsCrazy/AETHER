@@ -24,9 +24,9 @@ const item = (partial: Partial<TenantIntegrationItem>): TenantIntegrationItem =>
   ...partial,
 });
 
-function renderSection() {
+function renderSection(initialPath = '/') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialPath]}>
       <IntegrationsSection />
     </MemoryRouter>,
   );
@@ -203,6 +203,71 @@ describe('Settings → Integrations section', () => {
     const adRow = screen.getByText('Google Ads').closest('[data-provider-family="google_ads"]');
     expect(adRow).not.toBeNull();
     const adLink = within(adRow as HTMLElement).getByRole('link', { name: 'Manage' });
+    expect(adLink).toHaveAttribute(
+      'href',
+      '/campaign-intelligence/sources?connect=google_ads&return=%2Fsettings%2Fintegrations',
+    );
+  });
+
+  it('forwards a validated incoming return target through the ad connect deep link (reconciled bridge)', () => {
+    useTenantIntegrations.mockReturnValue({
+      data: {
+        tenant_id: 't1',
+        count: 1,
+        items: [
+          item({
+            id: 'google_ads',
+            family: 'google_ads',
+            display_name: 'Google Ads',
+            experience_category: 'advertising_campaigns',
+            connected: false,
+            enabled: false,
+            secret_configured: false,
+          }),
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    // The tenant reached Settings from the Campaign Sources empty state, which
+    // deep-links back here with ?return=<the sources list>. The ad connect deep
+    // link forwards that target so the round trip completes where it started.
+    renderSection('/settings/integrations?return=/campaign-intelligence/sources');
+    const adRow = screen.getByText('Google Ads').closest('[data-provider-family="google_ads"]');
+    expect(adRow).not.toBeNull();
+    const adLink = within(adRow as HTMLElement).getByRole('link', { name: 'Connect' });
+    expect(adLink).toHaveAttribute(
+      'href',
+      '/campaign-intelligence/sources?connect=google_ads&return=%2Fcampaign-intelligence%2Fsources',
+    );
+  });
+
+  it('never forwards an off-origin return target — falls back to the Settings default', () => {
+    useTenantIntegrations.mockReturnValue({
+      data: {
+        tenant_id: 't1',
+        count: 1,
+        items: [
+          item({
+            id: 'google_ads',
+            family: 'google_ads',
+            display_name: 'Google Ads',
+            experience_category: 'advertising_campaigns',
+            connected: false,
+            enabled: false,
+            secret_configured: false,
+          }),
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    renderSection('/settings/integrations?return=https%3A%2F%2Fevil.example%2Fphish');
+    const adRow = screen.getByText('Google Ads').closest('[data-provider-family="google_ads"]');
+    expect(adRow).not.toBeNull();
+    const adLink = within(adRow as HTMLElement).getByRole('link', { name: 'Connect' });
     expect(adLink).toHaveAttribute(
       'href',
       '/campaign-intelligence/sources?connect=google_ads&return=%2Fsettings%2Fintegrations',

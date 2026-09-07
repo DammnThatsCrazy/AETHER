@@ -1062,16 +1062,14 @@ are flag-gated OFF by default; the section is **not** client-feature-flagged —
 it is capability-gated by the backend and self-reports a not-enabled state,
 consistent with the runtime data-truth contract.
 
-**Route + placement.** `/settings/data-exchange` was added to
-`frontend/aether/src/app/router.tsx` (lazy-loads the nested settings shell,
-`SettingsPage`, as the other `/settings/*` routes do). The shell's integration
-point is the `DataExchangeGate` from
-`frontend/aether/src/pages/settings/data-exchange-section.tsx`, mounted
-persistently at the foot of the shell beneath the settings sub-nav on every
-`/settings/*` tab — it is **not** a `SETTINGS_NAV` section. The shell's sub-nav
-resolver does not map `/settings/data-exchange` to a dedicated section, so
-visiting that route renders the default API Keys section with the Data Exchange
-card mounted below it. The gate is capability-gated on the backend-published
+**Route + placement.** `/settings/data-exchange` is a first-class
+`SETTINGS_NAV` section in the nested settings shell (router.tsx lazy-loads
+`SettingsPage` for it, as for every `/settings/*` route). The shell renders the
+section body through the `DataExchangeGate` from
+`frontend/aether/src/pages/settings/data-exchange-section.tsx` when the
+resolver maps the URL to the `data-exchange` section — it is **not** mounted as
+a persistent footer under every `/settings/*` tab. The gate is
+capability-gated on the backend-published
 `feature_flags.data_exchange_enabled`: while off it renders the not-enabled
 EmptyState and never mounts the full `DataExchangeSection` (its data fetches
 never fire on a disabled plane); when on it mounts the section.

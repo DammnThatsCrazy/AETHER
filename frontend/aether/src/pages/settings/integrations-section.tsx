@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   Badge,
   Button,
@@ -12,6 +12,7 @@ import {
 } from '@aether/ui';
 import { useTenantIntegrations } from '@aether-app/features/integrations';
 import type { TenantIntegrationItem } from '@aether-app/features/integrations';
+import { isWorkspaceDestination } from '@aether-app/features/workspace/last-workspace';
 import {
   catalogBaselineCaption,
   groupByExperienceCategory,
@@ -23,14 +24,30 @@ import {
 const CONNECT_MANAGER_ROUTE = '/settings/integrations/connectors';
 /** Advertising-family rows route into the dedicated ad connect flow instead. */
 const AD_SOURCES_ROUTE = '/campaign-intelligence/sources';
-const AD_SOURCES_RETURN = encodeURIComponent('/settings/integrations');
+/** Default return target after a Settings-initiated ad connect completes. */
+const DEFAULT_AD_RETURN = '/settings/integrations';
+
+/**
+ * The return target an advertising connect should navigate to on completion.
+ * When the tenant reached this Settings section carrying a ``?return=`` param
+ * (the Campaign Sources empty state deep-links back here), that target is
+ * forwarded through the ad connect deep link so the round trip completes where
+ * the tenant started. A raw query param is untrusted, so only a clean internal
+ * workspace path is forwarded; otherwise the connect returns here.
+ */
+function resolveAdReturnTarget(search: string): string {
+  const raw = new URLSearchParams(search).get('return');
+  return raw !== null && isWorkspaceDestination(raw) ? raw : DEFAULT_AD_RETURN;
+}
 
 function IntegrationRow({ item }: { readonly item: TenantIntegrationItem }) {
+  const location = useLocation();
   const timeCtx = useTimeContext();
   const status = tenantConnectionStatus(item);
   const stateToken = tenantConnectionStateToken(item);
   const baseline = catalogBaselineCaption(item.readiness?.state);
   const isAdvertising = item.experience_category === 'advertising_campaigns';
+  const adReturnTarget = resolveAdReturnTarget(location.search);
 
   return (
     <div
@@ -72,7 +89,7 @@ function IntegrationRow({ item }: { readonly item: TenantIntegrationItem }) {
         {isAdvertising ? (
           <Button asChild size="sm" variant="secondary">
             <Link
-              to={`${AD_SOURCES_ROUTE}?connect=${encodeURIComponent(item.family)}&return=${AD_SOURCES_RETURN}`}
+              to={`${AD_SOURCES_ROUTE}?connect=${encodeURIComponent(item.family)}&return=${encodeURIComponent(adReturnTarget)}`}
             >
               {stateToken === 'not_connected' ? 'Connect' : 'Manage'}
             </Link>

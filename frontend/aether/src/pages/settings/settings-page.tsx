@@ -15,6 +15,7 @@ type SettingsSection =
   | 'sdk-fleet'
   | 'notifications'
   | 'notification-preferences'
+  | 'data-exchange'
   | 'webhooks';
 
 interface SettingsNavItem {
@@ -27,19 +28,23 @@ interface SettingsNavItem {
 
 // Settings is a nested shell: a consistent sub-nav over the campaign-agnostic
 // areas that historically stacked on one long page. /settings remains the API
-// Keys index; the rest are split into their own /settings/* sections.
-const SETTINGS_NAV: readonly SettingsNavItem[] = [
+// Keys index; the rest are split into their own /settings/* sections. Data
+// Exchange is a first-class section (capability-gated by DataExchangeGate), not
+// a persistent footer under every tab.
+export const SETTINGS_NAV: readonly SettingsNavItem[] = [
   { section: 'api-keys', to: '/settings', label: 'API Keys', end: true },
   { section: 'integrations', to: '/settings/integrations', label: 'Integrations' },
+  { section: 'data-exchange', to: '/settings/data-exchange', label: 'Data Exchange' },
   { section: 'sdk-fleet', to: '/settings/sdk-fleet', label: 'SDK Fleet' },
   { section: 'notifications', to: '/settings/notifications', label: 'Notifications' },
   { section: 'notification-preferences', to: '/settings/notification-preferences', label: 'Notification Preferences' },
   { section: 'webhooks', to: '/settings/webhooks', label: 'Webhooks' },
 ];
 
-function resolveSettingsSection(pathname: string): SettingsSection {
+export function resolveSettingsSection(pathname: string): SettingsSection {
   if (pathname === '/settings' || pathname.startsWith('/settings/api-keys')) return 'api-keys';
   if (pathname.startsWith('/settings/integrations')) return 'integrations';
+  if (pathname.startsWith('/settings/data-exchange')) return 'data-exchange';
   if (pathname.startsWith('/settings/sdk-fleet')) return 'sdk-fleet';
   if (pathname.startsWith('/settings/notifications')) return 'notifications';
   if (pathname.startsWith('/settings/notification-preferences')) return 'notification-preferences';
@@ -82,14 +87,11 @@ export function SettingsPage() {
       <div className="max-w-3xl">
         {section === 'api-keys' && <ApiKeysSection />}
         {section === 'integrations' && <IntegrationsSection />}
+        {section === 'data-exchange' && <DataExchangeGate />}
         {section === 'sdk-fleet' && <SdkFleetSection />}
         {section === 'notifications' && <NotificationsSection />}
         {section === 'notification-preferences' && <NotificationPreferencesSection />}
         {section === 'webhooks' && <WebhooksSection />}
-      </div>
-
-      <div className="max-w-3xl">
-        <DataExchangeGate />
       </div>
     </div>
   );
