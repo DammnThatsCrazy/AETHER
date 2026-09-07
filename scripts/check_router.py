@@ -7,24 +7,52 @@ locally and in CI; execution is deliberately opt-in via ``--execute``.
 from __future__ import annotations
 
 import argparse
-import fnmatch
 import json
 import subprocess
 import sys
 from pathlib import Path
 
-import yaml
-
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.lib.verification_router import (
+    LANE_ORDER,
+    classify_impact,
+    load_router_registry,
+    matches as _matches,
+)
+
 CONFIG = ROOT / "config" / "verification_router.yaml"
-LANE_ORDER = ("fast", "pr", "integration", "regression", "release")
 
 
 def load_config() -> dict:
-    data = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
-    if data.get("schema_version") != 1:
-        raise ValueError("verification router schema_version must be 1")
-    return data
+    """Return the validated registry in its legacy mapping shape."""
+    registry = load_router_registry(CONFIG)
+    return {
+        "schema_version": registry.schema_version,
+        "default_lane": registry.default_lane,
+        "lanes": {lane: list(checks) for lane, checks in registry.lanes.items()},
+        "checks": {
+            check_id: {
+                "owner": check.owner,
+                "risk": check.risk,
+                "command": list(check.command),
+                "runtime_budget_seconds": check.runtime_budget_seconds,
+            }
+            for check_id, check in registry.checks.items()
+        },
+        "domains": {
+            domain_id: {
+                "owner": domain.owner,
+                "paths": list(domain.paths),
+                "checks": list(domain.checks),
+                "minimum_lane": domain.minimum_lane,
+            }
+            for domain_id, domain in registry.domains.items()
+        },
+        "global_paths": list(registry.global_paths),
+    }
 
 
 def changed_files(base: str | None, explicit: list[str]) -> list[str]:
@@ -41,55 +69,48 @@ def changed_files(base: str | None, explicit: list[str]) -> list[str]:
 
 
 def matches(path: str, pattern: str) -> bool:
-    # fnmatch's ** behavior is sufficient for repository-relative paths, but
-    # also treat a trailing /** as matching the directory itself.
-    return fnmatch.fnmatchcase(path, pattern) or (
-        pattern.endswith("/**") and (path == pattern[:-3] or path.startswith(pattern[:-2]))
-    )
+    return _matches(path, pattern)
 
 
 def route(paths: list[str], requested_lane: str | None = None) -> dict:
-    cfg = load_config()
-    domains: set[str] = set()
-    checks: set[str] = set(cfg["lanes"]["fast"][:2])
-    minimum = "fast"
-    global_change = any(any(matches(path, pat) for pat in cfg["global_paths"]) for path in paths)
-    matched_definitions = []
-    for name, definition in cfg["domains"].items():
-        if global_change or any(matches(path, pat) for path in paths for pat in definition["paths"]):
-            domains.add(name)
-            matched_definitions.append(definition)
-            if LANE_ORDER.index(definition["minimum_lane"]) > LANE_ORDER.index(minimum):
-                minimum = definition["minimum_lane"]
-    lane = requested_lane or minimum
-    # Fast is deliberately available as bounded local evidence even when the
-    # change requires a stronger merge lane. Other explicit downgrades are an
-    # unsafe attempt to substitute a weaker gate and remain blocked.
-    if lane != "fast" and LANE_ORDER.index(lane) < LANE_ORDER.index(minimum):
-        raise ValueError(f"requested lane {lane!r} is below required minimum {minimum!r}")
-    if LANE_ORDER.index(lane) >= LANE_ORDER.index(minimum):
-        for definition in matched_definitions:
-            checks.update(definition["checks"])
-    checks.update(cfg["lanes"][lane])
+    cfg = load_router_registry(CONFIG)
+    impact = classify_impact(paths, cfg, requested_lane)
     registry = _suite_commands()
-    definitions = cfg["checks"]
     selected = []
-    for check_id in sorted(checks):
-        definition = definitions.get(check_id)
-        command = definition["command"] if definition else registry.get(check_id)
+    for check_id in impact.selected_checks:
+        definition = cfg.checks.get(check_id)
+        command = list(definition.command) if definition else registry.get(check_id)
         if not command:
             raise ValueError(f"selected check {check_id!r} has no command definition")
         selected.append({"check_id": check_id, "command": command})
+    affected_tests = _affected_tests(impact.changed_files)
     return {
-        "schema_version": 1,
+        "schema_version": cfg.schema_version,
         "status": "SELECTED",
-        "changed_files": paths,
-        "affected_domains": sorted(domains),
-        "minimum_lane": minimum,
-        "selected_lane": lane,
-        "followup_required": LANE_ORDER.index(lane) < LANE_ORDER.index(minimum),
+        "changed_files": list(impact.changed_files),
+        "affected_domains": list(impact.affected_domains),
+        "minimum_lane": impact.minimum_lane,
+        "selected_lane": impact.selected_lane,
+        "followup_required": impact.followup_required,
+        "impact": {
+            "global_change": impact.global_change,
+            "affected_tests": affected_tests,
+            "selected_checks": list(impact.selected_checks),
+        },
         "checks": selected,
     }
+
+
+def _affected_tests(changed: tuple[str, ...]) -> list[str]:
+    """Expose inventory impact without narrowing the canonical suite command."""
+    from scripts.test_inventory import affected, build_inventory, tracked_tests
+
+    config_path = ROOT / "config" / "test_inventory.yaml"
+    import yaml
+
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    records = build_inventory(config, tracked_tests())
+    return sorted(affected(records, list(changed)))
 
 
 def _suite_commands() -> dict[str, list[str]]:

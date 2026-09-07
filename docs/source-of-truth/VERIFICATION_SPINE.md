@@ -81,6 +81,12 @@ local feedback; when the change requires a stronger merge lane the result sets
 `followup_required: true` and retains that stronger `minimum_lane`. PR,
 integration, regression, and release lanes cannot be downgraded.
 
+The same result includes an immutable impact record with whether a global path
+triggered, the inventory tests whose declared source or dependencies changed,
+and the selected check ids. This is impact evidence, not a claim that the
+currently registered suite commands have been narrowed to those tests; suite
+execution remains governed by the canonical registry and full completion gate.
+
 ## Lane semantics
 
 | Lane | Purpose | Typical scope |
