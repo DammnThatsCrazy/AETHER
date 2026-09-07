@@ -40,6 +40,11 @@ def test_package_json_exists() -> None:
         ("repo:doctor", "make repo-doctor"),
         ("repo:fix", "make repo-doctor-fix"),
         ("docs:fix", "make docs-fix"),
+        ("docs:check", "make docs-check"),
+        ("docs:generate", "make docs-generate"),
+        ("docs:generate:changed", "make docs-generate-changed"),
+        ("docs:verify-idempotent", "make docs-verify-idempotent"),
+        ("docs:migrate", "make docs-migrate"),
         ("validate:frontend-data-truth", "make frontend-data-truth"),
         ("validate:frontend-data-truth:bundles", "make frontend-data-truth-bundles"),
         ("validate:frontend-branding", "make frontend-branding"),
@@ -69,6 +74,10 @@ def test_test_docs_does_not_bypass_repo_doctor() -> None:
         "repo-doctor",
         "repo-doctor-fix",
         "docs-check",
+        "docs-generate",
+        "docs-generate-changed",
+        "docs-migrate",
+        "docs-verify-idempotent",
         "docs-fix",
         "ci-check",
         "release-gate",
@@ -112,8 +121,9 @@ def test_repo_consistency_workflow_names_frontend_data_truth_guardrail() -> None
 def test_agents_md_is_full_operating_contract() -> None:
     agents = _read("AGENTS.md")
     assert "make ci-check" in agents
-    assert "make docs-fix" in agents
-    assert "python scripts/docs_drift.py --update" in agents
+    assert "make docs-generate" in agents
+    assert "make docs-generate-changed" in agents
+    assert "source_hashes" in agents
 
 
 def test_claude_md_canonical_gate_is_ci_check() -> None:
@@ -126,9 +136,10 @@ def test_claude_md_canonical_gate_is_ci_check() -> None:
 
 def test_pr_template_mentions_canonical_workflow() -> None:
     template = _read(".github/pull_request_template.md")
-    assert "make docs-fix" in template
+    assert "make docs-generate" in template
+    assert "make docs-generate-changed" in template
+    assert "make docs-verify-idempotent" in template
     assert "make ci-check" in template
-    assert "python scripts/docs_drift.py --update" in template
 
 
 # --------------------------------------------------------------------------- #
