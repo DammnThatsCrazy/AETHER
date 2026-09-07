@@ -18,6 +18,8 @@ source_files:
   - contracts/delivery/release-evidence-bundle.schema.json
   - contracts/delivery/migration-evidence.schema.json
   - contracts/delivery/staging-lifecycle-result.schema.json
+  - contracts/delivery/environment-resolution.schema.json
+  - config/environment_requirements.yaml
   - scripts/artifact_builder.py
   - scripts/change_plan.py
   - scripts/check_router.py
@@ -29,6 +31,7 @@ source_files:
   - tests/unit/test_repo_consistency_workflow_authority.py
   - scripts/validate_delivery_profiles.py
   - scripts/validate_delivery_registries.py
+  - scripts/release/resolve_environment.py
   - Makefile
 canonical_owner: platform@aether
 estimated_read_minutes: 8
@@ -123,6 +126,18 @@ They emit structured evidence, preserve `DRY_RUN` as a distinct non-deployment
 state, and fail closed when candidate compatibility, AWS identity, database
 credentials, commands, or executable journeys are absent. They do not turn a
 blocked local invocation into staging evidence.
+
+Environment resolution is a separate pre-mutation authority. The canonical
+requirements in `config/environment_requirements.yaml` are resolved against a
+workflow-supplied capability record by `scripts/release/resolve_environment.py`.
+Missing capabilities remain `UNKNOWN`; dependencies are closed before a
+decision; and only explicitly degradable staging capabilities may produce
+`PASS_WITH_DEGRADATION`. A degraded profile is named explicitly (for example,
+`staging-degraded`) and never reports production equivalence. The resolver is
+read-only with respect to AWS and Terraform, so its output can safely gate
+planning or application delivery without fabricating cloud evidence. Use
+`make resolve-environment PROFILE=staging CAPABILITIES='vpc=PASS ...'` for a
+local decision/evidence record.
 
 PR CI compiles workspace packages once, archives the resulting `dist`
 directories, and creates `release-candidate.json` bound to that archive, the

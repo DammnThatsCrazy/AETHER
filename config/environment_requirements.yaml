@@ -1,0 +1,56 @@
+# Canonical environment capability requirements consumed by
+# scripts/release/resolve_environment.py.
+#
+# This is policy data only. It does not discover AWS or mutate infrastructure;
+# the capability record supplied by the operator/workflow is the authority for
+# what the target environment actually supports.
+schema_version: 1
+canonical_source: config/environment_requirements.yaml
+
+profiles:
+  local:
+    required: []
+    optional: []
+    degradable: []
+    promotion_equivalence: null
+  local-full:
+    required: []
+    optional: [postgres, redis, localstack]
+    degradable: []
+    promotion_equivalence: null
+  demo:
+    required: [vpc, ecs, ecr, sqs, sns, dynamodb, s3, kms, secrets, aurora, postgres_graph]
+    optional: [cloudfront, alb, observability]
+    degradable: []
+    promotion_equivalence: null
+  preview:
+    required: [vpc, ecs, ecr, sqs, sns, dynamodb, s3, kms, secrets, aurora, postgres_graph]
+    optional: [cloudfront, alb, observability]
+    degradable: []
+    promotion_equivalence: null
+  staging:
+    required: [vpc, ecs, ecr, sqs, sns, dynamodb, s3, kms, secrets, aurora, postgres_graph]
+    optional: [cloudfront, alb, observability]
+    # A staging rehearsal may be useful on an account that cannot support the
+    # full Aurora topology, but it must never claim production equivalence.
+    degradable: [aurora, postgres_graph]
+    promotion_equivalence: production-lean
+  production-lean:
+    required: [vpc, ecs, ecr, sqs, sns, dynamodb, s3, kms, secrets, aurora, postgres_graph]
+    optional: [cloudfront, alb, observability]
+    degradable: []
+    promotion_equivalence: production-lean
+  production-scale:
+    required: [vpc, ecs, ecr, sqs, sns, dynamodb, s3, kms, secrets, aurora, postgres_graph, redis, kafka, clickhouse]
+    optional: [cloudfront, alb, observability, dedicated_ml]
+    degradable: []
+    promotion_equivalence: production-scale
+  enterprise-isolated:
+    required: [vpc, ecs, ecr, sqs, sns, dynamodb, s3, kms, secrets, aurora, postgres_graph]
+    optional: [cloudfront, alb, observability, dedicated_ml, redis, kafka, clickhouse]
+    degradable: []
+    promotion_equivalence: enterprise-isolated
+
+# A capability cannot be available if its prerequisite is not available.
+dependencies:
+  postgres_graph: [aurora]

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.olympuslabs.io/contracts/delivery/environment-resolution/v1",
+  "title": "Aether Environment Resolution v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "requested_profile", "resolved_profile", "capabilities", "omitted", "promotion_equivalence", "disposition"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "requested_profile": {"type": "string", "minLength": 1},
+    "resolved_profile": {"type": "string", "minLength": 1},
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/capability"}
+    },
+    "omitted": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/omission"}
+    },
+    "promotion_equivalence": {"type": ["string", "null"]},
+    "production_equivalent": {"type": "boolean"},
+    "disposition": {"enum": ["PASS", "PASS_WITH_DEGRADATION", "BLOCKED_EXTERNAL"]},
+    "blockers": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "required"],
+      "properties": {
+        "status": {"enum": ["PASS", "UNAVAILABLE", "BLOCKED", "UNKNOWN"]},
+        "required": {"type": "boolean"},
+        "reason": {"type": "string"}
+      }
+    },
+    "omission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "reason", "impact"],
+      "properties": {
+        "capability": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "impact": {"enum": ["DEGRADED", "OPTIONAL"]}
+      }
+    }
+  }
+}

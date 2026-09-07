@@ -324,6 +324,10 @@ build-artifact: ## Record immutable ReleaseCandidate metadata (requires CANDIDAT
 	@test -n "$(CANDIDATE_ID)" -a -n "$(PROFILE)" -a -n "$(COMPONENTS)" || (echo "CANDIDATE_ID, PROFILE, and COMPONENTS are required"; exit 2)
 	$(GATE_PY) scripts/artifact_builder.py --candidate-id "$(CANDIDATE_ID)" --profile "$(PROFILE)" $(foreach component,$(COMPONENTS),--component "$(component)") $(foreach lockfile,$(LOCKFILES),--lockfile "$(lockfile)") --output "$(or $(OUTPUT),release-evidence/$(CANDIDATE_ID).json)"
 
+resolve-environment: ## Resolve a canonical profile against observed capabilities (requires PROFILE; CAPABILITIES='NAME=STATUS ...')
+	@test -n "$(PROFILE)" || (echo "PROFILE is required"; exit 2)
+	$(GATE_PY) scripts/release/resolve_environment.py --profile "$(PROFILE)" $(foreach capability,$(CAPABILITIES),--capability "$(capability)") $(if $(OUTPUT),--output "$(OUTPUT)")
+
 validate-delivery-profile: ## Validate a deployable frontend manifest and selected fallbacks (requires MANIFEST)
 	@test -n "$(MANIFEST)" || (echo "MANIFEST is required"; exit 2)
 	$(GATE_PY) scripts/validate_delivery_profiles.py "$(MANIFEST)" $(foreach fallback,$(ACTIVE_FALLBACKS),--active-fallback "$(fallback)")
