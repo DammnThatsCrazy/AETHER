@@ -11,6 +11,8 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 2
+source_hashes:
+  "scripts/staging_preflight.py": "sha256:beeb06bb27143f9dd5f27fab06357e201f8816f7933ae8afeb5e6a686c744a15"
 ---
 
 # Staging Deployment Guide

@@ -18,7 +18,15 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "cf6a8c30"
+source_hashes:
+  "Backend Architecture/aether-backend/services/provider_runtime/": "sha256:222fdaf7349cf2f190d5a512550b7f0f45b2d26473ecbbe87d20476f4f4d2ad9"
+  "Backend Architecture/aether-backend/services/providers/shopify/": "sha256:54bfbfbaba9b159859cbb085b9b1cd771ac3a334089081d2cf05fe62742dc20f"
+  "Backend Architecture/aether-backend/shared/integration_contracts/capabilities.py": "sha256:0549328cc36de3ad566dcc2bbdf2792cab4eafbf3a6785141485d5cdf0058b6f"
+  "Backend Architecture/aether-backend/shared/integration_contracts/events.py": "sha256:ba687017a65b1395e00077fd778c43fc394637bc50e95de91a1fb69ed4500ce2"
+  "Backend Architecture/aether-backend/shared/integration_contracts/identity.py": "sha256:8264880ababfa1eb2c6be6cbc099478d3e140e7caf1afcb52b664921b6b2871b"
+  "Backend Architecture/aether-backend/shared/integration_contracts/normalization.py": "sha256:65fe57419a11f1a4c6a14225a024af6d74425261a7b27296798142abca9d3aeb"
+  "Backend Architecture/aether-backend/shared/integration_contracts/plugin.py": "sha256:b4cfa2d84da2a47a43f96564d55d4ad63fdad3027feb08e1747cc0788030988c"
+  "Backend Architecture/aether-backend/shared/integration_contracts/results.py": "sha256:cf30d4dbed85c68e809a87b0f256f93665d11844b5a983a0b83177d62800e51a"
 ---
 
 # Provider Plugin Spec

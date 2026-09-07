@@ -8,6 +8,10 @@ source_files:
   - Backend Architecture/aether-backend/services/integrations/connectors/klaviyo.py
   - Backend Architecture/aether-backend/services/comms/ingest.py
   - Backend Architecture/aether-backend/alembic/versions/20260703_comms_intelligence.py
+source_hashes:
+  "Backend Architecture/aether-backend/alembic/versions/20260703_comms_intelligence.py": "sha256:b34e67a6d8a51b955817c773009f8bb2edf6a7f635d2e22666a0cc5b01dbcc9e"
+  "Backend Architecture/aether-backend/services/comms/ingest.py": "sha256:f5723b54d3bf02a39c2458e8cd649bf211503503e8f1ce4a735b454aff6dac2f"
+  "Backend Architecture/aether-backend/services/integrations/connectors/klaviyo.py": "sha256:8190d0ab1245843403c890363afba3ad96b6959e244d037044c6df55582c1feb"
 ---
 
 # Communications Backfill & Replay Runbook

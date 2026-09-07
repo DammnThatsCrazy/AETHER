@@ -11,6 +11,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 3
 source_files:
   - Backend Architecture/aether-backend/services/integrations/connectors/mailchimp.py
+source_hashes:
+  "Backend Architecture/aether-backend/services/integrations/connectors/mailchimp.py": "sha256:653baba81ebee7c37366f7fb7b4b672f7af228e913220d038bbb7488ff91a3a1"
 ---
 
 # Mailchimp Connector

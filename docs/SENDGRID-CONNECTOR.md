@@ -11,6 +11,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 3
 source_files:
   - Backend Architecture/aether-backend/services/integrations/connectors/sendgrid.py
+source_hashes:
+  "Backend Architecture/aether-backend/services/integrations/connectors/sendgrid.py": "sha256:02453dba7b767e516138444f51f709758382ad6449c8ddeb609be6a6bfdf2f77"
 ---
 
 # SendGrid Connector

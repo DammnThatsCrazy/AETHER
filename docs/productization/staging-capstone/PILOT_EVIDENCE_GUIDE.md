@@ -9,7 +9,8 @@ since_version: "8.12.0"
 source_files:
   - scripts/production_status.py
 canonical_owner: platform@aether
-last_synced_commit: "00fdcbc"
+source_hashes:
+  "scripts/production_status.py": "sha256:15010d4caab7f6e82c6677778332da1de5457d0c7576e11922fd24521a77086d"
 ---
 
 # Pilot Evidence Guide
@@ -64,7 +65,7 @@ against real infrastructure — this guide defines what that evidence is.
    (credential-waiting / pilot-ready ≠ production-ready).
 3. `scripts/production_status.py` and
    `docs/productization/aether_productization_audit.md` are updated together and
-   the audit is re-stamped (`python scripts/docs_drift.py --update`).
+   the affected source hashes are refreshed (`make docs-generate-changed`).
 
 ## Never do
 

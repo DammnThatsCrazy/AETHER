@@ -17,6 +17,16 @@ source_files:
   - Backend Architecture/aether-backend/services/interop/providers/debridge.py
   - Backend Architecture/aether-backend/services/stablecoins/price_feed.py
 canonical_owner: platform@aether
+source_hashes:
+  "Backend Architecture/aether-backend/services/derivatives/adapters/venue_base.py": "sha256:f6d471b0845c69191fa99eaceed7d83698bbad29c48cb7386e06360955d1f226"
+  "Backend Architecture/aether-backend/services/interop/providers/axelar.py": "sha256:91d37bfe0c21d21111e9f15562ca5ab61b8638502e0e5c302ac638c0d4d6780d"
+  "Backend Architecture/aether-backend/services/interop/providers/chainlink_ccip.py": "sha256:5bfac82aeec12bceb5968b76ddd35accdd557aeec59f5260752e1bf5266d9048"
+  "Backend Architecture/aether-backend/services/interop/providers/debridge.py": "sha256:01d11f6dc109f44d8a01b6eb724476fc72e935449756f32fa05ff319807b705a"
+  "Backend Architecture/aether-backend/services/interop/providers/hyperlane.py": "sha256:a894c6a64b73e7e74f99f5a6ae3ee39c9b801606eb7de79770251b7b37638857"
+  "Backend Architecture/aether-backend/services/interop/providers/ibc.py": "sha256:f6208857120ee238a5af1f11169e2368b07b5a624b6d9ca552fe195864dcfe74"
+  "Backend Architecture/aether-backend/services/interop/providers/layerzero_v2.py": "sha256:1da5037959fb2a91ad2febd5738cc84bf1edebf56ff41ffd0cebbb47f00d8d03"
+  "Backend Architecture/aether-backend/services/interop/providers/wormhole.py": "sha256:df38b0a4c82eef4be2302456a48857786187421fb18b35622ddfa0183bbf57ba"
+  "Backend Architecture/aether-backend/services/stablecoins/price_feed.py": "sha256:d575d0b5ad2f8991db7749a34b52cd1b3ef13c8fa047b56e8f1f0d8c2fa51636"
 ---
 
 # Adapter Capability Matrix

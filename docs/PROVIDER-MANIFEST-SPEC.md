@@ -14,7 +14,11 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 13
 toc_depth: 3
-last_synced_commit: "23eb1b05"
+source_hashes:
+  "Backend Architecture/aether-backend/shared/certification/readiness.py": "sha256:4f49477dd17b2652c27ca458b9d0c7fe8ca242defa7d1d6d5e837b50050846a2"
+  "Backend Architecture/aether-backend/shared/integration_contracts/catalog.py": "sha256:895abcded4185c421d1e84cb3e711b5c88abd963daf3260373c0f54a50c4a03c"
+  "Backend Architecture/aether-backend/shared/integration_contracts/identity.py": "sha256:8264880ababfa1eb2c6be6cbc099478d3e140e7caf1afcb52b664921b6b2871b"
+  "Backend Architecture/aether-backend/shared/integration_contracts/manifest.py": "sha256:8c78fa334a6c4e6a58f869f81fad103273d8f42c1023eeb5bb6e856fc26b4f34"
 ---
 
 # Provider Manifest Spec

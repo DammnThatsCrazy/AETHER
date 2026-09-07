@@ -13,7 +13,6 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 35
 toc_depth: 4
-last_synced_commit: "c4f33e58"
 reviewed_source_commits:
   - commit: "7ba83380"
     reason: "Reviewed the Kyber component-test synchronization change; frontend architecture and runtime contracts are unaffected."
@@ -33,6 +32,10 @@ reviewed_source_commits:
     reason: "WS-4 review (enduser-lifecycle lane, contextual readiness). Reviewed the additive features/integrations readiness surface (useTenantIntegrationReadiness calling restClient directly + readiness-context advisor + tenant-readiness zod types) and its consumers on the Campaign 360 / Campaign Sources / Profile360 pages. Added the 'Contextual integration readiness CTAs' subsection under Connector Pages documenting the hook/advisor + §6 copy invariants. body change was required and made."
   - commit: "8b1ca3dc"
     reason: "R2 WS-6 re-stamp after review (enduser-lifecycle lane, Phase 8 acceptance tail). Reviewed the new Playwright lifecycle suites A–E + shared harness added under frontend/aether/src/test/e2e/. This doc makes no claim about the tenant app's e2e/test inventory (its only test reference is Kyber unit tests at lines 842-844), and the suites are additive test surfaces, not runtime/IA changes — no body change required."
+source_hashes:
+  "frontend/aether/src/": "sha256:06b973755587d159ca09b1ec24215e985cc9ce6524ee1ccf490b96c66c626592"
+  "frontend/kyber/src/": "sha256:c072360167fd4871bcb45a0489ba281e06c3dee71ecf00642ece041bfcd2f28c"
+  "frontend/shared/src/": "sha256:5d8c4967068ea43d5944f68685b7a9d00c33d1bc6343c2c2172170c4e4e5f681"
 ---
 
 # Aether Frontend Architecture & Designer Handoff

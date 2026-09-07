@@ -16,7 +16,10 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 toc_depth: 3
-last_synced_commit: "74086291"
+source_hashes:
+  "Backend Architecture/aether-backend/services/intelligence/action_targets/base.py": "sha256:983f23fdb3696c505d39e80232b5e91c22d917744fef156cc58900bbfde0c449"
+  "Backend Architecture/aether-backend/services/intelligence/action_targets/registry.py": "sha256:06edc4a24ff4a7e14927a05414e5ce40b8da8d187af3895b0e893b21cb98d56c"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:6869337e19ec073673344c4d27986a717be807b852156ffe5807516105abdc35"
 ---
 
 # Governed Action Dispatch

@@ -11,6 +11,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 3
 source_files:
   - Backend Architecture/aether-backend/services/integrations/connectors/klaviyo.py
+source_hashes:
+  "Backend Architecture/aether-backend/services/integrations/connectors/klaviyo.py": "sha256:8190d0ab1245843403c890363afba3ad96b6959e244d037044c6df55582c1feb"
 ---
 
 # Klaviyo Connector

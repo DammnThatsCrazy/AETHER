@@ -9,7 +9,9 @@ since_version: "9.0.0"
 source_files:
   - frontend/kyber/src/pages/fraud/
   - frontend/kyber/src/components/fraud/
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "frontend/kyber/src/components/fraud/": "sha256:6b488494d59bd459b96df8ec22a4ec3c99568526ea7bd2d04ceb60dc2b6d634b"
+  "frontend/kyber/src/pages/fraud/": "sha256:c1f1dcb51a6da142d984bcd3dd24bd6c698c19f1156656557f49b32314bed02b"
 ---
 
 # Kyber Fraud Investigations Workspace

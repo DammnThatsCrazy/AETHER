@@ -12,6 +12,10 @@ source_files:
   - Backend Architecture/aether-backend/services/kyber/identity/lifecycle.py
   - Backend Architecture/aether-backend/services/kyber/identity/principals.py
   - Backend Architecture/aether-backend/services/kyber/identity/directory_sync.py
+source_hashes:
+  "Backend Architecture/aether-backend/services/kyber/identity/directory_sync.py": "sha256:ed2d2a76b05750f99fa7222d7b967f7d743ffec439d4a88f8b5ab4f0196b0061"
+  "Backend Architecture/aether-backend/services/kyber/identity/lifecycle.py": "sha256:f3c844c87f0efa7a009623672e2a69141734eb5c169d3504224bbf85afb67518"
+  "Backend Architecture/aether-backend/services/kyber/identity/principals.py": "sha256:9efd462db5c76f6da860ec1db01fcf49739d096c04c4705ba8ac8f31bebabd72"
 ---
 
 # Runbook — Kyber Workforce Offboarding

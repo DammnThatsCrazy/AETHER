@@ -13,7 +13,11 @@ source_files:
   - scripts/lib/preflight_env.py
   - scripts/lib/preflight_results.py
   - Backend Architecture/aether-backend/services/gateway/readiness.py
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/aether-backend/services/gateway/readiness.py": "sha256:76a97f3b23bdbc35dfed9909b13fbc4de56c3e509e43ea950b60b8855d7c1c3e"
+  "scripts/lib/preflight_env.py": "sha256:e74b3b1dc6de34135b6f3960cb956e2ff137e273d831d779f3d1976602beeb28"
+  "scripts/lib/preflight_results.py": "sha256:ce8f40edac30f24e6be3a9840d43c906436059055525cb2fba8df44c5165da86"
+  "scripts/staging_preflight.py": "sha256:beeb06bb27143f9dd5f27fab06357e201f8816f7933ae8afeb5e6a686c744a15"
 ---
 
 # Runbook — Staging Preflight & Readiness

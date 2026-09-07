@@ -11,7 +11,8 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "packages/shared/economic.ts": "sha256:40976cbf9da7d8e9169ca393c42412394475353c8ce9d0a8d61c0ee2c3c8e4df"
 ---
 # Economic Observability
 

@@ -7,7 +7,9 @@ audience: [dev-senior, ops]
 source_files:
   - Backend Architecture/aether-backend/alembic/versions/20260627_campaign_registry.py
   - scripts/campaign/backfill_campaign_ids.py
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/aether-backend/alembic/versions/20260627_campaign_registry.py": "sha256:0e241e5ddb71cf5843ae307ee6c3cb5f5bc2d6d10d0a0f268c5e9c9df36af7d1"
+  "scripts/campaign/backfill_campaign_ids.py": "sha256:778d580465462e010238d8ac399328584c8b44ad5379a74c31de23fbb276e515"
 ---
 
 # Campaign Registry Migration Guide

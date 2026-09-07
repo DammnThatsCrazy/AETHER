@@ -13,7 +13,10 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "c4f33e58"
+source_hashes:
+  "packages/ios/Sources/AetherSDK/Aether.swift": "sha256:02d7acf01b54710f24d3085e2168d861ff69db3bf8b5a088741240c76d865e2d"
+  "packages/shared/consent.ts": "sha256:e8cc43b2a64f70eca68d499d7a1fb7b85ceacb44bc94f77a70e105e0d05e8730"
+  "packages/shared/events.ts": "sha256:216fa41739a8613800f057f2937071bf40a28ac35ba47b4a77f438cfd2fd9477"
 ---
 
 # Aether iOS SDK v8.12.0 — Integration Guide

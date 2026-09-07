@@ -20,7 +20,7 @@
         docker-up docker-down docker-logs \
         smoke byok-reencrypt \
         clean validate-docs validate-frontmatter validate-ml-registry extract-docs docs-drift docs-stamp docs bump-version \
-        repo-doctor repo-doctor-fix docs-check ci-check docs-fix \
+        repo-doctor repo-doctor-fix docs-check docs-generate docs-generate-changed docs-migrate docs-verify-idempotent ci-check docs-fix \
         frontend-data-truth frontend-data-truth-bundles frontend-route-state frontend-branding \
         frontend-data-truth-report \
         demo-seed demo-reset demo-status demo-verify dev-demo \
@@ -288,8 +288,8 @@ gen-reward-rail-matrix: ## Regenerate docs/_generated/reward-rail-matrix.json fr
 docs-drift: ## Detect drift between doc source_files frontmatter and the repo
 	python scripts/docs_drift.py
 
-docs-stamp: ## Stamp last_synced_commit on every doc with source_files (after a re-review pass)
-	python scripts/docs_drift.py --update
+docs-stamp: ## Legacy compatibility target for source-linked SHA stamps
+	$(GATE_PY) scripts/docs_drift.py --update
 
 docs: ## Run the full documentation pipeline (extract + sync + validate + drift)
 	python scripts/docs_extract/run_all.py
@@ -306,7 +306,7 @@ docs: ## Run the full documentation pipeline (extract + sync + validate + drift)
 # Gate targets run on the isolated interpreter when the project venv exists:
 # doc generators import backend registries (fastapi et al.), which the system
 # interpreter cannot resolve — see the toolchain notes at the top of this file.
-GATE_PY := $(shell test -x $(VENV_PY) && echo $(VENV_PY) || echo python)
+GATE_PY := $(shell if test -x "$(VENV_PY)"; then echo "$(VENV_PY)"; elif command -v python >/dev/null 2>&1; then command -v python; elif command -v python3 >/dev/null 2>&1; then command -v python3; else echo python; fi)
 
 repo-doctor: ## Validate full repo consistency (no mutations)
 	$(GATE_PY) scripts/repo_doctor.py --check
@@ -370,6 +370,17 @@ repo-doctor-fix: ## Regenerate generated docs + sync, then validate
 
 docs-check: ## Docs/version/frontmatter/drift checks only (fast gate)
 	$(GATE_PY) scripts/repo_doctor.py --check --docs-only
+
+docs-generate: docs-fix ## Regenerate generated and sync-managed docs (never authored source-linked docs)
+
+docs-generate-changed: ## Update only source-linked docs whose declared source content changed
+	$(GATE_PY) scripts/docs_drift.py --update
+
+docs-migrate: ## One-time migration from Git SHA stamps to deterministic source-content hashes
+	$(GATE_PY) scripts/docs_drift.py --migrate-to-content-hashes
+
+docs-verify-idempotent: ## Prove two documentation-generation passes produce identical output
+	$(GATE_PY) scripts/docs_idempotency.py
 
 ci-check: ## CI-safe full validation; fails if generators produce a diff
 	$(GATE_PY) scripts/repo_doctor.py --ci

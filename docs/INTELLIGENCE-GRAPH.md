@@ -12,7 +12,9 @@ source_files:
 canonical_owner: graph@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "c587eb8b"
+source_hashes:
+  "Backend Architecture/aether-backend/shared/graph/": "sha256:e2d14222df434923e276aefa8602c97d1ee51b2361b52e56b35916d8f58293f4"
+  "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:bfe704e317b86363155e3626d15f0e6a8816b674fad15858ac946d7bb4d9eb62"
 ---
 # Unified On-Chain Intelligence Graph v8.12.0
 

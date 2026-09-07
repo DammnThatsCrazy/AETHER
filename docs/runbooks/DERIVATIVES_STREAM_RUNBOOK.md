@@ -10,7 +10,9 @@ source_files:
   - Backend Architecture/aether-backend/services/derivatives/connectors/stream.py
   - Backend Architecture/aether-backend/services/derivatives/admin_routes.py
 canonical_owner: platform@aether
-last_synced_commit: "845b1c14"
+source_hashes:
+  "Backend Architecture/aether-backend/services/derivatives/admin_routes.py": "sha256:ed8ee4ff62c31207a1313cbf7c3ad9381a0377d28d1200ee3377302dac6b495e"
+  "Backend Architecture/aether-backend/services/derivatives/connectors/stream.py": "sha256:52d32498c813fa09a0758ee4a7ecdc5dbd46a66593b68a808f76aa225aa59846"
 ---
 
 # Derivatives Stream Runbook

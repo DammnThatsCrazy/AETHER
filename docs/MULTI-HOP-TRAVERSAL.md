@@ -7,6 +7,9 @@ audience: [architect, dev-senior, ai]
 source_files:
   - Backend Architecture/aether-backend/shared/graph/traversal.py
   - Backend Architecture/aether-backend/shared/graph/path_scoring.py
+source_hashes:
+  "Backend Architecture/aether-backend/shared/graph/path_scoring.py": "sha256:4bff43191e835d86308a2668dea5ee891ff6768da3d5fe332e32a7be2f592b07"
+  "Backend Architecture/aether-backend/shared/graph/traversal.py": "sha256:13f44e23b4a3698c5be3dc09289131b163c0b47b2ef1184568525b5407bff02b"
 ---
 
 # Multi-Hop Traversal Algorithms

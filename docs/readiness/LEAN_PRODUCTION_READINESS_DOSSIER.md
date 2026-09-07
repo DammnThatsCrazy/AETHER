@@ -10,7 +10,8 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 11
 toc_depth: 3
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "scripts/staging_preflight.py": "sha256:beeb06bb27143f9dd5f27fab06357e201f8816f7933ae8afeb5e6a686c744a15"
 ---
 
 # Lean Production Readiness Dossier

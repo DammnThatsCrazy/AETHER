@@ -14,7 +14,12 @@ source_files:
   - Backend Architecture/aether-backend/services/imports/kyber_routes.py
   - Backend Architecture/aether-backend/repositories/imports_repo.py
   - Backend Architecture/aether-backend/shared/graph/graph.py
-last_synced_commit: "cf6a8c30"
+source_hashes:
+  "Backend Architecture/aether-backend/repositories/imports_repo.py": "sha256:d483f6e353ed70f170ff3738f4b3ac5eed1086722b2fc1c58e48df6315490b37"
+  "Backend Architecture/aether-backend/services/imports/commit.py": "sha256:543e19f89f10d895acd6cde57d48c2a83f6a8fc5bfb377ae3a027a2afadf9194"
+  "Backend Architecture/aether-backend/services/imports/kyber_routes.py": "sha256:5dda769c5213f881a57bb19c87078cd45cfcb62c9f54192c9216e70928074dff"
+  "Backend Architecture/aether-backend/services/imports/service.py": "sha256:f687a509ed815ba121efb5d806a65b76a2cee6d5384ffdf6564b76979e0f8d3d"
+  "Backend Architecture/aether-backend/shared/graph/graph.py": "sha256:689f7581a371f6f4f48ca17745a2fb31f88d45f5614da95d69e9d805c4212428"
 ---
 
 # Runbook — Tenant Import Failures

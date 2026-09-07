@@ -12,6 +12,9 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 2
+source_hashes:
+  "Smart Contracts/audit/README.md": "sha256:771ccec6cb43f5489a40c252119ed29a2c70f970e81190414e1ba06216e94712"
+  "Smart Contracts/programs/solana/audit/README.md": "sha256:8ef631a3b5de32d2b9ae4a87d1265dc91b6581d67bfd3d1560e950edb350140e"
 ---
 
 # External Audit Preparation Guide

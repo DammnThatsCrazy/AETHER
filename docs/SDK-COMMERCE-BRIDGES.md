@@ -18,7 +18,15 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "c4f33e58"
+source_hashes:
+  "Backend Architecture/aether-backend/shared/commerce_contracts/order.py": "sha256:186c38a97cbc2579bf461b5221f6bd96db126a8d967d0c064b3981f5d4b22893"
+  "Backend Architecture/aether-backend/shared/integration_contracts/commerce_bridge.py": "sha256:bc2dd396267ac6902568ad055c633d2de906c7cdd83f7020c0fe100caa67c9e8"
+  "Backend Architecture/aether-backend/shared/integration_contracts/events.py": "sha256:ba687017a65b1395e00077fd778c43fc394637bc50e95de91a1fb69ed4500ce2"
+  "packages/shared/commerce-bridge.ts": "sha256:b14c263789a1bee3fe21bcc383282bd4fc5b914c23f742f901fd3429cb98de03"
+  "packages/shared/commerce.ts": "sha256:1ecb0f87838e148ddeaeab7458ea7762350f451361eecf9925ba1c09ded0d32d"
+  "packages/shared/contracts/event-registry.json": "sha256:74c9e8233bb6000f6a80e51aceacb9b2e4c8f47ecaa5d10a3303da15127a6121"
+  "packages/web/src/bridges/": "sha256:3ceea9d41cd65bfc6442fc6c7809165e4bf651b3625edde1a5cdeebe755c74ba"
+  "packages/web/src/modules/commerce-detection.ts": "sha256:14f48bd32335bd9069aec1927d38e4eaaa33274a496f523acfd17ab770934751"
 ---
 
 # SDK Commerce Bridges
@@ -170,8 +178,8 @@ landed:
       from `confirm_interaction` (`matched` / `replay` / `unconfirmed` /
       `not_found`), with `confirmed=True` only on `matched`.
 - [x] `make ci-check` passes including SDK contract and docs checks; this
-      document's `source_files` are re-reviewed and `last_synced_commit`
-      re-stamped at that gate.
+      document's `source_files` are re-reviewed and its `source_hashes` are
+      refreshed at that gate.
 - [x] SDK event-registry convergence remains OUT of scope — the dotted
       `commerce.*` types still live in the runtime domain until a dedicated
       convergence program.

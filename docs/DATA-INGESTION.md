@@ -13,7 +13,10 @@ source_files:
 canonical_owner: ingest@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "11c307da"
+source_hashes:
+  "Data Ingestion Layer/README.md": "sha256:01904fb731e09585dd364cf88b807a226aa3ab3d865577d876176da97a388889"
+  "Data Ingestion Layer/packages/": "sha256:3b3af160248d0216f4a04b097e7fd6866d5cdf5a84f33a0655c3498b2ed8472e"
+  "Data Ingestion Layer/services/ingestion/": "sha256:c4950c17bda002217581c1cf02cf66708763abeebc6a718f4a45bfec8e158cee"
 ---
 
 # Data Ingestion — Architecture & API Reference

@@ -528,8 +528,9 @@ AREAS: list[Area] = [
     Area(
         "docs",
         4,
-        "202 docs with validated frontmatter, 64 source-linked docs with strict drift "
-        "gating in repo-doctor, generated contract registry under docs/_generated/. "
+        "Authored docs with validated frontmatter and source-linked content-hash "
+        "drift gating in repo-doctor, plus generated contract registries under "
+        "docs/_generated/. "
         "Readiness claims consolidated into this routine + the productization audit.",
         ["docs/", "scripts/docs_drift.py", "scripts/repo_doctor.py"],
     ),

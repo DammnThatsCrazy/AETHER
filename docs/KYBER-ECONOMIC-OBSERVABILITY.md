@@ -12,7 +12,9 @@ source_files:
 related:
   - concepts/economic-value-framing
   - concepts/unified-economic-graph
-last_synced_commit: "23eb1b05"
+source_hashes:
+  "Backend Architecture/aether-backend/services/economic/routes.py": "sha256:e01e6487d9825b57736b4d523483523698fa47fbd8fc3fd28be5b09c96a58cbc"
+  "packages/shared/economic-metrics.ts": "sha256:2c9c5b55a5131d1aec2625fcb910a36458363affe11bf0de2b660c6270a499d0"
 ---
 
 # Aether — Kyber Economic Observability

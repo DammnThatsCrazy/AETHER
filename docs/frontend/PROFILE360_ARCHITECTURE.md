@@ -12,7 +12,9 @@ source_files:
 canonical_owner: frontend@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "0e967a68"
+source_hashes:
+  "frontend/kyber/src/components/profile360/": "sha256:97915fc12711b18ca5693344ff5cb2c8d28a7d03b6c919c4ce5acb194597922e"
+  "frontend/kyber/src/features/profile360/": "sha256:cd65649e8a17ff011af23591ab9e9e2ca316f64ccc5c9c0c7a1360beec684066"
 ---
 # Aether Profile360 Frontend Architecture
 

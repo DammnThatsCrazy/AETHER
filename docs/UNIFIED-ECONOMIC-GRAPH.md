@@ -12,7 +12,9 @@ source_files:
 related:
   - concepts/economic-value-framing
   - concepts/tvl-gmv-revenue-metrics
-last_synced_commit: "23eb1b05"
+source_hashes:
+  "packages/shared/economic-metrics.ts": "sha256:2c9c5b55a5131d1aec2625fcb910a36458363affe11bf0de2b660c6270a499d0"
+  "packages/shared/graph-relationships.ts": "sha256:66b8ac86dd0d01ba291f7623114849d5f73be4ec934bf4944cad62717c5e29eb"
 ---
 
 # Aether — Unified Economic Graph

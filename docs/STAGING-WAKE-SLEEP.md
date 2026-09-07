@@ -18,6 +18,15 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
+source_hashes:
+  ".github/workflows/staging-lifecycle.yml": "sha256:f6a753c44140db649aca9f341a4be9910281efd933d4594f9fd8050aed862883"
+  ".github/workflows/staging-ttl-guard.yml": "sha256:4fe2250c0ccb0f8486800c6e09c8f1adcf6c38371944e911269f103053f0f1da"
+  ".github/workflows/terraform-promote.yml": "sha256:c6ba216364e25afee22be4b62c0e2b3629bc5e68e0f47389fba8cfc4c17f7ef4"
+  "AWS Deployment/aether-aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
+  "AWS Deployment/aether-aws/terraform/profiles/staging.tfvars": "sha256:2e642c5ba9dd8a8dfe65670d0d9eaf88543cb84e0e440ae752b508fc551c37ad"
+  "AWS Deployment/aether-aws/terraform/variables.tf": "sha256:b97e7f5ca882082c32c7bd963db2348db5af9a076340128891e747bdbd54ab37"
+  "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
+  "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
 ---
 
 # Staging Wake / Sleep

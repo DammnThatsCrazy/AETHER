@@ -25,9 +25,10 @@ _Describe only what changed:_
 
 ## Repo consistency
 
-- [ ] I ran `make docs-fix`
+- [ ] I ran `make docs-generate`
 - [ ] I reviewed stale source-linked docs against their declared `source_files`, if any were reported
-- [ ] I ran `python scripts/docs_drift.py --update` only after reviewing and updating stale authored docs
+- [ ] I ran `make docs-generate-changed` only after reviewing affected authored docs
+- [ ] I ran `make docs-verify-idempotent`
 - [ ] I ran `make repo-doctor-fix`
 - [ ] I ran `make ci-check`
 - [ ] `make ci-check` passes

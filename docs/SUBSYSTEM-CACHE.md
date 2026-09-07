@@ -11,7 +11,8 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 4
 toc_depth: 3
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/aether-backend/shared/cache/cache.py": "sha256:0f7b739b90343981892113e4103aecac16a76705987c3eff0730e0ce279f3226"
 ---
 
 # Cache / Redis Subsystem

@@ -12,6 +12,10 @@ source_files:
   - Backend Architecture/aether-backend/services/kyber/identity/bootstrap.py
   - Backend Architecture/aether-backend/services/kyber/identity/invitations.py
   - Backend Architecture/aether-backend/services/kyber/devices/approvals.py
+source_hashes:
+  "Backend Architecture/aether-backend/services/kyber/devices/approvals.py": "sha256:a2df5f8968e485f5a5dbf699c7a3bfc7f1b1c6e83dc1efc11b2c736f3548900c"
+  "Backend Architecture/aether-backend/services/kyber/identity/bootstrap.py": "sha256:949e128373290d238a587ba97f87ca7dc3671162762ed6acf98013e2dc43030b"
+  "Backend Architecture/aether-backend/services/kyber/identity/invitations.py": "sha256:019d350b95c3e12847f7fc6bf3245aae1019461ca3f1fbc4d2882cb292acce12"
 ---
 
 # Runbook — Kyber Account Recovery

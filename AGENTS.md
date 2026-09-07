@@ -10,21 +10,26 @@ PR completion.
 2. Check `docs/source-of-truth/repo_consistency_ownership.json` for the surfaces
    that category requires you to update.
 3. Update all required derived surfaces for the changed category.
-4. Run `make docs-fix`.
+4. Run `make docs-generate` for generated and sync-managed docs.
 5. If source-linked docs are reported stale by `python scripts/docs_drift.py --strict`,
    review each listed doc against its declared `source_files` frontmatter.
 6. Update authored doc content where behavior changed.
-7. Run `python scripts/docs_drift.py --update` **only after** review.
-8. Run `make ci-check`.
-9. Commit all generated docs, synced docs, source-linked docs, stamps, contract
+7. Run `make docs-generate-changed` **only after** review; it updates only the
+   affected pages' deterministic `source_hashes`.
+8. Run `make docs-verify-idempotent`.
+9. Run `make ci-check`.
+10. Commit all generated docs, synced docs, source-linked docs, source hashes, contract
    artifacts, package/version surfaces, and ownership-map-required surfaces.
-10. Do not claim completion while `make ci-check` fails.
+11. Do not claim completion while `make ci-check` fails.
 
 ## Canonical commands
 
 - `make repo-doctor` — full consistency check, no mutations.
 - `make repo-doctor-fix` — regenerate generated docs + sync, then validate.
 - `make docs-fix` — regenerate and sync docs only.
+- `make docs-generate` — generate only generated/sync-managed docs.
+- `make docs-generate-changed` — update only source-linked docs with changed source bytes.
+- `make docs-verify-idempotent` — prove the second generation pass is byte-identical.
 - `make ci-check` — **canonical PR completion gate** (fails if generators produce a diff).
 - `make release-gate` — `ci-check` + strict production status + ops readiness (release claims only).
 
@@ -38,9 +43,20 @@ PR completion.
 - Consent behavior is registry-derived: `packages/shared/contracts/consent-registry.json`
   is canonical. Do not hardcode a consent-purpose count in any doc or validator.
 
+## Source-linked documentation ownership
+
+- `source_files:` declares the exact repo-relative inputs a page describes.
+- `source_hashes:` records deterministic SHA-256 content markers for those inputs.
+- `last_synced_commit:` is legacy metadata and must not be added to new docs.
+- A source mismatch requires reviewing the listed page. Update only the affected
+  hashes with `make docs-generate-changed`; never solve a docs failure by globally
+  restamping every page.
+- If a source change is intentionally orthogonal to a page, record the decision
+  in the PR and keep the page's hash update scoped to that reviewed page.
+
 ## Forbidden Behavior
 
-- Do not blindly stamp source-linked docs.
+- Do not blindly update source-linked hashes.
 - Do not manually edit generated docs without changing the generator.
 - Do not use `npm run test`, `npm run test:docs`, partial pytest runs,
   TypeScript-only checks, docs-only checks, `make repo-doctor` alone, or manual

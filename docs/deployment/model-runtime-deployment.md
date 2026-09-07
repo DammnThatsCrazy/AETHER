@@ -15,6 +15,12 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
+source_hashes:
+  "Backend Architecture/aether-backend/services/model_runtime/config.py": "sha256:e258302a79e904ebd3f193b20c72fe6270c9f3c7f4f97b1928f1958ed5c6dc03"
+  "Backend Architecture/aether-backend/services/model_runtime/context/evidence.py": "sha256:07382fdbcd3b1cdff3e2129ae03530d91ccd47bfb158329ae29a84e5cf91a0fa"
+  "Backend Architecture/aether-backend/services/model_runtime/credentials/interface.py": "sha256:254fb0df4f45996b5da164a470176b951d28f6f6b0c066f96713106b017cbed5"
+  "Backend Architecture/aether-backend/services/model_runtime/routing/engine.py": "sha256:9c997defc5062e445ff8374c987d558592bb227b442860b7df0a3425d18ffb99"
+  "Backend Architecture/aether-backend/services/model_runtime/service.py": "sha256:c9c879b3a1025a81c5c693c1dfdc734a387f707a65993eaffaf5d1e2a408e4e8"
 ---
 
 # Model Runtime Deployment

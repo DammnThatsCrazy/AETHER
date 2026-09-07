@@ -226,6 +226,9 @@ def write_automation() -> None:
         "- `make repo-doctor` — full consistency check, no mutations.",
         "- `make repo-doctor-fix` — regenerate generated docs + sync, then validate.",
         "- `make docs-fix` — regenerate and sync docs only.",
+        "- `make docs-generate` — alias for generated/sync-managed docs only; authored docs are never restamped.",
+        "- `make docs-generate-changed` — update only source-linked docs whose declared source bytes changed.",
+        "- `make docs-verify-idempotent` — prove a second generation pass produces zero additional diff.",
         "- `make frontend-data-truth` — enforce Aether/Kyber production-source "
         "mock and fixture boundaries.",
         "- `make frontend-data-truth-bundles` — create explicit production builds "
@@ -239,19 +242,20 @@ def write_automation() -> None:
         "`scripts/docs_extract/run_all.py`), and `docs/REPO-INDEX.md` + "
         "`docs/AUTOMATION.md` (from `scripts/sync_docs.py`). Never hand-edit them.",
         "2. Authored source-linked docs (those with `source_files:` frontmatter) "
-        "require review when their linked sources change. Run "
-        "`python scripts/docs_drift.py --update` **only after** reviewing each doc — "
-        "stamping is not a substitute for review.",
+        "record deterministic `source_hashes:` for each declared source. A source "
+        "content mismatch requires review; run `make docs-generate-changed` only "
+        "after reviewing each affected doc. A hash update is not a substitute for review.",
         "3. Consent behavior is registry-derived: "
         "`packages/shared/contracts/consent-registry.json` is canonical. Do not "
         "hardcode a consent-purpose count in any doc or validator.",
         "",
         "## Required workflow",
         "",
-        "- Regenerate: `make docs-fix`.",
-        "- Review any stale source-linked docs reported by "
-        "`python scripts/docs_drift.py --strict`, then stamp with "
-        "`python scripts/docs_drift.py --update`.",
+        "- Regenerate generated/sync-managed docs: `make docs-generate`.",
+        "- Review the exact source-linked docs reported by "
+        "`python scripts/docs_drift.py --strict`, then update only those source "
+        "hashes with `make docs-generate-changed`.",
+        "- Confirm generator idempotency with `make docs-verify-idempotent`.",
         "- Final gate: `make ci-check`. Weaker commands (`npm run test:docs`, "
         "partial pytest runs, docs-only checks, `make repo-doctor` alone) are not "
         "sufficient proof of PR completion.",

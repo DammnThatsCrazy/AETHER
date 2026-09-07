@@ -85,7 +85,15 @@
     "last_synced_commit": {
       "type": "string",
       "pattern": "^[0-9a-f]{7,40}$",
-      "description": "Git SHA captured by sync_docs.py the last time source_files matched. Used by the drift detector."
+      "description": "Legacy Git SHA marker retained only for migration of older source-linked docs."
+    },
+    "source_hashes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "description": "Deterministic SHA-256 content markers keyed by each repo-relative source_files path."
     },
     "reviewed_source_commits": {
       "type": "array",

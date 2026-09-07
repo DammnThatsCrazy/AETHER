@@ -19,7 +19,9 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: "74086291"
+source_hashes:
+  "Backend Architecture/aether-backend/services/intelligence/investigations.py": "sha256:3369a68e9650eedefd7709a2e2ff91e2294d3dabe50cf38659a6309365bef517"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:6869337e19ec073673344c4d27986a717be807b852156ffe5807516105abdc35"
 ---
 # Investigation Workspace
 

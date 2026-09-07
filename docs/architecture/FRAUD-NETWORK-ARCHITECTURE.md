@@ -12,10 +12,15 @@ source_files:
   - Backend Architecture/aether-backend/services/risk_overlay/
   - Backend Architecture/aether-backend/repositories/repos.py
   - packages/shared/graph-contract.ts
-last_synced_commit: "845b1c14"
 reviewed_source_commits:
   - commit: "54eaac5d"
     reason: "Reviewed the staging first-admin bootstrap change; fraud-network architecture remains unchanged."
+source_hashes:
+  "Backend Architecture/aether-backend/repositories/repos.py": "sha256:17bda309a520403afe5ea14ec5a647d8aeea03839d644e3ce4c0086f1218f70f"
+  "Backend Architecture/aether-backend/services/flow_trace/": "sha256:f02d99a415f211c164a33956739c7fac197535a10af726cb661ff901aba31556"
+  "Backend Architecture/aether-backend/services/fraud_networks/": "sha256:b44b5cc3deaf995531d3bfa6dce1db3f87410ec829de76fd4631e00f59d6c05a"
+  "Backend Architecture/aether-backend/services/risk_overlay/": "sha256:976adb064b588584245a87408401c479c2e117519ed88590a9541e7be4c89128"
+  "packages/shared/graph-contract.ts": "sha256:e8344420da6181b78831c95bc132fdbdfac8ebb92235524ab2191bb4ab74004a"
 ---
 
 # Fraud Network Architecture

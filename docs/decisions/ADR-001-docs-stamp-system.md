@@ -11,27 +11,37 @@ estimated_read_minutes: 3
 toc_depth: 2
 ---
 
-# ADR-001: Documentation Sync Stamp System
+# ADR-001: Documentation Source-Hash Drift System
 
 **Status:** Accepted | **Date:** 2026-05-29
 
 ## Context
 
-The repository contains 37+ authored Markdown documents that describe system
+The repository contains authored Markdown documents that describe system
 behaviour derived from source code (API contracts, entity schemas, event
 registries, etc.). Without enforcement, these documents drift silently from
 their source as code evolves — the classic "the code is the truth" problem.
 
-A timestamp-based approach was evaluated but rejected: wall-clock times are
-not reproducible and do not identify *which* source commit the doc was last
-reviewed against.
+A timestamp-based approach was evaluated and rejected: wall-clock times are
+not reproducible. A Git-commit-only marker was also rejected as the canonical
+truth because squash merges can discard the branch commit that was used as a
+review anchor even when the resulting source bytes are unchanged.
 
 ## Decision
 
-Every authored doc that has `source_files:` frontmatter also carries a
-`last_synced_commit: <sha>` field. The `scripts/docs_drift.py --strict` CI
-check fails if any `source_files` path has been modified in a commit after the
-declared SHA.
+Every authored doc that has `source_files:` frontmatter carries a
+`source_hashes:` mapping from each declared repo-relative path to a SHA-256
+content marker. The `scripts/docs_drift.py --strict` CI check fails when the
+current bytes for any declared source differ from that marker. Directory
+sources are hashed as sorted tracked-file manifests. The comparison is
+independent of commit ancestry, timestamps, branch names, and filesystem
+traversal order.
+
+`last_synced_commit: <sha>` is a legacy field accepted only while older pages
+are migrated. `make docs-migrate` performs the one-time conversion; normal
+updates use `make docs-generate-changed`, which changes only pages whose source
+content actually differs. Hash refreshes remain a review step, not an approval
+or a substitute for updating inaccurate prose.
 
 Generated artifacts (`docs/_generated/*.json`, `docs/REPO-INDEX.md`,
 `docs/AUTOMATION.md`) are regenerated deterministically by CI and are excluded
@@ -46,19 +56,21 @@ loop where the bot commit re-triggers the same workflow run.
 ## Consequences
 
 **Positive:**
-- Drift is caught within one CI cycle of the offending source commit.
-- The stamp SHA provides a reproducible review anchor — a reviewer can run
-  `git log <sha>..HEAD -- <source_files>` to see exactly what changed.
+- Drift is caught within one CI cycle of the offending source change.
+- The source hash is a reproducible content anchor that survives rebase and
+  squash merge operations.
+- CI identifies the exact source-linked page and source path that needs review.
 
 **Negative:**
-- Every source change requires a follow-up doc stamp update, adding a step to
-  the PR checklist.
-- Docs files appear in git diff on every stamp update, creating noise in PRs
-  that are purely code changes.
+- A source change still requires review of each page that declares that source,
+  adding a deliberate step to the PR checklist.
+- Only affected pages receive a small metadata update; unrelated pages remain
+  untouched.
 
-**Mitigation for noise:** The `[skip ci]` flag on auto-commits prevents
-feedback loops. PR diff noise is addressed by excluding stamp-only changes from
-the PR size gate (`pr-size` job in `repo-health.yml`).
+**Mitigation for noise:** Generated docs remain separately managed, and the
+source-hash updater is scoped to content mismatches. The trusted-main
+`[skip ci]` auto-sync behavior remains limited to generated repository indexes;
+it never rewrites authored source-linked pages.
 
 ## Exit Criteria
 

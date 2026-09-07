@@ -11,7 +11,10 @@ source_files:
   - Backend Architecture/aether-backend/shared/certification/readiness.py
   - Backend Architecture/aether-backend/shared/certification/descriptor.py
 canonical_owner: platform@aether
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/aether-backend/shared/certification/descriptor.py": "sha256:c7f2d05f4799b1a6d7a4ab1ca125117049180b595eafa0267e01c9d656df4ac7"
+  "Backend Architecture/aether-backend/shared/certification/readiness.py": "sha256:4f49477dd17b2652c27ca458b9d0c7fe8ca242defa7d1d6d5e837b50050846a2"
+  "Backend Architecture/aether-backend/shared/certification/registry.py": "sha256:5c2e75d47d24e1dc2429c6ea6a2476cab2b0dcc71be4899ad77bac802ee12624"
 ---
 
 # Provider Capability Matrix Guide

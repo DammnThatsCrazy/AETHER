@@ -11,7 +11,8 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/migrations/": "sha256:0d9b426e6c5b1c3275d73db82af71d68ec2978638aaab2b777053676ebbe8d3e"
 ---
 # Migration Runbook — Aether Platform v8.12.0
 

@@ -11,7 +11,8 @@ source_files:
 canonical_owner: ml@aether
 estimated_read_minutes: 4
 toc_depth: 3
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "ML Models/aether-ml/training/": "sha256:62cc991f65aec3f15e6953fa4026a236949c371d2d7039ccdff33a8cd6763d69"
 ---
 # ML Model Training Guide
 

@@ -13,7 +13,13 @@ source_files:
   - tests/unit/test_silver_adapters.py
   - tests/integration/test_unified_journey_e2e.py
   - tests/security/test_journey_tenant_isolation.py
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "tests/integration/test_unified_journey_e2e.py": "sha256:5dc9f74bc7beedf9d372386aa31f562b22fffbb63af7e44aedfc63f581f0b798"
+  "tests/security/test_journey_tenant_isolation.py": "sha256:daa61f41d0d08381158ecd27f5a473ee8783c97929d99198ef93d0957d9da1bc"
+  "tests/unit/test_canonical_activity.py": "sha256:ff981cb131bf57b417af4ba247e4602fc6a08124a3a874bc2904442f3601cf08"
+  "tests/unit/test_journey_compiler_v2.py": "sha256:11ed3a245b1d19206bc7ece87c8c1812150249c022f8bcd980818aecc2a440ea"
+  "tests/unit/test_journey_step_repo.py": "sha256:2fd091fc178bfaabc90e6b8ce68077f4f401bf41cc5db68d151d54d26df900f1"
+  "tests/unit/test_silver_adapters.py": "sha256:86f4b6a457a3e2eeff18c067af8abc049ac041ddc7f2c22284b5b1137bc2aab0"
 ---
 
 # Test Evidence — Unified Canonical Journey

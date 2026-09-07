@@ -9,10 +9,12 @@ since_version: "9.0.0"
 source_files:
   - Backend Architecture/aether-backend/services/flow_trace/
   - Backend Architecture/aether-backend/repositories/repos.py
-last_synced_commit: "845b1c14"
 reviewed_source_commits:
   - commit: "54eaac5d"
     reason: "Reviewed the staging first-admin bootstrap change; flow-trace behavior and contracts are unaffected."
+source_hashes:
+  "Backend Architecture/aether-backend/repositories/repos.py": "sha256:17bda309a520403afe5ea14ec5a647d8aeea03839d644e3ce4c0086f1218f70f"
+  "Backend Architecture/aether-backend/services/flow_trace/": "sha256:f02d99a415f211c164a33956739c7fac197535a10af726cb661ff901aba31556"
 ---
 
 # Flow of Funds Trace

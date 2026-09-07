@@ -328,7 +328,7 @@ def check_docs_current() -> CheckResult:
     return (passed("docs-current", "source-linked docs drift clean")
             if proc.returncode == 0 else
             failed("docs-current", "source-linked docs are stale",
-                   "review docs vs source_files, then python scripts/docs_drift.py --update"))
+            "review the listed docs vs source_files, then make docs-generate-changed"))
 
 
 def check_pilot_manifest() -> CheckResult:

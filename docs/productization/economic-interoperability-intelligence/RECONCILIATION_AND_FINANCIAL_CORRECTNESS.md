@@ -12,7 +12,11 @@ source_files:
   - Backend Architecture/aether-backend/services/stablecoin/finality.py
   - Backend Architecture/aether-backend/services/interop/lifecycle.py
 canonical_owner: platform@aether
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/aether-backend/services/derivatives/pnl.py": "sha256:349600f38d611b92cdd51bb28c1f8747cc57b88e43de9e7ea90d3face1aa8d33"
+  "Backend Architecture/aether-backend/services/derivatives/runtime_reconciliation.py": "sha256:bf32bd026c4a4a03f3c7d74481b72db4527028b9543b28fa2f59c1da7b140f95"
+  "Backend Architecture/aether-backend/services/interop/lifecycle.py": "sha256:336cf9da3f46ec6364bb47b23761292cf2fa52bb0cebdecb12ac20a209163090"
+  "Backend Architecture/aether-backend/services/stablecoin/finality.py": "sha256:409db86b1b06aa9896b256acd4dc41cf9d358db48632cdb89f2b317599ff6a46"
 ---
 
 # Reconciliation and Financial Correctness

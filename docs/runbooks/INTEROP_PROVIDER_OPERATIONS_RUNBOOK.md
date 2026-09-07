@@ -9,7 +9,8 @@ since_version: "8.12.0"
 source_files:
   - Backend Architecture/aether-backend/services/interop/admin_routes.py
 canonical_owner: platform@aether
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/aether-backend/services/interop/admin_routes.py": "sha256:d3b506fdfb47dd45fbfc8c150f48689ac3e7bfe641b080bc7ddf287c1749c9d1"
 ---
 
 # Interop Provider Operations Runbook

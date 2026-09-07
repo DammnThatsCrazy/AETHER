@@ -12,7 +12,12 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/engine/journey_compiler.py
   - Backend Architecture/aether-backend/services/measurement/repositories/activity_repo.py
   - Backend Architecture/aether-backend/services/measurement/repositories/journey_step_repo.py
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/aether-backend/alembic/versions/20260627_canonical_activity.py": "sha256:aa34efcf5f337e4430e6727001ee26ca8d657b5d6be9ca7de85b7f151ee668d8"
+  "Backend Architecture/aether-backend/alembic/versions/20260725_ai_referral_attribution.py": "sha256:09bcc2502136159d1b50a74181c1d06a7eed30c57ffc9c15da6e900776196189"
+  "Backend Architecture/aether-backend/services/measurement/engine/journey_compiler.py": "sha256:53c760d1ef1a8c9efdd63665039287f033904f4c29e665341ffc6e5efdd40b4e"
+  "Backend Architecture/aether-backend/services/measurement/repositories/activity_repo.py": "sha256:faccc83968a7d96bcb74d60f05cbf3886bcabf22fc69ca9c4f6f4effa30894a9"
+  "Backend Architecture/aether-backend/services/measurement/repositories/journey_step_repo.py": "sha256:2e6af9a132e634bcfee37410c0966acc7d6f190d65b3d0de4c06efcfdee72831"
 ---
 
 # Deployment Profile Matrix — Unified Canonical Journey
