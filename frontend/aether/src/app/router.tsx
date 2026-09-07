@@ -1,12 +1,12 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { LoadingState } from '@aether/ui';
 import { RequireAuth } from '@aether-app/features/auth';
 import { AppShell } from '@aether-app/components/app-shell';
 import { CallbackPage } from '@aether-app/pages/callback';
 import { LoginPage } from '@aether-app/pages/login/login-page';
 import { DataRetentionPage } from '@aether-app/pages/legal/data-retention-page';
-import { TenantLanding, TenantNotFound } from './tenant-landing';
+import { AuthenticatedTenantLanding, TenantNotFound } from './tenant-landing';
 import { ErrorBoundary } from './error-boundary';
 
 const SignupPage = lazy(() => import('@aether-app/pages/signup/signup-page').then(m => ({ default: m.SignupPage })));
@@ -30,9 +30,10 @@ const MePage = lazy(() => import('@aether-app/pages/me/me-page').then(m => ({ de
 const NotificationCenterPage = lazy(() => import('@aether-app/pages/notifications/notification-center-page').then(m => ({ default: m.NotificationCenterPage })));
 const GeoPage = lazy(() => import('@aether-app/pages/geo').then(m => ({ default: m.GeoPage })));
 const OnboardingPage = lazy(() => import('@aether-app/pages/onboarding').then(m => ({ default: m.OnboardingPage })));
-const ActivationPage = lazy(() => import('@aether-app/pages/activation/activation-page').then(m => ({ default: m.ActivationPage })));
-// WS-3 guided activation (/activate alias): intent-driven connect over the same
-// connect contracts; the classic step flow stays at /activation.
+// Canonical guided activation: intent-driven connect over the shared connect
+// contracts, re-using the proven classic activation steps (plan/SDK/keys/test
+// event/first value) as its finish path (see activation-page.tsx). /activate is
+// a compatibility alias that redirects here.
 const ActivatePage = lazy(() => import('@aether-app/pages/activation/activate-page').then(m => ({ default: m.ActivatePage })));
 const AuditExportsPage = lazy(() => import('@aether-app/pages/audit-exports').then(m => ({ default: m.AuditExportsPage })));
 const ValueReviewPage = lazy(() => import('@aether-app/pages/value-review').then(m => ({ default: m.ValueReviewPage })));
@@ -71,6 +72,17 @@ function PageSuspense({ children }: { readonly children: React.ReactNode }) {
   );
 }
 
+/**
+ * Compatibility redirect that carries the query string + hash with it. Public
+ * handoff URLs (e.g. /activate?experience=advertising_campaigns) and contextual
+ * CTAs (/integrations?return=/campaigns/..) rely on those params surviving the
+ * alias hop, so a plain <Navigate to> (which drops search) is never used here.
+ */
+function RedirectPreservingQuery({ to }: { readonly to: string }) {
+  const location = useLocation();
+  return <Navigate to={`${to}${location.search}${location.hash}`} replace />;
+}
+
 export function AppRouter() {
   return (
     <Routes>
@@ -98,9 +110,12 @@ export function AppRouter() {
           <RequireAuth>
             <AppShell>
               <Routes>
-                <Route path="/" element={<TenantLanding />} />
-                <Route path="/activation" element={<PageSuspense><ActivationPage /></PageSuspense>} />
-                <Route path="/activate" element={<PageSuspense><ActivatePage /></PageSuspense>} />
+                <Route path="/" element={<AuthenticatedTenantLanding />} />
+                {/* Canonical guided activation (intent → recommended connect plan →
+                    credentials/sync → classic first-value finish). /activate is the
+                    compatibility alias and redirects here. */}
+                <Route path="/activation" element={<PageSuspense><ActivatePage /></PageSuspense>} />
+                <Route path="/activate" element={<RedirectPreservingQuery to="/activation" />} />
                 <Route path="/users" element={<PageSuspense><UsersPage /></PageSuspense>} />
                 <Route path="/users/:id" element={<PageSuspense><UserProfilePage /></PageSuspense>} />
                 <Route path="/users/:profileId/journey" element={<PageSuspense><JourneyExplorerPage /></PageSuspense>} />
@@ -139,7 +154,7 @@ export function AppRouter() {
                 <Route path="/system-status" element={<PageSuspense><SystemStatusPage /></PageSuspense>} />
                 <Route path="/data-quality" element={<PageSuspense><DataQualityPage /></PageSuspense>} />
                 {/* Compatibility: /integrations moved to Settings → Integrations (WS-1). */}
-                <Route path="/integrations" element={<Navigate to="/settings/integrations" replace />} />
+                <Route path="/integrations" element={<RedirectPreservingQuery to="/settings/integrations" />} />
                 <Route path="/rewards" element={<PageSuspense><RewardDecisionsPage /></PageSuspense>} />
                 <Route path="/rewards/decisions" element={<PageSuspense><RewardDecisionsPage /></PageSuspense>} />
                 <Route path="/rewards/approval-queue" element={<PageSuspense><RewardApprovalQueuePage /></PageSuspense>} />

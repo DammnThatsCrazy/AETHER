@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   cn,
   Badge,
@@ -19,6 +19,7 @@ import { AetherLogo } from '@aether-app/components/aether-logo';
 import { useAuth } from '@aether-app/features/auth';
 import { SESSION_KEY } from '@aether-app/features/auth/auth-context';
 import { useDemoSeedStatus } from '@aether-app/features/demo-seed/use-demo-seed-status';
+import { persistLastWorkspace } from '@aether-app/features/workspace/last-workspace';
 
 interface NavItemProps {
   to: string;
@@ -85,9 +86,17 @@ export function AppShell({ children }: AppShellProps) {
   const { capabilities } = useCapabilities();
   const build = useBuildInfo();
   const navigate = useNavigate();
+  const location = useLocation();
   const [reAuthBanner, setReAuthBanner] = useState(false);
   const demoSeed = useDemoSeedStatus();
   const showDemoBanner = demoSeed.data?.seeded === true && demoSeed.data.is_demo_tenant === true;
+
+  // Phase 2 landing: remember the last useful workspace (per user) so a
+  // completed tenant returns there instead of always landing on Home.
+  const scopeId = user?.email ?? null;
+  useEffect(() => {
+    if (scopeId) persistLastWorkspace(scopeId, location.pathname);
+  }, [scopeId, location.pathname]);
 
   // R-4: Detect sessionStorage cleared by tab/focus events
   useEffect(() => {

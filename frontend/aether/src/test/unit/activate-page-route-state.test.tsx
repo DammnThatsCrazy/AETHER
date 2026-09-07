@@ -4,11 +4,12 @@ import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '@aether/ui';
 import { ActivatePage } from '@aether-app/pages/activation/activate-page';
 
-// Route-state evidence for the WS-3 /activate row in the
-// FRONTEND-ROUTE-STATE-MATRIX ledger (empty/error/populated automation).
-// ActivatePage (activate-page.tsx) is the intent-driven guided activation
-// wizard served at /activate. Its three data hooks gate the states asserted
-// here: useActivationStatus (error -> "Failed to load activation status"),
+// Route-state evidence for the /activation row in the
+// FRONTEND-ROUTE-STATE-MATRIX ledger (empty/error/populated/loading automation).
+// ActivatePage (activate-page.tsx) is the canonical intent-driven guided
+// activation wizard served at /activation; /activate is a compatibility alias
+// that redirects here. Its three data hooks gate the states asserted here:
+// useActivationStatus (error -> "Failed to load activation status"),
 // useActivationIntentsCatalog (empty -> "No activation intents available"),
 // and useActivationPlan (drives the recommended connect plan section). The
 // proven activation step components it re-uses (./activation-page) consume the
@@ -64,7 +65,7 @@ function renderActivate() {
   );
 }
 
-describe('/activate — ActivatePage route states', () => {
+describe('/activation — ActivatePage route states', () => {
   beforeEach(() => {
     state.status = { data: null, isLoading: false, error: null, refetch: vi.fn() };
     state.catalog = { data: { intents: [] }, isLoading: false, error: null, refetch: vi.fn() };
@@ -73,6 +74,14 @@ describe('/activate — ActivatePage route states', () => {
     state.firstValue = { data: null, isLoading: false, error: null, refetch: vi.fn() };
     state.createKeys = { mutate: vi.fn(), isLoading: false, error: null, data: null, reset: vi.fn() };
     state.sendEvent = { mutate: vi.fn(), isLoading: false, error: null, data: null, reset: vi.fn() };
+  });
+
+  it('renders a loading skeleton without drawing any activation conclusions', () => {
+    state.status = { data: null, isLoading: true, error: null, refetch: vi.fn() };
+    renderActivate();
+    expect(document.querySelector('.animate-pulse, .aether-skeleton')).not.toBeNull();
+    expect(screen.queryByText('Failed to load activation status')).not.toBeInTheDocument();
+    expect(screen.queryByText('No activation intents available')).not.toBeInTheDocument();
   });
 
   it('renders the successful-empty state when the intent catalog is empty', async () => {

@@ -16,6 +16,7 @@ import {
   catalogBaselineCaption,
   groupByExperienceCategory,
   tenantConnectionStatus,
+  tenantConnectionStateToken,
 } from '@aether-app/features/settings';
 
 /** Route target for the reused connector manager (the Connect/Manage surface). */
@@ -24,10 +25,14 @@ const CONNECT_MANAGER_ROUTE = '/settings/integrations/connectors';
 function IntegrationRow({ item }: { readonly item: TenantIntegrationItem }) {
   const timeCtx = useTimeContext();
   const status = tenantConnectionStatus(item);
+  const stateToken = tenantConnectionStateToken(item);
   const baseline = catalogBaselineCaption(item.readiness?.state);
 
   return (
-    <div className="flex items-center justify-between rounded border border-border-default px-3 py-2 gap-2">
+    <div
+      data-provider-family={item.family}
+      className="flex items-center justify-between rounded border border-border-default px-3 py-2 gap-2"
+    >
       <div className="flex min-w-0 items-center gap-2.5">
         <ProviderMark provider={item.family} decorative size={20} />
         <div className="min-w-0">
@@ -49,7 +54,12 @@ function IntegrationRow({ item }: { readonly item: TenantIntegrationItem }) {
         <div className="text-right">
           <div className="flex items-center justify-end gap-1.5">
             <StatusIndicator status={status.indicator} />
-            <span className="text-xs font-mono text-text-secondary">{status.label}</span>
+            <span
+              className="text-xs font-mono text-text-secondary"
+              data-connection-state={stateToken}
+            >
+              {status.label}
+            </span>
           </div>
           {status.detail && (
             <div className="text-[10px] text-text-muted">{status.detail}</div>
@@ -124,7 +134,7 @@ export function IntegrationsSection() {
   const groups = groupByExperienceCategory(items);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" data-lifecycle-catalog>
       <div className="flex items-center justify-between">
         <div>
           <span className="text-sm font-mono text-text-muted">Integrations</span>

@@ -100,6 +100,34 @@ export function connectionStateLabel(
   }
 }
 
+/**
+ * Canonical lifecycle marker token for an activation integration row
+ * (`[data-connection-state]`). Strict projection of the connect machine's state
+ * onto the customer vocabulary; never emits "ready" — that word is reserved for
+ * the joined, evidence-derived readiness surface.
+ */
+export type ActivationStateToken =
+  | 'connected'
+  | 'syncing'
+  | 'needs_attention'
+  | 'not_connected';
+
+export function activationConnectionStateToken(
+  connectionState: ActivationPlanIntegration['connection_state'],
+): ActivationStateToken {
+  switch (connectionState) {
+    case 'connected':
+      return 'connected';
+    case 'initial_sync_running':
+      return 'syncing';
+    case 'degraded':
+    case 'sync_failed':
+      return 'needs_attention';
+    default:
+      return 'not_connected';
+  }
+}
+
 const CONNECT_ACTION_LABELS: Record<ActivationConnectAction, string> = {
   create_tenant_integration: 'Connect',
   configure_credential: 'Add credential',
@@ -174,6 +202,7 @@ function IntentPickerSection({
                 key={option.token}
                 type="button"
                 aria-pressed={active}
+                data-activation-intent={option.token}
                 onClick={() => onToggle(option.token)}
                 className={[
                   'text-left rounded border px-3 py-2 transition-colors',
@@ -250,7 +279,11 @@ function IntegrationRow({
     : null;
 
   return (
-    <div className="flex items-start justify-between gap-3 py-3 border-b border-border-subtle last:border-b-0">
+    <div
+      data-provider-family={integration.family}
+      data-connection-state={activationConnectionStateToken(integration.connection_state)}
+      className="flex items-start justify-between gap-3 py-3 border-b border-border-subtle last:border-b-0"
+    >
       <div className="min-w-0 space-y-1">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-text-primary truncate">
@@ -284,7 +317,7 @@ function IntegrationRow({
         {integration.connectable &&
           integration.can_act &&
           integration.next_action === 'configure_credential' && (
-            <div className="flex flex-col items-end gap-1">
+            <div className="flex flex-col items-end gap-1" data-connect-form={integration.family}>
               <label
                 className="text-[10px] uppercase tracking-wide text-text-muted"
                 htmlFor={`cred-${integration.family}`}
@@ -295,6 +328,7 @@ function IntegrationRow({
                 id={`cred-${integration.family}`}
                 type="password"
                 autoComplete="off"
+                data-credential-field="secret"
                 value={draft}
                 onChange={e => setDraft(e.target.value)}
                 placeholder="provider key"

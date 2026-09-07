@@ -40,14 +40,18 @@ vi.mock('@aether-app/features/activation/use-activation', () => ({
   useCompleteActivation: () => state.mutation,
 }));
 
-function renderLanding(initial = '/') {
+function renderLanding(initial = '/', scopeId?: string) {
   return render(
     <ThemeProvider>
       <MemoryRouter initialEntries={[initial]}>
         <Routes>
-          <Route path="/" element={<TenantLanding />} />
+          <Route
+            path="/"
+            element={scopeId ? <TenantLanding scopeId={scopeId} /> : <TenantLanding />}
+          />
           <Route path="/activation" element={<div>ACTIVATION ROUTE</div>} />
           <Route path="/settings" element={<div>SETTINGS ROUTE</div>} />
+          <Route path="/campaigns" element={<div>CAMPAIGNS ROUTE</div>} />
         </Routes>
       </MemoryRouter>
     </ThemeProvider>,
@@ -67,6 +71,7 @@ function renderActivation() {
 describe('Tenant landing routing', () => {
   beforeEach(() => {
     state.onboarding = { data: null, isLoading: false, error: null, refetch: vi.fn() };
+    window.localStorage.clear();
   });
 
   it('routes an incomplete tenant to /activation', () => {
@@ -93,6 +98,32 @@ describe('Tenant landing routing', () => {
     expect(screen.queryByText('ACTIVATION ROUTE')).not.toBeInTheDocument();
   });
 
+  it('returns a completed tenant to their last useful workspace (scope-scoped)', () => {
+    state.onboarding = {
+      data: { plan: { status: 'live' } },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+    window.localStorage.setItem('aether:last-workspace:acme@example.com', '/campaigns');
+    renderLanding('/', 'acme@example.com');
+    expect(screen.getByText('CAMPAIGNS ROUTE')).toBeInTheDocument();
+    expect(screen.queryByText('HOME WORKSPACE')).not.toBeInTheDocument();
+  });
+
+  it('never restores a last workspace from a different user account', () => {
+    state.onboarding = {
+      data: { plan: { status: 'live' } },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+    window.localStorage.setItem('aether:last-workspace:other@example.com', '/campaigns');
+    renderLanding('/', 'acme@example.com');
+    expect(screen.getByText('HOME WORKSPACE')).toBeInTheDocument();
+    expect(screen.queryByText('CAMPAIGNS ROUTE')).not.toBeInTheDocument();
+  });
+
   it('shows a loading state without misrouting while status resolves', () => {
     state.onboarding = { data: null, isLoading: true, error: null, refetch: vi.fn() };
     renderLanding('/');
@@ -111,7 +142,13 @@ describe('Tenant landing routing', () => {
   });
 });
 
-describe('Activation route data-truth states', () => {
+// Classic activation flow data-truth states. ActivationPage is no longer routed
+// on its own: /activation now serves the guided ActivatePage (route-state
+// evidence in activate-page-route-state.test.tsx) and re-uses these proven
+// plan/SDK/keys/test-event/first-value steps as its "Finish activation" tail.
+// This block keeps that classic container honest (loading / error / empty /
+// populated) since ActivatePage composes those steps.
+describe('Classic activation flow data-truth states (ActivatePage finish tail)', () => {
   beforeEach(() => {
     state.status = { data: null, isLoading: false, error: null, refetch: vi.fn() };
     state.firstValue = { data: null, isLoading: false, error: null, refetch: vi.fn() };
