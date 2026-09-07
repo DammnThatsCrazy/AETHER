@@ -50,6 +50,7 @@ from .lifecycle_scenarios import (
     ACTIVATION_STATE_COMPLETE,
     LIFECYCLE_SUITES,
     LifecycleSuite,
+    ScenarioPlan,
     scenario_state,
     tenant_email_env,
     tenant_password_env,
