@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.olympuslabs.io/contracts/delivery/failure-envelope/v1",
+  "title": "Aether FailureEnvelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "operation_id", "stage", "status", "code", "message", "retryable", "blocking"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "operation_id": {"type": "string", "minLength": 1},
+    "stage": {"type": "string", "minLength": 1},
+    "status": {"enum": ["BLOCKED", "FAILED"]},
+    "code": {"type": "string", "minLength": 1},
+    "message": {"type": "string", "minLength": 1},
+    "retryable": {"type": "boolean"},
+    "blocking": {"const": true},
+    "evidence_ref": {"type": "string", "minLength": 1},
+    "details": {"type": "object", "additionalProperties": {"type": "string"}}
+  }
+}

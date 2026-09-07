@@ -15,12 +15,15 @@ source_files:
   - config/golden_journeys.yaml
   - contracts/delivery/change-plan.schema.json
   - contracts/delivery/release-candidate.schema.json
+  - contracts/delivery/deployment-impact.schema.json
+  - contracts/delivery/failure-envelope.schema.json
   - contracts/delivery/release-evidence-bundle.schema.json
   - contracts/delivery/migration-evidence.schema.json
   - contracts/delivery/staging-lifecycle-result.schema.json
   - contracts/delivery/environment-resolution.schema.json
   - config/environment_requirements.yaml
   - scripts/artifact_builder.py
+  - scripts/delivery_contracts.py
   - scripts/change_plan.py
   - scripts/check_router.py
   - scripts/delivery_orchestrator.py
@@ -113,7 +116,18 @@ result before using it as PR evidence.
 candidate. Individual check states are `PASS`, `PASS_WITH_DEGRADATION`,
 `BLOCKED`, `FAILED`, or `NOT_APPLICABLE`. A bundle cannot be treated as ready
 when any blocking result remains. Artifact digests are mandatory SHA-256
-identities so staging and promotion can refer to the exact same build.
+identities so staging and promotion can refer to the exact same build. A
+`ReleaseCandidate` also carries per-lockfile digests and a typed
+`DeploymentImpact`, which makes the artifact closure explicit: consumers can
+re-check the exact component files, dependency locks, commit, profile, and
+rollback/approval implications before execution.
+
+Blocked or failed staging execution emits a typed `FailureEnvelope` alongside
+the lifecycle result. It records the operation, stage, stable failure code,
+retryability, and evidence reference while bounding and redacting command
+detail. A missing candidate, incompatible profile, absent cloud identity, or
+failed command therefore remains a first-class blocked/failed outcome instead
+of an unexplained generic error.
 
 `make build-artifact CANDIDATE_ID=<id> PROFILE=<profile>
 COMPONENTS='backend=path frontend=path' LOCKFILES='package-lock.json'` records

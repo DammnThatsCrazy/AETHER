@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.olympuslabs.io/contracts/delivery/deployment-impact/v1",
+  "title": "Aether DeploymentImpact v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile", "affected_domains", "affected_components", "migration_required", "data_contract_change", "security_sensitive", "rollback_required", "approval_required", "risk_level", "rationale"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "profile": {"type": "string", "minLength": 1},
+    "affected_domains": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "affected_components": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "migration_required": {"type": "boolean"},
+    "data_contract_change": {"type": "boolean"},
+    "security_sensitive": {"type": "boolean"},
+    "rollback_required": {"type": "boolean"},
+    "approval_required": {"type": "boolean"},
+    "risk_level": {"enum": ["low", "medium", "high", "critical"]},
+    "rationale": {"type": "string", "minLength": 1}
+  }
+}

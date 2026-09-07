@@ -13,6 +13,11 @@ from pathlib import Path
 
 import yaml
 
+try:  # Works both as a script and when imported by the unit tests.
+    from delivery_contracts import FailureEnvelope, sanitize_detail, validate_release_candidate
+except ModuleNotFoundError:  # pragma: no cover - import-mode compatibility
+    from scripts.delivery_contracts import FailureEnvelope, sanitize_detail, validate_release_candidate
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -38,15 +43,37 @@ def run(command: str) -> tuple[str, str]:
         completed = subprocess.run(argv, cwd=ROOT, text=True, capture_output=True, check=False)
     except OSError as exc:
         return "BLOCKED", f"command prerequisite unavailable: {exc}"
-    detail = (completed.stdout + completed.stderr).strip()[-4000:]
+    detail = sanitize_detail((completed.stdout + completed.stderr).strip())
     return ("PASS", detail) if completed.returncode == 0 else ("FAILED", detail or f"exit {completed.returncode}")
 
 
 def candidate(path: Path) -> dict:
     data = json.loads(path.read_text())
-    if not data.get("release_candidate_id") or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(data.get("artifact_digest", ""))):
-        raise ValueError("candidate lacks release_candidate_id or artifact_digest")
+    errors = validate_release_candidate(data)
+    if errors:
+        raise ValueError("invalid release candidate: " + "; ".join(errors))
     return data
+
+
+def _failure(
+    *,
+    operation_id: str,
+    stage: str,
+    status: str,
+    code: str,
+    reason: str,
+    evidence_ref: Path,
+    retryable: bool | None = None,
+) -> dict:
+    return FailureEnvelope.from_result(
+        operation_id=operation_id,
+        stage=stage,
+        status=status,
+        code=code,
+        reason=reason,
+        evidence_ref=str(evidence_ref),
+        retryable=retryable,
+    ).as_dict()
 
 
 def staging(args: argparse.Namespace) -> int:
@@ -55,26 +82,40 @@ def staging(args: argparse.Namespace) -> int:
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         result = {"schema_version": 1, "release_candidate_id": "unknown", "profile": args.profile,
                   "artifact_digest": "sha256:" + "0" * 64, "status": "BLOCKED",
-                  "checks": [{"check_id": "release_candidate", "status": "BLOCKED", "reason": str(exc)}], "timestamp": now()}
+                  "checks": [{"check_id": "release_candidate", "status": "BLOCKED", "reason": sanitize_detail(str(exc))}],
+                  "failure": _failure(operation_id="unknown", stage="release_candidate", status="BLOCKED",
+                                       code="INVALID_CANDIDATE", reason=str(exc), evidence_ref=args.output),
+                  "timestamp": now()}
         return write(result, args.output)
     checks: list[dict] = []
     compatible_profiles = rc.get("deployment_profiles", [])
     if compatible_profiles and args.profile not in compatible_profiles:
         checks.append({"check_id": "profile_compatibility", "status": "BLOCKED", "reason": f"candidate is not compatible with {args.profile}"})
         status = "BLOCKED"
+        failure = _failure(operation_id=rc["release_candidate_id"], stage="profile_compatibility", status=status,
+                           code="PROFILE_INCOMPATIBLE", reason=f"candidate is not compatible with {args.profile}",
+                           evidence_ref=args.output, retryable=False)
     elif args.dry_run:
         for name in ("preflight", "deploy", "migration", "tenant_activation", "golden_journeys"):
             checks.append({"check_id": name, "status": "NOT_APPLICABLE", "reason": "dry-run; command not executed"})
         status = "DRY_RUN"
+        failure = None
     elif not os.environ.get("AWS_ACCESS_KEY_ID") and not os.environ.get("AWS_PROFILE"):
         checks.append({"check_id": "aws_credentials", "status": "BLOCKED", "reason": "AWS_ACCESS_KEY_ID or AWS_PROFILE is required"})
         status = "BLOCKED"
+        failure = _failure(operation_id=rc["release_candidate_id"], stage="aws_identity", status=status,
+                           code="AWS_CREDENTIALS_MISSING", reason="AWS_ACCESS_KEY_ID or AWS_PROFILE is required",
+                           evidence_ref=args.output)
     else:
         status = "DEPLOYED"
+        failure = None
         identity_status, identity_detail = run("aws sts get-caller-identity --output json")
         checks.append({"check_id": "aws_identity", "status": identity_status, "reason": identity_detail or "AWS identity resolved"})
         if identity_status != "PASS":
             status = "BLOCKED" if identity_status == "BLOCKED" else "FAILED"
+            failure = _failure(operation_id=rc["release_candidate_id"], stage="aws_identity", status=status,
+                               code="AWS_IDENTITY_UNAVAILABLE", reason=identity_detail or "AWS identity could not be resolved",
+                               evidence_ref=args.output)
         commands = {
             "preflight": args.preflight_command,
             "deploy": args.deploy_command,
@@ -87,9 +128,14 @@ def staging(args: argparse.Namespace) -> int:
             checks.append({"check_id": name, "status": outcome, "reason": detail or "command passed"})
             if outcome != "PASS":
                 status = "BLOCKED" if outcome == "BLOCKED" else "FAILED"
+                failure = _failure(operation_id=rc["release_candidate_id"], stage=name, status=status,
+                                   code="COMMAND_BLOCKED" if outcome == "BLOCKED" else "COMMAND_FAILED",
+                                   reason=detail or f"{name} command did not pass", evidence_ref=args.output)
                 break
     result = {"schema_version": 1, "release_candidate_id": rc["release_candidate_id"], "profile": args.profile,
               "artifact_digest": rc["artifact_digest"], "status": status, "checks": checks, "timestamp": now()}
+    if failure is not None:
+        result["failure"] = failure
     return write(result, args.output)
 
 

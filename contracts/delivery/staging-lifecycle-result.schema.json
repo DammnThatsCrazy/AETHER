@@ -12,6 +12,7 @@
     "artifact_digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
     "status": {"enum": ["DRY_RUN", "BLOCKED", "FAILED", "DEPLOYED"]},
     "checks": {"type": "array", "items": {"$ref": "#/$defs/checkResult"}},
+    "failure": {"$ref": "#/$defs/failureEnvelope"},
     "timestamp": {"type": "string", "format": "date-time"}
   },
   "$defs": {
@@ -23,6 +24,23 @@
         "check_id": {"type": "string", "minLength": 1},
         "status": {"enum": ["PASS", "PASS_WITH_DEGRADATION", "BLOCKED", "FAILED", "NOT_APPLICABLE"]},
         "reason": {"type": "string"}
+      }
+    },
+    "failureEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "operation_id", "stage", "status", "code", "message", "retryable", "blocking"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "operation_id": {"type": "string", "minLength": 1},
+        "stage": {"type": "string", "minLength": 1},
+        "status": {"enum": ["BLOCKED", "FAILED"]},
+        "code": {"type": "string", "minLength": 1},
+        "message": {"type": "string", "minLength": 1},
+        "retryable": {"type": "boolean"},
+        "blocking": {"const": true},
+        "evidence_ref": {"type": "string", "minLength": 1},
+        "details": {"type": "object", "additionalProperties": {"type": "string"}}
       }
     }
   }

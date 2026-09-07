@@ -11,7 +11,36 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def candidate(tmp_path: Path, **overrides) -> Path:
     path = tmp_path / "candidate.json"
-    value = {"release_candidate_id": "rc-test", "artifact_digest": "sha256:" + "a" * 64}
+    value = {
+        "schema_version": 1,
+        "release_candidate_id": "rc-test",
+        "commit_sha": "a" * 40,
+        "artifact_digest": "sha256:" + "a" * 64,
+        "dependency_lock_hash": "sha256:" + "b" * 64,
+        "dependency_lock_digests": {},
+        "contract_versions": {},
+        "migration_version": "none",
+        "model_versions": {},
+        "policy_versions": {},
+        "deployment_profiles": ["staging"],
+        "affected_domains": ["delivery"],
+        "required_checks": ["canonical-consistency"],
+        "component_digests": {"repository-build": "sha256:" + "a" * 64},
+        "deployment_impact": {
+            "schema_version": 1,
+            "profile": "staging",
+            "affected_domains": ["delivery"],
+            "affected_components": ["repository-build"],
+            "migration_required": False,
+            "data_contract_change": False,
+            "security_sensitive": False,
+            "rollback_required": False,
+            "approval_required": False,
+            "risk_level": "medium",
+            "rationale": "candidate contains immutable, digest-bound build outputs",
+        },
+        "created_at": "2026-09-07T00:00:00+00:00",
+    }
     value.update(overrides)
     path.write_text(json.dumps(value))
     return path
@@ -37,7 +66,9 @@ def test_staging_without_aws_credentials_is_blocked(tmp_path, monkeypatch):
     monkeypatch.delenv("AWS_PROFILE", raising=False)
     args = staging_args(tmp_path)
     assert orchestrator.staging(args) == 1
-    assert json.loads(args.output.read_text())["status"] == "BLOCKED"
+    result = json.loads(args.output.read_text())
+    assert result["status"] == "BLOCKED"
+    assert result["failure"]["code"] == "AWS_CREDENTIALS_MISSING"
 
 
 def test_staging_stops_on_missing_command(tmp_path, monkeypatch):
@@ -54,7 +85,9 @@ def test_staging_blocks_incompatible_candidate_profile(tmp_path):
     args = staging_args(tmp_path)
     args.candidate = candidate(tmp_path, deployment_profiles=["production-lean"])
     assert orchestrator.staging(args) == 1
-    assert json.loads(args.output.read_text())["checks"][0]["check_id"] == "profile_compatibility"
+    result = json.loads(args.output.read_text())
+    assert result["checks"][0]["check_id"] == "profile_compatibility"
+    assert result["failure"]["code"] == "PROFILE_INCOMPATIBLE"
 
 
 def test_staging_success_executes_every_ordered_command(tmp_path, monkeypatch):
