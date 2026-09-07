@@ -328,6 +328,9 @@ resolve-environment: ## Resolve a canonical profile against observed capabilitie
 	@test -n "$(PROFILE)" || (echo "PROFILE is required"; exit 2)
 	$(GATE_PY) scripts/release/resolve_environment.py --profile "$(PROFILE)" $(foreach capability,$(CAPABILITIES),--capability "$(capability)") $(if $(OUTPUT),--output "$(OUTPUT)")
 
+validate-environment-requirements: ## Validate profile capability requirements without cloud access
+	$(GATE_PY) scripts/release/check_environment_requirements.py
+
 validate-delivery-profile: ## Validate a deployable frontend manifest and selected fallbacks (requires MANIFEST)
 	@test -n "$(MANIFEST)" || (echo "MANIFEST is required"; exit 2)
 	$(GATE_PY) scripts/validate_delivery_profiles.py "$(MANIFEST)" $(foreach fallback,$(ACTIVE_FALLBACKS),--active-fallback "$(fallback)")

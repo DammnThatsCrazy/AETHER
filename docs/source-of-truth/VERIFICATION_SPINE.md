@@ -35,6 +35,9 @@ source_files:
   - scripts/validate_delivery_profiles.py
   - scripts/validate_delivery_registries.py
   - scripts/release/resolve_environment.py
+  - scripts/release/check_environment_requirements.py
+  - scripts/validate_verification_router.py
+  - scripts/release/check_deployment_operator_surface.py
   - Makefile
 canonical_owner: platform@aether
 estimated_read_minutes: 8

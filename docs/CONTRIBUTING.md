@@ -16,9 +16,9 @@ estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
   "AGENTS.md": "sha256:9c93d298d9048a47ebbc2bbebdfba02095972cef5b0bd8f1a16b56a41b816f0e"
-  "Makefile": "sha256:28ff95d448dd863c553435d5e7250bc17bbc44209f2a8bbe78cb4854c2af3524"
+  "Makefile": "sha256:dccf27138afd889fdeea5d69a6b92407f9bc51cb5b0e5b4a3219559f1d6ef0c0"
   "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:88620327df8f66f95bb246548a484530a7fcc02388ce54fd167c6555f6157e37"
-  "scripts/repo_doctor.py": "sha256:a78c4dc073252c89f12bf354ad9cd225bb77b8281e0de2e3df2844658b4962dc"
+  "scripts/repo_doctor.py": "sha256:b0b85444c639b4be64ccf1defd21b92c3f9e8b0085e7d9c66f858b9a567ec1ac"
 ---
 
 # Contributing
@@ -36,6 +36,11 @@ Before opening or updating a PR:
 5. Do not bypass TypeScript/package export failures.
 6. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
 7. PR is not complete until `make ci-check` exits 0.
+
+The canonical CI gate also validates the impact-aware verification router, the
+environment capability requirement registry, and the GitHub-only deployment
+operator boundary. These checks validate repository policy; they do not claim
+that AWS credentials, runtime validation, or production promotion occurred.
 
 ## Generated docs
 
