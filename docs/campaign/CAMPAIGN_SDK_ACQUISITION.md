@@ -9,7 +9,7 @@ source_files:
   - packages/web/src/types.ts
   - packages/web/src/index.ts
   - packages/web/src/tracking/traffic-source-tracker.ts
-last_synced_commit: "c4f33e58"
+last_synced_commit: "23eb1b05"
 ---
 
 # Campaign SDK Acquisition Evidence
