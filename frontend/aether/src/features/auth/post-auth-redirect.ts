@@ -1,0 +1,17 @@
+/**
+ * The post-auth destination a successful login/signup should land on. Only an
+ * internal absolute path is accepted (a single leading `/`, not a
+ * protocol-relative `//…` or an absolute scheme) — RequireAuth builds it from
+ * the visitor's own deep link, and anything else falls back to the tenant home
+ * so a hand-built `/login?redirect=…` link can never push the browser to a
+ * foreign origin.
+ *
+ * Shared by the login and signup pages (and re-exported from login-page for
+ * back-compat with existing importers).
+ */
+export function resolvePostAuthRedirect(raw: string | null): string {
+  if (raw !== null && raw.startsWith("/") && !raw.startsWith("//")) {
+    return raw;
+  }
+  return "/settings";
+}

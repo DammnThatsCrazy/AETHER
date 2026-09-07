@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { AetherLogo } from '@aether-app/components/aether-logo';
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { AetherLogo } from "@aether-app/components/aether-logo";
 import {
   Button,
   GlyphIcon,
@@ -10,23 +10,33 @@ import {
   TabsTrigger,
   TabsContent,
   useToast,
-} from '@aether/ui';
-import type { SocialProvider } from '@aether/ui';
-import { useAuth, resolveAuthGrant } from '@aether-app/features/auth';
-import { api } from '@aether-app/lib/api/endpoints';
-import { OtpInput } from '@aether-app/components/otp-input';
+} from "@aether/ui";
+import type { SocialProvider } from "@aether/ui";
+import { useAuth, resolveAuthGrant } from "@aether-app/features/auth";
+import { resolvePostAuthRedirect } from "@aether-app/features/auth/post-auth-redirect";
+import {
+  buildSettingsRedirectFromHandoff,
+  parseSettingsHandoff,
+} from "@aether-app/features/settings/settings-handoff";
+import { api } from "@aether-app/lib/api/endpoints";
+import { OtpInput } from "@aether-app/components/otp-input";
 
 type Step = 1 | 2 | 3;
 
 const SSO_PROVIDERS: Array<{ provider: SocialProvider; label: string }> = [
-  { provider: 'google', label: 'Google' },
-  { provider: 'apple', label: 'Apple' },
-  { provider: 'slack', label: 'Slack' },
-  { provider: 'microsoft', label: 'Microsoft' },
+  { provider: "google", label: "Google" },
+  { provider: "apple", label: "Apple" },
+  { provider: "slack", label: "Slack" },
+  { provider: "microsoft", label: "Microsoft" },
 ];
 
 const RESEND_COOLDOWN = 30;
-const SDK_VERSIONS = { web: '8.9.0', ios: '8.3.1', android: '8.3.1', rn: '8.3.1' };
+const SDK_VERSIONS = {
+  web: "8.9.0",
+  ios: "8.3.1",
+  android: "8.3.1",
+  rn: "8.3.1",
+};
 
 function CodeBlock({ code, onCopy }: { code: string; onCopy: () => void }) {
   return (
@@ -47,10 +57,10 @@ function CodeBlock({ code, onCopy }: { code: string; onCopy: () => void }) {
 }
 
 const PLAN_OPTIONS = [
-  { value: 'P1', label: 'Hobbyist — $99/mo' },
-  { value: 'P2', label: 'Professional — $499/mo' },
-  { value: 'P3', label: 'Growth Intelligence — $1,499/mo' },
-  { value: 'P4', label: 'Protocol Master — $3,999/mo' },
+  { value: "P1", label: "Hobbyist — $99/mo" },
+  { value: "P2", label: "Professional — $499/mo" },
+  { value: "P3", label: "Growth Intelligence — $1,499/mo" },
+  { value: "P4", label: "Protocol Master — $3,999/mo" },
 ];
 
 export function SignupPage() {
@@ -61,13 +71,13 @@ export function SignupPage() {
 
   const [step, setStep] = useState<Step>(1);
   // Step 1 form fields
-  const [name, setName] = useState(searchParams.get('name') ?? '');
-  const [email, setEmail] = useState(searchParams.get('email') ?? '');
-  const [password, setPassword] = useState('');
-  const [planTier, setPlanTier] = useState('P1');
+  const [name, setName] = useState(searchParams.get("name") ?? "");
+  const [email, setEmail] = useState(searchParams.get("email") ?? "");
+  const [password, setPassword] = useState("");
+  const [planTier, setPlanTier] = useState("P1");
   const [registerError, setRegisterError] = useState<string | null>(null);
   // Step 2 OTP
-  const [otp, setOtp] = useState('');
+  const [otp, setOtp] = useState("");
   const [otpError, setOtpError] = useState<string | null>(null);
   const [resendHighlighted, setResendHighlighted] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -77,20 +87,51 @@ export function SignupPage() {
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [keySaved, setKeySaved] = useState(false);
 
+  // Post-signup destination. Precedence (all validated, never an off-origin
+  // value): (1) an explicit internal ?redirect=… survives the account creation;
+  // (2) otherwise a marketing provider deep link — /signup?family=…&intent=… —
+  // builds /settings/integrations?family=… so a brand-new visitor lands on the
+  // provider they came to connect; (3) otherwise the tenant home.
+  const rawRedirectParam = searchParams.get("redirect");
+  const explicitRedirect = resolvePostAuthRedirect(rawRedirectParam);
+  const handoff = parseSettingsHandoff(searchParams);
+  const signupTarget =
+    rawRedirectParam !== null && explicitRedirect !== "/settings"
+      ? explicitRedirect
+      : handoff.family !== null || handoff.experience !== null
+        ? buildSettingsRedirectFromHandoff(handoff)
+        : "/settings";
+
+  // The "Sign in" affordance preserves the current ?redirect and handoff params
+  // so a visitor who bounces back to /login does not lose their deep link.
+  const loginBackQuery = searchParams.toString();
+  const loginBackPath = loginBackQuery ? `/login?${loginBackQuery}` : "/login";
+
   useEffect(() => {
     if (resendCooldown <= 0) return;
-    const id = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+    const id = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
     return () => clearTimeout(id);
   }, [resendCooldown]);
 
   async function handleRegisterSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (name.trim().length < 2) { setRegisterError('Name must be at least 2 characters'); return; }
-    if (password.length < 8) { setRegisterError('Password must be at least 8 characters'); return; }
+    if (name.trim().length < 2) {
+      setRegisterError("Name must be at least 2 characters");
+      return;
+    }
+    if (password.length < 8) {
+      setRegisterError("Password must be at least 8 characters");
+      return;
+    }
     setRegisterLoading(true);
     setRegisterError(null);
     try {
-      await api.auth.register({ name: name.trim(), email: email.trim(), password, plan_tier: planTier });
+      await api.auth.register({
+        name: name.trim(),
+        email: email.trim(),
+        password,
+        plan_tier: planTier,
+      });
       setStep(2);
       setResendCooldown(RESEND_COOLDOWN);
     } catch {
@@ -110,7 +151,7 @@ export function SignupPage() {
     try {
       const response = await api.auth.verifyEmail(email.trim(), otp);
       const grant = resolveAuthGrant(response);
-      if (grant.kind === 'session') {
+      if (grant.kind === "session") {
         // Trust-plane posture: a durable session was started — there is no
         // reusable API key to reveal, so skip the key-reveal step entirely.
         await sessionLogin(grant.session);
@@ -122,9 +163,9 @@ export function SignupPage() {
         // Keep on step 2 to show key reveal; advance to 3 after user saves key
       }
     } catch {
-      setOtpError('Invalid or expired code — try again or request a new one');
+      setOtpError("Invalid or expired code — try again or request a new one");
       setResendHighlighted(true);
-      setOtp('');
+      setOtp("");
     } finally {
       setOtpLoading(false);
     }
@@ -136,36 +177,43 @@ export function SignupPage() {
     setOtpError(null);
     setResendCooldown(RESEND_COOLDOWN);
     try {
-      await api.auth.register({ name: name.trim() || 'User', email: email.trim(), password: password || 'resend', plan_tier: planTier });
-    } catch { /* silent — anti-enumeration */ }
+      await api.auth.register({
+        name: name.trim() || "User",
+        email: email.trim(),
+        password: password || "resend",
+        plan_tier: planTier,
+      });
+    } catch {
+      /* silent — anti-enumeration */
+    }
   }
 
   function handleSso(provider: SocialProvider) {
     setSsoLoading(true);
-    window.location.href = `/v1/auth/sso/${provider}?redirect_uri=${encodeURIComponent(window.location.origin + '/callback')}`;
+    window.location.href = `/v1/auth/sso/${provider}?redirect_uri=${encodeURIComponent(window.location.origin + "/callback")}`;
   }
 
   async function copyKey() {
     if (!revealedKey) return;
     try {
       await navigator.clipboard.writeText(revealedKey);
-      toast.success('Copied');
+      toast.success("Copied");
     } catch {
-      toast.info('Copy unavailable — select and copy the key manually');
+      toast.info("Copy unavailable — select and copy the key manually");
     }
   }
 
   async function copySnippet(text: string) {
     try {
       await navigator.clipboard.writeText(text);
-      toast.success('Copied');
+      toast.success("Copied");
     } catch {
-      toast.info('Copy unavailable — select and copy manually');
+      toast.info("Copy unavailable — select and copy manually");
     }
   }
 
   const snippets = {
-    web: `import aether from '@aether/web-sdk';\naether.init({ apiKey: '${revealedKey ?? 'YOUR_API_KEY'}' });`,
+    web: `import aether from '@aether/web-sdk';\naether.init({ apiKey: '${revealedKey ?? "YOUR_API_KEY"}' });`,
     ios: `.package(url: "https://github.com/AetherSDK/aether-ios.git", from: "${SDK_VERSIONS.ios}")`,
     android: `implementation("io.aether:sdk-android:${SDK_VERSIONS.android}")`,
     rn: `npm install @aether/react-native-sdk`,
@@ -184,17 +232,30 @@ export function SignupPage() {
         </div>
 
         <div className="bg-surface-raised border border-border-default rounded-lg p-6">
-
           {/* ── Step 1: Registration form ─────────────────────────── */}
           {step === 1 && (
             <div className="space-y-5">
               <div>
-                <h1 className="text-sm font-medium text-text-primary">Create your account</h1>
-                <p className="text-xs text-text-muted mt-0.5">Start with a plan you can upgrade anytime</p>
+                <h1 className="text-sm font-medium text-text-primary">
+                  Create your account
+                </h1>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Start with a plan you can upgrade anytime
+                </p>
               </div>
-              <form onSubmit={(e) => { void handleRegisterSubmit(e); }} className="space-y-3">
+              <form
+                onSubmit={(e) => {
+                  void handleRegisterSubmit(e);
+                }}
+                className="space-y-3"
+              >
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="signup-name" className="text-xs text-text-secondary">Full name</label>
+                  <label
+                    htmlFor="signup-name"
+                    className="text-xs text-text-secondary"
+                  >
+                    Full name
+                  </label>
                   <input
                     id="signup-name"
                     type="text"
@@ -202,26 +263,36 @@ export function SignupPage() {
                     required
                     minLength={2}
                     value={name}
-                    onChange={e => setName(e.target.value)}
+                    onChange={(e) => setName(e.target.value)}
                     placeholder="Your full name"
                     className="bg-surface-base text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus placeholder:text-text-muted"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="signup-email" className="text-xs text-text-secondary">Work email</label>
+                  <label
+                    htmlFor="signup-email"
+                    className="text-xs text-text-secondary"
+                  >
+                    Work email
+                  </label>
                   <input
                     id="signup-email"
                     type="email"
                     autoComplete="email"
                     required
                     value={email}
-                    onChange={e => setEmail(e.target.value)}
+                    onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@company.com"
                     className="bg-surface-base text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus placeholder:text-text-muted"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="signup-password" className="text-xs text-text-secondary">Password</label>
+                  <label
+                    htmlFor="signup-password"
+                    className="text-xs text-text-secondary"
+                  >
+                    Password
+                  </label>
                   <input
                     id="signup-password"
                     type="password"
@@ -229,28 +300,49 @@ export function SignupPage() {
                     required
                     minLength={8}
                     value={password}
-                    onChange={e => setPassword(e.target.value)}
+                    onChange={(e) => setPassword(e.target.value)}
                     placeholder="Min. 8 characters"
                     className="bg-surface-base text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus placeholder:text-text-muted"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="signup-plan" className="text-xs text-text-secondary">Plan</label>
+                  <label
+                    htmlFor="signup-plan"
+                    className="text-xs text-text-secondary"
+                  >
+                    Plan
+                  </label>
                   <select
                     id="signup-plan"
                     value={planTier}
-                    onChange={e => setPlanTier(e.target.value)}
+                    onChange={(e) => setPlanTier(e.target.value)}
                     className="bg-surface-base text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus"
                   >
-                    {PLAN_OPTIONS.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
+                    {PLAN_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
                     ))}
                   </select>
                 </div>
-                {registerError && <p className="text-danger text-xs font-mono">{registerError}</p>}
-                <Button type="submit" variant="primary" size="sm" className="w-full"
-                  disabled={!name.trim() || !email.trim() || !password || registerLoading}>
-                  {registerLoading ? '[···]' : 'Continue →'}
+                {registerError && (
+                  <p className="text-danger text-xs font-mono">
+                    {registerError}
+                  </p>
+                )}
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  className="w-full"
+                  disabled={
+                    !name.trim() ||
+                    !email.trim() ||
+                    !password ||
+                    registerLoading
+                  }
+                >
+                  {registerLoading ? "[···]" : "Continue →"}
                 </Button>
               </form>
               <div className="flex items-center gap-3">
@@ -279,8 +371,11 @@ export function SignupPage() {
                 ))}
               </div>
               <p className="text-center text-xs text-text-muted">
-                Already have an account?{' '}
-                <button onClick={() => void navigate('/login')} className="text-accent underline">
+                Already have an account?{" "}
+                <button
+                  onClick={() => void navigate(loginBackPath)}
+                  className="text-accent underline"
+                >
                   Sign in
                 </button>
               </p>
@@ -289,36 +384,68 @@ export function SignupPage() {
 
           {/* ── Step 2: OTP verification (before key is revealed) ── */}
           {step === 2 && !revealedKey && (
-            <form onSubmit={(e) => { void handleOtpSubmit(e); }} className="space-y-4">
+            <form
+              onSubmit={(e) => {
+                void handleOtpSubmit(e);
+              }}
+              className="space-y-4"
+            >
               <div>
-                <h1 className="text-sm font-medium text-text-primary">Check your email</h1>
+                <h1 className="text-sm font-medium text-text-primary">
+                  Check your email
+                </h1>
                 <p className="text-xs text-text-muted mt-0.5">
-                  We sent a verification code to{' '}
+                  We sent a verification code to{" "}
                   <span className="font-mono text-accent">{email}</span>
                 </p>
                 <button
                   type="button"
-                  onClick={() => { setStep(1); setOtp(''); setOtpError(null); }}
+                  onClick={() => {
+                    setStep(1);
+                    setOtp("");
+                    setOtpError(null);
+                  }}
                   className="text-xs text-text-muted underline mt-0.5"
                 >
                   Change details
                 </button>
               </div>
               <div className="flex flex-col gap-2">
-                <OtpInput value={otp} onChange={setOtp} error={!!otpError} disabled={otpLoading} />
-                {otpError && <p className="text-danger text-xs font-mono">{otpError}</p>}
+                <OtpInput
+                  value={otp}
+                  onChange={setOtp}
+                  error={!!otpError}
+                  disabled={otpLoading}
+                />
+                {otpError && (
+                  <p className="text-danger text-xs font-mono">{otpError}</p>
+                )}
               </div>
-              <Button type="submit" variant="primary" size="sm" className="w-full" disabled={otp.length < 6 || otpLoading}>
-                {otpLoading ? '[···]' : 'Verify & continue'}
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                className="w-full"
+                disabled={otp.length < 6 || otpLoading}
+              >
+                {otpLoading ? "[···]" : "Verify & continue"}
               </Button>
               <div className="text-center">
                 {resendCooldown > 0 ? (
-                  <span className="text-text-muted text-xs font-mono">resend in {resendCooldown}s</span>
+                  <span className="text-text-muted text-xs font-mono">
+                    resend in {resendCooldown}s
+                  </span>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => { void handleResend(); }}
-                    className={resendHighlighted ? 'text-accent underline text-xs animate-pulse' : 'text-accent underline text-xs'}
+                    onClick={() => {
+                      void handleResend();
+                    }}
+                    className={
+                      resendHighlighted
+                        ? "text-accent underline text-xs animate-pulse"
+                        : "text-accent underline text-xs"
+                    }
                   >
                     Resend code
                   </button>
@@ -331,15 +458,24 @@ export function SignupPage() {
           {step === 2 && revealedKey && (
             <div className="space-y-5">
               <div>
-                <h1 className="text-sm font-medium text-text-primary">Your API key</h1>
-                <p className="text-xs text-text-muted mt-0.5">Save this now — it won&apos;t be shown again.</p>
+                <h1 className="text-sm font-medium text-text-primary">
+                  Your API key
+                </h1>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Save this now — it won&apos;t be shown again.
+                </p>
               </div>
 
               {revealedKey && (
                 <div className="bg-surface-overlay border border-accent/40 rounded p-4 space-y-3">
                   <div className="flex items-start gap-1.5">
-                    <GlyphIcon glyph="[!]" className="text-warning text-xs mt-px shrink-0" />
-                    <p className="text-warning text-xs font-mono">Store this key — it will not be shown again</p>
+                    <GlyphIcon
+                      glyph="[!]"
+                      className="text-warning text-xs mt-px shrink-0"
+                    />
+                    <p className="text-warning text-xs font-mono">
+                      Store this key — it will not be shown again
+                    </p>
                   </div>
                   <div className="relative">
                     <p
@@ -349,7 +485,9 @@ export function SignupPage() {
                       {revealedKey}
                     </p>
                     <button
-                      onClick={() => { void copyKey(); }}
+                      onClick={() => {
+                        void copyKey();
+                      }}
                       className="absolute top-0 right-0 text-accent hover:text-accent-hover"
                       title="Copy key"
                       aria-label="Copy API key"
@@ -361,7 +499,9 @@ export function SignupPage() {
               )}
 
               <div className="space-y-3">
-                <p className="text-xs text-text-secondary">Install the SDK (optional — you can do this later)</p>
+                <p className="text-xs text-text-secondary">
+                  Install the SDK (optional — you can do this later)
+                </p>
                 <Tabs defaultValue="web">
                   <TabsList>
                     <TabsTrigger value="web">Web</TabsTrigger>
@@ -371,26 +511,74 @@ export function SignupPage() {
                   </TabsList>
                   <div className="mt-3 space-y-2">
                     <TabsContent value="web">
-                      <CodeBlock code={snippets.web} onCopy={() => { void copySnippet(snippets.web); }} />
-                      <button onClick={() => window.open('/docs/sdks/web', '_blank', 'noopener')} className="text-xs text-accent underline mt-1">
+                      <CodeBlock
+                        code={snippets.web}
+                        onCopy={() => {
+                          void copySnippet(snippets.web);
+                        }}
+                      />
+                      <button
+                        onClick={() =>
+                          window.open("/docs/sdks/web", "_blank", "noopener")
+                        }
+                        className="text-xs text-accent underline mt-1"
+                      >
                         View web docs →
                       </button>
                     </TabsContent>
                     <TabsContent value="ios">
-                      <CodeBlock code={snippets.ios} onCopy={() => { void copySnippet(snippets.ios); }} />
-                      <button onClick={() => window.open('/docs/sdks/ios', '_blank', 'noopener')} className="text-xs text-accent underline mt-1">
+                      <CodeBlock
+                        code={snippets.ios}
+                        onCopy={() => {
+                          void copySnippet(snippets.ios);
+                        }}
+                      />
+                      <button
+                        onClick={() =>
+                          window.open("/docs/sdks/ios", "_blank", "noopener")
+                        }
+                        className="text-xs text-accent underline mt-1"
+                      >
                         View iOS docs →
                       </button>
                     </TabsContent>
                     <TabsContent value="android">
-                      <CodeBlock code={snippets.android} onCopy={() => { void copySnippet(snippets.android); }} />
-                      <button onClick={() => window.open('/docs/sdks/android', '_blank', 'noopener')} className="text-xs text-accent underline mt-1">
+                      <CodeBlock
+                        code={snippets.android}
+                        onCopy={() => {
+                          void copySnippet(snippets.android);
+                        }}
+                      />
+                      <button
+                        onClick={() =>
+                          window.open(
+                            "/docs/sdks/android",
+                            "_blank",
+                            "noopener",
+                          )
+                        }
+                        className="text-xs text-accent underline mt-1"
+                      >
                         View Android docs →
                       </button>
                     </TabsContent>
                     <TabsContent value="rn">
-                      <CodeBlock code={snippets.rn} onCopy={() => { void copySnippet(snippets.rn); }} />
-                      <button onClick={() => window.open('/docs/sdks/react-native', '_blank', 'noopener')} className="text-xs text-accent underline mt-1">
+                      <CodeBlock
+                        code={snippets.rn}
+                        onCopy={() => {
+                          void copySnippet(snippets.rn);
+                        }}
+                      />
+                      <button
+                        onClick={() =>
+                          window.open(
+                            "/docs/sdks/react-native",
+                            "_blank",
+                            "noopener",
+                          )
+                        }
+                        className="text-xs text-accent underline mt-1"
+                      >
                         View React Native docs →
                       </button>
                     </TabsContent>
@@ -403,7 +591,7 @@ export function SignupPage() {
                   <input
                     type="checkbox"
                     checked={keySaved}
-                    onChange={e => setKeySaved(e.target.checked)}
+                    onChange={(e) => setKeySaved(e.target.checked)}
                     className="accent-accent"
                   />
                   I&apos;ve saved my API key
@@ -425,17 +613,25 @@ export function SignupPage() {
             <div className="space-y-5 text-center">
               <div>
                 <div className="font-mono text-2xl text-success mb-2">[✓]</div>
-                <h1 className="text-sm font-medium text-text-primary">You&apos;re all set</h1>
+                <h1 className="text-sm font-medium text-text-primary">
+                  You&apos;re all set
+                </h1>
                 <p className="text-xs text-text-muted mt-1">
-                  Your account is ready. Head to the dashboard to start tracking.
+                  Your account is ready. Head to the dashboard to start
+                  tracking.
                 </p>
               </div>
               <div className="flex flex-col gap-2">
-                <Button variant="primary" size="sm" className="w-full" onClick={() => void navigate('/settings')}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => void navigate(signupTarget)}
+                >
                   Go to dashboard
                 </Button>
                 <button
-                  onClick={() => void navigate('/settings')}
+                  onClick={() => void navigate(signupTarget)}
                   className="text-xs text-text-muted underline"
                 >
                   Skip for now

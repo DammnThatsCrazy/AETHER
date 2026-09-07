@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Badge,
   Button,
@@ -12,7 +12,7 @@ import {
   ErrorState,
   LoadingState,
   type CapabilityState,
-} from '@aether/ui';
+} from "@aether/ui";
 import {
   useActivationConnectAction,
   useActivationIntentsCatalog,
@@ -22,12 +22,12 @@ import {
   type ActivationPlan,
   type ActivationPlanCategory,
   type ActivationPlanIntegration,
-} from '@aether-app/features/activation/use-activation-intents';
+} from "@aether-app/features/activation/use-activation-intents";
 import {
   activationCapabilityState,
   activationStateLabel,
   useActivationStatus,
-} from '@aether-app/features/activation/use-activation';
+} from "@aether-app/features/activation/use-activation";
 import {
   CompleteStep,
   FirstValueStep,
@@ -35,7 +35,7 @@ import {
   PlanStep,
   SdkStep,
   TestEventStep,
-} from './activation-page';
+} from "./activation-page";
 
 /**
  * WS-3 guided activation ("/activate"): intent-driven connect over the shared
@@ -51,50 +51,50 @@ import {
 
 /** Map a ConnectionState token onto the shared honest capability palette. */
 export function connectionCapabilityState(
-  connectionState: ActivationPlanIntegration['connection_state'],
+  connectionState: ActivationPlanIntegration["connection_state"],
 ): CapabilityState {
   switch (connectionState) {
-    case 'available':
-      return 'not_configured';
-    case 'credential_waiting':
-      return 'credential_required';
-    case 'disabled':
-      return 'disabled';
-    case 'initial_sync_pending':
-      return 'provisioning';
-    case 'initial_sync_running':
-      return 'connection_testing';
-    case 'connected':
-      return 'live';
-    case 'degraded':
-      return 'degraded';
-    case 'sync_failed':
-      return 'error';
+    case "available":
+      return "not_configured";
+    case "credential_waiting":
+      return "credential_required";
+    case "disabled":
+      return "disabled";
+    case "initial_sync_pending":
+      return "provisioning";
+    case "initial_sync_running":
+      return "connection_testing";
+    case "connected":
+      return "live";
+    case "degraded":
+      return "degraded";
+    case "sync_failed":
+      return "error";
     default:
-      return 'unavailable';
+      return "unavailable";
   }
 }
 
 export function connectionStateLabel(
-  connectionState: ActivationPlanIntegration['connection_state'],
+  connectionState: ActivationPlanIntegration["connection_state"],
 ): string {
   switch (connectionState) {
-    case 'available':
-      return 'Available to connect';
-    case 'credential_waiting':
-      return 'Credential needed';
-    case 'disabled':
-      return 'Disabled';
-    case 'initial_sync_pending':
-      return 'Ready for first sync';
-    case 'initial_sync_running':
-      return 'Initial sync running';
-    case 'connected':
-      return 'Connected';
-    case 'degraded':
-      return 'Degraded';
-    case 'sync_failed':
-      return 'Sync failed';
+    case "available":
+      return "Available to connect";
+    case "credential_waiting":
+      return "Credential needed";
+    case "disabled":
+      return "Disabled";
+    case "initial_sync_pending":
+      return "Ready for first sync";
+    case "initial_sync_running":
+      return "Initial sync running";
+    case "connected":
+      return "Connected";
+    case "degraded":
+      return "Degraded";
+    case "sync_failed":
+      return "Sync failed";
     default:
       return connectionState;
   }
@@ -107,40 +107,42 @@ export function connectionStateLabel(
  * the joined, evidence-derived readiness surface.
  */
 export type ActivationStateToken =
-  | 'connected'
-  | 'syncing'
-  | 'needs_attention'
-  | 'not_connected';
+  | "connected"
+  | "syncing"
+  | "needs_attention"
+  | "not_connected";
 
 export function activationConnectionStateToken(
-  connectionState: ActivationPlanIntegration['connection_state'],
+  connectionState: ActivationPlanIntegration["connection_state"],
 ): ActivationStateToken {
   switch (connectionState) {
-    case 'connected':
-      return 'connected';
-    case 'initial_sync_running':
-      return 'syncing';
-    case 'degraded':
-    case 'sync_failed':
-      return 'needs_attention';
+    case "connected":
+      return "connected";
+    case "initial_sync_running":
+      return "syncing";
+    case "degraded":
+    case "sync_failed":
+      return "needs_attention";
     default:
-      return 'not_connected';
+      return "not_connected";
   }
 }
 
 const CONNECT_ACTION_LABELS: Record<ActivationConnectAction, string> = {
-  create_tenant_integration: 'Connect',
-  configure_credential: 'Add credential',
-  enable_connection: 'Enable connection',
-  first_sync: 'Run first sync',
+  create_tenant_integration: "Connect",
+  configure_credential: "Add credential",
+  enable_connection: "Enable connection",
+  first_sync: "Run first sync",
 };
 
-function isConnectAction(value: string | null): value is ActivationConnectAction {
+function isConnectAction(
+  value: string | null,
+): value is ActivationConnectAction {
   return (
-    value === 'create_tenant_integration' ||
-    value === 'configure_credential' ||
-    value === 'enable_connection' ||
-    value === 'first_sync'
+    value === "create_tenant_integration" ||
+    value === "configure_credential" ||
+    value === "enable_connection" ||
+    value === "first_sync"
   );
 }
 
@@ -175,7 +177,12 @@ function IntentPickerSection({
 }: IntentPickerSectionProps) {
   if (loading && options.length === 0) return <LoadingState lines={4} />;
   if (error) {
-    return <ErrorState message="Could not load the activation intents" onRetry={refetch} />;
+    return (
+      <ErrorState
+        message="Could not load the activation intents"
+        onRetry={refetch}
+      />
+    );
   }
   if (options.length === 0) {
     return (
@@ -189,13 +196,16 @@ function IntentPickerSection({
     <Card>
       <CardHeader>
         <CardTitle className="text-sm">
-          What are you trying to do? <span className="text-text-muted">(pick any)</span>
+          What are you trying to do?{" "}
+          <span className="text-text-muted">(pick any)</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {saveError && <ErrorState message={`Could not save your goals: ${saveError}`} />}
+        {saveError && (
+          <ErrorState message={`Could not save your goals: ${saveError}`} />
+        )}
         <div className="grid gap-2 sm:grid-cols-2">
-          {options.map(option => {
+          {options.map((option) => {
             const active = selected.includes(option.token);
             return (
               <button
@@ -205,31 +215,49 @@ function IntentPickerSection({
                 data-activation-intent={option.token}
                 onClick={() => onToggle(option.token)}
                 className={[
-                  'text-left rounded border px-3 py-2 transition-colors',
+                  "text-left rounded border px-3 py-2 transition-colors",
                   active
-                    ? 'border-border-focus bg-surface-raised'
-                    : 'border-border-default bg-surface-base hover:border-border-focus',
-                ].join(' ')}
+                    ? "border-border-focus bg-surface-raised"
+                    : "border-border-default bg-surface-base hover:border-border-focus",
+                ].join(" ")}
               >
                 <div className="flex items-center justify-between gap-2 text-sm">
-                  <span className="text-text-primary font-medium">{option.label}</span>
+                  <span className="text-text-primary font-medium">
+                    {option.label}
+                  </span>
                   {active && (
                     <Badge variant="success" size="sm">
                       Selected
                     </Badge>
                   )}
                 </div>
-                <p className="text-xs text-text-secondary mt-0.5">{option.description}</p>
+                <p className="text-xs text-text-secondary mt-0.5">
+                  {option.description}
+                </p>
               </button>
             );
           })}
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="primary" size="sm" disabled={saving} onClick={() => onSave(selected)}>
-            {saving ? '[···]' : selected.length === 0 ? 'Save my goals (none yet)' : 'Save my goals'}
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={saving}
+            onClick={() => onSave(selected)}
+          >
+            {saving
+              ? "[···]"
+              : selected.length === 0
+                ? "Save my goals (none yet)"
+                : "Save my goals"}
           </Button>
           {selected.length > 0 && (
-            <Button variant="ghost" size="sm" disabled={saving} onClick={() => onToggle('__clear')}>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={saving}
+              onClick={() => onToggle("__clear")}
+            >
               Clear
             </Button>
           )}
@@ -251,27 +279,31 @@ function IntegrationRow({
   const label = connectionStateLabel(integration.connection_state);
   const record = integration.record;
   const errorCount = record ? Number(record.error_count ?? 0) : 0;
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState("");
 
   // Never keep a typed credential around once the row has moved past the
   // configure_credential step (the value must not sit in component state).
   useEffect(() => {
-    if (integration.next_action !== 'configure_credential') setDraft('');
+    if (integration.next_action !== "configure_credential") setDraft("");
   }, [integration.next_action]);
 
   function run() {
-    if (!integration.can_act || !isConnectAction(integration.next_action)) return;
-    if (integration.next_action === 'configure_credential') {
+    if (!integration.can_act || !isConnectAction(integration.next_action))
+      return;
+    if (integration.next_action === "configure_credential") {
       const value = draft.trim();
       if (!value) return;
       connect.mutate({
         family: integration.family,
-        action: 'configure_credential',
+        action: "configure_credential",
         credential: value,
       });
       return;
     }
-    connect.mutate({ family: integration.family, action: integration.next_action });
+    connect.mutate({
+      family: integration.family,
+      action: integration.next_action,
+    });
   }
 
   const actionLabel = isConnectAction(integration.next_action)
@@ -281,7 +313,9 @@ function IntegrationRow({
   return (
     <div
       data-provider-family={integration.family}
-      data-connection-state={activationConnectionStateToken(integration.connection_state)}
+      data-connection-state={activationConnectionStateToken(
+        integration.connection_state,
+      )}
       className="flex items-start justify-between gap-3 py-3 border-b border-border-subtle last:border-b-0"
     >
       <div className="min-w-0 space-y-1">
@@ -298,26 +332,31 @@ function IntegrationRow({
         </div>
         {errorCount > 0 && (
           <p className="text-xs font-mono text-warning">
-            {errorCount} failed attempt{errorCount === 1 ? '' : 's'}
+            {errorCount} failed attempt{errorCount === 1 ? "" : "s"}
           </p>
         )}
         {!integration.connectable && (
           <p className="text-xs text-text-muted">
-            {integration.connect_unavailable_reason === 'managed_by_other_flow'
-              ? 'This connects through its own flow (not through activation).'
-              : 'Not available to connect in activation yet.'}
+            {integration.connect_unavailable_reason === "managed_by_other_flow"
+              ? "This connects through its own flow (not through activation)."
+              : "Not available to connect in activation yet."}
           </p>
         )}
         {connect.error && (
-          <p className="text-xs font-mono text-danger break-words">{connect.error}</p>
+          <p className="text-xs font-mono text-danger break-words">
+            {connect.error}
+          </p>
         )}
       </div>
 
       <div className="shrink-0 space-y-2">
         {integration.connectable &&
           integration.can_act &&
-          integration.next_action === 'configure_credential' && (
-            <div className="flex flex-col items-end gap-1" data-connect-form={integration.family}>
+          integration.next_action === "configure_credential" && (
+            <div
+              className="flex flex-col items-end gap-1"
+              data-connect-form={integration.family}
+            >
               <label
                 className="text-[10px] uppercase tracking-wide text-text-muted"
                 htmlFor={`cred-${integration.family}`}
@@ -330,7 +369,7 @@ function IntegrationRow({
                 autoComplete="off"
                 data-credential-field="secret"
                 value={draft}
-                onChange={e => setDraft(e.target.value)}
+                onChange={(e) => setDraft(e.target.value)}
                 placeholder="provider key"
                 className="w-48 bg-surface-raised text-text-primary border border-border-default rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-border-focus"
               />
@@ -340,25 +379,31 @@ function IntegrationRow({
           integration.can_act &&
           isConnectAction(integration.next_action) && (
             <Button
-              variant={integration.next_action === 'first_sync' ? 'secondary' : 'primary'}
+              variant={
+                integration.next_action === "first_sync"
+                  ? "secondary"
+                  : "primary"
+              }
               size="sm"
               disabled={
                 connect.isLoading ||
-                (integration.next_action === 'configure_credential' && !draft.trim())
+                (integration.next_action === "configure_credential" &&
+                  !draft.trim())
               }
               onClick={run}
             >
-              {connect.isLoading ? '[···]' : actionLabel}
+              {connect.isLoading ? "[···]" : actionLabel}
             </Button>
           )}
-        {integration.connectable && integration.connection_state === 'connected' && (
-          <Link
-            to="/integrations"
-            className="text-xs text-text-secondary hover:text-text-primary underline"
-          >
-            Manage
-          </Link>
-        )}
+        {integration.connectable &&
+          integration.connection_state === "connected" && (
+            <Link
+              to="/integrations"
+              className="text-xs text-text-secondary hover:text-text-primary underline"
+            >
+              Manage
+            </Link>
+          )}
         {!integration.connectable && (
           <Link
             to="/integrations"
@@ -380,61 +425,148 @@ function PlanCategoryBlock({
   readonly category: ActivationPlanCategory;
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between gap-3 text-sm">
-          <span className="text-text-primary">{category.display_name}</span>
-          <span className="text-xs font-mono text-text-muted">
-            {category.connected_count}/{category.integration_count} connected
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {category.integrations.length === 0 ? (
-          <EmptyState
-            title="Nothing to connect yet"
-            description="No self-serve integrations are available under this experience right now."
-          />
-        ) : (
-          <div className="divide-y divide-border-subtle">
-            {category.integrations.map(integration => (
-              <IntegrationRow key={integration.family} integration={integration} />
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <div
+      data-plan-category={category.experience_category}
+      className="rounded-lg data-[handoff-focus=true]:ring-2 data-[handoff-focus=true]:ring-border-focus"
+    >
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between gap-3 text-sm">
+            <span className="text-text-primary">{category.display_name}</span>
+            <span className="text-xs font-mono text-text-muted">
+              {category.connected_count}/{category.integration_count} connected
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {category.integrations.length === 0 ? (
+            <EmptyState
+              title="Nothing to connect yet"
+              description="No self-serve integrations are available under this experience right now."
+            />
+          ) : (
+            <div className="divide-y divide-border-subtle">
+              {category.integrations.map((integration) => (
+                <IntegrationRow
+                  key={integration.family}
+                  integration={integration}
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Find a rendered recommended-plan category block by its experience token, if
+ * the plan actually contains that experience. Returns null when absent so a
+ * handoff never highlights a category that is not rendered.
+ */
+function findPlanCategoryBlock(experience: string): HTMLElement | null {
+  const root = document.querySelector("[data-activation-plan]") ?? document;
+  for (const el of Array.from(root.querySelectorAll("[data-plan-category]"))) {
+    if (el.getAttribute("data-plan-category") === experience) {
+      return el as HTMLElement;
+    }
+  }
+  return null;
+}
 
 export function ActivatePage() {
   const status = useActivationStatus();
   const picker = useActivationIntentsCatalog();
   const plan = useActivationPlan();
   const saveIntents = useSaveActivationIntents();
+  const [searchParams] = useSearchParams();
+
+  // Deep-link draft prefill (WS-3 activation handoff): marketing emits
+  // /activate?experience=advertising_campaigns&intent=connect (the marketing
+  // action token) and, for goals-first internal links, /activate?intent=<goal>.
+  // Both are applied ONLY as a one-time DRAFT preselect when the tenant has no
+  // durable selection yet and has not touched the draft — never auto-saved.
+  const intentParam = searchParams.get("intent");
+  const experienceParam = searchParams.get("experience");
 
   // Durable selection is the seed for the picker toggles. Reseed only when the
   // backend-reported selection actually changes (e.g. after a save), never while
   // the user is editing the draft.
-  const seededKey = (plan.data?.selected_intents ?? status.data?.intents ?? []).join(',');
-  const lastSeed = useRef('');
+  const seededKey = (
+    plan.data?.selected_intents ??
+    status.data?.intents ??
+    []
+  ).join(",");
+  const lastSeed = useRef("");
   const [toggles, setToggles] = useState<readonly string[]>([]);
   useEffect(() => {
     if (seededKey !== lastSeed.current) {
       lastSeed.current = seededKey;
-      setToggles(seededKey ? seededKey.split(',').filter(Boolean) : []);
+      setToggles(seededKey ? seededKey.split(",").filter(Boolean) : []);
     }
   }, [seededKey]);
 
+  const intentOptions = picker.data?.intents ?? [];
+  // The durable selection is "settled" once the plan read (the authoritative
+  // source for selected_intents) has resolved or the status read reports intents.
+  const durableSettled =
+    plan.data !== null ||
+    (status.data !== null && status.data.intents !== undefined);
+  const touchedDraftRef = useRef(false);
+  const appliedPrefillRef = useRef(false);
+
+  // One-time draft prefill. Validation is single-sourced: ?intent must equal a
+  // catalog option token and ?experience must be in some option's
+  // recommended_categories; anything else is ignored. Never calls the save
+  // mutation — this is a DRAFT the tenant still explicitly saves.
+  useEffect(() => {
+    if (appliedPrefillRef.current || touchedDraftRef.current) return;
+    if (intentOptions.length === 0) return;
+    if (!durableSettled) return;
+    if (seededKey !== "") return; // existing saved goals win
+    const matched = intentOptions
+      .filter(
+        (option) =>
+          option.token === intentParam ||
+          (experienceParam !== null &&
+            option.recommended_categories.includes(experienceParam)),
+      )
+      .map((option) => option.token);
+    if (matched.length === 0) return;
+    appliedPrefillRef.current = true;
+    setToggles(matched);
+  }, [intentOptions, intentParam, experienceParam, durableSettled, seededKey]);
+
+  // Transient plan-category highlight for a requested ?experience (deep link):
+  // once the plan renders a matching PlanCategoryBlock, focus it (scroll once +
+  // data-handoff-focus ring for ~2.5s) exactly like the Settings row focus.
+  const focusedExperienceRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (experienceParam === null) return;
+    const block = findPlanCategoryBlock(experienceParam);
+    if (!block) return;
+    block.setAttribute("data-handoff-focus", "true");
+    if (focusedExperienceRef.current !== experienceParam) {
+      focusedExperienceRef.current = experienceParam;
+      block.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    const timer = window.setTimeout(() => {
+      block.removeAttribute("data-handoff-focus");
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [experienceParam, plan.data]);
+
   function toggleToken(token: string) {
-    if (token === '__clear') {
+    touchedDraftRef.current = true;
+    if (token === "__clear") {
       setToggles([]);
       return;
     }
-    setToggles(prev =>
-      prev.includes(token) ? prev.filter(t => t !== token) : [...prev, token],
+    setToggles((prev) =>
+      prev.includes(token) ? prev.filter((t) => t !== token) : [...prev, token],
     );
   }
 
@@ -446,7 +578,8 @@ export function ActivatePage() {
         </h1>
         <p className="text-text-secondary text-sm mt-1">
           Tell us what you are trying to do — we recommend the integrations to
-          connect, in the order that matters. Every step reflects real connection state.
+          connect, in the order that matters. Every step reflects real
+          connection state.
         </p>
       </div>
       {status.data && (
@@ -468,7 +601,10 @@ export function ActivatePage() {
         {status.isLoading && !status.data && <LoadingState lines={6} />}
 
         {!status.isLoading && status.error && (
-          <ErrorState message="Failed to load activation status" onRetry={status.refetch} />
+          <ErrorState
+            message="Failed to load activation status"
+            onRetry={status.refetch}
+          />
         )}
 
         {status.data && (
@@ -477,22 +613,25 @@ export function ActivatePage() {
               loading={picker.isLoading}
               error={picker.error ? String(picker.error) : null}
               refetch={picker.refetch}
-              options={picker.data?.intents ?? []}
+              options={intentOptions}
               selected={toggles}
               onToggle={toggleToken}
-              onSave={tokens => saveIntents.mutate(tokens)}
+              onSave={(tokens) => saveIntents.mutate(tokens)}
               saving={saveIntents.isLoading}
               saveError={saveIntents.error ? String(saveIntents.error) : null}
             />
 
-            <section className="space-y-2">
+            <section className="space-y-2" data-activation-plan>
               <h2 className="text-sm font-semibold text-text-primary uppercase tracking-wide">
                 Recommended connect plan
               </h2>
 
               {plan.isLoading && !plan.data && <LoadingState lines={4} />}
               {plan.error && (
-                <ErrorState message="Could not load your connect plan" onRetry={plan.refetch} />
+                <ErrorState
+                  message="Could not load your connect plan"
+                  onRetry={plan.refetch}
+                />
               )}
 
               {plan.data && plan.data.needs_selection && (
@@ -510,7 +649,7 @@ export function ActivatePage() {
                       description="Your goals don't map to connectable integrations yet — nothing is recommended rather than faking a step."
                     />
                   ) : (
-                    plan.data.categories.map(category => (
+                    plan.data.categories.map((category) => (
                       <PlanCategoryBlock
                         key={category.experience_category}
                         category={category}

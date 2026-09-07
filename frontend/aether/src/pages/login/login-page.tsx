@@ -1,48 +1,47 @@
-import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, SocialProviderIcon } from '@aether/ui';
-import { AetherLogo } from '@aether-app/components/aether-logo';
-import type { SocialProvider } from '@aether/ui';
-import { useAuth, resolveAuthGrant } from '@aether-app/features/auth';
-import { api } from '@aether-app/lib/api/endpoints';
-import { env } from '@aether-app/lib/env';
+import { useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Button, SocialProviderIcon } from "@aether/ui";
+import { AetherLogo } from "@aether-app/components/aether-logo";
+import type { SocialProvider } from "@aether/ui";
+import { useAuth, resolveAuthGrant } from "@aether-app/features/auth";
+import { resolvePostAuthRedirect } from "@aether-app/features/auth/post-auth-redirect";
+import { api } from "@aether-app/lib/api/endpoints";
+import { env } from "@aether-app/lib/env";
 
-type SsoState = 'idle' | 'loading';
+export { resolvePostAuthRedirect } from "@aether-app/features/auth/post-auth-redirect";
+
+type SsoState = "idle" | "loading";
 
 const SSO_PROVIDERS: Array<{ provider: SocialProvider; label: string }> = [
-  { provider: 'google', label: 'Continue with Google' },
-  { provider: 'apple', label: 'Continue with Apple' },
-  { provider: 'slack', label: 'Continue with Slack' },
-  { provider: 'microsoft', label: 'Continue with Microsoft' },
+  { provider: "google", label: "Continue with Google" },
+  { provider: "apple", label: "Continue with Apple" },
+  { provider: "slack", label: "Continue with Slack" },
+  { provider: "microsoft", label: "Continue with Microsoft" },
 ];
-
-/**
- * The post-auth destination a successful login should land on. Only an
- * internal absolute path is accepted (a single leading `/`, not a
- * protocol-relative `//…` or an absolute scheme) — RequireAuth builds it from
- * the visitor's own deep link, and anything else falls back to the tenant home
- * so a hand-built `/login?redirect=…` link can never push the browser to a
- * foreign origin.
- */
-export function resolvePostAuthRedirect(raw: string | null): string {
-  if (raw !== null && raw.startsWith('/') && !raw.startsWith('//')) {
-    return raw;
-  }
-  return '/settings';
-}
 
 export function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { apiKeyLogin, sessionLogin } = useAuth();
 
-  const [email, setEmail] = useState(searchParams.get('email') ?? '');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState(searchParams.get("email") ?? "");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [ssoLoading, setSsoLoading] = useState<SsoState>('idle');
+  const [ssoLoading, setSsoLoading] = useState<SsoState>("idle");
 
-  const redirectTo = resolvePostAuthRedirect(searchParams.get('redirect'));
+  const redirectTo = resolvePostAuthRedirect(searchParams.get("redirect"));
+
+  // Marketing→signup continuity: when the visitor reached /login carrying a
+  // genuine post-auth redirect (RequireAuth round-trip of a connect deep link),
+  // carry it into signup so a brand-new account still lands on the provider they
+  // came to connect. Only a real redirect is forwarded — never the fallback —
+  // so a plain sign-in page does not tack `?redirect=/settings` onto the link.
+  const rawRedirect = searchParams.get("redirect");
+  const signupPath =
+    rawRedirect !== null && redirectTo !== "/settings"
+      ? `/signup?redirect=${encodeURIComponent(redirectTo)}`
+      : "/signup";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -51,15 +50,17 @@ export function LoginPage() {
     setError(null);
     try {
       // Trust-plane posture returns a durable session; legacy returns api_key.
-      const grant = resolveAuthGrant(await api.auth.login(email.trim(), password));
-      if (grant.kind === 'session') {
+      const grant = resolveAuthGrant(
+        await api.auth.login(email.trim(), password),
+      );
+      if (grant.kind === "session") {
         await sessionLogin(grant.session);
       } else {
         await apiKeyLogin(grant.apiKey);
       }
       void navigate(redirectTo, { replace: true });
     } catch {
-      setError('Incorrect email or password');
+      setError("Incorrect email or password");
     } finally {
       setLoading(false);
     }
@@ -70,21 +71,21 @@ export function LoginPage() {
     setError(null);
     try {
       const grant = resolveAuthGrant(await api.auth.developmentSession());
-      if (grant.kind !== 'session') {
-        throw new Error('Development login did not return a backend session');
+      if (grant.kind !== "session") {
+        throw new Error("Development login did not return a backend session");
       }
       await sessionLogin(grant.session);
       void navigate(redirectTo, { replace: true });
     } catch {
-      setError('Development session unavailable');
+      setError("Development session unavailable");
     } finally {
       setLoading(false);
     }
   }
 
   function handleSso(provider: SocialProvider) {
-    setSsoLoading('loading');
-    window.location.href = `/v1/auth/sso/${provider}?redirect_uri=${encodeURIComponent(window.location.origin + '/callback')}`;
+    setSsoLoading("loading");
+    window.location.href = `/v1/auth/sso/${provider}?redirect_uri=${encodeURIComponent(window.location.origin + "/callback")}`;
   }
 
   return (
@@ -96,48 +97,70 @@ export function LoginPage() {
         </div>
 
         <div className="bg-surface-raised border border-border-default rounded-lg p-6 space-y-5">
-          <form onSubmit={(e) => { void handleSubmit(e); }} className="space-y-3">
+          <form
+            onSubmit={(e) => {
+              void handleSubmit(e);
+            }}
+            className="space-y-3"
+          >
             <div className="flex flex-col gap-1">
-              <label htmlFor="login-email" className="text-xs text-text-secondary">Email address</label>
+              <label
+                htmlFor="login-email"
+                className="text-xs text-text-secondary"
+              >
+                Email address
+              </label>
               <input
                 id="login-email"
                 type="email"
                 autoComplete="email"
                 required
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@company.com"
                 className="bg-surface-base text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus placeholder:text-text-muted"
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label htmlFor="login-password" className="text-xs text-text-secondary">Password</label>
+              <label
+                htmlFor="login-password"
+                className="text-xs text-text-secondary"
+              >
+                Password
+              </label>
               <input
                 id="login-password"
                 type="password"
                 autoComplete="current-password"
                 required
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder="Your password"
                 className="bg-surface-base text-text-primary border border-border-default rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-border-focus placeholder:text-text-muted"
               />
             </div>
             {error && <p className="text-danger text-xs font-mono">{error}</p>}
-            <Button type="submit" variant="primary" size="sm" className="w-full"
-              disabled={!email.trim() || !password || loading}>
-              {loading ? '[···]' : 'Sign in'}
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              className="w-full"
+              disabled={!email.trim() || !password || loading}
+            >
+              {loading ? "[···]" : "Sign in"}
             </Button>
           </form>
 
-          {env.VITE_AETHER_ENV === 'local' && (
+          {env.VITE_AETHER_ENV === "local" && (
             <Button
               type="button"
               variant="secondary"
               size="sm"
               className="w-full"
               disabled={loading}
-              onClick={() => { void handleDevelopmentSession(); }}
+              onClick={() => {
+                void handleDevelopmentSession();
+              }}
             >
               Use backend development session
             </Button>
@@ -156,11 +179,11 @@ export function LoginPage() {
                 variant="secondary"
                 size="sm"
                 className="w-full flex items-center gap-2"
-                disabled={ssoLoading === 'loading'}
+                disabled={ssoLoading === "loading"}
                 onClick={() => handleSso(provider)}
                 aria-label={label}
               >
-                {ssoLoading === 'loading' ? (
+                {ssoLoading === "loading" ? (
                   <span className="text-text-muted">[···]</span>
                 ) : (
                   <SocialProviderIcon provider={provider} />
@@ -171,8 +194,11 @@ export function LoginPage() {
           </div>
 
           <p className="text-center text-xs text-text-muted">
-            No account?{' '}
-            <button onClick={() => void navigate('/signup')} className="text-accent underline">
+            No account?{" "}
+            <button
+              onClick={() => void navigate(signupPath)}
+              className="text-accent underline"
+            >
               Create one
             </button>
           </p>
