@@ -34,7 +34,7 @@ reviewed_source_commits:
     reason: "R2 WS-6 re-stamp after review (enduser-lifecycle lane, Phase 8 acceptance tail). Reviewed the new Playwright lifecycle suites A–E + shared harness added under frontend/aether/src/test/e2e/. This doc makes no claim about the tenant app's e2e/test inventory (its only test reference is Kyber unit tests at lines 842-844), and the suites are additive test surfaces, not runtime/IA changes — no body change required."
 source_hashes:
   "frontend/aether/src/": "sha256:06b973755587d159ca09b1ec24215e985cc9ce6524ee1ccf490b96c66c626592"
-  "frontend/kyber/src/": "sha256:c072360167fd4871bcb45a0489ba281e06c3dee71ecf00642ece041bfcd2f28c"
+  "frontend/kyber/src/": "sha256:0231b24d315cbd3dff15c4ad1b1da5864e53b2a07aa8da27f079461996aa2ca2"
   "frontend/shared/src/": "sha256:5d8c4967068ea43d5944f68685b7a9d00c33d1bc6343c2c2172170c4e4e5f681"
 ---
 
