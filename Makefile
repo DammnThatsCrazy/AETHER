@@ -25,6 +25,7 @@
         frontend-data-truth-report \
         demo-seed demo-reset demo-status demo-verify dev-demo \
         clean-install-smoke demo-seed-smoke demo-reset-smoke \
+        lifecycle-seed \
         design-partner-demo-up design-partner-demo-seed design-partner-demo-check design-partner-demo-down \
         temporal-integrity temporal-contract-parity mutation-gateway-check exploration-readiness \
         production-status release-gate ops-readiness help \
@@ -46,6 +47,14 @@ DEMO_DATABASE_URL ?= postgresql://aether:aether_dev_password@localhost:5432/aeth
 # DurableStore. When the seed CLI and the backend must share it across
 # processes, point DEMO_REDIS_URL at the same Redis the backend uses.
 DEMO_REDIS_URL ?= redis://localhost:6379/0
+# Lifecycle E2E scenario-seed (see `make lifecycle-seed`): per-suite tenant
+# credentials are sourced from the file named here (default .env.lifecycle-e2e,
+# templated by .env.lifecycle-e2e.example). The seed CLI writes the canonical
+# JSONB repos (tenants/users/tenant_implementation_plans/tenant_activations/
+# integration_connector_configs) via BaseRepository, so DATABASE_URL must point
+# at the SAME loopback Postgres the backend API reads — mirroring the demo-seed
+# seam above (REDIS_URL/DurableStore rows are not touched by lifecycle seeding).
+LIFECYCLE_E2E_ENV ?= .env.lifecycle-e2e
 PYTHON ?= python3
 # The live Terraform root. NOT terraform/environments/* — that tree references
 # seven modules that do not exist and `terraform init` fails there.
@@ -447,6 +456,29 @@ demo-seed-smoke: ## Verify seed visibility, provenance, checksum, and idempotenc
 
 demo-reset-smoke: ## Verify reset isolation, control-record preservation, and audit
 	cd "$(BACKEND_DIR)" && $(PYTHON) -m pytest -q -o addopts='' tests/test_demo_seed.py -k "reset or tenant_ids_are_isolated"
+
+# ---------------------------------------------------------------------------
+# End-user lifecycle E2E scenario seed (A-F)
+# ---------------------------------------------------------------------------
+# Stages the scenario tenants the frontend lifecycle E2E suites (A-F) assert at
+# their C1 starting conditions, through the canonical repositories the backend
+# API reads. Never writes a credential value, a sync/evidence/readiness row, or
+# activation state 'complete'; suites B/D/E's connector/evidence preconditions
+# (commerce-connected, revoked Google Ads, open mapping review) stay operator/env
+# bound and are reported, not seeded. Uses a separate provenance token so demo
+# reset/verify never sweeps these tenants.
+lifecycle-seed: ## Stage end-user lifecycle E2E scenario tenants (A-F) from $(LIFECYCLE_E2E_ENV)
+	@if [ ! -f "$(LIFECYCLE_E2E_ENV)" ]; then \
+		echo "No $(LIFECYCLE_E2E_ENV) found."; \
+		echo "Copy .env.lifecycle-e2e.example to $(LIFECYCLE_E2E_ENV), then fill the"; \
+		echo "E2E_TENANT_EMAIL_<SUITE> / E2E_TENANT_PASSWORD_<SUITE> pairs for the"; \
+		echo "suites you want (unset suites are skipped and reported). Or export them."; \
+		exit 1; \
+	fi
+	@set -a; . "$(LIFECYCLE_E2E_ENV)"; set +a; \
+	cd "$(BACKEND_DIR)" && AETHER_ENV="$${AETHER_ENV:-local}" \
+		DATABASE_URL="$(DEMO_DATABASE_URL)" \
+		$(PYTHON) -m services.demo_seed.cli seed-lifecycle
 
 # ---------------------------------------------------------------------------
 # Design-partner demo (M7) — local/automated end-to-end demo stack
