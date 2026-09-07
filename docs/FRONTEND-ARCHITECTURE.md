@@ -33,7 +33,7 @@ reviewed_source_commits:
   - commit: "8b1ca3dc"
     reason: "R2 WS-6 re-stamp after review (enduser-lifecycle lane, Phase 8 acceptance tail). Reviewed the new Playwright lifecycle suites A–E + shared harness added under frontend/aether/src/test/e2e/. This doc makes no claim about the tenant app's e2e/test inventory (its only test reference is Kyber unit tests at lines 842-844), and the suites are additive test surfaces, not runtime/IA changes — no body change required."
 source_hashes:
-  "frontend/aether/src/": "sha256:06b973755587d159ca09b1ec24215e985cc9ce6524ee1ccf490b96c66c626592"
+  "frontend/aether/src/": "sha256:81bbd5b5d1268b430aa562a57edeb84c727e73541cb4f49c41f751ab6bd87490"
   "frontend/kyber/src/": "sha256:c072360167fd4871bcb45a0489ba281e06c3dee71ecf00642ece041bfcd2f28c"
   "frontend/shared/src/": "sha256:5d8c4967068ea43d5944f68685b7a9d00c33d1bc6343c2c2172170c4e4e5f681"
 ---
@@ -102,7 +102,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Campaign Intelligence** — campaign hierarchy, performance metrics, spend/ROAS time-series (`/measurement/campaigns`)
 - **Campaign 360** — full per-campaign drill-down: overview metrics, population funnel (observed→resolved→engaged→converted→attributed), identity clusters, entities, journeys, conversions, attribution model comparison, graph anchor, quality/freshness diagnostics (`/measurement/campaigns/:campaignId`); launched via "Campaign 360 →" links in Campaign Intelligence rows and Profile360 attribution panel. Also hosts **Outcome 360** / **Economic 360** intelligence-projection tabs (`features/projection-360/`) rendering typed projection section states for the campaign focus — never recomputing projection content
 - **Campaign Registry** (v8.11.0+) — canonical campaign list with origin/platform/status filters, alias management, external references view (`/campaign-intelligence/registry`)
-- **Campaign Sources** (v8.11.0+) — connected ad platform sources with sync controls and health indicators, plus the advertising connect flow: pick a supported ad platform, fill its catalog credential schema (secrets + the single account id), run a live credential test, and manage sources with explicit single-account selection (change account rotates the source) and disable/enable (`/campaign-intelligence/sources`)
+- **Campaign Sources** (v8.11.0+) — connected advertising platform sources with sync controls and connection health indicators. Adding an advertising platform is consolidated under Settings → Integrations → Advertising (the canonical connect path); this page hosts the `?connect=<family>` connect flow the advertising-row deep links open and lists sources for management and sync once connected. The flow collects the catalog credential schema (secrets + the single account id, manual selection — no discovery) and drives connect with backend-derived states only; it never claims live capability without evidence (`/campaign-intelligence/sources`)
 - **Mapping Review** (v8.11.0+) — unresolved/ambiguous attribution evidence queue; resolve/ignore actions create durable aliases and trigger reprocessing (`/campaign-intelligence/mapping-review`)
 - **Campaign Quality** (v8.11.0+) — measurement mapping rate gauges and quality metrics (`/campaign-intelligence/quality`)
 - **Custom Campaign** (v8.11.0+) — creation form for custom (non-platform) campaigns (`/campaign-intelligence/new`)
@@ -928,8 +928,9 @@ All components use `useQuery` / `useMutation` from `@aether/ui`, the `api.fraudN
 > `frontend/aether/src/pages/connectors/` re-exports them so legacy importers
 > keep resolving. The Settings shell itself splits the historical one-long-page
 > `/settings` into a sub-nav over `/settings` (API Keys),
-> `/settings/integrations`, `/settings/sdk-fleet`, `/settings/notifications`,
-> `/settings/notification-preferences`, and `/settings/webhooks`.
+> `/settings/integrations`, `/settings/data-exchange`, `/settings/sdk-fleet`,
+> `/settings/notifications`, `/settings/notification-preferences`, and
+> `/settings/webhooks`.
 
 ### Aether (tenant) — Delivery History
 
@@ -1064,8 +1065,8 @@ consistent with the runtime data-truth contract.
 
 **Route + placement.** `/settings/data-exchange` is a first-class
 `SETTINGS_NAV` section in the nested settings shell (router.tsx lazy-loads
-`SettingsPage` for it, as for every `/settings/*` route). The shell renders the
-section body through the `DataExchangeGate` from
+`SettingsPage` for it, as for the other `/settings/*` section routes). The
+shell renders the section body through the `DataExchangeGate` from
 `frontend/aether/src/pages/settings/data-exchange-section.tsx` when the
 resolver maps the URL to the `data-exchange` section — it is **not** mounted as
 a persistent footer under every `/settings/*` tab. The gate is
