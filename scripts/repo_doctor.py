@@ -347,10 +347,10 @@ def _report_stale_docs() -> bool:
         ┌─────────────────────────────────────────────────────────────────┐
         │  SOURCE-LINKED DOCS DRIFT REPORT                                │
         │                                                                 │
-        │  repo_doctor --fix does NOT stamp authored docs automatically.  │
+        │  repo_doctor --fix does NOT update authored source hashes.       │
         │  If this report shows stale docs, review each listed doc against│
-        │  its source_files, update content, then stamp intentionally with │
-        │  python scripts/docs_drift.py --update.                         │
+        │  its source_files, update content, then refresh hashes with      │
+        │  make docs-generate-changed.                                    │
         └─────────────────────────────────────────────────────────────────┘
     """))
     proc = subprocess.run([sys.executable, "scripts/docs_drift.py", "--strict"], cwd=ROOT)
@@ -541,6 +541,15 @@ def main(argv: Sequence[str] | None = None) -> None:
             remediation="fix scripts/sync_docs.py or stale inputs, then rerun make docs-fix", cwd=generation_root,
         )
 
+        run(
+            [sys.executable, "scripts/docs_idempotency.py"],
+            name="Documentation generators are idempotent",
+            results=results,
+            stop_on_failure=stop,
+            remediation="fix the documentation generator that changes output on its second run",
+            cwd=generation_root,
+        )
+
         if args.ci or args.check:
             _check_clean(
                 ["docs/REPO-INDEX.md", "docs/AUTOMATION.md"],
@@ -565,7 +574,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 name="Source-linked docs drift (strict review report)",
                 passed=clean,
                 command="python scripts/docs_drift.py --strict",
-                remediation="review stale docs, update content, then run python scripts/docs_drift.py --update",
+                remediation="review the listed docs, update content if needed, then run make docs-generate-changed",
             )
         )
         if not clean and stop:
@@ -577,7 +586,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             name="Source-linked docs drift (strict)",
             results=results,
             stop_on_failure=stop,
-            remediation="review listed docs against source_files, update content, then run python scripts/docs_drift.py --update",
+            remediation="review the listed docs against source_files, update content if needed, then run make docs-generate-changed",
         )
 
     run(

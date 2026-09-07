@@ -8,6 +8,10 @@ source_files:
   - Backend Architecture/aether-backend/services/comms/contracts.py
   - Backend Architecture/aether-backend/services/comms/projector.py
   - Backend Architecture/aether-backend/services/silver/dispatcher.py
+source_hashes:
+  "Backend Architecture/aether-backend/services/comms/contracts.py": "sha256:9629e0f07c08f85d43c8b7bd24faf4c2c835a1974ca60d98efad27aa6ff5d961"
+  "Backend Architecture/aether-backend/services/comms/projector.py": "sha256:4744e01f562aa331be96730330668f25e0daa14a264f752c90b579f6a567278a"
+  "Backend Architecture/aether-backend/services/silver/dispatcher.py": "sha256:ea6279d0a1242887281ced91e1cb05bc8d94eb4c978f10a6e8615fb4d565f98f"
 ---
 
 # Architecture Decision Records — Communications Intelligence

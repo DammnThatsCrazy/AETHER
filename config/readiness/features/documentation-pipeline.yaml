@@ -4,8 +4,9 @@
 feature_id: documentation-pipeline
 title: Documentation Pipeline
 owning_system: aether
-summary: 202 docs with validated frontmatter, 64 source-linked docs with strict drift gating in repo-doctor,
-  generated contract registry under docs/_generated/.
+summary: Authored docs with validated frontmatter and deterministic source-content
+  hash drift gating in repo-doctor, plus generated contract registries under
+  docs/_generated/.
 scope:
   id: documentation-pipeline-v1
   version: 1

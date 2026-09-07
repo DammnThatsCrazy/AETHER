@@ -11,7 +11,8 @@ source_files:
 canonical_owner: release@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "CHANGELOG.md": "sha256:6700bf7d494153cd0e0a91c34b0d8325635139f8807290e25204118c4b8eddd0"
 ---
 # Changelog
 

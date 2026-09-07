@@ -9,6 +9,11 @@ source_files:
   - Backend Architecture/aether-backend/services/operational_intelligence/routes.py
   - Backend Architecture/aether-backend/shared/graph/path_scoring.py
   - packages/shared/operational-intelligence.ts
+source_hashes:
+  "Backend Architecture/aether-backend/services/operational_intelligence/models.py": "sha256:7f87d5d21705d6243e64694e3f10ef48ddd2b913bffce46d3bf8cdc773bcf100"
+  "Backend Architecture/aether-backend/services/operational_intelligence/routes.py": "sha256:19f8e7e069c436b890ee915608645227c7a0493ee9286e3694904eb616c52c3a"
+  "Backend Architecture/aether-backend/shared/graph/path_scoring.py": "sha256:4bff43191e835d86308a2668dea5ee891ff6768da3d5fe332e32a7be2f592b07"
+  "packages/shared/operational-intelligence.ts": "sha256:5121c6c22553c81b5e5e2b922833964a3b51cc53ef9326d03fd79cea5ea7d49d"
 ---
 
 # Canonical Path Intelligence

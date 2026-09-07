@@ -22,7 +22,19 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "23eb1b05"
+source_hashes:
+  "Backend Architecture/aether-backend/services/integrations/adapter.py": "sha256:92065c9a6c459302d05241379d1bc92fbc96a25596c767bfcd7d29671ee4eb7e"
+  "Backend Architecture/aether-backend/services/integrations/connectors/base.py": "sha256:c30c8cf70873be7e5974db3d4199779c4d0baa5ca5facef32157245111c5073e"
+  "Backend Architecture/aether-backend/services/integrations/connectors/registry.py": "sha256:cbd62d89ef255fbe7097d9778d1adc2f728f7ff98bfade29a98d0620d86238f8"
+  "Backend Architecture/aether-backend/services/providers/amazon/": "sha256:5442227fd07f38ccc4855c475a4e45030e37f1330a4f33dfb02d1a9ba3863c53"
+  "Backend Architecture/aether-backend/services/providers/ebay/": "sha256:f993fcea78550f3aff773060537931f627cf3a079a538c88bd1999500f831ec0"
+  "Backend Architecture/aether-backend/services/providers/etsy/": "sha256:9acb2872c25323e154429294fe3989620c2005d068b6ed03d8582f778e71ddb6"
+  "Backend Architecture/aether-backend/services/providers/shopify/": "sha256:54bfbfbaba9b159859cbb085b9b1cd771ac3a334089081d2cf05fe62742dc20f"
+  "Backend Architecture/aether-backend/services/providers/tiktok/": "sha256:7c3b1b4c5bd68a74cbbcda94bf887eeb2b8b5013bc1f473cec6268209a16c6aa"
+  "Backend Architecture/aether-backend/services/providers/walmart/": "sha256:15858d45b8b09d665a14eb44bff4afff6cf7aa74c75e9f263e50a7ca2d72f007"
+  "Backend Architecture/aether-backend/services/providers/woocommerce/": "sha256:4e89a592d41220996fd71724d5d22d05d80e42e2936a52165d450edec9b8901f"
+  "Backend Architecture/aether-backend/shared/integration_contracts/catalog.py": "sha256:895abcded4185c421d1e84cb3e711b5c88abd963daf3260373c0f54a50c4a03c"
+  "Backend Architecture/aether-backend/shared/integration_contracts/migration.py": "sha256:1254c727afc3841b7803a4cecaa9a528049ff6df29086e10246c50844c293df7"
 ---
 
 # Provider Migration

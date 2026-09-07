@@ -23,7 +23,20 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
-last_synced_commit: "81583a2"
+source_hashes:
+  ".github/workflows/staging-lifecycle.yml": "sha256:f6a753c44140db649aca9f341a4be9910281efd933d4594f9fd8050aed862883"
+  ".github/workflows/staging-state-reconcile.yml": "sha256:f84ebf15cff0d5cc46d30890f767d9dcf3ca584b4392b889df3bce7d8bbcc3ed"
+  ".github/workflows/staging-ttl-guard.yml": "sha256:4fe2250c0ccb0f8486800c6e09c8f1adcf6c38371944e911269f103053f0f1da"
+  ".github/workflows/terraform-promote.yml": "sha256:c6ba216364e25afee22be4b62c0e2b3629bc5e68e0f47389fba8cfc4c17f7ef4"
+  "AWS Deployment/aether-aws/README.md": "sha256:03270a4543e2c843d8d485cc60b31e8f44768187709db312f88f6487c2ccd6e2"
+  "AWS Deployment/aether-aws/config/": "sha256:c22916c8942b6defa9a3cc28d1eca0e68f3d8419decb8defdc2ceebf79de2050"
+  "AWS Deployment/aether-aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
+  "AWS Deployment/aether-aws/terraform/": "sha256:21d2647932e6a5594fdd3c29d58a5e500225d654124093294836d577c90415ff"
+  "config/staging_apply_iam_policy.yaml": "sha256:acc34d81c456090d4569faac727b6688604fc07c3bb36764f38c422f23d5004a"
+  "config/staging_lifecycle_iam_policy.yaml": "sha256:84cc2d5a0cdb621f0dc2ba271fd9e66228e36a80cabf52133cf51d410a85f21e"
+  "scripts/release/check_staging_lifecycle_policy.py": "sha256:20998a03fdd484635cc80667220794fb1970be3f2e198ac067ec7c7bda12f2f1"
+  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:08dff05b2a886af751d7e0b1c7886951b240b6a31f18ef14d26f73085ae59145"
+  "scripts/release/verify_terraform_state_role.py": "sha256:80dce5faa3a69a530f24a72105f7b340bc52726906a641540ed7ef08fb6e46ac"
 ---
 
 # AWS Deployment — Infrastructure Reference

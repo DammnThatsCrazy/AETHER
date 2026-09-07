@@ -14,7 +14,11 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
-last_synced_commit: "23eb1b05"
+source_hashes:
+  "packages/react-native/src/bridge.ts": "sha256:0beb3a5ee8f7158a6a4cee5016735b96b6a8f9269721bd772a51d41d6ed34246"
+  "packages/react-native/src/index.tsx": "sha256:8861ddc797def68d8580f489007f78a65d6f3dd882b4538fdbeb99ddecb54fbe"
+  "packages/shared/consent.ts": "sha256:e8cc43b2a64f70eca68d499d7a1fb7b85ceacb44bc94f77a70e105e0d05e8730"
+  "packages/shared/events.ts": "sha256:216fa41739a8613800f057f2937071bf40a28ac35ba47b4a77f438cfd2fd9477"
 ---
 
 # Aether React Native SDK v8.12.0 — Integration Guide

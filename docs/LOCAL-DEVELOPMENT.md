@@ -108,10 +108,12 @@ cd frontend/aether && npm run typecheck && npm test
 cd frontend/kyber  && npm run typecheck && npm run test:component && npm run test:integration && npm run test:e2e
 
 # Docs validation + generation
-make validate-frontmatter
-make extract-docs
-python scripts/sync_docs.py
-python scripts/docs_drift.py --strict
+make docs-check
+make docs-generate
+make docs-verify-idempotent
+# After reviewing any source-linked docs listed by the drift report:
+make docs-generate-changed
+make docs-check
 python scripts/validate_contracts.py
 
 # Lint

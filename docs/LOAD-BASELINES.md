@@ -12,7 +12,9 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 toc_depth: 2
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "tests/load/locustfile.py": "sha256:cdc0fc597d99c63fe87547e6a2197ceaef8c202b09a6de427f842a30e7aaee0d"
+  "tests/load/thresholds.json": "sha256:aee0927999630736a9eb307900b102bf1548600d9814caa262a49591902a4fd0"
 ---
 
 # Load Baselines
@@ -56,4 +58,5 @@ Not yet recorded — run `make load-smoke` against staging to populate.
 | — | — | — | — | pending |
 
 Once a staging run completes, commit the CSV from `tests/load/results/`
-alongside an updated row in the table above and re-stamp this doc.
+alongside an updated row in the table above and run
+`make docs-generate-changed` after reviewing this doc's declared sources.

@@ -17,7 +17,11 @@ related:
   - reliability/incident-response
 canonical_owner: platform@aether
 estimated_read_minutes: 6
-last_synced_commit: "23eb1b05"
+source_hashes:
+  "Backend Architecture/aether-backend/services/governance/routes.py": "sha256:ba2ab1b509221205ffba6b31cb346cde1dc4d24b6395f6397a95e677b0c5c24b"
+  "Backend Architecture/aether-backend/services/reliability/service.py": "sha256:04c7f243fe9140a842de8d89997097e1e9e4ebf16c294b56040e06bd246a27bb"
+  "Backend Architecture/aether-backend/services/security/access_control.py": "sha256:cc0456da6c2de55fd6d09ae2e3a9b9abd20c99e507e398163ddd2f030853e6e2"
+  "Backend Architecture/aether-backend/services/security/policy_engine.py": "sha256:a0ec68cf5e7fb524e02ca0c6fef0332462282b01c9db2161e1eed7eedb70c713"
 ---
 
 # Security, Compliance & Governance Controls

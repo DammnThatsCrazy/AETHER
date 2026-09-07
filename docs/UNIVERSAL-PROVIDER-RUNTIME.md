@@ -18,7 +18,15 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 14
 toc_depth: 3
-last_synced_commit: "2d6b1fd0"
+source_hashes:
+  "Backend Architecture/aether-backend/config/settings.py": "sha256:27f7b15209c14a857112fd3dfff3558ebd9e45c21def782d4dd63ccecfc0aa3c"
+  "Backend Architecture/aether-backend/main.py": "sha256:4f2b65d2b09e59b46fa07dc5c4d61fbddc449efb0a47be7766f92ee527a91252"
+  "Backend Architecture/aether-backend/services/provider_runtime/": "sha256:222fdaf7349cf2f190d5a512550b7f0f45b2d26473ecbbe87d20476f4f4d2ad9"
+  "Backend Architecture/aether-backend/services/providers/": "sha256:ae867295b135642a9bb21babecc505f78e1505d012ef74b67cdfab1239358f5f"
+  "Backend Architecture/aether-backend/services/providers/shopify/": "sha256:54bfbfbaba9b159859cbb085b9b1cd771ac3a334089081d2cf05fe62742dc20f"
+  "Backend Architecture/aether-backend/shared/commerce_contracts/": "sha256:b9bde3d49c9b1c1719f40f7a2f293e7c868f8a6a5773eb1c2dd5745cddc9ca79"
+  "Backend Architecture/aether-backend/shared/integration_contracts/": "sha256:f43671c8a5e3750e5115ce2acbb0f435f0493d4872e7ac918b8781a73b821853"
+  "Backend Architecture/aether-backend/shared/rate_limit/feature_gate.py": "sha256:24eef8024d2f17b5e254ac58f17b98ce1e098f278d0116334366c9a0f8e9eec2"
 ---
 
 # Universal Provider Runtime

@@ -11,7 +11,10 @@ source_files:
   - Smart Contracts/audit/DEPLOYMENT.md
   - Smart Contracts/audit/KNOWN_LIMITATIONS.md
 canonical_owner: platform@aether
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Smart Contracts/audit/DEPLOYMENT.md": "sha256:0cb61931ef6a7f00af448da544af561af07b484ae8ec6ce02ae9151adb84116d"
+  "Smart Contracts/audit/KNOWN_LIMITATIONS.md": "sha256:4b0d06c0e8a27f62731e308482f5c201c786b638d7c65fc61571fcd777a0d34e"
+  "Smart Contracts/contracts/AnalyticsRewards.sol": "sha256:899d5684ce989049b36863123e9fa0c44fc9b1d01f16c2ef0838d408e7b0832f"
 ---
 
 # EVM Deploy & Emergency Runbook

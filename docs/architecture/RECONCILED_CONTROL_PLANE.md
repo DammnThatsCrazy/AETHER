@@ -22,6 +22,22 @@ source_files:
   - Backend Architecture/aether-backend/main.py
   - Backend Architecture/aether-backend/config/settings.py
   - packages/shared/managed-integrations.ts
+source_hashes:
+  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_admission.py": "sha256:b57dc1a0b7a5e8d06e9ec985ff04f3dd0e705d6e4d66d7de419d960407759908"
+  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_change_sets.py": "sha256:7becb857318edc7ccd267ed951c0a5cfbc291282c307df663f7d8b9277bf6bc7"
+  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_execution.py": "sha256:fe60187d99dbf2b67a883a5e6155b6a67c2ab5ee954552d762d5e4239ed528a6"
+  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_fleet_update.py": "sha256:e68eb36c569f253c01cab5f263e07432768dc34d9cd8cf48b3ec5626d1461f42"
+  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_managed_integrations.py": "sha256:d2946f405c5a427091f7f3bc08cbc247fca8ca400b72001a1cff5b87335feeff"
+  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_rollouts.py": "sha256:596f4ab7a09e6f9322e876bc84edabc5b81562c72e9c9ff92414684838e34c77"
+  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_schema_mapping.py": "sha256:f52e3ca5ee8ab0050fd9f447642d87fb93f5c7ef0eab16bf8e34211a1360d8b6"
+  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_simulation.py": "sha256:9365aeced6274ca792563a9d8931a54e387e4cced758bfeec7114adc6e932838"
+  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_source_authority.py": "sha256:b3506114be9179b6592dbc08dfc616de066aea4856d274db16f46cf0f8c17422"
+  "Backend Architecture/aether-backend/config/settings.py": "sha256:27f7b15209c14a857112fd3dfff3558ebd9e45c21def782d4dd63ccecfc0aa3c"
+  "Backend Architecture/aether-backend/main.py": "sha256:4f2b65d2b09e59b46fa07dc5c4d61fbddc449efb0a47be7766f92ee527a91252"
+  "Backend Architecture/aether-backend/services/kyber/access/": "sha256:b9b0c98e3f9b467678f79d14a0c19b401503cd92da209e7cb0ca51ddb932a24a"
+  "Backend Architecture/aether-backend/services/managed_integrations/": "sha256:ea501954b47eb179a1b21ae6ea48cdfc8964e6256c08147c08e4e932ae091cd1"
+  "config/route_registry.yaml": "sha256:7af5f658004930d3f07e991e7f843687cbab634bf1a2909b1fb17f11e3c618c6"
+  "packages/shared/managed-integrations.ts": "sha256:3c782bac6c26827e8ea0a80471edd241ca2cd44ca1ef3df74865178197e3a527"
 ---
 
 # Reconciled Control Plane — Architecture (§0–40 lane)

@@ -10,6 +10,7 @@ import importlib.util
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -84,6 +85,22 @@ def test_check_doc_finds_missing_source_path(dd, tmp_path):
     )
     r = dd.check_doc(p)
     assert "some/nonexistent/path.py" in r["missing_paths"]
+
+
+def test_check_doc_rejects_source_path_outside_repo(dd, tmp_path, monkeypatch):
+    monkeypatch.setattr(dd, "ROOT", tmp_path)
+    p = tmp_path / "doc.md"
+    p.write_text(
+        "---\n"
+        "title: T\n"
+        "source_files:\n"
+        "  - ../outside.py\n"
+        "---\n"
+        "body\n"
+    )
+
+    report = dd.check_doc(p)
+    assert report["missing_paths"] == ["../outside.py"]
 
 
 def test_check_doc_real_doc_with_real_sources(dd):
@@ -166,6 +183,124 @@ def test_check_doc_accepts_explicit_review_receipts(dd, tmp_path, monkeypatch):
     )
     r = dd.check_doc(p)
     assert r["stale"] is False
+
+
+def test_source_content_hash_changes_only_when_source_bytes_change(dd, tmp_path, monkeypatch):
+    """Content markers are stable across metadata-only filesystem changes."""
+    monkeypatch.setattr(dd, "ROOT", tmp_path)
+    source = tmp_path / "source.py"
+    source.write_bytes(b"value = 1\n")
+
+    first = dd.source_content_hash("source.py")
+    source.touch()
+    assert dd.source_content_hash("source.py") == first
+
+    source.write_bytes(b"value = 2\n")
+    assert dd.source_content_hash("source.py") != first
+
+
+def test_directory_source_hash_uses_sorted_tracked_manifest(dd, tmp_path, monkeypatch):
+    """Directory markers ignore traversal order and untracked local files."""
+    monkeypatch.setattr(dd, "ROOT", tmp_path)
+    tree = tmp_path / "tree"
+    tree.mkdir()
+    (tree / "a.py").write_bytes(b"a\n")
+    (tree / "b.py").write_bytes(b"b\n")
+    (tree / "scratch.py").write_bytes(b"ignored\n")
+
+    def fake_git_ls_files(*args, **kwargs):
+        return SimpleNamespace(
+            returncode=0,
+            stdout=b"tree/b.py\0tree/a.py\0",
+        )
+
+    monkeypatch.setattr(dd.subprocess, "run", fake_git_ls_files)
+    first = dd.source_content_hash("tree/")
+    (tree / "scratch.py").write_bytes(b"changed but still untracked\n")
+    assert dd.source_content_hash("tree/") == first
+
+    (tree / "b.py").write_bytes(b"changed\n")
+    assert dd.source_content_hash("tree/") != first
+
+
+def test_hash_backed_doc_does_not_consult_git_history(dd, tmp_path, monkeypatch):
+    """A squash-safe content marker replaces fragile commit ancestry checks."""
+    monkeypatch.setattr(dd, "ROOT", tmp_path)
+    source = tmp_path / "source.py"
+    source.write_bytes(b"value = 1\n")
+    marker = dd.source_content_hash("source.py")
+    assert marker
+
+    def unexpected_history_lookup(*args):
+        raise AssertionError("hash-backed docs must not inspect git history")
+
+    monkeypatch.setattr(dd, "commits_touching_after", unexpected_history_lookup)
+    doc = tmp_path / "doc.md"
+    doc.write_text(
+        "---\n"
+        "title: T\n"
+        "source_files:\n"
+        "  - source.py\n"
+        "source_hashes:\n"
+        f"  source.py: {marker}\n"
+        "---\n"
+        "body\n",
+        encoding="utf-8",
+    )
+
+    report = dd.check_doc(doc)
+    assert report["stale"] is False
+
+
+def test_hash_backed_doc_reports_exact_changed_source(dd, tmp_path, monkeypatch):
+    monkeypatch.setattr(dd, "ROOT", tmp_path)
+    source = tmp_path / "source.py"
+    source.write_bytes(b"value = 1\n")
+    old_marker = dd.source_content_hash("source.py")
+    source.write_bytes(b"value = 2\n")
+
+    doc = tmp_path / "doc.md"
+    doc.write_text(
+        "---\n"
+        "title: T\n"
+        "source_files:\n"
+        "  - source.py\n"
+        "source_hashes:\n"
+        f"  source.py: {old_marker}\n"
+        "---\n"
+        "body\n",
+        encoding="utf-8",
+    )
+
+    report = dd.check_doc(doc)
+    assert report["stale"] is True
+    assert "source.py" in report["stale_detail"]
+    assert "make docs-generate-changed" in report["stale_detail"]
+
+
+def test_migrate_doc_to_source_hashes_replaces_legacy_commit_marker(dd, tmp_path, monkeypatch):
+    monkeypatch.setattr(dd, "ROOT", tmp_path)
+    (tmp_path / "b.py").write_bytes(b"b\n")
+    (tmp_path / "a.py").write_bytes(b"a\n")
+    doc = tmp_path / "doc.md"
+    doc.write_text(
+        "---\n"
+        "title: T\n"
+        "source_files:\n"
+        "  - b.py\n"
+        "  - a.py\n"
+        "last_synced_commit: \"abc1234\"\n"
+        "---\n"
+        "body\n",
+        encoding="utf-8",
+    )
+
+    assert dd.migrate_doc_to_source_hashes(doc) is True
+    text = doc.read_text(encoding="utf-8")
+    frontmatter = dd.extract_frontmatter(text)
+    assert "last_synced_commit" not in frontmatter
+    assert list(frontmatter["source_hashes"]) == ["a.py", "b.py"]
+    assert dd.check_doc(doc)["stale"] is False
 
 
 def test_reviewed_source_receipts_require_resolved_source_commit(dd, monkeypatch):

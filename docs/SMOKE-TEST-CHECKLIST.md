@@ -11,7 +11,8 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
 ---
 # Smoke Test & Post-Deploy Verification Checklist — Aether Platform v8.12.0
 

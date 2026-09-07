@@ -20,6 +20,17 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 16
 toc_depth: 3
+source_hashes:
+  "AWS Deployment/aether-aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
+  "config/aws_price_book.yaml": "sha256:87fe0dc629d829c8d501dedd32b1f1797850692b406bd801c50436c6c3f49eb5"
+  "config/cost_exceptions.yaml": "sha256:029e003d3340de68c683a2f212edd3ceb13b6de01e5f6e70ddd44bdecda78ce2"
+  "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
+  "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
+  "config/terraform_resource_contracts.yaml": "sha256:f915daf101aab4b46b216ade95355eae2e119ab469e98de0c653ac81d92dbdf9"
+  "scripts/release/check_cost_model.py": "sha256:74cd3c9db8489aa4fb3d67153a882dbe5cded4d257cddafcc202d1a25a7897f2"
+  "scripts/release/check_cost_policy.py": "sha256:2e547cdb3ce200a9f067b2a930a54ca622f29952fe4138693d942ddc1ec54e12"
+  "scripts/release/check_cost_policy_terraform.py": "sha256:fecb3d483b3644a12d2443f7afcd6844829605116f4620e09a78e49926ad9054"
+  "scripts/release/check_terraform_plan_policy.py": "sha256:942a10349eab14782c7f98b04e2d13201434ceeb06908c1439c6727869f3269b"
 ---
 
 # Cost Optimization

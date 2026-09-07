@@ -10,7 +10,9 @@ source_files:
   - Backend Architecture/aether-backend/services/derivatives/adapters/base.py
   - Backend Architecture/aether-backend/services/agentic_observability/foundation.py
 canonical_owner: platform@aether
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/aether-backend/services/agentic_observability/foundation.py": "sha256:16eacb148f01e09136ad41a350b04b7bd466e4bc9d396ef081c5a6bb748468c9"
+  "Backend Architecture/aether-backend/services/derivatives/adapters/base.py": "sha256:787fc96a6067075032ecdb277a71095c2855ab31ca0865c7e54d8b64a144feee"
 ---
 
 # ADR-011: Observation-Only Execution Invariant

@@ -14,7 +14,13 @@ source_files:
   - Backend Architecture/aether-backend/services/suggestions/adapters/derivatives_adapter.py
   - Backend Architecture/aether-backend/services/suggestions/adapters/interop_adapter.py
 canonical_owner: platform@aether
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/aether-backend/services/noesis/adapters/derivatives_adapter.py": "sha256:fdd0f5f13da071c5cc95ca03373c3b4e55d183e97373b2c6d8c76dffaaf44d5f"
+  "Backend Architecture/aether-backend/services/noesis/adapters/interop_adapter.py": "sha256:66dbd63ef28c1c38e991d91c6a0bd81d5d137de53f2aa1d46e232cb073c9cb0f"
+  "Backend Architecture/aether-backend/services/noesis/adapters/stablecoin_adapter.py": "sha256:d7e351b6efb8bd464e17f9474555bfa292a1ff5c0ef0dbfdf7167516702fa124"
+  "Backend Architecture/aether-backend/services/suggestions/adapters/derivatives_adapter.py": "sha256:2ff88e8ed0436798ed395e2013f3ab4d920b1394e3167ad5e56a489660a639cc"
+  "Backend Architecture/aether-backend/services/suggestions/adapters/interop_adapter.py": "sha256:e0b474c87a04b89c7bbd46f21c3bebca79197b128cca352d5e907837f3644fa6"
+  "Backend Architecture/aether-backend/services/suggestions/adapters/stablecoin_adapter.py": "sha256:9bb974b3b7d19af4adb1abbab4b72cb4f06eecb9a9f85ca91469bff900f46f12"
 ---
 
 # Noesis and OODA Integration

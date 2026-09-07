@@ -17,7 +17,9 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 toc_depth: 3
-last_synced_commit: "74086291"
+source_hashes:
+  "Backend Architecture/aether-backend/services/intelligence/decision_models.py": "sha256:ff7e6d657dcf68bbe4d9ac7d66736be7f7b7c446050cceec84c35dd59b6a2ee7"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:6869337e19ec073673344c4d27986a717be807b852156ffe5807516105abdc35"
 ---
 # Integration Actions
 

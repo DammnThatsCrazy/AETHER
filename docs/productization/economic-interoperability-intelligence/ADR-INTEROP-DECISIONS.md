@@ -11,7 +11,10 @@ source_files:
   - Backend Architecture/aether-backend/services/interop/correlation.py
   - Backend Architecture/aether-backend/services/interop/providers/layerzero_v2.py
 canonical_owner: platform@aether
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/aether-backend/services/interop/correlation.py": "sha256:781c5a927507f4a4f6ad6c519ef270f6605dabd45dbea135f8fd391f5a506be1"
+  "Backend Architecture/aether-backend/services/interop/lifecycle.py": "sha256:336cf9da3f46ec6364bb47b23761292cf2fa52bb0cebdecb12ac20a209163090"
+  "Backend Architecture/aether-backend/services/interop/providers/layerzero_v2.py": "sha256:1da5037959fb2a91ad2febd5738cc84bf1edebf56ff41ffd0cebbb47f00d8d03"
 ---
 
 # Interoperability Intelligence — Domain Decisions

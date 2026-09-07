@@ -12,7 +12,9 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 11
 toc_depth: 3
-last_synced_commit: "bee65298"
+source_hashes:
+  "Backend Architecture/aether-backend/shared/commerce_contracts/": "sha256:b9bde3d49c9b1c1719f40f7a2f293e7c868f8a6a5773eb1c2dd5745cddc9ca79"
+  "Backend Architecture/aether-backend/shared/integration_contracts/events.py": "sha256:ba687017a65b1395e00077fd778c43fc394637bc50e95de91a1fb69ed4500ce2"
 ---
 
 # Commerce Event Contract

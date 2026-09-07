@@ -10,7 +10,9 @@ source_files:
   - Backend Architecture/aether-backend/services/stablecoins/rpc_observer.py
   - Backend Architecture/aether-backend/services/stablecoins/solana_observer.py
 canonical_owner: platform@aether
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/aether-backend/services/stablecoins/rpc_observer.py": "sha256:ba66db580cd8b31fdb65b95f366133cf5c8ea2e5167a5017e3eeb5fadcca6e49"
+  "Backend Architecture/aether-backend/services/stablecoins/solana_observer.py": "sha256:29d60e9e1e933046cf6e128974b84f89553bbb9efa257dcda7c34ff710812c16"
 ---
 
 # Stablecoin Observer Runbook

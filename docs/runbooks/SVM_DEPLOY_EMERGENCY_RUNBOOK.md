@@ -11,7 +11,10 @@ source_files:
   - Smart Contracts/programs/solana/audit/09-pause-rotation-procedure.md
   - Smart Contracts/programs/solana/registry/upgrade-authority-policy.md
 canonical_owner: platform@aether
-last_synced_commit: "845b1c14"
+source_hashes:
+  "Smart Contracts/programs/solana/audit/08-deployment-procedure.md": "sha256:e40cc2aad872891755e5eb84b50a12fab39f518a3e51b5ebaf4e61a09ff841b0"
+  "Smart Contracts/programs/solana/audit/09-pause-rotation-procedure.md": "sha256:f648cedaf0beecc54e0f101c335f95c9256d8f7228a47267cd4b7d4e794b3131"
+  "Smart Contracts/programs/solana/registry/upgrade-authority-policy.md": "sha256:126ca9f59ed8c6789db25f8fdaaf477075f5e554f4cb000ccfb5484cd6e253ad"
 ---
 
 # SVM (Solana) Deploy & Emergency Runbook

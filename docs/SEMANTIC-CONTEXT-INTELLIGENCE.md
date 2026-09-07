@@ -12,7 +12,9 @@ source_files:
 canonical_owner: ai@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/aether-backend/shared/semantic_context.py": "sha256:f55822b931a36ba89ef33ecb82f3b31bd79c3b28dd0b32a88cfa36e7101c8553"
+  "Data Ingestion Layer/services/ingestion/src/event-enricher.ts": "sha256:e71f321c28ac593689501eb411a9067d45e6ec3cc46ef838dd6da597451ed4c1"
 ---
 # Semantic Context Intelligence Layer
 

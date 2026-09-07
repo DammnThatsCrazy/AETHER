@@ -13,7 +13,10 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: "09cf26a7"
+source_hashes:
+  "Backend Architecture/aether-backend/main.py": "sha256:4f2b65d2b09e59b46fa07dc5c4d61fbddc449efb0a47be7766f92ee527a91252"
+  "Backend Architecture/aether-backend/middleware/middleware.py": "sha256:e320a85428e219bd745ff298a6b3a8a7404a1f72b562e65d4f7682e722ecb79c"
+  "packages/shared/": "sha256:94bbd34a5bc09698b166a0f7442198068811a8be19a24e96432f4be3c3d541e0"
 ---
 # Aether vNext — Architecture Guide
 

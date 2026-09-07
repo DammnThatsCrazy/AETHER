@@ -9,7 +9,8 @@ since_version: "8.12.0"
 source_files:
   - Backend Architecture/aether-backend/services/noesis/capability_registry.py
 canonical_owner: platform@aether
-last_synced_commit: "0e967a68"
+source_hashes:
+  "Backend Architecture/aether-backend/services/noesis/capability_registry.py": "sha256:546ffefe30f3b64e96603a101345d7bb7cbf533a37375f4d8e0b9e480d4e4170"
 ---
 
 # Olympus Intelligence Surfaces

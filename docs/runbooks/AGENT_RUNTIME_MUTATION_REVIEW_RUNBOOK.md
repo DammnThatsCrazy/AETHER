@@ -10,7 +10,9 @@ source_files:
   - Backend Architecture/aether-backend/services/agent/runtime_repository.py
   - Backend Architecture/aether-backend/services/agent/mutation_commit.py
 canonical_owner: platform@aether
-last_synced_commit: "845b1c14"
+source_hashes:
+  "Backend Architecture/aether-backend/services/agent/mutation_commit.py": "sha256:53333e556ceba4a84382683687d900f1f1e4e9ea48333fa295fe5b8976a026a8"
+  "Backend Architecture/aether-backend/services/agent/runtime_repository.py": "sha256:58209dbc9455991f64bb67462ef8bfbcd7d7167077c11a5fdcf44feda642914b"
 ---
 
 # Agent Runtime & Mutation Review Runbook

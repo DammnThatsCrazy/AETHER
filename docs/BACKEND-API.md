@@ -11,13 +11,13 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "09cf26a7"
 reviewed_source_commits:
   - commit: "c607780c"
     reason: "Reviewed c607780c (new services/measurement/connectors/ad_accounts.py account-identity/credential-probe module + its tests). It adds no HTTP surface — the doc's /v1/* endpoint tables are unaffected — so no body change was required."
   - commit: "41e8356b"
     reason: "Reviewed 41e8356b (additive /v1/campaign-sources overview/ad-options/connect/test/account/disable/enable endpoints in services/campaign/routes.py, orchestrated by new ad_source_links.py). This spec's Campaign Management Service section documents the /v1/campaigns CRUD surface and does not enumerate the /v1/campaign-sources registry router (covered in docs/api/CAMPAIGN_360_API.md), so the additions are additive to routes this doc does not describe; no body change was required."
-
+source_hashes:
+  "Backend Architecture/aether-backend/services/": "sha256:e974237719542f2535247a9c8d776a092a44c04b341c41087415f9b5db461c02"
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
 

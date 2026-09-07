@@ -12,6 +12,10 @@ source_files:
   - Backend Architecture/aether-backend/services/kyber/devices/approvals.py
   - Backend Architecture/aether-backend/services/kyber/devices/device_proof.py
   - Backend Architecture/aether-backend/services/kyber/sessions/service.py
+source_hashes:
+  "Backend Architecture/aether-backend/services/kyber/devices/approvals.py": "sha256:a2df5f8968e485f5a5dbf699c7a3bfc7f1b1c6e83dc1efc11b2c736f3548900c"
+  "Backend Architecture/aether-backend/services/kyber/devices/device_proof.py": "sha256:65bae2c4b353e49e3e55acb9207ee0171e8446b82e3349931a3376a49d283d8b"
+  "Backend Architecture/aether-backend/services/kyber/sessions/service.py": "sha256:2991d35bd865a64c53775e31b1fba844c554b190bd896d094c80334e9f0032f2"
 ---
 
 # Runbook — Kyber Device Loss

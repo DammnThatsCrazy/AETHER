@@ -11,7 +11,10 @@ source_files:
   - Backend Architecture/aether-backend/shared/auth/auth.py
   - Backend Architecture/aether-backend/shared/privacy/consent_enforcement.py
 canonical_owner: platform@aether
-last_synced_commit: "9d95900c"
+source_hashes:
+  "Backend Architecture/aether-backend/shared/auth/auth.py": "sha256:346ea24378d80d21a177c1996d24aa280f0d18e37230d617d79237f0e6c08ac1"
+  "Backend Architecture/aether-backend/shared/privacy/consent_enforcement.py": "sha256:e7fe650bd8f1f0b95c86c55954a3f5b8367c94850ba57b0aff6130955cb5d7f6"
+  "packages/shared/contracts/consent-registry.json": "sha256:7b1467bb683a609e6adad7416d3faf40c7110e07bf904ea8499c10c6a8e0cc2e"
 ---
 
 # Governance and Consent

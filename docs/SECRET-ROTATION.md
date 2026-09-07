@@ -11,7 +11,8 @@ source_files:
 canonical_owner: security@aether
 estimated_read_minutes: 2
 toc_depth: 3
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "scripts/generate_secrets.py": "sha256:e69f65190d3a775d5381be008100d33b45aa1b2f7f23a9b0a92672b519fbb3f9"
 ---
 # Secret Rotation Runbook
 

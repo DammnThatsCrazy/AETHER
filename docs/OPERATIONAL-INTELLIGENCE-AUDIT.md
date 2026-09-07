@@ -16,10 +16,20 @@ source_files:
   - frontend/kyber/src/features/investigation/use-investigations.ts
   - frontend/kyber/src/features/governance/use-governance.ts
   - frontend/kyber/src/features/graph/use-graph-intelligence.ts
-last_synced_commit: "0e967a68"
 reviewed_source_commits:
   - commit: "54eaac5d"
     reason: "Reviewed the staging first-admin bootstrap change; operational-intelligence findings remain unchanged."
+source_hashes:
+  "Backend Architecture/aether-backend/repositories/repos.py": "sha256:17bda309a520403afe5ea14ec5a647d8aeea03839d644e3ce4c0086f1218f70f"
+  "Backend Architecture/aether-backend/services/events/routes.py": "sha256:1ede3d12a54845f33a149b13106b001a899c4b77c168c6d990023e836b59101f"
+  "Backend Architecture/aether-backend/services/events/worker.py": "sha256:9cf0acc4c999875f0496e7665058fb80f4cd09fffa74b434a00ef9c9adfb7363"
+  "Backend Architecture/aether-backend/services/governance/routes.py": "sha256:ba2ab1b509221205ffba6b31cb346cde1dc4d24b6395f6397a95e677b0c5c24b"
+  "Backend Architecture/aether-backend/services/investigation/routes.py": "sha256:478819bc46669998a2ed931cf720ed992d6306ccc9a31741ed51cc7530057916"
+  "Backend Architecture/aether-backend/services/realtime/channel_hub.py": "sha256:c53cb1a1270ba4d2f19dac8b3db0ebc09ab60118fa7f176afd3e5e45363399c9"
+  "Backend Architecture/aether-backend/shared/events/events.py": "sha256:c8bd9450991073d2dc7387cb621fd18e992a9f37e5b4ab1aea775f5bb2d0b17e"
+  "frontend/kyber/src/features/governance/use-governance.ts": "sha256:95866e0a4d641818054dea1a9c955de75e5c21449bba8687f97a7989b7b17474"
+  "frontend/kyber/src/features/graph/use-graph-intelligence.ts": "sha256:9e9e9e76a87c02158860fc6ffa12d542be09d888de3dad5b43ce6c5b8232c57b"
+  "frontend/kyber/src/features/investigation/use-investigations.ts": "sha256:70977dbe926bbf5a45ebb1ed1c5b115c7c4241fdb044e4c9341ce3ed37850207"
 ---
 
 # Operational Intelligence — Stub vs. Production Audit

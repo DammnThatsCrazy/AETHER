@@ -10,7 +10,10 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/contracts.py
   - Backend Architecture/aether-backend/alembic/versions/20260627_canonical_activity.py
   - Backend Architecture/aether-backend/alembic/versions/20260725_ai_referral_attribution.py
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/aether-backend/alembic/versions/20260627_canonical_activity.py": "sha256:aa34efcf5f337e4430e6727001ee26ca8d657b5d6be9ca7de85b7f151ee668d8"
+  "Backend Architecture/aether-backend/alembic/versions/20260725_ai_referral_attribution.py": "sha256:09bcc2502136159d1b50a74181c1d06a7eed30c57ffc9c15da6e900776196189"
+  "Backend Architecture/aether-backend/services/measurement/contracts.py": "sha256:7e249e6d721014d85c109277a97ad8e4e46f301d7739ec576b5ccc89d31404e7"
 ---
 
 # Data and Identity Contract

@@ -21,7 +21,18 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "2443e08"
+source_hashes:
+  ".github/workflows/": "sha256:e37e823dd45aa7aa17745e97b9d9b525f2a362ba5f4933b3cb2f170c8ed082e5"
+  "AWS Deployment/aether-aws/terraform/modules/aurora/main.tf": "sha256:16c4beb8ccab1af164ff62f8aa2d515a5efc3f093b7878411f40aa14ce39e094"
+  "AWS Deployment/aether-aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
+  "AWS Deployment/aether-aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
+  "AWS Deployment/aether-aws/terraform/modules/secrets/main.tf": "sha256:998303bfe6e5a0a24477933beeb650c02e5e43469d9cba6d0af84e27e50d8032"
+  "cicd/aether-cicd/README.md": "sha256:698b43317965aed7ccfbcadd82def87c2a51d4d13c47aca8e0b2d369b7455b8a"
+  "cicd/aether-cicd/main.py": "sha256:a20ae99a95de475ad442e9eb72504cf2d613fb549c1e6121350ac07564d75301"
+  "cicd/aether-cicd/quality_gates/": "sha256:2cc72d40cd7c324e686271c5ea2c90c2ccb15c4ebe0435b0589844663dd2e436"
+  "cicd/aether-cicd/stages/": "sha256:93cb3130ac2472b981992e5918314b385c018ba5b0b19c95d057f4cf49eee0f4"
+  "config/staging_apply_iam_policy.yaml": "sha256:acc34d81c456090d4569faac727b6688604fc07c3bb36764f38c422f23d5004a"
+  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:08dff05b2a886af751d7e0b1c7886951b240b6a31f18ef14d26f73085ae59145"
 ---
 
 # CI/CD Pipeline — Stages, Gates & SDK Release

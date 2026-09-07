@@ -10,7 +10,9 @@ source_files:
   - Backend Architecture/aether-backend/shared/certification/readiness.py
   - Backend Architecture/aether-backend/shared/certification/checks.py
 canonical_owner: platform@aether
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/aether-backend/shared/certification/checks.py": "sha256:beda94f222993aecb30e43e5483667d856f39dbb74fc74cb758c86391efb4ea9"
+  "Backend Architecture/aether-backend/shared/certification/readiness.py": "sha256:4f49477dd17b2652c27ca458b9d0c7fe8ca242defa7d1d6d5e837b50050846a2"
 ---
 
 # Credential-Waiting Promotion Guide

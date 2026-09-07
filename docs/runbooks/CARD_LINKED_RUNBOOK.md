@@ -10,7 +10,9 @@ source_files:
   - Backend Architecture/aether-backend/services/card_linked_payments/ingestion.py
   - Backend Architecture/aether-backend/services/card_linked_payments/gold.py
 canonical_owner: platform@aether
-last_synced_commit: "0e967a68"
+source_hashes:
+  "Backend Architecture/aether-backend/services/card_linked_payments/gold.py": "sha256:1f3ef6a6ee5e6366171318590bd0ee7fac6d286266725bca971fedd99197ea31"
+  "Backend Architecture/aether-backend/services/card_linked_payments/ingestion.py": "sha256:edb3e70792a4aaf27abb91df95943abfb87b65b91dba08b8b6a233252cbbb8f1"
 ---
 
 # Card-Linked Payment Rails Runbook

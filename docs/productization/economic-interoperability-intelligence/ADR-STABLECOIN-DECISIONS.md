@@ -11,7 +11,10 @@ source_files:
   - Backend Architecture/aether-backend/services/stablecoin/valuation.py
   - Backend Architecture/aether-backend/services/stablecoin/finality.py
 canonical_owner: platform@aether
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/aether-backend/services/stablecoin/finality.py": "sha256:409db86b1b06aa9896b256acd4dc41cf9d358db48632cdb89f2b317599ff6a46"
+  "Backend Architecture/aether-backend/services/stablecoin/service.py": "sha256:b00127d3bc49bad5861afcaec080688cadee0e283e7cbe279db6eb941b61d5fd"
+  "Backend Architecture/aether-backend/services/stablecoin/valuation.py": "sha256:4c4e5cb17c5c465f7a58fe9b4bd75df925e262fa536f86f81f3781eabad42811"
 ---
 
 # Stablecoin Intelligence — Domain Decisions

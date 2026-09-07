@@ -11,6 +11,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 3
 source_files:
   - Backend Architecture/aether-backend/services/integrations/connectors/customerio.py
+source_hashes:
+  "Backend Architecture/aether-backend/services/integrations/connectors/customerio.py": "sha256:37f0e4827c0e5031d80239a216a0227867cae8790735ce879da6e308a76cf39e"
 ---
 
 # Customer.io Connector

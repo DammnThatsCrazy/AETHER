@@ -12,7 +12,10 @@ source_files:
   - Backend Architecture/aether-backend/services/campaign/routes.py
   - Backend Architecture/aether-backend/services/campaign/exploration.py
   - Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py
-last_synced_commit: "8238f06d"
+source_hashes:
+  "Backend Architecture/aether-backend/services/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
+  "Backend Architecture/aether-backend/services/campaign/routes.py": "sha256:b1c15a5daea35ed9cbabb848f71b1c6ccc9e324bb2c7296844af3138806ff872"
+  "Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py": "sha256:5f1ea2109ff37ba742f1236d651e4fcc00d14fe62b25eb08ae41b8693545f3d8"
 ---
 
 # Campaign 360 API Reference

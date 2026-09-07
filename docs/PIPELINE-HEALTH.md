@@ -14,7 +14,9 @@ related:
   - reliability/queue-worker-health
 canonical_owner: platform@aether
 estimated_read_minutes: 3
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/aether-backend/services/reliability/definitions.py": "sha256:9f80425fe87fbaae545c2983822dd65380b3b0ad837327719871ca859d115cf2"
+  "Backend Architecture/aether-backend/services/reliability/service.py": "sha256:04c7f243fe9140a842de8d89997097e1e9e4ebf16c294b56040e06bd246a27bb"
 ---
 # Pipeline Health
 

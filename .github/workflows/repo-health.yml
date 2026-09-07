@@ -112,9 +112,10 @@ jobs:
       - name: Print generated-doc diagnostics on failure
         if: failure()
         run: |
+          .venv/bin/python scripts/docs_drift.py --strict || true
           git diff --stat -- docs/_generated docs/REPO-INDEX.md docs/AUTOMATION.md || true
           git diff --name-only -- docs/_generated docs/REPO-INDEX.md docs/AUTOMATION.md || true
-          echo 'Remediation: make repo-doctor-fix && commit docs/_generated docs/REPO-INDEX.md docs/AUTOMATION.md'
+          echo 'Remediation: review the exact source-linked pages above, then run make docs-generate-changed; for generated drift run make docs-generate.'
 
   docs-sync:
     # Write-capable job — auto-commits regenerated docs on push to main only.
@@ -265,10 +266,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # ml-docs-check runs docs_drift.py, which resolves each doc's
-          # last_synced_commit against history. A shallow clone puts older
-          # stamps beyond the fetch horizon, and the drift gate correctly
-          # refuses to score an unverifiable stamp as fresh.
+          # Most source-linked docs use content hashes, which are independent of
+          # commit ancestry. Keep full history while legacy last_synced_commit
+          # markers are still accepted during migration.
           fetch-depth: 0
 
       - name: Set up Python

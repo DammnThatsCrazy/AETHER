@@ -11,7 +11,8 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "packages/shared/schema-version.ts": "sha256:7662500fa1357ae884949443fdc075a6361656e7be3f57b720cb23b41015dda1"
 ---
 # Migration Guide: Aether SDK v6.x to v7.0.0
 

@@ -11,7 +11,8 @@ source_files:
 canonical_owner: commerce@aether
 estimated_read_minutes: 4
 toc_depth: 3
-last_synced_commit: "0845dfa2"
+source_hashes:
+  "Backend Architecture/aether-backend/services/x402/commerce_routes.py": "sha256:7709c0d869867366a90b8aa336e38f2b76ba6204e471371bc41b8848502e7e6f"
 ---
 # Agentic Commerce — Approval Model
 

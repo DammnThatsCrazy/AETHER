@@ -11,7 +11,10 @@ source_files:
   - frontend/kyber/src/pages/derivatives/kyber-derivatives-ops-page.tsx
   - frontend/kyber/src/pages/interop/kyber-interop-ops-page.tsx
 canonical_owner: platform@aether
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "frontend/kyber/src/pages/derivatives/kyber-derivatives-ops-page.tsx": "sha256:2543f57e9e8144b45691479d3c4a25072b48faf1c35b55f07daae9fed4413e08"
+  "frontend/kyber/src/pages/interop/kyber-interop-ops-page.tsx": "sha256:7d027dce23e07545f45bc2f43ab59ebe8511bd36f9b160fb7760a3fa42532739"
+  "frontend/kyber/src/pages/stablecoins/kyber-stablecoins-ops-page.tsx": "sha256:18922ef9af9a3d2531757533f8feac73ec621b75985ee4870eac961f6bc9c25c"
 ---
 
 # Kyber Operator Surfaces

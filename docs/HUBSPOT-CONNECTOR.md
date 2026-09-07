@@ -11,6 +11,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 4
 source_files:
   - Backend Architecture/aether-backend/services/integrations/connectors/adapters.py
+source_hashes:
+  "Backend Architecture/aether-backend/services/integrations/connectors/adapters.py": "sha256:dc1b09adfa1eecb2690e47cfdf364b7efaa04ec0e8664f46a513eaf0f7213459"
 ---
 
 # HubSpot Connector

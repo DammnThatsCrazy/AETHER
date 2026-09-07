@@ -11,7 +11,10 @@ source_files:
   - Backend Architecture/aether-backend/services/derivatives/state_machines.py
   - Backend Architecture/aether-backend/services/interop/correlation.py
 canonical_owner: platform@aether
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "Backend Architecture/aether-backend/services/derivatives/state_machines.py": "sha256:fc7f1c23cc0ca979815182eaea0a0401640741df24c8d57d2b3c07687040ffae"
+  "Backend Architecture/aether-backend/services/interop/correlation.py": "sha256:781c5a927507f4a4f6ad6c519ef270f6605dabd45dbea135f8fd391f5a506be1"
+  "Backend Architecture/aether-backend/services/stablecoin/service.py": "sha256:b00127d3bc49bad5861afcaec080688cadee0e283e7cbe279db6eb941b61d5fd"
 ---
 
 # Execution State

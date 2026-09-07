@@ -14,7 +14,11 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "23eb1b05"
+source_hashes:
+  "Backend Architecture/aether-backend/services/provider_runtime/": "sha256:222fdaf7349cf2f190d5a512550b7f0f45b2d26473ecbbe87d20476f4f4d2ad9"
+  "Backend Architecture/aether-backend/services/providers/routes.py": "sha256:604d8af79653b6472262c42da610787ca6328aadef8c356d6635f56092c6ec39"
+  "Backend Architecture/aether-backend/shared/certification/readiness.py": "sha256:4f49477dd17b2652c27ca458b9d0c7fe8ca242defa7d1d6d5e837b50050846a2"
+  "Backend Architecture/aether-backend/shared/integration_contracts/certification.py": "sha256:2969b5f1176212f462882a7361fcdeebdaf13a390148eba0626c459451fdf101"
 ---
 
 # Provider Certification

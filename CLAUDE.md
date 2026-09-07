@@ -27,8 +27,8 @@ pytest runs, TypeScript-only checks, docs-only checks, manual inspection, or
 `make repo-doctor` alone.
 
 If source-linked docs are reported stale, update the actual docs against their
-declared `source_files`, then run `python scripts/docs_drift.py --update`.
-Stamping without review is not allowed.
+declared `source_files`, then run `make docs-generate-changed` to refresh only
+the affected `source_hashes`. Hash updates without review are not allowed.
 
 For release readiness, also run `make release-gate` when the PR claims release
 readiness.
@@ -56,20 +56,21 @@ make repo-doctor
 ## Source-linked docs rule
 
 Docs with `source_files:` frontmatter must be reviewed when their linked
-source files change. `last_synced_commit` is only updated **after** review:
+source content changes. `source_hashes` are updated **after** review:
 
 ```bash
-python scripts/docs_drift.py --update
+make docs-generate-changed
 ```
 
-Never blindly stamp stale docs to silence CI.
+Never blindly restamp all docs to silence CI. A squash merge must not require a
+new metadata commit when the reviewed source bytes are unchanged.
 
 ---
 
 ## Agents must NOT
 
 - Manually edit generated docs
-- Blindly stamp source-linked docs
+- Blindly update source-linked hashes
 - Weaken validators to pass CI
 - Leave generated diffs unstaged
 - Skip SDK / contract / docs checks after source changes

@@ -29,7 +29,14 @@ related:
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
-last_synced_commit: "23eb1b05"
+source_hashes:
+  "Backend Architecture/aether-backend/config/settings.py": "sha256:27f7b15209c14a857112fd3dfff3558ebd9e45c21def782d4dd63ccecfc0aa3c"
+  "Backend Architecture/aether-backend/services/intelligence/decision_models.py": "sha256:ff7e6d657dcf68bbe4d9ac7d66736be7f7b7c446050cceec84c35dd59b6a2ee7"
+  "Backend Architecture/aether-backend/services/intelligence/ooda_engine.py": "sha256:bea93d08056d5cb9c7c2fc7d3738beaa3b42715c5930a0811900c55b6bb8a486"
+  "Backend Architecture/aether-backend/services/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
+  "Backend Architecture/aether-backend/services/intelligence/recommendation_families.py": "sha256:9a1375244f013488f51e2a73bd5de32b452bb7232f67fea68ac4cc7955d80e43"
+  "Backend Architecture/aether-backend/services/intelligence/repositories.py": "sha256:5dc6be1b18ffec874a1ef2026a8f8ab3e975f69119f7efa92928fc9f71b72610"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:6869337e19ec073673344c4d27986a717be807b852156ffe5807516105abdc35"
 ---
 # Decision & Outcome Intelligence
 

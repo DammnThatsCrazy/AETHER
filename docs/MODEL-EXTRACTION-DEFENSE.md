@@ -11,7 +11,8 @@ source_files:
 canonical_owner: security@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "4e6fdad"
+source_hashes:
+  "security/model_extraction_defense/": "sha256:a39e9edab1b81febc20fb8432a61746b2ac840c1e82c2b8c1842f4e431d2b0b2"
 ---
 # Model Extraction Defense v8.12.0
 
