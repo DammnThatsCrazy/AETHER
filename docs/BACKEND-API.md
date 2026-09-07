@@ -17,7 +17,7 @@ reviewed_source_commits:
   - commit: "41e8356b"
     reason: "Reviewed 41e8356b (additive /v1/campaign-sources overview/ad-options/connect/test/account/disable/enable endpoints in services/campaign/routes.py, orchestrated by new ad_source_links.py). This spec's Campaign Management Service section documents the /v1/campaigns CRUD surface and does not enumerate the /v1/campaign-sources registry router (covered in docs/api/CAMPAIGN_360_API.md), so the additions are additive to routes this doc does not describe; no body change was required."
 source_hashes:
-  "Backend Architecture/aether-backend/services/": "sha256:d6c9a9c8b1eaf0f0473aa9158ed9974af88aa7f067b8594ed93b6857ba06ed24"
+  "Backend Architecture/aether-backend/services/": "sha256:0a1d6e61aff3f2e5b85d3ebd72e8ba0e715f04b274a808a687526f85a988710a"
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
 
