@@ -407,6 +407,23 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
         return build_provider_sync_coro()
 
 
+    def _rcp_reconcile_scheduler() -> Coroutine[Any, Any, None]:
+        """Continuously reconcile managed integrations (Reconciled Control Plane).
+
+        Closes the §32 loop on a cadence: stale managed integrations are
+        reconciled, actionable drift is planned, and planned changes ride the
+        §34/§35 governed execution path with the default (fail-closed) actuator
+        registry — nothing auto-applies until authorities are admitted, and the
+        loop self-stops when the flags flip OFF. Rides the existing
+        ``maintenance`` role like the other single periodic loops; gated on the
+        plane master switch AND the scheduler kill-switch (default OFF).
+        """
+        from services.managed_integrations.scheduler import (
+            build_reconcile_scheduler_coro,
+        )
+
+        return build_reconcile_scheduler_coro()
+
     # ── specs (registration order mirrors the old lifespan start order) ───
 
     return [
@@ -740,6 +757,20 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
                     "receipt_evidence_enabled",
                     False,
                 )
+            ),
+        ),
+        # Reconciled Control Plane continuous reconcile scheduler (§32/§35/§39):
+        # periodically reconciles managed integrations, plans actionable drift
+        # and rides the governed execution path. Rides the existing
+        # ``maintenance`` role like the other single periodic loops (registered
+        # in ROLE_TO_SPEC_NAMES); gated on the plane master switch AND the
+        # scheduler kill-switch, both default OFF.
+        WorkerSpec(
+            name="reconciled_control_scheduler",
+            factory=_rcp_reconcile_scheduler,
+            enabled=lambda: bool(
+                settings.reconciled_control.enabled
+                and settings.reconciled_control.scheduler_enabled
             ),
         ),
     ]

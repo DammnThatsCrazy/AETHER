@@ -709,6 +709,7 @@ NO_PROJECTION_FAMILIES: dict[str, str] = {
     "identity": "pending",
     "interaction": "pending_pr2",
     "location": "pending",
+    "privacy": "no_projection",
     "x402": "pending",
 }
 

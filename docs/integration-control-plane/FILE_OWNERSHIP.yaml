@@ -95,3 +95,108 @@ deploy_cert:          # A13 (W6)
 # Connector-group agents share adapters.py by lease. Because they touch one hot file,
 # the orchestrator serializes their landings (A6 -> A7 -> A8) rather than landing in
 # parallel, or splits adapters.py into per-connector modules in W4 before fan-out.
+
+# ============================================================================
+# End-User Lifecycle & Integration Management (absorbed program, branch
+# feat/enduser-lifecycle-integration). Round 2 workstream leases. The orchestrator
+# owns the integration queue over the shared destinations below (router.tsx,
+# app-shell.tsx nav, endpoints.ts, settings/). Each WS owns its paths exclusively;
+# files not listed are read-only to that WS. Contract files owned by WS-0 freeze
+# after R1 (change only via ADR-0008..0013).
+# Backend root = "Backend Architecture/aether-backend/". Paths relative to it unless
+# prefixed with "/" (repo root).
+# ============================================================================
+
+r2_ws0_contract_spine:      # R1 (before fan-out); owns shared contracts + endpoints
+  owner: ws0
+  paths:
+    - shared/integration_contracts/**          # extend experience_category + projection types
+    - /packages/shared/connector-taxonomy.ts   # provider/category mirror (generate)
+  leased:                                      # additive endpoints only (no restructure)
+    - services/integrations/connectors/routes.py
+    - /frontend/aether/src/lib/api/endpoints.ts
+    - /frontend/aether/src/features/integrations/**
+
+r2_ws1_settings_ia:        # Phase 2 / PR B
+  owner: ws1
+  paths:
+    - /frontend/aether/src/pages/settings/**   # extract sections into nested shell
+    - /frontend/aether/src/features/settings/**
+  leased:                                      # submitted as diff evidence to orchestrator
+    - /frontend/aether/src/app/router.tsx      # /settings/* routes + /integrations redirect
+    - /frontend/aether/src/components/app-shell.tsx
+  reuse_only:
+    - /frontend/aether/src/pages/connectors/** # moved, not rewritten, in this wave
+
+r2_ws2_advertising_convergence:   # Phase 3 / PR C
+  owner: ws2
+  paths:
+    - services/measurement/connectors/**
+    - services/campaign/**                      # source auto-link orchestration (additive)
+    - /frontend/aether/src/pages/campaigns/campaign-sources-page.tsx
+    - /frontend/aether/src/features/campaigns/use-campaign-sources.ts
+  leased:
+    - shared/providers/categories.py            # ad_platform identity/alias only
+    - services/campaign/routes.py               # connect/accounts/sync additions only
+
+r2_ws3_activation:         # Phase 4 / PR D
+  owner: ws3
+  paths:
+    - services/activation/**                    # intent + steps (extend, additive)
+    - /frontend/aether/src/pages/activation/**
+    - /frontend/aether/src/features/activation/**
+  leased:
+    - /frontend/aether/src/app/router.tsx       # /activate alias
+    - /frontend/aether/src/app/tenant-landing.tsx  # post-auth resolver
+
+r2_ws4_readiness_contextual:   # Phase 5+6 / PR E
+  owner: ws4
+  paths:
+    - services/readiness_graph/**               # projection additions
+    - /frontend/aether/src/features/integrations/**  # readiness hooks (after WS-0 types)
+  leased:
+    - /frontend/aether/src/pages/campaigns/**   # contextual CTAs + empty states
+    - /frontend/aether/src/pages/profile360/**
+
+r2_ws5_public_private:     # Phase 7 / PR F (requires marketing source on base = origin/main)
+  owner: ws5
+  paths:
+    # WS-6-handoff swap DONE @ 7604fb95: connectors.ts is a DERIVED VIEW of
+    # packages/shared/connector-taxonomy.ts (CATALOG_ENTRIES project + PUBLIC_COPY
+    # marketing overlay). Only the shared_destinations orchestrator touches it now.
+    - /frontend/aether-marketing/src/content/connectors.ts   # derived view (shared taxonomy) — no longer hand-transcribed
+    - /frontend/aether-marketing/src/lib/handoff.ts          # intent/provider params (whitelisted)
+    - /frontend/aether-marketing/src/pages/integrations-page.tsx
+  leased:
+    - /packages/shared/**                          # vocabulary convergence via WS-0 contracts
+  reuse_only:
+    - /frontend/aether-marketing/src/content/connectors.test.ts
+
+r2_ws6_tail:               # Phase 8 / PR G + spec capture + acceptance
+  owner: ws6
+  # HANDED OFF FROM R1 (WS-0): generate /packages/shared/connector-taxonomy.ts,
+  # the TS provider/category mirror. Deferred out of R1-s2 (63fab756) because
+  # the R1 contract spine ended at the FE twin (s4, 95d53f4c). WS-6 tail must
+  # generate it from shared/integration_contracts/catalog.py (ALL_MANIFESTS
+  # four-group union — connectors / ad-platforms / payment-rails /
+  # deferred-credit-bureaus) as a pure derived mirror, never hand-edited, and
+  # keep it in step when catalog.py evolves.
+  paths:
+    - /docs/source-of-truth/**                    # spec capture + stale-taxonomy fixes (review, never blind-stamp)
+    - /docs/operations/**
+    - /docs/frontend/FRONTEND-ARCHITECTURE.md     # or docs/FRONTEND-ARCHITECTURE.md as declared source
+    - /tests/contracts/**                         # parity/lifecycle contract tests (namespaced)
+    - /frontend/aether/src/test/e2e/**            # lifecycle suites A-E (playwright)
+    - /packages/shared/connector-taxonomy.ts      # generate (derive from catalog.py), never hand-edit
+  leased:
+    - /frontend/aether/src/app/router.tsx         # legacy route deprecations only
+    - /docs/plans/**                              # phase ledger updates
+
+shared_destinations:       # orchestrator-owned merge surface (never two WS writers in one wave)
+  owner: orchestrator
+  paths:
+    - /frontend/aether/src/app/router.tsx
+    - /frontend/aether/src/components/app-shell.tsx
+    - /frontend/aether/src/lib/api/endpoints.ts
+    - /frontend/aether/src/pages/settings/**
+    - /docs/integration-control-plane/**

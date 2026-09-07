@@ -439,6 +439,36 @@ kyber_routes:
     disclosure: D1
     action_class: 0
 
+  # ── Reconciled Control Plane (operator convergence + review) ─────────────
+  # Operator-derived managed-integration evidence: fleet inventory, change-set
+  # plans, approvals and action-required review items. Record-level evidence
+  # (D4) — never tenant-visible product state; the domain carries no tenant
+  # grant, and every handler is additionally operator-gated in-handler.
+  - route: "GET /v1/admin/kyber/managed-integrations"
+    capability: kyber.reconciled_control.read
+    disclosure: D4
+    action_class: 0
+  - route: "GET /v1/admin/kyber/managed-integrations/{managed_integration_id}"
+    capability: kyber.reconciled_control.read
+    disclosure: D4
+    action_class: 0
+  - route: "GET /v1/admin/kyber/managed-integrations/change-sets"
+    capability: kyber.reconciled_control.read
+    disclosure: D4
+    action_class: 0
+  - route: "GET /v1/admin/kyber/managed-integrations/change-sets/{changeset_id}"
+    capability: kyber.reconciled_control.read
+    disclosure: D4
+    action_class: 0
+  - route: "GET /v1/admin/kyber/managed-integrations/approvals"
+    capability: kyber.reconciled_control.read
+    disclosure: D4
+    action_class: 0
+  - route: "GET /v1/admin/kyber/managed-integrations/action-required"
+    capability: kyber.reconciled_control.read
+    disclosure: D4
+    action_class: 0
+
   # ── Incidents, postmortems & runbooks ─────────────────────────────────────
   - route: "GET /v1/admin/kyber/incidents"
     capability: kyber.incident.read

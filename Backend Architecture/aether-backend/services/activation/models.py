@@ -54,6 +54,12 @@ class ActivationRecord(BaseModel):
     waiting_reason: Optional[str] = None
     manual_reason: Optional[str] = None
     blocked_reason: Optional[str] = None
+    # WS-3 (intent-driven activation): customer-selected activation intents
+    # (ActivationIntent tokens). These drive the recommended connect plan and are
+    # orthogonal to the SDK activation state machine above — they never gate its
+    # transitions. Additive only; absent for records created before WS-3.
+    intents: list[str] = Field(default_factory=list)
+    intents_updated_at: Optional[str] = None
     created_at: str
     updated_at: str
     history: list[dict[str, Any]] = Field(default_factory=list)
@@ -77,3 +83,31 @@ class TestEventRequest(BaseModel):
     properties: Optional[dict[str, Any]] = Field(default_factory=dict)
     anonymous_id: Optional[str] = Field(default=None, max_length=256)
     session_id: Optional[str] = Field(default=None, max_length=256)
+
+
+class ActivationIntentsRequest(BaseModel):
+    """WS-3: the tenant's chosen ActivationIntent tokens (durable save/resume).
+
+    Tokens are validated against the ActivationIntent vocabulary in the planner
+    (never silently dropped); the stored order is canonical intent order.
+    """
+
+    intents: list[str] = Field(default_factory=list, max_length=32)
+
+
+class ActivationConnectActionRequest(BaseModel):
+    """WS-3: run ONE connect action for a recommended integration.
+
+    ``family`` is a catalog ``provider_family`` reachable through the shared
+    connect surface (product_id == "ingestion"). ``action`` is one of
+    ``create_tenant_integration`` | ``configure_credential`` |
+    ``enable_connection`` | ``first_sync``. ``credential`` is the raw secret
+    handed to the credential service — never stored in config, exactly once per
+    call. ``name``/``since`` are pass-through display/backfill options.
+    """
+
+    family: str = Field(..., min_length=1, max_length=128)
+    action: str = Field(..., min_length=1, max_length=64)
+    name: Optional[str] = Field(default=None, max_length=200)
+    credential: Optional[str] = Field(default=None, max_length=4000)
+    since: Optional[str] = Field(default=None, max_length=64)

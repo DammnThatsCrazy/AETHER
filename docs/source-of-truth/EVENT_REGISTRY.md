@@ -1,169 +1,172 @@
 # Event Registry
 
 **Canonical source of truth:** `packages/shared/contracts/event-registry.json`  
-**Generated artifacts:** `packages/shared/events.ts` (TypeScript) and
-`Backend Architecture/aether-backend/services/ingestion/generated_registry.py` (Python).  
+(403 event types across 25 families, contract v8.12.0, schema v2.2.0)  
+**Generated artifacts:** `packages/shared/events.ts` (TypeScript — `EventType`,
+`EventFamily`, `EVENT_FAMILY`, `EVENT_CONSENT_PURPOSE`, field-trust / semantic-level
+maps) and
+`Backend Architecture/aether-backend/services/ingestion/generated_registry.py`
+(Python), plus the native iOS/Android event-type + consent-purpose regions
+(`Aether.swift` / `Aether.kt`) and the web consent map.  
 **Regenerate with:** `python scripts/generate_contracts.py`  
-**Full reference table:** `docs/_generated/event-registry-table.md` (248 types)
+**Authoritative per-event reference:** `docs/_generated/event-registry-table.md`
+— every one of the 403 types with **Family | Required Purposes | Privacy Class |
+Retention Class | Description** (deprecated events are marked).
 
 Every `EventType` the SDK is permitted to emit must appear in the JSON registry.
 Emitting anything outside this list will be dropped by the backend validator.
+Of the 403 types, 399 are `active` and 4 are `deprecated` (kept for backward
+compatibility); 153 are client-SDK-emittable (`sdkEmitable: true`), the rest are
+backend / observation-plane events (see [Families](#event-families-contract-v8120)).
 
-## Event families (v8.10.0)
+## Event families (contract v8.12.0)
 
-| Family | Purpose | Count | Description |
-|---|---|---|---|
-| `core` | analytics | 7 | track, page, screen, heartbeat, error, performance, experiment |
-| `identity` | analytics | 1 | identify |
-| `consent` | — (always allowed) | 1 | consent |
-| `journey` | analytics | 7 | journey_started, journey_paused, journey_resumed, journey_continued, journey_completed, journey_abandoned, journey_checkpoint |
-| `commerce` | commerce | 11 | payment_*, approval_*, entitlement_*, access_* |
-| `wallet` | web3 | 3 | wallet, transaction, contract_action |
-| `x402` | commerce | 14 | x402_* (corrected from agent; x402 is a payment protocol) |
-| `reward` | commerce | 5 | reward_* |
-| `agent` | agent | 18 | agent_task, agent_decision, a2h_interaction, agent_registered, etc. |
-| `agentic` | agent | 17 | agentic_session, agent_cost, agent_inbox, etc. |
-| `exposure` | analytics + personalization | 8 | content_impression, recommendation_exposed, offer_exposed, etc. |
-| `outcome` | analytics | 9 | outcome_observed, goal_achieved, recommendation_accepted, etc. |
-| `b2b` | analytics + commerce | 21 | organization_observed, workspace_*, member_*, etc. |
-| `ecommerce` | commerce | 24 | product_viewed, cart_*, checkout_*, order_*, subscription_*, invoice_*, etc. |
-| `friction` | analytics | 12 | dead_click_observed, rage_click_observed, form_*, scroll_depth_observed, etc. |
-| `server` | analytics | 11 | api_request_observed, webhook_delivery_observed, job_*, connector_sync_*, etc. |
-| `identity_lc` | analytics | 15 | signup_started, login_succeeded, logout_observed, mfa_*, device_*, etc. |
-| `web3_lc` | web3 | 8 | transaction_pending_observed, transaction_confirmed_observed, token_approval_observed, etc. |
-| `comms` | analytics + marketing | 15 | notification_delivered, email_*, message_*, support_case_*, etc. |
-| `credit` | credit (explicit opt-in) | 3 | credit_signal_observed, credit_account_observed, credit_decision_observed |
-| `location` | location (explicit opt-in) | 2 | location_observed, geofence_transition_observed |
+`Count` is registry events; `SDK` is how many of them are `sdkEmitable: true`;
+`Consent` is the required purpose(s) on the family's events.
 
-For the complete list of all 248 event types with their required purposes, privacy class,
-retention class, and Silver/Graph projections, see `docs/_generated/event-registry-table.md`.
+| Family | Count | SDK | Consent | Covers |
+|---|---|---|---|---|
+| `core` | 7 | 7 | analytics (`experiment` → marketing) | track, page, screen, heartbeat, error, performance, experiment |
+| `journey` | 15 | 12 | analytics | journey lifecycle + navigation/attribution (deep link, QR/NFC, app clip, install attribution) |
+| `identity` | 1 | 1 | analytics | identify |
+| `consent` | 1 | 1 | — (always allowed) | consent grant/revoke |
+| `commerce` | 10 | 10 | commerce (`conversion` → marketing) | payment / approval / entitlement / access |
+| `wallet` | 3 | 3 | web3 | wallet, transaction, contract_action |
+| `agent` | 64 | — | agent (trade/position/portfolio/fill observations also financial_activity) | lifecycle, tools, and external observation (account / MCP / brokerage / AgentMail-style) |
+| `reward` | 4 | 3 | commerce | reward action, claim, proof, delivery |
+| `x402` | 26 | 26 | commerce | x402 payment lifecycle + externally-observed protocol flows |
+| `exposure` | 8 | 8 | analytics (3 also personalization) + marketing (`ad_exposed`) | content/recommendation/offer/ad exposure |
+| `outcome` | 9 | — | analytics (2 also personalization) | outcome/goal observation, recommendation acceptance |
+| `b2b` | 20 | 20 | analytics (2 also commerce) | organization / workspace / member / seat / project |
+| `ecommerce` | 23 | 23 | commerce | product / cart / checkout / order / subscription / invoice |
+| `friction` | 12 | 12 | analytics | dead/rage click, form, scroll depth, backtrack |
+| `interaction` | 12 | 12 | analytics | surface/UI interaction, feature + action lifecycle |
+| `server` | 11 | — | analytics | API / webhook / job / connector observation |
+| `identity_lc` | 15 | 15 | analytics | signup / login / logout / MFA / device / account recovery |
+| `web3_lc` | 8 | — | web3 | on-chain transaction lifecycle observation |
+| `comms` | 23 | — | marketing (email, unsubscribe) + analytics (notification, message, support) | notification / email / message / support-case delivery |
+| `credit` | 3 | — | credit (explicit opt-in) | credit signal / account / decision |
+| `location` | 2 | — | location (explicit opt-in) | location / geofence |
+| `derivatives` | 52 | — | financial_activity (2 also agent) | derivatives position/order/fill/risk/reconciliation observation |
+| `stablecoin` | 30 | — | economic_observability | stablecoin transfer/payment/mint/burn/valuation/depeg/finality |
+| `interop` | 39 | — | cross_chain_observability | interop message/asset-leg/verification/reconciliation |
+| `privacy` | 5 | — | — (always allowed) | data-subject requests + erasure (DSR/compliance) |
+
+Two of the "SDK-emittable" families are only partially client-emittable:
+`journey_completed`, `app_install_attributed`, and `deferred_attribution_resolved`
+are backend-derived (`sdkEmitable: false`), as is `reward_action_queued` (reward
+actions are queued by the backend). The generated table is authoritative for the
+full per-type metadata — required purposes, privacy class, retention class, and
+status — on every one of the 403 events; do not hand-maintain that enumeration
+in prose.
+
+Privacy classes in use: `behavioral`, `identity`, `governance`, `financial`,
+`sensitive`, `sensitive_financial`, `sensitive_location`. Retention classes in
+use: `standard_30d`, `standard_90d`, `standard_180d`, `standard_365d`,
+`financial_7y`, `credit_730d`, `location_30d`, `permanent`. Each event's class is
+declared on the spine and rendered in the generated table.
 
 ---
 
-## Core analytics (family: `core`) — purpose: `analytics`
+## Journey lifecycle (family: `journey`) — analytics
 
-| Type | Emitted by | Purpose |
+The seven canonical journey markers (client-observable):
+
+| Type | Captured when | Notes |
 |---|---|---|
-| `track` | `aether.track()` | Custom event |
-| `page` | `aether.pageView()` + SPA hooks (web) | Navigation |
-| `screen` | native lifecycle / `screenView()` | Navigation |
-| `heartbeat` | session manager | Session liveness |
-| `error` | error capture modules | Client errors |
-| `performance` | perf collectors | Web Vitals, load metrics |
-| `experiment` | experiment runners | Variant exposure |
+| `journey_started` | journey start | Explicit start. |
+| `journey_paused` | pause / background / hidden | Client observation only; backend owns final state. |
+| `journey_resumed` | resume / foreground | Canonical top-level type; no longer emitted as an unregistered event. |
+| `journey_continued` | foreground/resume within timeout | Same-device/session continuation. |
+| `journey_completed` | backend finalization | `sdkEmitable: false` — the backend closes the journey. |
+| `journey_abandoned` | `abandonJourney()` / safe client timeout | Backend may derive abandonment when client inference is unsafe. |
+| `journey_checkpoint` | route/section checkpoint | Non-terminal step marker. |
 
-## Identity (family: `identity`) — purpose: `analytics`
+The family also carries navigation and acquisition events: `navigation_intent`,
+`navigation_arrival`, `deep_link_opened`, `qr_code_scanned`, `nfc_tag_read`,
+`app_clip_invoked` (SDK-emitted), and `app_install_attributed`,
+`deferred_attribution_resolved` (backend attribution results).
 
-| Type | Emitted by |
-|---|---|
-| `identify` | `aether.hydrateIdentity()` |
+Journey payloads may include `journeyId`, `journeyName`, `journeyType`, step
+IDs/names, status/reason fields, handoff source/target session/device
+identifiers, latency, confidence, confidence signals, campaign/referrer
+attribution, and metadata. Journey events require `analytics` consent unless
+commerce, web3, or agent-specific data is also emitted through its canonical
+event family.
 
-## Consent (family: `consent`) — always allowed
+Legacy `track` events remain accepted when `properties.event` is one of the
+journey lifecycle names above. Ingestion normalizes those records for internal
+journey stitching without breaking existing `track`, `page`, or `screen`
+behavior.
 
-| Type | Emitted by |
-|---|---|
-| `consent` | `aether.consent.grant/revoke` |
+## Core / Identity / Consent / Commerce / Wallet
 
-## Commerce / access (family: `commerce`) — purpose: `commerce` (except `conversion` → `marketing`)
+| Family | Types | Consent |
+|---|---|---|
+| `core` | `track` (`aether.track()`), `page` (+SPA hooks), `screen`, `heartbeat`, `error`, `performance` → `analytics`; `experiment` → `marketing` | analytics / marketing |
+| `identity` | `identify` (`aether.hydrateIdentity()`) | analytics |
+| `consent` | `consent` (`aether.consent.grant/revoke`) | always allowed |
+| `commerce` | `conversion`, `payment_initiated/completed/failed`, `approval_requested/resolved`, `entitlement_granted/revoked`, `access_granted/denied` | commerce |
+| `wallet` | `wallet`, `transaction`, `contract_action` | web3 |
 
-| Type | Emitted by |
-|---|---|
-| `conversion` | `aether.conversion()` |
-| `payment_initiated` | `aether.commerce.paymentInitiated()` |
-| `payment_completed` | `aether.commerce.paymentCompleted()` |
-| `payment_failed` | `aether.commerce.paymentFailed()` |
-| `approval_requested` | `aether.commerce.approvalRequested()` |
-| `approval_resolved` | `aether.commerce.approvalResolved()` |
-| `entitlement_granted` | `aether.commerce.entitlementGranted()` |
-| `entitlement_revoked` | `aether.commerce.entitlementRevoked()` |
-| `access_granted` | `aether.commerce.accessGranted()` |
-| `access_denied` | `aether.commerce.accessDenied()` |
+All `payment_*` events carry a `rail` field so a single code path handles fiat /
+stripe / invoice / onchain / x402 / internal_credit. `conversion` is gated on
+`marketing`, not `commerce` — a click is a marketing observation, never a
+commerce fact on its own.
 
-All `payment_*` events carry a `rail` field so a single code path handles
-fiat / stripe / invoice / onchain / x402 / internal_credit.
+## Agent (family: `agent`) — agent / financial_activity
 
-## Wallet / on-chain (family: `wallet`) — purpose: `web3`
+All 64 `agent` events are **backend / observation-plane** (`sdkEmitable:
+false`): the agent lifecycle and tools are recorded by the Aether agent runtime,
+and external observation arrives through provider webhooks / the MCP bridge /
+parsers — never by the client SDK. Payload contracts:
+`packages/shared/agent.ts` (`AgentRegisteredPayload`, …).
 
-| Type | Emitted by |
-|---|---|
-| `wallet` | `aether.wallet.connect/disconnect` |
-| `transaction` | `aether.wallet.transaction()` |
-| `contract_action` | host app via `aether.track()` wrapper (optional) |
-
-## Agent (family: `agent`) — purpose: `agent`
-
-### Legacy events (kept for backward compatibility)
-
-| Type | Emitted by |
-|---|---|
-| `agent_task` | `aether.agent.task()` |
-| `agent_decision` | `aether.agent.decision()` |
-| `a2h_interaction` | `aether.agent.interaction()` |
+Three legacy events are `deprecated` but kept for backward compatibility:
+`agent_task`, `agent_decision`, `a2h_interaction`.
 
 ### Lifecycle events (granular — preferred)
 
-| Type | Emitted by |
+`agent_registered`, `agent_updated`, `agent_authorized`, `agent_deauthorized`,
+`agent_capability_granted`, `agent_capability_revoked`, `agent_task_created` /
+`decomposed` / `started` / `completed` / `failed`, `agent_tool_called`,
+`agent_resource_requested`, `agent_delegated_task`, `agent_subagent_spawned`,
+`agent_policy_evaluated`, `agent_handoff`, `agent_escalated_to_human`,
+`agent_outcome_recorded`.
+
+### Externally-observed agent activity (family `agent`)
+
+These observe an external agent's account/activity — recorded from the outside;
+Aether does not execute them. (The observability *service* lives under
+`services/agentic_observability/`; the event *family* is `agent`.)
+
+| Group | Types |
 |---|---|
-| `agent_registered` | `aether.agent.registered()` |
-| `agent_updated` | `aether.agent.updated()` |
-| `agent_authorized` | `aether.agent.authorized()` |
-| `agent_deauthorized` | `aether.agent.deauthorized()` |
-| `agent_capability_granted` | `aether.agent.capabilityGranted()` |
-| `agent_capability_revoked` | `aether.agent.capabilityRevoked()` |
-| `agent_task_created` | `aether.agent.taskCreated()` |
-| `agent_task_decomposed` | `aether.agent.taskDecomposed()` |
-| `agent_task_started` | `aether.agent.taskStarted()` |
-| `agent_task_completed` | `aether.agent.taskCompleted()` |
-| `agent_task_failed` | `aether.agent.taskFailed()` |
-| `agent_tool_called` | `aether.agent.toolCalled()` |
-| `agent_resource_requested` | `aether.agent.resourceRequested()` |
-| `agent_delegated_task` | `aether.agent.delegatedTask()` |
-| `agent_subagent_spawned` | `aether.agent.subagentSpawned()` |
-| `agent_policy_evaluated` | `aether.agent.policyEvaluated()` |
-| `agent_handoff` | `aether.agent.handoff()` |
-| `agent_escalated_to_human` | `aether.agent.escalatedToHuman()` |
-| `agent_outcome_recorded` | `aether.agent.outcomeRecorded()` |
+| Account / MCP observation | `agentic_account_observed`, `agentic_account_connected_observed`, `agentic_account_disconnected_observed`, `agent_budget_observed`, `agent_budget_changed_observed`, `agent_permission_observed`, `agent_mcp_connection_observed`, `agent_tool_observed`, `agent_tool_invocation_observed`, `agent_activity_observed`, `agent_risk_signal_observed`, `agent_notification_observed` |
+| Trading (brokerage) observation | `agent_strategy_observed`, `agent_trade_intent_observed`, `agent_trade_order_observed`, `agent_trade_fill_observed`, `agent_trade_rejection_observed`, `agent_position_observed`, `agent_portfolio_snapshot_observed`, `agent_performance_snapshot_observed`, `agent_disconnect_observed` (the trade/position/portfolio/fill observations also require `financial_activity`) |
+| Communication (AgentMail-style) observation | `agent_inbox_observed`, `agent_email_address_observed`, `agent_thread_observed`, `agent_message_received_observed`, `agent_message_sent_observed`, `agent_reply_observed`, `agent_attachment_observed`, `agent_attachment_parsed_observed`, `agent_otp_detected_observed`, `agent_invoice_detected_observed`, `agent_receipt_detected_observed`, `agent_calendar_intent_observed`, `agent_support_route_observed`, `agent_semantic_search_observed`, `agent_data_extraction_observed` |
+| Runtime / oversight observation | `agent_evaluation_observed`, `agent_cost_observed`, `ai_invocation_observed`, `agent_grounding_observed`, `agent_guardrail_observed`, `agent_human_override_observed` |
 
-Payload contracts: `packages/shared/agent.ts` (`AgentRegisteredPayload`, etc.)
+## x402 (family: `x402`) — commerce
 
-## x402 (family: `x402`) — purpose: `commerce`
+All 26 `x402` events are SDK-emittable and require `commerce` consent
+(`privacyClass: financial`, `retentionClass: financial_7y`). Payload contracts:
+`packages/shared/x402-lifecycle.ts` (`X402PaymentIntentCreatedPayload`, …).
 
-### Legacy event (kept for backward compatibility)
+### Legacy event
 
-| Type | Emitted by |
-|---|---|
-| `x402_payment` | `aether.x402.payment()` |
-
-Legacy `x402_payment` normalizes to `x402_payment_settled` in the backend lifecycle mapper.
+`x402_payment` is **deprecated** (kept for backward compatibility); the backend
+lifecycle mapper normalizes it to `x402_payment_settled`.
 
 ### Lifecycle events (granular — preferred)
 
-| Type | Emitted by |
-|---|---|
-| `x402_resource_requested` | `aether.x402.resourceRequested()` |
-| `x402_payment_required` | `aether.x402.paymentRequired()` |
-| `x402_quote_received` | `aether.x402.quoteReceived()` |
-| `x402_authorization_requested` | `aether.x402.authorizationRequested()` |
-| `x402_authorization_resolved` | `aether.x402.authorizationResolved()` |
-| `x402_payment_intent_created` | `aether.x402.paymentIntentCreated()` |
-| `x402_payment_submitted` | `aether.x402.paymentSubmitted()` |
-| `x402_payment_settled` | `aether.x402.paymentSettled()` |
-| `x402_payment_failed` | `aether.x402.paymentFailed()` |
-| `x402_payment_timeout` | `aether.x402.paymentTimeout()` |
-| `x402_receipt_verified` | `aether.x402.receiptVerified()` |
-| `x402_access_granted` | `aether.x402.accessGranted()` |
-| `x402_access_denied` | `aether.x402.accessDenied()` |
-| `x402_refund_or_reversal` | `aether.x402.refundOrReversal()` |
+`x402_resource_requested`, `x402_payment_required`, `x402_quote_received`,
+`x402_authorization_requested`, `x402_authorization_resolved`,
+`x402_payment_intent_created`, `x402_payment_submitted`, `x402_payment_settled`,
+`x402_payment_failed`, `x402_payment_timeout`, `x402_receipt_verified`,
+`x402_access_granted`, `x402_access_denied`, `x402_refund_or_reversal`.
 
-Payload contracts: `packages/shared/x402-lifecycle.ts` (`X402PaymentIntentCreatedPayload`, etc.)
-
-### Consent rules
-
-All x402 lifecycle events require `commerce` consent. If `agent` consent is
-also granted, agent-specific detail fields are included in the payload.
-Wallet/onchain fields require `web3` consent.
-
-### State machine
+State machine:
 
 ```
 x402_resource_requested
@@ -179,107 +182,34 @@ x402_resource_requested
   → x402_refund_or_reversal [optional terminal]
 ```
 
+### Externally-observed x402 flows (family `x402`)
+
+The `*_observed` types record what Aether sees in an x402 flow it did not drive —
+an external party requesting, authorizing, or settling a payment:
+
+`x402_resource_request_observed`, `x402_challenge_observed`,
+`x402_payment_requirement_observed`, `x402_signature_observed`,
+`x402_verification_observed`, `x402_settlement_observed`,
+`x402_resource_access_observed`, `x402_resource_access_denied_observed`,
+`x402_failure_observed`, `x402_replay_risk_observed`, `x402_provider_observed`.
+
 ## Consent mapping (authoritative)
 
-Mirrored in `packages/shared/events.ts::EVENT_CONSENT_PURPOSE` and
-`packages/web/src/core/event-queue.ts::CONSENT_MAP`. An event whose required
-purpose is not granted is **dropped before transport** by the SDK.
+Generated from the registry: `packages/shared/events.ts::EVENT_CONSENT_PURPOSE`,
+`packages/web/src/core/generated-consent-map.ts::EVENT_CONSENT_PURPOSE`, and the
+native iOS/Android consent-purpose regions. The generated map holds each type's
+primary (first) required purpose; events with no required purposes — `consent`
+itself and the `privacy` DSR family — are always allowed at the consent gate and
+default to `analytics` in the generated purpose map. An event whose required
+purpose is not granted is **dropped before transport** by the SDK. Hand-edited
+consent maps are not permitted — `generate_contracts.py --check` and
+`validate_mobile_event_parity.py` enforce registry parity.
 
-## Journey lifecycle (family: `journey`) — purpose: `analytics`
+## Remaining families (dedicated sources of truth)
 
-| Type | Emitted by | Notes |
-|---|---|---|
-| `journey_started` | `startJourney()` | Explicit host-app journey start. |
-| `journey_paused` | `pauseJourney()` / app background / page hidden | Client observation only; backend owns final state. |
-| `journey_resumed` | `resumeJourney()` / `/sdk/identity/resolve` match | Canonical top-level type; no longer emitted as an unregistered event. |
-| `journey_continued` | foreground/resume within timeout | Same-device/session continuation. |
-| `journey_completed` | `completeJourney()` | Explicit host-app completion. |
-| `journey_abandoned` | `abandonJourney()` / safe client timeout | Backend may derive abandonment when client inference is unsafe. |
-| `journey_checkpoint` | `checkpointJourney()` / throttled SPA route checkpoint | Non-terminal step marker. |
-
-Journey payloads may include `journeyId`, `journeyName`, `journeyType`, step IDs/names,
-status/reason fields, handoff source/target session/device identifiers, latency,
-confidence, confidence signals, campaign/referrer attribution, and metadata. Journey
-events default to `analytics` consent unless commerce, web3, or agent-specific data is
-also emitted through its canonical event family.
-
-Legacy `track` events remain accepted when `properties.event` is one of the journey
-lifecycle names above. Ingestion normalizes those records for internal journey stitching
-without breaking existing `track`, `page`, or `screen` behavior.
-
-## Agentic account / MCP observation (family: `agentic_observability`) — purpose: `agent`
-
-| Type | Observed from | Notes |
-|---|---|---|
-| `agentic_account_observed` | External provider webhook | New external agentic account observed |
-| `agentic_account_connected_observed` | External provider webhook | Account connected to agent |
-| `agentic_account_disconnected_observed` | External provider webhook | Account disconnected |
-| `agent_budget_observed` | External provider webhook | Agent budget state observed |
-| `agent_budget_changed_observed` | External provider webhook | Agent budget changed |
-| `agent_permission_observed` | External provider webhook | Agent permissions observed |
-| `agent_mcp_connection_observed` | MCP server / webhook | MCP connection observed |
-| `agent_tool_observed` | MCP server | Tool available on MCP server observed |
-| `agent_tool_invocation_observed` | MCP server | Tool invocation observed |
-| `agent_activity_observed` | External provider | General agent activity observed |
-| `agent_risk_signal_observed` | AETHER risk engine | Risk signal produced from observed activity |
-| `agent_notification_observed` | External provider webhook | Agent notification observed |
-
-## Robinhood-style trading observation (family: `agentic_observability`) — purpose: `agent`
-
-| Type | Observed from | Notes |
-|---|---|---|
-| `agent_strategy_observed` | External brokerage webhook | Trading strategy observed |
-| `agent_trade_intent_observed` | External brokerage webhook | Trade intent observed (not executed by AETHER) |
-| `agent_trade_order_observed` | External brokerage webhook | Trade order observed (executed externally) |
-| `agent_trade_fill_observed` | External brokerage webhook | Trade fill observed (executed externally) |
-| `agent_trade_rejection_observed` | External brokerage webhook | Trade rejection observed |
-| `agent_position_observed` | External brokerage webhook | Position snapshot observed |
-| `agent_portfolio_snapshot_observed` | External brokerage webhook | Portfolio snapshot observed |
-| `agent_performance_snapshot_observed` | External brokerage webhook | Performance metrics observed |
-| `agent_disconnect_observed` | External brokerage webhook | External account disconnect observed |
-
-## AgentMail-style communication observation (family: `agentic_observability`) — purpose: `agent`
-
-| Type | Observed from | Notes |
-|---|---|---|
-| `agent_inbox_observed` | AgentMail-style webhook | Agent inbox state observed |
-| `agent_email_address_observed` | AgentMail-style webhook | Agent email address observed |
-| `agent_thread_observed` | AgentMail-style webhook | Message thread observed |
-| `agent_message_received_observed` | AgentMail-style webhook | Inbound message observed |
-| `agent_message_sent_observed` | AgentMail-style webhook | Outbound message observed (sent externally) |
-| `agent_reply_observed` | AgentMail-style webhook | Reply observed |
-| `agent_attachment_observed` | AgentMail-style webhook | Attachment observed |
-| `agent_attachment_parsed_observed` | AETHER parser | Attachment parsing result observed |
-| `agent_otp_detected_observed` | AETHER extractor | OTP detected in message |
-| `agent_invoice_detected_observed` | AETHER extractor | Invoice detected in message |
-| `agent_receipt_detected_observed` | AETHER extractor | Receipt detected in message |
-| `agent_calendar_intent_observed` | AETHER extractor | Calendar intent detected |
-| `agent_support_route_observed` | AETHER classifier | Support routing decision observed |
-| `agent_semantic_search_observed` | AgentMail-style webhook | Semantic search performed on inbox |
-| `agent_data_extraction_observed` | AgentMail-style webhook | Data extraction performed on message |
-
-## x402 protocol observation (family: `x402_observability`) — purpose: `agent`
-
-These events are observed FROM THE OUTSIDE — AETHER records what it sees in an x402 flow, not what it does.
-
-| Type | Observed from | Notes |
-|---|---|---|
-| `x402_resource_request_observed` | Agent/client activity | Agent requested a paid resource |
-| `x402_challenge_observed` | HTTP 402 response | 402 challenge received by agent |
-| `x402_payment_requirement_observed` | PAYMENT-REQUIRED header | Payment requirement metadata observed |
-| `x402_signature_observed` | X-PAYMENT header | Payment signature submitted by external party |
-| `x402_verification_observed` | Facilitator response | Verification result observed |
-| `x402_settlement_observed` | External settlement event | Settlement observed (executed externally, not by AETHER) |
-| `x402_resource_access_observed` | Server response | Resource access outcome observed |
-| `x402_resource_access_denied_observed` | Server response | Access denied outcome observed |
-| `x402_failure_observed` | Any stage | Protocol failure observed |
-| `x402_replay_risk_observed` | AETHER risk engine | Replay attack risk detected |
-| `x402_provider_observed` | Protocol metadata | x402 provider observed |
-
-### Deprecated x402 event names (imply AETHER executes — use observation equivalents)
-
-| Deprecated | Replace with |
-|---|---|
-| `x402_payment_submitted` | `x402_signature_observed` (the external party submitted, not AETHER) |
-| `x402_payment_settled` | `x402_settlement_observed` |
-| `x402_payment_created` | `x402_payment_requirement_observed` |
+The families above and in the overview table have richer authored sources of
+truth — see `STABLECOIN_EVENT_REGISTRY.md` (stablecoin), `COMMS_TRUTH_MATRIX.md`
+(comms), `REWARD_ENABLEMENT.md` (reward), `AGENT_ACCESS_INTELLIGENCE_*.md` and
+`AGENTIC_OBSERVABILITY_AUDIT.md` (agent observation), and
+`docs/runbooks/INTEROP_OBSERVER_RUNBOOK.md` (interop). `privacy` (DSR) events are
+added by the contract spine for compliance request/erasure tracking.

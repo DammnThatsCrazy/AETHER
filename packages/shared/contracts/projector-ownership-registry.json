@@ -941,6 +941,11 @@
         "x402_flow_facts"
       ],
       "reason": "X402FlowProjector handles legacy *_observed event types that are not in the event registry; the registry's x402 family types are not yet routed by the dispatcher."
+    },
+    {
+      "family": "privacy",
+      "status": "no_projection",
+      "reason": "Privacy DSR/compliance lifecycle events are control-plane state owned by the consent/DSR authority, not Silver analytics facts."
     }
   ]
 }

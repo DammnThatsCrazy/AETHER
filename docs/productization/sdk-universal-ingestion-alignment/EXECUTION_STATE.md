@@ -11,9 +11,22 @@ canonical_owner: platform@aether
 
 # Execution State
 
-## Phase 0 (current) — convergence bedrock
+> **Delivery model (supersedes per-slice merges):** all WS-A…E implementation
+> slices are delivered as **stacked commits on one branch,
+> `feat/sdk-universal-ingestion`**, and land as **one consolidated program PR**
+> (no per-slice PRs/merges). The canonical gate is run **once at the full-program
+> tip**, not per slice. Slice rows below record their commit + content; the
+> "Branch off …" lines describe the base each slice was authored on before the
+> stack consolidated.
+>
+> **Gate policy (user directive):** do not start `make ci-check` /
+> `repo-doctor` / `docs_drift` until the entire WS-A…E program build is
+> completely over and done with; the single final gate runs then.
 
-Branch `feat/sdk-universal-ingestion` (rebased onto `bfea2e93` = `origin/main` head at landing, which carried Communication360 #596 on top of the 360 program #593).
+## Phase 0 — convergence bedrock
+
+Convergence bedrock (Phase 0 base = `bfea2e93`, `origin/main` head at landing,
+which carried Communication360 #596 on top of the 360 program #593).
 Make the canonical architecture authoritative *and enforced* without yet building
 the big missing pieces. This page + `TARGET_ARCHITECTURE.md` +
 `REPO_TRUTH_AND_GAP_MATRIX.md` are the governed home for the program.
@@ -40,10 +53,11 @@ the big missing pieces. This page + `TARGET_ARCHITECTURE.md` +
   out-of-scope note that `docs/plans/RISK_FRAUD_360_PHASES.md` is not on
   `origin/main`).
 
-## WS-A1 (current) — blueprint canonicalization + spec recovery
+## WS-A1 — blueprint canonicalization + spec recovery
 
-Branch `feat/sdk-univ-ws-a1` off `d379a9d2` (= `origin/main` head after the
-Phase 0 squash-merge, PR #599).
+Merged to `origin/main` via PR #600 (`b4fc4d18`), squash of slice branch
+`feat/sdk-univ-ws-a1` off `d379a9d2` (= `origin/main` head after the Phase 0
+squash-merge, PR #599).
 Commit the controlling 34-section alignment blueprint in-repo and make the
 alignment docs authoritative against it, so executors steer against committed
 content — not session memory or an external paste.
@@ -61,19 +75,675 @@ content — not session memory or an external paste.
 - Canonical gate green: `make ci-check` = 0, `git status --short` empty,
   `docs_drift.py --strict` clean.
 
-## Later phases (reserved)
+## WS-A2 — field-trust taxonomy in the Contract Spine
 
-Workstreams A–E (the blueprint's own sequencing) begin after Phase 0 converges.
-Phases are added to this ledger as they are scheduled; nothing below is claimed
-built.
+Authored as slice branch `feat/sdk-univ-ws-a2` off `b4fc4d18` (= `origin/main`
+head after the WS-A1 squash-merge, PR #600); under the stacked model this content
+is carried on `feat/sdk-universal-ingestion` as commits `571de852` … `9b77cdda`
+(base `584fda74` = #601), delivered in the consolidated program PR (supersedes
+the closed un-merged PR #602).
+Put per-field trust/authority metadata on the SDK-facing event families in the
+Contract Spine (additive `schemaVersion` 2.1.0), emit the per-field maps to the
+TS + Python twins, and enforce them with a parity gate — the first real spine
+mutation of the program. Descriptive in WS-A2; boundary enforcement is WS-A3.
 
-| Workstream | Scope (reserved) | Opens when |
+| Workstream item | Deliverable | Status |
 |---|---|---|
-| WS-A — Contract foundation | **WS-A1 done —** WS-A2–A7: field-trust/authority taxonomy + per-field minimum trust + Level A/B/C + missing vocabularies in the Contract Spine; Envelope B server-side; per-event metadata load-bearing and generated; Swift/Kotlin generation; re-point metric/privacy/retention truth into the Spine (Blueprint Points 2/3/10/13, Invariants #2/#16) | WS-A1 merged |
-| WS-B — Adapter convergence | SDK/webhook/connector/feed/import/harness/replay adapters that all produce Envelope B through one validated gateway; consent-on-every-path; idempotency-before-publish; ingestion-level replay with original-time preservation; kill deprecated `/v1/ingest` aliases (Invariants #1/#5/#8/#9/#15) | Phase 0 merged |
-| WS-C — SDK hardening | Native identity → subject hints (delete client `/sdk/identity/resolve` re-stamping); native encrypted persistent queues; remove/relocate shared interpretation modules; regenerate `web/src/types.ts`; add native correlation fields (Invariants #4/#12/#16) | Phase 0 merged |
-| WS-D — Backend interpretation | Typed `RelationshipFact` + `evidence_refs`; Episode engine; outcome truth store; Section-25 evidence dedupe; silver money → exact decimal/event-time valuation on by default (coordinate with `feat/financial-normalization` — do not build twice); mutation-gateway governance on by default (Invariants #7/#11/#13/#14) | Phase 0 merged |
-| WS-E — Operations | Ingestion funnel telemetry; Kyber ingestion control plane + Observation Inspector; mount the already-built SDK-fleet view; golden cross-path fixture; SDK version-compatibility tiers; shadow/staged enforcement (Invariant #17, Gates G/H) | Phase 0 merged |
+| Spine field-trust block | `event-registry.json`: `schemaVersion` **2.1.0** + `fieldTrustSchemaVersion` `1.0.0`, `trustClasses` (canonical rank-ordered 10, verbatim from the committed blueprint), `fieldTrustDefaults`, `_registryNotes.field_trust` (incl. the SDK-assertable boundary is a class SET, not a linear cut — resolved WS-A3) | ✅ implemented (this slice) |
+| Per-event content | `fieldTrust.fields` on **117 events** across the 14 SDK-facing families (core 7 + journey/reward/wallet, identity_lc/identity/consent, commerce/ecommerce, b2b/friction, interaction/exposure, x402): app-authored events → `userId: CLIENT_HINT` + `properties: SOURCE_ASSERTED`; pure-observation events stay OBSERVED (no block); external-source leaves (`properties.address/txHash/contract/external_ref/quoteId`) → SOURCE_REFERENCE, each file:line evidenced | ✅ implemented (this slice) |
+| Generator emission | `generate_contracts.py` `validate_field_trust()` (structural rules) + emits `TRUST_CLASS_ORDER`/`TrustClass`/`FieldTrustSpec`/`EVENT_FIELD_TRUST` to the TS twin and `TRUST_CLASS_ORDER`/`EVENT_FIELD_TRUST` to the Python twin | ✅ implemented (this slice) |
+| Parity gate | `scripts/validate_field_trust_parity.py` (regenerate-and-diff over both twins + structural validation), wired into `scripts/repo_doctor.py` → `make ci-check`; closes the `generate_contracts.py` CI-coverage gap | ✅ implemented (this slice) |
+| Ownership map | New `event_field_trust_schema` category in `repo_consistency_ownership.json` + mirrored `REPO_CONSISTENCY_OWNERSHIP.md` row | ✅ implemented (this slice) |
+| Tests | `tests/unit/test_validate_field_trust_parity.py` + wiring test in `test_repo_doctor_cli.py`; `test_commerce_parity.py::test_registry_shape` top-level-key pin extended for the additive WS-A2 keys | ✅ implemented (this slice) |
+| Integration + final gate | `make repo-doctor-fix` **70/0** (wrote the synced-doc reindex — `REPO-INDEX.md` `scripts` 184→185 / `tests` 541→542 once the two new files were tracked); 11 source-linked docs genuinely reviewed against the additive change and restamped (also healing the pre-existing `AWS-DEPLOYMENT.md` staleness from #598 in-band); **`make ci-check` 73/0** at HEAD `424a761a` (pre-consolidation tree; the consolidated tip `9b77cdda` differs only by rebase shas + dropping the AWS-DEPLOYMENT opportunistic restamp — gate-neutral, docs-only), `git status --short` empty, `docs_drift.py --strict` exit 0 | ✅ implemented (this slice, stacked) |
+
+### Definition of done (WS-A2)
+
+- `make ci-check` exits **0** — the only valid completion gate.
+- `git status --short` empty; regenerated twins + synced docs committed, never
+  hand-edited.
+- `python scripts/validate_field_trust_parity.py` green (117 events carry
+  `fieldTrust.fields`; TS + Python twins match the registry) and
+  `python scripts/generate_contracts.py --check` idempotent.
+- `validate_consistency_ownership.py` green for the new `event_field_trust_schema`
+  category.
+- No validators weakened; no new ADR.
+
+## WS-A3 — minimum-trust + Level A/B/C + SDK trust boundary
+
+Stacked on `feat/sdk-universal-ingestion` at `3e559da9` (base `584fda74` = #601),
+authored on top of the WS-A2 stack (`571de852`…`9b77cdda`), delivered in the
+consolidated program PR. Canonical gate deferred to the full-program tip per the
+gate-policy directive; the generator run that validates the new registry and
+regenerates the twins (exit 0) is the recorded build evidence.
+The spine declares a per-event semantic release level (A/B/C) and an SDK
+emittability boundary; the static gate asserts public-SDK emittable events never
+declare Level C and never carry a field-trust class the public SDK cannot assert
+(SDK ≤ CLIENT_HINT; RESOLVED/SERVER_STAMPED+ are backend-only). Runtime
+enforcement at the ingestion boundary is deliberately **deferred to WS-B's
+universal gateway** (flag-gated OFF there) so the still-un-runnable green tree is
+not risked — WS-A3 ships the spine + generator + static boundary validation only.
+
+| Workstream item | Deliverable | Status |
+|---|---|---|
+| Spine semantic-level + boundary block | `event-registry.json`: `schemaVersion` **2.2.0** + `semanticLevelSchemaVersion` `1.0.0` + `semanticLevels` catalog {A primitive, B typed source, C derived Aether state}, + `sdkBoundarySchemaVersion` `1.0.0` + `sdkBoundary` {`publicSdk`: assertableTrustClasses = class SET `OBSERVED/SOURCE_ASSERTED/SOURCE_REFERENCE/CLIENT_HINT` + emittableSemanticLevels `A,B`; `aetherInternal`: full 10-class rank + `A,B,C`}; `_registryNotes` gained `semantic_levels` + `sdk_boundary`, and the WS-A2 `field_trust` note tail rewritten to the A3-resolved SDK-boundary wording (class set, not a rank cut) | ✅ implemented (this slice) |
+| Per-event classification | every event carries `semanticLevel` A/B/C + boolean `sdkEmitable`: **A = 17** (track,page,screen,heartbeat,error,performance,experiment,identify,consent,interaction_observed,ui_interaction_observed,active_interval_observed,api_request_observed,action_attempted/succeeded/failed/cancelled), **B = 371**, **C = 15** (journey_completed,deferred_attribution_resolved,app_install_attributed + stablecoin/derivatives/interop reconciliation_run_completed/variance_detected/variance_resolved + stablecoin_flow_aggregate_materialized + derivatives pnl/exposure_snapshot_materialized); **sdkEmitable = 153**; zero sdkEmitable-and-C; the four F-family non-emittable events = app_install_attributed,deferred_attribution_resolved,journey_completed,reward_action_queued | ✅ implemented (this slice) |
+| Generator self-gating validation | `generate_contracts.py` `_validate_semantic_boundary()` (runs first inside `validate_field_trust`): per-event semanticLevel ∈ A/B/C, sdkEmitable is bool, sdkEmitable ⇒ level ∈ publicSdk.emittableSemanticLevels, publicSdk classes known + none ≥ SERVER_STAMPED index, "C" never a public emit level, aetherInternal.assertableTrustClasses == full 10-rank, sdkEmitable fieldTrust trustClasses ∈ public-SDK set | ✅ implemented (this slice) |
+| Twin emission | `_semantic_boundary_ts_block` + `_semantic_boundary_py_block`: TS `SEMANTIC_LEVEL_ORDER`/`SemanticLevel`/`EVENT_SEMANTIC_LEVEL` (403)/`SDK_ASSERTABLE_TRUST_CLASSES`/`SDK_EMITTABLE_SEMANTIC_LEVELS`/`SDK_EMITTABLE_EVENT_TYPES` (153) and the Python mirrors (frozenset, 153 confirmed) | ✅ implemented (this slice) |
+| Parity gate | `validate_field_trust_parity.py` docstring + OK line extended (reports `n sdkEmitable` + level {A,B,C} counts); regenerate-and-diff now covers the semantic-boundary section of both twins | ✅ implemented (this slice) |
+| Ownership map | `repo_consistency_ownership.json` `event_field_trust_schema` category name + `test_semantic_boundary.py` required-command + remediation extended to cover the semantic-level/trust-boundary declarations and `_validate_semantic_boundary`; mirrored `REPO_CONSISTENCY_OWNERSHIP.md` row updated | ✅ implemented (this slice) |
+| Tests | new `tests/unit/test_semantic_boundary.py` (13 tests: pre-2.2 no-op, valid-boundary pass, missing level / C-as-emittable / unknown-level / non-bool-emittable / SERVER_STAMPED-in-SDK-set / C-as-public-emit-level / internal-classes≠full-rank failures, sdkEmitable-declaring-backend-only-field fails, sdkEmitable-declaring-assertable-field passes, live-registry 2.2.0 boundary pass) + `test_commerce_parity.py::test_registry_shape` top-level-key pin extended for the four additive WS-A3 keys | ✅ implemented (this slice) |
+| Build evidence | generator exit 0 on the 2.2.0 registry (validation passed + both twins regenerated); canonical `make ci-check` deferred to the full-program tip (user gate policy) | ✅ implemented (this slice, stacked) |
+
+### Definition of done (WS-A3)
+
+- `event-registry.json` is 2.2.0 and passes `_validate_semantic_boundary` with
+  zero sdkEmitable-and-C and zero sdkEmitable event declaring a non-public-SDK
+  field-trust class.
+- TS + Python twins carry the semantic-boundary section and match a fresh
+  regeneration.
+- Canonical gate green at the full-program tip: `make ci-check` = 0,
+  `git status --short` empty, `docs_drift.py --strict` clean.
+- No validators weakened; no new ADR; runtime enforcement deferred to WS-B.
+
+## WS-A4 — missing vocabularies (grounded privacy DSR family; enrichment/economic notes)
+
+Stacked on `feat/sdk-universal-ingestion` at `f5048446` (base = the WS-A3 tip
+`4ba07daf`), delivered in the consolidated program PR. Canonical gate deferred to
+the full-program tip per the gate-policy directive; the two generator runs that
+validate the 403-event registry and regenerate the twins/tables (both exit 0) are
+the recorded build evidence.
+WS-A4's reserved scope ("missing vocabularies" per the blueprint §4: `enrichment`/
+`economic`/`privacy` (+ blueprint-listed)) was under-determined — no committed
+enumeration exists. Recon across the tree established the ground truth, and the
+user chose **"add a conservative grounded set."** Resolution per vocabulary:
+
+| Vocabulary | Decision | Evidence |
+|---|---|---|
+| `enrichment` | **NO family.** Inline field-stamping only — no emitter, no run lifecycle, no SDK surface; `context_enricher.py` augments an event already owned by its source family. Recorded here, not invented as a family | blueprint §4 treats enrichment as a *registry* (pre-observation field stamps), not an event family |
+| `economic` | **NO new events.** Already governed across `derivatives` (41) / `stablecoin` (30) / `interop` (39) / commerce / x402 / agent-trade; a parallel "economic" family would duplicate silver vocabulary | family census + `test_event_registry_economic_domains.py` subset pin |
+| `privacy` | **5-event DSR lifecycle family ADDED** (below) — grounded in real mounted compliance code | `services/consent/routes.py`, `erasure_jobs.py`, `dsr_propagation/models.py`, `security/retention.py` |
+
+Added to `event-registry.json` (schemaVersion stays **2.2.0** — additive events
+only, no new top-level key; contractVersion stays 8.12.0): **403 events / 25
+families**, A = 17, **B = 371**, C = 15, sdkEmitable = 153.
+
+- `data_subject_request_received` / `data_subject_request_queued` /
+  `data_subject_request_denied` / `erasure_completed` / `erasure_failed` —
+  family `privacy`, `semanticLevel` B, `sdkEmitable` false, `privacyClass`
+  governance, `retentionClass` permanent, `requiredPurposes` [],
+  `introducedVersion` 8.12.0. Grounded in the consent DSR service
+  (`services/consent/routes.py:307-369`, status `pending→queued`,
+  publishes `aether.consent.dsr`), the durable-erasure propagator
+  (`services/consent/erasure_jobs.py:280-586`, statuses `completed`/`failed`),
+  `services/dsr_propagation/models.py` (DSR_TYPES + per-step statuses), and the
+  retention/data-request denied path (`services/security/retention.py:138`).
+- `projector-ownership-registry.json` `noProjection`: `privacy` =
+  `no_projection` ("Privacy DSR/compliance lifecycle events are control-plane
+  state owned by the consent/DSR authority, not Silver analytics facts") —
+  mirrors the `consent` no_projection precedent. No dispatcher projector, by
+  design.
+
+| Workstream item | Deliverable | Status |
+|---|---|---|
+| Spine vocabularies | `privacy` family (5 events) added with full WS-A3 metadata (level B / non-emittable / governance / permanent / no-purpose); enrichment + economic documented as no-add above | ✅ implemented (this slice) |
+| Projector ownership | `privacy` noProjection entry (status `no_projection`) + regenerated `generated_ownership.py` + `projector-ownership-table.md` row | ✅ implemented (this slice) |
+| Twins/tables | `generate_contracts.py` exit 0 (403 events; regenerated `events.ts`, `generated_registry.py`, `generated-consent-map.ts`, `event-registry-table.md` — header now "(403 types, contract v8.12.0)"); `generate_platform_contracts.py` exit 0 (temporal surfaces roll to **25 families**; projector-ownership-table gained the privacy row) | ✅ implemented (this slice) |
+| Native parity co-edits | 5 privacy types hand-added to iOS `AetherEventType` enum + `eventConsentPurpose` and Android `EVENT_CONSENT_PURPOSE`, purpose `"analytics"` (the generator's empty-`requiredPurposes` default — same value the `consent` event maps to). Inline mirror-parse self-check: iOS enum / iOS purpose / Android purpose each = 403 = registry, bidirectional, zero extras | ✅ implemented (this slice) |
+| Authored doc count sync | `CANONICAL_EVENT_MODEL.md` (398/24 → 403/25), `REPO_TRUTH_AND_GAP_MATRIX.md` row-18 (398 → 403), `EXECUTION_STATE.md` WS-A3 pins (B 366 → 371, `EVENT_SEMANTIC_LEVEL` 398 → 403) | ✅ implemented (this slice) |
+| Source-linked docs review | 7 docs declaring `source_files: event-registry.json` reviewed: CANONICAL_EVENT_MODEL (global-count edit, above); SDK-COMMERCE-BRIDGES, COMMS_TRUTH_MATRIX, FIRST_RELEASE_INTELLIGENCE_TELEMETRY_OPERATIONS, DERIVATIVES/INTEROP/STABLECOIN_EVENT_REGISTRY — content **unaffected** by a new non-economic `privacy` family (per-domain counts unchanged). Pre-existing prose inaccuracies surfaced during review — `FIRST_RELEASE_INTELLIGENCE_TELEMETRY_OPERATIONS.md` "267 events, 21 families", `COMMS_TRUTH_MATRIX.md` "comms family has 15 events" — are **WS-A7** un-stale scope (recorded here, not opportunistically rewritten). `docs_drift.py --update` restamp deferred to the full-program tip per the gate-policy directive (WS-A3 precedent) | ✅ reviewed (restamp deferred) |
+
+### Definition of done (WS-A4)
+
+- `event-registry.json` = 403 events / 25 families (A=17, B=371, C=15,
+  sdkEmitable=153), schemaVersion 2.2.0, boundary-valid by construction
+  (B-level / non-emittable / empty-purpose with governance privacy + permanent
+  retention).
+- TS + Python + temporal twins/tables match a fresh regeneration of both
+  generators (exit 0 recorded above).
+- iOS/Android native event/consent surfaces mirror the full 403-type registry
+  (bidirectional — inline parse confirmed).
+- Canonical gate green at the full-program tip: `make ci-check` = 0,
+  `git status --short` empty, `docs_drift.py --strict` clean.
+- No validators weakened; no new ADR; enrichment + economic additions
+  deliberately NOT invented (documented above).
+
+## WS-A5 — Envelope B server-side: UniversalObservationEnvelope model + registry + adoption (flag)
+
+Stacked on `feat/sdk-universal-ingestion` — feat content at `b1d89132`,
+tests/ownership at `f8ec5d3e`, ledger close-out below (base = the WS-A4 tip
+`0d0ce8cc`), delivered in the consolidated program PR. Canonical gate deferred to the
+full-program tip per the gate-policy directive; the build-time self-checks below are the
+recorded evidence.
+WS-A5 ships the **model, not the enforcement** (the blueprint's PR-2 note: "create
+backend canonical representation. Do not break BaseEvent."). Scope boundary, applied
+throughout: `BaseEvent` stays the public Envelope A; `UniversalObservationEnvelope` is
+server-built by the SDK adapter after validation; structural validation happens at
+build time, source-trust/consent/idempotency/lineage stay the WS-B gateway's job.
+
+**The triad (bound in lock-step by `tests/contracts/test_observation_envelope_parity.py`):**
+
+| Surface | File | Role |
+|---|---|---|
+| Canonical field registry | `packages/shared/contracts/observation-envelope-registry.json` (schemaVersion 1.0.0) | §3 block tree → machine-readable: blocks + field requiredness + vocabularies + `naming_resolutions` (source_native_id/subjects[]/signature_status/adapter/occurred_at-vs-source_time/trust-vocab) + `passthrough_blocks` note |
+| Runtime model | `Backend Architecture/aether-backend/shared/observation/envelope.py` (+ `__init__.py` barrel) | pydantic v2, every class `extra="forbid"`; 11 model classes; curated vocab tuples (source/identifier/credential) + `TRUST_CLASSES` frozenset asserted == `generated_registry.TRUST_CLASS_ORDER`; `to_bronze_additive()` JSON-safe dump |
+| Passive TS twin | `packages/shared/observation-envelope.ts` (+ `index.ts` barrel export) | Contract mirror; explicitly NOT a client emitter (no builder/emit) — adapters build Envelope B inside Aether |
+
+**Flag-gated adoption (default OFF, `AETHER_OBSERVATION_ENVELOPE_ENABLED`):**
+
+- `ObservationEnvelopeConfig` frozen dataclass + `settings.observation_envelope` root field
+  (`Backend Architecture/aether-backend/config/settings.py`); operator-facing flag block in
+  `.env.production.example` next to the Ingestion V2 flags.
+- SDK mapping `Backend Architecture/aether-backend/services/ingestion/observation_envelope.py`:
+  normalized SDK dict → envelope; subject `trust_class` derived from `EVENT_FIELD_TRUST`
+  (WS-A2) — `user_id` → CLIENT_HINT (fallback), `anonymous_id` → OBSERVED — never above the
+  WS-A3 public-SDK boundary; temporal enforcement stamp (sequence coerced to the envelope's
+  string `sequence`, `utc_offset` derived); correlation from EventContext; payload = properties.
+- `batch.py` V1 accepted path (after `server_context` injection, before the `Event` bus
+  object): when the flag is ON, builds + attaches `normalized["observation_envelope"]`
+  additively (the shared dict reaches both the bus payload and durable Bronze); any mapping
+  failure warn-degrades with a `ingestion_observation_envelope_*` meter — the flag can never
+  take ingestion down. Flat-dict consumption unchanged until WS-B.
+- Ownership: new `observation_envelope` change category in `repo_consistency_ownership.json`
+  + `REPO_CONSISTENCY_OWNERSHIP.md` row (registry ↔ runtime model ↔ TS twin lock-step).
+
+| Workstream item | Deliverable | Status |
+|---|---|---|
+| Field registry | `observation-envelope-registry.json` with §3 blocks, requiredness, vocabularies, naming resolutions, passthrough-block note (acquisition/application/surface/device/network/payload fields NOT re-declared — A-side EventContext/AcquisitionEvidence owns that shape) | ✅ implemented (this slice) |
+| Runtime model | `shared/observation/envelope.py`: ObservationBlock/TenancyBlock/SourceBlock/SubjectRef/TemporalBlock/CorrelationBlock/PrivacyBlock/ProvenanceBlock/QualityBlock/LineageBlock + UniversalObservationEnvelope, extra=forbid, curated-vocab validators, `to_bronze_additive` | ✅ implemented (this slice) |
+| Passive TS twin + barrel | `observation-envelope.ts` (mirror interfaces + SOURCE_TYPES/IDENTIFIER_TYPES/CREDENTIAL_CLASSES/TRUST_CLASSES `as const` + schema-version const), exported from `packages/shared/index.ts` | ✅ implemented (this slice) |
+| Flag-gated adoption | `ObservationEnvelopeConfig` (OFF), mapping module, batch V1 attach point, `.env.production.example` block | ✅ implemented (this slice) |
+| Parity + unit coverage | `tests/contracts/test_observation_envelope_parity.py` (registry↔TS↔Py + TRUST_CLASSES == TRUST_CLASS_ORDER + barrel/passive guards); `tests/unit/observation/{conftest,test_observation_envelope}.py` (construction/extra=forbid/vocab/mapping/trust-override/temporal/degrade/flag-attach) | ✅ implemented (this slice) |
+| Gap matrix / ledger | Point 2 "Two-Envelope Architecture" MISSING → **PARTIAL** (evidence + owning phase WS-A5→WS-B); this ledger section | ✅ implemented (this slice) |
+
+Build-time self-checks (serial, no full gate): parity file direct-run **10/10**; new pytest
+suites **31 passed** (2.08s). `docs_drift.py --update` / `make ci-check` restamp deferred to
+the full-program tip per the gate-policy directive (WS-A3/A4 precedent).
+
+### Definition of done (WS-A5)
+
+- Envelope-B field registry + runtime model + passive TS twin exist, held in lock-step by a
+  parity test; the 10-class trust vocabulary equals `generated_registry.TRUST_CLASS_ORDER`.
+- Adoption is flag-gated OFF with an additive, degrade-safe attach on the accepted path;
+  `BaseEvent` (Envelope A) and the flat normalized consumption surface are unchanged.
+- Ownership category, env-flag doc, unit + parity tests, and the gap-matrix/ledger updates
+  move with the source; no validators weakened; no new ADR (ADR-012 still reserved).
+- Canonical gate green at the full-program tip: `make ci-check` = 0, `git status --short`
+  empty, `docs_drift.py --strict` clean.
+- WS-B owns the enforcement half (source-trust/consent/idempotency/lineage + universal
+  adapter convergence) — this slice deliberately leaves it to WS-B.
+
+## WS-A6 — native event-type codegen (Swift/Kotlin regions generated from the event registry)
+
+Stacked on `feat/sdk-universal-ingestion` — feat content at `4ffd69f5`,
+tests/ownership at `623e94eb`, ledger close-out below (base = the WS-A5 tip
+`e5a825af`), delivered in the consolidated program PR. Canonical gate deferred to the
+full-program tip per the gate-policy directive; the build-time self-checks below are the
+recorded evidence.
+
+WS-A6 converts the hand-maintained iOS `AetherEventType` enum / `eventConsentPurpose`
+dict and Android `EVENT_CONSENT_PURPOSE` map into **marker-delimited generated regions**
+owned by `scripts/generate_contracts.py`, so a registry event-set or primary-purpose
+change regenerates the native surfaces exactly as it already regenerates the TS/Python
+twins and doc tables. The hand-authored Aether.swift/Aether.kt keep all non-region SDK
+code — only the marker bodies are generated, and hand-editing them is not supported.
+
+**The three generated regions (all spliced from `packages/shared/contracts/event-registry.json`):**
+
+| Surface | Location | Content |
+|---|---|---|
+| iOS event enum | `packages/ios/Sources/AetherSDK/Aether.swift` — `@generated-start/end aether-event-types/ios-enum` | `AetherEventType` case list, grouped by registry family |
+| iOS consent map | same file — `aether-consent-purposes/ios-map` | per-event `type → primary-purpose` dict |
+| Android consent map | `packages/android/src/main/java/com/aether/sdk/Aether.kt` — `aether-consent-purposes/android-map` | per-event `"type" to "purpose"` mapOf |
+
+Primary purpose = `requiredPurposes[0]`, defaulting to `analytics` when empty (same rule
+the TS/Python twins use). Regions are byte-stable, so `python scripts/generate_contracts.py --check`
+is idempotent.
+
+**Drift fix delivered by regeneration.** The hand-maintained native maps had drifted on 5
+agentic-trade/position events to purpose `agent` while the registry primary purpose is
+`financial_activity` — a consent-gating bug the old key-set parity gate could not see.
+Regeneration makes the registry authoritative: the five agent events whose registry
+primary purpose is `financial_activity` — `agent_trade_order_observed`,
+`agent_trade_fill_observed`, `agent_position_observed`,
+`agent_portfolio_snapshot_observed`, `agent_performance_snapshot_observed` — now
+carry `financial_activity`, and every other agent event carries `agent`. (Ledger
+accuracy note, corrected in WS-A7: an earlier draft of this close-out cited
+phantom names `agent_trade_executed` / `agent_position_opened` /
+`agent_position_closed`, which are not registry event types.)
+
+**Validator hardening (value-aware, never-weaken rule).** `make ci-check` (repo-doctor)
+runs `validate_mobile_event_parity.py` but never the generator `--check`, so a
+key-set-only parity gate would miss a single-event purpose re-gate inside a generated
+region. The parity validator now also diffs each event's purpose **value** against the
+registry on both native maps — the canonical gate catches value drift independently of
+the generator path. Claim retirements landed in the same slice: four scripts'
+"hand-maintained native maps / no generated native registry" language replaced with the
+generator-owned reality (`validate_mobile_event_parity.py`, `validate_sdk_parity.py`,
+`validate_sdk_release_alignment.py`, `repo_doctor.py`), plus this doc's sibling
+`SDK_RUNTIME_PARITY.md` (native registries now generated; brittle "11-purpose" count
+retired in favor of the generated per-event consent map).
+
+| Workstream item | Deliverable | Status |
+|---|---|---|
+| Generator native emitters | `gen_ios_event_enum_section` / `gen_ios_consent_map_section` / `gen_android_consent_map_section` + shared `_splice_region` in `generate_contracts.py`; family-grouped, byte-stable, `--check` idempotent | ✅ implemented (this slice) |
+| Regenerated native regions | Aether.swift enum + dict, Aether.kt map (403 events each) inside `@generated` markers; diffs confined to the three region bodies | ✅ implemented (this slice) |
+| Value-aware parity backstop | `validate_mobile_event_parity.py` key-set diff unchanged + per-event primary-purpose value diff on both maps; regression-proven on the 5-event class | ✅ implemented (this slice) |
+| Claim retirements | Hand-maintained-map claims retired in `validate_mobile_event_parity.py`, `validate_sdk_parity.py`, `validate_sdk_release_alignment.py`, `repo_doctor.py` (+ `SDK_RUNTIME_PARITY.md`) | ✅ implemented (this slice) |
+| Codegen + parity unit coverage | `tests/unit/test_native_event_codegen.py` (14: emitters ↔ parity extractors, byte-stability, grouped order, analytics default, splice + apply writers); `tests/unit/test_mobile_event_parity.py` (15: hermetic main() seams, value-drift regression, value-map extractors) | ✅ implemented (this slice) |
+| Ownership | New `mobile_native_regions` category in `repo_consistency_ownership.json` + `REPO_CONSISTENCY_OWNERSHIP.md` row (generator emitter + parity gate + region files → mirrors/tests) | ✅ implemented (this slice) |
+| Gap matrix / ledger | This ledger section | ✅ implemented (this slice) |
+
+Build-time self-checks (serial, no full gate): `generate_contracts.py --check` **exit 0**;
+`validate_mobile_event_parity.py` **exit 0** (403×3 keys + per-event purpose); new pytest
+suites **29 passed** (3.33s). `docs_drift.py --update` / `make ci-check` restamp deferred to
+the full-program tip per the gate-policy directive (WS-A3/A4/A5 precedent).
+
+### Definition of done (WS-A6)
+
+- The iOS `AetherEventType` enum, iOS `eventConsentPurpose` dict, and Android
+  `EVENT_CONSENT_PURPOSE` map are marker-delimited generated regions; generator `--check`
+  is byte-stable and idempotent; the pre-existing 5-event purpose drift is corrected to
+  the registry-authoritative values.
+- `validate_mobile_event_parity.py` stays green and now enforces keys **and** per-event
+  primary-purpose values, so value drift is caught under the canonical gate even though
+  repo-doctor does not run the generator `--check`.
+- Ownership category, codegen/parity tests, and claim retirements move with the source;
+  no validators weakened; no new ADR (ADR-012 still reserved).
+- Canonical gate green at the full-program tip: `make ci-check` = 0, `git status --short`
+  empty, `docs_drift.py --strict` clean.
+- WS-A7 next (re-point metric/privacy/retention truth into the Spine + un-stale the
+  per-domain count prose recorded in WS-A4) — delivered in the WS-A7 section below.
+
+## WS-A7 — re-point metric/privacy/retention truth to the spine + un-stale docs
+
+Stacked on `feat/sdk-universal-ingestion` — generator/test at `8897cde4`, docs at
+`e247883a`, ledger close-out below (base = the WS-A6 tip `6e9b1fe4`), delivered in
+the consolidated program PR. Canonical gate deferred to the full-program tip per the
+gate-policy directive; the build-time self-checks below are the recorded evidence.
+
+WS-A7 closes the remaining WS-A contract-foundation debt recorded since WS-A4: the
+generated event table carried only privacy class while authored SOT docs pointed at
+it as the retention reference, and the authored `EVENT_REGISTRY.md` (plus six
+dependent prose docs) had drifted far from the 403-type / 25-family spine.
+
+**Retention Class made load-bearing (commit `8897cde4`).** `gen_event_table_md`
+(scripts/generate_contracts.py) now emits a Retention Class column between Privacy
+Class and Description, so `docs/_generated/event-registry-table.md` is the complete
+per-event metadata surface — Event Type | Family | Required Purposes | Privacy Class
+| Retention Class | Description (403 rows, deprecated marked). No other emitter
+changed (native regions, TS/Python twins, and the consent/metric/integration tables
+are byte-identical); the generator `--check` is idempotent. New pin suite
+`tests/unit/test_event_registry_table_md.py` (6 tests) asserts the 6-column header,
+one row per registry event in registry order, and — the backstop — that
+`privacyClass` + `retentionClass` reproduce the spine for all 403 events.
+
+**EVENT_REGISTRY.md rewritten (commit `e247883a`).** The doc claimed 248 types /
+v8.10.0; its family table was missing five families (derivatives, interaction,
+interop, privacy, stablecoin), carried a phantom `agentic` family, and the three
+"agentic account / trading / AgentMail" + x402-observation sections used phantom
+event-family labels `agentic_observability` / `x402_observability` (those events
+live in families `agent` / `x402`; only the *service* directory is
+`agentic_observability`). It falsely claimed the generated table shows Silver/Graph
+projections, asserted core is analytics-only (`experiment` is marketing), and printed
+an x402 "deprecated execution verbs" table the registry contradicts
+(`x402_payment_submitted` / `_settled` are active SDK lifecycle verbs; only
+`x402_payment` is deprecated). The rewrite now states the generated table is the authoritative per-event
+reference, lists all 25 families with registry-exact counts / sdkEmitable counts /
+consent purposes, catalogs the privacy and retention classes in use, and corrects the
+journey (15), agent (64, backend/observation-plane), and x402 (26) narratives.
+Prose counts were re-pointed to the current spine in six authored docs:
+`FIRST_RELEASE_INTELLIGENCE_TELEMETRY_OPERATIONS` (267/21 → 403/25),
+`COMMS_TRUTH_MATRIX` 1.1 (comms 15 → 23 events, now IMPL — closing the
+WS-A4-recorded stale count),
+`MEASUREMENT_INTEGRITY` (20 → 27 metrics, matching `registry.py` ↔ `metric-registry`
+parity), `PRODUCT_INTELLIGENCE` (11 → 12 interaction events),
+`UNIVERSAL_INTELLIGENCE_GRAPH_IMPLEMENTATION` validation log (248/8/20 → 403/12/25),
+and `STABLECOIN_EVENT_REGISTRY` (financial/governance privacy split + per-class
+retention made registry-exact). This ledger also absorbs two WS-A6-close-out accuracy
+fixes (phantom agent drift-event names; deferred-table EVENT_REGISTRY row retired).
+
+| Workstream item | Deliverable | Status |
+|---|---|---|
+| Retention Class column | `gen_event_table_md` emits Retention Class; `docs/_generated/event-registry-table.md` regenerated (403 rows, 6 columns); no other emitter changed; generator `--check` byte-stable | ✅ implemented (this slice) |
+| Generated-table pin suite | `tests/unit/test_event_registry_table_md.py` (6 tests: header/separator, row-per-event registry order, spine-exact privacy + retention for all 403, purposes column, deprecation markers, title) | ✅ implemented (this slice) |
+| EVENT_REGISTRY.md rewrite | 403 types / v8.12.0; 25-family table (counts + sdkEmitable + consent); phantom `agentic` / `agentic_observability` / `x402_observability` labels removed; Silver/Graph claim removed; core purpose corrected; x402 sole-deprecated truth; sdkEmitable taxonomy + privacy/retention class catalogs; generated-table pointer | ✅ implemented (this slice) |
+| Prose-count re-point | FIRST_RELEASE (267/21→403/25), COMMS_TRUTH_MATRIX (15→23 IMPL), MEASUREMENT_INTEGRITY (20→27), PRODUCT_INTELLIGENCE (11→12), UNIVERSAL_INTELLIGENCE_GRAPH_IMPLEMENTATION (248/8/20→403/12/25), STABLECOIN_EVENT_REGISTRY (retention-exact) | ✅ implemented (this slice) |
+| Ledger close-out | This section + WS-A row → complete; WS-A6 phantom-name + Deferred-row accuracy fixes | ✅ implemented (this slice) |
+
+Build-time self-checks (serial, no full gate): `generate_contracts.py --check`
+**exit 0**; pytest `test_event_registry_table_md.py` **6 passed**; EVENT_REGISTRY.md
+family table / sdkEmitable counts / deprecation sets / class catalogs cross-checked
+against `event-registry.json` (all match); 76 doc-named event types all resolve in
+the registry; markdown table column-consistency scan over the 7 touched docs: 0 issues.
+`docs_drift.py --update` / `make ci-check` restamp deferred to the full-program tip
+per the gate-policy directive (WS-A3/A4/A5/A6 precedent).
+
+### Definition of done (WS-A7)
+
+- The generated event table carries Retention Class, so per-event privacy **and**
+  retention are spine-derived and pinned by tests on a generated surface; the
+  generator stays byte-stable and `--check` idempotent.
+- `EVENT_REGISTRY.md` asserts only registry-true counts / families / purposes /
+  classes and points readers at the generated table for the authoritative per-event
+  enumeration; the six dependent prose docs carry current spine numbers.
+- No validators weakened; no new ADR (ADR-012 still reserved); authored docs updated
+  when the behavior (spine) changed; source-linked docs content-reviewed with
+  `docs_drift.py --update` restamp deferred to the tip.
+- Canonical gate green at the full-program tip: `make ci-check` = 0, `git status --short`
+  empty, `docs_drift.py --strict` clean.
+- WS-A (contract foundation) is complete — WS-B (adapter convergence) is next,
+  reserved below.
+
+## WS-B1 — universal ingress adapter registry + one validated gateway
+
+Stacked on `feat/sdk-universal-ingestion` — adapters/registry at `add87dad`, gateway
+core + flag at `a1002211`, `/v1/batch` adoption at `fc0bba24`, suites at `dd9ca821`
+(whole WS-A2..A7 + WS-B1 stack rebased onto `origin/main` @ `59a7fb24`, PR #608's
+four-lane convergence), delivered in the consolidated program PR. Canonical gate
+deferred to the full-program tip per the gate-policy directive; the build-time
+self-checks below are the recorded evidence.
+
+WS-B1 opens Workstream B (adapter convergence) with a faithful, flag-gated,
+non-shrinking first slice: the seven-ingress-family adapter authority and the one
+validated gateway the blueprint's "one validated gateway" diagram block requires,
+registered under the Envelope-B contract (WS-A5). Every other ingress path
+(webhook/connector/feed/import/harness/replay) remains bespoke today and converges
+in WS-B2..WS-B5 — nothing is dropped (the reserved WS-B row below tracks the
+remainder).
+
+**Registry-bound credential authority (commit `add87dad`).**
+`services/ingestion/adapters/` now owns the universal ingress adapter registry:
+`base.py` defines `UniversalIngressAdapter(ABC)` (ClassVar `adapter_id`/`family`/
+`credential_class`/`adapter_version`/`description`; `__init_subclass__` rejects a
+concrete subclass whose family ∉ the seven `SOURCE_TYPES` or credential ∉ the seven
+`CREDENTIAL_CLASSES`, or that omits `adapter_id`/`description`); `sdk.py` implements
+`SdkIngressAdapter` (adapter_id "sdk", family "sdk", `PUBLIC_CLIENT`, delegates to
+`build_sdk_observation_envelope`, default ingress path `/v1/batch`); `registry.py`
+declares all seven family specs in `SOURCE_TYPES` order with their blueprint adapter
+names and allowed credential classes per family, a `declared` status for the six
+unconverged families, `REGISTERED_ADAPTERS = {"sdk": SdkIngressAdapter}`, and
+module-end asserts binding the registry to the Envelope-B vocabulary. The SDK
+provenance block in `observation_envelope.py` now stamps `adapter="sdk"` /
+`adapter_version="1.0.0"`.
+
+**One validated gateway (commit `a1002211`).** `services/ingestion/gateway.py`
+implements `validate_and_stamp(envelope_dict, *, adapter, tenant_id) -> GatewayResult`:
+rebuilds the `UniversalObservationEnvelope` (field-exact `extra="forbid"`), rejects
+unknown-observation-type / event-family-mismatch / tenancy-mismatch / schema-invalid
+envelopes, and stamps `ProvenanceBlock` (credential_class, signature_status passthrough,
+adapter id/version, `source_trust` = adapter-asserted or credential_class) +
+`QualityBlock(validation_state="gateway:accepted")`, returning the stamped
+`to_bronze_additive()` dict. A new default-OFF `ingress_gateway` config block
+(`AETHER_UNIVERSAL_INGRESS_GATEWAY_ENABLED=false`) is documented in
+`.env.production.example`.
+
+**Degrade-safe `/v1/batch` adoption (commit `fc0bba24`).** Under the WS-A5
+`observation_envelope.enabled` block, batch.py builds the SDK envelope through
+`SdkIngressAdapter`; when the gateway flag is on it runs `validate_and_stamp` and only
+attaches `normalized["observation_envelope"]` on `accepted` (else warns + increments
+the gateway-rejection metric and leaves the key off — no fail-open, no 500), and when
+off it attaches the adapter envelope directly. Any build/gateway exception degrades to
+a warning + metric, preserving the existing V1 contract.
+
+| Workstream item | Deliverable | Status |
+|---|---|---|
+| Ingress adapter registry | `services/ingestion/adapters/` — base ABC + `SdkIngressAdapter` + family registry (7 families in `SOURCE_TYPES` order, 6 `declared`), module-end binds to Envelope-B tuples | ✅ implemented (this slice) |
+| SDK adapter | `SdkIngressAdapter` (PUBLIC_CLIENT, blueprint §11) delegating to `build_sdk_observation_envelope`; provenance block stamps `adapter="sdk"` | ✅ implemented (this slice) |
+| Validated gateway | `services/ingestion/gateway.py` `validate_and_stamp` — schema/type/family/tenant rejects + provenance/quality stamping + additive result | ✅ implemented (this slice) |
+| Flag + operator block | `AETHER_UNIVERSAL_INGRESS_GATEWAY_ENABLED=false` (Settings `ingress_gateway` + `.env.production.example`) | ✅ implemented (this slice) |
+| Batch adoption | flag-gated adapter+gateway adoption under the WS-A5 envelope block; degrade-safe (reject leaves no envelope key, no 500) | ✅ implemented (this slice) |
+| Suites | `tests/unit/observation/test_ingress_adapter_registry.py` (8) + `test_ingress_gateway.py` (7) + updated envelope grep guard | ✅ implemented (this slice) |
+| Ownership | `ingress_adapter_registry` category (JSON) + row (`REPO_CONSISTENCY_OWNERSHIP.md`) + `TARGET_ARCHITECTURE.md` registry/gateway prose | ✅ implemented (this slice) |
+
+Build-time self-checks (serial, no full gate): pytest `tests/unit/observation`
+**36 passed**; envelope parity `tests/contracts/test_observation_envelope_parity.py`
+**10 passed**; both flag-on code paths simulated (accepted attach; tenant-mismatch
+degrade leaves no envelope key); batch.py compiles; ruff clean.
+`docs_drift.py --update` / `make ci-check` restamp deferred to the full-program
+tip per the gate-policy directive (WS-A precedent).
+
+### Definition of done (WS-B1)
+
+- Seven ingress families are registered against the Envelope-B vocabulary with a
+  credential-class authority per family, and `SdkIngressAdapter` (PUBLIC_CLIENT,
+  blueprint §11) produces Envelope B — the first universal ingress adapter (one
+  observation model after adapters, Invariant #1 begins).
+- `validate_and_stamp` enforces one validated-gateway path for adapter envelopes:
+  schema/type/family/tenant rejects before stamping provenance + quality, and the
+  `/v1/batch` V1 flow adopts it flag-gated and degrade-safe.
+- No validators weakened; no new ADR (ADR-012 still reserved); authored docs updated
+  when behavior changed; source-linked docs content-reviewed with
+  `docs_drift.py --update` restamp deferred to the tip.
+- Canonical gate green at the full-program tip: `make ci-check` = 0, `git status --short`
+  empty, `docs_drift.py --strict` clean.
+- WS-B1 complete — webhook/connector/feed/import/harness/replay path convergence,
+  consent-on-every-path, idempotency-before-publish, and replay original-time remain
+  WS-B2..WS-B5 (reserved row below).
+
+## WS-B2 — deprecated-alias convergence (canonical spine + kill flag)
+
+Merged onto `feat/sdk-universal-ingestion` at `bf18f8cc`. Extracts the canonical V1
+pipeline into one async spine and converges the two deprecated aliases onto it so no
+ingress path bypasses validation/consent/scrub/idempotency/Bronze/publish.
+
+- **Canonical spine extraction (`d6f3340b`).** `batch.py` now exposes
+  `ingest_events(events, *, tenant_id, request_privacy, server_context,
+  granted_consents, sent_at, producer) -> BatchResponse` — the full V1 spine
+  (validate → consent/scrub → normalized dict → observation-envelope block →
+  Bronze-before-publish → identity fire-and-forget → `set_nx` idempotency →
+  publish `SDK_EVENTS_VALIDATED`) that `/v1/batch` and the aliases share.
+- **Operator kill config (`7bf8609f`).** `DeprecatedIngestAliasesConfig.kill_enabled`
+  = `AETHER_KILL_DEPRECATED_INGEST_ALIASES` (default False).
+- **Alias convergence + kill (`1e3b3621`).** `routes.py` `/events` + `/events/batch`
+  now converge onto the canonical spine: WRITE permission first, kill → HTTP 410,
+  lazy imports, and `_alias_event_to_canonical` maps the legacy SDKEvent shape to
+  `BaseEvent` (`anonymousId`→`session_id`, device under `context.device.id`,
+  lowercased event `type`, fresh `id`). Envelope block stays inside `batch.py`
+  (WS-A5 grep guard).
+- **Deviation (documented).** `ingest_batch` returns `response.model_dump()` (the
+  legacy route contract asserts dict access, not the awaited result).
+- **Suites:** `tests/unit/ingestion_alias/` — 10 tests (`a92102c4`).
+
+## WS-B3 — consent-on-every-path (fail-closed across all ingress seams)
+
+Merged onto `feat/sdk-universal-ingestion` at `6b338285` (feature commits
+`69a0c5d2`→`175718e3`, hardening + regression tests at `907ee9b7`). Closes the
+Invariant #9 gap (server-authoritative consent on `/v1/batch` only) by putting every
+non-batch ingress seam through the same facade as the batch path.
+
+- **Shared facade (`2ce0b24e`).** `validation.py::evaluate_ingress_decision` mirrors
+  `validate_event`'s ordering (request-privacy signals → server consent receipt →
+  fingerprint data-policy) and the WS-B3 rule: the MANDATORY minimization layer
+  (scrub of sensitive values + strip of client-asserted canonical entity ids +
+  T-class tenant data-policy) runs UNCONDITIONALLY on every path; ONLY the
+  per-subject (S) server-receipt rejection is a per-path toggle.
+- **Seams.** `/feed` T-class gate with optional S escalation (`a3e13d7f`, `routes.py`);
+  comms connector durable seam C-class gate (`c22a1c15`, `services/comms/ingest.py`);
+  provider-runtime bridge per-event gate (`364f4011`, `bridge.py`); tenant-import
+  commit data-policy gate + Bronze scrub (`6cde296c`, `imports/commit.py`);
+  payment-rails webhook ingress scrub (`175718e3`). Config: `IngressConsentConfig`
+  (`69a0c5d2`) — five flags, all default **True** (mandatory layer ON by default);
+  each flag enables only the optional S escalation for its path.
+- **Post-commit security review + hardening (`907ee9b7`).** Four automated MEDIUM
+  fail-open findings (facade authoritative-ON skip, `/feed` scrub behind the flag,
+  imports `source_column` label trust + `continue` skip, comms flag-OFF bypass) were
+  fixed before merge: authoritative-ON + purpose now consults the server receipt for
+  every purposed request (`evaluate_consent` is itself fail-closed on an unresolvable
+  subject → `consent_receipt_missing`); scrub/strip/data-policy moved OUT of every
+  per-path flag (unconditional); import classification validates the mapping
+  `source_column` against the ACTUAL staged columns and denies unresolved columns
+  (`mapping_source_column_unresolved`) instead of skipping; the import flag's OFF
+  state denies the commit (`ConflictError`) rather than bypassing the policy layer.
+- **Suites:** `tests/ingestion/` — facade consent regressions (5) + import seam
+  label-trust/fail-closed regressions (5) (`907ee9b7`). Existing seam suites green on
+  the merged tree: imports/provider/journey/card-linked/payment (92) + comms/routes/
+  security/batch-endpoint (344).
+
+## WS-B4 — replay adapter + original-time preservation (Invariant #15)
+
+Merged onto `feat/sdk-universal-ingestion` at `888ea003` (commits `9f9f6446` +
+`6992654f`; main.py operator-route mount + route-mount test at `d1c95a39`). Operator-
+triggered re-delivery of durable Bronze SDK events with ORIGINAL occurrence times
+preserved.
+
+- **`ReplayIngressAdapter` (`9f9f6446`, `adapters/replay.py`).** Family `replay`,
+  `OPERATOR_REPLAY`, v1.0.0 — revalidates a stored envelope or rebuilds an
+  SDK-equivalent, rewrites `source_type="replay"` while keeping the ORIGINAL
+  `occurred_at`/`observation_id`/flat `timestamp`; only `received_at`/`ingested_at`
+  and replay provenance (`adapter="replay"`,
+  `lineage.raw_record_ref=bronze_ref`) are fresh. Registered in the ingress registry
+  as the 2nd implemented family.
+- **Runner + operator surface (`6992654f`).** `services/ingestion/replay.py`
+  (`REPLAY_SOURCE_SERVICE="ingestion.replay"`, `replay_events`, dry-run counts, run-
+  journal idempotency) + `replay_routes.py` (`/v1/kyber/ingest/replay` POST /events +
+  GET /status, Kyber-operator-only; dry_run defaults True, real run refused with 403
+  while `AETHER_INGESTION_REPLAY_ENABLED` is OFF). Worker skip: the Bronze writer
+  consumer skips `source_service == "ingestion.replay"` rows (the durable row already
+  exists; metric `ingestion_bronze_replay_skip_total`). Config `IngestReplayConfig`.
+- **Route mount (`d1c95a39`).** `kyber_replay_router` mounted on `main.app`; routes
+  classify under the route-policy registry via the `/v1/kyber` operator-required
+  fallback (no registry entry needed); no route conflicts.
+- **Suites:** `test_replay_adapter.py` + `test_ingest_replay.py` + route-mount
+  regressions (`d1c95a39`) — 4.
+
+## WS-B5 — single normalization-spine convergence (consumption side, flag-gated)
+
+Merged onto `feat/sdk-universal-ingestion` at `7a1b73f5` (commits `0ffd30d0`→
+`1692755d`). Retires the heterogeneous-envelope branching on the consumption side with
+one Envelope-B-projection spine (Invariant #1).
+
+- **Spine (`0ffd30d0`, `services/ingestion/spine.py`).** `ObservationView`/
+  `SubjectView` (all-Optional) + `to_observation_view(payload)`: envelope-first (the
+  additive `observation_envelope` key wins), else AetherEvent `model_dump()`, else the
+  legacy flat SDK/comms dict, else all-None; `normalization_spine_enabled()`.
+- **Config (`70ff4f51`).** `NormalizationSpineConfig.enabled` =
+  `AETHER_NORMALIZATION_SPINE_ENABLED` (default False).
+- **Consumers (`6dfc53b3`, `b1f73b59`).** Ingestion workers (`silver_normalizer`,
+  `identity_signal_emitter`, `_bus_payload_to_sdk_envelope`) and the
+  semantic_intelligence + resolution consumers read via the view when ON; the legacy
+  flat path is kept byte-identical when OFF (`_legacy_sdk_envelope`).
+- **Suites (`1692755d` + new `test_normalization_spine.py`):** 23 spine tests; blast
+  radius re-run on the integrated tree (observation 47, silver 119,
+  semantic/social/provider 479, parity 22, staging/comms 388) green at the slice tip.
+
+## WS-B close-out (invariant delta)
+
+| Invariant | WS-B delta |
+|---|---|
+| #1 single observation model after adapters | B5 consumption-side spine (flag-gated); B1 gateway + B4 replay adapter emission |
+| #5 idempotency-before-publish | B2 alias convergence onto the canonical `set_nx` spine |
+| #8 no un-stamped durability | B2 aliases now Bronze-before-publish like `/v1/batch` |
+| #9 consent/privacy on every path | B3 mandatory scrub/strip/data-policy unconditional on feed/comm/provider/import/payment seams (default-ON); S server-receipt is a per-path toggle, fail-closed under the authoritative flag |
+| #15 original occurrence time never rewritten | B4 replay preserves `occurred_at`/`event_id`/`timestamp`; only receive/ingest time + provenance are fresh |
+
+Post-merge build-time evidence (full canonical gate deferred to the full-program tip):
+focused suites **73 passed** (B2 aliases 10 + B3 `tests/ingestion` 10 + B4 replay +
+B5 spine) and broad regression net **185 passed** (observation full 93 incl.
+outbox/workers, imports/provider/journey/card-linked/payment, comms 344, route-mount
++ registry coverage); settings/import smoke clean across all seams and the four new
+flag blocks (all default OFF except the five B3 ingress-consent flags, default True).
+
+## WS-C close-out (SDK hardening — Invariants #3/#4/#12/#16)
+
+Stacked on `feat/sdk-universal-ingestion` for the consolidated PR at `99717978`
+(18 files). Every behavior-changing mechanism is flag-gated default OFF; the
+legacy path is byte-identical while OFF. Items map to gap rows 4/6/12/15/28.
+
+- **Native identity → subject hints (`AETHER_SUBJECT_HINTS_ONLY_ENABLED`, default OFF; Invariant #4, gap row 6).** `SubjectHintsConfig` on `Settings`; `validation.py` neutralizes client-asserted `identityConfidence`/`identitySignals` at the single Bronze-write normalization point; `touchpoint_projector.py` nulls `identity_resolution_method`/`_confidence`/`_version`; iOS/Android `AetherConfig.subjectHintsOnly` (default false) stops client `/sdk/identity/resolve` re-stamping. Legacy values preserved when OFF.
+- **Native encrypted durable queues (`AetherConfig.encryptedDurableQueue`, default OFF; gap row 12).** Replaces delete-before-ack with a durable AES-GCM ack queue: Keychain / Android-Keystore cipher key, `AETHERQ1` envelope magic, 2xx-acknowledge / transient-retry-retain / ≥400 acknowledge-drop (poison-pill protection). Honest boundary: iOS verified to `swiftc -parse`; Android not compilable in CI — a device/emulator build + integration test is required before enablement.
+- **Shared-barrel delist (`packages/shared` no longer star-ships `commerce-bridge.ts`/`economic-metrics.ts`; Invariant #3, gap row 28).** Canonical backend homes documented on both files; consumers import via explicit subpath; `validate_sdk_import_boundary.py` gains a regression lock forbidding re-adding either star-export (validator not weakened). Full physical relocation off the SDK graph is deferred (no governed non-SDK TS home yet) — tracked, not faked.
+- **`packages/web/src/types.ts` EventType re-point (Invariant #16, gap row 4).** Hand-mirror union removed; re-export from the Contract Spine; `generate_contracts.py` `validate_web_eventtype_reimport()` guard fails on local re-declaration or lost re-export.
+- **Native correlation fields, end-to-end (Invariant #12, gap row 8).** iOS/Android `CorrelationContext` (camelCase, shared-shaped with `packages/shared/events.ts`); `observation_envelope.py` additively maps a `span_id` flat fallback + `parent_observation_id`; nothing re-stamps a source-provided id.
+
+Lane evidence (pre-integration; coordinator gate deferred to the program tip):
+pytest **60 passed** (8 new + 52 adjacent), `generate_contracts.py --check` /
+`validate_sdk_import_boundary.py` / `validate_mobile_event_parity.py` /
+`validate_ts_public_exports.py` all exit 0, docs-fix 56/0, docs_drift 0 stale.
+
+## WS-D close-out (backend interpretation — Invariants #7/#11/#12/#13/#14)
+
+Stacked on `feat/sdk-universal-ingestion` for the consolidated PR at `5f2f0272`
+(28 files). Architecture: `docs/architecture/BACKEND_INTERPRETATION_WS_D.md`.
+Seven new flags, all default OFF, on `Settings.backend_interpretation`
+(`BackendInterpretationConfig`); item-8 governance rides the pre-existing
+`AETHER_MUTATION_GATEWAY_MODE` (`off|shadow|enforce`, default `off`) — no new
+knob, no production default flip. Scopes gap rows 7/8/9/22/24/26/31.
+
+| Item | Flag (default OFF) | Deliverable |
+|---|---|---|
+| 1 Typed `RelationshipFact` | `AETHER_BACKEND_RELATIONSHIP_FACT_ENABLED` | `RelationshipFact` + `evidence_refs` / `resolution_method` / validity window; promotion forwards evidence + correlation onto the mutation ledger when ON (#14). Boundary: the typed model + `RelationshipFactStore` are delivered but no live production seam persists a typed fact — today the flag gates only the #14 ledger-evidence forward (`promotion.py:476`); a writer seam stays `in_flight` |
+| 2 Episode engine | `AETHER_BACKEND_EPISODE_ENGINE_ENABLED` | canonical episode primitive + `episode360` read surface; deterministic digest ids; durable; provider fail-isolated. Boundary: the flag currently gates no runtime seam — no episode-engine write path calls `episode_engine_enabled()`; engine adoption stays `in_flight` (honest, not flipped) |
+| 3 Outcome truth store | `AETHER_OUTCOME_TRUTH_STORE_ENABLED` | durable mirror of projected silver outcome rows with evidence lineage (`workers.py` recorder hook, best-effort) (#14) |
+| 4 Section-25 dedupe | `AETHER_EVIDENCE_DEDUPE_ENABLED` | dedupe primitive (`shared/backend_interpretation/dedupe.py`) delivered: one outcome, many evidence refs. Boundary: the flag currently gates no production write seam — a collation caller stays `in_flight` |
+| 5 Temporal envelope → Silver | `AETHER_SILVER_TEMPORAL_ENVELOPE_ENABLED` | server temporal block replaces the raw client timestamp at the Silver projector boundary (#11) |
+| 6 Correlation first-class | `AETHER_CORRELATION_FIRST_CLASS_ENABLED` | canonical registry, not opaque JSONB (#12) |
+| 7 Silver exact money | `AETHER_SILVER_EXACT_MONEY_ENABLED` | exact `Decimal`; missing-never-0.0, currency never `'USD'`; alembic `20260906_wsd_silver_exact_money` (#13) |
+
+Convergence note (`feat/financial-normalization`, merged to `origin/main`
+`59a7fb24`): WS-D reuses the canonical financial exact-money machinery and keeps
+its Silver exact-money behind the default-OFF flag — migration/table overlap with
+the financial-normalization lane is resolved at the consolidated-PR merge onto
+`main`; the machinery is never built twice.
+
+Lane evidence (pre-integration): **26 new + 24 flag-OFF parity** tests green;
+`validate_migration_safety` 103 revisions, 0 destructive.
+
+## WS-E close-out (operations — Invariant #17, Gates G/H)
+
+Stacked on `feat/sdk-universal-ingestion` for the consolidated PR at `08e46a1b`
+(backend) + `df323de7` (frontend). Authored doc:
+`docs/source-of-truth/INGESTION_OPS.md`. Every mechanism default OFF.
+
+- **Ingestion funnel telemetry (`AETHER_INGESTION_OBSERVABILITY_ENABLED`, default OFF).** `ingestion_observability.py` in-process ledger + per-observation trace ladder; monitored stages RECEIVED/VALIDATED/BRONZE (API process) + NORMALIZED/PROJECTIONS (workers); the remainder honestly `declared-unmonitored`. Recording seams never change dispositions.
+- **Kyber ingestion control plane + Observation Inspector (`enableIngestionOps`, default OFF).** `/ingestion-ops` route (`router.tsx`), sidebar gated by the same flag; funnel table + rollup, trace inspector, recent traces, SDK fleet, tier manifest, replay status; honest disabled note when the backend reports `enabled:false`.
+- **Real `GET /v1/health/pipeline`** (replaces the phantom endpoint lane-0 Gate G needle found); mounted in `services/gateway/routes.py`.
+- **SDK-fleet view mounted** (pre-built `SdkFleetMonitor` — not rebuilt) + **golden cross-path fixture** asserted across batch/replay paths.
+- **SDK version-compatibility tiers (`AETHER_SDK_VERSION_COMPAT_ENABLED` default OFF; `AETHER_SDK_VERSION_COMPAT_MODE` default `off`).** `sdk_version_tiers.py` + `GET /v1/config/sdk/versions`; `/v1/batch` `sdk_tier` advisory label gated by the enable flag; fail-closed date enforcement only in mode `enforce`.
+- **Gate G (`validate_kyber_ops_surface.py`) + Gate H (`validate_sdk_compat_tiers.py`) dispatched in `repo_doctor`** (both PASS in the 78-gate run); fail-closed.
+
+## WS-C/D/E integration evidence (single combined gate at the program tip)
+
+`make ci-check` (env-stripped) **78 passed / 0 failed** at the integration head;
+`docs_drift.py --strict` **455 clean / 0 stale** after a genuine 18-doc re-review
+(7 content-edited — SDK-IOS / SDK-ANDROID / SDK-COMMERCE-BRIDGES, ARCHITECTURE,
+OPERATIONS-RUNBOOK, FRONTEND-ARCHITECTURE, BACKEND-API — 11 verified-accurate
+restamps, `ea658fba`); `FRONTEND-ROUTE-STATE-MATRIX.md` registered the new
+`/ingestion-ops` route with only genuinely-asserted states (empty + gating `A`,
+loading/error/populated `I`) — `c098c109`. The head was pushed to
+`origin/feat/sdk-universal-ingestion` at `095c45ce`; GitHub leaf checks ran
+green (35/35, only path-filtered skips: docs-sync / ml-tests / pr-size /
+release-gate, gated on the passing detect-changes job).
+
+Audit remediation (independent 11-agent adversarial pass over head `095c45ce`,
+2026-09-06): one genuine code defect surfaced — the WS-D item-8 governance seam
+read a nonexistent top-level `Settings` attribute, so
+`AETHER_MUTATION_GATEWAY_MODE=shadow|enforce` never reached derived-truth
+writes (governance always resolved `off`). Fixed at `cc31d70e`:
+`flags.mutation_gateway_mode()` now reads the frozen
+`settings.temporal_observatory` block (the same nested path
+`shared.graph.mutation_gateway` reads), and the `mutation_mode` test fixture
+swaps that block via `dataclasses.replace` so the mode-ladder tests drive the
+real env→settings path. The audit also over-stated close-out framing on WS-D
+items 1/2/4 — primitives delivered, but no live production write seam consumes
+them yet — corrected in the table above with honest `in_flight` boundaries
+(consistent with `docs/architecture/BACKEND_INTERPRETATION_WS_D.md` §9).
+Env-stripped `make ci-check` re-run on `cc31d70e`: **78 passed / 0 failed**;
+GitHub leaf checks re-ran green on the pushed head.
+
+## Workstreams A–E (ledger)
+
+WS-A1 merged to `origin/main` via #600; WS-A2–A7 and WS-B…E are stacked on
+`feat/sdk-universal-ingestion` for the consolidated program PR. Close-out per
+lane is above; each row records its slice commit(s) and content.
+
+| Workstream | Scope (delivered) | Status |
+|---|---|---|
+| WS-A — Contract foundation | **WS-A1 + WS-A2 + WS-A3 + WS-A4 + WS-A5 + WS-A6 + WS-A7 done** (WS-A1 merged to main via #600; A2–A7 stacked on `feat/sdk-universal-ingestion` for the consolidated PR). WS-A complete: field-trust + semantic-level spine, privacy family, Envelope-B, native event-type codegen, and registry-re-pointed metric/privacy/retention docs | — (complete) |
+| WS-B — Adapter convergence | **WS-B1..B5 done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR): universal ingress adapter registry (7 families declared; `SdkIngressAdapter` + `ReplayIngressAdapter` implemented) + one validated gateway (`services/ingestion/gateway.py`) + flag-gated `/v1/batch` adoption; deprecated `/v1/ingest` aliases converged onto the canonical spine (kill flag `AETHER_KILL_DEPRECATED_INGEST_ALIASES`); consent-on-every-path across feed/comm/provider/import/payment seams (B3, mandatory scrub/policy default-ON, S server-receipt fail-closed toggle); ingestion-level replay with original-time preservation (`AETHER_INGESTION_REPLAY_ENABLED`, operator surface mounted); consumption-side normalization spine (`AETHER_NORMALIZATION_SPINE_ENABLED`) retiring heterogeneous-envelope branching (Invariants #1/#5/#8/#9/#15) | Phase 0 merged |
+| WS-C — SDK hardening | **done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR, `99717978`): native identity → subject hints (`AETHER_SUBJECT_HINTS_ONLY_ENABLED`, default OFF); native encrypted durable ack queues (`AetherConfig.encryptedDurableQueue`, default OFF); `@aether/shared` barrel delist of `commerce-bridge.ts`/`economic-metrics.ts` + import-boundary regression lock; `web/src/types.ts` EventType re-point to the Contract Spine + generator guard; native correlation fields end-to-end, never overwritten (Invariants #3/#4/#12/#16). Close-out + evidence above | — (complete) |
+| WS-D — Backend interpretation | **done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR, `5f2f0272`): typed `RelationshipFact` + `evidence_refs`; episode engine + episode360 read surface; durable outcome truth store; Section-25 evidence dedupe; server temporal envelope reaches Silver; correlation first-class; Silver exact-decimal money — all seven behind `BackendInterpretationConfig` flags default OFF; derived-truth governance rides `AETHER_MUTATION_GATEWAY_MODE` (no new knob); coordinated with `feat/financial-normalization` (never built twice) (Invariants #7/#11/#12/#13/#14). Close-out + evidence above | — (complete) |
+| WS-E — Operations | **done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR, `08e46a1b` + `df323de7`): ingestion funnel telemetry (`AETHER_INGESTION_OBSERVABILITY_ENABLED`, default OFF); Kyber ingestion control plane + Observation Inspector (`enableIngestionOps`, default OFF); real `GET /v1/health/pipeline` (was phantom); SDK-fleet view mounted; golden cross-path fixture; SDK version-compatibility tiers (`AETHER_SDK_VERSION_COMPAT_ENABLED`/`_MODE`, default OFF); Gate G/H validators in `repo_doctor` (Invariant #17). Close-out + evidence above | — (complete) |
 
 **ADR-012** is reserved for a future genuine decision (e.g. converge-on-one-
 `observe` + the Envelope A→B contract) and is **not** created in Phase 0.
@@ -87,7 +757,7 @@ built.
 | Consent/privacy on every ingress path | Server-authoritative on `/v1/batch` only today | WS-B |
 | Single observation model / normalization spine | ≥5 Bronze/Silver pipelines at baseline | WS-B |
 | Kyber Observation Inspector + funnel metrics | No surface exists at baseline | WS-E |
-| Stale source-linked docs (`EVENT_REGISTRY.md`, `INGESTION_CONTRACT.md`, `ENRICHMENT_LINEAGE.md`) | Contradict enforced code; corrected against sources in a later phase, not stamped | Deferred constraints |
+| Stale source-linked docs (`INGESTION_CONTRACT.md`, `ENRICHMENT_LINEAGE.md`) | Contradict enforced code; corrected against sources in a later phase, not stamped (`EVENT_REGISTRY.md` corrected against the spine in WS-A7) | Deferred constraints |
 
 ## Definitions of done (all phases)
 
@@ -102,3 +772,36 @@ built.
 - PRs that touch a deprecated legacy tree must carry the acknowledgment
   (`docs/productization/sdk-universal-ingestion-alignment/**`) required by the
   `legacy_ingestion_tree_mutation` ownership category.
+
+## Acknowledged external mutations
+
+The `legacy_ingestion_tree_mutation` ownership category fires when the legacy
+ingestion/data-lake trees OR the deprecated backend monolith root move. Third
+programs that deliberately mutate one of those surfaces record the
+acknowledgment here, in the governed home the category designates.
+
+### 2026-09-05 — End-User Lifecycle & Integration Management (R1 catalog read-model)
+
+Branch `feat/enduser-lifecycle-integration` (R1 contract spine, commit `64877fca`)
+mounted the connectors-gated **catalog read-model** router from
+`Backend Architecture/aether-backend/main.py` and added
+`services/integrations/connectors/catalog_endpoints.py`.
+
+- **Why the deprecated surface was touched:** the four `/v1` catalog endpoints
+  (`/v1/integration-catalog`, `/v1/tenant-integrations[/{id}]`,
+  `/v1/integration-readiness`) must be reachable behind the existing
+  `AETHER_CONNECTORS_ENABLED` feature gate, which only `main.py` can wire, and the
+  read-model module lives in the legacy connectors package to respect the
+  connectors-package import-cycle law (the module is standalone and is NOT
+  exported by `connectors/__init__`, so a readiness-first import cannot break).
+  The change is additive, read-only projection wiring; no ingestion or data-lake
+  behavior is altered.
+- **What was NOT extended:** no files were added under `Data Ingestion Layer/**`,
+  `Data Lake Architecture/**`, `Backend Architecture/migrations/**`,
+  `Backend Architecture/mnt/**`, or the deprecated
+  `services/{delegation,journey-service,web3}/**` trees. All new catalog
+  vocabulary lives in `shared/integration_contracts/` (`catalog.py`,
+  `experience.py`, `aliases.py`), which is the canonical UPR-aligned contract
+  layer this program steers new work into.
+- **Guardrail intact:** `scripts/validate_canonical_ingestion_trees.py` remains
+  on disk and is still run by the ownership gate.

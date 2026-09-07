@@ -34,10 +34,18 @@ export type {
 export * from './agentic-observability'; // agentic observability contracts
 export * from './capabilities';
 export * from './economic';
-export * from './economic-metrics';
+// NOTE (WS-C row 28 / SDK thinness): ./economic-metrics was previously
+// star-exported here. It ships SDK-side interpretation of backend economic
+// aggregation; canonical home is the backend
+// (Backend Architecture/aether-backend/services/economic/economic360_contracts.py).
+// Consumers that still need the passive UnifiedEconomicBreakdown contract type
+// import it via the explicit subpath '@aether/shared/economic-metrics'
+// (packages/shared/profile360-contract.ts), NOT from this public barrel. Do NOT
+// re-add it to the SDK public surface.
 export * from './contextual';
 export * from './graph-relationships';
 export * from './graph-contract';
+export * from './observation-envelope';
 export * from './intelligence';
 export * from './financials';
 export * from './profile360-contract';
@@ -95,6 +103,8 @@ export * from './installation';
 export * from './mobile-config';
 export * from './mobile-projection';
 export * from './imports';
+export * from './data-exchange';
+export * from './managed-integrations';
 
 // Unified-platform registries (generated from packages/shared/contracts/*.json
 // by scripts/generate_platform_contracts.py)
@@ -122,8 +132,14 @@ export * from './relationship-motif-registry';
 // surface; generated from packages/shared/contracts/social-provider-capability-vocabulary.json)
 export * from './social-provider-capability-vocabulary';
 
-// Commerce bridge (S2): SDK signal ↔ server snapshot reconciliation contract.
-export * from './commerce-bridge';
+// NOTE (WS-C row 28 / SDK thinness): ./commerce-bridge was previously
+// star-exported here. It carries SDK-side interpretation (confirmation / money /
+// canonical event mapping) whose canonical home is the backend
+// (Backend Architecture/aether-backend/shared/integration_contracts/commerce_bridge.py).
+// The web SDK imports only the source-observable signal types + schema version it
+// needs via the explicit subpath '@aether/shared/commerce-bridge'
+// (packages/web/src/modules/commerce-detection.ts), NOT from this public barrel.
+// Do NOT re-add it to the SDK public surface.
 
 // ADR-011 D3 common spine envelope (composes canonical primitives; redefines nothing).
 export * from './spine-envelope';

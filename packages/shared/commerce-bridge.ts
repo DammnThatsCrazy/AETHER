@@ -1,11 +1,16 @@
 // =============================================================================
 // Aether SDK — COMMERCE BRIDGE CONTRACT (shared, S2)
 //
-// TypeScript mirror of
+// WS-C row 28 (SDK thinness): this module is NOT part of the @aether/shared
+// public barrel (removed in packages/shared/index.ts). It is a legacy SDK-side
+// mirror whose canonical home is backend Python:
 // `Backend Architecture/aether-backend/shared/integration_contracts/commerce_bridge.py`
 // (canonical `OrderSnapshot`: `shared/commerce_contracts/order.py`; `Money`:
 // `shared/commerce_contracts/money.py`). Teams A and B own the Python side;
-// this module converges on the exact same contract.
+// this module converges on the exact same contract. SDK client surfaces must not
+// add NEW interpreter logic here — the web SDK consumes only the source-
+// observable signal types + schema version via the explicit subpath
+// '@aether/shared/commerce-bridge' (packages/web/src/modules/commerce-detection.ts).
 //
 // Vocabularies (DECISION 1):
 //   sdk_event_type       = BARE SDK signal name (product_view, cart_updated,

@@ -792,6 +792,66 @@ class ConsentAuthorityConfig:
 
 
 # ---------------------------------------------------------------------------
+# Ingress consent-on-every-path (WS-B3) — per-seam controls for the non-batch
+# ingestion paths. Each path is classified S / C / T (module docstring of
+# services/ingestion/validation.py).
+#
+# WS-B3 rule: every path runs the MANDATORY minimization layer UNCONDITIONALLY
+# (default ON, never gated by these flags) — scrub of sensitive values, strip of
+# client-asserted canonical entity ids, and T-class tenant data-policy removal.
+# That layer is a pure convergence (scrub never rejects and
+# services.consent.authority.evaluate_data_policy is default-allow — a
+# prohibition needs an explicit tenant compliance profile), so closing the
+# Invariant #9 gap cannot be switched off. Each flag below authorizes ONLY the
+# per-subject (S) SERVER-receipt rejection for its path; an S toggle OFF degrades
+# the path to the mandatory scrub/data-policy layer (no per-subject lookup).
+# Disabling a T-class flag cannot bypass its mandatory layer either: the import
+# flag's OFF state DENIES the commit (fail closed). The authoritative receipt
+# check is additionally gated on
+# settings.consent_authority.authoritative_consent_enforcement_enabled (ON in
+# staging/production). Explicit env vars always win per flag.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class IngressConsentConfig:
+    # T class — API feed (POST /v1/ingest/feed): mandatory scrub + strip + data-
+    # policy always run; the flag enables the optional per-subject escalation
+    # declared via APIFeedEvent.subject_id/anonymous_id/purpose.
+    feed_ingress_consent_enforcement_enabled: bool = _env_bool(
+        "FEED_INGRESS_CONSENT_ENFORCEMENT_ENABLED", True
+    )
+    # C class — connector/communication durability seam (services/comms/ingest):
+    # scrub + data-policy always run; the flag enables the per-subject (S)
+    # server-receipt rejection (additionally gated by the authoritative flag AND
+    # a subject-resolvable event).
+    connector_comms_consent_enforcement_enabled: bool = _env_bool(
+        "CONNECTOR_COMMS_CONSENT_ENFORCEMENT_ENABLED", True
+    )
+    # C class — payment-rails webhook ingress value redaction before
+    # reconciliation writes (the existing domain _consent_permits_session gate
+    # is untouched). Scrub-only seam; redaction is unconditional when enabled.
+    payment_rails_ingress_scrub_enabled: bool = _env_bool(
+        "PAYMENT_RAILS_INGRESS_SCRUB_ENABLED", True
+    )
+    # C class — provider runtime event bridge (services/provider_runtime/bridge):
+    # scrub + data-policy always run; the flag enables the per-subject (S)
+    # server-receipt rejection (additionally gated by the authoritative flag AND
+    # a resolvable subject).
+    provider_runtime_consent_enforcement_enabled: bool = _env_bool(
+        "PROVIDER_RUNTIME_CONSENT_ENFORCEMENT_ENABLED", True
+    )
+    # T class — import engine commit seam (services/imports/commit): scrub of
+    # secret-key columns on staged rows + the data-policy gate are the MANDATORY
+    # T-class layer and run unconditionally BEFORE any Bronze('tenant_import')
+    # write. There is no per-path S toggle on the import path, so disabling this
+    # flag cannot bypass the policy layer: OFF DENIES the commit (fail closed)
+    # instead of ingesting without data-policy.
+    imports_consent_policy_enabled: bool = _env_bool(
+        "IMPORTS_CONSENT_POLICY_ENABLED", True
+    )
+
+
+# ---------------------------------------------------------------------------
 # Semantic Intelligence — durable semantic/sentiment pipeline.
 #
 # All flags default OFF/inert in local so `make ci-check` and unit tests keep
@@ -934,6 +994,208 @@ class IngestionV2Config:
 
 
 # ---------------------------------------------------------------------------
+# UniversalObservationEnvelope (WS-A5) — Envelope B server-side canonical
+# observation model. Default OFF: when ON, the /v1/batch SDK path also builds
+# a UniversalObservationEnvelope per accepted event (services/ingestion/
+# observation_envelope.py) and persists it additively on the normalized
+# payload (normalized["observation_envelope"]). Consumers are unchanged — the
+# flat SDK dict remains the consumption surface until WS-B converges adapters
+# onto Envelope B as the single observation model (Invariant #1). Structural
+# enforcement of Envelope-B required blocks / curated vocabularies happens at
+# build time only; source-trust/consent/idempotency ordering is the WS-B
+# gateway's scope.
+@dataclass(frozen=True)
+class ObservationEnvelopeConfig:
+    enabled: bool = _env_bool("AETHER_OBSERVATION_ENVELOPE_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
+# Universal ingress gateway (WS-B1): the one validated gateway that Envelope-B
+# observations (built by the ingress adapters) route through. Default OFF:
+# when ON together with the observation-envelope flag, /v1/batch ALSO runs each
+# accepted SDK envelope through services/ingestion/gateway.validate_and_stamp —
+# Envelope-B schema re-validation, canonical type/family checks against the
+# Contract Spine, tenant match, and credential/source-trust provenance + quality
+# stamping. A rejected envelope degrades to the flat SDK path (the A-side event
+# is already accepted) so the flag can never take ingestion down. Consent /
+# idempotency / durable-Bronze ordering is adopted per family in WS-B2..WS-B5.
+@dataclass(frozen=True)
+class IngressGatewayConfig:
+    enabled: bool = _env_bool("AETHER_UNIVERSAL_INGRESS_GATEWAY_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
+# Deprecated ingest aliases (WS-B2): the POST /v1/ingest/events and
+# /v1/ingest/events/batch aliases are already converged onto the canonical V1
+# spine (services/ingestion/batch.ingest_events — validation/consent/scrub/
+# Bronze-durable/idempotency/publish), flag-gated OFF below. Turning the kill
+# flag ON retires them with HTTP 410 (routes stay mounted for gateway
+# discovery; only their bodies go away) so SDKs MUST use POST /v1/batch.
+# Default OFF: flag-off callers still reach the converged canonical path.
+@dataclass(frozen=True)
+class DeprecatedIngestAliasesConfig:
+    kill_enabled: bool = _env_bool("AETHER_KILL_DEPRECATED_INGEST_ALIASES", False)
+
+
+# Ingestion-level replay (WS-B4): the OPERATOR-triggered, scan-run re-delivery
+# of durable Bronze SDK events through the universal ingestion gateway with
+# original-time preservation (Invariant #15). Default OFF: an operator may
+# always dry-run a replay (counts only, zero publishes); a REAL run
+# (services/ingestion/replay_routes.py POST /events with dry_run=false) is
+# refused with 403 until this flag is ON. Replay reads Bronze only and
+# publishes to Topic.SDK_EVENTS_VALIDATED with source_service
+# "ingestion.replay" (the Bronze writer consumer skips those — the durable row
+# already exists). Service runner + minimal operator route; NOT a durable-jobs
+# control plane in this slice.
+@dataclass(frozen=True)
+class IngestReplayConfig:
+    enabled: bool = _env_bool("AETHER_INGESTION_REPLAY_ENABLED", False)
+
+
+# Consumption-side normalization spine (WS-B5). Default OFF: when ON, downstream
+# consumers on SDK_EVENTS_VALIDATED (ingestion workers, semantic_intelligence,
+# resolution) read validated-topic payloads through
+# services/ingestion/spine.to_observation_view — one spine that projects the
+# additive ``observation_envelope`` key when present (Envelope B, WS-A5) and
+# maps the legacy flat SDK/comms dict or the provider_runtime AetherEvent
+# model_dump() otherwise. OFF keeps every legacy flat-key read (byte/row parity
+# for the Silver write path); ON additionally makes AetherEvent subject_id/
+# actor_id reachable as user_id/agent_id subjects. Emission convergence (every
+# publisher attaching an envelope) stays deferred to WS-B2/WS-B3.
+@dataclass(frozen=True)
+class NormalizationSpineConfig:
+    enabled: bool = _env_bool("AETHER_NORMALIZATION_SPINE_ENABLED", False)
+
+
+# Native identity -> subject-hints convergence (WS-C / Invariant #4). Default
+# OFF: the legacy SDK contract (client-stamped canonical top-level ids +
+# identityConfidence/identitySignals persisted verbatim to Silver) is honored
+# unchanged. When ON, the backend treats the SDK as subject-hints-only — the
+# client is no longer an authority on canonical entity id / identity confidence,
+# so normalization neutralizes client-asserted identityConfidence/identitySignals
+# instead of persisting them verbatim and resolution drives identity from the
+# additive ``subjects`` hint list (Envelope B). Validation and projectors honor
+# BOTH modes until the flip; this flag is the deployment switch the coordinator
+# turns on after native + web SDKs converge.
+@dataclass(frozen=True)
+class SubjectHintsConfig:
+    enabled: bool = _env_bool("AETHER_SUBJECT_HINTS_ONLY_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
+# Backend interpretation (WS-D) — the SDK + Universal Ingestion blueprint's
+# backend-interpretation slice (REPO_TRUTH_AND_GAP_MATRIX rows 7/8/9/22/24/26/31,
+# invariants #7/#11/#12/#13/#14). Every behavior-changing mechanism in WS-D is
+# gated by ONE of the default-OFF flags below; nothing changes while they are
+# OFF. Flip sequences are documented per item in docs/architecture/
+# BACKEND_INTERPRETATION_WS_D.md (authored WS-D close-out surface).
+#
+#   relationship_fact_enabled     AETHER_BACKEND_RELATIONSHIP_FACT_ENABLED —
+#                                 Typed canonical RelationshipFact
+#                                 (resolution-method + validity) and carrying
+#                                 evidence_refs on relationships/edges and on
+#                                 derived-claim writes (Invariant #14; row 26).
+#   episode_engine_enabled        AETHER_BACKEND_EPISODE_ENGINE_ENABLED —
+#                                 canonical episode primitive + episode360
+#                                 surface over the outcome truth store
+#                                 (rows 24/26/31).
+#   outcome_truth_store_enabled   AETHER_OUTCOME_TRUTH_STORE_ENABLED —
+#                                 durable outcome truth store; derived claims
+#                                 retain evidence + model/policy lineage
+#                                 instead of the outcome store returning None
+#                                 (Invariant #14; row 26/31).
+#   evidence_dedupe_enabled       AETHER_EVIDENCE_DEDUPE_ENABLED —
+#                                 Section-25 evidence dedupe (several source
+#                                 observations may evidence ONE canonical
+#                                 outcome; blueprint §25). WS-A/B evidence
+#                                 back-links rely on the dedupe fingerprint.
+#   silver_temporal_envelope_enabled  AETHER_SILVER_TEMPORAL_ENVELOPE_ENABLED —
+#                                 carry the server-built EventTemporalEnvelope
+#                                 through to the Silver projection boundary so
+#                                 projectors stop re-reading the raw client
+#                                 timestamp once the flag is on (Invariant #11;
+#                                 rows 7/22).
+#   correlation_first_class_enabled  AETHER_CORRELATION_FIRST_CLASS_ENABLED —
+#                                 correlation promoted from opaque JSONB to
+#                                 canonical columns/registry and carried end-to-
+#                                 end on the promotion path (Invariant #12;
+#                                 row 8).
+#   silver_exact_money_enabled    AETHER_SILVER_EXACT_MONEY_ENABLED —
+#                                 ingestion→Silver money path consumes the
+#                                 financial-normalization Decimal/exact-money
+#                                 machinery so missing/empty/zero/degraded stay
+#                                 DISTINCT instead of collapsing missing→0.0 and
+#                                 currency→'USD' (Invariant #13; row 13).
+#
+# Derived-truth governance (row 658) is NOT a separate flag: it rides the
+# existing mutation-gateway ladder (AETHER_MUTATION_GATEWAY_MODE, default
+# "off" → off|shadow|enforce) plus this block's relationship_fact_enabled /
+# outcome_truth_store_enabled switches where they stamp lineage on derived
+# writes. The gateway itself is pre-existing shared/graph/mutation_gateway.py
+# (default OFF); WS-D only wires derived-truth writers through its governance
+# semantics and completes the claim_type/model-version/evidence lineage.
+@dataclass(frozen=True)
+class BackendInterpretationConfig:
+    relationship_fact_enabled: bool = _env_bool(
+        "AETHER_BACKEND_RELATIONSHIP_FACT_ENABLED", False
+    )
+    episode_engine_enabled: bool = _env_bool(
+        "AETHER_BACKEND_EPISODE_ENGINE_ENABLED", False
+    )
+    outcome_truth_store_enabled: bool = _env_bool(
+        "AETHER_OUTCOME_TRUTH_STORE_ENABLED", False
+    )
+    evidence_dedupe_enabled: bool = _env_bool(
+        "AETHER_EVIDENCE_DEDUPE_ENABLED", False
+    )
+    silver_temporal_envelope_enabled: bool = _env_bool(
+        "AETHER_SILVER_TEMPORAL_ENVELOPE_ENABLED", False
+    )
+    correlation_first_class_enabled: bool = _env_bool(
+        "AETHER_CORRELATION_FIRST_CLASS_ENABLED", False
+    )
+    silver_exact_money_enabled: bool = _env_bool(
+        "AETHER_SILVER_EXACT_MONEY_ENABLED", False
+    )
+
+
+# ---------------------------------------------------------------------------
+# Ingestion funnel observability + Kyber ingestion control plane (WS-E 1/2/3).
+# Default OFF: when ON, services/ingestion/ingestion_observability.py records
+# per-stage ingestion-funnel telemetry (RECEIVED → VALIDATED → BRONZE →
+# NORMALIZED → PROJECTIONS; blueprint §17 ladder) and per-observation traces
+# keyed by ``{tenant_id}:{event_id}`` for the Kyber Observation Inspector, and
+# the Kyber operator surfaces (GET /v1/kyber/ingest/observability/*) plus
+# GET /v1/health/pipeline serve live from that ledger. OFF = zero recording and
+# every surface reports the feature disabled (routes stay mounted; bodies are
+# flag-gated — the same adoption posture as the replay kill switch). The ledger
+# is in-process (it mirrors the existing in-process MetricsCollector
+# conventions), never changes event dispositions, and never rejects.
+@dataclass(frozen=True)
+class IngestionObservabilityConfig:
+    enabled: bool = _env_bool("AETHER_INGESTION_OBSERVABILITY_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
+# SDK version-compatibility tiers (Invariant #18, WS-E 6): the version-band
+# model (supported / deprecated / read-compatible / blocked-after-date) served
+# as the SDK capability manifest at GET /v1/config/sdk/versions. Default OFF:
+# when ON, /v1/batch ALSO consults each event's ``context.library.version`` and
+# attaches an advisory tier label (normalized["sdk_tier"]) — advisory only
+# unless MODE=enforce, which additionally REJECTS events whose SDK band is past
+# its blocked_after date (see services/ingestion/sdk_version_tiers.py). OFF keeps
+# every SDK client treated identically (today's behavior).
+@dataclass(frozen=True)
+class SdkVersionCompatibilityConfig:
+    enabled: bool = _env_bool("AETHER_SDK_VERSION_COMPAT_ENABLED", False)
+    # Enforcement switch for the ingress consultation once ENABLED is ON
+    # (mirrors the stack's shadow/observe conventions): "off"/"shadow"/"warn"
+    # attach the advisory sdk_tier label only (identical behavior, differing
+    # recorded mode); "enforce" additionally rejects blocked-after-date bands.
+    mode: str = _env("AETHER_SDK_VERSION_COMPAT_MODE", "off")
+
+
+# ---------------------------------------------------------------------------
 # Storage Plane (PR 7 / FT-7 + PR 8 / FT-8) — Elastic Data Plane descriptor +
 # object layer, object-backed Bronze compaction, and cross-store lifecycle.
 #
@@ -992,6 +1254,52 @@ class DataQualityConfig:
     kyber_intelligence_quality_enabled: bool = _env_bool("KYBER_INTELLIGENCE_QUALITY_ENABLED", False)
     watch_threshold: float = float(_env("AETHER_DATA_QUALITY_WATCH_THRESHOLD", "0.8"))
     critical_threshold: float = float(_env("AETHER_DATA_QUALITY_CRITICAL_THRESHOLD", "0.6"))
+
+
+# ---------------------------------------------------------------------------
+# Data Exchange Plane (governed tenant import/export layer)
+# ---------------------------------------------------------------------------
+# The plane is a policy/control layer that composes onto the existing
+# import/export engines and the shared ObjectStore — never a second ingestion
+# or storage path.  These flags gate *surface availability* only and default
+# OFF (declared-but-dark M0).  Rollout order is tracked in
+# docs/plans/DATA_EXCHANGE_PHASES.md: M1 object-store migration, M2 signed
+# transfers, M3 import control surface, M4 export control surface,
+# M5 reports.
+
+@dataclass(frozen=True)
+class DataExchangeConfig:
+    """Data Exchange Plane surface toggles (all OFF until the plane ships)."""
+    enabled: bool = _env_bool("DATA_EXCHANGE_ENABLED", False)
+    object_store_enabled: bool = _env_bool("DATA_EXCHANGE_OBJECT_STORE_ENABLED", False)
+    parquet_enabled: bool = _env_bool("DATA_EXCHANGE_PARQUET_ENABLED", False)
+    reports_enabled: bool = _env_bool("DATA_EXCHANGE_REPORTS_ENABLED", False)
+    signed_transfers_enabled: bool = _env_bool("DATA_EXCHANGE_SIGNED_TRANSFERS_ENABLED", False)
+
+
+# ---------------------------------------------------------------------------
+# Reconciled Control Plane (managed-integration desired/observed reconciliation)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ReconciledControlPlaneConfig:
+    """Reconciled Control Plane surface toggles (all OFF until the plane ships).
+
+    Phase 0 establishes the ManagedIntegration abstraction + reconcile *loop
+    machinery* only. ``enabled`` is the plane master switch; ``reconciler_enabled``
+    gates the reconciliation skeleton (exercised by tests only in Phase 0 — there
+    is no live scheduler yet); ``kyber_route_enabled`` gates the read-only
+    operator surface under ``/v1/admin/kyber/managed-integrations``;
+    ``scheduler_enabled`` gates the Phase-3 continuous reconcile scheduler
+    (a WorkerSpec, supervised, never auto-enabled by ``enabled`` alone).
+    No flag here ever enables a mutation of a managed integration's desired or
+    observed state outside the governed executor path.
+    """
+    enabled: bool = _env_bool("AETHER_RECONCILED_CONTROL_PLANE_ENABLED", False)
+    reconciler_enabled: bool = _env_bool("AETHER_RECONCILED_CONTROL_RECONCILER_ENABLED", False)
+    kyber_route_enabled: bool = _env_bool("AETHER_RECONCILED_CONTROL_KYBER_ROUTE_ENABLED", False)
+    scheduler_enabled: bool = _env_bool("AETHER_RECONCILED_CONTROL_SCHEDULER_ENABLED", False)
+    scheduler_interval_seconds: int = _env_int("AETHER_RECONCILED_CONTROL_SCHEDULER_INTERVAL_SECONDS", 300)
 
 
 # ---------------------------------------------------------------------------
@@ -1788,10 +2096,26 @@ class Settings:
     kyber_workforce: KyberWorkforceConfig = field(default_factory=KyberWorkforceConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     consent_authority: ConsentAuthorityConfig = field(default_factory=ConsentAuthorityConfig)
+    ingress_consent: IngressConsentConfig = field(default_factory=IngressConsentConfig)
     semantic: SemanticIntelligenceConfig = field(default_factory=SemanticIntelligenceConfig)
     integration_consent: IntegrationConsentConfig = field(default_factory=IntegrationConsentConfig)
     credential_platform: CredentialPlatformConfig = field(default_factory=CredentialPlatformConfig)
     ingestion_v2: IngestionV2Config = field(default_factory=IngestionV2Config)
+    observation_envelope: ObservationEnvelopeConfig = field(default_factory=ObservationEnvelopeConfig)
+    ingress_gateway: IngressGatewayConfig = field(default_factory=IngressGatewayConfig)
+    deprecated_ingest_aliases: DeprecatedIngestAliasesConfig = field(default_factory=DeprecatedIngestAliasesConfig)
+    ingest_replay: IngestReplayConfig = field(default_factory=IngestReplayConfig)
+    normalization_spine: NormalizationSpineConfig = field(default_factory=NormalizationSpineConfig)
+    subject_hints: SubjectHintsConfig = field(default_factory=SubjectHintsConfig)
+    backend_interpretation: BackendInterpretationConfig = field(
+        default_factory=BackendInterpretationConfig
+    )
+    ingestion_observability: IngestionObservabilityConfig = field(
+        default_factory=IngestionObservabilityConfig,
+    )
+    sdk_version_compat: SdkVersionCompatibilityConfig = field(
+        default_factory=SdkVersionCompatibilityConfig,
+    )
     storage_plane: StoragePlaneConfig = field(default_factory=StoragePlaneConfig)
     quicknode: QuickNodeConfig = field(default_factory=QuickNodeConfig)
     stablecoin_intelligence: StablecoinIntelligenceConfig = field(default_factory=StablecoinIntelligenceConfig)
@@ -1844,6 +2168,15 @@ class Settings:
 
     # Data Quality / Drift / Intelligence Quality
     data_quality: DataQualityConfig = field(default_factory=DataQualityConfig)
+
+    # Data Exchange Plane (governed tenant import/export layer; all OFF in M0)
+    data_exchange: DataExchangeConfig = field(default_factory=DataExchangeConfig)
+
+    # Reconciled Control Plane (managed-integration desired/observed reconcile;
+    # all OFF in Phase 0 — no live reconcile trigger or actuator)
+    reconciled_control: ReconciledControlPlaneConfig = field(
+        default_factory=ReconciledControlPlaneConfig
+    )
 
     # External billing / payment provider readiness (behind flags)
     external_billing: ExternalBillingConfig = field(default_factory=ExternalBillingConfig)

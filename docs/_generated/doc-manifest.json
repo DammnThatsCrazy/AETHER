@@ -3885,6 +3885,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/architecture/BACKEND_INTERPRETATION_WS_D.md",
+      "title": "Backend Interpretation (WS-D) Architecture",
+      "slug": "architecture/backend-interpretation-ws-d",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "experimental",
+      "estimated_read_minutes": 20,
+      "toc_depth": 4,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/architecture/CAMPAIGN_360_ARCHITECTURE.md",
       "title": "Campaign 360 Architecture",
       "slug": "architecture/campaign-360",
@@ -3911,6 +3927,19 @@
       ],
       "status": "stable",
       "since_version": "9.0.0"
+    },
+    {
+      "path": "docs/architecture/RECONCILED_CONTROL_PLANE.md",
+      "title": "Reconciled Control Plane — Architecture (§0–40 lane)",
+      "slug": "architecture/reconciled-control-plane",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0"
     },
     {
       "path": "docs/architecture/RELIABILITY-PHASE-2-PROGRAM.md",
@@ -5372,6 +5401,23 @@
       "status": "stable"
     },
     {
+      "path": "docs/operations/ENDUSER_LIFECYCLE_E2E.md",
+      "title": "End-User Lifecycle E2E Runbook",
+      "slug": "operations/enduser-lifecycle-e2e",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "ops",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 8,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/operations/UNIVERSAL_GRAPH_RUNBOOK.md",
       "title": "Universal Intelligence Graph Operations Runbook",
       "slug": "operations/universal-graph-runbook",
@@ -5417,9 +5463,56 @@
       "canonical_owner": "backend@aether"
     },
     {
+      "path": "docs/plans/DATA_EXCHANGE_PHASES.md",
+      "title": "Data Exchange Plane — Day-1 Implementation Program",
+      "slug": "plans/data-exchange-phases",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/plans/ENDUSER_LIFECYCLE_PHASES.md",
+      "title": "End-User Lifecycle & Integration Management — Implementation Program",
+      "slug": "plans/enduser-lifecycle-phases",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 15,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/plans/FINANCIAL_NORMALIZATION_PHASES.md",
       "title": "Financial Normalization — Phased Implementation Program",
       "slug": "plans/financial-normalization-phases",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/plans/RECONCILED_CONTROL_PHASES.md",
+      "title": "Reconciled Control Plane — Phases",
+      "slug": "plans/reconciled-control-phases",
       "section": "architecture",
       "visibility": "I",
       "audience": [
@@ -5490,6 +5583,20 @@
       "status": "experimental",
       "since_version": "8.12.0",
       "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/plans/data-exchange-api.md",
+      "title": "Data Exchange Plane — Frozen API Surface",
+      "slug": "plans/data-exchange-api",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "canonical_owner": "backend@aether"
     },
     {
       "path": "docs/privacy/traffic-intelligence-data-retention.md",
@@ -5908,6 +6015,21 @@
         "exec"
       ],
       "status": "stable",
+      "since_version": "8.12.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/productization/reconciled-control-plane/EXECUTION_STATE.md",
+      "title": "Execution State — Reconciled Control Plane (Phases 0–4)",
+      "slug": "productization/reconciled-control-plane/execution-state",
+      "section": "operations",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "ops",
+        "exec"
+      ],
+      "status": "experimental",
       "since_version": "8.12.0",
       "canonical_owner": "platform@aether"
     },
@@ -6976,6 +7098,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/source-of-truth/AETHER_END_USER_LIFECYCLE.md",
+      "title": "Aether End-User Lifecycle & Integration Management",
+      "slug": "architecture/aether-end-user-lifecycle",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ai"
+      ],
+      "status": "draft",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/source-of-truth/AETHER_MOBILE.md",
       "title": "Aether Mobile — App Architecture",
       "slug": "mobile/aether-app",
@@ -7084,6 +7222,7 @@
       ],
       "status": "draft",
       "estimated_read_minutes": 5,
+      "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
     {
@@ -7099,6 +7238,7 @@
       ],
       "status": "draft",
       "estimated_read_minutes": 6,
+      "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
     {
@@ -7430,6 +7570,24 @@
       "path": "docs/source-of-truth/IMPORTS.md",
       "title": "Tenant Import Engine Source of Truth",
       "status": "stable"
+    },
+    {
+      "path": "docs/source-of-truth/INGESTION_OPS.md",
+      "title": "Ingestion Operations — Control Plane + SDK Version-Compatibility Tiers",
+      "slug": "architecture/ingestion-ops",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "ops",
+        "exec"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 12,
+      "toc_depth": 3,
+      "canonical_owner": "backend@aether"
     },
     {
       "path": "docs/source-of-truth/INTEGRATION_CONSENT_REGISTRY.md",

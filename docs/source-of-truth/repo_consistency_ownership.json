@@ -78,6 +78,34 @@
       "remediation": "Update contract docs, SDK types, validation fixtures, generated docs, and tests."
     },
     {
+      "id": "event_field_trust_schema",
+      "name": "event field-trust/authority + semantic-level/trust-boundary metadata or its generator/gate changed",
+      "source_globs": [
+        "packages/shared/contracts/event-registry.json",
+        "packages/shared/events.ts",
+        "Backend Architecture/aether-backend/services/ingestion/generated_registry.py",
+        "scripts/generate_contracts.py",
+        "scripts/validate_field_trust_parity.py"
+      ],
+      "required_changed_globs": [
+        "docs/_generated/**",
+        "docs/source-of-truth/**",
+        "docs/REPO-INDEX.md",
+        "docs/AUTOMATION.md",
+        "packages/shared/**",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/generate_contracts.py --check",
+        "python scripts/validate_field_trust_parity.py",
+        "python scripts/validate_contracts.py",
+        "python scripts/docs_drift.py --strict",
+        "python -m pytest tests/unit/test_validate_field_trust_parity.py -q",
+        "python -m pytest tests/unit/test_semantic_boundary.py -q"
+      ],
+      "remediation": "Keep per-event fieldTrust metadata AND the semantic-level / sdkEmitable / sdkBoundary declarations in packages/shared/contracts/event-registry.json structurally valid (see generate_contracts.validate_field_trust + _validate_semantic_boundary), regenerate the TS/Python twins with python scripts/generate_contracts.py, and move/update the parity + boundary tests when the field-trust or semantic-boundary gate changes."
+    },
+    {
       "id": "consent_tenant_auth",
       "name": "consent/tenant/auth behavior changed",
       "source_globs": [
@@ -286,6 +314,61 @@
         "python -m pytest tests/ -v --tb=short"
       ],
       "remediation": "Keep the imports contract twin (packages/shared/imports.ts \u2194 services/imports/contracts.py) in sync, review the IMPORT_FAILURES runbook, and update import tests; regenerate docs."
+    },
+    {
+      "id": "data_exchange_plane",
+      "name": "data exchange plane changed",
+      "source_globs": [
+        "Backend Architecture/**/services/data_exchange/**",
+        "Backend Architecture/**/services/reports/**",
+        "Backend Architecture/**/repositories/data_artifacts.py",
+        "Backend Architecture/**/alembic/versions/*data_exchange*.py",
+        "packages/shared/data-exchange.ts",
+        "frontend/aether/src/features/data-exchange/**",
+        "frontend/aether/src/pages/settings/data-exchange-section.tsx"
+      ],
+      "required_changed_globs": [
+        "packages/shared/data-exchange.ts",
+        "docs/plans/DATA_EXCHANGE_PHASES.md",
+        "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",
+        "docs/_generated/**",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/validate_contracts.py",
+        "python scripts/docs_drift.py --strict",
+        "python -m pytest tests/contracts/test_data_exchange_parity.py -q"
+      ],
+      "remediation": "Keep the data exchange contract twin (packages/shared/data-exchange.ts \u2194 services/data_exchange/contracts.py) in sync, refresh the DATA_EXCHANGE_PHASES plan, and update the data exchange tests; regenerate docs."
+    },
+    {
+      "id": "reconciled_control_plane",
+      "name": "reconciled control plane changed",
+      "source_globs": [
+        "Backend Architecture/**/services/managed_integrations/**",
+        "Backend Architecture/**/alembic/versions/20260906_rcp_managed_integrations.py",
+        "packages/shared/managed-integrations.ts",
+        "Backend Architecture/**/services/security/contracts.py",
+        "Backend Architecture/**/services/security/access_control.py",
+        "packages/shared/security-governance.ts"
+      ],
+      "required_changed_globs": [
+        "packages/shared/managed-integrations.ts",
+        "packages/shared/security-governance.ts",
+        "Backend Architecture/**/services/managed_integrations/**",
+        "docs/architecture/RECONCILED_CONTROL_PLANE.md",
+        "docs/plans/RECONCILED_CONTROL_PHASES.md",
+        "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",
+        "docs/_generated/**",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/validate_contracts.py",
+        "python scripts/docs_drift.py --strict",
+        "python -m pytest tests/contracts/test_managed_integrations_parity.py -q",
+        "python -m pytest tests/unit/reconciled_control -q"
+      ],
+      "remediation": "Keep the reconciled-control contract twin (packages/shared/managed-integrations.ts \u2194 services/managed_integrations/contracts.py) and the reconciled_control governance domain in sync, refresh the RECONCILED_CONTROL_PHASES plan, and update the managed-integration tests; regenerate docs."
     },
     {
       "id": "measurement_integrity",
@@ -539,6 +622,105 @@
         "python -m pytest tests/unit/test_spine_registry_validation.py tests/unit/test_spine_envelope_parity.py -q"
       ],
       "remediation": "Align the canonical spine registry (ADR-011 Spine Composition Kernel) with its generated twins, runtime package, and the real routes/surfaces/services each spine row binds; a row must bind to machinery that exists (tetris inventory gate) \u2014 declare unresolved bindings pending in unresolvedRefs with a reason and resolving milestone; regenerate via python scripts/generate_platform_contracts.py; and update the spine tests."
+    },
+    {
+      "id": "observation_envelope",
+      "name": "observation envelope (Envelope B) model/registry/twin/adoption changed",
+      "source_globs": [
+        "packages/shared/contracts/observation-envelope-registry.json",
+        "packages/shared/observation-envelope.ts",
+        "Backend Architecture/aether-backend/shared/observation/**",
+        "Backend Architecture/aether-backend/services/ingestion/observation_envelope.py"
+      ],
+      "required_changed_globs": [
+        "docs/_generated/**",
+        "docs/source-of-truth/**",
+        "docs/REPO-INDEX.md",
+        "docs/AUTOMATION.md",
+        "packages/shared/observation-envelope.ts",
+        "Backend Architecture/aether-backend/shared/observation/**",
+        "tests/**",
+        "Backend Architecture/**/tests/**"
+      ],
+      "required_commands": [
+        "python scripts/docs_drift.py --strict",
+        "python -m pytest tests/contracts/test_observation_envelope_parity.py -q",
+        "python -m pytest tests/unit/observation -q"
+      ],
+      "remediation": "Keep the three Envelope-B surfaces in lock-step - packages/shared/contracts/observation-envelope-registry.json (canonical field registry), Backend Architecture/aether-backend/shared/observation/envelope.py (pydantic runtime model), and packages/shared/observation-envelope.ts (passive TS twin) - held by tests/contracts/test_observation_envelope_parity.py; extend tests/unit/observation/test_observation_envelope.py when the model or the SDK mapping (services/ingestion/observation_envelope.py) changes."
+    },
+  {
+      "id": "ingress_adapter_registry",
+      "name": "universal ingress adapter registry / gateway (WS-B1) changed",
+      "source_globs": [
+        "Backend Architecture/aether-backend/services/ingestion/adapters/**",
+        "Backend Architecture/aether-backend/services/ingestion/gateway.py",
+        "Backend Architecture/aether-backend/services/ingestion/observation_envelope.py",
+        "Backend Architecture/aether-backend/services/ingestion/batch.py"
+      ],
+      "required_changed_globs": [
+        "docs/source-of-truth/**",
+        "Backend Architecture/aether-backend/services/ingestion/adapters/**",
+        "Backend Architecture/aether-backend/services/ingestion/gateway.py",
+        "Backend Architecture/aether-backend/config/settings.py",
+        ".env.production.example",
+        "tests/**",
+        "Backend Architecture/**/tests/**"
+      ],
+      "required_commands": [
+        "python -m pytest tests/unit/observation -q"
+      ],
+      "remediation": "Keep the adapter registry (Backend Architecture/aether-backend/services/ingestion/adapters/registry.py) and the universal ingestion gateway (services/ingestion/gateway.py) consistent with the Envelope-B surfaces they consume (shared/observation/envelope.py source_type/credential_class vocabulary + packages/shared/contracts/observation-envelope-registry.json) and the Contract Spine they enforce (generated_registry CANONICAL_EVENT_TYPES/EVENT_FAMILY); register a new adapter class under the family it implements and extend tests/unit/observation/test_ingress_adapter_registry.py + test_ingress_gateway.py when the registry, an adapter, or the gateway changes."
+    },
+    {
+      "id": "ingestion_replay_spine_convergence",
+      "name": "ingestion replay + consumption normalization-spine convergence (WS-B4/B5) changed",
+      "source_globs": [
+        "Backend Architecture/aether-backend/services/ingestion/replay.py",
+        "Backend Architecture/aether-backend/services/ingestion/replay_routes.py",
+        "Backend Architecture/aether-backend/services/ingestion/spine.py",
+        "Backend Architecture/aether-backend/services/ingestion/workers.py",
+        "Backend Architecture/aether-backend/services/semantic_intelligence/consumer.py",
+        "Backend Architecture/aether-backend/services/resolution/consumer.py"
+      ],
+      "required_changed_globs": [
+        "docs/source-of-truth/**",
+        "docs/productization/sdk-universal-ingestion-alignment/**",
+        "Backend Architecture/aether-backend/config/settings.py",
+        ".env.example",
+        ".env.production.example",
+        "tests/**",
+        "Backend Architecture/**/tests/**"
+      ],
+      "required_commands": [
+        "python -m pytest tests/unit/observation -q"
+      ],
+      "remediation": "Keep the WS-B4 replay surface (services/ingestion/replay.py runner + services/ingestion/replay_routes.py Kyber-operator routes + services/ingestion/adapters/replay.py, which also co-moves the ingress_adapter_registry category) and the WS-B5 consumption normalization spine (services/ingestion/spine.py::to_observation_view) in lock-step with their flag blocks (config/settings.py IngestReplayConfig + NormalizationSpineConfig and the AETHER_INGESTION_REPLAY_ENABLED / AETHER_NORMALIZATION_SPINE_ENABLED env examples) and the consumers that read through the spine (services/ingestion/workers.py Bronze-writer consumer original-time/replay-skip logic, services/semantic_intelligence/consumer.py, services/resolution/consumer.py); a replay/spine surface change must co-move the settings/env flag block, extend tests/unit/observation (test_ingest_replay.py / test_replay_adapter.py / test_normalization_spine.py / test_replay_route_mount.py), and update the SOT + alignment docs."
+    },
+    {
+      "id": "mobile_native_regions",
+      "name": "native iOS/Android event-type + consent-purpose regions changed (generator emitter, parity gate, or the region files)",
+      "source_globs": [
+        "scripts/generate_contracts.py",
+        "scripts/validate_mobile_event_parity.py",
+        "packages/ios/Sources/AetherSDK/Aether.swift",
+        "packages/android/src/main/java/com/aether/sdk/Aether.kt"
+      ],
+      "required_changed_globs": [
+        "docs/_generated/**",
+        "docs/source-of-truth/**",
+        "docs/REPO-INDEX.md",
+        "docs/AUTOMATION.md",
+        "packages/shared/**",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/generate_contracts.py --check",
+        "python scripts/validate_mobile_event_parity.py",
+        "python -m pytest tests/unit/test_mobile_event_parity.py -q",
+        "python -m pytest tests/unit/test_native_event_codegen.py -q"
+      ],
+      "remediation": "The iOS AetherEventType enum, iOS eventConsentPurpose dict, and Android EVENT_CONSENT_PURPOSE map are marker-delimited regions inside the hand-authored Aether.swift/Aether.kt, generated from packages/shared/contracts/event-registry.json by scripts/generate_contracts.py (WS-A6). Hand-editing the regions is not supported - change the event registry or the generator emitters, rerun python scripts/generate_contracts.py, and keep validate_mobile_event_parity.py green (it checks region keys AND per-event primary-purpose values so the canonical gate still catches a single-event purpose re-gate even though repo-doctor does not run the generator --check). Move tests/unit/test_mobile_event_parity.py and tests/unit/test_native_event_codegen.py when the gate or emitters change."
     }
   ]
 }

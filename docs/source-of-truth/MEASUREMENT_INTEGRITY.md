@@ -53,7 +53,7 @@ a different result, never a silent overwrite.
 - `registry.py` — the in-code metric registry (`MetricDefinition`: name, version,
   unit, bounds, `min_sample`, `allows_probability`). `REGISTRY_VERSION` pins the
   contract a result is validated against. Surfaced at `GET /v1/measurement/definitions`.
-- The registry (20 metrics) now includes the economic-360 set absorbed for
+- The registry (27 metrics) now includes the economic-360 set absorbed for
   `economic360`: `campaign_spend`, `campaign_roas`, `campaign_cac`,
   `campaign_ltv`, plus `gross_value`, `net_value`, `costs`, `margin`, `ltv`,
   `refunds`, `exposure`. Every economic360 `metricRef` resolves against

@@ -52,9 +52,20 @@ class EventBridge:
         provider_record_id=event.event_id, payload=event.model_dump(),
         tenant_id=tenant_id)`` followed by an ``SDK_EVENTS_VALIDATED`` publish.
         Publish exceptions are caught and logged; they never fail ingestion.
+
+        WS-B3 (C class): when ``provider_runtime_consent_enforcement_enabled``,
+        each event is scrubbed (in place, before the durable dump) and gated by
+        the shared ingress decision — fingerprint/data-policy removal always,
+        and a per-subject (S) server-receipt check when the event type resolves
+        a purpose AND a subject is present AND the authoritative flag is on. A
+        denied event is rejected (no Bronze, no publish, metric + warning) while
+        the provider RAW record stays intact for replay; the delivery is never
+        silently failed wholesale.
         """
         count = 0
         for event in events:
+            if await self._consent_allows(tenant_id, event) is False:
+                continue
             await self.bronze.ingest(
                 source=event.provider,
                 source_tag=f"provider:{event.provider}:{tenant_id}",
@@ -77,6 +88,55 @@ class EventBridge:
                 )
             count += 1
         return count
+
+    async def _consent_allows(self, tenant_id: str, event: AetherEvent) -> bool:
+        """WS-B3 ingress consent gate for one canonical event (scrub + decide).
+
+        Returns True when the event may be ingested. Scrub redacts sensitive
+        values in ``data``/``context`` in place so the Bronze dump and the
+        publish both carry only scrubbed payloads. Scrubbing is the MANDATORY
+        minimization layer and runs UNCONDITIONALLY — it is never gated by the
+        per-path flag (redaction never rejects). The shared ingress decision
+        runs for every event: tenant data-policy removal of fingerprinting
+        always, and the per-subject (S) server-receipt rejection only when the
+        provider S-gate is enabled AND the event resolves a purpose + a subject
+        under the authoritative flag. Never raises.
+        """
+        from config.settings import settings
+        from services.ingestion.generated_registry import EVENT_CONSENT_PURPOSE
+        from services.ingestion.validation import (
+            evaluate_ingress_decision,
+            scrub_sensitive_fields,
+        )
+
+        event.data, _ = scrub_sensitive_fields(event.data or {})
+        event.context, _ = scrub_sensitive_fields(event.context or {})
+        subject = str(event.subject_id or "").strip() or None
+        purpose = EVENT_CONSENT_PURPOSE.get(event.event_type)
+        if not settings.ingress_consent.provider_runtime_consent_enforcement_enabled:
+            # S-class server-receipt escalation disabled for the provider-runtime
+            # path: fall back to the unconditional scrub + data-policy decision
+            # (no per-subject lookup or purpose gate; the event is processed
+            # under C/T minimization).
+            subject = purpose = None
+        allowed, reason_code, _decisions = await evaluate_ingress_decision(
+            tenant_id=tenant_id,
+            subject_id=subject,
+            anonymous_id=None,
+            purpose=purpose,
+            fingerprint_obj={"data": event.data, "context": event.context},
+        )
+        if not allowed:
+            logger.warning(
+                "provider_runtime_consent_denied event=%s tenant=%s type=%s reason=%s",
+                event.event_id, tenant_id, event.event_type, reason_code,
+            )
+            metrics.increment(
+                "provider_runtime_consent_blocked_total",
+                labels={"reason": reason_code or "unknown", "tenant_id": tenant_id},
+            )
+            return False
+        return True
 
 
 __all__ = ["EventBridge"]

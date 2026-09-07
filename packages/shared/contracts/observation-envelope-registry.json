@@ -1,0 +1,208 @@
+{
+  "schemaVersion": "1.0.0",
+  "description": "Canonical field registry for the UniversalObservationEnvelope (Envelope B), the server-side observation model that every ingress adapter builds and the universal ingestion gateway validates (SDK + Universal Ingestion Alignment blueprint Point 2 / Invariant #1). The tree below is the blueprint's §3 envelope structure made machine-readable: blocks with their fields, requiredness, and the committed vocabularies they reference. The Python runtime model (Backend Architecture/aether-backend/shared/observation/envelope.py) and the passive TypeScript contract type (packages/shared/observation-envelope.ts) are bound to this registry by scripts/tests/contracts/test_observation_envelope_parity.py so the three cannot drift.",
+  "envelope_required_fields": [
+    "observation.observation_id",
+    "observation.occurred_at",
+    "observation.received_at",
+    "observation.ingested_at",
+    "observation.schema_version",
+    "tenancy.tenant_id",
+    "source.source_type"
+  ],
+  "naming_resolutions": {
+    "note": "The blueprint uses inconsistent names across sections for the same concept. WS-A5 resolves every reference to the §3 Envelope-B block name and records the resolution here; WS-B adapters and the gateway consume these names.",
+    "source_native_id": "source-native record identifier (§3 block name). §9 source_native_record_id, §12 source_native_event_id and §5 extract_source_id() resolve to this.",
+    "subjects[]": "§3 fields identifier_type/identifier_value/actor_role/trust_class. §6 SubjectHint (identifier_type/value/namespace/role/verification_hint?/source) is a superset; the optional namespace/verification_hint/source are accepted on SubjectRef.",
+    "signature_status": "signature disposition (§3). §9 signature_state resolves to this.",
+    "adapter": "adapter identity (§3). §9 adapter_id resolves to this; adapter_version is separate.",
+    "occurred_at": "canonical occurrence time lives under observation; temporal.source_time is the raw source-clock claim the adapter saw.",
+    "subject.trust_class": "uses the field-authority trust-class vocabulary (event-registry trustClasses, OBSERVED..OPERATOR_ASSERTED); provenance.source_trust and source-trust classification use the §11 ingress credential classes."
+  },
+  "blocks": [
+    {
+      "name": "observation",
+      "kind": "object",
+      "required": true,
+      "description": "Envelope identity + occurrence/receipt/ingest times + schema version. Created by the adapter from source claims and server receipt stamps.",
+      "fields": [
+        { "name": "observation_id", "type": "string", "required": true },
+        { "name": "observation_type", "type": "string", "required": true },
+        { "name": "family", "type": "string", "required": false },
+        { "name": "occurred_at", "type": "iso8601", "required": true },
+        { "name": "received_at", "type": "iso8601", "required": true },
+        { "name": "ingested_at", "type": "iso8601", "required": true },
+        { "name": "schema_version", "type": "string", "required": true }
+      ]
+    },
+    {
+      "name": "tenancy",
+      "kind": "object",
+      "required": true,
+      "description": "Tenant provenance (Invariant #6). Every observation carries tenant identity.",
+      "fields": [
+        { "name": "tenant_id", "type": "string", "required": true },
+        { "name": "deployment_id", "type": "string", "required": false },
+        { "name": "environment", "type": "string", "required": false }
+      ]
+    },
+    {
+      "name": "source",
+      "kind": "object",
+      "required": true,
+      "description": "Ingress source provenance (Invariant #7): which adapter/path/provider observed this.",
+      "fields": [
+        { "name": "source_type", "type": "source_type", "required": true },
+        { "name": "source_provider", "type": "string", "required": false },
+        { "name": "source_instance", "type": "string", "required": false },
+        { "name": "source_native_id", "type": "string", "required": false },
+        { "name": "ingress_path", "type": "string", "required": false }
+      ]
+    },
+    {
+      "name": "subjects",
+      "kind": "array",
+      "required": false,
+      "description": "Entities the observation is about (anonymous_id/user_id/account_id/...). Each subject is an identifier + actor role + field-authority trust class.",
+      "fields": [
+        { "name": "identifier_type", "type": "identifier_type", "required": true },
+        { "name": "identifier_value", "type": "string", "required": true },
+        { "name": "actor_role", "type": "string", "required": false },
+        { "name": "trust_class", "type": "trust_class", "required": true },
+        { "name": "namespace", "type": "string", "required": false },
+        { "name": "verification_hint", "type": "string", "required": false },
+        { "name": "source", "type": "string", "required": false }
+      ]
+    },
+    {
+      "name": "temporal",
+      "kind": "object",
+      "required": false,
+      "description": "Source-clock evidence (Invariant #11). Raw source time/timezone/clock claims; never discarded during normalization.",
+      "fields": [
+        { "name": "source_time", "type": "iso8601", "required": false },
+        { "name": "timezone", "type": "string", "required": false },
+        { "name": "utc_offset", "type": "string", "required": false },
+        { "name": "clock_source", "type": "string", "required": false },
+        { "name": "sequence", "type": "string", "required": false },
+        { "name": "temporal_quality", "type": "string", "required": false }
+      ]
+    },
+    {
+      "name": "correlation",
+      "kind": "object",
+      "required": false,
+      "description": "Correlation context (Invariant #12). Canonical correlation is additive — source-native correlation values are never overwritten during normalization.",
+      "fields": [
+        { "name": "correlation_id", "type": "string", "required": false },
+        { "name": "causation_id", "type": "string", "required": false },
+        { "name": "trace_id", "type": "string", "required": false },
+        { "name": "span_id", "type": "string", "required": false },
+        { "name": "parent_observation_id", "type": "string", "required": false }
+      ]
+    },
+    {
+      "name": "privacy",
+      "kind": "object",
+      "required": false,
+      "description": "Consent + privacy policy evidence (Invariant #9). Consent snapshot / applicable purposes / GPC / DNT / policy decisions. Stamped by the gateway; never trusted from the source.",
+      "fields": [
+        { "name": "consent_snapshot", "type": "string", "required": false },
+        { "name": "purposes", "type": "array[string]", "required": false },
+        { "name": "GPC", "type": "boolean", "required": false },
+        { "name": "DNT", "type": "boolean", "required": false },
+        { "name": "policy_decisions", "type": "array[string]", "required": false }
+      ]
+    },
+    {
+      "name": "provenance",
+      "kind": "object",
+      "required": false,
+      "description": "Ingress trust evidence: credential class, signature disposition, and the adapter that built this envelope.",
+      "fields": [
+        { "name": "credential_class", "type": "credential_class", "required": false },
+        { "name": "signature_status", "type": "string", "required": false },
+        { "name": "adapter", "type": "string", "required": false },
+        { "name": "adapter_version", "type": "string", "required": false },
+        { "name": "source_trust", "type": "string", "required": false }
+      ]
+    },
+    {
+      "name": "quality",
+      "kind": "object",
+      "required": false,
+      "description": "Validation/quality state assigned by the gateway (Invariant #10): raw vs normalized distinguishable, degraded dispositions never collapsed.",
+      "fields": [
+        { "name": "completeness", "type": "string", "required": false },
+        { "name": "freshness", "type": "string", "required": false },
+        { "name": "sequencing_state", "type": "string", "required": false },
+        { "name": "validation_state", "type": "string", "required": false }
+      ]
+    },
+    {
+      "name": "lineage",
+      "kind": "object",
+      "required": false,
+      "description": "Evidence lineage back to the raw record (Invariant #14 / blueprint §9): raw_record_ref points at the durable Bronze raw store.",
+      "fields": [
+        { "name": "raw_record_ref", "type": "string", "required": false },
+        { "name": "normalization_version", "type": "string", "required": false },
+        { "name": "validation_version", "type": "string", "required": false }
+      ]
+    }
+  ],
+  "passthrough_blocks": {
+    "note": "Blueprint §3 lists acquisition/application/surface/device/network/payload as Envelope-B blocks but gives them no sub-tree; the committed A-side (EventContext / AcquisitionEvidence in packages/shared/events.ts) already carries that vocabulary. WS-A5 does not re-declare their fields (that would invent shape). The runtime model accepts each as an opaque passthrough of the adapter-supplied A-side-shaped sub-envelope; WS-B adapters map them and WS-A6/WSA7 may re-declare them on the spine.",
+    "blocks": [
+      { "name": "acquisition", "type": "object", "required": false },
+      { "name": "application", "type": "object", "required": false },
+      { "name": "surface", "type": "object", "required": false },
+      { "name": "device", "type": "object", "required": false },
+      { "name": "network", "type": "object", "required": false },
+      { "name": "payload", "type": "object", "required": false }
+    ]
+  },
+  "vocabularies": {
+    "source_types": [
+      "sdk",
+      "webhook",
+      "connector",
+      "feed",
+      "import",
+      "harness",
+      "replay"
+    ],
+    "identifier_types": [
+      "anonymous_id",
+      "user_id",
+      "account_id",
+      "email_hash",
+      "phone_hash",
+      "wallet_address",
+      "device_id",
+      "session_id",
+      "organization_user_id",
+      "agent_id",
+      "service_account_id",
+      "external_customer_id",
+      "provider_account_id"
+    ],
+    "credential_classes": [
+      "PUBLIC_CLIENT",
+      "TRUSTED_CLIENT",
+      "TENANT_SERVER",
+      "VERIFIED_WEBHOOK",
+      "MANAGED_CONNECTOR",
+      "AETHER_INTERNAL",
+      "OPERATOR_REPLAY"
+    ],
+    "trust_classes": {
+      "note": "Field-authority trust classes are owned by event-registry.json (trustClasses, OBSERVED..OPERATOR_ASSERTED). The envelope model validates subject.trust_class against that 10-class rank; the parity test asserts the model's local frozenset equals generated_registry.TRUST_CLASS_ORDER so the vocabulary never drifts.",
+      "source": "packages/shared/contracts/event-registry.json#trustClasses"
+    },
+    "purpose_ref": {
+      "note": "privacy.purposes reference the consent-registry purpose ids.",
+      "source": "packages/shared/contracts/consent-registry.json"
+    }
+  }
+}

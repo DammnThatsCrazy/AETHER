@@ -18,6 +18,11 @@ Generated outputs:
   docs/_generated/metric-registry-table.md
   packages/web/src/core/generated-consent-map.ts
 
+EventType consumers (guarded, NOT spliced — WS-C row 4 / Invariant #16):
+  packages/web/src/types.ts             re-exports the generated EventType from
+                                        '@aether/shared/events' (a local hand-
+                                        mirror union is a generator failure)
+
 Usage:
   python scripts/generate_contracts.py           # write all outputs in-place
   python scripts/generate_contracts.py --check   # exit 1 if any output differs (CI gate)
@@ -32,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import textwrap
 from pathlib import Path
@@ -58,6 +64,7 @@ METRIC_TABLE_MD = ROOT / "docs" / "_generated" / "metric-registry-table.md"
 WEB_CONSENT_MAP_TS = (
     ROOT / "packages" / "web" / "src" / "core" / "generated-consent-map.ts"
 )
+WEB_TYPES_TS = ROOT / "packages" / "web" / "src" / "types.ts"
 INTEGRATION_CONSENT_TS = ROOT / "packages" / "shared" / "integration-consent.ts"
 INTEGRATION_CONSENT_PY = (
     ROOT / "Backend Architecture" / "aether-backend" / "shared" / "privacy" / "generated_integration_consent.py"
@@ -75,14 +82,65 @@ TRAFFIC_SOURCE_PY = (
 )
 TRAFFIC_SOURCE_TABLE_MD = ROOT / "docs" / "_generated" / "traffic-source-registry-table.md"
 
+# Native SDK sources whose event-type + consent-purpose regions are generated
+# here (WS-A6). The files themselves are hand-authored; only the marker-delimited
+# region bodies below are owned by this generator.
+IOS_AETHER_SWIFT = ROOT / "packages" / "ios" / "Sources" / "AetherSDK" / "Aether.swift"
+ANDROID_AETHER_KT = (
+    ROOT / "packages" / "android" / "src" / "main" / "java" / "com" / "aether" / "sdk" / "Aether.kt"
+)
+
 # Markers used in events.ts to delimit the generated section
 GENERATED_START = "// @generated-start"
 GENERATED_END = "// @generated-end"
+
+# Markers delimiting the iOS/Android event-type + consent-purpose regions this
+# generator owns (WS-A6). Distinct per region so a splice target is unambiguous
+# even with several generated regions inside one hand-authored source file.
+IOS_EVENT_ENUM_START = "// @generated-start aether-event-types/ios-enum"
+IOS_EVENT_ENUM_END = "// @generated-end aether-event-types/ios-enum"
+IOS_CONSENT_MAP_START = "// @generated-start aether-consent-purposes/ios-map"
+IOS_CONSENT_MAP_END = "// @generated-end aether-consent-purposes/ios-map"
+ANDROID_CONSENT_MAP_START = "// @generated-start aether-consent-purposes/android-map"
+ANDROID_CONSENT_MAP_END = "// @generated-end aether-consent-purposes/android-map"
 
 GENERATED_PY_HEADER = """\
 # DO NOT EDIT — generated from packages/shared/contracts/event-registry.json
 # Run: python scripts/generate_contracts.py
 """
+
+# Canonical field-trust taxonomy rank (low -> high authority). Order is
+# load-bearing: consumers index into it (e.g. sourceEmit:false fields must rank
+# at or above SERVER_STAMPED). The SDK-assertable boundary is a class SET, not a
+# linear cut — see the event-registry field_trust note (WS-A3 enforces it).
+FIELD_TRUST_CLASSES = [
+    "OBSERVED",
+    "SOURCE_ASSERTED",
+    "SOURCE_REFERENCE",
+    "CLIENT_HINT",
+    "SERVER_STAMPED",
+    "RESOLVED",
+    "DERIVED",
+    "INFERRED",
+    "PREDICTED",
+    "OPERATOR_ASSERTED",
+]
+
+# Key emission order for a FieldTrustSpec (registry + twins stay deterministic).
+FIELD_TRUST_SPEC_KEYS = [
+    "trustClass",
+    "sourceEmit",
+    "minimumTrust",
+    "level",
+    "privacyClass",
+    "retentionClass",
+    "introducedVersion",
+]
+
+# Canonical semantic levels (WS-A3): A primitive observation, B typed source
+# observation, C derived Aether state. Order A<B<C mirrors increasing semantic
+# distance from the raw observation; C is never a public-SDK emit level.
+SEMANTIC_LEVELS = ("A", "B", "C")
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +206,233 @@ def validate(event_reg: dict, consent_reg: dict) -> None:
             if field not in p:
                 print(f"ERROR: consent purpose {p.get('key')!r} missing field {field!r}", file=sys.stderr)
                 sys.exit(1)
+
+
+def _validate_semantic_boundary(event_reg: dict) -> None:
+    """Validate the WS-A3 semantic-level + SDK-boundary declarations.
+
+    Self-gating: no-op when ``semanticLevelSchemaVersion`` /
+    ``sdkBoundarySchemaVersion`` are absent (pre-2.2 registries). Rules:
+    - every event carries semanticLevel A/B/C and a boolean sdkEmitable;
+    - the public-SDK trust boundary is a class SET, and it contains no
+      SERVER_STAMPED-or-above class (backend-only fields are gated);
+    - Level C (derived Aether state) is never a public-SDK emit level;
+    - sdkEmitable:true events must be a public-SDK emit level (A/B) and may
+      only declare field-trust classes inside the public-SDK assertable set;
+    - sdkBoundary.aetherInternal.assertableTrustClasses == full trustClasses.
+    """
+    events = event_reg["events"]
+    if (
+        "semanticLevelSchemaVersion" not in event_reg
+        or "sdkBoundarySchemaVersion" not in event_reg
+    ):
+        return
+    boundary = event_reg.get("sdkBoundary")
+    if not isinstance(boundary, dict) or not (
+        isinstance(boundary.get("publicSdk"), dict)
+        and isinstance(boundary.get("aetherInternal"), dict)
+    ):
+        print(
+            "ERROR: sdkBoundary requires publicSdk and aetherInternal entries",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    classes = event_reg.get("trustClasses")
+    if not classes:
+        print("ERROR: trustClasses required for semantic-boundary validation", file=sys.stderr)
+        sys.exit(1)
+    server_rank = classes.index("SERVER_STAMPED")
+    pub = boundary["publicSdk"]
+    for key in ("assertableTrustClasses", "emittableSemanticLevels"):
+        if key not in pub:
+            print(f"ERROR: sdkBoundary.publicSdk missing {key!r}", file=sys.stderr)
+            sys.exit(1)
+    sdk_classes = pub["assertableTrustClasses"]
+    if not sdk_classes or any(c not in classes for c in sdk_classes):
+        print(
+            "ERROR: sdkBoundary.publicSdk.assertableTrustClasses must be a non-empty "
+            "list of known trust classes",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    for c in sdk_classes:
+        if classes.index(c) >= server_rank:
+            print(
+                f"ERROR: sdkBoundary.publicSdk.assertableTrustClasses includes {c}, "
+                "which is SERVER_STAMPED-or-above (backend-only — gated)",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    emit_levels = pub["emittableSemanticLevels"]
+    if not emit_levels or any(l not in SEMANTIC_LEVELS for l in emit_levels):
+        print(
+            "ERROR: sdkBoundary.publicSdk.emittableSemanticLevels must be a non-empty "
+            "subset of A/B/C",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if "C" in emit_levels:
+        print(
+            "ERROR: Level C (derived Aether state) is never a public-SDK emit level",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    internal = boundary["aetherInternal"]
+    if internal.get("assertableTrustClasses") != list(classes):
+        print(
+            "ERROR: sdkBoundary.aetherInternal.assertableTrustClasses must equal the "
+            "full trustClasses rank",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    sdk_class_set = set(sdk_classes)
+    for e in events:
+        lv = e.get("semanticLevel")
+        if lv not in SEMANTIC_LEVELS:
+            print(
+                f"ERROR: event {e['type']!r} missing/unknown semanticLevel {lv!r} (A/B/C)",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        se = e.get("sdkEmitable")
+        if not isinstance(se, bool):
+            print(
+                f"ERROR: event {e['type']!r} missing/unknown sdkEmitable {se!r} (bool)",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if se and lv not in emit_levels:
+            print(
+                f"ERROR: event {e['type']!r} sdkEmitable true but semanticLevel "
+                f"{lv} is not a public-SDK emit level",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if not se:
+            continue
+        ft = e.get("fieldTrust", {}).get("fields")
+        if not ft:
+            continue
+        for path, spec in ft.items():
+            tc = spec.get("trustClass")
+            if tc is not None and tc not in sdk_class_set:
+                print(
+                    f"ERROR: event {e['type']!r} sdkEmitable field {path!r} trustClass "
+                    f"{tc} exceeds the public-SDK assertable set",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
+
+def validate_field_trust(event_reg: dict) -> None:
+    """Validate the WS-A2 field-trust taxonomy + WS-A3 semantic boundary.
+
+    Descriptive in A2 (enforced at the SDK/ingress boundary in A3). Rules:
+    - fieldTrustSchemaVersion is present iff >=1 event declares fieldTrust.fields
+      (fieldTrustDefaults likewise must not appear without field content).
+      trustClasses alone is permitted: the WS-A3 boundary machinery requires the
+      shared rank vocabulary even for a registry whose events carry no per-field
+      specs, so a lone trustClasses is not block advertisement.
+    - trustClasses equals the canonical rank whenever any event declares
+      fieldTrust.fields; every spec's trustClass / minimumTrust is one of them;
+      trustClass is required per spec.
+    - A field spec's level, when present, is A/B/C; sourceEmit is a bool.
+    - sourceEmit:false requires the field's trustClass rank >= SERVER_STAMPED.
+    - WS-A3 semantic-level + SDK-boundary rules (see _validate_semantic_boundary).
+    """
+    _validate_semantic_boundary(event_reg)
+
+    events = event_reg["events"]
+    ftsv = event_reg.get("fieldTrustSchemaVersion")
+    classes = event_reg.get("trustClasses")
+    defaults = event_reg.get("fieldTrustDefaults")
+    any_fields = any(bool(e.get("fieldTrust", {}).get("fields")) for e in events)
+
+    if not any_fields:
+        # The per-field block is advertised only by fieldTrustSchemaVersion /
+        # fieldTrustDefaults. trustClasses is shared rank vocabulary that the
+        # WS-A3 boundary machinery requires even when no event declares per-field
+        # specs (_validate_semantic_boundary derives server_rank from it and pins
+        # aetherInternal.assertableTrustClasses to it), so a lone trustClasses is
+        # not an orphan block — a boundary-only 2.2.0 registry is valid.
+        if ftsv is not None or defaults is not None:
+            print(
+                "ERROR: fieldTrustSchemaVersion/fieldTrustDefaults present but no "
+                "event declares fieldTrust.fields — add content or remove the block",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        return
+
+    if ftsv is None or classes is None or defaults is None:
+        print(
+            "ERROR: fieldTrustSchemaVersion/trustClasses/fieldTrustDefaults are required "
+            "when any event declares fieldTrust.fields",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if classes != FIELD_TRUST_CLASSES:
+        print(
+            f"ERROR: trustClasses must equal the canonical rank {FIELD_TRUST_CLASSES}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    class_set = set(classes)
+    server_rank = classes.index("SERVER_STAMPED")
+    for key in ("trustClass", "sourceEmit", "minimumTrust", "level"):
+        if key not in defaults:
+            print(f"ERROR: fieldTrustDefaults missing {key!r}", file=sys.stderr)
+            sys.exit(1)
+    if defaults["trustClass"] not in class_set:
+        print(f"ERROR: fieldTrustDefaults.trustClass {defaults['trustClass']!r} not in trustClasses", file=sys.stderr)
+        sys.exit(1)
+
+    for e in events:
+        ft = e.get("fieldTrust")
+        if not ft:
+            continue
+        fields = ft.get("fields")
+        if not isinstance(fields, dict) or not fields:
+            print(
+                f"ERROR: event {e['type']!r} fieldTrust.fields must be a non-empty object",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        for path, spec in fields.items():
+            if not isinstance(spec, dict):
+                print(f"ERROR: event {e['type']!r} field {path!r} spec must be an object", file=sys.stderr)
+                sys.exit(1)
+            tc = spec.get("trustClass")
+            if tc is None or tc not in class_set:
+                print(
+                    f"ERROR: event {e['type']!r} field {path!r} spec missing or unknown "
+                    f"trustClass {tc!r}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            mt = spec.get("minimumTrust")
+            if mt is not None and mt not in class_set:
+                print(
+                    f"ERROR: event {e['type']!r} field {path!r} minimumTrust {mt!r} not in trustClasses",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            level = spec.get("level")
+            if level is not None and level not in ("A", "B", "C"):
+                print(f"ERROR: event {e['type']!r} field {path!r} level {level!r} not A/B/C", file=sys.stderr)
+                sys.exit(1)
+            se = spec.get("sourceEmit")
+            if se is not None and not isinstance(se, bool):
+                print(f"ERROR: event {e['type']!r} field {path!r} sourceEmit must be a bool", file=sys.stderr)
+                sys.exit(1)
+            if se is False:
+                if classes.index(tc) < server_rank:
+                    print(
+                        f"ERROR: event {e['type']!r} field {path!r} sourceEmit:false but "
+                        f"trustClass {tc} ranks below SERVER_STAMPED",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
 
 
 def validate_integration_consent(integration_reg: dict, consent_reg: dict) -> None:
@@ -265,6 +550,34 @@ def validate_integration_consent(integration_reg: dict, consent_reg: dict) -> No
 
 def _ts_literal(value) -> str:
     return json.dumps(value, indent=2)
+
+
+def validate_web_eventtype_reimport() -> None:
+    """WS-C row 4 / Invariant #16: web must re-export the generated EventType.
+
+    packages/web/src/types.ts used to carry a hand-written EventType union that
+    silently fell behind the registry (it was missing navigation_intent and later
+    registry events). The canonical EventType is generated into
+    packages/shared/events.ts (this script); web now imports + re-exports it
+    (``import type { EventType } from '@aether/shared/events'; export type {
+    EventType };``). Guard against re-introducing a hand-mirror union: a local
+    ``export type EventType =`` declaration, or losing the re-export entirely,
+    fails the generator (write and --check modes) so the drift cannot recur.
+    """
+    if not WEB_TYPES_TS.is_file():
+        return
+    text = WEB_TYPES_TS.read_text(encoding="utf-8")
+    if re.search(r"\bexport type EventType\s*=", text):
+        raise ValueError(
+            f"{WEB_TYPES_TS} declares a local `export type EventType =` union — "
+            "remove it and re-export the generated EventType from "
+            "'@aether/shared/events' (Invariant #16)"
+        )
+    if "export type { EventType }" not in text or "'@aether/shared/events'" not in text:
+        raise ValueError(
+            f"{WEB_TYPES_TS} does not re-export the generated EventType from "
+            "'@aether/shared/events' (Invariant #16)"
+        )
 
 
 def validate_traffic_source(traffic_reg: dict) -> None:
@@ -715,6 +1028,207 @@ def _event_consent_map(events: list[dict]) -> str:
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Field-trust (WS-A2) emission: per-field trust/authority metadata maps
+# ---------------------------------------------------------------------------
+
+def _spec_literal(spec: dict, quote: str = '"', ts: bool = False) -> str:
+    """Render a FieldTrustSpec dict with deterministic key order.
+
+    `ts=True` emits TS literals (single-quoted strings, `true`/`false`);
+    otherwise emits a JSON-compatible / Python-compatible literal (double
+    quotes, `True`/`False`).
+    """
+    parts: list[str] = []
+    for k in FIELD_TRUST_SPEC_KEYS:
+        if k not in spec:
+            continue
+        v = spec[k]
+        if isinstance(v, bool):
+            lit = ("true" if v else "false") if ts else ("True" if v else "False")
+        elif isinstance(v, int):
+            lit = str(v)
+        else:
+            lit = json.dumps(v) if not ts else f"'{v}'"
+        if ts:
+            parts.append(f"{k}: {lit}")
+        else:
+            parts.append(f"{json.dumps(k)}: {lit}")
+    return "{ " + ", ".join(parts) + " }"
+
+
+def _field_trust_event_blocks(events: list[dict], ts: bool) -> list[str]:
+    """Per-event field-trust declaration rows (only events that carry content)."""
+    rows: list[str] = []
+    for e in events:
+        fields = e.get("fieldTrust", {}).get("fields")
+        if not fields:
+            continue
+        if ts:
+            inner = ", ".join(
+                f"{json.dumps(path)}: {_spec_literal(spec, ts=True)}"
+                for path, spec in fields.items()
+            )
+            rows.append(f"  {e['type']}: {{ {inner} }},")
+        else:
+            inner_lines = [
+                f"        {json.dumps(path)}: {_spec_literal(spec)},"
+                for path, spec in fields.items()
+            ]
+            rows.append(
+                "    %s: {\n%s\n    },"
+                % (json.dumps(e["type"]), "\n".join(inner_lines))
+            )
+    return rows
+
+
+def _field_trust_ts_block(event_reg: dict) -> str:
+    """events.ts generated-section block (empty when the taxonomy is off)."""
+    if "fieldTrustSchemaVersion" not in event_reg:
+        return ""
+    class_lines = "\n".join(f"  '{c}'," for c in event_reg["trustClasses"])
+    rows = _field_trust_event_blocks(event_reg["events"], ts=True)
+    body = "\n".join(rows)
+    return (
+        "\n"
+        "/** Canonical field-trust taxonomy rank (low -> high authority). */\n"
+        "export const TRUST_CLASS_ORDER = [\n"
+        f"{class_lines}\n"
+        "] as const;\n"
+        "\n"
+        "/** A Contract Spine field-trust class. */\n"
+        "export type TrustClass = typeof TRUST_CLASS_ORDER[number];\n"
+        "\n"
+        "/** Per-field trust declaration on an Envelope-A (BaseEvent) dotted path. */\n"
+        "export interface FieldTrustSpec {\n"
+        "  trustClass: TrustClass;\n"
+        "  sourceEmit?: boolean;\n"
+        "  minimumTrust?: TrustClass;\n"
+        "  level?: 'A' | 'B' | 'C';\n"
+        "  privacyClass?: string;\n"
+        "  retentionClass?: string;\n"
+        "  introducedVersion?: string;\n"
+        "}\n"
+        "\n"
+        "/**\n"
+        " * Per-event field-trust declarations. Dotted paths are into the Envelope-A\n"
+        " * (BaseEvent) payload; unlisted fields default per fieldTrustDefaults.\n"
+        " */\n"
+        "export const EVENT_FIELD_TRUST: Partial<Record<EventType, Record<string, FieldTrustSpec>>> = {\n"
+        f"{body}\n"
+        "};\n"
+    )
+
+
+def _field_trust_py_block(event_reg: dict) -> str:
+    """generated_registry.py tail block (empty when the taxonomy is off)."""
+    if "fieldTrustSchemaVersion" not in event_reg:
+        return ""
+    class_lines = ",\n".join(f"    {json.dumps(c)}" for c in event_reg["trustClasses"])
+    rows = _field_trust_event_blocks(event_reg["events"], ts=False)
+    body = "\n".join(rows)
+    return (
+        "\n"
+        "# Field-trust taxonomy rank order (low -> high authority), from event-registry.json.\n"
+        "TRUST_CLASS_ORDER: tuple[str, ...] = (\n"
+        f"{class_lines},\n"
+        ")\n"
+        "\n"
+        "# Per-event field-trust declarations (dotted Envelope-A payload paths).\n"
+        "# Unlisted fields default per fieldTrustDefaults (OBSERVED / sourceEmit:true / level A).\n"
+        "EVENT_FIELD_TRUST: dict[str, dict[str, dict[str, object]]] = {\n"
+        f"{body}\n"
+        "}\n"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Semantic-level + SDK boundary (WS-A3) emission: per-event level + boundary
+# ---------------------------------------------------------------------------
+
+def _semantic_boundary_ts_block(event_reg: dict) -> str:
+    """events.ts generated-section block (empty when the A3 keys are off)."""
+    if "semanticLevelSchemaVersion" not in event_reg:
+        return ""
+    events = event_reg["events"]
+    level_lines = "\n".join(f"  {e['type']}: '{e['semanticLevel']}'," for e in events)
+    sdk_types = [e["type"] for e in events if e.get("sdkEmitable")]
+    sdk_type_lines = "\n".join(f"  '{t}'," for t in sdk_types)
+    boundary = event_reg["sdkBoundary"]["publicSdk"]
+    sdk_class_lines = "\n".join(f"  '{c}'," for c in boundary["assertableTrustClasses"])
+    emit_level_lines = "\n".join(f"  '{l}'," for l in boundary["emittableSemanticLevels"])
+    return (
+        "\n"
+        "/** Semantic level A/B/C (primitive observation / typed source observation / derived Aether state). */\n"
+        "export const SEMANTIC_LEVEL_ORDER = [\n"
+        "  'A',\n"
+        "  'B',\n"
+        "  'C',\n"
+        "] as const;\n"
+        "\n"
+        "/** A Contract Spine semantic level. */\n"
+        "export type SemanticLevel = typeof SEMANTIC_LEVEL_ORDER[number];\n"
+        "\n"
+        "/** Per-event semantic level (WS-A3). */\n"
+        "export const EVENT_SEMANTIC_LEVEL: Record<EventType, SemanticLevel> = {\n"
+        f"{level_lines}\n"
+        "};\n"
+        "\n"
+        "/** Trust classes a public SDK key may originate (WS-A3 boundary = a class SET, not a rank cut). */\n"
+        "export const SDK_ASSERTABLE_TRUST_CLASSES: readonly TrustClass[] = [\n"
+        f"{sdk_class_lines}\n"
+        "];\n"
+        "\n"
+        "/** Semantic levels a public SDK key may emit. */\n"
+        "export const SDK_EMITTABLE_SEMANTIC_LEVELS: readonly SemanticLevel[] = [\n"
+        f"{emit_level_lines}\n"
+        "];\n"
+        "\n"
+        "/** Event types a public SDK key may emit (per-event sdkEmitable, WS-A3). */\n"
+        "export const SDK_EMITTABLE_EVENT_TYPES: readonly EventType[] = [\n"
+        f"{sdk_type_lines}\n"
+        "];\n"
+    )
+
+
+def _semantic_boundary_py_block(event_reg: dict) -> str:
+    """generated_registry.py tail block (empty when the A3 keys are off)."""
+    if "semanticLevelSchemaVersion" not in event_reg:
+        return ""
+    events = event_reg["events"]
+    level_lines = "\n".join(
+        f'    "{e["type"]}": "{e["semanticLevel"]}",' for e in events
+    )
+    sdk_types = [e["type"] for e in events if e.get("sdkEmitable")]
+    sdk_type_lines = ",\n".join(f'    "{t}"' for t in sdk_types)
+    boundary = event_reg["sdkBoundary"]["publicSdk"]
+    sdk_class_lines = ",\n".join(f'    "{c}"' for c in boundary["assertableTrustClasses"])
+    emit_levels = boundary["emittableSemanticLevels"]
+    emit_level_lit = ", ".join(f'"{l}"' for l in emit_levels)
+    return (
+        "\n"
+        "# Semantic level + SDK boundary (WS-A3).\n"
+        'SEMANTIC_LEVEL_ORDER: tuple[str, ...] = ("A", "B", "C")\n'
+        "\n"
+        "# Per-event semantic level (A primitive / B typed source / C derived Aether state).\n"
+        "EVENT_SEMANTIC_LEVEL: dict[str, str] = {\n"
+        f"{level_lines}\n"
+        "}\n"
+        "\n"
+        "# Trust classes a public SDK key may originate (boundary = class SET, not a rank cut).\n"
+        "SDK_ASSERTABLE_TRUST_CLASSES: tuple[str, ...] = (\n"
+        f"{sdk_class_lines},\n"
+        ")\n"
+        "\n"
+        f"SDK_EMITTABLE_SEMANTIC_LEVELS: tuple[str, ...] = ({emit_level_lit})\n"
+        "\n"
+        "# Event types a public SDK key may emit (per-event sdkEmitable).\n"
+        "SDK_EMITTABLE_EVENT_TYPES: frozenset[str] = frozenset({\n"
+        f"{sdk_type_lines},\n"
+        "})\n"
+    )
+
+
 def gen_events_ts_section(event_reg: dict) -> str:
     """Return the content to insert between @generated-start and @generated-end."""
     events = event_reg["events"]
@@ -745,6 +1259,7 @@ def gen_events_ts_section(event_reg: dict) -> str:
         f"export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {{\n"
         f"{_event_consent_map(events)}\n"
         f"}};\n"
+        f"{_field_trust_ts_block(event_reg)}{_semantic_boundary_ts_block(event_reg)}"
     )
 
 
@@ -769,6 +1284,180 @@ def update_events_ts(event_reg: dict, current: str) -> str:
 
     inner = gen_events_ts_section(event_reg)
     return preamble + inner + postamble
+
+
+# ---------------------------------------------------------------------------
+# Native iOS/Android event-type + consent-purpose regions (WS-A6)
+#
+# The AetherEventType enum, the eventConsentPurpose dict, and the Android
+# EVENT_CONSENT_PURPOSE map were hand-maintained until WS-A6. They are now
+# marker-delimited regions inside hand-authored SDK files, regenerated here so
+# the native event-type surface can never drift from event-registry.json.
+# ---------------------------------------------------------------------------
+
+def _native_banner(version: str) -> str:
+    """Banner emitted at the top of each generated native region."""
+    return (
+        "// @generated — DO NOT EDIT. Source: packages/shared/contracts/event-registry.json\n"
+        f"// Contract version: {version} — Run: python scripts/generate_contracts.py"
+    )
+
+
+def _primary_purpose(event: dict) -> str:
+    """Primary required consent purpose for an event: requiredPurposes[0], or
+    ``analytics`` when empty (e.g. the ``consent`` event). Same rule the TS and
+    Python twins use."""
+    purposes = event.get("requiredPurposes", [])
+    return purposes[0] if purposes else "analytics"
+
+
+def _registry_family_groups(events: list[dict]) -> tuple[list[str], dict[str, list[dict]]]:
+    """Group registry events by family, preserving first-seen (registry) order."""
+    family_order: list[str] = []
+    by_family: dict[str, list[dict]] = {}
+    for e in events:
+        family = e["family"]
+        if family not in by_family:
+            by_family[family] = []
+            family_order.append(family)
+        by_family[family].append(e)
+    return family_order, by_family
+
+
+def gen_ios_event_enum_section(event_reg: dict) -> str:
+    """Registry-derived body of the iOS ``AetherEventType`` enum (the content
+    between the ios-enum markers). One ``case`` per event type, grouped by
+    registry family so the native enum order is exactly registry order.
+
+    One case per line (not comma-packed rows) so every SDK event keeps its own
+    greppable ``case <type>`` anchor — a property the pre-codegen hand-maintained
+    enum exposed and the first-release foundations contract test pins
+    (``case ai_invocation_observed``)."""
+    family_order, by_family = _registry_family_groups(event_reg["events"])
+    lines: list[str] = [_native_banner(event_reg["contractVersion"])]
+    for family in family_order:
+        lines.append(f"    // {family}")
+        for e in by_family[family]:
+            lines.append(f"    case {e['type']}")
+    return "\n".join(lines) + "\n"
+
+
+def gen_ios_consent_map_section(event_reg: dict) -> str:
+    """Registry-derived body of the iOS ``eventConsentPurpose`` dict (the content
+    between the ios-map markers). One ``.type: "purpose"`` entry per line in
+    registry order, grouped by family."""
+    family_order, by_family = _registry_family_groups(event_reg["events"])
+    lines: list[str] = [_native_banner(event_reg["contractVersion"])]
+    for family in family_order:
+        lines.append(f"        // {family}")
+        for e in by_family[family]:
+            lines.append(f'        .{e["type"]}: "{_primary_purpose(e)}",')
+    lines[-1] = lines[-1].rstrip(",")
+    return "\n".join(lines) + "\n"
+
+
+def gen_android_consent_map_section(event_reg: dict) -> str:
+    """Registry-derived body of the Android ``EVENT_CONSENT_PURPOSE`` map (the
+    content between the android-map markers). One ``"type" to "purpose"`` entry
+    per line in registry order, grouped by family."""
+    family_order, by_family = _registry_family_groups(event_reg["events"])
+    lines: list[str] = [_native_banner(event_reg["contractVersion"])]
+    for family in family_order:
+        lines.append(f"        // {family}")
+        for e in by_family[family]:
+            lines.append(f'        "{e["type"]}" to "{_primary_purpose(e)}",')
+    lines[-1] = lines[-1].rstrip(",")
+    return "\n".join(lines) + "\n"
+
+
+def _splice_region(current: str, start_marker: str, end_marker: str, inner: str, what: str) -> str:
+    """Replace the body between ``start_marker`` and ``end_marker`` with ``inner``,
+    preserving everything before and after. Mirrors update_events_ts."""
+    start_idx = current.find(start_marker)
+    end_idx = current.find(end_marker)
+    if start_idx == -1 or end_idx == -1:
+        print(
+            f"ERROR: {what} is missing its @generated markers "
+            f"({start_marker!r} / {end_marker!r}).\n"
+            "Place the marker comments around the generated region body, then rerun.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if start_idx > end_idx:
+        print(
+            f"ERROR: {what} has its @generated markers in the wrong order "
+            f"(start at {start_idx} found after end at {end_idx}).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    # Everything up to and including the start marker line
+    preamble = current[: start_idx + len(start_marker)] + "\n"
+    # Everything from the end marker onward
+    postamble = current[end_idx:]
+    return preamble + inner + postamble
+
+
+def _apply_ios_event_enum(event_reg: dict, check: bool, diffs: list[str]) -> None:
+    if not IOS_AETHER_SWIFT.exists():
+        print(f"ERROR: iOS SDK source not found: {IOS_AETHER_SWIFT}", file=sys.stderr)
+        sys.exit(1)
+    current = IOS_AETHER_SWIFT.read_text()
+    updated = _splice_region(
+        current,
+        IOS_EVENT_ENUM_START,
+        IOS_EVENT_ENUM_END,
+        gen_ios_event_enum_section(event_reg),
+        "Aether.swift `enum AetherEventType`",
+    )
+    if current == updated:
+        return
+    if check:
+        diffs.append(str(IOS_AETHER_SWIFT.relative_to(ROOT)))
+        return
+    IOS_AETHER_SWIFT.write_text(updated)
+    print(f"  written: {IOS_AETHER_SWIFT.relative_to(ROOT)}")
+
+
+def _apply_ios_consent_map(event_reg: dict, check: bool, diffs: list[str]) -> None:
+    if not IOS_AETHER_SWIFT.exists():
+        print(f"ERROR: iOS SDK source not found: {IOS_AETHER_SWIFT}", file=sys.stderr)
+        sys.exit(1)
+    current = IOS_AETHER_SWIFT.read_text()
+    updated = _splice_region(
+        current,
+        IOS_CONSENT_MAP_START,
+        IOS_CONSENT_MAP_END,
+        gen_ios_consent_map_section(event_reg),
+        "Aether.swift `eventConsentPurpose`",
+    )
+    if current == updated:
+        return
+    if check:
+        diffs.append(str(IOS_AETHER_SWIFT.relative_to(ROOT)))
+        return
+    IOS_AETHER_SWIFT.write_text(updated)
+    print(f"  written: {IOS_AETHER_SWIFT.relative_to(ROOT)}")
+
+
+def _apply_android_consent_map(event_reg: dict, check: bool, diffs: list[str]) -> None:
+    if not ANDROID_AETHER_KT.exists():
+        print(f"ERROR: Android SDK source not found: {ANDROID_AETHER_KT}", file=sys.stderr)
+        sys.exit(1)
+    current = ANDROID_AETHER_KT.read_text()
+    updated = _splice_region(
+        current,
+        ANDROID_CONSENT_MAP_START,
+        ANDROID_CONSENT_MAP_END,
+        gen_android_consent_map_section(event_reg),
+        "Aether.kt `EVENT_CONSENT_PURPOSE`",
+    )
+    if current == updated:
+        return
+    if check:
+        diffs.append(str(ANDROID_AETHER_KT.relative_to(ROOT)))
+        return
+    ANDROID_AETHER_KT.write_text(updated)
+    print(f"  written: {ANDROID_AETHER_KT.relative_to(ROOT)}")
 
 
 # ---------------------------------------------------------------------------
@@ -815,6 +1504,7 @@ def gen_python_registry(event_reg: dict, consent_reg: dict) -> str:
         f"EVENT_FAMILY: dict[str, str] = {{\n"
         f"{family_lines}\n"
         f"}}\n"
+        f"{_field_trust_py_block(event_reg)}{_semantic_boundary_py_block(event_reg)}"
     )
 
 
@@ -1240,7 +1930,7 @@ def gen_event_table_md(event_reg: dict) -> str:
         marker = " *(deprecated)*" if status == "deprecated" else ""
         rows.append(
             f"| `{e['type']}`{marker} | `{e['family']}` | {purposes} | "
-            f"{e.get('privacyClass', '')} | {e.get('description', '')} |"
+            f"{e.get('privacyClass', '')} | {e.get('retentionClass', '')} | {e.get('description', '')} |"
         )
 
     rows_str = "\n".join(rows)
@@ -1250,8 +1940,8 @@ def gen_event_table_md(event_reg: dict) -> str:
         f"\n"
         f"# Aether Event Registry ({total} types, contract v{version})\n"
         f"\n"
-        f"| Event Type | Family | Required Purposes | Privacy Class | Description |\n"
-        f"|---|---|---|---|---|\n"
+        f"| Event Type | Family | Required Purposes | Privacy Class | Retention Class | Description |\n"
+        f"|---|---|---|---|---|---|\n"
         f"{rows_str}\n"
     )
 
@@ -1384,14 +2074,19 @@ def main() -> int:
 
     event_reg, consent_reg, metric_reg, integration_reg, traffic_reg = load_registries()
     validate(event_reg, consent_reg)
+    validate_field_trust(event_reg)
     validate_metrics(metric_reg)
     validate_integration_consent(integration_reg, consent_reg)
     validate_traffic_source(traffic_reg)
+    validate_web_eventtype_reimport()
 
     diffs: list[str] = []
 
     _apply(CONSENT_TS, gen_consent_ts(consent_reg), args.check, diffs)
     _apply_events_ts(event_reg, args.check, diffs)
+    _apply_ios_event_enum(event_reg, args.check, diffs)
+    _apply_ios_consent_map(event_reg, args.check, diffs)
+    _apply_android_consent_map(event_reg, args.check, diffs)
     _apply(GENERATED_REGISTRY_PY, gen_python_registry(event_reg, consent_reg), args.check, diffs)
     _apply(MEASUREMENT_TS, gen_measurement_ts(metric_reg), args.check, diffs)
     _apply(GENERATED_METRIC_REGISTRY_PY, gen_metric_registry_py(metric_reg), args.check, diffs)

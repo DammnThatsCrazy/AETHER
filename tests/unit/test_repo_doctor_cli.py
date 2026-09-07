@@ -114,6 +114,43 @@ def test_universal_financial_assets_gate_wired_in_repo_doctor() -> None:
     assert validator.exists(), "validator script must exist next to its dispatch"
 
 
+def test_kyber_ops_surface_gate_wired_in_repo_doctor() -> None:
+    """repo_doctor.py must dispatch the Kyber operations surface (Gate G) validator.
+
+    Locks the WS-E ops control-plane gate (source/schema health, ingestion lag,
+    quality, rejection, replay, lineage) into the same canonical check path as
+    every other release-blocking validator, so a future de-mount or regated
+    surface cannot pass CI silently.
+    """
+    import inspect
+    from pathlib import Path
+
+    source = inspect.getsource(repo_doctor)
+    assert 'scripts/validate_kyber_ops_surface.py"]' in source, (
+        "repo_doctor must dispatch scripts/validate_kyber_ops_surface.py"
+    )
+    validator = Path("scripts/validate_kyber_ops_surface.py")
+    assert validator.exists(), "validator script must exist next to its dispatch"
+
+
+def test_sdk_compat_tiers_gate_wired_in_repo_doctor() -> None:
+    """repo_doctor.py must dispatch the SDK version-compatibility tier (Gate H) validator.
+
+    Locks the WS-E version-tier model + staged default-OFF enforcement into the
+    canonical gate, so the compatibility guarantee (Invariant #18) stays a
+    checked invariant rather than a prose promise.
+    """
+    import inspect
+    from pathlib import Path
+
+    source = inspect.getsource(repo_doctor)
+    assert 'scripts/validate_sdk_compat_tiers.py"]' in source, (
+        "repo_doctor must dispatch scripts/validate_sdk_compat_tiers.py"
+    )
+    validator = Path("scripts/validate_sdk_compat_tiers.py")
+    assert validator.exists(), "validator script must exist next to its dispatch"
+
+
 def test_outcome_type_gate_wired_in_repo_doctor() -> None:
     """repo_doctor.py must track the Outcome360 outcome-type generated twins.
 
@@ -226,4 +263,22 @@ def test_spine_registry_gate_wired_in_repo_doctor() -> None:
     ), (
         "repo_doctor _check_clean must track the backend generated spine registry "
         "(spine/generated_spine_registry.py)"
+    )
+
+
+def test_field_trust_parity_gate_wired_in_repo_doctor() -> None:
+    """repo_doctor.py must dispatch the field-trust parity gate.
+
+    The gate (scripts/validate_field_trust_parity.py) asserts the WS-A2
+    per-field trust metadata in event-registry.json is structurally valid and
+    that the TypeScript + Python field-trust twins exactly match a fresh
+    regeneration — closing the coverage gap where generate_contracts.py is not
+    otherwise run inside repo-doctor/CI.
+    """
+    import inspect
+
+    source = inspect.getsource(repo_doctor)
+    assert 'scripts/validate_field_trust_parity.py"]' in source, (
+        "repo_doctor must dispatch scripts/validate_field_trust_parity.py "
+        "as part of the WS-A2 field-trust parity gate"
     )

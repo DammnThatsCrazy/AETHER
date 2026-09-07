@@ -14,6 +14,7 @@ from typing import Any
 
 from shared.events.events import Event, Topic
 from shared.logger.logger import get_logger
+from services.ingestion.spine import normalization_spine_enabled, to_observation_view
 
 from .eligibility import Eligibility, classify_eligibility
 from .resolution import SemanticActorResolver, SemanticSubjectResolver
@@ -53,26 +54,45 @@ def _to_semantic_payload(event: Event) -> dict[str, Any]:
     payload = event.payload or {}
     props = payload.get("properties") or {}
     subject = _first(payload, props, *_SUBJECT_PROPERTY_KEYS)
-    actor = payload.get("user_id") or payload.get("anonymous_id") or "anonymous"
     campaign_id = payload.get("campaign_id") or props.get("campaign_id")
     if campaign_id is not None and not _CANONICAL_CAMPAIGN_RE.match(str(campaign_id)):
         campaign_id = None  # non-canonical → drop (avoids invalid linkage)
+
+    # WS-B5: identity / occurrence reads fall back to the spine view when the
+    # normalization-spine flag is ON, so an additive envelope user subject or an
+    # AetherEvent subject_id becomes reachable. Flag OFF = the legacy flat reads.
+    user_id = payload.get("user_id")
+    anonymous_id = payload.get("anonymous_id")
+    occurred_at = payload.get("timestamp")
+    session_id = payload.get("session_id")
+    view = to_observation_view(payload) if normalization_spine_enabled() else None
+    if view is not None:
+        if view.user_id is not None:
+            user_id = view.user_id
+        if view.anonymous_id is not None:
+            anonymous_id = view.anonymous_id
+        if view.occurred_at is not None:
+            occurred_at = view.occurred_at
+        if view.session_id is not None:
+            session_id = view.session_id
+    actor = user_id or anonymous_id or "anonymous"
+
     return {
         "source_event_id": payload.get("event_id") or event.event_id,
         "source_type": payload.get("event_type", "event"),
         "source_platform": (payload.get("context") or {}).get("platform"),
         "actor_ref": actor,
         "actor_type": "profile",
-        "user_id": payload.get("user_id"),
-        "anonymous_id": payload.get("anonymous_id"),
+        "user_id": user_id,
+        "anonymous_id": anonymous_id,
         "primary_subject_ref": str(subject) if subject is not None else "unknown_subject",
         "content": props.get("content") or props.get("text") or payload.get("content"),
         "language": props.get("language", "en"),
         "campaign_id": campaign_id,
         "purposes": payload.get("purposes") or ["analytics"],
         "consent_snapshot_id": (payload.get("context") or {}).get("consent_snapshot_id"),
-        "occurred_at": payload.get("timestamp"),
-        "session_id": payload.get("session_id"),
+        "occurred_at": occurred_at,
+        "session_id": session_id,
         "narrative_frames": props.get("narrative_frames", []),
     }
 
@@ -121,7 +141,9 @@ class SemanticEventConsumer:
         if not tenant_id:
             return
         event_type = payload.get("event_type", "")
-        eligibility, _reason = classify_eligibility(event_type, {**payload, **(payload.get("properties") or {})})
+        eligibility, _reason = classify_eligibility(
+            event_type, {**payload, **(payload.get("properties") or {})}
+        )
         if eligibility is Eligibility.SKIP:
             return
         try:

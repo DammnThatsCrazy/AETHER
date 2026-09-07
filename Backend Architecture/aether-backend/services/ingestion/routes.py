@@ -9,10 +9,10 @@ import hashlib
 import uuid
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, BadRequestError, utc_now
+from shared.common.common import APIResponse, BadRequestError, ForbiddenError, utc_now
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
 from dependencies.providers import get_producer
@@ -47,6 +47,21 @@ class APIFeedEvent(BaseModel):
         max_length=256,
         description="Deterministic provider record ID used for idempotency",
     )
+    # Optional per-subject (S-class) escalation: a feed is normally T-class
+    # (tenant back-office attests rights). When a caller also declares the
+    # subject + purpose, the feed runs the same server-receipt consent gate as
+    # the batch path (via the shared ingress facade) and a denial is a 403.
+    subject_id: Optional[str] = Field(
+        default=None,
+        description="Optional subject id; presence (with purpose) escalates the "
+        "feed to a per-subject server-consent check",
+    )
+    anonymous_id: Optional[str] = Field(default=None)
+    purpose: Optional[str] = Field(
+        default=None,
+        description="Optional consent purpose; presence (with a subject) escalates "
+        "the feed to a per-subject server-consent check",
+    )
 
 
 # ── Routes ────────────────────────────────────────────────────────────
@@ -60,21 +75,57 @@ async def ingest_single_event(
     """Deprecated: use POST /v1/batch instead.
 
     Retained as a server-to-server alias with full validation and tenant scoping.
-    SDKs MUST use /v1/batch.
+    SDKs MUST use /v1/batch. Converged (WS-B2) onto the canonical V1 spine: the
+    legacy wire event is normalized to a canonical BaseEvent and routed through
+    services.ingestion.batch.ingest_events, so validation / consent / scrub /
+    Bronze-durable / idempotency / publish semantics match /v1/batch.
     """
+    # Convergence closes the missing-auth gap: aliases now require WRITE like
+    # /v1/batch and /feed (permission checked before translation/kill-flag).
+    from shared.auth.auth import Permissions
     tenant = request.state.tenant
-    validated = _validate_and_normalize(event, tenant.tenant_id, request)
+    tenant.require_permission(Permissions.WRITE)
 
-    await producer.publish(Event(
-        topic=Topic.SDK_EVENTS_VALIDATED,
+    from config.settings import settings
+    if settings.deprecated_ingest_aliases.kill_enabled:
+        raise HTTPException(
+            status_code=410,
+            detail={
+                "message": "POST /v1/ingest/events is deprecated and retired; "
+                           "use POST /v1/batch",
+                "replacement": "POST /v1/batch",
+                "deprecated": True,
+            },
+        )
+
+    from pydantic import ValidationError
+    from services.ingestion.batch import BaseEvent, EventContext, ingest_events
+    from services.ingestion.validation import RequestPrivacySignals
+
+    try:
+        canonical = _alias_event_to_canonical(
+            event, BaseEvent=BaseEvent, EventContext=EventContext
+        )
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": f"POST /v1/ingest/events: invalid event payload: {exc}",
+            },
+        )
+
+    resp = await ingest_events(
+        [canonical],
         tenant_id=tenant.tenant_id,
-        source_service="ingestion",
-        payload=validated,
-    ))
-
-    metrics.increment("events_ingested")
+        request_privacy=RequestPrivacySignals.from_headers(request.headers),
+        server_context=None,
+        granted_consents=frozenset(),
+        sent_at=None,
+        producer=producer,
+    )
+    result = resp.events[0]
     return APIResponse(
-        data={"event_id": validated["event_id"], "status": "accepted"}
+        data={"event_id": result.id, "status": result.status}
     ).to_dict()
 
 
@@ -86,28 +137,95 @@ async def ingest_batch_events(
 ):
     """Deprecated: use POST /v1/batch instead.
 
-    Retained as a server-to-server alias.  SDKs MUST use /v1/batch.
+    Retained as a server-to-server alias. SDKs MUST use /v1/batch. Converged
+    (WS-B2): every event is normalized to a canonical BaseEvent and routed
+    through services.ingestion.batch.ingest_events, matching /v1/batch
+    semantics. Accepted events are Bronze-durable before the bus publish.
     """
+    # Convergence closes the missing-auth gap: aliases now require WRITE like
+    # /v1/batch and /feed (permission checked before translation/kill-flag).
+    from shared.auth.auth import Permissions
     tenant = request.state.tenant
-    event_ids = []
+    tenant.require_permission(Permissions.WRITE)
 
-    events_to_publish = []
-    for sdk_event in batch.events:
-        validated = _validate_and_normalize(sdk_event, tenant.tenant_id, request)
-        event_ids.append(validated["event_id"])
-        events_to_publish.append(Event(
-            topic=Topic.SDK_EVENTS_VALIDATED,
-            tenant_id=tenant.tenant_id,
-            source_service="ingestion",
-            payload=validated,
-        ))
+    from config.settings import settings
+    if settings.deprecated_ingest_aliases.kill_enabled:
+        raise HTTPException(
+            status_code=410,
+            detail={
+                "message": "POST /v1/ingest/events/batch is deprecated and retired; "
+                           "use POST /v1/batch",
+                "replacement": "POST /v1/batch",
+                "deprecated": True,
+            },
+        )
 
-    await producer.publish_batch(events_to_publish)
+    from pydantic import ValidationError
+    from services.ingestion.batch import BaseEvent, EventContext, ingest_events
+    from services.ingestion.validation import RequestPrivacySignals
 
-    metrics.increment("events_ingested", value=len(event_ids))
+    try:
+        canonical_events = [
+            _alias_event_to_canonical(
+                e, BaseEvent=BaseEvent, EventContext=EventContext
+            )
+            for e in batch.events
+        ]
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": f"POST /v1/ingest/events/batch: invalid event payload: {exc}",
+            },
+        )
+
+    resp = await ingest_events(
+        canonical_events,
+        tenant_id=tenant.tenant_id,
+        request_privacy=RequestPrivacySignals.from_headers(request.headers),
+        server_context=None,
+        granted_consents=frozenset(),
+        sent_at=None,
+        producer=producer,
+    )
+    accepted_event_ids = [r.id for r in resp.events if r.status == "accepted"]
     return APIResponse(
-        data={"accepted": len(event_ids), "event_ids": event_ids}
+        data={"accepted": len(accepted_event_ids), "event_ids": accepted_event_ids}
     ).to_dict()
+
+
+def _alias_event_to_canonical(
+    event: SDKEvent, *,
+    BaseEvent,
+    EventContext,
+):
+    """Translate a deprecated-alias wire event onto the canonical BaseEvent model.
+
+    The server generates the event id — per-request retry-dedup is not possible
+    on this alias; client dedup requires POST /v1/batch. The legacy wire has no
+    anonymous concept, so anonymousId mirrors the session id. Canonical Silver's
+    touchpoint_projector reads context.device.id, so a legacy device_id maps onto
+    context.device.id when present. Non-canonical legacy types (page_view / click
+    / custom, ...) are no longer silently published: the canonical validator now
+    rejects them per-event with unknown_event_type — the intended WS-B2
+    enforcement. A supplied timestamp that fails ISO parsing raises pydantic
+    ValidationError here; the handlers convert it to HTTP 400.
+    """
+    context = (
+        EventContext(device={"id": event.device_id})
+        if event.device_id
+        else EventContext()
+    )
+    return BaseEvent(
+        id=str(uuid.uuid4()),
+        type=(event.event_type or "").lower().strip(),
+        sessionId=event.session_id,
+        anonymousId=event.session_id,
+        userId=event.user_id,
+        properties=event.properties or {},
+        context=context,
+        timestamp=event.timestamp or utc_now().isoformat(),
+    )
 
 
 @router.post("/feed")
@@ -126,11 +244,56 @@ async def ingest_api_feed(
     tenant.require_permission(Permissions.WRITE)
 
     received_at = utc_now().isoformat()
+
+    # WS-B3 ingress consent (T class). scrub_sensitive_fields + strip of any
+    # client-asserted canonical entity ids + the tenant data-policy decision are
+    # the MANDATORY T-class minimization layer and run UNCONDITIONALLY before any
+    # durable Bronze write — they are never gated by the per-path flag (scrub
+    # never rejects and data-policy is default-allow, so this is a pure
+    # convergence). Only the per-subject (S) server-receipt escalation is a
+    # per-path toggle: when a caller ALSO declares subject+purpose (the optional
+    # APIFeedEvent fields) AND the feed S-gate is enabled, the same facade runs
+    # the server-consent check (itself gated by the authoritative flag). Denials
+    # are 403s — the feed is idempotent, so reject-and-retry is correct (no
+    # quarantine).
+    from config.settings import settings
+    from services.ingestion.validation import (
+        evaluate_ingress_decision,
+        format_ingress_rejection,
+        scrub_sensitive_fields,
+        strip_canonical_entity_id,
+    )
+
+    data, _ = scrub_sensitive_fields(feed_event.data)
+    data = strip_canonical_entity_id(data)
+    purpose = (feed_event.purpose or "").strip() or None
+    subject = (feed_event.subject_id or "").strip() or None
+    anon = (feed_event.anonymous_id or "").strip() or None
+    if not settings.ingress_consent.feed_ingress_consent_enforcement_enabled:
+        # S-class escalation disabled for the feed path: fall back to the
+        # unconditional T-class decision (data-policy only, no server-receipt).
+        purpose = subject = anon = None
+    allowed, reason_code, decisions = await evaluate_ingress_decision(
+        tenant_id=tenant.tenant_id,
+        subject_id=subject,
+        anonymous_id=anon,
+        purpose=purpose,
+        fingerprint_obj=data,
+    )
+    if not allowed:
+        metrics.increment(
+            "ingestion_feed_consent_blocked_total",
+            labels={"reason": reason_code or "unknown"},
+        )
+        raise ForbiddenError(
+            f"ingress_consent_denied:{format_ingress_rejection(reason_code, decisions)}"
+        )
+
     payload = {
         "source": feed_event.source,
         "entity_type": feed_event.entity_type,
         "external_id": feed_event.external_id,
-        "data": feed_event.data,
+        "data": data,
         "tenant_id": tenant.tenant_id,
         "received_at": received_at,
         "schema_version": "1.0",

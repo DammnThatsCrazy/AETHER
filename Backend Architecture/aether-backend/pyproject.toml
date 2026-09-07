@@ -29,11 +29,20 @@ noesis = [
     "anthropic>=0.25",
     "httpx>=0.27",
 ]
+# Data Exchange Plane (M4 parquet export / M5 PDF reports) — heavy, flag-gated.
+# Kept out of the base dependency set: pyarrow alone adds ~100s of MiB, and the
+# envelope routes importing these are mounted only when the data_exchange.*
+# feature flags are on.
+data_exchange = [
+    "pyarrow>=15.0",    # parquet export path (services/data_exchange/parquet.py)
+    "reportlab>=4.1",   # PDF report renders (services/reports/renderers/pdf.py)
+]
 # Full production stack
 all = [
     "aether-backend[databases]",
     "aether-backend[kafka]",
     "aether-backend[noesis]",
+    "aether-backend[data_exchange]",
     "httpx>=0.27",
     "prometheus-client>=0.20",
 ]

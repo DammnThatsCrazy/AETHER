@@ -13,6 +13,8 @@ Routes:
     POST /v1/batch                    Canonical SDK batch events
     POST /v1/ingest/events[/batch]    Deprecated server-side connector aliases
     POST /v1/ingest/feed                External API feed
+    POST /v1/kyber/ingest/replay/events Operator Bronze replay (dry-run default; real run flag-gated)
+    GET  /v1/kyber/ingest/replay/status Ingestion replay service status
     GET  /v1/identity/profiles/{id}     Get profile
     PUT  /v1/identity/profiles/{id}     Upsert profile
     POST /v1/identity/merge             Merge identities
@@ -208,6 +210,8 @@ logger = get_logger("aether.main")
 from services.gateway.routes import router as gateway_router
 from services.ingestion.routes import router as ingestion_router
 from services.ingestion.batch import router as batch_router
+from services.ingestion.replay_routes import kyber_replay_router
+from services.ingestion.observability_routes import ingestion_observability_router
 from services.identity.routes import router as identity_router
 from services.identity.reconciliation_routes import router as identity_reconciliation_router
 from services.analytics.routes import router as analytics_router
@@ -616,6 +620,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     register_semantic_replay_handler()  # semantic.replay (durable Bronze backfill)
 
+    # Data Exchange Plane — durable jobs + canonical exporter registration
+    # (flag-gated; registration is idempotent per process and the surfaces only
+    # exist when the matching availability flag is ON).
+    dex = settings.data_exchange
+    if dex.enabled:
+        from services.data_exchange.jobs_migrate import register as register_data_exchange_migrate_handlers
+        from services.data_exchange.exporters import register_data_exchange_exporters
+        from services.data_exchange.jobs_ops import register as register_data_exchange_ops_jobs
+        from services.data_exchange.metrics import register_metrics as register_data_exchange_metrics
+
+        register_data_exchange_migrate_handlers()  # data_exchange.migrate_legacy_artifact
+        register_data_exchange_exporters()  # canonical EXPORTERS += data-exchange envelope exporters
+        register_data_exchange_ops_jobs()  # M7 ops: expire / reconcile / cleanup / finalize-pending-egress
+        register_data_exchange_metrics()  # M7 metric-family no-op seam (collector auto-registers)
+    if dex.reports_enabled:
+        from services.reports.jobs_reports import register_report_jobs
+
+        register_report_jobs()  # report.generate (PDF report artifacts)
+
     # Supervised long-running loop workers: event replay, billing overage
     # cron, notification SLA expiry, Dune polling (canonical scheduler only —
     # the legacy services.integrations.dune_feeder loop is no longer started),
@@ -818,6 +841,8 @@ def create_app() -> FastAPI:
     app.include_router(gateway_router)
     app.include_router(batch_router)      # POST /v1/batch — canonical SDK ingestion
     app.include_router(ingestion_router)  # POST /v1/ingest/feed (server-side feed)
+    app.include_router(kyber_replay_router)  # /v1/kyber/ingest/replay — operator Bronze replay (WS-B4)
+    app.include_router(ingestion_observability_router)  # /v1/kyber/ingest/observability — funnel + Observation Inspector (WS-E)
     app.include_router(identity_router)
     app.include_router(identity_reconciliation_router)
     app.include_router(analytics_router)
@@ -1081,6 +1106,38 @@ def create_app() -> FastAPI:
         app.include_router(data_quality_admin_router)
         logger.info("Intelligence Quality: Kyber admin routes mounted (/v1/admin/kyber/intelligence-quality)")
 
+    # ── Data Exchange Plane (governed tenant import/export layer) ─────────
+    # Flag-gated envelope: DATA_EXCHANGE_ENABLED gates the M3 import +
+    # M4 export/artifact + read-adapter routers; DATA_EXCHANGE_SIGNED_
+    # TRANSFERS_ENABLED and DATA_EXCHANGE_REPORTS_ENABLED gate their own M2/M5
+    # surfaces. Sub-routers mount lazily so a disabled plane imports nothing.
+    dex = settings.data_exchange
+    if dex.enabled:
+        from services.data_exchange.routes_import import router as data_exchange_import_router
+        from services.data_exchange.saved_mappings import router as data_exchange_saved_mappings_router
+        from services.data_exchange.capabilities import router as data_exchange_capabilities_router
+        from services.data_exchange.routes_export import router as data_exchange_export_router
+        from services.data_exchange.history import router as data_exchange_artifacts_router
+
+        app.include_router(data_exchange_capabilities_router)   # /v1/data-exchange/settings|capabilities|usage
+        app.include_router(data_exchange_import_router)         # /v1/data-exchange/imports
+        app.include_router(data_exchange_saved_mappings_router) # /v1/data-exchange/import-mappings
+        app.include_router(data_exchange_export_router)         # /v1/data-exchange/exports
+        app.include_router(data_exchange_artifacts_router)      # /v1/data-exchange/artifacts
+        logger.info("Data Exchange: envelope routes mounted (/v1/data-exchange)")
+    else:
+        logger.info("Data Exchange: envelope routes disabled (set DATA_EXCHANGE_ENABLED=true)")
+    if dex.signed_transfers_enabled:
+        from services.data_exchange.routes_transfer import router as data_exchange_transfer_router
+
+        app.include_router(data_exchange_transfer_router)
+        logger.info("Data Exchange: signed-transfer routes mounted (/v1/data-exchange/transfers)")
+    if dex.reports_enabled:
+        from services.reports.routes import router as data_exchange_reports_router
+
+        app.include_router(data_exchange_reports_router)
+        logger.info("Data Exchange: report routes mounted (/v1/data-exchange/reports)")
+
     # ── Dune Analytics feeder (admin-only, always mounted) ──────────────
     from services.dune_feeder.routes import router as dune_feeder_router
     app.include_router(dune_feeder_router)
@@ -1105,6 +1162,29 @@ def create_app() -> FastAPI:
     else:
         logger.info("Provider Source Catalog: disabled (set KYBER_PROVIDER_SOURCE_CATALOG_ENABLED=true to enable)")
 
+    # ── Reconciled Control Plane operator surface (feature-flagged, read-only) ──
+    # Phase 0 exposes ONLY read-only operator GETs over managed-integration
+    # registration + reconcile evidence. No live reconcile trigger and no
+    # actuator exist in Phase 0 (CP-08 boundary): drift classification is
+    # exercised by tests only until a later phase mounts a scheduler.
+    rcp = settings.reconciled_control
+    if rcp.enabled and rcp.kyber_route_enabled:
+        from services.managed_integrations.routes import (
+            admin_router as reconciled_control_admin_router,
+        )
+
+        app.include_router(reconciled_control_admin_router)
+        logger.info(
+            "Reconciled Control Plane: read-only operator routes mounted "
+            "(/v1/admin/kyber/managed-integrations)"
+        )
+    else:
+        logger.info(
+            "Reconciled Control Plane: disabled (set "
+            "AETHER_RECONCILED_CONTROL_PLANE_ENABLED=true and "
+            "AETHER_RECONCILED_CONTROL_KYBER_ROUTE_ENABLED=true to enable)"
+        )
+
     # ── Data Rights Ledger (feature-flagged) ───────────────────────────
     if pc.connector_data_rights_enabled:
         from services.integrations.data_rights.routes import (
@@ -1124,14 +1204,18 @@ def create_app() -> FastAPI:
             router as connectors_router,
         )
         from services.integrations.connectors.routes import webhook_public_router, slack_notify_router
+        from services.integrations.connectors.catalog_endpoints import catalog_router
         app.include_router(connectors_router)
         # Public webhook route always mounted when connectors are enabled;
         # security is enforced by HMAC verification inside the handler.
         app.include_router(webhook_public_router)
         app.include_router(slack_notify_router)
+        # Unified catalog read model (/v1/integration-catalog,
+        # /v1/tenant-integrations, /v1/integration-readiness).
+        app.include_router(catalog_router)
         if settings.connectors.kyber_connector_health_enabled:
             app.include_router(connectors_admin_router)
-        logger.info("Connectors: ingestion routes mounted (/v1/integrations/connectors + /v1/integrations/webhooks + /v1/integrations/slack-notify)")
+        logger.info("Connectors: ingestion routes mounted (/v1/integrations/connectors + /v1/integrations/webhooks + /v1/integrations/slack-notify + /v1/integration-catalog)")
     else:
         logger.info("Connectors: disabled (set AETHER_CONNECTORS_ENABLED=true to enable)")
 

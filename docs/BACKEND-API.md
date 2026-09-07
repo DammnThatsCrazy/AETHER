@@ -11,8 +11,12 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
-last_synced_commit: "f3f42b38"
-
+last_synced_commit: "09cf26a7"
+reviewed_source_commits:
+  - commit: "c607780c"
+    reason: "Reviewed c607780c (new services/measurement/connectors/ad_accounts.py account-identity/credential-probe module + its tests). It adds no HTTP surface — the doc's /v1/* endpoint tables are unaffected — so no body change was required."
+  - commit: "41e8356b"
+    reason: "Reviewed 41e8356b (additive /v1/campaign-sources overview/ad-options/connect/test/account/disable/enable endpoints in services/campaign/routes.py, orchestrated by new ad_source_links.py). This spec's Campaign Management Service section documents the /v1/campaigns CRUD surface and does not enumerate the /v1/campaign-sources registry router (covered in docs/api/CAMPAIGN_360_API.md), so the additions are additive to routes this doc does not describe; no body change was required."
 
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
@@ -348,6 +352,25 @@ key. GETs require `read`; state-changing POSTs require `write`. Full behavior:
 | `GET`  | `/v1/activation/first-value` | read | `{ "state", "ready", "evidence" }` from real Bronze rows. |
 | `POST` | `/v1/activation/complete` | write | `409` unless state is `first_value_ready`. |
 
+### Intent-driven activation (WS-3)
+
+Additive endpoints (same `/v1/activation` mount gate) that turn customer goals
+into recommended connect steps. A tenant selects `ActivationIntent` tokens
+(`grow_revenue`, `run_advertising`, … — full vocabulary in the `/intents`
+picker); the `/plan` read derives, per recommended experience category, each
+integration's next connect step from REAL tenant connector rows — the same
+config store `/v1/tenant-integrations` and the Settings connect surface read,
+never a fabricated step. Connect actions delegate to `connector_service` (the
+runtime behind `PUT /v1/integrations/connectors/{type}`), so credentials flow
+through the credential service and enablement through the consent policy.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| `GET`  | `/v1/activation/intents` | read | Intent picker: every goal + its recommended experience categories + the canonical category order/labels. |
+| `POST` | `/v1/activation/intents` | write | Body `{ "intents": ["grow_revenue", …] }`. Validated tokens (unknown → `400`), stored in canonical order, replace-on-reselect. |
+| `GET`  | `/v1/activation/plan` | read | Recommended connect plan per experience; `needs_selection` until intents are saved. Each integration carries `connection_state` + `next_action` derived from tenant rows. |
+| `POST` | `/v1/activation/connect-action` | write | Body `{ "family", "action", "name"?, "credential"?, "since"? }`. Actions: `create_tenant_integration \| configure_credential \| enable_connection \| first_sync`. A failed initial sync returns honest `ok:false` + `sync_failed`; unknown family/action → `400`. |
+
 ## Command Center (read-only tenant aggregate, flag-gated)
 
 Mounted at `/v1/command-center` only when `AETHER_COMMAND_CENTER_ENABLED=true`
@@ -413,6 +436,14 @@ Receives batched raw events from iOS and Android SDKs. Same schema as `/v1/event
 - ML scoring (intent prediction, bot detection)
 - Heatmap grid building from coordinate events
 - Rage click and dead click detection
+
+The deprecated server-to-server aliases `POST /v1/ingest/events` and
+`POST /v1/ingest/events/batch` are converged (WS-B2) onto this same canonical
+spine — validation, consent, scrub, Bronze-durable write, idempotency, and
+publish semantics match `/v1/batch`, and the aliases now require the same
+`write` permission. Setting `AETHER_KILL_DEPRECATED_INGEST_ALIASES=true`
+retires them with HTTP 410 (routes stay mounted; their bodies return the
+retired error and direct callers to `/v1/batch`).
 
 ---
 
@@ -1923,6 +1954,72 @@ Ingest a single `EventPipelineEnvelope` (used by the replay feed to re-introduce
 { "ingested": true, "id": "evt-uuid-v4" }
 ```
 
+### Operator ingestion replay (`/v1/kyber/ingest/replay/*`, WS-B4, v8.12.0)
+
+Kyber-operator re-delivery of a tenant's durable Bronze SDK events through the
+universal ingestion gateway, preserving original event times — distinct from
+the tenant-facing `/v1/events/replay` service above. The router is mounted in
+`main.py` and every route requires `require_kyber_operator`.
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/v1/kyber/ingest/replay/events` | Submit a replay scan for one tenant's Bronze SDK events (`tenant_id` required; optional `event_types`, `families`, `occurred_from`, `occurred_to`, `limit`, `replay_run_id`). `dry_run` defaults to `true` — previews rows scanned / would-replay / gateway-rejected / skipped with zero publishes. A real run (`dry_run=false`) is refused with HTTP 403 until `AETHER_INGESTION_REPLAY_ENABLED=true`. |
+| GET | `/v1/kyber/ingest/replay/status` | Gate state: `enabled` (the `AETHER_INGESTION_REPLAY_ENABLED` kill switch), the `source_service` label replayed events carry (`ingestion.replay`), and `dry_run_default`. |
+
+### Operator ingestion observability & SDK version tiers (WS-E, v8.12.0)
+
+Three additive operator/health surfaces mounted in `main.py` / the gateway /
+the sdk_config router. They mirror the replay route's adoption posture: the
+routers stay mounted so gateway discovery sees them, but while the flags are
+OFF no instrumentation runs and the surfaces report `enabled: false` / empty
+bodies rather than erroring, so the Kyber UI renders the feature as
+not-enabled.
+
+**Observability routes** (flag `AETHER_INGESTION_OBSERVABILITY_ENABLED`,
+default OFF; router mounted in `main.py`; every route requires
+`require_kyber_operator`):
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/v1/kyber/ingest/observability` | Status + instrumentation: `enabled`, `recorded_at`, and `instrumentation.monitored_stages` (`RECEIVED` / `VALIDATED` / `BRONZE` from the API process, `NORMALIZED` / `PROJECTIONS` from the worker functions) with `declared_unmonitored` completing the funnel ladder for the control plane to render. |
+| GET | `/v1/kyber/ingest/observability/funnel` | Per-stage ingestion funnel telemetry: `rollup` (`received` / `accepted` / `duplicates` / `rejected` / `degraded`) plus per-stage buckets carrying the disposition split (`accepted` / `duplicate` / `rejected` / `degraded` / `observed`); stages marked `monitored: false` complete the ladder but are not instrumented in this slice. |
+| GET | `/v1/kyber/ingest/observability/traces/{event_id}` | Observation Inspector — one observation's `RAW → … → METRICS/FINDINGS` stage trace. `event_id` is the client event id (the same id returned by `/v1/batch`); optional `tenant_id` query scopes the lookup. Returns `{"trace": {...}}`, or `{"trace": null}` when the ledger has no record for that key (flag OFF returns `null` — no instrumentation ran). |
+| GET | `/v1/kyber/ingest/observability/traces` | Recent observation traces for inspector browse (`{"traces": [...]}`, `limit` bounded 1–200, default 50; flag OFF returns `{"traces": []}`). |
+
+**Funnel health summary** — `GET /v1/health/pipeline` (gateway). Always
+200-shaped, mirroring the gateway health conventions; a disabled pipeline
+reports `enabled: false` with zeroed counters rather than erroring:
+
+```json
+{
+  "probe": "ingestion-pipeline",
+  "status": "disabled",
+  "enabled": false,
+  "timestamp": "...",
+  "pipeline": { "received": 0, "accepted": 0, "duplicates": 0, "rejected": 0, "degraded": 0 },
+  "stages": []
+}
+```
+
+`status` is `disabled` while the observability flag is OFF; otherwise
+`healthy` (no rejected/degraded rollup) or `degraded` (any rejected/degraded
+stage), and `enabled` reflects the same flag.
+
+**SDK version-compatibility tiers** — `GET /v1/config/sdk/versions`
+(sdk_config router). Returns the capability-manifest block:
+`schema_version`, `enabled` / `mode`, `blocked_after_date`, `tiers[]` (each
+band: `id`, `status`, `label`, `min_version`, `max_version_exclusive`,
+`deprecated_after`, `blocked_after`, `capabilities`, `note`), and the
+`unclassified` band. The tier table is **static, non-secret policy data and is
+always served** — reading it never depends on the flag. Only the `/v1/batch` /
+`/v1/ingest/events[/batch]` ingress consultation is flag-gated
+(`AETHER_SDK_VERSION_COMPAT_ENABLED`, default OFF; `AETHER_SDK_VERSION_COMPAT_MODE`
+= `off` | `shadow` | `warn` | `enforce`). When enabled the ingress attaches an
+additive `normalized["sdk_tier"]` advisory (mode / tier / label / capabilities
+/ `blocked_after` / source) — metadata only, never a rejection — except in
+`enforce` mode, which rejects events from SDK bands past their
+`blocked_after` date.
+
 ---
 
 ### Governance Service (v8.8.0)
@@ -3062,6 +3159,68 @@ reports `credential_turnkey / staging_validation_pending` — never `provider_li
 
 ---
 
+## Integration Catalog Read Model (v8.12.0)
+
+The unified catalog read model
+(`Backend Architecture/aether-backend/services/integrations/connectors/catalog_endpoints.py`)
+projects the one-customer catalog — the derived manifests in
+`shared/integration_contracts/catalog` (connectors, ad-platforms, payment rails,
+credit bureaus) — plus tenant connector records as read-only endpoints. Mounted
+inside the connectors gate (`AETHER_CONNECTORS_ENABLED`, default OFF — the same
+gate as the ingestion/webhook connector routes). Tenant API key required.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/integration-catalog` | Every connectable manifest as a flat entry (identity key, display name, `experience_category`, readiness state/rank/level, auth, sync, data outputs) in stable experience-grouping order; deferred bureaus (enabled-nowhere) are excluded. |
+| GET | `/v1/tenant-integrations` | The tenant's configured connectors with connection facts (`enabled` / `secret_configured` / `sync_status` / `last_synced_at`) plus the manifest's catalog readiness. |
+| GET | `/v1/tenant-integrations/{integration_id}` | One tenant integration (404 unless the tenant has a stored record for it). |
+| GET | `/v1/integration-readiness` | Catalog-level readiness matrix reusing the `CredentialReadiness` ladder + `readiness_rank` (single source). |
+
+### Tenant-contextual joined readiness (`/v1/tenant/integration-readiness`)
+
+The joined *tenant-contextual* readiness graph
+(`Backend Architecture/aether-backend/services/readiness_graph/`) is the WS-4
+workstream the catalog read model above deferred: it combines the catalog's
+provider truth with the tenant's connection record facts under the "Connected
+≠ Ready" honesty law.
+
+| GET | `/v1/tenant/integration-readiness` | The joined projection for the calling tenant: every connectable catalog manifest (plus any tenant-configured family the catalog no longer exposes) joined with the tenant's stored connection facts into an evidence-derived `tenant_state` per integration. |
+| GET | `/v1/tenant/integration-readiness?experience_category={cat}` | Restrict the projection to one customer experience category (e.g. `advertising_campaigns`). |
+| GET | `/v1/tenant/integration-readiness?state={state}` | Restrict to one tenant-contextual state (`available` / `connected` / `ready` / `connection_disabled` / `needs_attention`). |
+
+Item shape and honesty rules:
+
+- `readiness` is ALWAYS the manifest's catalog baseline (`state`/`rank`/`level`) —
+  tenant connection evidence can never raise it. An integration that reads
+  `connected` may still be `credential_waiting` on the provider axis.
+- `connection` carries record facts (`configured`, `connected` — enabled OR
+  credential configured OR ever synced — `state`, `enabled`,
+  `secret_configured`, `sync_status`, `last_synced_at`, `error_count`,
+  `last_error_at`). `connected` is a fact, never a readiness claim.
+- `tenant_state` is an evidence-derived connection/attention label, deliberately
+  distinct from the `CredentialReadiness` ladder tokens:
+  - `available` — no connection record (or a residual record with no fact);
+  - `connected` — a connection fact exists and no attention/disabled evidence;
+  - `ready` — the ONE claim needing proof on BOTH axes: provider catalog
+    `sandbox_validated` or better (rank ≥ 60) AND a currently healthy
+    connection. With every connectable manifest at `credential_waiting` today,
+    no integration can read `ready` — the honest posture;
+  - `connection_disabled` — the tenant turned the connection off;
+  - `needs_attention` — at least one concrete signal in `attention_reasons`
+    (`provider_off_ramp`, `sync_failed`, `sync_degraded`,
+    `credential_missing` — an enabled connection on a credential-bearing
+    provider with no configured credential).
+- Readiness is never asserted from a parallel token: another tenant's record
+  never affects this projection, and the unknown-`state` filter returns an
+  error payload rather than fabricating items.
+
+The router is a standalone, cycle-safe module mounted under the same connectors
+gate as the catalog read model; it is intentionally absent from the eagerly
+imported package surface and wired lazily by the gate next to
+`catalog_endpoints.catalog_router`.
+
+---
+
 ## Universal Provider Runtime (UPR) APIs (v8.12.0)
 
 The provider-neutral runtime (ADR-009) exposes generic provider-connection
@@ -3660,3 +3819,143 @@ rather than inventing one.
 | POST | `/v1/valuation/observe` | admin | Record one price observation (idempotent single append path; a replay returns the existing observation). Returns 201. |
 | POST | `/v1/valuation/value` | admin | Canonicalize → value → persist one tenant snapshot at `effective_at`. Body: `{ "native", "effective_at", "reporting_asset_id"?, "deployment_id"?, "valuation_basis"?, "economic_role"?, "supersedes_snapshot_id"? }`. A `supersedes_snapshot_id` correction APPENDS a new superseding snapshot; replay of identical inputs is a no-op returning the persisted row. Returns 201. |
 | PUT | `/v1/valuation/policy` | admin | Create/update the tenant's current value policy (one row per tenant; `policy_version` advances monotonically, a re-PUT of the current policy is a no-op). Returns 200. |
+
+---
+
+## Data Exchange Plane (v8.12.0, flag-gated)
+
+The governed tenant-facing import/export layer. Doctrine: *many ways in — one
+canonical graph — many ways out — one governed portability layer*. The plane is
+a control layer that composes onto the existing canonical seams (import
+FSM/commit/rollback, exporter registry, identity resolution, durable jobs,
+shared ObjectStore) — it is never a second ingestion path and never a third
+import state machine. Payload bytes live in the shared ObjectStore; Postgres
+holds only envelope metadata (`data_artifacts`, `data_exchange_saved_mappings`,
+`report_renders`).
+
+**Availability:** every `/v1/data-exchange/*` router is mounted in `main.py`
+only behind the `settings.data_exchange.*` flags (`enabled`,
+`object_store_enabled`, `parquet_enabled`, `reports_enabled`,
+`signed_transfers_enabled`) — all OFF by default. Flags switch
+transport/storage/surface availability only, never semantics. The detailed
+contract-level spec is `docs/plans/data-exchange-api.md`.
+
+**Authorization:** routes enforce the canonical seam they proxy and are never
+weaker than it. Each dotted `data_exchange.*` grant is enforced *or* resolved
+to the legacy single-word permission the proxied seam admits (read / write /
+admin) via `services/data_exchange/authz.py`, so existing tenant JWTs/API keys
+keep working; the `admin` role short-circuits as always. Import mutations gate
+on `write`-equivalence, import approve/rollback and all egress
+(export/transfer-download/report) gate on `admin`-equivalence — matching the
+canonical `/v1/imports` and `/v1/exports` seams.
+
+### Settings, capabilities & usage (read)
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| GET | `/v1/data-exchange/settings` | Tenant data-exchange settings + flag state | Read-only adapters over the canonical capability surface. |
+| GET | `/v1/data-exchange/capabilities` | Per-format / per-destination availability | Drives M6 frontend control enablement. |
+| GET | `/v1/data-exchange/usage` | Per-tenant artifact usage | Computed over `data_artifacts` metadata (no metering service dependency). |
+
+### Import envelope (over the canonical import engine)
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| POST | `/v1/data-exchange/imports` | Open an import session envelope | `write`. |
+| GET | `/v1/data-exchange/imports` | List import envelopes | `read`. |
+| GET | `/v1/data-exchange/imports/{import_id}` | Fetch one envelope | `read`. |
+| POST | `/v1/data-exchange/imports/{import_id}/files` | Upload a source file (ObjectStore-backed) | `write`; requires `object_store_enabled`. |
+| POST | `/v1/data-exchange/imports/{import_id}/analyze` | Run analysis over the source | `write`. |
+| PUT | `/v1/data-exchange/imports/{import_id}/mapping` | Set the field/identity/temporal/currency mapping | `write`. |
+| POST | `/v1/data-exchange/imports/{import_id}/preview/identity` | Identity-resolution preview | `write`; delegates to the canonical identity seam. |
+| POST | `/v1/data-exchange/imports/{import_id}/preview/graph` | Graph-mutation preview | `write`; delegates to the canonical commit preview. |
+| POST | `/v1/data-exchange/imports/{import_id}/commit` | Commit the import | `admin`; enqueues the canonical `import.commit` durable job. |
+| POST | `/v1/data-exchange/imports/{import_id}/rollback` | Roll back a committed import | `admin`; uses canonical source-tag rollback. |
+
+### Saved import mappings
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| GET | `/v1/data-exchange/import-mappings` | List saved mappings | `read`. |
+| POST | `/v1/data-exchange/import-mappings` | Save a mapping | `write`. |
+| GET | `/v1/data-exchange/import-mappings/{mapping_id}` | Fetch one mapping | `read`; tenant-scoped (cross-tenant → 404). |
+| DELETE | `/v1/data-exchange/import-mappings/{mapping_id}` | Delete a mapping | `write`. |
+
+### Export envelope
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| GET | `/v1/data-exchange/exports/types` | Available exporter types | `read`. |
+| POST | `/v1/data-exchange/exports` | Request an export | `admin`; enqueues the canonical `export.generate` durable job. |
+| GET | `/v1/data-exchange/exports` | List export envelopes | `read`. |
+| GET | `/v1/data-exchange/exports/{export_id}` | Fetch one export envelope | `read`. |
+| DELETE | `/v1/data-exchange/exports/{export_id}` | Delete an export artifact | `admin`. |
+
+### Signed transfers (ObjectStore presigned URLs)
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| POST | `/v1/data-exchange/transfers/{artifact_id}/upload-url` | Short-TTL presigned PUT URL | `write`; requires `signed_transfers_enabled`. |
+| POST | `/v1/data-exchange/transfers/{artifact_id}/upload-complete` | Server-side size/hash/prefix verification | `write`. |
+| GET | `/v1/data-exchange/transfers/{artifact_id}/download-url` | Short-TTL presigned GET URL | `admin`; mirrors the canonical export-download audit. |
+
+### Artifact history (read)
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| GET | `/v1/data-exchange/artifacts` | Unified artifact history (paged) | `read`; filters: direction / artifact_type. |
+| GET | `/v1/data-exchange/artifacts/{artifact_id}` | One artifact envelope | `read`. |
+
+### Reports plane (PDF egress)
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| POST | `/v1/data-exchange/reports` | Request a report render | `admin`; requires `reports_enabled`. |
+| GET | `/v1/data-exchange/reports` | List report renders | `read`. |
+| GET | `/v1/data-exchange/reports/{report_id}` | Fetch one render | `read`. |
+| GET | `/v1/data-exchange/reports/{report_id}/download` | Download the rendered PDF | `admin`; bytes streamed from ObjectStore. |
+| DELETE | `/v1/data-exchange/reports/{report_id}` | Delete a render + object | `admin`. |
+
+Ops/hardening (M7) adds durable reconcile / expire / cleanup jobs
+(`data_exchange.reconcile_artifacts`, `data_exchange.expire_artifacts`,
+`data_exchange.cleanup_artifacts`, `data_exchange.finalize_pending_egress`)
+that reconcile `data_artifacts` metadata against ObjectStore state with
+strict tenant-prefix-scoped deletion.
+
+## Reconciled Control Plane (operator surface, v8.12.0, flag-gated)
+
+The Reconciled Control Plane converges managed integrations (SDKs, connectors,
+provider connections, webhooks, imports, curated feeds) toward an authorized,
+healthy, supportable desired state — *install once, continuously reconcile*.
+This section documents the operator **read surface**; the engines behind it
+(reconcile classification, ChangeSet planning/execution, admission +
+simulation, §40 rollout + §29 fleet controller) are flag-gated OFF and
+exercised by tests only. Full architecture + boundaries:
+`docs/architecture/RECONCILED_CONTROL_PLANE.md`; close-out evidence in
+`docs/productization/reconciled-control-plane/EXECUTION_STATE.md`.
+
+**Availability:** the router is mounted in `main.py` only behind
+`settings.reconciled_control.enabled` AND `settings.reconciled_control.kyber_route_enabled`
+(`AETHER_RECONCILED_CONTROL_PLANE_ENABLED` + `AETHER_RECONCILED_CONTROL_KYBER_ROUTE_ENABLED`)
+— OFF by default. Routes are read-only; there is no tenant-facing counterpart.
+
+**Authorization:** every route requires the Kyber operator gate
+(`kyber:operator` permission; fail-closed denial otherwise). The surface is
+declared in the Kyber console vocabulary: capability
+`kyber.reconciled_control.read` (domain `reconciled_control`, action `read`,
+scope `all_tenants_aggregate`, disclosure D4 event evidence) rides the
+`_READ_EVIDENCE` role-template grant beside `kyber.audit.read`, and each route
+below carries a `kyber_routes` registry declaration
+(`config/route_registry.yaml`) that engages denial once backend authorization
+enforcement is on.
+
+### Managed-integration registry + review surface (all GET)
+
+| Method | Path | Summary | Notes |
+|---|---|---|---|
+| GET | `/v1/admin/kyber/managed-integrations` | List managed integrations | Filters: tenant/environment/kind; registry + last-reconcile evidence |
+| GET | `/v1/admin/kyber/managed-integrations/{managed_integration_id}` | One integration detail | Includes last reconcile run + drift summary |
+| GET | `/v1/admin/kyber/managed-integrations/change-sets` | List ChangeSets | Planning + status + risk/guard fields |
+| GET | `/v1/admin/kyber/managed-integrations/change-sets/{changeset_id}` | One ChangeSet detail | Status history, risk, approvals evidence |
+| GET | `/v1/admin/kyber/managed-integrations/approvals` | Approval records | §21 role-gated review queue |
+| GET | `/v1/admin/kyber/managed-integrations/action-required` | ActionRequired items | §12.14 exceptions awaiting an operator decision |

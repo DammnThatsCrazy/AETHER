@@ -2,9 +2,10 @@
 """Validate SDK runtime parity across web / server / iOS / Android / React Native
 / Python (Truth Kernel §2.6, §2.8, §2.9).
 
-Native parity is grep-based by design (no generated native registries — see the
-Truth Kernel non-goals). This gate asserts that each SDK actually exposes the
-canonical runtime surface it is supposed to:
+Native parity is grep-based for the runtime capability surface (the native
+event-type/consent-purpose regions are code-generated from event-registry.json —
+see scripts/generate_contracts.py). This gate asserts that each SDK actually
+exposes the canonical runtime surface it is supposed to:
 
   - `observe()` — the canonical event-capture entry point on every client SDK
     (§2.6). Server SDK captures via `track()` and is exempt.

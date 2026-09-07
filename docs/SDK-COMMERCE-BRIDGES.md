@@ -18,7 +18,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
-last_synced_commit: "bee65298"
+last_synced_commit: "c4f33e58"
 ---
 
 # SDK Commerce Bridges
@@ -32,6 +32,19 @@ bridges at `packages/web/src/bridges/*`, the shared mapping at
 §4 below describe the shipped contract and its evidence. SDK event-registry
 convergence remains OUT of scope — the dotted `commerce.*` types stay in the
 runtime domain until a dedicated convergence program.
+
+**SDK-thinness boundary (WS-C row 28):** `packages/shared/commerce-bridge.ts` is
+a legacy SDK-side mirror and is **not** part of the `@aether/shared` public
+barrel (it was star-exported from `packages/shared/index.ts` before the
+three-lane integration and is now deliberately delisted). The canonical home is
+the backend Python
+(`shared/integration_contracts/commerce_bridge.py`, money
+`shared/commerce_contracts/money.py`). The web SDK consumes only the
+source-observable signal types + schema version via the explicit subpath
+`@aether/shared/commerce-bridge`
+(`packages/web/src/modules/commerce-detection.ts`); no new interpreter logic is
+added on the SDK side, and the module must not be re-added to the SDK public
+surface.
 
 ## 1. Why this exists
 

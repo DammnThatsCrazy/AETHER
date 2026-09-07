@@ -47,7 +47,13 @@ async def ingest_normalized_events(
         data = event.model_dump() if hasattr(event, "model_dump") else dict(event)
         event_type = data.get("event_type", "")
         if event_type in COMMUNICATION_EVENT_TYPES:
-            await _ingest_communication(tenant_id, data, source_connector_id)
+            # WS-B3 (C class): a consent-denied communication event is dropped
+            # entirely — nothing about it is written, published, identity-bridged,
+            # suppression-recorded, or metered (fail-closed, never partial).
+            ingested = await _ingest_communication(tenant_id, data, source_connector_id)
+            if not ingested:
+                counts["skipped"] += 1
+                continue
             # Provider identity evidence carried on the event (best-effort;
             # the communication fact is preserved regardless of resolution).
             await _record_identity(tenant_id, data)
@@ -78,11 +84,63 @@ async def ingest_normalized_events(
 
 async def _ingest_communication(
     tenant_id: str, data: dict[str, Any], source_connector_id: Optional[str],
-) -> None:
-    """Durable Bronze write, then bus publish (mirrors /v1/batch ordering)."""
+) -> bool:
+    """Durable Bronze write, then bus publish (mirrors /v1/batch ordering).
+
+    Returns True when the event was persisted + published, False when the
+    WS-B3 ingress consent gate dropped it (never a partial write).
+    """
     properties = dict(data.get("properties") or {})
     if source_connector_id:
         properties.setdefault("source_connector_id", source_connector_id)
+
+    # WS-B3 connector/comm consent (C class). scrubbing sensitive values from
+    # properties is the MANDATORY minimization layer and runs UNCONDITIONALLY —
+    # it is never gated by the per-path flag (redaction never rejects). The
+    # shared ingress decision then runs for EVERY communication event: tenant
+    # data-policy removal of fingerprinting always, and the per-subject (S)
+    # server-receipt rejection only when the connector S-gate is enabled AND the
+    # event resolves a purpose + a subject under the authoritative flag. A
+    # denial drops the event — no Bronze, no publish.
+    from config.settings import settings
+    from services.ingestion.generated_registry import EVENT_CONSENT_PURPOSE
+    from services.ingestion.validation import (
+        evaluate_ingress_decision,
+        scrub_sensitive_fields,
+    )
+
+    properties, _ = scrub_sensitive_fields(properties)
+    event_type = str(data.get("event_type") or "")
+    # subject resolvable = the canonical recipient/profile id on the event.
+    recipient = (
+        properties.get("recipient_entity_id")
+        or properties.get("profile_id")
+        or ""
+    )
+    recipient = str(recipient).strip() or None
+    anon = str(properties.get("anonymous_id") or "").strip() or None
+    purpose = EVENT_CONSENT_PURPOSE.get(event_type)
+    if not settings.ingress_consent.connector_comms_consent_enforcement_enabled:
+        # S-class server-receipt escalation disabled for this connector path:
+        # fall back to the unconditional scrub + data-policy decision (no
+        # per-subject lookup or purpose gate; the event is processed under C/T
+        # minimization).
+        recipient = anon = purpose = None
+    allowed, reason_code, _decisions = await evaluate_ingress_decision(
+        tenant_id=tenant_id,
+        subject_id=recipient,
+        anonymous_id=anon,
+        purpose=purpose,
+        fingerprint_obj=properties,
+    )
+    if not allowed:
+        logger.warning(
+            "comms_ingest_consent_denied event=%s tenant=%s type=%s reason=%s",
+            data.get("external_id") or data.get("id"), tenant_id, event_type,
+            reason_code,
+        )
+        return False
+
     event_id = str(data.get("external_id") or uuid.uuid4())
     provider = properties.get("provider") or data.get("source") or "webhook"
     # Deterministic event id namespaced by provider so replays dedupe.
@@ -134,6 +192,7 @@ async def _ingest_communication(
         # Bronze is durable; a replay of the Bronze range recovers the publish.
         logger.warning("comms_ingest_publish_failed event=%s: %s", normalized["event_id"], exc)
         metrics.increment("comms_ingest_publish_failures_total", labels={"tenant_id": tenant_id})
+    return True
 
 
 async def _record_identity(tenant_id: str, data: dict[str, Any]) -> bool:

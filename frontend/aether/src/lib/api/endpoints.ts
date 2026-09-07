@@ -17,6 +17,12 @@
  */
 import { z } from 'zod';
 import { restClient } from './rest/client';
+import {
+  integrationCatalogResponseSchema,
+  integrationReadinessResponseSchema,
+  tenantIntegrationResponseSchema,
+  tenantIntegrationsResponseSchema,
+} from '@aether-app/features/integrations/types';
 import type {
   SessionsResponse, DevicesResponse, JourneysResponse, WalletsResponse,
   RelationshipsResponse, DelegationsResponse,
@@ -2102,6 +2108,25 @@ export const api = {
         wrap(unknownSchema),
         body,
       ).then(r => r.data as ContinuationSelection),
+  },
+
+  // ── Unified Integration Catalog (Settings→Integrations read model, R1) ──────
+  integrationCatalog: {
+    /** Derived one-customer catalog — every connectable manifest, experience-grouped. */
+    list: () =>
+      restClient.get('/v1/integration-catalog', wrap(integrationCatalogResponseSchema)).then(r => r.data),
+
+    /** The tenant's configured integrations (connection facts, never readiness claims). */
+    tenantIntegrations: () =>
+      restClient.get('/v1/tenant-integrations', wrap(tenantIntegrationsResponseSchema)).then(r => r.data),
+
+    /** One tenant integration (404 unless the tenant has a stored record for it). */
+    tenantIntegration: (integrationId: string) =>
+      restClient.get(`/v1/tenant-integrations/${encodeURIComponent(integrationId)}`, wrap(tenantIntegrationResponseSchema)).then(r => r.data),
+
+    /** Catalog-level readiness matrix over the canonical CredentialReadiness ladder. */
+    readiness: () =>
+      restClient.get('/v1/integration-readiness', wrap(integrationReadinessResponseSchema)).then(r => r.data),
   },
 
   /** Durable per-scope change-log slice (ids + revision only, never resource bodies). */

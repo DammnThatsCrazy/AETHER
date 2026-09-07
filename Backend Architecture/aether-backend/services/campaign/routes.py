@@ -23,15 +23,26 @@ from shared.logger.logger import get_logger, metrics
 from shared.observability import trace_request, emit_latency
 from dependencies.providers import get_producer
 from repositories.repos import CampaignRepository
+from services.campaign.ad_source_links import (
+    ad_connect_options,
+    connect_ad_source,
+    overview_sources,
+    set_source_account,
+    set_source_enabled,
+)
 from services.campaign.exploration import CampaignPopulationExplorer
-from services.measurement.repositories.touchpoint_repo import TouchpointRepository
-from services.measurement.repositories.conversion_repo import ConversionRepository
+from services.measurement.connectors.ad_accounts import (
+    is_ad_account_family,
+    run_credential_test,
+)
 from services.measurement.repositories.attribution_run_repo import AttributionRunRepository
+from services.measurement.repositories.conversion_repo import ConversionRepository
 from services.measurement.repositories.journey_repo import JourneyRepository
-from services.measurement.repositories.spend_repo import SpendRepository
 from services.measurement.repositories.measurement_connector_repo import (
     MeasurementConnectorRepository,
 )
+from services.measurement.repositories.spend_repo import SpendRepository
+from services.measurement.repositories.touchpoint_repo import TouchpointRepository
 
 logger = get_logger("aether.service.campaign")
 router = APIRouter(prefix="/v1/campaigns", tags=["Campaigns"])
@@ -1162,6 +1173,212 @@ async def trigger_sync(connector_id: str, request: Request):
         raise BadRequestError(f"Campaign source {connector_id} not found")
     metrics.increment("campaign_source_sync_triggered", labels={"connector_id": connector_id})
     return APIResponse(data={"connector_id": connector_id, "status": "queued"}).to_dict()
+
+
+# =============================================================================
+# Advertising connect flow (additive, WS-2) — /v1/campaign-sources/*
+#
+# Read-model + connect surface for the advertising convergence: list catalog ad
+# platforms (options), connect a single-account source, test its credentials,
+# select its account, disable/enable. Orchestration lives in
+# services/campaign/ad_source_links.py; account/campaign resolution after a
+# source is anchored stays in the /v1/mapping-review surface.
+# =============================================================================
+
+
+class AdConnectRequest(BaseModel):
+    # A connect without a platform is meaningless — rejected at the edge.
+    platform: str = Field(..., min_length=1, description="Ad platform family or its alias (e.g. google_ads, twitter, facebook)")
+    name: Optional[str] = None
+    # Complete credential set for the family (identifiers + secrets). A partial
+    # set is rejected because the connector store has no config-update path.
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class AdAccountSelectRequest(BaseModel):
+    # Single-account manual selection: the account identifier the source is
+    # bound to (customer_id / ad_account_id / advertiser_id / account_id).
+    account_id: str = Field(..., min_length=1)
+
+
+@sources_router.get("/overview")
+async def campaign_sources_overview(request: Request):
+    """Redacted overview of every connected campaign source.
+
+    Never returns ``config`` — only non-secret facts (account id,
+    secret-configured, health/sync state) projected by ad_source_links.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:read")
+    degraded = False
+    try:
+        overview = await overview_sources(_connector_repo, tenant_id=tenant.tenant_id)
+    except Exception as exc:
+        logger.warning("campaign sources overview failed: %s", exc)
+        degraded = True
+        overview = {"items": [], "counts": {"total": 0, "active": 0, "disabled": 0, "ad_families": 0}, "ad_families": []}
+    items = overview["items"]
+    return APIResponse(data={
+        "items": items,
+        "counts": overview["counts"],
+        "ad_families": overview["ad_families"],
+        "source_status": _list_source_status(degraded, items),
+    }).to_dict()
+
+
+@sources_router.get("/ad-options")
+async def campaign_sources_ad_options(request: Request):
+    """List the ad platforms the tenant can connect, with connect state."""
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:read")
+    degraded = False
+    try:
+        options = await ad_connect_options(_connector_repo, tenant_id=tenant.tenant_id)
+    except Exception as exc:
+        logger.warning("campaign sources ad-options failed: %s", exc)
+        degraded = True
+        options = []
+    return APIResponse(data={
+        "items": options,
+        "source_status": _list_source_status(degraded, options),
+    }).to_dict()
+
+
+@sources_router.post("/connect")
+async def connect_ad_campaign_source(body: AdConnectRequest, request: Request):
+    """Connect (idempotently) an ad-platform campaign source.
+
+    Idempotent per active source: if the tenant already has an active source
+    for the platform, that source is returned unchanged (config is never
+    silently overwritten). Incomplete credential sets and unbacked platforms
+    are rejected with a clear message.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:manage")
+    try:
+        result = await connect_ad_source(
+            _connector_repo,
+            tenant_id=tenant.tenant_id,
+            platform=body.platform,
+            name=body.name,
+            config=body.config,
+        )
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    except Exception as exc:
+        logger.error("ad source connect failed: %s", exc)
+        raise ServiceUnavailableError(
+            "Ad platform could not be connected — please retry"
+        ) from exc
+    metrics.increment(
+        "campaign_source_ad_connected",
+        labels={"platform": result.get("platform", ""), "already": str(result.get("already_connected", False))},
+    )
+    return APIResponse(data=result).to_dict()
+
+
+@sources_router.post("/{connector_id}/test")
+async def test_campaign_source_credentials(connector_id: str, request: Request):
+    """Run a live credential probe for an ad-platform source.
+
+    Executes the family's own connector credential/health check against the
+    stored config and reports the result. The probe is never persisted — a test
+    must not fabricate a sync or health fact for a source that was not synced.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:manage")
+    connector = await _connector_repo.get(tenant.tenant_id, connector_id)
+    if connector is None:
+        raise BadRequestError(f"Campaign source {connector_id} not found")
+    family = connector.get("connector_type") or ""
+    if not is_ad_account_family(family):
+        raise BadRequestError(
+            f"Source {connector_id} is not an ad-platform source ({family!r}); "
+            "credential tests apply to ad platforms only"
+        )
+    try:
+        result = await run_credential_test(family, connector.get("config") or {})
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    except Exception as exc:
+        logger.error("credential test failed: connector=%s %s", connector_id, exc)
+        raise ServiceUnavailableError(
+            "Credential test could not run — please retry"
+        ) from exc
+    metrics.increment("campaign_source_ad_tested", labels={"platform": family})
+    return APIResponse(data=result).to_dict()
+
+
+@sources_router.post("/{connector_id}/account")
+async def select_campaign_source_account(connector_id: str, body: AdAccountSelectRequest, request: Request):
+    """Select the single account an active ad source is bound to.
+
+    Ad platforms have no account discovery, so selection is explicit/manual.
+    Because the connector store has no config-update path, changing the account
+    rotates the source: the current active row is archived (disabled) and a
+    fresh active row carries the same credentials under the new account.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:manage")
+    try:
+        result = await set_source_account(
+            _connector_repo,
+            tenant_id=tenant.tenant_id,
+            connector_id=connector_id,
+            account_id=body.account_id,
+        )
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    except Exception as exc:
+        logger.error("source account selection failed: %s", exc)
+        raise ServiceUnavailableError(
+            "Account selection failed — please retry"
+        ) from exc
+    metrics.increment("campaign_source_ad_account_set", labels={"platform": result.get("platform", "")})
+    return APIResponse(data=result).to_dict()
+
+
+@sources_router.post("/{connector_id}/disable")
+async def disable_campaign_source(connector_id: str, request: Request):
+    """Disable a campaign source (stops scheduling; row stays as history)."""
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:manage")
+    try:
+        result = await set_source_enabled(
+            _connector_repo, tenant_id=tenant.tenant_id,
+            connector_id=connector_id, enabled=False,
+        )
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    except Exception as exc:
+        logger.error("source disable failed: %s", exc)
+        raise ServiceUnavailableError("Source could not be disabled — please retry") from exc
+    metrics.increment("campaign_source_disabled")
+    return APIResponse(data=result).to_dict()
+
+
+@sources_router.post("/{connector_id}/enable")
+async def enable_campaign_source(connector_id: str, request: Request):
+    """Re-enable a disabled campaign source.
+
+    Refused when another active source exists for the same ad family, so the
+    one-active-per-family invariant is never broken by re-enabling an archived
+    row.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:manage")
+    try:
+        result = await set_source_enabled(
+            _connector_repo, tenant_id=tenant.tenant_id,
+            connector_id=connector_id, enabled=True,
+        )
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    except Exception as exc:
+        logger.error("source enable failed: %s", exc)
+        raise ServiceUnavailableError("Source could not be enabled — please retry") from exc
+    metrics.increment("campaign_source_enabled")
+    return APIResponse(data=result).to_dict()
 
 
 # =============================================================================

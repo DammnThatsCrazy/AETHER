@@ -13,8 +13,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
-last_synced_commit: "f543a085"
-
+last_synced_commit: "09cf26a7"
 ---
 # Aether vNext — Architecture Guide
 
@@ -275,7 +274,11 @@ Resolution Consumer (real-time)
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/v1/batch` | POST | Canonical batched raw events (ALL SDKs — web, iOS, Android, RN) |
-| `/v1/ingest/events[/batch]` | POST | Deprecated server-to-server connector aliases |
+| `/v1/ingest/events[/batch]` | POST | Deprecated server-to-server connector aliases — converged (WS-B2) onto the canonical `/v1/batch` spine (same validation/consent/scrub/Bronze/idempotency/publish path + `write` auth); retire with HTTP 410 when `AETHER_KILL_DEPRECATED_INGEST_ALIASES=true` |
+| `/v1/kyber/ingest/replay/*` | POST/GET | Kyber-operator Bronze-ingestion replay (WS-B4) — re-deliver a tenant's durable Bronze SDK events with original-time preservation; `POST /v1/kyber/ingest/replay/events` dry-runs by default (zero publishes), a real run requires `AETHER_INGESTION_REPLAY_ENABLED` (else HTTP 403); `GET /v1/kyber/ingest/replay/status` reports gate state |
+| `/v1/kyber/ingest/observability*` | GET | Kyber-operator ingestion-funnel telemetry + Observation Inspector (WS-E; flag-gated `AETHER_INGESTION_OBSERVABILITY_ENABLED`, default OFF — while OFF the routes stay mounted but report `enabled: false` / empty, never an error) |
+| `/v1/health/pipeline` | GET | Ingestion funnel health summary (`healthy`/`degraded`/`disabled`; `enabled: false` + zeroed counters while the observability flag is OFF) |
+| `/v1/config/sdk/versions` | GET | SDK version-compatibility tier manifest (supported / deprecated / read-compatible / blocked-after-date + per-band capabilities; static non-secret policy data, always served — the `/v1/batch` ingress consultation rides `AETHER_SDK_VERSION_COMPAT_ENABLED` / `_MODE` (`off`/`shadow`/`warn`/`enforce`), default OFF) |
 | `/v1/config/sdk/manifest` | GET | SDK remote config (signed manifests + rollouts) |
 | `/v1/activation/*` | GET/POST | Self-serve tenant activation FSM (flag-gated `AETHER_ACTIVATION_ENABLED`, default OFF) |
 | `/v1/kyber/missions[/*]` | GET/POST | Kyber Mission aggregate + monitoring read plane (operator; flag-gated `KYBER_MISSIONS_ENABLED`, default OFF) |
@@ -591,6 +594,31 @@ retrieval; tenant scope is server-authoritative; staging/production fail closed
 on missing credentials/config; no cross-tenant evidence leakage; the model never
 selects or overrides tenant scope.
 
+## Data Exchange Plane (v8.12.0, flag-gated)
+
+A governed tenant-facing import/export layer mounted under `/v1/data-exchange/*`
+(seven router groups: settings/capabilities/usage, import envelopes, saved
+import mappings, export envelopes, artifact history, signed transfers, and the
+PDF reports plane). Doctrine: *many ways in — one canonical graph — many ways
+out — one governed portability layer*. The plane is a control layer that
+composes onto the existing canonical seams (import FSM/commit/rollback,
+exporter registry, identity resolution, durable jobs, shared ObjectStore) — it
+is never a second ingestion path and never a third import state machine.
+Payload bytes live in the shared ObjectStore; Postgres holds only envelope
+metadata (`data_artifacts`, `data_exchange_saved_mappings`, `report_renders`,
+created by the `20260905_data_exchange` Alembic migration). `main.py` mounts
+each surface only behind the `settings.data_exchange.*` flags —
+`DATA_EXCHANGE_ENABLED` (envelope routers + the `data_exchange.migrate_legacy_artifact`
+job handler), `DATA_EXCHANGE_SIGNED_TRANSFERS_ENABLED`,
+`DATA_EXCHANGE_REPORTS_ENABLED` (reports plane + the `report.generate` handler),
+plus `DATA_EXCHANGE_OBJECT_STORE_ENABLED` / `DATA_EXCHANGE_PARQUET_ENABLED` for
+transport/storage features — all OFF by default. Routes enforce the `data_exchange`
+RBAC domain (added to `ALL_DOMAINS` / `TENANT_DOMAINS`, auto-granted to tenant
+owner/admin/viewer) via `services/data_exchange/authz.py`, resolving each
+dotted `data_exchange.*` grant to the legacy read/write/admin alias the proxied
+seam admits. See `BACKEND-API.md` ("Data Exchange Plane") and
+`docs/plans/data-exchange-api.md` for the full contract.
+
 ## Universal Provider Runtime (8.12.0)
 
 The Universal Provider Runtime (UPR) makes provider integrations pluggable: a
@@ -638,6 +666,32 @@ only, not auth; connection loads enforce tenant ownership (cross-tenant id →
 404); `shop_domain` is allowlisted to `*.myshopify.com` (SSRF gate); errors
 carry `safe_message` only; manifest capability claims are verified against
 actual adapters at registration and certification.
+
+## Reconciled Control Plane (§0–40 lane, flag-gated)
+
+The **Reconciled Control Plane** is Aether's operational authority that
+converges every managed integration (SDKs, connectors, provider connections,
+webhooks, imports, curated feeds) toward an authorized, healthy, supportable
+desired state — *install once, continuously reconcile*. Doctrine: *the SDK
+observes; the control plane manages; the backend reasons*. The §0–40 lane
+ships the loop end to end: reconcile **classification** (desired state vs
+evidence-backed observed state; never `actionable` from missing evidence),
+typed ChangeSet **planning** with §39 risk + automation authority, §34
+state-machine **execution** with verify-or-rollback and
+last-known-good-after-verify, §16 admission + discovery/schema-mapping/
+source-authority + §37 simulation/shadow, a flag-gated §32/§35 scheduler, and
+**§40 progressive rings** driven by the §12.9 health-gated rollout engine + §29
+fleet controller. The plane is **operator-only**: a read-only GET surface
+under `/v1/admin/kyber/managed-integrations` (`/change-sets`, `/approvals`,
+`/action-required`) gated by `require_kyber_operator`, surfaced in the Kyber
+console vocabulary via the `kyber.reconciled_control.read` capability (D4
+evidence) + `kyber_routes` declarations. Everything is **flag-gated OFF**
+(`AETHER_RECONCILED_CONTROL_*`): engines are exercised by tests only, the
+scheduler is idle until its master switch + kill-switch flip, and day-1
+production activation sits behind the §41+ blueprint review. No tenant grant,
+no self-service delivery, no hidden rewriting of customer-controlled binaries.
+See `docs/architecture/RECONCILED_CONTROL_PLANE.md` for the architecture and
+boundaries.
 
 ## Unified On-Chain Intelligence Graph
 

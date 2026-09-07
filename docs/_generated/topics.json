@@ -1208,6 +1208,31 @@
           "value": "aether.graph.mutated"
         }
       ]
+    },
+    {
+      "name": "\u2500\u2500 Data Exchange Plane (M2 signed transfers / M5 reports) \u2014 appended block \u2500\u2500",
+      "topics": [
+        {
+          "member": "DATA_EXCHANGE_ARTIFACT_UPLOADED",
+          "value": "aether.data_exchange.artifact.uploaded"
+        },
+        {
+          "member": "REPORT_REQUESTED",
+          "value": "aether.report.requested"
+        },
+        {
+          "member": "REPORT_AVAILABLE",
+          "value": "aether.report.available"
+        },
+        {
+          "member": "REPORT_FAILED",
+          "value": "aether.report.failed"
+        },
+        {
+          "member": "REPORT_DOWNLOADED",
+          "value": "aether.report.downloaded"
+        }
+      ]
     }
   ],
   "all_topics": [
@@ -2202,6 +2227,26 @@
     {
       "member": "GRAPH_MUTATED",
       "value": "aether.graph.mutated"
+    },
+    {
+      "member": "DATA_EXCHANGE_ARTIFACT_UPLOADED",
+      "value": "aether.data_exchange.artifact.uploaded"
+    },
+    {
+      "member": "REPORT_REQUESTED",
+      "value": "aether.report.requested"
+    },
+    {
+      "member": "REPORT_AVAILABLE",
+      "value": "aether.report.available"
+    },
+    {
+      "member": "REPORT_FAILED",
+      "value": "aether.report.failed"
+    },
+    {
+      "member": "REPORT_DOWNLOADED",
+      "value": "aether.report.downloaded"
     }
   ]
 }

@@ -16,7 +16,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
-last_synced_commit: "c587eb8b"
+last_synced_commit: "c4f33e58"
 ---
 
 # Backend Execution Model
@@ -39,7 +39,7 @@ API process no longer starts every worker, consumer, and cron in-request.
 | `measurement-worker` | Identity merge/split journey rebuild and attribution restatement consumers. |
 | `semantic-worker` | Semantic classification + identity-restatement consumers plus the `semantic_reconciler` (Gold recompute sweep, gated by `settings.semantic.reconciler_enabled`), `semantic_retention` (Silver tombstone / Gold delete sweep, gated by `settings.semantic.retention_enabled`), and `semantic_graph_projector` (per-tenant Gold relationship-state projection into the intelligence graph via the canonical mutation gateway, gated by `settings.semantic.graph_projector_enabled`) loop workers. |
 | `materializer` | Artifact materialization sweeps (export expiry, payment-rail sync, object-backed Bronze compaction + scheduled storage reconciler — FT-8, gated by the `settings.storage_plane` flags — and x402 settlement reconciliation, which advances verified PENDING settlements to on-chain finality, gated by the commerce control plane). |
-| `maintenance` | Cross-cutting crons/sweepers (retention — including the flag-gated FT-8 storage-lifecycle retention pass, billing overage, SLA, jobs — plus the reward-plane/credential sweeps: stale reward-budget reservation release, reward DLQ depth gauge, expired credential rotation-overlap tombstoning, and the opt-in ledger chain verifier). |
+| `maintenance` | Cross-cutting crons/sweepers (retention — including the flag-gated FT-8 storage-lifecycle retention pass, billing overage, SLA, jobs — plus the reward-plane/credential sweeps: stale reward-budget reservation release, reward DLQ depth gauge, expired credential rotation-overlap tombstoning, and the opt-in ledger chain verifier). Also the Reconciled Control Plane continuous-reconcile scheduler (`reconciled_control_scheduler` — one periodic §32/§35 reconcile→plan→execute loop that rides `maintenance` rather than justifying a runtime role of its own; gated on the plane master switch AND its scheduler kill-switch, both default OFF, so it stays idle until flipped). |
 
 The canonical role set lives in `config/settings.py::RUNTIME_ROLES`; the
 role → loop-worker mapping lives in `services/runtime/roles.py`; canonical
@@ -119,6 +119,23 @@ downstream work becomes replayable instead of riding the request.
 Tuning env vars: `OUTBOX_RELAY_BATCH_SIZE` (100),
 `OUTBOX_RELAY_POLL_INTERVAL_S` (2), `OUTBOX_RELAY_LEASE_SECONDS` (60),
 `OUTBOX_RELAY_MAX_ATTEMPTS` (8) — all on `settings.ingestion_v2`.
+
+## Ingestion-level replay (WS-B4)
+
+Operator-triggered re-delivery of a tenant's durable Bronze SDK events
+(`services/ingestion/replay.py`, mounted in `main.py` at
+`POST /v1/kyber/ingest/replay/events` and `GET /v1/kyber/ingest/replay/status`,
+Kyber-operator-only) is a synchronous service runner plus a minimal operator
+route — **not** a runtime role and not a durable-jobs control plane. A dry run
+(counts only, zero publishes) is always available; a real run
+(`dry_run=false`) republishes the Bronze rows onto `SDK_EVENTS_VALIDATED` with
+their original occurrence timestamps preserved (Invariant #15) only when
+`AETHER_INGESTION_REPLAY_ENABLED` (`settings.ingest_replay.enabled`, default
+OFF) is on — otherwise refused with 403. Republished events carry
+`source_service="ingestion.replay"`, and the Bronze-writer consumer
+(`services/ingestion/workers.py`) skips them for the same reason it skips
+relay-originated events: the durable Bronze row already exists, so writing
+again would mint a second Bronze row for the same original event.
 
 ## Reward & commerce plane workers
 

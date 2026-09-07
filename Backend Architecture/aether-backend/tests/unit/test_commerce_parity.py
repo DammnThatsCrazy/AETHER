@@ -61,11 +61,21 @@ EVENT_REGISTRY = os.path.join(
 # SDK EventType union: every registry event type is one member of it.
 # ``_registryNotes`` carries the WS4 convergence tracker (runtime-domain
 # commerce.* split is tracker-only — never an EventType-union edit).
+# WS-A2 added three additive top-level keys governing the per-event
+# field-trust/authority taxonomy (schemaVersion 2.1.0); WS-A3 added the
+# semantic-level + SDK-boundary declarations (schemaVersion 2.2.0).
 _EVENT_REGISTRY_KEYS = (
     "_comment",
     "_registryNotes",
     "schemaVersion",
     "contractVersion",
+    "fieldTrustSchemaVersion",
+    "trustClasses",
+    "fieldTrustDefaults",
+    "semanticLevelSchemaVersion",
+    "semanticLevels",
+    "sdkBoundarySchemaVersion",
+    "sdkBoundary",
     "events",
 )
 

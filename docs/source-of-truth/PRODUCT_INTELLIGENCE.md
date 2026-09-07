@@ -26,7 +26,7 @@ is never settlement.
 
 | Concern | Canonical owner |
 |---|---|
-| Interaction event lifecycle (11 `interaction`-family events) | `packages/shared/contracts/event-registry.json` (via `scripts/generate_contracts.py`) |
+| Interaction event lifecycle (12 `interaction`-family events) | `packages/shared/contracts/event-registry.json` (via `scripts/generate_contracts.py`) |
 | Interaction types / result states / evidence basis / actor kinds (+ registered custom namespaces `tenant.* wallet.* dapp.* agent.* financial_rail.*`) | `packages/shared/contracts/interaction-vocabulary.json` → generated TS/Py twins |
 | Canonical interaction payload | `shared/product/models.py::InteractionPayload` ↔ `interaction-contract.ts` (parity-tested) |
 | Product → Area → Feature → FeatureVersion → Surface → Control catalog + mapping rules + proposals + instrumentation-as-code manifests | `services/product_catalog/` (`/v1/product-catalog`, flag `AETHER_PRODUCT_CATALOG_ENABLED`, default off) |

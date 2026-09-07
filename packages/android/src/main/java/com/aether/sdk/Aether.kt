@@ -14,16 +14,24 @@ import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.SystemClock
 import android.provider.Settings
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import android.util.Log
 import androidx.lifecycle.*
 import kotlinx.coroutines.*
+import kotlin.jvm.Volatile
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.KeyStore
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 
 // =============================================================================
 // CONFIGURATION
@@ -45,9 +53,45 @@ data class AetherConfig(
      */
     val manifestVerificationKey: String? = null,
     val autoResumeJourney: Boolean = true,
-    val onJourneyResumed: ((resolvedAnonymousId: String, resolvedUserId: String?) -> Unit)? = null
+    val onJourneyResumed: ((resolvedAnonymousId: String, resolvedUserId: String?) -> Unit)? = null,
+    // Native identity -> subject-hints convergence (WS-C / Invariant #4).
+    // Default OFF = legacy behavior: after /sdk/identity/resolve the SDK
+    // re-stamps the resolved canonical user id into its persisted identity.
+    // When ON the SDK no longer re-stamps a canonical user id client-side (the
+    // backend resolves identity from the source-asserted subject hints it
+    // carries); the resolved id is still reported inside journey_resumed.
+    val subjectHintsOnly: Boolean = false,
+    // Durable encrypted queue with ack semantics (WS-C row 12). Default OFF =
+    // legacy delete-before-ack queue persisted as a plaintext JSON file. When
+    // ON the persisted queue file is AES-GCM encrypted with a key held in the
+    // Android Keystore, and events are only removed after the server
+    // acknowledges the batch (2xx), preserving order and idempotency.
+    val encryptedDurableQueue: Boolean = false
 ) {
     enum class Environment { PRODUCTION, STAGING, DEVELOPMENT }
+}
+
+/**
+ * Source-native correlation context (WS-C / Invariant #12). Mirrors the A-side
+ * CorrelationContext tuple in packages/shared/events.ts (camelCase). The
+ * backend Envelope-B correlation block is additive: source-native values are
+ * never overwritten during normalization, and the optional parentObservationId
+ * is carried end-to-end into parent_observation_id.
+ */
+data class CorrelationContext(
+    val correlationId: String? = null,
+    val causationId: String? = null,
+    val traceId: String? = null,
+    val spanId: String? = null,
+    val parentObservationId: String? = null,
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        correlationId?.let { put("correlationId", it) }
+        causationId?.let { put("causationId", it) }
+        traceId?.let { put("traceId", it) }
+        spanId?.let { put("spanId", it) }
+        parentObservationId?.let { put("parentObservationId", it) }
+    }
 }
 
 data class ModuleConfig(
@@ -156,8 +200,16 @@ object Aether : DefaultLifecycleObserver {
     private var flushJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    // Source-native correlation stamped on every outgoing event's
+    // context.correlation (WS-C / Invariant #12). Thread-safety: guarded by the
+    // Dispatchers.IO scope writes and reads on the same IO dispatcher.
+    @Volatile
+    private var sourceCorrelation: CorrelationContext? = null
+
     private const val MAX_QUEUE_SIZE = 1000
     private const val QUEUE_FORMAT_VERSION = 1
+    private const val QUEUE_CIPHER_MAGIC = "AETHERQ1"
+    private const val QUEUE_KEY_ALIAS = "com.aether.sdk.queue.aes-gcm-v1"
     private const val SESSION_TIMEOUT_MS = 30 * 60 * 1000L // 30 min
 
     private var healthAgent: AetherHealthAgent? = null
@@ -220,236 +272,438 @@ object Aether : DefaultLifecycleObserver {
     private var activeAcquisitionEvidence: JSONObject? = null
     private val recentDeepLinks = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private val EVENT_CONSENT_PURPOSE = mapOf(
-        "track" to "analytics", "page" to "analytics", "screen" to "analytics",
-        "heartbeat" to "analytics", "error" to "analytics", "performance" to "analytics",
-        "journey_started" to "analytics", "journey_paused" to "analytics",
-        "journey_resumed" to "analytics", "journey_continued" to "analytics",
-        "journey_completed" to "analytics", "journey_abandoned" to "analytics",
-        "journey_checkpoint" to "analytics", "identify" to "analytics",
-        // Acquisition attribution — SDKs observe evidence; the backend classifies
-        "navigation_intent" to "analytics", "navigation_arrival" to "analytics",
-        "deep_link_opened" to "analytics", "app_install_attributed" to "analytics",
+// @generated-start aether-consent-purposes/android-map
+// @generated — DO NOT EDIT. Source: packages/shared/contracts/event-registry.json
+// Contract version: 8.12.0 — Run: python scripts/generate_contracts.py
+        // core
+        "track" to "analytics",
+        "page" to "analytics",
+        "screen" to "analytics",
+        "heartbeat" to "analytics",
+        "error" to "analytics",
+        "performance" to "analytics",
+        "experiment" to "marketing",
+        // journey
+        "journey_started" to "analytics",
+        "journey_paused" to "analytics",
+        "journey_resumed" to "analytics",
+        "journey_continued" to "analytics",
+        "journey_completed" to "analytics",
+        "journey_abandoned" to "analytics",
+        "journey_checkpoint" to "analytics",
+        "navigation_intent" to "analytics",
+        "navigation_arrival" to "analytics",
+        "deep_link_opened" to "analytics",
+        "app_install_attributed" to "analytics",
         "deferred_attribution_resolved" to "analytics",
-        // QR / NFC / App Clip acquisition capture (host app decodes; SDK attributes)
-        "qr_code_scanned" to "analytics", "nfc_tag_read" to "analytics",
+        "qr_code_scanned" to "analytics",
+        "nfc_tag_read" to "analytics",
         "app_clip_invoked" to "analytics",
-        // Native UI interaction observation (metadata-only)
-        "ui_interaction_observed" to "analytics",
-        "experiment" to "marketing", "conversion" to "marketing",
+        // identity
+        "identify" to "analytics",
+        // consent
         "consent" to "analytics",
-        "payment_initiated" to "commerce", "payment_completed" to "commerce",
-        "payment_failed" to "commerce", "approval_requested" to "commerce",
-        "approval_resolved" to "commerce", "entitlement_granted" to "commerce",
-        "entitlement_revoked" to "commerce", "access_granted" to "commerce",
+        // commerce
+        "conversion" to "marketing",
+        "payment_initiated" to "commerce",
+        "payment_completed" to "commerce",
+        "payment_failed" to "commerce",
+        "approval_requested" to "commerce",
+        "approval_resolved" to "commerce",
+        "entitlement_granted" to "commerce",
+        "entitlement_revoked" to "commerce",
+        "access_granted" to "commerce",
         "access_denied" to "commerce",
-        // x402 — legacy + lifecycle
-        "x402_payment" to "commerce",
-        "x402_resource_requested" to "commerce", "x402_payment_required" to "commerce",
-        "x402_quote_received" to "commerce", "x402_authorization_requested" to "commerce",
-        "x402_authorization_resolved" to "commerce", "x402_payment_intent_created" to "commerce",
-        "x402_payment_submitted" to "commerce", "x402_payment_settled" to "commerce",
-        "x402_payment_failed" to "commerce", "x402_payment_timeout" to "commerce",
-        "x402_receipt_verified" to "commerce", "x402_access_granted" to "commerce",
-        "x402_access_denied" to "commerce", "x402_refund_or_reversal" to "commerce",
-        // reward enablement (A6)
-        "reward_action_queued" to "commerce", "reward_proof_generated" to "commerce",
-        "reward_delivered" to "commerce", "reward_claim_submitted" to "commerce",
-        "wallet" to "web3", "transaction" to "web3", "contract_action" to "web3",
-        // Agent — legacy + lifecycle
-        "agent_task" to "agent", "agent_decision" to "agent", "a2h_interaction" to "agent",
-        "agent_registered" to "agent", "agent_updated" to "agent",
-        "agent_authorized" to "agent", "agent_deauthorized" to "agent",
-        "agent_capability_granted" to "agent", "agent_capability_revoked" to "agent",
-        "agent_task_created" to "agent", "agent_task_decomposed" to "agent",
-        "agent_task_started" to "agent", "agent_task_completed" to "agent",
-        "agent_task_failed" to "agent", "agent_tool_called" to "agent",
-        "agent_resource_requested" to "agent", "agent_delegated_task" to "agent",
-        "agent_subagent_spawned" to "agent", "agent_policy_evaluated" to "agent",
-        "agent_handoff" to "agent", "agent_escalated_to_human" to "agent",
+        // wallet
+        "wallet" to "web3",
+        "transaction" to "web3",
+        "contract_action" to "web3",
+        // agent
+        "agent_task" to "agent",
+        "agent_decision" to "agent",
+        "a2h_interaction" to "agent",
+        "agent_registered" to "agent",
+        "agent_updated" to "agent",
+        "agent_authorized" to "agent",
+        "agent_deauthorized" to "agent",
+        "agent_capability_granted" to "agent",
+        "agent_capability_revoked" to "agent",
+        "agent_task_created" to "agent",
+        "agent_task_decomposed" to "agent",
+        "agent_task_started" to "agent",
+        "agent_task_completed" to "agent",
+        "agent_task_failed" to "agent",
+        "agent_tool_called" to "agent",
+        "agent_resource_requested" to "agent",
+        "agent_delegated_task" to "agent",
+        "agent_subagent_spawned" to "agent",
+        "agent_policy_evaluated" to "agent",
+        "agent_handoff" to "agent",
+        "agent_escalated_to_human" to "agent",
         "agent_outcome_recorded" to "agent",
-        // Agentic observability — account / MCP / tool
-        "agentic_account_observed" to "agent", "agentic_account_connected_observed" to "agent",
-        "agentic_account_disconnected_observed" to "agent", "agent_budget_observed" to "agent",
-        "agent_budget_changed_observed" to "agent", "agent_permission_observed" to "agent",
-        "agent_mcp_connection_observed" to "agent", "agent_tool_observed" to "agent",
-        "agent_tool_invocation_observed" to "agent", "agent_activity_observed" to "agent",
-        "agent_risk_signal_observed" to "agent", "agent_notification_observed" to "agent",
-        // Agentic observability — Robinhood-style trading observation
-        "agent_strategy_observed" to "agent", "agent_trade_intent_observed" to "agent",
-        "agent_trade_order_observed" to "agent", "agent_trade_fill_observed" to "agent",
-        "agent_trade_rejection_observed" to "agent", "agent_position_observed" to "agent",
-        "agent_portfolio_snapshot_observed" to "agent", "agent_performance_snapshot_observed" to "agent",
+        "agentic_account_observed" to "agent",
+        "agentic_account_connected_observed" to "agent",
+        "agentic_account_disconnected_observed" to "agent",
+        "agent_budget_observed" to "agent",
+        "agent_budget_changed_observed" to "agent",
+        "agent_permission_observed" to "agent",
+        "agent_mcp_connection_observed" to "agent",
+        "agent_tool_observed" to "agent",
+        "agent_tool_invocation_observed" to "agent",
+        "agent_activity_observed" to "agent",
+        "agent_risk_signal_observed" to "agent",
+        "agent_notification_observed" to "agent",
+        "agent_strategy_observed" to "agent",
+        "agent_trade_intent_observed" to "agent",
+        "agent_trade_order_observed" to "financial_activity",
+        "agent_trade_fill_observed" to "financial_activity",
+        "agent_trade_rejection_observed" to "agent",
+        "agent_position_observed" to "financial_activity",
+        "agent_portfolio_snapshot_observed" to "financial_activity",
+        "agent_performance_snapshot_observed" to "financial_activity",
         "agent_disconnect_observed" to "agent",
-        // Agentic observability — AgentMail-style communication observation
-        "agent_inbox_observed" to "agent", "agent_email_address_observed" to "agent",
-        "agent_thread_observed" to "agent", "agent_message_received_observed" to "agent",
-        "agent_message_sent_observed" to "agent", "agent_reply_observed" to "agent",
-        "agent_attachment_observed" to "agent", "agent_attachment_parsed_observed" to "agent",
-        "agent_otp_detected_observed" to "agent", "agent_invoice_detected_observed" to "agent",
-        "agent_receipt_detected_observed" to "agent", "agent_calendar_intent_observed" to "agent",
-        "agent_support_route_observed" to "agent", "agent_semantic_search_observed" to "agent",
+        "agent_inbox_observed" to "agent",
+        "agent_email_address_observed" to "agent",
+        "agent_thread_observed" to "agent",
+        "agent_message_received_observed" to "agent",
+        "agent_message_sent_observed" to "agent",
+        "agent_reply_observed" to "agent",
+        "agent_attachment_observed" to "agent",
+        "agent_attachment_parsed_observed" to "agent",
+        "agent_otp_detected_observed" to "agent",
+        "agent_invoice_detected_observed" to "agent",
+        "agent_receipt_detected_observed" to "agent",
+        "agent_calendar_intent_observed" to "agent",
+        "agent_support_route_observed" to "agent",
+        "agent_semantic_search_observed" to "agent",
         "agent_data_extraction_observed" to "agent",
-        // x402 protocol observation family
-        "x402_resource_request_observed" to "commerce", "x402_challenge_observed" to "commerce",
-        "x402_payment_requirement_observed" to "commerce", "x402_signature_observed" to "commerce",
-        "x402_verification_observed" to "commerce", "x402_settlement_observed" to "commerce",
-        "x402_resource_access_observed" to "commerce", "x402_resource_access_denied_observed" to "commerce",
-        "x402_failure_observed" to "commerce", "x402_replay_risk_observed" to "commerce",
+        "agent_evaluation_observed" to "agent",
+        "agent_cost_observed" to "agent",
+        "ai_invocation_observed" to "agent",
+        "agent_grounding_observed" to "agent",
+        "agent_guardrail_observed" to "agent",
+        "agent_human_override_observed" to "agent",
+        // reward
+        "reward_action_queued" to "commerce",
+        "reward_proof_generated" to "commerce",
+        "reward_delivered" to "commerce",
+        "reward_claim_submitted" to "commerce",
+        // x402
+        "x402_payment" to "commerce",
+        "x402_resource_requested" to "commerce",
+        "x402_payment_required" to "commerce",
+        "x402_quote_received" to "commerce",
+        "x402_authorization_requested" to "commerce",
+        "x402_authorization_resolved" to "commerce",
+        "x402_payment_intent_created" to "commerce",
+        "x402_payment_submitted" to "commerce",
+        "x402_payment_settled" to "commerce",
+        "x402_payment_failed" to "commerce",
+        "x402_payment_timeout" to "commerce",
+        "x402_receipt_verified" to "commerce",
+        "x402_access_granted" to "commerce",
+        "x402_access_denied" to "commerce",
+        "x402_refund_or_reversal" to "commerce",
+        "x402_resource_request_observed" to "commerce",
+        "x402_challenge_observed" to "commerce",
+        "x402_payment_requirement_observed" to "commerce",
+        "x402_signature_observed" to "commerce",
+        "x402_verification_observed" to "commerce",
+        "x402_settlement_observed" to "commerce",
+        "x402_resource_access_observed" to "commerce",
+        "x402_resource_access_denied_observed" to "commerce",
+        "x402_failure_observed" to "commerce",
+        "x402_replay_risk_observed" to "commerce",
         "x402_provider_observed" to "commerce",
-        // Exposure family
-        "content_impression" to "analytics", "recommendation_exposed" to "analytics",
-        "offer_exposed" to "analytics", "feature_exposed" to "analytics",
-        "search_result_exposed" to "analytics", "ad_exposed" to "marketing",
-        "notification_presented" to "analytics", "decision_observed" to "analytics",
-        // Outcome family
-        "outcome_observed" to "analytics", "goal_achieved" to "analytics", "goal_failed" to "analytics",
-        "recommendation_accepted" to "analytics", "recommendation_rejected" to "analytics",
-        "feedback_submitted" to "analytics", "retention_observed" to "analytics",
-        "churn_observed" to "analytics", "human_override_observed" to "analytics",
-        // B2B family
-        "organization_observed" to "analytics", "workspace_created" to "analytics", "workspace_updated" to "analytics",
-        "member_invited" to "analytics", "member_joined" to "analytics", "member_removed" to "analytics",
-        "role_changed" to "analytics", "seat_assigned" to "analytics", "seat_released" to "analytics",
-        "integration_connected" to "analytics", "integration_disconnected" to "analytics",
-        "service_account_created" to "analytics", "service_account_revoked" to "analytics",
-        "api_key_created" to "analytics", "api_key_revoked" to "analytics",
-        "project_created" to "analytics", "project_archived" to "analytics",
-        "workflow_started" to "analytics", "workflow_completed" to "analytics", "workflow_failed" to "analytics",
-        // Ecommerce extended family
-        "cart_item_added" to "commerce", "cart_item_removed" to "commerce",
-        // Registry events previously missing from this map (mobile-event parity gate)
-        "product_viewed" to "commerce", "checkout_started" to "commerce", "coupon_applied" to "commerce",
-        "message_received_observed" to "analytics", "message_sent_observed" to "analytics",
-        "notification_opened" to "analytics",
-        "cart_updated" to "commerce", "checkout_step_completed" to "commerce",
-        "order_completed" to "commerce", "order_cancelled" to "commerce",
-        "order_refunded" to "commerce", "chargeback_observed" to "commerce",
-        "subscription_started" to "commerce", "trial_started" to "commerce", "trial_converted" to "commerce",
-        "subscription_renewed" to "commerce", "subscription_upgrade_observed" to "commerce",
-        "subscription_downgrade_observed" to "commerce", "subscription_cancelled" to "commerce",
-        "invoice_issued" to "commerce", "invoice_paid" to "commerce", "invoice_failed" to "commerce",
-        "dunning_started" to "commerce", "dunning_resolved" to "commerce",
-        // Friction family
-        "dead_click_observed" to "analytics", "rage_click_observed" to "analytics",
-        "scroll_depth_observed" to "analytics", "form_started" to "analytics",
-        "form_field_interaction" to "analytics", "form_validation_failed" to "analytics",
-        "form_submitted" to "analytics", "form_abandoned" to "analytics",
-        "search_reformulated" to "analytics", "retry_observed" to "analytics",
-        "journey_stalled" to "analytics", "backtrack_observed" to "analytics",
-        // Interaction family
-        "surface_entered" to "analytics", "surface_exited" to "analytics",
-        "interaction_observed" to "analytics", "feature_started" to "analytics",
-        "feature_completed" to "analytics", "feature_abandoned" to "analytics",
-        "action_attempted" to "analytics", "action_succeeded" to "analytics",
-        "action_failed" to "analytics", "action_cancelled" to "analytics",
+        // exposure
+        "content_impression" to "analytics",
+        "recommendation_exposed" to "analytics",
+        "offer_exposed" to "analytics",
+        "feature_exposed" to "analytics",
+        "search_result_exposed" to "analytics",
+        "ad_exposed" to "marketing",
+        "notification_presented" to "analytics",
+        "decision_observed" to "analytics",
+        // outcome
+        "outcome_observed" to "analytics",
+        "goal_achieved" to "analytics",
+        "goal_failed" to "analytics",
+        "recommendation_accepted" to "analytics",
+        "recommendation_rejected" to "analytics",
+        "feedback_submitted" to "analytics",
+        "retention_observed" to "analytics",
+        "churn_observed" to "analytics",
+        "human_override_observed" to "analytics",
+        // b2b
+        "organization_observed" to "analytics",
+        "workspace_created" to "analytics",
+        "workspace_updated" to "analytics",
+        "member_invited" to "analytics",
+        "member_joined" to "analytics",
+        "member_removed" to "analytics",
+        "role_changed" to "analytics",
+        "seat_assigned" to "analytics",
+        "seat_released" to "analytics",
+        "integration_connected" to "analytics",
+        "integration_disconnected" to "analytics",
+        "service_account_created" to "analytics",
+        "service_account_revoked" to "analytics",
+        "api_key_created" to "analytics",
+        "api_key_revoked" to "analytics",
+        "project_created" to "analytics",
+        "project_archived" to "analytics",
+        "workflow_started" to "analytics",
+        "workflow_completed" to "analytics",
+        "workflow_failed" to "analytics",
+        // ecommerce
+        "product_viewed" to "commerce",
+        "cart_item_added" to "commerce",
+        "cart_item_removed" to "commerce",
+        "cart_updated" to "commerce",
+        "coupon_applied" to "commerce",
+        "checkout_started" to "commerce",
+        "checkout_step_completed" to "commerce",
+        "order_completed" to "commerce",
+        "order_cancelled" to "commerce",
+        "order_refunded" to "commerce",
+        "chargeback_observed" to "commerce",
+        "subscription_started" to "commerce",
+        "trial_started" to "commerce",
+        "trial_converted" to "commerce",
+        "subscription_renewed" to "commerce",
+        "subscription_upgrade_observed" to "commerce",
+        "subscription_downgrade_observed" to "commerce",
+        "subscription_cancelled" to "commerce",
+        "invoice_issued" to "commerce",
+        "invoice_paid" to "commerce",
+        "invoice_failed" to "commerce",
+        "dunning_started" to "commerce",
+        "dunning_resolved" to "commerce",
+        // friction
+        "dead_click_observed" to "analytics",
+        "rage_click_observed" to "analytics",
+        "scroll_depth_observed" to "analytics",
+        "form_started" to "analytics",
+        "form_field_interaction" to "analytics",
+        "form_validation_failed" to "analytics",
+        "form_submitted" to "analytics",
+        "form_abandoned" to "analytics",
+        "search_reformulated" to "analytics",
+        "retry_observed" to "analytics",
+        "journey_stalled" to "analytics",
+        "backtrack_observed" to "analytics",
+        // interaction
+        "surface_entered" to "analytics",
+        "surface_exited" to "analytics",
+        "interaction_observed" to "analytics",
+        "ui_interaction_observed" to "analytics",
+        "feature_started" to "analytics",
+        "feature_completed" to "analytics",
+        "feature_abandoned" to "analytics",
+        "action_attempted" to "analytics",
+        "action_succeeded" to "analytics",
+        "action_failed" to "analytics",
+        "action_cancelled" to "analytics",
         "active_interval_observed" to "analytics",
-        // Server observation family
-        "api_request_observed" to "analytics", "webhook_delivery_observed" to "analytics",
-        "connector_sync_started" to "analytics", "connector_sync_completed" to "analytics",
-        "connector_sync_failed" to "analytics", "job_started" to "analytics",
-        "job_completed" to "analytics", "job_failed" to "analytics",
-        "rate_limit_observed" to "analytics", "dependency_failure_observed" to "analytics",
+        // server
+        "api_request_observed" to "analytics",
+        "webhook_delivery_observed" to "analytics",
+        "connector_sync_started" to "analytics",
+        "connector_sync_completed" to "analytics",
+        "connector_sync_failed" to "analytics",
+        "job_started" to "analytics",
+        "job_completed" to "analytics",
+        "job_failed" to "analytics",
+        "rate_limit_observed" to "analytics",
+        "dependency_failure_observed" to "analytics",
         "export_completed" to "analytics",
-        // Identity lifecycle family
-        "signup_started" to "analytics", "signup_completed" to "analytics",
-        "login_succeeded" to "analytics", "login_failed" to "analytics",
-        "logout_observed" to "analytics", "sso_observed" to "analytics",
-        "mfa_challenge_observed" to "analytics", "identity_verified" to "analytics",
-        "alias_link_requested" to "analytics", "alias_link_confirmed" to "analytics",
-        "alias_revoked" to "analytics", "account_recovery_started" to "analytics",
-        "account_recovery_completed" to "analytics", "device_registered" to "analytics",
+        // identity_lc
+        "signup_started" to "analytics",
+        "signup_completed" to "analytics",
+        "login_succeeded" to "analytics",
+        "login_failed" to "analytics",
+        "logout_observed" to "analytics",
+        "sso_observed" to "analytics",
+        "mfa_challenge_observed" to "analytics",
+        "identity_verified" to "analytics",
+        "alias_link_requested" to "analytics",
+        "alias_link_confirmed" to "analytics",
+        "alias_revoked" to "analytics",
+        "account_recovery_started" to "analytics",
+        "account_recovery_completed" to "analytics",
+        "device_registered" to "analytics",
         "device_revoked" to "analytics",
-        // Agent evaluation family
-        "agent_evaluation_observed" to "agent", "agent_cost_observed" to "agent",
-        "agent_grounding_observed" to "agent", "agent_guardrail_observed" to "agent",
-        "agent_human_override_observed" to "agent", "ai_invocation_observed" to "agent",
-        // Web3 lifecycle extensions
-        "transaction_pending_observed" to "web3", "transaction_confirmed_observed" to "web3",
-        "transaction_reverted_observed" to "web3", "transaction_reorged_observed" to "web3",
-        "token_approval_observed" to "web3", "allowance_changed_observed" to "web3",
-        "bridge_transfer_observed" to "web3", "settlement_finality_observed" to "web3",
-        // Comms family
-        "notification_delivered" to "analytics", "notification_clicked" to "analytics",
-        "email_delivered" to "marketing", "email_opened" to "marketing",
-        "email_clicked" to "marketing", "email_bounced" to "marketing",
-        "email_queued" to "marketing", "email_processed" to "marketing",
-        "email_sent" to "marketing", "email_deferred" to "marketing",
-        "email_dropped" to "marketing", "email_replied" to "marketing",
-        "email_spam_complaint" to "marketing", "email_suppressed" to "marketing",
-        "message_replied_observed" to "analytics", "unsubscribe_observed" to "marketing",
-        "support_case_created" to "analytics", "support_case_resolved" to "analytics",
-        "support_case_escalated" to "analytics", "support_sla_breached" to "analytics",
-        // Credit family (explicit opt-in)
-        "credit_signal_observed" to "credit", "credit_account_observed" to "credit",
+        // web3_lc
+        "transaction_pending_observed" to "web3",
+        "transaction_confirmed_observed" to "web3",
+        "transaction_reverted_observed" to "web3",
+        "transaction_reorged_observed" to "web3",
+        "token_approval_observed" to "web3",
+        "allowance_changed_observed" to "web3",
+        "bridge_transfer_observed" to "web3",
+        "settlement_finality_observed" to "web3",
+        // comms
+        "notification_delivered" to "analytics",
+        "notification_opened" to "analytics",
+        "notification_clicked" to "analytics",
+        "email_delivered" to "marketing",
+        "email_opened" to "marketing",
+        "email_clicked" to "marketing",
+        "email_bounced" to "marketing",
+        "email_queued" to "marketing",
+        "email_processed" to "marketing",
+        "email_sent" to "marketing",
+        "email_deferred" to "marketing",
+        "email_dropped" to "marketing",
+        "email_replied" to "marketing",
+        "email_spam_complaint" to "marketing",
+        "email_suppressed" to "marketing",
+        "message_received_observed" to "analytics",
+        "message_sent_observed" to "analytics",
+        "message_replied_observed" to "analytics",
+        "unsubscribe_observed" to "marketing",
+        "support_case_created" to "analytics",
+        "support_case_resolved" to "analytics",
+        "support_case_escalated" to "analytics",
+        "support_sla_breached" to "analytics",
+        // credit
+        "credit_signal_observed" to "credit",
+        "credit_account_observed" to "credit",
         "credit_decision_observed" to "credit",
-        // Location family (explicit opt-in)
-        "location_observed" to "location", "geofence_transition_observed" to "location",
-        // Derivatives family (explicit financial_activity opt-in)
-        "trading_account_connected" to "financial_activity", "trading_account_disconnected" to "financial_activity",
-        "trading_account_authorized" to "financial_activity", "trading_account_deauthorized" to "financial_activity",
-        "trading_agent_enabled" to "financial_activity", "trading_agent_disabled" to "financial_activity",
-        "trade_intent_created" to "financial_activity", "trade_approval_requested" to "financial_activity",
-        "trade_approval_resolved" to "financial_activity", "risk_policy_updated" to "financial_activity",
+        // location
+        "location_observed" to "location",
+        "geofence_transition_observed" to "location",
+        // derivatives
+        "trading_account_connected" to "financial_activity",
+        "trading_account_disconnected" to "financial_activity",
+        "trading_account_authorized" to "financial_activity",
+        "trading_account_deauthorized" to "financial_activity",
+        "trading_agent_enabled" to "financial_activity",
+        "trading_agent_disabled" to "financial_activity",
+        "trade_intent_created" to "financial_activity",
+        "trade_approval_requested" to "financial_activity",
+        "trade_approval_resolved" to "financial_activity",
+        "risk_policy_updated" to "financial_activity",
         "human_trade_override_recorded" to "financial_activity",
-        // Stablecoin intelligence family (explicit opt-in)
-        "stablecoin_transfer_observed" to "economic_observability", "stablecoin_payment_observed" to "economic_observability",
-        "stablecoin_mint_observed" to "economic_observability", "stablecoin_burn_observed" to "economic_observability",
-        "stablecoin_bridge_outbound_observed" to "economic_observability", "stablecoin_bridge_inbound_observed" to "economic_observability",
-        "stablecoin_swap_observed" to "economic_observability", "stablecoin_x402_settlement_observed" to "economic_observability",
-        "stablecoin_treasury_movement_observed" to "economic_observability", "stablecoin_payout_observed" to "economic_observability",
-        "stablecoin_venue_deposit_observed" to "economic_observability", "stablecoin_venue_withdrawal_observed" to "economic_observability",
-        "stablecoin_balance_snapshot_observed" to "economic_observability", "stablecoin_supply_snapshot_observed" to "economic_observability",
-        "stablecoin_holder_concentration_observed" to "economic_observability", "stablecoin_valuation_observed" to "economic_observability",
-        "stablecoin_depeg_detected" to "economic_observability", "stablecoin_depeg_resolved" to "economic_observability",
-        "stablecoin_finality_confirmed" to "economic_observability", "stablecoin_reorg_detected" to "economic_observability",
-        "stablecoin_observation_corrected" to "economic_observability", "stablecoin_reconciliation_run_completed" to "economic_observability",
-        "stablecoin_reconciliation_variance_detected" to "economic_observability", "stablecoin_reconciliation_variance_resolved" to "economic_observability",
-        "stablecoin_asset_registered" to "economic_observability", "stablecoin_deployment_registered" to "economic_observability",
-        "stablecoin_support_asserted" to "economic_observability", "stablecoin_support_revoked" to "economic_observability",
-        "stablecoin_flow_aggregate_materialized" to "economic_observability", "stablecoin_checkpoint_advanced" to "economic_observability",
-        // Derivatives intelligence family (explicit opt-in)
-        "derivatives_venue_registered" to "financial_activity", "derivatives_venue_deployment_registered" to "financial_activity",
-        "derivatives_instrument_registered" to "financial_activity", "derivatives_market_registered" to "financial_activity",
-        "derivatives_strategy_registered" to "financial_activity", "derivatives_strategy_version_registered" to "financial_activity",
-        "derivatives_risk_policy_registered" to "financial_activity", "derivatives_account_linked" to "financial_activity",
-        "derivatives_account_link_revoked" to "financial_activity", "derivatives_balance_snapshot_observed" to "financial_activity",
-        "derivatives_collateral_change_observed" to "financial_activity", "derivatives_margin_snapshot_observed" to "financial_activity",
-        "derivatives_order_observed" to "financial_activity", "derivatives_order_updated_observed" to "financial_activity",
-        "derivatives_order_cancelled_observed" to "financial_activity", "derivatives_order_rejected_observed" to "financial_activity",
-        "derivatives_order_expired_observed" to "financial_activity", "derivatives_fill_observed" to "financial_activity",
-        "derivatives_fill_corrected" to "financial_activity", "derivatives_position_opened_observed" to "financial_activity",
-        "derivatives_position_increased_observed" to "financial_activity", "derivatives_position_reduced_observed" to "financial_activity",
-        "derivatives_position_closed_observed" to "financial_activity", "derivatives_position_liquidated_observed" to "financial_activity",
-        "derivatives_position_adl_observed" to "financial_activity", "derivatives_position_settled_observed" to "financial_activity",
-        "derivatives_position_corrected" to "financial_activity", "derivatives_funding_payment_observed" to "financial_activity",
-        "derivatives_fee_observed" to "financial_activity", "derivatives_pnl_snapshot_materialized" to "financial_activity",
-        "derivatives_exposure_snapshot_materialized" to "financial_activity", "derivatives_price_observation_recorded" to "financial_activity",
-        "derivatives_market_status_changed" to "financial_activity", "derivatives_stream_gap_detected" to "financial_activity",
-        "derivatives_stream_gap_recovered" to "financial_activity", "derivatives_stream_checkpoint_advanced" to "financial_activity",
-        "derivatives_adapter_conformance_run" to "financial_activity", "derivatives_reconciliation_run_completed" to "financial_activity",
-        "derivatives_reconciliation_variance_detected" to "financial_activity", "derivatives_reconciliation_variance_resolved" to "financial_activity",
+        "derivatives_venue_registered" to "financial_activity",
+        "derivatives_venue_deployment_registered" to "financial_activity",
+        "derivatives_instrument_registered" to "financial_activity",
+        "derivatives_market_registered" to "financial_activity",
+        "derivatives_strategy_registered" to "financial_activity",
+        "derivatives_strategy_version_registered" to "financial_activity",
+        "derivatives_risk_policy_registered" to "financial_activity",
+        "derivatives_account_linked" to "financial_activity",
+        "derivatives_account_link_revoked" to "financial_activity",
+        "derivatives_balance_snapshot_observed" to "financial_activity",
+        "derivatives_collateral_change_observed" to "financial_activity",
+        "derivatives_margin_snapshot_observed" to "financial_activity",
+        "derivatives_order_observed" to "financial_activity",
+        "derivatives_order_updated_observed" to "financial_activity",
+        "derivatives_order_cancelled_observed" to "financial_activity",
+        "derivatives_order_rejected_observed" to "financial_activity",
+        "derivatives_order_expired_observed" to "financial_activity",
+        "derivatives_fill_observed" to "financial_activity",
+        "derivatives_fill_corrected" to "financial_activity",
+        "derivatives_position_opened_observed" to "financial_activity",
+        "derivatives_position_increased_observed" to "financial_activity",
+        "derivatives_position_reduced_observed" to "financial_activity",
+        "derivatives_position_closed_observed" to "financial_activity",
+        "derivatives_position_liquidated_observed" to "financial_activity",
+        "derivatives_position_adl_observed" to "financial_activity",
+        "derivatives_position_settled_observed" to "financial_activity",
+        "derivatives_position_corrected" to "financial_activity",
+        "derivatives_funding_payment_observed" to "financial_activity",
+        "derivatives_fee_observed" to "financial_activity",
+        "derivatives_pnl_snapshot_materialized" to "financial_activity",
+        "derivatives_exposure_snapshot_materialized" to "financial_activity",
+        "derivatives_price_observation_recorded" to "financial_activity",
+        "derivatives_market_status_changed" to "financial_activity",
+        "derivatives_stream_gap_detected" to "financial_activity",
+        "derivatives_stream_gap_recovered" to "financial_activity",
+        "derivatives_stream_checkpoint_advanced" to "financial_activity",
+        "derivatives_adapter_conformance_run" to "financial_activity",
+        "derivatives_reconciliation_run_completed" to "financial_activity",
+        "derivatives_reconciliation_variance_detected" to "financial_activity",
+        "derivatives_reconciliation_variance_resolved" to "financial_activity",
         "derivatives_risk_threshold_breached" to "financial_activity",
-        // Interoperability intelligence family (explicit opt-in)
-        "interop_provider_registered" to "cross_chain_observability", "interop_gateway_registered" to "cross_chain_observability",
-        "interop_path_registered" to "cross_chain_observability", "interop_application_registered" to "cross_chain_observability",
-        "interop_verification_actor_registered" to "cross_chain_observability", "interop_message_discovered" to "cross_chain_observability",
-        "interop_message_sent_observed" to "cross_chain_observability", "interop_message_source_confirmed" to "cross_chain_observability",
-        "interop_message_verification_observed" to "cross_chain_observability", "interop_message_verified" to "cross_chain_observability",
-        "interop_message_delivery_attempt_observed" to "cross_chain_observability", "interop_message_delivered" to "cross_chain_observability",
-        "interop_message_executed_observed" to "cross_chain_observability", "interop_message_settled" to "cross_chain_observability",
-        "interop_message_failed" to "cross_chain_observability", "interop_message_timeout" to "cross_chain_observability",
-        "interop_message_expired" to "cross_chain_observability", "interop_message_cancelled" to "cross_chain_observability",
-        "interop_message_refunded_observed" to "cross_chain_observability", "interop_message_recovered" to "cross_chain_observability",
-        "interop_message_reorged" to "cross_chain_observability", "interop_message_corrected" to "cross_chain_observability",
-        "interop_message_correlated" to "cross_chain_observability", "interop_intent_observed" to "cross_chain_observability",
-        "interop_intent_fulfilled_observed" to "cross_chain_observability", "interop_asset_leg_locked_observed" to "cross_chain_observability",
-        "interop_asset_leg_burned_observed" to "cross_chain_observability", "interop_asset_leg_minted_observed" to "cross_chain_observability",
-        "interop_asset_leg_released_observed" to "cross_chain_observability", "interop_fee_observed" to "cross_chain_observability",
-        "interop_security_policy_snapshot_recorded" to "cross_chain_observability", "interop_security_policy_changed" to "cross_chain_observability",
-        "interop_verification_quorum_observed" to "cross_chain_observability", "interop_provider_checkpoint_advanced" to "cross_chain_observability",
-        "interop_stream_gap_detected" to "cross_chain_observability", "interop_stream_gap_recovered" to "cross_chain_observability",
-        "interop_reconciliation_run_completed" to "cross_chain_observability", "interop_reconciliation_variance_detected" to "cross_chain_observability",
-        "interop_reconciliation_variance_resolved" to "cross_chain_observability"
+        // stablecoin
+        "stablecoin_transfer_observed" to "economic_observability",
+        "stablecoin_payment_observed" to "economic_observability",
+        "stablecoin_mint_observed" to "economic_observability",
+        "stablecoin_burn_observed" to "economic_observability",
+        "stablecoin_bridge_outbound_observed" to "economic_observability",
+        "stablecoin_bridge_inbound_observed" to "economic_observability",
+        "stablecoin_swap_observed" to "economic_observability",
+        "stablecoin_x402_settlement_observed" to "economic_observability",
+        "stablecoin_treasury_movement_observed" to "economic_observability",
+        "stablecoin_payout_observed" to "economic_observability",
+        "stablecoin_venue_deposit_observed" to "economic_observability",
+        "stablecoin_venue_withdrawal_observed" to "economic_observability",
+        "stablecoin_balance_snapshot_observed" to "economic_observability",
+        "stablecoin_supply_snapshot_observed" to "economic_observability",
+        "stablecoin_holder_concentration_observed" to "economic_observability",
+        "stablecoin_valuation_observed" to "economic_observability",
+        "stablecoin_depeg_detected" to "economic_observability",
+        "stablecoin_depeg_resolved" to "economic_observability",
+        "stablecoin_finality_confirmed" to "economic_observability",
+        "stablecoin_reorg_detected" to "economic_observability",
+        "stablecoin_observation_corrected" to "economic_observability",
+        "stablecoin_reconciliation_run_completed" to "economic_observability",
+        "stablecoin_reconciliation_variance_detected" to "economic_observability",
+        "stablecoin_reconciliation_variance_resolved" to "economic_observability",
+        "stablecoin_asset_registered" to "economic_observability",
+        "stablecoin_deployment_registered" to "economic_observability",
+        "stablecoin_support_asserted" to "economic_observability",
+        "stablecoin_support_revoked" to "economic_observability",
+        "stablecoin_flow_aggregate_materialized" to "economic_observability",
+        "stablecoin_checkpoint_advanced" to "economic_observability",
+        // interop
+        "interop_provider_registered" to "cross_chain_observability",
+        "interop_gateway_registered" to "cross_chain_observability",
+        "interop_path_registered" to "cross_chain_observability",
+        "interop_application_registered" to "cross_chain_observability",
+        "interop_verification_actor_registered" to "cross_chain_observability",
+        "interop_message_discovered" to "cross_chain_observability",
+        "interop_message_sent_observed" to "cross_chain_observability",
+        "interop_message_source_confirmed" to "cross_chain_observability",
+        "interop_message_verification_observed" to "cross_chain_observability",
+        "interop_message_verified" to "cross_chain_observability",
+        "interop_message_delivery_attempt_observed" to "cross_chain_observability",
+        "interop_message_delivered" to "cross_chain_observability",
+        "interop_message_executed_observed" to "cross_chain_observability",
+        "interop_message_settled" to "cross_chain_observability",
+        "interop_message_failed" to "cross_chain_observability",
+        "interop_message_timeout" to "cross_chain_observability",
+        "interop_message_expired" to "cross_chain_observability",
+        "interop_message_cancelled" to "cross_chain_observability",
+        "interop_message_refunded_observed" to "cross_chain_observability",
+        "interop_message_recovered" to "cross_chain_observability",
+        "interop_message_reorged" to "cross_chain_observability",
+        "interop_message_corrected" to "cross_chain_observability",
+        "interop_message_correlated" to "cross_chain_observability",
+        "interop_intent_observed" to "cross_chain_observability",
+        "interop_intent_fulfilled_observed" to "cross_chain_observability",
+        "interop_asset_leg_locked_observed" to "cross_chain_observability",
+        "interop_asset_leg_burned_observed" to "cross_chain_observability",
+        "interop_asset_leg_minted_observed" to "cross_chain_observability",
+        "interop_asset_leg_released_observed" to "cross_chain_observability",
+        "interop_fee_observed" to "cross_chain_observability",
+        "interop_security_policy_snapshot_recorded" to "cross_chain_observability",
+        "interop_security_policy_changed" to "cross_chain_observability",
+        "interop_verification_quorum_observed" to "cross_chain_observability",
+        "interop_provider_checkpoint_advanced" to "cross_chain_observability",
+        "interop_stream_gap_detected" to "cross_chain_observability",
+        "interop_stream_gap_recovered" to "cross_chain_observability",
+        "interop_reconciliation_run_completed" to "cross_chain_observability",
+        "interop_reconciliation_variance_detected" to "cross_chain_observability",
+        "interop_reconciliation_variance_resolved" to "cross_chain_observability",
+        // privacy
+        "data_subject_request_received" to "analytics",
+        "data_subject_request_queued" to "analytics",
+        "data_subject_request_denied" to "analytics",
+        "erasure_completed" to "analytics",
+        "erasure_failed" to "analytics"
+// @generated-end aether-consent-purposes/android-map
     )
     private val CANONICAL_EVENT_TYPES = EVENT_CONSENT_PURPOSE.keys
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
@@ -692,6 +946,15 @@ object Aether : DefaultLifecycleObserver {
     fun getUserId(): String? = userId
     fun getFingerprintId(): String = fingerprintId
 
+    /**
+     * Stamp source-native correlation context on every outgoing event's
+     * context.correlation (WS-C / Invariant #12). Values are carried verbatim
+     * and never overwritten by the backend normalization. Pass null to clear.
+     */
+    fun setCorrelationContext(correlation: CorrelationContext?) {
+        sourceCorrelation = correlation
+    }
+
     fun reset() {
         flush()
         flushJob?.cancel()
@@ -748,9 +1011,15 @@ object Aether : DefaultLifecycleObserver {
                 put("events", events)
             }
             val temp = file.resolveSibling(file.name + ".tmp")
-            temp.writeText(envelope.toString())
+            val serialized = envelope.toString().toByteArray(Charsets.UTF_8)
+            val out = if (encryptedDurableQueueEnabled()) {
+                encryptQueuePayload(serialized) ?: serialized
+            } else {
+                serialized
+            }
+            temp.writeBytes(out)
             if (!temp.renameTo(file)) {
-                file.writeText(temp.readText())
+                file.writeBytes(out)
                 temp.delete()
             }
         } catch (error: Exception) {
@@ -762,7 +1031,16 @@ object Aether : DefaultLifecycleObserver {
         val file = queueFile() ?: return
         if (!file.exists()) return
         try {
-            val text = file.readText()
+            val bytes = file.readBytes()
+            val text = if (hasQueueCipherMagic(bytes)) {
+                val decrypted = decryptQueuePayload(bytes)
+                    ?: throw IllegalStateException("durable queue decryption failed")
+                String(decrypted, Charsets.UTF_8)
+            } else {
+                // Legacy plaintext file (written before the encrypted flag) is
+                // accepted as-is — upgrade path when the flag was just enabled.
+                String(bytes, Charsets.UTF_8)
+            }
             val events = if (text.trimStart().startsWith("[")) {
                 JSONArray(text) // v0 compatibility
             } else {
@@ -798,6 +1076,95 @@ object Aether : DefaultLifecycleObserver {
     }
 
     private fun clearPersistedQueue() { queueFile()?.delete() }
+
+    // =========================================================================
+    // ENCRYPTED DURABLE QUEUE WITH ACK SEMANTICS (WS-C row 12)
+    // Gated on AetherConfig.encryptedDurableQueue (default OFF). When ON the
+    // persisted queue file is AES-GCM encrypted with a 256-bit key held in the
+    // Android Keystore (never leaves secure hardware-backed storage), and events
+    // are removed only after the server acknowledges the batch (2xx) instead of
+    // the legacy delete-before-ack. The legacy plaintext format is still read
+    // (upgrade path) and ciphertext is self-describing via a magic prefix, so a
+    // flag flip in either direction never strands the queue.
+    // =========================================================================
+
+    private fun encryptedDurableQueueEnabled() = config?.encryptedDurableQueue == true
+
+    private fun hasQueueCipherMagic(bytes: ByteArray): Boolean {
+        if (bytes.size < QUEUE_CIPHER_MAGIC.length) return false
+        return String(bytes.copyOfRange(0, QUEUE_CIPHER_MAGIC.length), Charsets.UTF_8) == QUEUE_CIPHER_MAGIC
+    }
+
+    @Synchronized
+    private fun getOrCreateQueueCipherKey(): SecretKey? {
+        // Android Keystore AES-GCM requires API 23+; below that we fall back to
+        // the legacy plaintext file (documented in the manifest) rather than
+        // weakening the on-device guarantee silently on supported devices.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
+        return try {
+            val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            if (keyStore.containsAlias(QUEUE_KEY_ALIAS)) {
+                keyStore.getKey(QUEUE_KEY_ALIAS, null) as? SecretKey
+            } else {
+                val generator = KeyGenerator.getInstance(
+                    KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore"
+                )
+                generator.init(
+                    KeyGenParameterSpec.Builder(
+                        QUEUE_KEY_ALIAS,
+                        KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+                    )
+                        .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                        .setKeySize(256)
+                        .build()
+                )
+                generator.generateKey()
+            }
+        } catch (error: Exception) {
+            log("Failed to load/create queue cipher key: " + error.javaClass.simpleName)
+            null
+        }
+    }
+
+    private fun encryptQueuePayload(plain: ByteArray): ByteArray? {
+        val key = getOrCreateQueueCipherKey() ?: return null
+        return try {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, key)
+            val iv = cipher.iv
+            val ciphertext = cipher.doFinal(plain)
+            QUEUE_CIPHER_MAGIC.toByteArray(Charsets.UTF_8) + iv + ciphertext
+        } catch (error: Exception) {
+            log("Failed to encrypt durable queue: " + error.javaClass.simpleName)
+            null
+        }
+    }
+
+    private fun decryptQueuePayload(data: ByteArray): ByteArray? {
+        val key = getOrCreateQueueCipherKey() ?: return null
+        return try {
+            val magic = QUEUE_CIPHER_MAGIC.toByteArray(Charsets.UTF_8)
+            val iv = data.copyOfRange(magic.size, magic.size + 12)
+            val ciphertext = data.copyOfRange(magic.size + 12, data.size)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
+            cipher.doFinal(ciphertext)
+        } catch (error: Exception) {
+            log("Failed to decrypt durable queue: " + error.javaClass.simpleName)
+            null
+        }
+    }
+
+    /** Remove acknowledged events (by id) from the queue and persist. */
+    private fun acknowledge(batch: List<JSONObject>) {
+        val acked = batch.mapNotNull { id ->
+            id.optString("id").takeIf { s -> s.isNotEmpty() }
+        }.toSet()
+        if (acked.isEmpty()) return
+        eventQueue.removeIf { it.optString("id") in acked }
+        persistQueue()
+    }
 
     // =========================================================================
     // DEEP-LINK & INSTALL ATTRIBUTION
@@ -1549,6 +1916,15 @@ object Aether : DefaultLifecycleObserver {
         val cfg = config ?: return@withContext
         if (eventQueue.isEmpty()) return@withContext
 
+        if (encryptedDurableQueueEnabled()) {
+            // Durable ack mode (WS-C row 12): events stay queued until the
+            // server acknowledges the batch (2xx) — never delete-before-ack.
+            val durableBatch = eventQueue.toList().take(minOf(cfg.batchSize, eventQueue.size))
+            if (durableBatch.isEmpty()) return@withContext
+            sendBatchDurableAck(durableBatch, cfg, retryCount = 0)
+            return@withContext
+        }
+
         val batch = mutableListOf<JSONObject>()
         repeat(minOf(cfg.batchSize, eventQueue.size)) {
             eventQueue.poll()?.let { batch.add(it) }
@@ -1557,6 +1933,97 @@ object Aether : DefaultLifecycleObserver {
         persistQueue()
 
         sendBatchWithRetry(batch, cfg, retryCount = 0)
+    }
+
+    /**
+     * Durable ack-mode batch sender. Unlike the legacy delete-before-ack path,
+     * the batch is NOT removed from the queue before the request completes. A
+     * 2xx response acknowledges the batch (events removed by id, preserving
+     * order); transient/network failures retain the events for the next flush;
+     * terminal client errors (>= 400) are acknowledged-removed as permanently
+     * rejected (the server will not accept them on retry). Because the request
+     * is idempotent server-side (per-event id), overlapping flushes/retries
+     * cannot create duplicate durable facts.
+     */
+    private suspend fun sendBatchDurableAck(
+        batch: List<JSONObject>,
+        cfg: AetherConfig,
+        retryCount: Int,
+    ): Unit = withContext(Dispatchers.IO) {
+        val maxRetries = 3
+        try {
+            val url = URL("${cfg.endpoint}/v1/batch")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("Authorization", "Bearer ${cfg.apiKey}")
+            connection.setRequestProperty("X-Aether-SDK", "android")
+            connection.doOutput = true
+            connection.connectTimeout = 10000
+            connection.readTimeout = 10000
+
+            val payload = JSONObject().apply {
+                put("batch", JSONArray(batch))
+                put("sentAt", dateFormat.format(Date()))
+            }
+
+            val sendStart = System.currentTimeMillis()
+            connection.outputStream.use { it.write(payload.toString().toByteArray()) }
+            val responseCode = connection.responseCode
+            val latencyMs = (System.currentTimeMillis() - sendStart).toDouble()
+            val responseBody = if (responseCode in 200..299) {
+                try { connection.inputStream.bufferedReader().readText() } catch (_: Exception) { "" }
+            } else ""
+            connection.disconnect()
+
+            when {
+                responseCode in 200..299 -> {
+                    healthAgent?.recordBatchAttempt(true, latencyMs)
+                    acknowledge(batch)
+                    emitBatchHealth(batch.size, responseBody)
+                }
+                responseCode == 429 -> {
+                    val retryAfterSec = connection.getHeaderField("Retry-After")?.toLongOrNull() ?: 5L
+                    if (retryCount < maxRetries) {
+                        healthAgent?.recordRetry()
+                        delay(retryAfterSec * 1000)
+                        sendBatchDurableAck(batch, cfg, retryCount + 1)
+                    } else {
+                        healthAgent?.recordBatchAttempt(false, latencyMs)
+                        log("Durable batch retained after $maxRetries retries (rate limited)")
+                    }
+                }
+                responseCode == 408 || responseCode == 425 || responseCode >= 500 -> {
+                    if (retryCount < maxRetries) {
+                        healthAgent?.recordRetry()
+                        val backoff = minOf(1000L * (1L shl retryCount), 30000L)
+                        delay(backoff)
+                        sendBatchDurableAck(batch, cfg, retryCount + 1)
+                    } else {
+                        healthAgent?.recordBatchAttempt(false, latencyMs)
+                        log("Durable batch retained after $maxRetries retries (retryable error $responseCode)")
+                    }
+                }
+                responseCode >= 400 -> {
+                    healthAgent?.recordBatchAttempt(false, latencyMs)
+                    healthAgent?.recordDroppedEvents(batch.size)
+                    acknowledge(batch)
+                    log("Durable batch rejected (client error $responseCode) — not retrying")
+                }
+            }
+        } catch (e: Exception) {
+            log("Durable batch send failed: ${e.message}")
+            if (retryCount < maxRetries) {
+                healthAgent?.recordRetry()
+                val backoff = minOf(1000L * (1L shl retryCount), 30000L)
+                delay(backoff)
+                sendBatchDurableAck(batch, cfg, retryCount + 1)
+            } else {
+                healthAgent?.recordBatchAttempt(false, 0.0)
+                // Retained (never removed) for a later flush cycle.
+                log("Durable batch retained after $maxRetries retries (transport failure)")
+            }
+        }
     }
 
     private suspend fun sendBatchWithRetry(
@@ -1754,6 +2221,8 @@ object Aether : DefaultLifecycleObserver {
         put("sequence", JSONObject().apply {
             put("event", eventSequence)
         })
+        // Source-native correlation rides on every event (WS-C / #12).
+        sourceCorrelation?.let { put("correlation", it.toJson()) }
     }
 
     private fun loadOrCreateAnonymousId(): String {
@@ -1968,7 +2437,16 @@ object Aether : DefaultLifecycleObserver {
 
             if (resolvedAnonymousId.isEmpty() || resolvedAnonymousId == anonymousId) return@withContext
 
-            resolvedUserId?.let { uid -> this@Aether.userId = uid; prefs?.edit()?.putString("userId", uid)?.apply() }
+            // WS-C / Invariant #4: in subject-hints-only mode the SDK stops
+            // re-stamping the resolved canonical user id into its persisted
+            // identity (no client-side canonical restamp); the backend resolves
+            // identity from the source-asserted hints. Legacy mode keeps it.
+            if (config?.subjectHintsOnly != true) {
+                resolvedUserId?.let { uid ->
+                    this@Aether.userId = uid
+                    prefs?.edit()?.putString("userId", uid)?.apply()
+                }
+            }
             enqueueEvent("journey_resumed", mapOf(
                 "resolvedAnonymousId" to resolvedAnonymousId,
                 "resolvedUserId" to (resolvedUserId ?: "")

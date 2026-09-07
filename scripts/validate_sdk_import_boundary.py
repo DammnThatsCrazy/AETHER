@@ -261,6 +261,26 @@ def main() -> int:
     for entry in sorted(allowlist - actual):
         errors.append(f"allowlist entry no longer references an internal target — REMOVE it (shrink-only): {entry}")
 
+    # WS-C row 28 / SDK thinness: the interpretation-bearing mirror modules must
+    # NOT be star-exported from the @aether/shared public barrel. Their canonical
+    # homes are the backend Python modules (commerce_bridge.py /
+    # economic360_contracts.py); a star-export here re-ships SDK-side backend
+    # intelligence to every SDK consumer. Consumers import only the passive
+    # contracts they need via explicit subpaths.
+    shared_index = ROOT / "packages" / "shared" / "index.ts"
+    if shared_index.is_file():
+        index_text = shared_index.read_text(encoding="utf-8")
+        for banned_star_export in (
+            "export * from './economic-metrics';",
+            "export * from './commerce-bridge';",
+        ):
+            if banned_star_export in index_text:
+                errors.append(
+                    "packages/shared/index.ts re-exports a backend-interpretation "
+                    f"module ({banned_star_export!r}) via the public barrel — remove "
+                    "the star-export (SDK thinness, WS-C row 28)"
+                )
+
     if errors:
         print("SDK IMPORT-BOUNDARY VIOLATIONS:", file=sys.stderr)
         for error in errors:

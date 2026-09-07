@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "4e6fdad"
+last_synced_commit: "c4f33e58"
 ---
 
 # Aether iOS SDK v8.12.0 — Integration Guide
@@ -96,6 +96,14 @@ let anonId = Aether.shared.getAnonymousId()
 // Reset on logout
 Aether.shared.reset()
 ```
+
+> **Native identity → subject-hints convergence (WS-C / Invariant #4, default OFF).**
+> In legacy mode the SDK re-stamps the resolved canonical user id into its
+> persisted identity after `/sdk/identity/resolve` and emits `journey_resumed`
+> with the resolved tuple. Set `subjectHintsOnly = true` on `AetherConfig` to
+> stop that client-side canonical re-stamp — the backend then resolves identity
+> from the source-asserted subject hints the event carries, and the resolved id
+> is still reported inside the `journey_resumed` observation for server use.
 
 ### Device Fingerprint
 
@@ -307,6 +315,8 @@ struct AetherConfig {
     var onJourneyResumed:                        // Fires once when a prior session is matched
         ((_ resolvedAnonymousId: String,
           _ resolvedUserId: String?) -> Void)? = nil
+    var subjectHintsOnly: Bool = false           // Subject-hints identity (default OFF = legacy client-side canonical re-stamp)
+    var encryptedDurableQueue: Bool = false      // AES-GCM durable queue + server ack (default OFF = plaintext delete-before-ack)
 }
 
 struct ModuleConfig {
@@ -355,6 +365,12 @@ UIKit Events / Wallet Interactions
   `sequence.event` counter (reset on session rotation) for gap/reorder
   detection at ingest
 - Session ID, anonymous ID, user ID
+- Optional source-native correlation context `context.correlation`
+  (`{correlationId, causationId, traceId, spanId, parentObservationId}`),
+  stamped on every outgoing event once the host app calls
+  `Aether.shared.setCorrelationContext(...)`. The backend correlation block is
+  additive — source-native values are never overwritten during normalization,
+  and `parentObservationId` is carried end-to-end into `parent_observation_id`.
 
 ### What the backend derives:
 - Device model, screen size from User-Agent
@@ -376,6 +392,14 @@ All event operations are dispatched to a private serial queue (`DispatchQueue(la
 - **Anonymous ID** and **User ID** are persisted in `UserDefaults` under `com.aether.sdk` suite
 - **Device fingerprint** is generated on each init (deterministic — same result for same device)
 - **Event queue** is persisted to `Application Support/aether_queue.json` (file-based, capped at 1000 events; flushed on foreground)
+- **Encrypted durable queue (WS-C row 12, default OFF):** set
+  `encryptedDurableQueue = true` on `AetherConfig` to encrypt the persisted
+  queue file with AES-GCM (256-bit key held in the Keychain,
+  `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`) and switch to
+  server-ack removal — events leave the queue only after the batch POST returns
+  2xx (legacy is delete-before-ack), preserving order and idempotency across
+  kills. The file is self-describing (magic prefix), so the legacy plaintext
+  format is still read as the upgrade path when the flag is first enabled.
 - **Server config** cached in memory (refreshed on each app launch)
 
 ## Health Agent
@@ -447,7 +471,7 @@ Emit using `Aether.shared.track()` with `campaignId`, `ruleId`, and `rewardIdemp
 
 47 new event types support passive observation of external agentic activity. All are registered in the SDK's `eventConsentPurpose` map and flow through `POST /v1/batch` like any other event.
 
-**Consent purpose:** `"agent"` for all agentic observation events; `"commerce"` for x402 protocol observation events.
+**Consent purpose:** `"agent"` for agentic observation events and `"commerce"` for x402 protocol observation events, with five exceptions: the Robinhood-style trading-state observations `agent_trade_order_observed`, `agent_trade_fill_observed`, `agent_position_observed`, `agent_portfolio_snapshot_observed`, and `agent_performance_snapshot_observed` are consent-gated on the explicit opt-in purpose `financial_activity` (grant it via `grantConsent(categories: ["financial_activity"])`; it is never included in `grantAll()`).
 
 **Agentic account / MCP / tool (12 types):**
 

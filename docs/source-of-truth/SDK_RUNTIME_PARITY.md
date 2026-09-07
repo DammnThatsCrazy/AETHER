@@ -3,7 +3,10 @@
 Every Aether SDK must expose the same canonical runtime surface so that what a
 subject observes, consents to, and has counted is identical regardless of
 platform. Parity is enforced grep-based by `scripts/validate_sdk_parity.py`
-(there are no generated native registries — a Truth Kernel non-goal); if an SDK
+(the native event-type/consent-purpose regions inside Aether.swift/Aether.kt are
+code-generated from event-registry.json by `scripts/generate_contracts.py` —
+WS-A6 — and gated by `validate_mobile_event_parity.py`; the grep surface this
+validator asserts is the runtime capability surface below); if an SDK
 legitimately lacks a capability, the validator is updated in the same change.
 
 ## Canonical `observe()` (§2.6)
@@ -84,8 +87,8 @@ source for (`packages/shared/events.ts`; backend acceptance pinned by
 |---|---|
 | web | `surface: 'web'`, `schemaVersion` (synced literal), `operatingSystem`, `application` (config), `sequence.event`, journey snapshot on every event |
 | server | `surface: 'server'`, `schemaVersion` (shared import), `operatingSystem` (host OS), `application` (config), `sequence.event` |
-| iOS | `sequence.event` (per-session, reset on rotation), journey block on every event, 11-purpose consent map |
-| Android | `sequence.event` (per-session, reset on rotation), journey block on every event, 11-purpose consent map |
+| iOS | `sequence.event` (per-session, reset on rotation), journey block on every event, registry-generated per-event consent map |
+| Android | `sequence.event` (per-session, reset on rotation), journey block on every event, registry-generated per-event consent map |
 
 `sequence.event` is a monotonic per-session (native) / per-instance (TS)
 counter for backend gap/reorder detection.

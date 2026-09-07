@@ -12,7 +12,7 @@ source_files:
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
-last_synced_commit: "4e6fdad"
+last_synced_commit: "c4f33e58"
 ---
 
 # Events / Kafka Subsystem
@@ -34,7 +34,7 @@ Non-local environments fail closed: if `EVENT_BROKER=sns_sqs` but boto3 or the q
 - `EventConsumer` — Subscribes to topics with consumer groups, backpressure (`MAX_CONCURRENT=10`, resizable via `resize_concurrency()`), per-role queue/DLQ bindings, and durable dead-lettering.
 - `Event` — Serializable event schema with topic, payload, tenant_id, correlation_id, version, retry_count, and an optional `envelope` (v2 enrichment).
 - `EventEnvelopeV2` — Profile 360 v2 enrichment envelope; every field optional, additive only. Attached via `Event.with_v2()`, which bumps `version` to `"2.0"`.
-- `Topic` — Enum of all event topics (248 topics grouped into domain sections).
+- `Topic` — Enum of all event topics (253 topics grouped into domain sections).
 - `DLQPublishError` / `ConsumerClientTornDown` — named failure types: a failed durable dead-letter publish, and a broker client torn down while messages were still unacknowledged (which would otherwise turn a shutdown into a batch of duplicates).
 
 ## Environment Variables
@@ -73,7 +73,7 @@ In `AETHER_ENV=local` with no broker reachable, `EventProducer.publish()` append
 
 ## Event Topics
 
-Topics are organized by domain (248 total). Examples:
+Topics are organized by domain (253 total). Examples:
 - **Ingestion:** `aether.sdk.events.raw`, `aether.sdk.events.validated`
 - **Identity:** `aether.identity.resolved`, `aether.identity.merged`
 - **Analytics:** `aether.analytics.session.scored`, `aether.analytics.anomaly`
@@ -84,6 +84,8 @@ Topics are organized by domain (248 total). Examples:
 - **Notification Intelligence:** `aether.notifications.intelligence.detected`, `.validated`, `.queued`, `.delivered`, `.failed`, `.propagated`, `.expired`; `aether.notifications.operator.action`; `aether.notifications.channel.connected`, `.disconnected`
 - **Platform control plane:** durable job lifecycle, export artifacts, tenant notification inbox/outbox, job schedules, bulk imports, measurement restatement, reconciliation runs
 - **Risk360 / Fraud360 (read-only projection plane):** `aether.risk.signal.created` / `.superseded`, `aether.risk.assessment.created` / `.superseded`, `aether.fraud.hypothesis.created` / `.updated` / `.confirmed` / `.superseded`
+- **Data Exchange Plane:** `aether.data_exchange.artifact.uploaded` (governed transfer uploads; envelope import/export transitions deliberately reuse the existing `IMPORT_*` / `EXPORT_*` vocabulary)
+- **Reports (Data Exchange):** `aether.report.requested`, `.available`, `.failed`, `.downloaded` (report-artifact lifecycle)
 - **Dead letter:** the durable `DEAD_LETTER` topic
 
 ## Envelope Required-Field Enforcement (staged)

@@ -47,6 +47,7 @@ export type GovernanceDomain =
   | 'governance'
   | 'reliability'
   | 'data_quality'
+  | 'data_exchange'
   // Kyber operating-plane domains. `kyber_workforce` covers operator identity,
   // devices and role administration; `kyber_tenant` covers scoped tenant
   // inspection (Tenant Mirror + raw tenant reads); `kyber_command` covers the
@@ -54,7 +55,11 @@ export type GovernanceDomain =
   // aggregates) so read authority never implies workforce or command authority.
   | 'kyber_workforce'
   | 'kyber_tenant'
-  | 'kyber_command';
+  | 'kyber_command'
+  // Reconciled control plane. Read-only operator surface over managed-integration
+  // desired/observed state and reconcile drift. Kept out of `kyber_admin` so
+  // fleet/platform aggregates never imply authority to mutate integration state.
+  | 'reconciled_control';
 
 export type PermissionAction =
   | 'read'

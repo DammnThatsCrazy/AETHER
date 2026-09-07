@@ -68,6 +68,7 @@ These projectors also emit canonical activity for the listed event types but con
 | `identity` | pending | `identity_evidence_facts` | The bare identify call is not routed; identity evidence is currently projected from identity_lc lifecycle events only. |
 | `interaction` | pending_pr2 | `feature_transition_facts`, `product_interaction_facts`, `surface_interval_facts` | The interaction family currently has NO projector; its silverProjection targets land with the PR 2 interaction plane. |
 | `location` | pending | `location_observation_facts` | Registry declares silverProjection=location_observation_facts; no dispatcher projector exists yet. |
+| `privacy` | no_projection | — | Privacy DSR/compliance lifecycle events are control-plane state owned by the consent/DSR authority, not Silver analytics facts. |
 | `x402` | pending | `x402_flow_facts` | X402FlowProjector handles legacy *_observed event types that are not in the event registry; the registry's x402 family types are not yet routed by the dispatcher. |
 
 ## Out-of-band stages

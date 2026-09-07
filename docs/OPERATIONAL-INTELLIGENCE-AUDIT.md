@@ -16,7 +16,7 @@ source_files:
   - frontend/kyber/src/features/investigation/use-investigations.ts
   - frontend/kyber/src/features/governance/use-governance.ts
   - frontend/kyber/src/features/graph/use-graph-intelligence.ts
-last_synced_commit: "c1ed52a7"
+last_synced_commit: "0e967a68"
 reviewed_source_commits:
   - commit: "54eaac5d"
     reason: "Reviewed the staging first-admin bootstrap change; operational-intelligence findings remain unchanged."
@@ -282,4 +282,16 @@ PR #344 added the following operational artifacts that affect this audit scope:
 **New Event Topics** (`shared/events/events.py`): `FRAUD_NETWORK_CREATED`, `FRAUD_NETWORK_UPDATED`, `FRAUD_NETWORK_REFRESHED`, `FRAUD_NETWORK_ESCALATED`, `FRAUD_NETWORK_SUPPRESSED`, `FLOW_TRACE_CREATED`, `FLOW_TRACE_COMPLETED`, `RISK_OVERLAY_GENERATED`.
 
 **New Investigation Endpoints** (`services/investigation/routes.py`): Six new endpoints for attaching fraud networks and flow traces to investigation cases, retrieving fraud summaries, generating investigation reports, and exporting case bundles — all tenant-scoped, permission-gated, and using the existing state machine.
+
+### Data Exchange Plane event-surface additions (commit 5b974b02, `data-exchange-plane` lane)
+
+The Data Exchange Plane added **net-new** `Topic` members to
+`shared/events/events.py` for surfaces with no prior canonical vocabulary: the M2
+signed-transfer upload member `DATA_EXCHANGE_ARTIFACT_UPLOADED` (published for
+transfer uploads — deliberately distinct from the canonical bulk-import
+`IMPORT_UPLOADED`) and the M5 report-lifecycle quartet `REPORT_REQUESTED` /
+`REPORT_AVAILABLE` / `REPORT_FAILED` / `REPORT_DOWNLOADED`. Envelope import/export
+transitions reuse the existing `IMPORT_*` / `EXPORT_*` members, so no duplicate
+import/export vocabulary was introduced. These members are outside this audit's
+operational-intelligence scope; every A1–C4 finding above stands unchanged.
 | PostgreSQL DDL migrations | P0 (infra) | Pre-staging action required |

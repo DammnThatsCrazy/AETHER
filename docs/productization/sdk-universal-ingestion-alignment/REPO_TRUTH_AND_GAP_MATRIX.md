@@ -48,13 +48,17 @@ drift-exempt on purpose.
 
 One row per blueprint section (1–34). Classification reflects the repository at
 the Phase-0 baseline, before this slice's deprecations/gates. Evidence paths are
-repo-relative.
+repo-relative. Post-baseline deltas landed by the WS-A/WS-B slices (e.g. the
+WS-B5 consumption normalization spine superseding envelope-shape branching, the
+WS-B4 replay adapter, the WS-B3 per-path consent facade) are **not** rewritten
+into these frozen rows — they are tracked live in
+[`EXECUTION_STATE.md`](./EXECUTION_STATE.md).
 
 | Blueprint § | Classification | File evidence | Owning phase |
 |---|---|---|---|
 | 1 — Target end-to-end architecture | **MISALIGNED** | Two `/v1/batch` acceptors + two lake stacks; canonical path exists only in Python: `Backend Architecture/aether-backend/services/ingestion/batch.py`, root `docker-compose.yml`; duplicate claims in `Data Ingestion Layer/README.md` (:3001) and `Data Lake Architecture/README.md` | Phase 0 (deprecate duplicates) → WS-B |
 | 2 — Point 1: Observation Boundary | **MISALIGNED** | No single observation model after adapters; heterogeneous envelopes on one validated topic; five+ Bronze/Silver pipelines — `…/services/ingestion/workers.py`, `…/bronze_bulk.py`, `Backend Architecture/migrations/…/20260720_silver_import_facts.py` (synthesized `TEXT source_event_id`) | WS-B |
-| 3 — Point 2: Two-Envelope Architecture | **MISSING** | Envelope B = zero implementation; `BaseEvent` is the one flat envelope — `packages/shared/events.ts` | WS-A |
+| 3 — Point 2: Two-Envelope Architecture | **PARTIAL** | Envelope B = canonical field registry + pydantic runtime model + passive TS twin + flag-gated /v1/batch adoption (WS-A5, default OFF) — `packages/shared/contracts/observation-envelope-registry.json`, `Backend Architecture/aether-backend/shared/observation/envelope.py`, `packages/shared/observation-envelope.ts`, `…/services/ingestion/observation_envelope.py`, `…/batch.py`; `BaseEvent` (Envelope A) still the client envelope and the flat dict still the consumption surface until WS-B converges adapters | WS-A5 (model, flag) → WS-B (universal) |
 | 4 — Point 3: Contract Spine as Generator | **MISALIGNED** | Spine real + drift-gated, but native iOS/Android registries are hand-maintained and documented never-generated; `packages/web/src/types.ts` is a drifted hand-mirror; only consent is generated — `packages/shared/contracts/event-registry.json`, `scripts/generate_contracts.py`, `packages/ios/Sources/AetherSDK/Aether.swift`, `scripts/validate_mobile_event_parity.py` | WS-A (+ Phase 0 drift gates) |
 | 5 — Point 4: Universalize Ingress Adapters | **MISALIGNED** | Deprecated `POST /v1/ingest/events[/batch]` still mounted and publishes un-validated events into the "validated" topic; webhook/feed/import paths distinct — `Backend Architecture/aether-backend/main.py`, `…/services/ingestion/routes.py` | Phase 0 (kill aliases) → WS-B |
 | 6 — Point 5: Identity via Subject Hints | **MISALIGNED** | Web is hints-only/aligned; native SDKs stamp canonical top-level ids and re-stamp client-side after `/sdk/identity/resolve`; client `identityConfidence` persisted verbatim to Silver — `packages/ios/Sources/AetherSDK/Aether.swift`, `packages/android/src/…/Aether.kt`, `…/services/ingestion/validation.py` (`strip_canonical_entity_id`), `…/services/silver/projectors/touchpoint_projector.py` | WS-C |
@@ -69,7 +73,7 @@ repo-relative.
 | 15 — Point 14: SDK Core + Adapter + Facades | **MISSING** | No CI gate enforces SDK thinness; `packages/mobile-core` is an unrelated API client; interpretation modules ride inside the SDK graph | Phase 0 (import-boundary gate) → WS-C |
 | 16 — Point 15: Universal Backend Projection Pipeline | **MISALIGNED** | Five+ Bronze/Silver pipelines (SDK dispatcher · imports inline to `silver_import_facts` · DUNE lake promotion · connectors Bronze-only · semantic bypassing to `silver_semantic_observations`) instead of one normalization spine | WS-B |
 | 17 — Point 16: Ingestion Observable in Kyber | **MISSING** | No Observation Inspector (RAW→…→METRICS); no ingestion funnel metrics; SDK-fleet stack built but unmounted; the one pipeline hook calls a phantom `GET /v1/health/pipeline` | WS-E |
-| 18 — Point 17: Conformance/Compatibility/Migration Testing | **PARTIAL** | Drift/parity gates strong; no golden cross-path fixture; exhaustive native parity forces iOS/Android to mirror all 398 event types incl. server-only/derived; shadow/staged enforcement absent | Phase 0 (first gates) → WS-E |
+| 18 — Point 17: Conformance/Compatibility/Migration Testing | **PARTIAL** | Drift/parity gates strong; no golden cross-path fixture; exhaustive native parity forces iOS/Android to mirror all 403 event types incl. server-only/derived; shadow/staged enforcement absent | Phase 0 (first gates) → WS-E |
 | 19 — Point 18: Controlled Release Program | **MISSING** | Governance encodes no ingestion-architecture invariants; physical-dir realignment and duplicate-tree deprecation pending; ADR numbering collision present at baseline | Phase 0 |
 | 20 — Web SDK runtime example | **EXISTS** | Web is the aligned reference surface — thin/observe-only, registry-driven consent, endpoint `https://api.aether.io` (`packages/web/src/index.ts`); nuances: DNT advisory-only, consent defaults all-false | Phase 0 (preserve as bedrock) |
 | 21 — Ingestion runtime | **MISALIGNED** | Three heterogeneous envelopes share `SDK_EVENTS_VALIDATED`; Silver workers branch on `source_service`/payload keys — `…/services/ingestion/workers.py`; deprecated alias publishes un-validated into the same topic | WS-B |

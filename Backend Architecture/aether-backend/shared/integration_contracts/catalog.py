@@ -525,6 +525,193 @@ def build_deferred_credit_bureau_manifests() -> list[ProviderManifest]:
     ]
 
 
+# ── Ad-platform catalog (measurement runtime) ────────────────────────────────
+#
+# The seven measurement ad connectors (services/measurement/connectors/*_ads)
+# are a second provider family behind the same customer job — campaign
+# measurement. Each is exposed here as ONE manifest under product "ads" exposing
+# ONE capability ("metrics"): the runtime pulls normalized campaign spend from
+# the provider API into the canonical measurement spend store. Identity keys on
+# the canonical family ids (google_ads … microsoft_ads) — the ids the measurement
+# runtime and campaign normalization already use — NOT the legacy alias names
+# (twitter_ads &c.), which resolve onto these families via the boundary alias
+# map (shared.integration_contracts.aliases).
+#
+# Honesty mirrors the payment-rail projection: readiness is CREDENTIAL_WAITING
+# (code complete, offline-safe, awaiting tenant credentials) → level 3, never >=4
+# since no ad connector is sandbox-validated; visible only in local/integration.
+# No ad connector executes syncs yet (the connect runtime and account discovery
+# are later workstreams), so accounts claims no discovery/selection surface — the
+# ad account id is simply a field the tenant supplies in the credential form.
+#
+# Display names and credential field tables below are the SINGLE catalog mirror
+# of each connector module's documented "Required config keys"; the catalog
+# honesty tests assert every declared field is actually read by the module so a
+# drift fails loudly rather than shipping a stale schema.
+
+AD_PRODUCT_ID = "ads"
+AD_CAPABILITY_ID = "metrics"
+AD_CATEGORY = ProviderCategory.AD_PLATFORM.value  # "ad_platform"
+
+# Canonical ad-platform families in stable catalog order.
+AD_FAMILIES: tuple[str, ...] = (
+    "google_ads",
+    "meta_ads",
+    "tiktok_ads",
+    "linkedin_ads",
+    "x_ads",
+    "reddit_ads",
+    "microsoft_ads",
+)
+
+AD_DISPLAY_NAMES: dict[str, str] = {
+    "google_ads": "Google Ads",
+    "meta_ads": "Meta Ads",
+    "tiktok_ads": "TikTok Ads",
+    "linkedin_ads": "LinkedIn Ads",
+    "x_ads": "X (Twitter) Ads",
+    "reddit_ads": "Reddit Ads",
+    "microsoft_ads": "Microsoft Advertising",
+}
+
+# Normalized campaign spend written into the canonical measurement spend store
+# (CampaignMeasurementWriter → SpendRepository). Bronze connector events do NOT
+# carry ad spend — the measurement spend store is where these records land.
+AD_DATA_OUTPUTS: list[str] = ["measurement.spend_records"]
+
+# Each connector advances a "last_sync_date" recency cursor over daily spend.
+AD_INCREMENTAL_CURSOR = "last_sync_date"
+
+# (field name, secret?) per family — mirrored from each connector module's
+# documented "Required config keys". Identifiers are non-secret strings; tokens
+# and client secrets are secrets. Kept authoritative for the catalog by the
+# module-read honesty tests in tests/integration_contracts/test_catalog_ads.py.
+_AD_CREDENTIAL_FIELDS: dict[str, list[tuple[str, bool]]] = {
+    "google_ads": [
+        ("customer_id", False),
+        ("developer_token", True),
+        ("client_id", False),
+        ("client_secret", True),
+        ("refresh_token", True),
+    ],
+    "meta_ads": [
+        ("access_token", True),
+        ("ad_account_id", False),
+    ],
+    "tiktok_ads": [
+        ("access_token", True),
+        ("advertiser_id", False),
+    ],
+    "linkedin_ads": [
+        ("access_token", True),
+        ("ad_account_id", False),
+    ],
+    # x_ads reads access_token + account_id (Bearer-token path) at runtime. Its
+    # class docstring also lists OAuth 1.0a consumer/secret keys, but the code
+    # never consumes them — the schema mirrors what the connector actually reads.
+    "x_ads": [
+        ("access_token", True),
+        ("account_id", False),
+    ],
+    "reddit_ads": [
+        ("access_token", True),
+        ("account_id", False),
+    ],
+    "microsoft_ads": [
+        ("client_id", False),
+        ("client_secret", True),
+        ("refresh_token", True),
+        ("customer_id", False),
+        ("account_id", False),
+    ],
+}
+
+
+def _ad_credential_schema(family: str) -> list[CredentialFieldSpec]:
+    """Credential shape from the per-family table (identifiers vs secrets)."""
+    return [
+        CredentialFieldSpec(
+            name=name,
+            type="secret" if secret else "string",
+            secret=secret,
+        )
+        for name, secret in _AD_CREDENTIAL_FIELDS[family]
+    ]
+
+
+def manifest_from_ad_platform(family: str) -> ProviderManifest:
+    """Derive one campaign-metrics :class:`ProviderManifest` for an ad platform.
+
+    Honesty: CREDENTIAL_WAITING → level 3 (code complete, offline-safe, awaiting
+    tenant credentials) — never >=4, since no ad connector is sandbox-validated.
+    Visible only in local/integration; token-paste authentication (no Aether-side
+    OAuth drive yet, so no empty-scope ``oauth2`` claim); incremental daily spend
+    pull on a ``last_sync_date`` cursor; no webhooks.
+    """
+    readiness = ManifestReadiness(
+        state=CredentialReadiness.CREDENTIAL_WAITING,
+        level=_READINESS_LEVEL[CredentialReadiness.CREDENTIAL_WAITING],
+    )
+    credential_schema = _ad_credential_schema(family)
+    return ProviderManifest(
+        provider_family=family,
+        product_id=AD_PRODUCT_ID,
+        capability_id=AD_CAPABILITY_ID,
+        display_name=AD_DISPLAY_NAMES[family],
+        category=AD_CATEGORY,
+        readiness=readiness,
+        availability=Availability(
+            tenant_self_service=True,
+            kyber_managed=True,
+            olympus_system=False,
+            environments=EnvironmentAvailability(
+                local=True,
+                integration=True,
+                staging=False,
+                production=False,
+            ),
+        ),
+        authentication=Authentication(
+            type="api_key", credential_schema=credential_schema
+        ),
+        configuration=Configuration(),
+        accounts=Accounts(),
+        webhooks=Webhooks(supported=False),
+        sync=Sync(
+            initial_backfill=True,
+            incremental=True,
+            reconciliation=False,
+            cursor=AD_INCREMENTAL_CURSOR,
+        ),
+        data_outputs=list(AD_DATA_OUTPUTS),
+        product_destinations=[],
+        deployment=Deployment(
+            required_secrets=[field.name for field in credential_schema if field.secret],
+        ),
+    )
+
+
+def build_ad_platform_manifests() -> list[ProviderManifest]:
+    """Derive + honesty-validate one manifest per canonical ad platform.
+
+    Each passes :func:`validate_manifest`. Iterates :data:`AD_FAMILIES` for a
+    stable catalog order; a family missing from the display/credential tables
+    raises (KeyError) rather than silently shipping a half-described manifest.
+    """
+    return [
+        validate_manifest(manifest_from_ad_platform(family)) for family in AD_FAMILIES
+    ]
+
+
+# Computed once at import — each ad manifest is already honesty-validated.
+AD_MANIFESTS: list[ProviderManifest] = build_ad_platform_manifests()
+
+# Ad-family lookup (connector-scoped manifest_by_family stays the BYOD catalog).
+ad_manifest_by_family: dict[str, ProviderManifest] = {
+    manifest.provider_family: manifest for manifest in AD_MANIFESTS
+}
+
+
 # ── Combined catalog ─────────────────────────────────────────────────────────
 
 # Computed once at import — each list is already honesty-validated at build.
@@ -533,10 +720,11 @@ DEFERRED_CREDIT_BUREAU_MANIFESTS: list[ProviderManifest] = (
     build_deferred_credit_bureau_manifests()
 )
 
-# The full catalog: inbound connectors + observe-only payment rails + deferred
-# (non-tenant-visible) credit bureaus.
+# The full catalog: inbound connectors + campaign-metrics ad platforms +
+# observe-only payment rails + deferred (non-tenant-visible) credit bureaus.
 ALL_MANIFESTS: list[ProviderManifest] = [
     *CONNECTOR_MANIFESTS,
+    *AD_MANIFESTS,
     *PAYMENT_RAIL_MANIFESTS,
     *DEFERRED_CREDIT_BUREAU_MANIFESTS,
 ]
@@ -571,18 +759,24 @@ def deferred_manifests() -> list[ProviderManifest]:
 
 
 __all__ = [
+    "AD_FAMILIES",
+    "AD_DISPLAY_NAMES",
+    "AD_MANIFESTS",
     "ALL_MANIFESTS",
     "CONNECTOR_MANIFESTS",
+    "ad_manifest_by_family",
     "DEFAULT_DATA_OUTPUTS",
     "DEFAULT_INCREMENTAL_CURSOR",
     "DEFERRED_CREDIT_BUREAU_MANIFESTS",
     "PAYMENT_RAIL_MANIFESTS",
+    "build_ad_platform_manifests",
     "build_connector_manifests",
     "build_deferred_credit_bureau_manifests",
     "build_payment_rail_manifests",
     "deferred_manifests",
     "manifest_by_family",
     "manifest_by_identity",
+    "manifest_from_ad_platform",
     "manifest_from_connector_descriptor",
     "manifest_from_credit_bureau",
     "manifest_from_payment_rail_adapter",

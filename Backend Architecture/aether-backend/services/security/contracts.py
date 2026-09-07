@@ -31,13 +31,17 @@ GovernanceDomain = Literal[
     'profile', 'graph', 'recommendations', 'decisions', 'actions', 'dispatches',
     'outcomes', 'playbooks', 'integrations', 'audit_exports', 'billing',
     'onboarding', 'customer_success', 'kyber_admin', 'security', 'governance',
-    'reliability', 'data_quality',
+    'reliability', 'data_quality', 'data_exchange',
     # Kyber operating-plane domains. `kyber_workforce` covers operator identity,
     # devices and role administration; `kyber_tenant` covers scoped tenant
     # inspection (Tenant Mirror + raw tenant reads); `kyber_command` covers the
     # governed command plane. Kept distinct from `kyber_admin` (fleet/platform
     # aggregates) so read authority never implies workforce or command authority.
     'kyber_workforce', 'kyber_tenant', 'kyber_command',
+    # Reconciled control plane. Read-only operator surface over managed-
+    # integration desired/observed state and reconcile drift (Phase 0). Not in
+    # ALL_DOMAINS: granted explicitly per role, mirroring the kyber domains.
+    'reconciled_control',
 ]
 
 PermissionAction = Literal[

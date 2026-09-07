@@ -14,7 +14,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
-last_synced_commit: "c587eb8b"
+last_synced_commit: "c4f33e58"
 ---
 # Operations Runbook v8.12.0
 
@@ -201,6 +201,7 @@ in-memory only and is **not durable** until Redis returns.
 | Service | Endpoint | Expected |
 |---------|----------|----------|
 | Backend | `GET /v1/health` | `{"status": "healthy"}` |
+| Ingestion funnel | `GET /v1/health/pipeline` | `{"probe": "ingestion-pipeline", "status": healthy/degraded/disabled, "enabled": true/false}` — `disabled` with zeroed counters while `AETHER_INGESTION_OBSERVABILITY_ENABLED` is OFF |
 | ML Serving | `GET /health` | `{"status": "healthy", "models_loaded": [...]}` |
 | Defense | `GET /v1/defense/status` | `{"enabled": true/false}` |
 
@@ -268,7 +269,7 @@ recovery < 0) fail closed at startup.
 
 ### Kafka Topic Provisioning
 
-All 114 Kafka topics are provisioned by `deploy/legacy-staging/kafka_topics.sh`, called automatically from `bootstrap.sh` after leader election. If topics are missing:
+All 135 Kafka topics are provisioned by `deploy/legacy-staging/kafka_topics.sh`, called automatically from `bootstrap.sh` after leader election. If topics are missing:
 
 1. Run `deploy/legacy-staging/kafka_topics.sh` manually — it uses `--if-not-exists` so re-running is safe
 2. Required env var: `KAFKA_BOOTSTRAP` (default: `localhost:9092`)
@@ -591,3 +592,120 @@ deploy-profile/compose/Terraform/topology-validator fan-out; running under
 `materializer` keeps scheduled sync on the same durable ledger without a new
 deploy artifact. Because it runs as the `materializer` principal (not a tenant
 principal), scheduled sync never elevates a tenant principal's rights.
+
+### Reconciled Control Plane reconcile scheduler (flag-gated OFF)
+
+The Reconciled Control Plane lane adds `reconciled_control_scheduler`, a
+periodic loop that reconciles managed integrations against desired state,
+plans actionable drift, and rides the governed §34/§35 execution path:
+
+```
+AETHER_RECONCILED_CONTROL_PLANE_ENABLED=true        → plane master switch (gates the
+                                                      scheduler factory)
+AETHER_RECONCILED_CONTROL_SCHEDULER_ENABLED=true    → scheduler kill-switch; the loop
+                                                      runs only when the master switch
+                                                      AND this flag are both on
+```
+
+Both default OFF. Pass-to-pass sleep is
+`AETHER_RECONCILED_CONTROL_SCHEDULER_INTERVAL_SECONDS` (default 300s, mirrors
+the §32 freshness window). Architecture + flag semantics:
+`docs/architecture/RECONCILED_CONTROL_PLANE.md`; production activation sits
+behind the §41+ blueprint review — no deploy flips these today.
+
+**Scheduler role:** `reconciled_control_scheduler` rides the existing
+**`maintenance`** role (exact precedent: the UPR/provider loops above — a
+single periodic loop does not justify a new runtime role and its
+deploy-profile/compose/Terraform/topology-validator fan-out). It runs as the
+`maintenance` principal (never a tenant principal), and it executes nothing
+until admission, tenant update policy, and §21 approvals admit a change.
+
+## Ingestion Bronze Replay (Kyber operator)
+
+An operator can re-drive one tenant's durable Bronze SDK events through the
+universal ingestion gateway with **original occurrence times preserved**
+(`AETHER_INGESTION_REPLAY_ENABLED`, default **false**):
+
+- `POST /v1/kyber/ingest/replay/events` — Kyber-operator run/preview.
+  `dry_run` defaults to **true** (counts only, zero publishes). A real run
+  (`dry_run=false`) is refused with HTTP 403 until the flag is ON.
+- `GET /v1/kyber/ingest/replay/status` — kill-switch state and the
+  `source_service` replayed events carry.
+
+Replay reads Bronze only and republishes to `aether.sdk.events.validated` with
+`source_service="ingestion.replay"`; the `sdk_bronze_writer` consumer **skips**
+those rows (the durable Bronze row already exists), incrementing
+`ingestion_bronze_replay_skip_total`, so a replay re-delivers the downstream
+pipeline without double-persisting.
+
+## Ingestion Funnel Observability & SDK Version Tiers (WS-E)
+
+The ingestion-observability slice records **nothing** until enabled:
+
+```
+AETHER_INGESTION_OBSERVABILITY_ENABLED=true   → records per-stage ingestion-funnel
+                                                 telemetry (RECEIVED → VALIDATED →
+                                                 BRONZE → NORMALIZED → PROJECTIONS)
+                                                 and per-observation traces keyed by
+                                                 {tenant_id}:{event_id}
+AETHER_SDK_VERSION_COMPAT_ENABLED=true        → /v1/batch consults context.library.version
+AETHER_SDK_VERSION_COMPAT_MODE=off            → off | shadow | warn | enforce
+                                                 (enforce rejects past blocked-after date)
+```
+
+While the observability flag is OFF the operator surfaces stay mounted but
+report `enabled: false` / empty bodies (never an error), so dashboards keep a
+stable liveness surface:
+
+- `GET /v1/kyber/ingest/observability` (+ `/funnel`, `/traces`,
+  `/traces/{event_id}`) — Kyber-operator-only (Observation Inspector / control
+  plane), gated on `require_kyber_operator`.
+- `GET /v1/health/pipeline` — funnel health summary: `healthy` when no rejected
+  or degraded stage, `degraded` otherwise, `disabled` while the flag is OFF.
+- `GET /v1/config/sdk/versions` — always served: the tier table is static,
+  non-secret policy data. Only the `/v1/batch` ingress consultation
+  (advisory `sdk_tier` label / enforce-mode rejection) is flag-gated.
+
+The ledger is in-process and never rejects, drops, or changes event
+dispositions — it is observation-only by construction.
+
+---
+
+## Data Exchange Plane
+
+The governed tenant import/export plane mounts conditionally in `main.py`
+(flag-gated, all default OFF):
+
+```
+DATA_EXCHANGE_ENABLED=true                  → mounts the envelope routers at
+                                              /v1/data-exchange/settings, /capabilities,
+                                              /usage, /imports, /import-mappings,
+                                              /exports, /artifacts; registers the
+                                              data_exchange.migrate_legacy_artifact job
+                                              handler and the canonical envelope exporters
+DATA_EXCHANGE_SIGNED_TRANSFERS_ENABLED=true → additionally mounts /v1/data-exchange/transfers
+DATA_EXCHANGE_REPORTS_ENABLED=true          → additionally mounts /v1/data-exchange/reports
+                                              and registers the report.generate job handler
+```
+
+`DATA_EXCHANGE_OBJECT_STORE_ENABLED` and `DATA_EXCHANGE_PARQUET_ENABLED` switch
+transport/storage features within the enabled plane (object-store file upload,
+parquet export); the envelope routers mount as soon as
+`DATA_EXCHANGE_ENABLED` is on. Routes enforce the `data_exchange` RBAC domain —
+auto-granted to tenant owner / admin / viewer — with each dotted
+`data_exchange.*` grant resolved to the legacy read/write/admin permission by
+`services/data_exchange/authz.py`, so existing tenant tokens keep working.
+
+**Migration required in hosted modes:** run Alembic before enabling — the
+`20260905_data_exchange` migration creates `data_artifacts`,
+`data_exchange_saved_mappings`, and `report_renders` (envelope metadata only;
+payload bytes live in the shared ObjectStore, never Postgres). Enable by
+setting the flags and restarting; disable by clearing the flags and restarting
+— stored artifacts, saved mappings, and report renders are preserved and become
+reachable again when the flags are re-enabled.
+
+When enabled, artifact history is visible at `GET /v1/data-exchange/artifacts`
+and per-tenant usage at `GET /v1/data-exchange/usage`; failed export/report
+renders surface as `failed`-status artifacts with the durable job recorded on
+the artifact envelope. See `docs/BACKEND-API.md` (the "Data Exchange Plane"
+section) and `docs/plans/data-exchange-api.md` for the full contract.

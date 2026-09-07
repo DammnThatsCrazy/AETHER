@@ -3,6 +3,28 @@
 This module owns policy decisions only. V1 and V2 keep their distinct
 persistence/idempotency mechanics, but both must consume EventValidationResult
 before any durable write or publish.
+
+Consent-class model shared by the WS-B3 ingress paths (``evaluate_ingress_decision``):
+  - **S** = per-subject server receipt (``services.consent.authority.evaluate_consent``).
+  - **C** = credential/connection-class (install/config is the grant; no per-subject
+    lookup unless a purpose resolves AND the authoritative flag is on).
+  - **T** = tenant-server/back-office (tenant attests rights; data-policy + scrub only).
+    API feeds and imports are T.
+Batch = S (``validate_event``). Feeds/imports = T. Connector/comm/payment/provider = C.
+
+WS-B3 rule applied by every seam (see ``evaluate_ingress_decision``):
+  * the MANDATORY minimization layer -- scrub of sensitive values, strip of
+    client-asserted canonical entity ids, and T-class tenant data-policy removal
+    of fingerprinting -- runs UNCONDITIONALLY on every path (default ON; never
+    behind a per-path flag). Scrub never rejects and data-policy is
+    default-allow, so this layer closes the Invariant #9 gap without new denials;
+  * the per-subject (S) SERVER-receipt rejection is the ONLY per-path toggle. It
+    applies when a purpose is present under the authoritative flag; it is
+    fail-closed like ``validate_event`` -- ``evaluate_consent`` returns
+    ``consent_receipt_missing`` for an event with no resolvable subject/anonymous
+    identifier, so an authoritative-ON, purposed, subject-less request is never
+    silently fail-opened to allowed. A caller that wants NO per-subject gate
+    supplies no purpose (C/T minimization), never a subject-less purpose.
 """
 
 from __future__ import annotations
@@ -163,8 +185,10 @@ def strip_canonical_entity_id(obj: Any) -> Any:
     return obj
 
 
-def _fingerprint_paths(obj: Any, path: tuple[str, ...] = ()) -> list[str]:
-    """Classify fingerprint-bearing fields by key only; values are never retained."""
+def classify_fingerprints(obj: Any, path: tuple[str, ...] = ()) -> list[str]:
+    """Public: classify fingerprint-bearing fields by key only; values are never
+    retained. Shared by ``validate_event`` and the WS-B3 ingress facade so every
+    path (batch, feed, comms, provider, imports) speaks one fingerprint language."""
     found: list[str] = []
     if isinstance(obj, dict):
         for key, value in obj.items():
@@ -172,15 +196,42 @@ def _fingerprint_paths(obj: Any, path: tuple[str, ...] = ()) -> list[str]:
             next_path = (*path, str(key))
             if normalized in _FINGERPRINT_KEYS or normalized.endswith("fingerprint"):
                 found.append(".".join(next_path))
-            found.extend(_fingerprint_paths(value, next_path))
+            found.extend(classify_fingerprints(value, next_path))
     elif isinstance(obj, list):
         for value in obj:
-            found.extend(_fingerprint_paths(value, (*path, "[]")))
+            found.extend(classify_fingerprints(value, (*path, "[]")))
     return found[:16]
 
 
 def get_event_family(event_type: str) -> str:
     return EVENT_FAMILY.get(event_type, "core")
+
+
+_CLIENT_IDENTITY_CONFIDENCE_KEYS = frozenset({
+    "identityConfidence",
+    "identitySignals",
+})
+
+
+def neutralize_client_identity_claims(context: dict[str, Any]) -> dict[str, Any]:
+    """Drop client-asserted identity-confidence claims from an SDK context dict.
+
+    Native identity -> subject-hints convergence (WS-C / Invariant #4). Under
+    the legacy contract the client may self-report ``identityConfidence`` /
+    ``identitySignals`` (a client-side resolution claim) and the backend
+    persists them verbatim. Under subject-hints-only the SDK is not an
+    authority on its own resolution confidence — identity is driven server-side
+    from the additive ``subjects`` hint list — so those verbatim claims must not
+    reach Silver. Gate: ``settings.subject_hints.enabled`` (default OFF), so the
+    legacy mode is byte-identical until the coordinator flips the flag.
+    """
+    if not settings.subject_hints.enabled:
+        return context
+    return {
+        key: value
+        for key, value in context.items()
+        if key not in _CLIENT_IDENTITY_CONFIDENCE_KEYS
+    }
 
 
 def build_normalized_payload(
@@ -199,8 +250,10 @@ def build_normalized_payload(
         "anonymous_id": sdk_event.anonymousId,
         "user_id": sdk_event.userId,
         "properties": strip_canonical_entity_id(sdk_event.properties or {}),
-        "context": strip_canonical_entity_id(
-            sdk_event.context.model_dump(exclude_none=True)
+        "context": neutralize_client_identity_claims(
+            strip_canonical_entity_id(
+                sdk_event.context.model_dump(exclude_none=True)
+            )
         ),
         "timestamp": sdk_event.timestamp,
         "received_at": received_at,
@@ -363,7 +416,7 @@ async def validate_event(
                 )
                 return reject(reason_code or REJECT_CONSENT_DENIED)
 
-    fingerprint_paths = _fingerprint_paths({
+    fingerprint_paths = classify_fingerprints({
         "properties": sdk_event.properties or {},
         "context": sdk_event.context.model_dump(exclude_none=True),
     })
@@ -439,6 +492,124 @@ async def validate_event(
     )
 
 
+# ── Shared ingress facade (WS-B3: consent-on-every-path) ─────────────────────
+# One decision function for every non-batch ingress seam. The ordering mirrors
+# ``validate_event``'s S-class pipeline (request-privacy signals → server
+# authority → fingerprint/data-policy) while letting each path state its class:
+# a caller supplies ``purpose`` (+ subject) to opt into the per-subject S gate,
+# or omits it for a T/C-class purpose-less decision (data-policy + scrub only).
+# Never raises; scrub always proceeds regardless of the decision.
+
+def format_ingress_rejection(reason_code: Optional[str], decisions: tuple[dict, ...]) -> str:
+    """Stable wire reason mirroring ``format_rejection`` (code[:purpose])."""
+    if not reason_code:
+        return "validation_failed"
+    purpose = next(
+        (d.get("purpose") for d in decisions if d.get("purpose")), None
+    )
+    return f"{reason_code}:{purpose}" if purpose else reason_code
+
+
+async def evaluate_ingress_decision(
+    *,
+    tenant_id: str,
+    subject_id: Optional[str] = None,
+    anonymous_id: Optional[str] = None,
+    purpose: Optional[str] = None,
+    request_privacy: RequestPrivacySignals = RequestPrivacySignals(),
+    fingerprint_obj: Any = None,
+) -> tuple[bool, Optional[str], tuple[dict, ...]]:
+    """Consent/data-policy decision for an ingress path (never raises).
+
+    Returns ``(allowed, reason_code_or_None, decisions)`` where ``decisions`` is
+    the tuple of policy decisions (same dict vocabulary as ``validate_event``'s
+    privacy_decisions).
+
+    Order mirrors ``validate_event`` EXACTLY (so no ingress seam can diverge
+    from the /v1/batch path):
+      1. request-privacy signals (GPC/DNT) suppress a supplied purpose;
+      2. when a purpose is supplied and
+         ``authoritative_consent_enforcement_enabled`` is ON → server consent
+         receipt via ``evaluate_consent`` UNCONDITIONALLY. ``evaluate_consent``
+         itself is fail-closed on an unresolvable subject: no subject/anonymous
+         identifier → ``consent_receipt_missing`` (absence of a server receipt
+         is NOT permission). A caller that wants to skip the per-subject (S)
+         gate entirely supplies NO purpose (T/C class), never a subject-less
+         purpose under the authoritative flag;
+      3. when ``fingerprint_obj`` is supplied → classify + tenant data-policy
+         (``evaluate_data_policy(tenant_id, "fingerprint")``).
+    Reject reason codes reuse this module's ``REJECT_*`` constants and the
+    authority's stable codes (``consent_receipt_missing``, ...).
+    """
+    decisions: list[dict[str, Any]] = []
+
+    if purpose:
+        signal_allowed, signal_reason = evaluate_request_privacy_signals(
+            purpose,
+            gpc_observed=request_privacy.gpc,
+            dnt_observed=request_privacy.dnt,
+        )
+        decisions.append({
+            "control": "request_privacy_signals",
+            "outcome": "allowed" if signal_allowed else "suppressed",
+            "reason_code": signal_reason,
+            "purpose": purpose,
+        })
+        if not signal_allowed:
+            metrics.increment(
+                "ingestion_request_privacy_blocked_total",
+                labels={"purpose": purpose, "reason": signal_reason or "unknown"},
+            )
+            return False, signal_reason or REJECT_CONSENT_DENIED, tuple(decisions)
+
+        subject = (subject_id or "").strip() or None
+        anon = (anonymous_id or "").strip() or None
+        # Mirror validate_event: under the authoritative flag the server receipt
+        # is consulted for EVERY purposed event. evaluate_consent denies
+        # (CONSENT_RECEIPT_MISSING) when no subject/anonymous identifier is
+        # resolvable, so an authoritative-ON, purposed, subject-less request is
+        # REJECTED — never silently fail-opened to allowed.
+        if settings.consent_authority.authoritative_consent_enforcement_enabled:
+            allowed, reason_code = await evaluate_consent(
+                tenant_id=tenant_id,
+                subject_id=subject,
+                anonymous_id=anon,
+                purpose=purpose,
+            )
+            decisions.append({
+                "control": "consent_authority",
+                "outcome": "allowed" if allowed else "denied",
+                "reason_code": reason_code,
+                "purpose": purpose,
+                "subject_resolvable": bool(subject or anon),
+            })
+            if not allowed:
+                metrics.increment(
+                    "ingestion_consent_authority_blocked_total",
+                    labels={"purpose": purpose, "reason": reason_code or "unknown"},
+                )
+                return False, reason_code or REJECT_CONSENT_DENIED, tuple(decisions)
+
+    if fingerprint_obj is not None:
+        fingerprint_paths = classify_fingerprints(fingerprint_obj)
+        if fingerprint_paths:
+            allowed, reason_code = await evaluate_data_policy(tenant_id, "fingerprint")
+            decisions.append({
+                "control": "fingerprint_policy",
+                "outcome": "allowed" if allowed else "denied",
+                "reason_code": reason_code,
+                "classified_paths": len(fingerprint_paths),
+            })
+            if not allowed:
+                metrics.increment(
+                    "ingestion_data_policy_blocked_total",
+                    labels={"data_class": "fingerprint", "reason": reason_code or "unknown"},
+                )
+                return False, reason_code or "fingerprinting_not_authorized", tuple(decisions)
+
+    return True, None, tuple(decisions)
+
+
 __all__ = [
     "ENVELOPE_REQUIRED_FIELDS",
     "EventValidationResult",
@@ -446,6 +617,9 @@ __all__ = [
     "RELEASE_CRITICAL_EVENT_FAMILIES",
     "RequestPrivacySignals",
     "build_normalized_payload",
+    "classify_fingerprints",
+    "evaluate_ingress_decision",
+    "format_ingress_rejection",
     "format_rejection",
     "get_event_family",
     "scrub_sensitive_fields",

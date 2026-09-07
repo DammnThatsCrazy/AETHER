@@ -48,9 +48,30 @@ NON_SURFACE: dict[str, str] = {
     "/": "redirect only",
     "/onboarding": "tenant self-setup wizard; no operator equivalent",
     "/activation": "tenant self-serve activation wizard; no operator mirror (same class as /onboarding)",
+    "/activate": "tenant self-serve guided activation wizard (WS-3 intent-driven goals-to-plan); same class as /activation and /onboarding",
     "/me": "the caller's own account; an operator's own account is /v1/kyber/me",
     "/settings": "tenant self-configuration; operators must not mutate it from a mirror",
     "/settings/notifications": "tenant self-configuration",
+    "/settings/data-exchange": "tenant self-configuration (Settings → Data Exchange)",
+    "/settings/integrations": (
+        "tenant self-configuration of external integrations (Settings → "
+        "Integrations); operator connection ops live in their own provider-connection plane"
+    ),
+    "/settings/integrations/connectors": (
+        "tenant self-configuration (connector browser under Settings → Integrations); "
+        "same class as /settings/integrations"
+    ),
+    "/settings/notification-preferences": (
+        "tenant self-configuration (notification quiet-hours / timezone / severity)"
+    ),
+    "/settings/sdk-fleet": (
+        "tenant's own SDK fleet (installed packages / versions / activity); "
+        "operator equivalent is per-tenant SDK telemetry, not a tenant mirror"
+    ),
+    "/settings/webhooks": (
+        "tenant self-configuration (own outbound delivery endpoints); "
+        "operator webhook delivery ops are separately governed"
+    ),
     "/notifications": (
         "tenant's own notification inbox is self-scoped attention data not "
         "projected into the tenant graph; operator signals have their own ops "

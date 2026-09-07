@@ -11,7 +11,7 @@ toc_depth: 2
 source_files:
   - Backend Architecture/aether-backend/services/campaign/exploration.py
   - Backend Architecture/aether-backend/services/campaign/routes.py
-last_synced_commit: "4e6fdad"
+last_synced_commit: "8238f06d"
 ---
 
 # Runbook — Stale Spend Warning (Campaign 360)
@@ -63,6 +63,23 @@ displayed in Campaign 360 may be stale by hours or days.
 | Import job crashed | Trigger a manual backfill via `POST /v1/spend/imports` |
 | No spend in window (campaign paused) | Expected behavior — verify with tenant |
 | Platform API rate-limited | Wait for rate limit reset; job will auto-retry |
+
+### Campaign Sources self-service surface (additive)
+
+When the stale source is an ad platform the tenant manages from the Campaign
+Sources page (`/campaign-intelligence/sources`), two additive endpoints clarify
+the diagnosis before escalation:
+
+- `POST /v1/campaign-sources/{connector_id}/test` runs a **live credential
+  probe** through the connector's own `validate_credentials`/`health_check` and
+  reports `{valid, status_message}` — it never persists a sync or health fact,
+  so a stale source can be probed safely. An invalid result here matches the
+  "Connector credential expired" row above.
+- `POST /v1/campaign-sources/{connector_id}/disable` marks the source disabled,
+  so it is no longer the tenant's active connection for that platform. Spend
+  from a deliberately disabled source is expected to go stale by design;
+  re-authorize by disabling the old source and connecting anew, or use the
+  account endpoint to rotate to the correct account.
 
 ## Escalation
 

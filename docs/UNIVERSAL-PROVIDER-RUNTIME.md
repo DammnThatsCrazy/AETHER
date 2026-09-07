@@ -18,7 +18,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 14
 toc_depth: 3
-last_synced_commit: "c587eb8b"
+last_synced_commit: "2d6b1fd0"
 ---
 
 # Universal Provider Runtime
@@ -100,7 +100,9 @@ Backend Architecture/aether-backend/
 │   │   ├── normalization.py            #   EventNormalizer, NormalizationResult
 │   │   ├── events.py                   #   RawProviderRecord, ReadBatch, AetherEvent
 │   │   ├── certification.py            #   CertificationReport, readiness tokens
-│   │   ├── catalog.py                  #   catalog-derived manifests (legacy)
+│   │   ├── catalog.py                  #   derived catalog — 4 groups (connectors, ad-platforms, payment-rails, credit bureaus)
+│   │   ├── experience.py               #   ExperienceCategory + experience_category_for (customer-facing projection)
+│   │   ├── aliases.py                  #   boundary-family aliases (twitter_ads→x_ads, …) + canonical_family_id
 │   │   └── ...                         #   lifecycle, deployment, health
 │   ├── commerce_contracts/             # commerce vocabulary (additive)
 │   │   ├── money.py                    #   Money, Currency, sum_money, money_from_cents
@@ -178,6 +180,17 @@ The pipeline honors three invariants:
 - **Deterministic normalization.** A normalizer never depends on wall-clock,
   randomness, or provider I/O; anything it cannot translate is surfaced via
   `dropped`, never silently skipped.
+- **Ingress consent gate (WS-B3).** The event bridge scrubs sensitive values
+  from each `AetherEvent`'s `data`/`context` in place before the durable dump
+  (mandatory and unconditional — Bronze and the publish carry only scrubbed
+  payloads) and runs the shared ingress decision
+  (`services/ingestion/validation.evaluate_ingress_decision`) per event. A
+  denied event is rejected — no Bronze row, no publish,
+  `provider_runtime_consent_blocked_total` incremented — while the provider RAW
+  record stays intact for replay; a delivery is never failed wholesale. The
+  per-subject (S) server-receipt rejection applies only when
+  `PROVIDER_RUNTIME_CONSENT_ENFORCEMENT_ENABLED` is set (default True) AND the
+  authoritative consent flag is on AND the event resolves a purpose + subject.
 
 ## Feature flag & wiring
 

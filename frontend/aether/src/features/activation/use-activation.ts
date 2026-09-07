@@ -41,6 +41,10 @@ export interface ActivationStatus {
   readonly billing_state: string;
   readonly first_value_evidence: Record<string, unknown>;
   readonly waiting_reason: string | null;
+  // WS-3 (intent-driven activation): the tenant's durable ActivationIntent tokens
+  // + save timestamp. Additive — absent for status reads cached before WS-3.
+  readonly intents?: readonly string[];
+  readonly intents_updated_at?: string | null;
   readonly history: ReadonlyArray<Record<string, unknown>>;
 }
 

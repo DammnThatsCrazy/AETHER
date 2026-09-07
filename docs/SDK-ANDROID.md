@@ -13,7 +13,7 @@ source_files:
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
-last_synced_commit: "4e6fdad"
+last_synced_commit: "21fc22d1"
 ---
 
 # Aether Android SDK v8.12.0 — Integration Guide
@@ -104,6 +104,14 @@ val anonId = Aether.getAnonymousId()
 // Reset on logout
 Aether.reset()
 ```
+
+> **Native identity → subject-hints convergence (WS-C / Invariant #4, default OFF).**
+> In legacy mode the SDK re-stamps the resolved canonical user id into its
+> persisted identity after `/sdk/identity/resolve` and emits `journey_resumed`
+> with the resolved tuple. Set `subjectHintsOnly = true` on `AetherConfig` to
+> stop that client-side canonical re-stamp — the backend then resolves identity
+> from the source-asserted subject hints the event carries, and the resolved id
+> is still reported inside the `journey_resumed` observation for server use.
 
 ### Device Fingerprint
 
@@ -313,7 +321,9 @@ data class AetherConfig(
                                              // are rejected (last-known-good kept)
     val autoResumeJourney: Boolean = true,   // Call /sdk/identity/resolve on init
     val onJourneyResumed:                    // Fires once when a prior session is matched
-        ((resolvedAnonymousId: String, resolvedUserId: String?) -> Unit)? = null
+        ((resolvedAnonymousId: String, resolvedUserId: String?) -> Unit)? = null,
+    val subjectHintsOnly: Boolean = false,   // Subject-hints identity (default OFF = legacy client-side canonical re-stamp)
+    val encryptedDurableQueue: Boolean = false // AES-GCM durable queue + server ack (default OFF = plaintext delete-before-ack)
 ) {
     enum class Environment { PRODUCTION, STAGING, DEVELOPMENT }
 }
@@ -366,6 +376,13 @@ Activity Lifecycle / User Interactions
   `sequence.event` counter (reset on session rotation) for gap/reorder
   detection at ingest
 - Session ID, anonymous ID, user ID
+- Optional source-native correlation context `context.correlation`
+  (`{correlationId, causationId, traceId, spanId, parentObservationId}`),
+  stamped on every outgoing event once the host app calls
+  `Aether.setCorrelationContext(CorrelationContext(...))` (pass `null` to
+  clear). The backend correlation block is additive — source-native values are
+  never overwritten during normalization, and `parentObservationId` is carried
+  end-to-end into `parent_observation_id`.
 
 > Note: unlike the web/server SDKs, the Android SDK does not yet stamp the
 > canonical envelope `context.surface` / `context.schemaVersion` fields;
@@ -407,6 +424,15 @@ When `errorTracking` is enabled, the SDK installs a global `Thread.UncaughtExcep
 - **Anonymous ID** and **User ID** persisted in `SharedPreferences` under `com.aether.sdk`
 - **Device fingerprint** is generated on each init (deterministic — same result for same device)
 - **Event queue** is persisted to `filesDir/aether_queue.json` (file-based, capped at 1000 events; flushed on foreground)
+- **Encrypted durable queue (WS-C row 12, default OFF):** set
+  `encryptedDurableQueue = true` on `AetherConfig` to encrypt the persisted
+  queue file with AES-GCM (256-bit key held in the Android Keystore — never
+  leaves secure hardware-backed storage; API 23+, below which it falls back to
+  the legacy path) and switch to server-ack removal — events leave the queue
+  only after the batch POST returns 2xx (legacy is delete-before-ack),
+  preserving order and idempotency across kills. Ciphertext is self-describing
+  (magic prefix `AETHERQ1`), so the legacy plaintext format is still read as
+  the upgrade path when the flag is first enabled.
 - **Server config** cached in memory (refreshed on each app launch)
 
 ## Health Agent

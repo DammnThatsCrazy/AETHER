@@ -379,7 +379,7 @@ Key P0 gaps:
 - `grep -rn "startsWith.*H2A\|startsWith.*A2H\|startsWith.*A2A"` across `frontend/` and `packages/` → 0 results. G11 fix confirmed.
 
 ### Validation Results
-- `python scripts/validate_contracts.py` → 7 checks passed — 248 events, 8 consent purposes, 20 families all consistent.
+- `python scripts/validate_contracts.py` → 7 checks passed — 403 events, 12 consent purposes, 25 families all consistent.
 - `python scripts/docs_drift.py --strict` → 231 docs scanned, 231 clean, 0 stale.
 - `python scripts/validate_frontmatter.py` → 233 files scanned, 233 validated, 0 errors.
 - `make repo-doctor` → all gates passed (exit 0).

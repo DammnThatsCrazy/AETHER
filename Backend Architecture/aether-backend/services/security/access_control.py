@@ -32,7 +32,7 @@ ALL_DOMAINS: tuple[GovernanceDomain, ...] = (
     'profile', 'graph', 'recommendations', 'decisions', 'actions', 'dispatches',
     'outcomes', 'playbooks', 'integrations', 'audit_exports', 'billing',
     'onboarding', 'customer_success', 'kyber_admin', 'security', 'governance',
-    'reliability', 'data_quality',
+    'reliability', 'data_quality', 'data_exchange',
 )
 TENANT_DOMAINS: tuple[GovernanceDomain, ...] = tuple(
     d for d in ALL_DOMAINS if d != 'kyber_admin'
@@ -69,12 +69,17 @@ ROLE_SPECS: dict[AccessRole, list[_GrantSpec]] = {
     'olympus_operator': [
         (TENANT_DOMAINS, ('read',), 'assigned_tenant'),
         (('kyber_admin', 'security', 'governance'), ('read',), 'all_tenants_aggregate'),
+        # Reconciled control plane: aggregate read (fleet managed integrations).
+        (('reconciled_control',), ('read',), 'all_tenants_aggregate'),
     ],
     'olympus_support': [
         (('profile', 'onboarding', 'customer_success', 'billing'), ('read',), 'assigned_tenant'),
     ],
     'olympus_admin': [
         ('*', ('read', 'write', 'approve', 'dispatch', 'export', 'configure', 'delete', 'admin'), 'all_tenants_admin'),
+        # `*` only expands over ALL_DOMAINS; reconciled_control is granted
+        # explicitly so platform admins hold full domain authority.
+        (('reconciled_control',), ('read', 'write', 'approve', 'dispatch', 'export', 'configure', 'delete', 'admin'), 'all_tenants_admin'),
     ],
     'olympus_security': [
         (('security', 'governance', 'audit_exports', 'integrations'), ('read', 'write', 'configure', 'export', 'admin'), 'all_tenants_admin'),
@@ -90,7 +95,7 @@ ROLE_SPECS: dict[AccessRole, list[_GrantSpec]] = {
 
 # Domains/actions whose ALLOWED outcomes are still worth an audit event.
 _SENSITIVE_DOMAINS: frozenset[GovernanceDomain] = frozenset(
-    {'security', 'governance', 'audit_exports', 'billing', 'kyber_admin', 'integrations', 'dispatches'}
+    {'security', 'governance', 'audit_exports', 'billing', 'kyber_admin', 'integrations', 'dispatches', 'reconciled_control'}
 )
 _SENSITIVE_ACTIONS: frozenset[PermissionAction] = frozenset(
     {'approve', 'dispatch', 'export', 'delete', 'admin', 'configure'}

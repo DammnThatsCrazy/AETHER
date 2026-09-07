@@ -57,6 +57,22 @@ CANONICAL_NAMES: frozenset[str] = frozenset({
     "ingestion_outbox_relay_retried_total",
     "ingestion_outbox_relay_dead_lettered_total",
     "ingestion_bronze_relay_skip_total",
+    # Envelope-B adoption (WS-A5, observation_envelope.py hook in batch.py —
+    # flag-gated additive envelope build/reject/skip counters)
+    "ingestion_observation_envelope_gateway_rejected_total",
+    "ingestion_observation_envelope_skipped_total",
+    "ingestion_observation_envelope_build_failed_total",
+    # Ingestion-level replay (WS-B4): replay.py runner + adapters/replay.py +
+    # workers.py Bronze-writer skip — original-time re-drive of durable Bronze
+    "ingestion_replay_scanned_total",
+    "ingestion_replay_skipped_total",
+    "ingestion_replay_rejected_total",
+    "ingestion_replay_replayed_total",
+    "ingestion_replay_published_total",
+    "ingestion_replay_adapter_skipped_total",
+    "ingestion_bronze_replay_skip_total",
+    # Consent-on-every-path (WS-B3): feed ingress seam consent/data-policy deny
+    "ingestion_feed_consent_blocked_total",
     # Payment Rail Observability (services/integrations/providers/payment_rails)
     "payment_rail_event_duplicate_total",
     "payment_rail_event_rejected_total",

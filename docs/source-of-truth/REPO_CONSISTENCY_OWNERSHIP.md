@@ -28,6 +28,7 @@ The machine-readable owner map is `docs/source-of-truth/repo_consistency_ownersh
 | `pyproject.toml` version | all package versions, docs version metadata, generated docs |
 | backend route added/changed | generated API docs, route index, contract validation, frontend/client types if applicable |
 | event schema changed | contract docs, SDK types, validation fixtures, generated docs |
+| event field-trust/authority + semantic-level/trust-boundary metadata or its generator/gate changed | regenerated TS/Python field-trust + semantic-boundary twins, `python scripts/generate_contracts.py --check`, field-trust + semantic-boundary parity gate, boundary tests |
 | consent/tenant/auth behavior changed | source-linked docs, contract validation, tests |
 | SDK public method changed | package exports, `src/index.ts`, declaration output, SDK release alignment |
 | package public type changed | barrel exports, TypeScript build, declaration files |
@@ -37,10 +38,15 @@ The machine-readable owner map is `docs/source-of-truth/repo_consistency_ownersh
 | docs source-linked content changed | frontmatter validation, drift validation, reviewed sync stamp |
 | durable jobs platform changed | `JOBS_PLATFORM.md` review/restamp, generated docs, jobs tests |
 | tenant import engine changed | imports contract twin, `IMPORT_FAILURES.md`, generated docs, import tests |
+| data exchange plane changed | data-exchange contract twin (`packages/shared/data-exchange.ts`), `DATA_EXCHANGE_PHASES.md` plan, this ownership doc, generated docs, data exchange parity/tests |
 | measurement integrity plane changed | metric registry contract (TS/Py/doc mirrors), `MEASUREMENT_RESTATEMENT.md`, measurement tests |
 | computation substrate changed | `config/computation_inventory.yaml`, `COMPUTATION_SUBSTRATE.md`, regenerated registry twin, substrate tests |
 | intelligence projection architecture changed | generated projection artifacts (TS/Py/doc mirrors), SOT docs, `REPO-INDEX.md`/`AUTOMATION.md`, `packages/shared/index.ts`, projection tests |
 | relationship spine registry changed | generated relationship predicate/motif twins (TS/Py/doc mirrors), barrel exports, parity tests |
+| observation envelope (Envelope B) model/registry/twin/adoption changed | Envelope-B field registry ↔ pydantic runtime model ↔ passive TS twin lock-step (parity test), observation-envelope unit tests, SOT + alignment docs |
+| universal ingress adapter registry / gateway (WS-B1) changed | `services/ingestion/adapters/**` registry ↔ `services/ingestion/gateway.py` ↔ Envelope-B vocabulary/registry ↔ Contract Spine canonical types/families consistent; ingress-adapter-registry + gateway unit tests, SOT + alignment docs |
+| ingestion replay + consumption normalization-spine convergence (WS-B4/B5) changed | replay runner + Kyber replay operator routes + `services/ingestion/spine.py` ↔ `IngestReplayConfig`/`NormalizationSpineConfig` flag blocks and env examples ↔ the consumers that read through the spine (`workers.py` Bronze-writer replay-skip/original-time logic, semantic_intelligence + resolution consumers); `tests/unit/observation` (ingest-replay / replay-adapter / normalization-spine / replay-route-mount), SOT + alignment docs |
+| native iOS/Android event-type + consent-purpose regions changed (generator emitter, parity gate, or the region files) | regenerated `Aether.swift` / `Aether.kt` marker regions, `generate_contracts.py --check`, mobile-event key + purpose-value parity gate, `test_mobile_event_parity.py` + `test_native_event_codegen.py`, SOT docs |
 | workflow/check command changed | Makefile, workflows, docs, repo_doctor tests |
 | deprecated legacy ingestion/data-lake tree mutated (do-not-extend) | program acknowledgment docs (`docs/productization/sdk-universal-ingestion-alignment/**`), this md, canonical-ingestion-trees gate (`scripts/validate_canonical_ingestion_trees.py`) |
 | Aether/Kyber production data source changed | `scripts/validate_frontend_data_truth.py` source guardrail and explicit production-bundle scan |

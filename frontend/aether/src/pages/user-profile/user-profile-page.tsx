@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Badge, Button, Card, CardContent, CardHeader,
   DataTable, EmptyState, ErrorState, EvidenceDrawer, FreshnessIndicator,
@@ -29,6 +29,12 @@ import {
 } from '@aether-app/lib/traffic-source';
 import { OutcomeLedgerPanel } from '@aether-app/components/outcome-ledger-panel';
 import { ProfileExplorationPanel } from '@aether-app/features/profile360';
+import {
+  attentionReasonLabel,
+  contextualReadiness,
+  useTenantIntegrationReadiness,
+} from '@aether-app/features/integrations';
+import type { TenantReadinessItem } from '@aether-app/features/integrations';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -1588,6 +1594,88 @@ function InsightsTab({ userId, window }: { userId: string; window: string }) {
   );
 }
 
+// ── Contextual integration readiness banner (WS-4, additive) ────────────────
+// Profile 360 is enriched by several experience categories. When one of them
+// has NO engaged integration we propose connecting it ("an integration is
+// connected but a needed one is not"); when any of the tenant's own
+// integrations needs attention (credential missing / sync failing / provider
+// off-ramp) we surface that fact. Copy uses the §6 vocabulary and never claims
+// data is live before a source is connected and syncing.
+const PROFILE_DEPENDENT_CATEGORIES = [
+  'commerce_revenue',
+  'communications_lifecycle',
+  'crm_customer',
+  'social_community',
+] as const;
+
+const PROFILE_CONNECT_COPY: Record<string, string> = {
+  commerce_revenue: 'orders, revenue and loyalty evidence',
+  communications_lifecycle: 'messages, replies and lifecycle activity',
+  crm_customer: 'CRM records, segments and owner context',
+  social_community: 'social profiles and public activity',
+};
+
+function ProfileIntegrationBanner() {
+  const { data, isLoading, error } = useTenantIntegrationReadiness();
+  if (isLoading || error) return null;
+  const model = contextualReadiness(
+    data?.items as TenantReadinessItem[] | undefined,
+    PROFILE_DEPENDENT_CATEGORIES,
+  );
+  if (!model.connect && model.attention.length === 0) return null;
+  const href = `/integrations?return=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+
+  return (
+    <div className="space-y-2">
+      {model.connect && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent/30 bg-accent/5 px-3 py-2">
+          <p className="text-xs text-text-secondary">
+            <span className="font-medium text-text-primary">
+              {model.connect.categoryLabel}
+            </span>{' '}
+            isn't connected yet — connect it under Integrations to enrich this
+            profile with {PROFILE_CONNECT_COPY[model.connect.category] ?? 'data'}.
+          </p>
+          <Link
+            to={href}
+            className="text-xs font-medium text-accent hover:underline"
+          >
+            Connect {model.connect.categoryLabel}
+          </Link>
+        </div>
+      )}
+      {model.attention.length > 0 && (
+        <div className="space-y-1 rounded-md border border-status-warning/40 bg-status-warning/10 px-3 py-2">
+          <p className="text-xs font-medium text-text-primary">
+            Integrations need attention
+          </p>
+          {model.attention.map((item) => (
+            <div
+              key={item.key}
+              className="flex flex-wrap items-center justify-between gap-2"
+            >
+              <p className="text-xs text-text-secondary">
+                <span className="font-medium">{item.display_name}</span>
+                {item.attention_reasons.length > 0
+                  ? ` — ${item.attention_reasons
+                      .map(attentionReasonLabel)
+                      .join(', ')}`
+                  : ''}
+              </p>
+              <Link
+                to={href}
+                className="text-xs font-medium text-accent hover:underline"
+              >
+                Fix in Integrations
+              </Link>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function UserProfilePage() {
   const { id: userId = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -1640,6 +1728,9 @@ export function UserProfilePage() {
           )}
         </div>
       </div>
+
+      {/* Contextual integration readiness (WS-4) */}
+      <ProfileIntegrationBanner />
 
       {/* Tabbed content */}
       <Tabs defaultValue="overview">

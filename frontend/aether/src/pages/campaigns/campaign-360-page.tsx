@@ -1,4 +1,4 @@
-import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Badge, Card, CardContent, CardHeader, CardTitle, DataTable, EmptyState, ErrorState, LoadingState, Tabs, TabsContent, TabsList, TabsTrigger, formatCount, formatDate, formatDateTime, formatDecimal, useTimeContext, type TimeContext } from '@aether/ui';
 import { CardLinkedOutcomesTab } from './card-linked-outcomes-tab';
@@ -10,6 +10,12 @@ import {
   useCampaign360Conversions,
   useCampaign360Attribution,
 } from '@aether-app/features/campaigns/use-campaign-360';
+import {
+  attentionReasonLabel,
+  contextualReadiness,
+  useTenantIntegrationReadiness,
+} from '@aether-app/features/integrations';
+import type { TenantReadinessItem } from '@aether-app/features/integrations';
 import { CampaignTargetingIntelligenceTab } from '@aether-app/features/targeting-intelligence';
 import {
   encodeExplorationContext,
@@ -20,6 +26,99 @@ import { campaignExplorationContext } from '@aether-app/features/campaigns/use-c
 import { ProjectionSurfacePanel } from '@aether-app/features/projection-360';
 
 type AnyRecord = Record<string, unknown>;
+
+// ── Contextual integration readiness (WS-4) ─────────────────────────────────
+// A Campaign 360 page only has a "needed integration" to propose when the
+// campaign's own channel evidences the dependency. Paid/channel campaigns need
+// an advertising source; lifecycle/outbound campaigns need a communications
+// source. Unknown/organic channels propose nothing (only tenant-wide attention
+// items still surface — those are facts about the tenant's own records).
+const AD_CHANNELS = new Set([
+  'ads', 'social', 'paid_social', 'paid_search', 'search', 'display', 'video',
+  'shopping', 'retargeting',
+]);
+const COMMS_CHANNELS = new Set([
+  'email', 'sms', 'push', 'lifecycle', 'transactional', 'in_app', 'in-app',
+  'outbound',
+]);
+
+function dependentCategoriesForCampaignChannel(channel: string): string[] {
+  const c = (channel ?? '').toLowerCase();
+  if (AD_CHANNELS.has(c)) return ['advertising_campaigns'];
+  if (COMMS_CHANNELS.has(c)) return ['communications_lifecycle'];
+  return [];
+}
+
+const CONNECT_COPY: Record<string, { dataKinds: string }> = {
+  advertising_campaigns: { dataKinds: 'spend, attribution and conversions' },
+  communications_lifecycle: { dataKinds: 'messages, recipients and replies' },
+};
+
+function integrationsHref(): string {
+  return `/integrations?return=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+}
+
+function CampaignIntegrationBanner({ channel }: { channel: string }) {
+  const { data, isLoading, error } = useTenantIntegrationReadiness();
+  if (isLoading || error) return null;
+  const model = contextualReadiness(
+    data?.items as TenantReadinessItem[] | undefined,
+    dependentCategoriesForCampaignChannel(channel),
+  );
+  if (!model.connect && model.attention.length === 0) return null;
+  const href = integrationsHref();
+
+  return (
+    <div className="space-y-2">
+      {model.connect && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent/30 bg-accent/5 px-3 py-2">
+          <p className="text-xs text-text-secondary">
+            <span className="font-medium text-text-primary">
+              {model.connect.categoryLabel}
+            </span>{' '}
+            isn't connected yet — connect it under Integrations to start
+            populating this campaign's{' '}
+            {CONNECT_COPY[model.connect.category]?.dataKinds ?? 'data'}.
+          </p>
+          <Link
+            to={href}
+            className="text-xs font-medium text-accent hover:underline"
+          >
+            Connect {model.connect.categoryLabel}
+          </Link>
+        </div>
+      )}
+      {model.attention.length > 0 && (
+        <div className="space-y-1 rounded-md border border-status-warning/40 bg-status-warning/10 px-3 py-2">
+          <p className="text-xs font-medium text-text-primary">
+            Integrations need attention
+          </p>
+          {model.attention.map((item) => (
+            <div
+              key={item.key}
+              className="flex flex-wrap items-center justify-between gap-2"
+            >
+              <p className="text-xs text-text-secondary">
+                <span className="font-medium">{item.display_name}</span>
+                {item.attention_reasons.length > 0
+                  ? ` — ${item.attention_reasons
+                      .map(attentionReasonLabel)
+                      .join(', ')}`
+                  : ''}
+              </p>
+              <Link
+                to={href}
+                className="text-xs font-medium text-accent hover:underline"
+              >
+                Fix in Integrations
+              </Link>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Metric({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -448,6 +547,23 @@ function MessagesTab({ campaignId }: { campaignId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Contextual comms-empty-state: when no Communications source is connected,
+  // the empty Messages state tells the operator how to start populating it.
+  const { data: readinessData } = useTenantIntegrationReadiness();
+  const comms = contextualReadiness(
+    readinessData?.items as TenantReadinessItem[] | undefined,
+    ['communications_lifecycle'],
+  );
+  const commsUnconnected = comms.connect !== null;
+  const messagesEmptyAction = commsUnconnected ? (
+    <Link
+      to={integrationsHref()}
+      className="text-xs font-medium text-accent hover:underline"
+    >
+      Connect a Communications source
+    </Link>
+  ) : undefined;
+
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -544,7 +660,13 @@ function MessagesTab({ campaignId }: { campaignId: string }) {
         <CardHeader><CardTitle className="text-sm">Messages</CardTitle></CardHeader>
         <CardContent>
           {!messages?.length
-            ? <EmptyState title="No messages" description="No provider messages observed for this campaign yet." />
+            ? <EmptyState
+                title="No messages"
+                description={commsUnconnected
+                  ? 'No provider messages yet — connect a Communications source under Integrations to start populating Messages.'
+                  : 'No provider messages observed for this campaign yet.'}
+                action={messagesEmptyAction}
+              />
             : (
               <DataTable
                 data={messages}
@@ -748,6 +870,10 @@ export function Campaign360Page() {
           </>
         )}
       </div>
+
+      <CampaignIntegrationBanner
+        channel={campaign ? String(campaign.channel ?? '') : ''}
+      />
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>

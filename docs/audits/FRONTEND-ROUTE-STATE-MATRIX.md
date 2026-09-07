@@ -36,8 +36,15 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/noesis` | Noesis conversations and answers | no | I | A | A | A | I | `noesis-page.test.tsx`, `noesis-workspace.test.tsx` |
 | `/settings` | tenant profile, notifications, keys | yes | I | A | A | — | I | parameterized route-state family |
 | `/settings/notifications` | notification preferences | yes | I | A | A | — | I | parameterized route-state family |
+| `/settings/data-exchange` | data-exchange settings, capabilities, artifact history | no | I | A | A | A | A | `data-exchange-section.test.tsx`, `data-exchange.spec.ts` |
+| `/settings/integrations` | tenant integration catalog and connections | yes | I | A | A | A | I | `settings-integrations-section.test.tsx` |
+| `/settings/integrations/connectors` | connector registry and connections | yes | I | A | A | A | I | `connectors-page.test.tsx` |
+| `/settings/sdk-fleet` | SDK fleet health, silent SDKs, remote config | no | I | A | A | A | I | `settings-sections-route-state.test.tsx` |
+| `/settings/webhooks` | webhook endpoint management | no | I | A | A | A | I | `settings-sections-route-state.test.tsx` |
+| `/settings/notification-preferences` | notification preferences (quiet hours, digest) | no | I | n/a | A | A | I | `settings-sections-route-state.test.tsx` |
 | `/onboarding` | readiness and blockers | no | I | A | A | — | I | parameterized route-state family |
 | `/activation` | activation status, first value, plan/sdk/keys/test-event | yes | A | A | A | A | I | `activation-landing.test.tsx` (activation-page.tsx) |
+| `/activate` | intent-driven guided activation (goals → connect plan) | yes | I | A | A | A | I | `activate-page-route-state.test.tsx` |
 | `/billing` | account, subscription, invoices | yes | I | A | A | — | I | parameterized route-state family |
 | `/usage-plan` | measured usage and plan | yes | I | A | A | — | I | parameterized route-state family |
 | `/me` | tenant profile and measured usage | no | A | A | A | A | I | `me-data-truth.test.tsx` |
@@ -93,6 +100,7 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/tenants/:tenantId` | tenant detail, keys, billing, usage | yes | I | A | A | — | I | `kyber-route-state-family.test.tsx` |
 | `/imports` | import operations | yes | I | A | A | A | I | `imports-ops-page.test.tsx` |
 | `/imports/:importId` | import operation detail | yes | I | A | A | — | I | `kyber-route-state-family.test.tsx` |
+| `/ingestion-ops` | ingestion observability, /v1/health/pipeline, SDK fleet + version tiers, replay (Kyber operator, default-OFF flag) | no | I | A | I | I | A | `ingestion-ops-page.test.tsx` |
 | `/implementation` | implementation readiness | no | I | A | — | — | I | `kyber-operations-empty-routes.test.tsx` |
 | `/implementation/:tenantId` | tenant implementation | no | I | A | — | — | I | `kyber-operations-empty-routes.test.tsx` |
 | `/cis` | CIS health, mutation, drift | yes | I | A | A | — | I | `kyber-route-state-family.test.tsx` |
@@ -166,16 +174,16 @@ permission/capability gating (`G`). A failed request never counts as empty.
 
 ## Coverage totals
 
-The denominator is the 137 data-bearing route patterns above: 51 Aether and
-86 Kyber routes.
+The denominator is the 145 data-bearing route patterns above: 58 Aether and
+87 Kyber routes.
 
 | Metric | Current automated coverage | Requirement |
 |---|---:|---:|
-| Explicit loading-state assertions | 18 / 137 (13.1%) | tracked for every route |
-| Empty-state assertions | 125 / 137 (91.2%) | at least 90% overall |
-| Error/unavailable assertions | 105 / 137 (76.6%) | 100% of critical routes |
-| Populated-state assertions | 33 / 137 (24.1%) | tracked for every route |
-| Critical routes with both empty and error assertions | 62 / 62 (100%) | 62 / 62 (100%) |
+| Explicit loading-state assertions | 18 / 145 (12.4%) | tracked for every route |
+| Empty-state assertions | 132 / 145 (91.0%) | at least 90% overall |
+| Error/unavailable assertions | 112 / 145 (77.2%) | 100% of critical routes |
+| Populated-state assertions | 40 / 145 (27.6%) | tracked for every route |
+| Critical routes with both empty and error assertions | 65 / 65 (100%) | 65 / 65 (100%) |
 
 These totals count only named automated assertions. Implemented behavior,
 generic hook state, or a successful build does not count as coverage.

@@ -15,7 +15,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/repositories/conversion_repo.py
   - Backend Architecture/aether-backend/services/measurement/repositories/attribution_run_repo.py
   - Backend Architecture/aether-backend/services/traffic/repair.py
-last_synced_commit: "b6e0b751"
+last_synced_commit: "8238f06d"
 ---
 
 # Campaign 360 Architecture
@@ -113,6 +113,21 @@ mediation type, AI provider/product, actor type, and journey role, and retains
 the classifier version and verification provenance used by the run. A repair
 creates a new classification revision and recomputed attribution run linked to
 the prior run; it does not mutate historical credit evidence in place.
+
+### Ad-platform source connect (WS-2, additive)
+
+The Campaign Sources page's advertising connect flow is additive to this
+architecture and does not change the explorer's read repos. It is orchestrated
+by `services/campaign/ad_source_links.py` over the canonical
+`measurement_connectors` store — the same rows the measurement ad connectors
+read at sync time. Connect is idempotent (one *active* source per
+tenant/family), requires a complete credential set at store time (the store has
+no config-update path), and treats account selection as an explicit rotation
+(archive + fresh active row carrying the credentials forward). Read models are
+redacted: `config` is never returned. The endpoints hang off the same
+`/v1/campaign-sources` router used by the registry API; ambiguous campaign
+resolution (mapping an external provider campaign to a canonical Aether
+campaign) stays in the `/v1/mapping-review` surface, which is unchanged.
 
 ---
 

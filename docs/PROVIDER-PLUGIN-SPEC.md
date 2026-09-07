@@ -18,7 +18,7 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-last_synced_commit: "60a5c024"
+last_synced_commit: "cf6a8c30"
 ---
 
 # Provider Plugin Spec
@@ -35,17 +35,19 @@ A plugin satisfies the structural `ProviderPlugin` protocol
 - `identity() -> ProviderIdentity` — the per-capability identity.
 - `manifest() -> ProviderManifest` — what the capability is and needs (see
   [PROVIDER-MANIFEST-SPEC](PROVIDER-MANIFEST-SPEC.md)).
-- Eight optional capability adapter accessors, one per capability:
+- Seven optional capability adapter accessors, one per capability:
   `auth()`, `account()`, `pull()`, `webhook()`, `report()`, `stream()`,
   `reconciliation()` — each returns the adapter or `None` when the capability
   is not implemented.
 - `normalizer() -> EventNormalizer` — always present (the plugin may return a
   no-op normalizer, but the accessor must exist).
 
-`BaseProviderPlugin` provides the **honest defaults**: every adapter accessor
-returns `None` and `normalizer()` returns a pass-through. A plugin subclass
-overrides only what it genuinely implements — it can never accidentally claim
-a capability it does not implement.
+`BaseProviderPlugin` (in `services/provider_runtime/plugin.py`) provides the
+**honest defaults**: every capability accessor returns `None`, so a plugin
+claims a capability only by overriding the accessor to return an adapter.
+`normalizer()` — like `identity()` and `manifest()` — is left abstract: a
+subclass must declare its normalizer (a no-op normalizer is a deliberate
+choice, never an accidental default).
 
 ```python
 @runtime_checkable
@@ -95,6 +97,7 @@ Every adapter operation returns `AdapterResult` (`shared/integration_contracts/r
 | `rate_limit` | `RateLimitInfo` (limit / remaining / reset_epoch_ms / retry_after_ms) |
 | `provider_request_id` | upstream request id for tracing |
 | `correlation_id` | runtime correlation id |
+| `account` | optional dict identifying the account the operation addressed |
 | `data` | typed payload (e.g. `ReadBatch`) |
 
 **`not_supported` never raises.** An adapter that does not implement an
@@ -129,12 +132,14 @@ class ReadBatch(BaseModel):
 
 A `WebhookAdapter` has two methods:
 
-- `verify(request) -> bool` — authenticates an inbound delivery (HMAC,
-  signature, token). **This is mandatory whenever the manifest claims
-  `webhooks.supported`; the verification_scheme declared in the manifest must
-  match the actual verification performed.**
-- `parse(request) -> RawProviderRecord | list[RawProviderRecord]` — converts a
-  verified delivery into raw records that flow through the normalizer.
+- `verify(raw_body, headers, secret) -> bool` — authenticates an inbound
+  delivery (HMAC, signature, token) from the raw body bytes, the delivery
+  headers, and the configured secret. **This is mandatory whenever the
+  manifest claims `webhooks.supported`; the verification_scheme declared in
+  the manifest must match the actual verification performed.**
+- `parse(payload, *, headers) -> list[RawProviderRecord]` — converts a
+  verified delivery's JSON payload into raw records that flow through the
+  normalizer (never a bare record).
 
 The `/v1/provider-webhooks/` route is in `PUBLIC_PATH_PREFIXES` — it is
 unauthenticated by API key by design, so **the plugin's `verify()` is the only
@@ -153,6 +158,17 @@ There is **no "no secret ⇒ trust" path**: this endpoint is public, so trust
 must come from cryptographic proof the caller holds the connection's secret.
 Never process an unverified delivery.
 
+Even after a delivery is verified and parsed, its normalized events are not
+immediately durable. The provider-runtime event bridge
+(`services/provider_runtime/bridge.py`) runs each event through the platform's
+**unconditional sensitive-value scrub** on `data`/`context` (server-authoritative
+minimization; redaction never rejects) plus a per-event **ingress
+consent/data-policy gate** (WS-B3) before the Bronze write and publish. A
+consent-denied event is skipped — no Bronze row, no publish, a metric and a
+warning — so individual events inside a verified delivery can be dropped by
+tenant data-policy or consent independently of `verify()`; the delivery itself
+is never silently failed wholesale.
+
 ## 5. Normalization contract
 
 `normalizer().normalize(raw: RawProviderRecord) -> NormalizationResult`
@@ -164,7 +180,7 @@ Never process an unverified delivery.
 - **Network-free.** The normalizer never calls the provider or any service.
 - **`dropped` is never silent.** Anything the normalizer cannot translate must
   appear in `result.dropped` with enough detail to audit — convention
-  `f"{record_id}:{provider_record_type}"` — and counts in `result.skipped`.
+  `f"{record_id}:{provider_record_type}"` — never as a silently-skipped record.
 - `NormalizationResult` carries `events`, `skipped`, `dropped`, and
   `normalizer_version`.
 
@@ -175,10 +191,14 @@ See [COMMERCE-EVENT-CONTRACT](COMMERCE-EVENT-CONTRACT.md) for the canonical
 
 Registration is additive and does not touch central type unions:
 
-- `register_provider(plugin)` (module-level in `provider_runtime/plugin.py`) /
-  `ProviderRegistry.register(plugin)` — runs the §32 honesty validation
-  (`assert_plugin_honest` in `provider_runtime/validation.py`), then inserts
-  into the registry. A duplicate identity key is a hard error.
+- The module-level `register_provider(plugin)` hook
+  (`provider_runtime/plugin.py`) records a plugin into the in-repo store by its
+  `plugin_identity_key` — idempotent per identity key, and a *different* object
+  under a duplicate key is a hard error. The runtime registry's
+  `ProviderRegistry.register(plugin)` (`provider_runtime/registry.py`) is the
+  full path: it runs the §32 honesty validation (`assert_plugin_honest` in
+  `provider_runtime/validation.py`), an ABI check, and a duplicate-key / catalog
+  conflict check before inserting.
 - `provider_registry.load_all()` — the startup batch path; discovers plugins
   from:
   - the **`aether.providers`** entry-points group (`PLUGIN_ENTRY_POINT_GROUP`,
@@ -228,7 +248,7 @@ from shared.integration_contracts.identity import ProviderIdentity
 from shared.integration_contracts.manifest import (
     Authentication, ManifestReadiness, ProviderManifest, Sync, Webhooks,
 )
-from shared.integration_contracts.plugin import BaseProviderPlugin
+from services.provider_runtime.plugin import BaseProviderPlugin
 from shared.integration_contracts.capabilities import PullAdapter
 from shared.integration_contracts.normalization import EventNormalizer
 from shared.integration_contracts.results import AdapterResult

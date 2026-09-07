@@ -107,6 +107,11 @@ _READ_TENANT = _READ_FLEET | {
 _READ_EVIDENCE = _READ_TENANT | {
     "kyber.graph.evidence.read",
     "kyber.audit.read",
+    # Reconciled control plane convergence state + operator change-decision
+    # evidence. Rides evidence-read with kyber.audit.read: the surface is
+    # operator-derived records, never tenant-visible product state (the domain
+    # carries no tenant grant).
+    "kyber.reconciled_control.read",
 }
 _BOUNDED_COMMANDS = {
     "kyber.command.retry",
