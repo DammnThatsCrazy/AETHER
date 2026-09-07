@@ -16,7 +16,7 @@ reviewed_source_commits:
     reason: "Reviewed 41e8356b (additive advertising-connect endpoints — overview/ad-options/connect/test/account/disable/enable — appended to the /v1/campaign-sources router in services/campaign/routes.py, orchestrated by new services/campaign/ad_source_links.py). These additions do not touch the Campaign 360 graph/overview path this runbook diagnoses (exploration.py unchanged; sources endpoints never persist probe/sync facts on test), so no body change was required."
 source_hashes:
   "Backend Architecture/aether-backend/services/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
-  "Backend Architecture/aether-backend/services/campaign/routes.py": "sha256:b1c15a5daea35ed9cbabb848f71b1c6ccc9e324bb2c7296844af3138806ff872"
+  "Backend Architecture/aether-backend/services/campaign/routes.py": "sha256:d7a4747fba3fa05424c8c6a4ff5a1382739ce942e35c0738b43a9355ad38d26e"
 ---
 
 # Runbook — Graph Results Disagree With Campaign Totals

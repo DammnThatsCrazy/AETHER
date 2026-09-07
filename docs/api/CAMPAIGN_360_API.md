@@ -14,7 +14,7 @@ source_files:
   - Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py
 source_hashes:
   "Backend Architecture/aether-backend/services/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
-  "Backend Architecture/aether-backend/services/campaign/routes.py": "sha256:b1c15a5daea35ed9cbabb848f71b1c6ccc9e324bb2c7296844af3138806ff872"
+  "Backend Architecture/aether-backend/services/campaign/routes.py": "sha256:d7a4747fba3fa05424c8c6a4ff5a1382739ce942e35c0738b43a9355ad38d26e"
   "Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py": "sha256:5f1ea2109ff37ba742f1236d651e4fcc00d14fe62b25eb08ae41b8693545f3d8"
 ---
 
@@ -537,8 +537,17 @@ after a source is anchored stays in the `/v1/mapping-review` surface.
 | POST | `/v1/campaign-sources/{connector_id}/account` | `campaign:manage` | Explicit single-account selection; rotates the source to the new account (archive + fresh active row carrying credentials) |
 | POST | `/v1/campaign-sources/{connector_id}/disable` | `campaign:manage` | Disable a source (stops scheduling; row stays as history) |
 | POST | `/v1/campaign-sources/{connector_id}/enable` | `campaign:manage` | Re-enable a source; refused when another active row exists for the same ad family |
+| POST | `/v1/campaign-sources/{connector_id}/reconnect` | `campaign:manage` | In-place re-credential of a degraded/failed/stale, disabled, or secret-missing source — replaces the stored single-account credential set on the SAME row and resets health/error state to the never-synced baseline (connector id + sync history preserved). `404` unknown connector; `409` while the row is active and healthy; `400` partial credential set or non-ad source |
 
 `connect` accepts `{platform, name?, config}` where `platform` may be a brand or
 alias (e.g. `twitter` → `x_ads`) and `config` must be a complete credential set
 for the family (secrets + the single account identifier). Errors use the same
 error envelope as the rest of the registry API.
+
+`reconnect` accepts `{secret_config}` — the same complete single-account
+credential set `connect` requires — and replaces it **in place** on the named
+source's existing row, so a degraded/disabled source can be re-credentialed
+without archiving it. A swap resets health/error state to the never-synced
+baseline and is not evidence of a healthy sync; the next sync exercises the new
+credential. Errors map `400` (partial set / non-ad source), `404` (unknown
+connector), and `409` (row active and healthy).
