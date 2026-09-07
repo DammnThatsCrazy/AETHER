@@ -8,7 +8,9 @@ export {
 } from './experience-categories';
 export {
   catalogBaselineCaption,
+  tenantConnectionStateToken,
   tenantConnectionStatus,
   type ConnectionIndicator,
+  type ConnectionStateToken,
   type ConnectionStatus,
 } from './connection-status';

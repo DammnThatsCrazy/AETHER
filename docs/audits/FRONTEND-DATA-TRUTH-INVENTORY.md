@@ -13,7 +13,7 @@ source_files:
   - scripts/validate_frontend_data_truth.py
   - scripts/docs_extract/extract_frontend_data_truth_inventory.py
 source_hashes:
-  "frontend/aether/": "sha256:38d2de993e92f839212d54203ed17debcdf5e57f3a9a5c50e066a7b425fd5646"
+  "frontend/aether/": "sha256:22244935448016945e4e674bf3f6d9e2dbb11c9f1876769fd4e6c89288403f95"
   "frontend/demo/": "sha256:34d2e8d3ad5ae8af2099a733f77ebb6ca695a25c69ca8b8a7de18a565ebc33fb"
   "frontend/kyber/": "sha256:0e592231a63bee0c6be0e75be15c3d586e7ccc95f8f94c1838f26ca556a3a248"
   "scripts/docs_extract/extract_frontend_data_truth_inventory.py": "sha256:d32fbf2cfaccccb7420cf6ba0ef4e25030a27dc43fc03d50a04e168db8c0cc92"

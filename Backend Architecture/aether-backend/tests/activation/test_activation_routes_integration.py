@@ -10,9 +10,10 @@ first-value proof, and the ``complete`` gate all work together over HTTP — not
 just at the service layer.
 
 The activation package is flag-gated OFF in production (mounted only when
-``AETHER_ACTIVATION_ENABLED=true``); the mount decision itself is covered by
-``test_activation_mount_gating.py``. Here the router is included unconditionally,
-which is exactly what the gate does when the flag is on.
+``AETHER_ACTIVATION_ENABLED=true``); the mount decision is enforced by main.py's
+``if settings.activation.activation_enabled:`` block (there is no separate
+mount-gating unit test). Here the router is included unconditionally, which is
+exactly what the gate does when the flag is on.
 """
 from __future__ import annotations
 

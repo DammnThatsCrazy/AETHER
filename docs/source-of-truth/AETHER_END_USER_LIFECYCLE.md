@@ -85,17 +85,22 @@ Copy invariants:
 | `/activate` | Legacy alias of `/activation` | Redirects to `/activation` during compatibility |
 | `/settings` | Settings shell | Hosts nested sections |
 | `/settings/integrations` | Integrations manager (canonical) | Legacy `/integrations` redirects here during compatibility |
-| `/campaigns` | Campaign 360 (resolved workspace root) | Complete tenants land here |
+| `/campaigns` | Campaign 360 | Workspace destination; complete tenants return to their last useful workspace (root = Home) |
 | `/profiles` | Profile 360 | Commerce/profile evidence visible post-sync |
 | `/campaign-intelligence/sources` | Campaign sources directory | Connect is via Settings/Integrations advertising group |
 | `/campaign-intelligence/mapping-review` | Mapping Review queue | Exception-driven; linked from campaign-quality readiness |
 | `/campaign-intelligence/quality` | Campaign-quality readiness gate | Discloses open reviews and links into Mapping Review |
 
 **Tenant-landing resolver contract.** An incomplete tenant (no activation
-intent, no commerce/advertising/comms evidence) is resolved into `/activation`.
-A complete tenant (live / value-proven / expansion-ready evidence) is resolved
-into the workspace root (Campaign 360). The resolver never strands a tenant and
-never routes by guesswork.
+intent, no commerce/advertising/comms evidence) is resolved into `/activation`
+(the canonical guided activation surface). A complete tenant (live /
+value-proven / expansion-ready evidence) is resolved back into their **last
+useful workspace** when the session remembers one (scope-scoped per user,
+persisted only for real workspace routes — never for `/activation`, `/activate`,
+auth, or legal paths); otherwise they land on the workspace root (Home). A
+requested deep link to a protected workspace renders directly after auth and
+never passes through this resolver. The resolver never strands a tenant, never
+routes to the operator `/settings` surface, and never routes by guesswork.
 
 ## 3. Connection-state projection
 

@@ -15,8 +15,8 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field, field_validator
 
 from shared.common.common import (
-    APIResponse, BadRequestError, NotFoundError, ServiceUnavailableError,
-    PaginatedResponse, PaginationMeta,
+    APIResponse, BadRequestError, ConflictError, NotFoundError,
+    ServiceUnavailableError, PaginatedResponse, PaginationMeta,
 )
 from shared.events.events import Event, EventProducer, Topic
 from shared.logger.logger import get_logger, metrics
@@ -27,6 +27,7 @@ from services.campaign.ad_source_links import (
     ad_connect_options,
     connect_ad_source,
     overview_sources,
+    reconnect_ad_source,
     set_source_account,
     set_source_enabled,
 )
@@ -1201,6 +1202,15 @@ class AdAccountSelectRequest(BaseModel):
     account_id: str = Field(..., min_length=1)
 
 
+class AdReconnectRequest(BaseModel):
+    # The full single-account credential set (identifiers + secrets) that will
+    # REPLACE the stored config of an existing degraded/disabled/revoked source
+    # in place. Same shape as /connect's ``config`` — a partial set is rejected
+    # because an ad source cannot be partially configured. Named ``secret_config``
+    # so the intent is explicit: this is a credential replacement, not a connect.
+    secret_config: dict[str, Any] = Field(default_factory=dict)
+
+
 @sources_router.get("/overview")
 async def campaign_sources_overview(request: Request):
     """Redacted overview of every connected campaign source.
@@ -1273,6 +1283,42 @@ async def connect_ad_campaign_source(body: AdConnectRequest, request: Request):
     metrics.increment(
         "campaign_source_ad_connected",
         labels={"platform": result.get("platform", ""), "already": str(result.get("already_connected", False))},
+    )
+    return APIResponse(data=result).to_dict()
+
+
+@sources_router.post("/{connector_id}/reconnect")
+async def reconnect_campaign_source(connector_id: str, body: AdReconnectRequest, request: Request):
+    """Re-credential an existing ad-platform source IN PLACE.
+
+    Replaces the stored credential set of the SAME connector row (degraded /
+    failed / disabled / revoked sources) and resets its health/error state to
+    the never-synced baseline; ``connector_id`` and sync history are preserved.
+    Refused with 409 while the source is active and healthy — a healthy source
+    does not need re-credentialing (disable it first for the disable→enable
+    path). Unknown connectors are a 404.
+    """
+    tenant = request.state.tenant
+    tenant.require_permission("campaign:manage")
+    try:
+        result = await reconnect_ad_source(
+            _connector_repo,
+            tenant_id=tenant.tenant_id,
+            connector_id=connector_id,
+            config=body.secret_config,
+        )
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+    except (NotFoundError, ConflictError):
+        raise
+    except Exception as exc:
+        logger.error("ad source reconnect failed: %s", exc)
+        raise ServiceUnavailableError(
+            "Ad platform could not be re-credentialed — please retry"
+        ) from exc
+    metrics.increment(
+        "campaign_source_ad_reconnected",
+        labels={"platform": result.get("platform", "")},
     )
     return APIResponse(data=result).to_dict()
 

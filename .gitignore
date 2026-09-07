@@ -51,6 +51,7 @@ __pycache__/
 !.env.local.example
 !.env.staging.example
 !.env.production.example
+!.env.lifecycle-e2e.example
 
 # IDE
 .vscode/

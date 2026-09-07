@@ -83,6 +83,27 @@ export function tenantConnectionStatus(item: TenantIntegrationItem): ConnectionS
   return { label: 'Not connected', indicator: 'unknown' };
 }
 
+/**
+ * Canonical connection-state token for the lifecycle acceptance markers
+ * (`[data-connection-state]`, E2E harness). A strict projection of record
+ * facts onto the §6 customer vocabulary subset used by the markers. "ready" is
+ * intentionally absent — a connection record alone can never prove readiness
+ * (that is the joined, evidence-derived readiness surface's claim).
+ */
+export type ConnectionStateToken =
+  | 'connected'
+  | 'syncing'
+  | 'needs_attention'
+  | 'not_connected';
+
+export function tenantConnectionStateToken(item: TenantIntegrationItem): ConnectionStateToken {
+  const sync = item.sync_status ?? 'never_synced';
+  if (ATTENTION_SYNC_STATUSES.has(sync)) return 'needs_attention';
+  if (sync === 'syncing') return 'syncing';
+  if (item.enabled || item.connected) return 'connected';
+  return 'not_connected';
+}
+
 /** Muted caption for the manifest catalog baseline, when the catalog covers it. */
 export function catalogBaselineCaption(state: string | undefined): string | null {
   if (!state) return null;

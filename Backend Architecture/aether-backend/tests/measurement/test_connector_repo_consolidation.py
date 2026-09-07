@@ -241,3 +241,85 @@ async def test_record_sync_returns_false_for_missing_connector() -> None:
     repo = MeasurementConnectorRepository()
     ok = await repo.record_sync("tenant-missing", "does-not-exist", success=True)
     assert ok is False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# In-place reconnect (credential replacement) — the new config-update path
+# ─────────────────────────────────────────────────────────────────────────────
+
+_GOOGLE_CONFIG_A = {
+    "customer_id": "123-456",
+    "developer_token": "dev-token",
+    "client_id": "client-id",
+    "client_secret": "client-secret",
+    "refresh_token": "rt-secret",
+}
+_GOOGLE_CONFIG_B = {
+    "customer_id": "123-456",
+    "developer_token": "dev-token-B",
+    "client_id": "client-id",
+    "client_secret": "client-secret-B",
+    "refresh_token": "rt-secret-B",
+}
+
+
+@pytest.mark.asyncio
+async def test_reconnect_replaces_config_in_place_and_resets_health() -> None:
+    repo = MeasurementConnectorRepository()
+    tenant_id = "tenant-reconnect"
+    created = await repo.create(
+        tenant_id=tenant_id, connector_type="google_ads", name="GAds",
+        config=_GOOGLE_CONFIG_A,
+    )
+    connector_id = created["connector_id"]
+    await repo.update_cursor(tenant_id, connector_id, {"page_token": "p1"})
+    await repo.record_sync(tenant_id, connector_id, success=False, health_status="error")
+    # A healthy source that later failed is not unusual; make the row degraded.
+    degraded = await repo.get(tenant_id, connector_id)
+    assert degraded["health_status"] == "error"
+    assert degraded["error_count"] == 1
+    assert degraded["cursor_state"] == {"page_token": "p1"}
+
+    refreshed = await repo.reconnect(tenant_id, connector_id, config=_GOOGLE_CONFIG_B)
+
+    assert refreshed is not None
+    # SAME row — connector_id and sync history preserved, no new row.
+    assert refreshed["connector_id"] == connector_id
+    assert refreshed["config"] == _GOOGLE_CONFIG_B
+    assert refreshed["cursor_state"] == {"page_token": "p1"}
+    assert refreshed["sync_run_count"] == degraded["sync_run_count"]
+    # Health/error reset to the never-synced baseline (never "healthy").
+    assert refreshed["health_status"] == "unknown"
+    assert refreshed["health_message"] is None
+    assert refreshed["error_count"] == 0
+    assert refreshed["status"] == "active"
+    # The row count for the tenant is unchanged — reconnect never creates a row.
+    rows = await repo.list_for_tenant(tenant_id)
+    assert len(rows) == 1
+    assert rows[0]["connector_id"] == connector_id
+    assert rows[0]["config"] == _GOOGLE_CONFIG_B
+
+
+@pytest.mark.asyncio
+async def test_reconnect_keeps_disabled_row_disabled() -> None:
+    """A re-credential is NOT a re-activation at the storage layer: this store
+    only activates on ``create`` or ``set_status``."""
+    repo = MeasurementConnectorRepository()
+    tenant_id = "tenant-reconnect-disabled"
+    created = await repo.create(
+        tenant_id=tenant_id, connector_type="google_ads", config=_GOOGLE_CONFIG_A,
+    )
+    connector_id = created["connector_id"]
+    await repo.set_status(tenant_id, connector_id, "disabled")
+
+    refreshed = await repo.reconnect(tenant_id, connector_id, config=_GOOGLE_CONFIG_B)
+
+    assert refreshed is not None
+    assert refreshed["status"] == "disabled"
+    assert refreshed["config"] == _GOOGLE_CONFIG_B
+
+
+@pytest.mark.asyncio
+async def test_reconnect_returns_none_for_missing_connector() -> None:
+    repo = MeasurementConnectorRepository()
+    assert await repo.reconnect("tenant-missing", "does-not-exist", config={}) is None

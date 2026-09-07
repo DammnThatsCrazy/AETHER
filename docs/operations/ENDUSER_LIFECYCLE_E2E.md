@@ -14,7 +14,7 @@ toc_depth: 3
 
 Runbook for the Playwright acceptance suites that exercise the integrated
 End-User Lifecycle tenant app end to end. The suites live at
-`frontend/aether/src/test/e2e/lifecycle-{A,B,C,D,E}-*.spec.ts` (plus the shared
+`frontend/aether/src/test/e2e/lifecycle-{A,B,C,D,E,F}-*.spec.ts` (plus the shared
 `lifecycle.harness.ts`) and are the executable acceptance spec for the lifecycle
 IA — see `docs/plans/ENDUSER_LIFECYCLE_PHASES.md` §7 and
 `docs/source-of-truth/AETHER_END_USER_LIFECYCLE.md` §9.
@@ -55,8 +55,8 @@ they skip with a self-explanatory reason instead of timing out.
 |---|---|---|
 | `E2E_TENANT_EMAIL` | Shared fallback | Tenant login email when no suite-specific pair is set |
 | `E2E_TENANT_PASSWORD` | Shared fallback | Tenant login password when no suite-specific pair is set |
-| `E2E_TENANT_EMAIL_A` … `_E` | Optional | Suite-specific tenant email (overrides the shared pair for that suite) |
-| `E2E_TENANT_PASSWORD_A` … `_E` | Optional | Suite-specific tenant password |
+| `E2E_TENANT_EMAIL_A` … `_F` | Optional | Suite-specific tenant email (overrides the shared pair for that suite) |
+| `E2E_TENANT_PASSWORD_A` … `_F` | Optional | Suite-specific tenant password |
 | `E2E_CAMPAIGN_UUID` | Suite E only | Canonical Aether campaign UUID the Suite-E seed review resolves to |
 
 Each suite uses its own tenant so the suites can run in any order and in
@@ -78,6 +78,7 @@ runs must export the vars.
 | C | **Activated** tenant; Communications group present (comms cohort derived from catalog); Klaviyo not yet connected. |
 | D | **Activated** tenant whose Google Ads connection's credential the seed has **REVOKED** (so the row renders Needs attention with impact). |
 | E | **Activated** tenant whose seed includes at least one **open/ambiguous mapping review** plus the canonical `E2E_CAMPAIGN_UUID` the review resolves to. |
+| F | **Activated** (complete) tenant — F1/F2 only need the guided activation page reachable; F3 asserts the last-workspace landing, so the tenant's onboarding plan must read **complete/live**. No provider connection needed. |
 
 Runs are not idempotent across the serial journey: a suite that already
 connected/activated/resolved will fail honest assertions on re-run. **Reset the
@@ -91,10 +92,11 @@ From `frontend/aether` (the config `testDir` is `./src/test/e2e`, base URL
 `http://localhost:5175`, `VITE_AETHER_ENV=test`):
 
 ```bash
-# All five lifecycle suites (explicit list — the bare `lifecycle` positional also
+# All six lifecycle suites (explicit list — the bare `lifecycle` positional also
 # over-matches the unrelated onboarding.spec.ts in this repo, so it is not used)
 npx playwright test lifecycle-A-ecommerce-first-tenant lifecycle-B-returning-expansion \
-  lifecycle-C-communications lifecycle-D-credential-recovery lifecycle-E-mapping-exception
+  lifecycle-C-communications lifecycle-D-credential-recovery lifecycle-E-mapping-exception \
+  lifecycle-F-route-convergence
 
 # One suite
 npx playwright test lifecycle-A-ecommerce-first-tenant
@@ -105,7 +107,7 @@ npx playwright test lifecycle-D-credential-recovery --trace on
 
 Equivalently `npm run e2e -- lifecycle-A-ecommerce-first-tenant`.
 
-**Expectation:** with the R3/R4 environment + seeds, all five suites pass.
+**Expectation:** with the R3/R4 environment + seeds, all six suites pass.
 Without the env vars, all suites skip with
 `requires E2E_TENANT_EMAIL/E2E_TENANT_PASSWORD (R3/R4 integration env: WS-1..WS-6
 merged, seeded backend)` — that is a correct, honest result for a non-integration
@@ -122,6 +124,7 @@ run.
 | C | Communications group lists the derived cohort (Klaviyo + sendgrid/customerio/mailchimp) → connect Klaviyo → sync → comms facts reachable from Campaign 360 |
 | D | Revoked credential renders Needs attention with impact disclosed + Reconnect CTA (never Ready) → reconnect restores Connected then Ready only from evidence |
 | E | Campaign-quality readiness discloses open mapping reviews → Mapping Review → resolve via `#campaign-id-input` → review leaves the open queue and lists under resolved |
+| F | `/activate` is a query-preserving alias onto canonical `/activation` (guided surface, no legacy bare step flow) → `/activation` renders directly with no redirect loop → a complete tenant hitting `/` is restored to their scope-scoped last workspace, never dropped on Home or `/activation` |
 
 ---
 
@@ -139,6 +142,11 @@ explicit five-file list from §5, or add `--grep-invert` for onboarding.
 **Suite E skips alone.**
 `E2E_CAMPAIGN_UUID` unset — export the canonical campaign the seed review
 resolves to.
+
+**Suite F fails at F3 (lands on Home or `/activation` instead of the workspace).**
+Suite F's tenant seed is not *complete* — an incomplete tenant is resolved into
+`/activation` by design (that leg wins over last-workspace). Reset F's seed to an
+activated/complete tenant before re-running. F1/F2 do not depend on this.`
 
 **Suite A fails at A1 (tenant does not land on `/activation`).**
 The tenant seed was not reset to *incomplete*. Reset the seed (an already-

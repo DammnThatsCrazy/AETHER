@@ -13,7 +13,7 @@ source_files:
   - Backend Architecture/aether-backend/services/campaign/routes.py
 source_hashes:
   "Backend Architecture/aether-backend/services/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
-  "Backend Architecture/aether-backend/services/campaign/routes.py": "sha256:b1c15a5daea35ed9cbabb848f71b1c6ccc9e324bb2c7296844af3138806ff872"
+  "Backend Architecture/aether-backend/services/campaign/routes.py": "sha256:d7a4747fba3fa05424c8c6a4ff5a1382739ce942e35c0738b43a9355ad38d26e"
 ---
 
 # Runbook — Stale Spend Warning (Campaign 360)
@@ -69,8 +69,8 @@ displayed in Campaign 360 may be stale by hours or days.
 ### Campaign Sources self-service surface (additive)
 
 When the stale source is an ad platform the tenant manages from the Campaign
-Sources page (`/campaign-intelligence/sources`), two additive endpoints clarify
-the diagnosis before escalation:
+Sources page (`/campaign-intelligence/sources`), three additive endpoints
+clarify the diagnosis and fix before escalation:
 
 - `POST /v1/campaign-sources/{connector_id}/test` runs a **live credential
   probe** through the connector's own `validate_credentials`/`health_check` and
@@ -82,6 +82,12 @@ the diagnosis before escalation:
   from a deliberately disabled source is expected to go stale by design;
   re-authorize by disabling the old source and connecting anew, or use the
   account endpoint to rotate to the correct account.
+- `POST /v1/campaign-sources/{connector_id}/reconnect` re-credentials a
+  degraded/revoked source **in place** — it replaces the stored credential set
+  on the same row and resets health/error state to the never-synced baseline
+  (`404` unknown connector, `409` while the row is active and healthy). A swap
+  is not evidence of a healthy sync: the source stays stale until the next sync
+  exercises the new credential.
 
 ## Escalation
 

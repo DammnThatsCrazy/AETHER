@@ -13,6 +13,14 @@ campaign-service orchestration over those rows:
   Credential sets are required complete at connect because the connector store
   has no config-update path: storing a partial set would create an unfixable
   source (honesty invariant — see ``connect_ad_source``);
+* **in-place reconnect** — a degraded/disabled/revoked source can now be
+  re-credentialed ON THE SAME ROW (``reconnect_ad_source`` → the repository's
+  ``reconnect``), replacing its stored credential set and resetting its
+  health/error state without a new ``connector_id``. This is the store's new
+  config-update path and it is refused only while the row is active AND healthy
+  (a healthy source does not need re-credentialing; disable it first for the
+  other path). A disabled row stays disabled after re-credentialing; the
+  operator enables it afterwards. ``/connect`` idempotency is untouched;
 * **redacted read model** — the overview surface never returns ``config``; it
   projects non-secret facts (account id, secret-configured, sync/health state);
 * **account selection** — manifests have no account discovery
@@ -35,6 +43,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Optional
 
+from shared.common.common import ConflictError, NotFoundError
 from services.campaign.normalization import normalize_platform
 from services.measurement.connectors.ad_accounts import (
     AD_ACCOUNT_FAMILIES,
@@ -300,6 +309,88 @@ async def connect_ad_source(
     }
 
 
+# ── In-place re-credential (reconnect) ─────────────────────────────────
+
+async def reconnect_ad_source(
+    repo: RepoLike,
+    *,
+    tenant_id: str,
+    connector_id: str,
+    config: Optional[Mapping[str, Any]] = None,
+) -> dict[str, Any]:
+    """Re-credential an existing ad-platform source IN PLACE (additive reconnect).
+
+    This is the honest fix path for a degraded/disabled/revoked source: instead
+    of ``connect`` (idempotent per *active* source, and it never overwrites a
+    stored config) or account rotation (which archives the row and creates a new
+    one), the repository replaces the stored credential set on the SAME row and
+    resets its health/error state to the never-synced baseline. ``connector_id``
+    and sync history are preserved.
+
+    Raises:
+        ``NotFoundError`` — no connector row for the tenant/connector_id.
+        ``ValueError``    — the row is not an ad-platform source, or the supplied
+                            credential set is incomplete (same guard as connect:
+                            an ad source is single-account and cannot be
+                            partially configured).
+        ``ConflictError`` — the row is active AND healthy (``status == active``
+                            and ``health_status == 'healthy'``). A healthy source
+                            does not need re-credentialing; the operator disables
+                            it first if they want the disable→enable path.
+
+    Status semantics (explicit, enforced in a test): re-credentialing a DISABLED
+    row keeps it disabled — the operator enables it afterwards. A re-credential
+    is NOT a re-activation; this module's store only activates on ``create`` or
+    ``set_source_enabled``.
+    """
+    row = await repo.get(tenant_id, connector_id)
+    if row is None:
+        raise NotFoundError(f"Campaign source {connector_id}")
+
+    family = row.get("connector_type") or row.get("platform") or ""
+    if not is_ad_account_family(family):
+        raise ValueError(
+            f"Source {connector_id} is not an ad-platform source "
+            f"({family!r}); re-credentialing applies to ad platforms only"
+        )
+
+    status = row.get("status") or _STATUS_ACTIVE
+    health = row.get("health_status") or "unknown"
+    if status == _STATUS_ACTIVE and health == "healthy":
+        raise ConflictError(
+            f"Campaign source {connector_id} is active and healthy "
+            f"(health_status {health!r}); it does not need re-credentialing. "
+            "Reconnect is for degraded, failed, or disabled sources — disable "
+            "it first if you need to cycle its credentials."
+        )
+
+    config = dict(config or {})
+    missing = _validate_connect_config(family, config)
+    if missing:
+        raise ValueError(
+            f"Incomplete {family} credential set — missing required "
+            f"field(s): {', '.join(sorted(missing))}. Re-credentialing stores a "
+            "complete single-account set in place."
+        )
+
+    refreshed = await repo.reconnect(tenant_id, connector_id, config=config)
+    if refreshed is None:
+        raise NotFoundError(f"Campaign source {connector_id}")
+
+    return {
+        "reconnected": True,
+        "connector_id": connector_id,
+        "platform": family,
+        "status": refreshed.get("status", status),
+        "source": project_source(refreshed),
+        "message": (
+            f"The stored credential set for {connector_id} was replaced on the "
+            "existing source and its health/error state reset. Re-credentialing "
+            "is not evidence of a healthy sync — the next sync exercises it."
+        ),
+    }
+
+
 # ── Account selection (single-account rotation) ─────────────────────────
 
 async def set_source_account(
@@ -429,6 +520,7 @@ __all__ = [
     "connect_ad_source",
     "overview_sources",
     "project_source",
+    "reconnect_ad_source",
     "resolve_ad_family",
     "set_source_account",
     "set_source_enabled",
