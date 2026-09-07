@@ -865,8 +865,9 @@ test-terraform-profiles: ## Provider-mocked plan tests asserting per-profile mod
 test-runtime-topology: ## Execution-group topology: every worker role owned by exactly one service
 	python -m pytest tests/unit/test_runtime_topology.py tests/unit/test_runtime_execution_groups.py -q
 
-test-workflow-controls: ## Structural controls: no automatic apply, no false-green, reviewed-plan integrity
-	python -m pytest tests/unit/test_release_workflow_controls.py -q
+test-workflow-controls: ## Structural controls: no automatic apply, no false-green, reviewed-plan integrity, GitHub-only deployment operator
+	$(GATE_PY) -m pytest tests/unit/test_release_workflow_controls.py -q
+	$(GATE_PY) scripts/release/check_deployment_operator_surface.py
 
 test-cost-model: ## Cost-model unit tests (ceilings, fail-closed pricing, exception expiry)
 	python -m pytest tests/unit/test_cost_model.py -q

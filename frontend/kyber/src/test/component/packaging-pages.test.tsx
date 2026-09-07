@@ -29,6 +29,8 @@ describe('Kyber packaging pages', () => {
   it('renders Deployment Readiness and Audit Export Health', async () => {
     render(<MemoryRouter><DeploymentReadinessPage /></MemoryRouter>);
     await waitFor(() => expect(screen.getByText('standard_saas')).toBeInTheDocument());
+    expect(screen.getByText(/Deployment execution is disabled in Kyber/)).toBeInTheDocument();
+    expect(screen.getByText(/GitHub Actions workflows/)).toBeInTheDocument();
     expect(screen.getByText(/Volume/i)).toBeInTheDocument();
   });
 });

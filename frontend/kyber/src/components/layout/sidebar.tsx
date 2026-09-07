@@ -50,7 +50,7 @@ export const KYBER_NAV_ITEMS: readonly NavItem[] = [
   { path: '/investigations',  label: 'Investigations',  destination: 'kyber-investigations' },
   { path: '/cis',             label: 'CIS',             destination: 'kyber-cis' },
   { path: '/packages',        label: 'Packages',        destination: 'kyber-packages' },
-  { path: '/deployment-readiness', label: 'Deploy Ready', destination: 'kyber-deployment-readiness' },
+  { path: '/deployment-readiness', label: 'Deployment Review', destination: 'kyber-deployment-readiness' },
   { path: '/reliability',     label: 'Reliability',     destination: 'kyber-reliability' },
   { path: '/journey-health',  label: 'Journey Health',  destination: 'kyber-journey-health' },
   { path: '/intelligence-quality', label: 'Intel Quality', destination: 'kyber-intelligence-quality' },
