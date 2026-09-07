@@ -181,6 +181,73 @@ class MeasurementConnectorRepository:
             )
         return _normalize(dict(row)) if row else None
 
+    async def reconnect(
+        self,
+        tenant_id: str,
+        connector_id: str,
+        *,
+        config: Optional[dict[str, Any]] = None,
+    ) -> Optional[dict[str, Any]]:
+        """Replace an existing connector's stored config in place and reset its
+        health/error state to the never-synced baseline.
+
+        This is the in-place config-update path the ad connect flow was missing:
+        instead of archive-and-rotate (``set_source_account``) or creating a
+        fresh row, an existing degraded/disabled/revoked source keeps its
+        ``connector_id`` and its accrued sync history (``cursor_state``,
+        ``sync_run_count``, ``last_sync_at`` / ``last_success_at`` stay as
+        historical facts) while its credential set is replaced and its
+        health/error sub-state is reset the way ``create`` seeds a fresh source:
+        ``health_status`` -> ``"unknown"`` (the store's never-synced baseline,
+        not ``"healthy"`` — a freshly stored credential has not been exercised
+        by a sync), ``health_message`` -> None, ``error_count`` -> 0,
+        ``updated_at`` -> now.
+
+        The row's ``status`` is deliberately preserved: re-credentialing a
+        disabled source keeps it disabled (the operator enables it afterwards) —
+        this store only activates a row on ``create`` or ``set_status``, so a
+        re-credential is NOT a re-activation.
+
+        ``secret_configured`` / ``missing_secrets`` are not persisted columns;
+        they are recomputed at read time from ``config`` by
+        ``campaign.ad_source_links.project_source`` exactly as they are for a
+        freshly created source. Whether the stored set is complete/valid is a
+        domain decision owned by the campaign orchestration layer; this storage
+        primitive persists whatever ``config`` it is handed.
+
+        Returns the refreshed row, or ``None`` if the connector does not exist
+        for the tenant (this repo's not-found convention — see ``get``).
+        """
+        config = dict(config or {})
+        now = datetime.now(timezone.utc)
+        pool = await self._pool()
+        if pool is None:
+            key = f"{tenant_id}:{connector_id}"
+            record = _local_connectors.get(key)
+            if record is None:
+                return None
+            record["config"] = config
+            record["health_status"] = "unknown"
+            record["health_message"] = None
+            record["error_count"] = 0
+            record["updated_at"] = now.isoformat()
+            return _normalize(record)
+
+        cid = _uuid_or_none(connector_id)
+        if cid is None:
+            return None
+        async with pool.acquire() as conn:
+            result = await conn.execute(
+                "UPDATE measurement_connectors "
+                "SET config = $1, health_status = 'unknown', health_message = NULL, "
+                "    error_count = 0, updated_at = NOW() "
+                "WHERE tenant_id = $2 AND connector_id = $3",
+                json.dumps(config), tenant_id, cid,
+            )
+            if result.split()[-1] == "0":
+                return None
+        return await self.get(tenant_id, connector_id)
+
     async def request_sync(self, tenant_id: str, connector_id: str) -> bool:
         """Queue a sync for the connector. Returns False when it does not exist."""
         pool = await self._pool()

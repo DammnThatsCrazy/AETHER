@@ -19,6 +19,7 @@ from services.measurement.repositories.measurement_connector_repo import (
 )
 from services.campaign import ad_source_links as L
 from services.measurement.connectors.ad_accounts import AD_ACCOUNT_FAMILIES
+from shared.common.common import ConflictError, NotFoundError
 
 GOOGLE_FULL_CONFIG: dict[str, str] = {
     "customer_id": "123-456",
@@ -26,6 +27,14 @@ GOOGLE_FULL_CONFIG: dict[str, str] = {
     "client_id": "client-id",
     "client_secret": "client-secret",
     "refresh_token": "rt-secret",
+}
+
+GOOGLE_ROTATED_SECRETS: dict[str, str] = {
+    "customer_id": "123-456",
+    "developer_token": "dev-token-B",
+    "client_id": "client-id",
+    "client_secret": "client-secret-B",
+    "refresh_token": "rt-secret-B",
 }
 
 
@@ -317,3 +326,127 @@ async def test_ad_connect_options_shape_and_connect_state() -> None:
     assert google["already_connected"] is True
     meta = next(o for o in options if o["family"] == "meta_ads")
     assert meta["already_connected"] is False
+
+
+# ── In-place reconnect (re-credential of degraded/disabled/revoked) ────────
+
+@pytest.mark.asyncio
+async def test_reconnect_unknown_connector_raises_not_found() -> None:
+    repo = MeasurementConnectorRepository()
+    with pytest.raises(NotFoundError):
+        await L.reconnect_ad_source(
+            repo, tenant_id="tenant-reconnect-missing", connector_id="nope",
+            config=GOOGLE_ROTATED_SECRETS,
+        )
+
+
+@pytest.mark.asyncio
+async def test_reconnect_refuses_healthy_active_source() -> None:
+    """A source whose row is active AND health_status == 'healthy' does not need
+    re-credentialing — reconnect is for degraded/failed/disabled/revoked rows.
+    The healthy row must be left untouched (config never silently overwritten)."""
+    repo = MeasurementConnectorRepository()
+    tenant_id = "tenant-reconnect-healthy"
+    connector_id = await _connect_google(repo, tenant_id)
+    await repo.record_sync(tenant_id, connector_id, success=True, health_status="healthy")
+
+    with pytest.raises(ConflictError, match="active and healthy"):
+        await L.reconnect_ad_source(
+            repo, tenant_id=tenant_id, connector_id=connector_id,
+            config=GOOGLE_ROTATED_SECRETS,
+        )
+
+    stored = await repo.get(tenant_id, connector_id)
+    assert stored["config"] == GOOGLE_FULL_CONFIG
+    assert stored["health_status"] == "healthy"
+
+
+@pytest.mark.asyncio
+async def test_reconnect_degraded_active_source_replaces_config_in_place() -> None:
+    """A degraded (active but failing) source keeps its connector_id and history
+    while its stored credential set is replaced and health/error reset."""
+    repo = MeasurementConnectorRepository()
+    tenant_id = "tenant-reconnect-degraded"
+    connector_id = await _connect_google(repo, tenant_id)
+    await repo.record_sync(tenant_id, connector_id, success=False, health_status="error")
+
+    result = await L.reconnect_ad_source(
+        repo, tenant_id=tenant_id, connector_id=connector_id,
+        config=GOOGLE_ROTATED_SECRETS,
+    )
+    assert result["reconnected"] is True
+    assert result["connector_id"] == connector_id
+    assert result["status"] == "active"
+    assert result["source"]["connector_id"] == connector_id
+    # No fabricated health: a stored credential swap is not evidence of a sync.
+    assert result["source"]["health_status"] == "unknown"
+    assert result["source"]["error_count"] == 0
+    assert result["source"]["secret_configured"] is True
+    assert result["source"]["missing_secrets"] == []
+    assert "config" not in result["source"]
+
+    # SAME row retained — exactly one row, with the new secrets and reset health.
+    rows = await repo.list_for_tenant(tenant_id)
+    assert len(rows) == 1
+    assert rows[0]["connector_id"] == connector_id
+    assert rows[0]["config"] == GOOGLE_ROTATED_SECRETS
+    assert rows[0]["config"]["refresh_token"] == "rt-secret-B"
+    assert rows[0]["health_status"] == "unknown"
+    assert rows[0]["error_count"] == 0
+
+    # The old secret value must never leak through the redacted read model.
+    assert "rt-secret" not in str(result["source"])
+
+
+@pytest.mark.asyncio
+async def test_reconnect_disabled_source_stays_disabled() -> None:
+    """Documented semantics: re-credentialing a DISABLED row keeps it disabled —
+    a re-credential is not a re-activation; the operator enables it after."""
+    repo = MeasurementConnectorRepository()
+    tenant_id = "tenant-reconnect-disabled"
+    connector_id = await _connect_google(repo, tenant_id)
+    await L.set_source_enabled(repo, tenant_id=tenant_id, connector_id=connector_id, enabled=False)
+
+    result = await L.reconnect_ad_source(
+        repo, tenant_id=tenant_id, connector_id=connector_id,
+        config=GOOGLE_ROTATED_SECRETS,
+    )
+    assert result["reconnected"] is True
+    assert result["status"] == "disabled"
+
+    stored = await repo.get(tenant_id, connector_id)
+    assert stored["status"] == "disabled"
+    assert stored["config"] == GOOGLE_ROTATED_SECRETS
+
+    # The operator can still enable the re-credentialed source afterwards.
+    reenabled = await L.set_source_enabled(repo, tenant_id=tenant_id, connector_id=connector_id, enabled=True)
+    assert reenabled["status"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_reconnect_rejects_non_ad_source() -> None:
+    repo = MeasurementConnectorRepository()
+    tenant_id = "tenant-reconnect-nonad"
+    created = await repo.create(tenant_id=tenant_id, connector_type="file_import", name="Upload")
+    with pytest.raises(ValueError, match="not an ad-platform source"):
+        await L.reconnect_ad_source(
+            repo, tenant_id=tenant_id, connector_id=created["connector_id"], config={}
+        )
+
+
+@pytest.mark.asyncio
+async def test_reconnect_rejects_incomplete_credential_set() -> None:
+    """A partial re-credential would persist an unfixable source — same edge
+    guard as connect."""
+    repo = MeasurementConnectorRepository()
+    tenant_id = "tenant-reconnect-partial"
+    connector_id = await _connect_google(repo, tenant_id)
+    await repo.record_sync(tenant_id, connector_id, success=False, health_status="error")
+
+    with pytest.raises(ValueError, match="Incomplete google_ads credential set"):
+        await L.reconnect_ad_source(
+            repo, tenant_id=tenant_id, connector_id=connector_id,
+            config={"refresh_token": "rt-secret-B"},
+        )
+    stored = await repo.get(tenant_id, connector_id)
+    assert stored["config"] == GOOGLE_FULL_CONFIG

@@ -91,6 +91,15 @@ const connectResultSchema = z.object({
   message: z.string().nullish(),
 }).passthrough();
 
+const reconnectResultSchema = z.object({
+  reconnected: z.boolean().nullish(),
+  connector_id: z.string().nullish(),
+  platform: z.string().nullish(),
+  status: z.string().nullish(),
+  source: campaignSourceSchema.nullish(),
+  message: z.string().nullish(),
+}).passthrough();
+
 const testResultSchema = z.object({
   family: z.string().nullish(),
   account_field: z.string().nullish(),
@@ -163,6 +172,12 @@ export interface ConnectCampaignSourceInput {
   config: Record<string, string>;
 }
 
+export interface ReconnectCampaignSourceInput {
+  connectorId: string;
+  /** Full single-account credential set (same shape as connect ``config``). */
+  secretConfig: Record<string, string>;
+}
+
 export function useSyncCampaignSource() {
   return useMutation({
     mutationFn: (connectorId: string) => restClient
@@ -177,6 +192,18 @@ export function useConnectCampaignSource() {
   return useMutation({
     mutationFn: (input: ConnectCampaignSourceInput) => restClient
       .post('/v1/campaign-sources/connect', wrap(connectResultSchema), input)
+      .then(r => r.data),
+    invalidateKeys: [OVERVIEW_KEY, OPTIONS_KEY, 'campaign-sources:list', TENANT_INTEGRATIONS_KEY],
+    onSuccess: () => { queryCache.invalidatePrefix(READINESS_PREFIX); },
+  });
+}
+
+export function useReconnectCampaignSource() {
+  return useMutation({
+    mutationFn: (input: ReconnectCampaignSourceInput) => restClient
+      .post(`/v1/campaign-sources/${input.connectorId}/reconnect`, wrap(reconnectResultSchema), {
+        secret_config: input.secretConfig,
+      })
       .then(r => r.data),
     invalidateKeys: [OVERVIEW_KEY, OPTIONS_KEY, 'campaign-sources:list', TENANT_INTEGRATIONS_KEY],
     onSuccess: () => { queryCache.invalidatePrefix(READINESS_PREFIX); },
