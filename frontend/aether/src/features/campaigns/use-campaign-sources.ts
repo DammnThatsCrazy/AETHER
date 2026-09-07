@@ -1,10 +1,15 @@
-import { useQuery, useMutation } from '@aether/ui';
+import { useQuery, useMutation, queryCache } from '@aether/ui';
 import { restClient } from '@aether-app/lib/api/rest/client';
 import { z } from 'zod';
 
 const STALE = 30_000;
 const OVERVIEW_KEY = 'campaign-sources:overview';
 const OPTIONS_KEY = 'campaign-sources:ad-options';
+// Tenant integration read keys live in features/integrations. The overview list
+// is exact-key; the joined readiness graph is composite
+// (``tenant-integration-readiness:list:*:*``), so it is cleared by prefix.
+const TENANT_INTEGRATIONS_KEY = 'tenant-integrations:list';
+const READINESS_PREFIX = 'tenant-integration-readiness';
 
 // ── Additive wire schemas (WS-2 advertising connect flow) ───────────────
 // Backend responses are the campaign API's snake_case surface, returned inside
@@ -163,7 +168,8 @@ export function useSyncCampaignSource() {
     mutationFn: (connectorId: string) => restClient
       .post(`/v1/campaign-sources/${connectorId}/sync`, wrap(actionResultSchema), {})
       .then(r => r.data),
-    invalidateKeys: [OVERVIEW_KEY, 'campaign-sources:list'],
+    invalidateKeys: [OVERVIEW_KEY, 'campaign-sources:list', TENANT_INTEGRATIONS_KEY],
+    onSuccess: () => { queryCache.invalidatePrefix(READINESS_PREFIX); },
   });
 }
 
@@ -172,7 +178,8 @@ export function useConnectCampaignSource() {
     mutationFn: (input: ConnectCampaignSourceInput) => restClient
       .post('/v1/campaign-sources/connect', wrap(connectResultSchema), input)
       .then(r => r.data),
-    invalidateKeys: [OVERVIEW_KEY, OPTIONS_KEY, 'campaign-sources:list'],
+    invalidateKeys: [OVERVIEW_KEY, OPTIONS_KEY, 'campaign-sources:list', TENANT_INTEGRATIONS_KEY],
+    onSuccess: () => { queryCache.invalidatePrefix(READINESS_PREFIX); },
   });
 }
 
@@ -192,7 +199,8 @@ export function useSetCampaignSourceAccount() {
         account_id: input.accountId,
       })
       .then(r => r.data),
-    invalidateKeys: [OVERVIEW_KEY, OPTIONS_KEY],
+    invalidateKeys: [OVERVIEW_KEY, OPTIONS_KEY, TENANT_INTEGRATIONS_KEY],
+    onSuccess: () => { queryCache.invalidatePrefix(READINESS_PREFIX); },
   });
 }
 
@@ -201,7 +209,8 @@ export function useDisableCampaignSource() {
     mutationFn: (connectorId: string) => restClient
       .post(`/v1/campaign-sources/${connectorId}/disable`, wrap(actionResultSchema), {})
       .then(r => r.data),
-    invalidateKeys: [OVERVIEW_KEY, OPTIONS_KEY],
+    invalidateKeys: [OVERVIEW_KEY, OPTIONS_KEY, TENANT_INTEGRATIONS_KEY],
+    onSuccess: () => { queryCache.invalidatePrefix(READINESS_PREFIX); },
   });
 }
 
@@ -210,6 +219,7 @@ export function useEnableCampaignSource() {
     mutationFn: (connectorId: string) => restClient
       .post(`/v1/campaign-sources/${connectorId}/enable`, wrap(actionResultSchema), {})
       .then(r => r.data),
-    invalidateKeys: [OVERVIEW_KEY, OPTIONS_KEY],
+    invalidateKeys: [OVERVIEW_KEY, OPTIONS_KEY, TENANT_INTEGRATIONS_KEY],
+    onSuccess: () => { queryCache.invalidatePrefix(READINESS_PREFIX); },
   });
 }

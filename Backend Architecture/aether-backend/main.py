@@ -1205,6 +1205,7 @@ def create_app() -> FastAPI:
         )
         from services.integrations.connectors.routes import webhook_public_router, slack_notify_router
         from services.integrations.connectors.catalog_endpoints import catalog_router
+        from services.readiness_graph.tenant_integration_readiness_routes import router as tenant_integration_readiness_router
         app.include_router(connectors_router)
         # Public webhook route always mounted when connectors are enabled;
         # security is enforced by HMAC verification inside the handler.
@@ -1213,9 +1214,14 @@ def create_app() -> FastAPI:
         # Unified catalog read model (/v1/integration-catalog,
         # /v1/tenant-integrations, /v1/integration-readiness).
         app.include_router(catalog_router)
+        # Tenant-contextual joined readiness (/v1/tenant/integration-readiness):
+        # the catalog matrix joined with the tenant's connection-record facts
+        # (deferred from the catalog_endpoints docstring; router declares its
+        # own prefix, so no prefix is passed at mount).
+        app.include_router(tenant_integration_readiness_router)
         if settings.connectors.kyber_connector_health_enabled:
             app.include_router(connectors_admin_router)
-        logger.info("Connectors: ingestion routes mounted (/v1/integrations/connectors + /v1/integrations/webhooks + /v1/integrations/slack-notify + /v1/integration-catalog)")
+        logger.info("Connectors: ingestion routes mounted (/v1/integrations/connectors + /v1/integrations/webhooks + /v1/integrations/slack-notify + /v1/integration-catalog + /v1/tenant/integration-readiness)")
     else:
         logger.info("Connectors: disabled (set AETHER_CONNECTORS_ENABLED=true to enable)")
 

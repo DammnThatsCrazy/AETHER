@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { IntegrationsSection } from '@aether-app/pages/settings/integrations-section';
@@ -131,5 +131,81 @@ describe('Settings → Integrations section', () => {
     renderSection();
     const manage = screen.getAllByRole('link', { name: 'Manage' })[0];
     expect(manage).toHaveAttribute('href', '/settings/integrations/connectors');
+  });
+
+  it('routes advertising rows into the ad connect flow while other rows stay on the connector manager', () => {
+    useTenantIntegrations.mockReturnValue({
+      data: {
+        tenant_id: 't1',
+        count: 2,
+        items: [
+          item({
+            id: 'google_ads',
+            family: 'google_ads',
+            display_name: 'Google Ads',
+            experience_category: 'advertising_campaigns',
+            connected: false,
+            enabled: false,
+            secret_configured: false,
+          }),
+          item({
+            id: 'shopify',
+            family: 'shopify',
+            display_name: 'Shopify',
+            experience_category: 'commerce_revenue',
+            connected: false,
+            enabled: false,
+            secret_configured: false,
+          }),
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    renderSection();
+
+    const adRow = screen.getByText('Google Ads').closest('[data-provider-family="google_ads"]');
+    const nonAdRow = screen.getByText('Shopify').closest('[data-provider-family="shopify"]');
+    expect(adRow).not.toBeNull();
+    expect(nonAdRow).not.toBeNull();
+
+    const adLink = within(adRow as HTMLElement).getByRole('link', { name: 'Connect' });
+    expect(adLink).toHaveAttribute(
+      'href',
+      '/campaign-intelligence/sources?connect=google_ads&return=%2Fsettings%2Fintegrations',
+    );
+
+    const nonAdLink = within(nonAdRow as HTMLElement).getByRole('link', { name: 'Manage' });
+    expect(nonAdLink).toHaveAttribute('href', '/settings/integrations/connectors');
+  });
+
+  it('labels an already-connected advertising row Manage and keeps it in the ad flow', () => {
+    useTenantIntegrations.mockReturnValue({
+      data: {
+        tenant_id: 't1',
+        count: 1,
+        items: [
+          item({
+            id: 'google_ads',
+            family: 'google_ads',
+            display_name: 'Google Ads',
+            experience_category: 'advertising_campaigns',
+          }),
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    renderSection();
+
+    const adRow = screen.getByText('Google Ads').closest('[data-provider-family="google_ads"]');
+    expect(adRow).not.toBeNull();
+    const adLink = within(adRow as HTMLElement).getByRole('link', { name: 'Manage' });
+    expect(adLink).toHaveAttribute(
+      'href',
+      '/campaign-intelligence/sources?connect=google_ads&return=%2Fsettings%2Fintegrations',
+    );
   });
 });

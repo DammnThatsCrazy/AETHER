@@ -21,12 +21,16 @@ import {
 
 /** Route target for the reused connector manager (the Connect/Manage surface). */
 const CONNECT_MANAGER_ROUTE = '/settings/integrations/connectors';
+/** Advertising-family rows route into the dedicated ad connect flow instead. */
+const AD_SOURCES_ROUTE = '/campaign-intelligence/sources';
+const AD_SOURCES_RETURN = encodeURIComponent('/settings/integrations');
 
 function IntegrationRow({ item }: { readonly item: TenantIntegrationItem }) {
   const timeCtx = useTimeContext();
   const status = tenantConnectionStatus(item);
   const stateToken = tenantConnectionStateToken(item);
   const baseline = catalogBaselineCaption(item.readiness?.state);
+  const isAdvertising = item.experience_category === 'advertising_campaigns';
 
   return (
     <div
@@ -65,13 +69,19 @@ function IntegrationRow({ item }: { readonly item: TenantIntegrationItem }) {
             <div className="text-[10px] text-text-muted">{status.detail}</div>
           )}
         </div>
-        <Button
-          asChild
-          size="sm"
-          variant="secondary"
-        >
-          <Link to={CONNECT_MANAGER_ROUTE}>Manage</Link>
-        </Button>
+        {isAdvertising ? (
+          <Button asChild size="sm" variant="secondary">
+            <Link
+              to={`${AD_SOURCES_ROUTE}?connect=${encodeURIComponent(item.family)}&return=${AD_SOURCES_RETURN}`}
+            >
+              {stateToken === 'not_connected' ? 'Connect' : 'Manage'}
+            </Link>
+          </Button>
+        ) : (
+          <Button asChild size="sm" variant="secondary">
+            <Link to={CONNECT_MANAGER_ROUTE}>Manage</Link>
+          </Button>
+        )}
       </div>
     </div>
   );
