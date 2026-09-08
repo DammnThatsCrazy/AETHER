@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
+import { useEffect } from 'react';
 import type { ExplorationContextV1 } from '@aether/shared/exploration-contract';
-import { ExplorationProvider, useExploration, useExplorationContext } from './provider';
+import type { GraphScope } from '@aether/shared/graph-context-contract';
+import { ExplorationProvider, GraphContextProvider, useExploration, useExplorationContext, useGraphActions, useGraphContext, useGraphHistory, useGraphSelection } from './provider';
 import { encodeExplorationContext } from './url-codec';
 
 afterEach(cleanup);
@@ -102,5 +104,64 @@ describe('ExplorationProvider URL authority', () => {
       </ExplorationProvider>,
     );
     expect(getByTestId('pop').textContent).toContain('risk.score');
+  });
+});
+
+describe('GraphContextProvider host scope authority', () => {
+  const scope: GraphScope = { tenant_id: 't1', workspace_id: 'w1', environment_id: 'staging' };
+
+  function GraphProbe() {
+    const context = useGraphContext();
+    const selection = useGraphSelection();
+    const history = useGraphHistory();
+    const actions = useGraphActions();
+    useEffect(() => {
+      actions.appendHistory({
+        object: { tenant_id: 't1', environment_id: 'staging', kind: 'entity', id: 'root' },
+        action: 'open', occurred_at: '2026-01-01T00:00:00Z',
+      });
+    }, [actions]);
+    return (
+      <div>
+        <span data-testid="graph-scope">{context.scope.tenant_id}/{context.scope.workspace_id}/{context.scope.environment_id}</span>
+        <span data-testid="graph-anchors">{context.anchors.map((anchor) => anchor.id).join(',')}</span>
+        <span data-testid="graph-selection">{selection.selected.length}</span>
+        <span data-testid="graph-history">{history.entries.length}</span>
+      </div>
+    );
+  }
+
+  it('requires a complete host GraphScope', () => {
+    expect(() => render(
+      <GraphContextProvider scope={{ tenant_id: 't1', workspace_id: '', environment_id: 'staging' }}>
+        <GraphProbe />
+      </GraphContextProvider>,
+    )).toThrow('workspace_id');
+  });
+
+  it('clears anchors, selection, and trail on a same-tenant workspace switch', () => {
+    const shareable = encodeExplorationContext({
+      ...base(), anchors: [{ kind: 'entity', id: 'root' }],
+      selection: { selected: [{ kind: 'entity', id: 'root' }] },
+    });
+    const { getByTestId, rerender } = render(
+      <GraphContextProvider scope={scope} query={shareable}>
+        <GraphProbe />
+      </GraphContextProvider>,
+    );
+    expect(getByTestId('graph-scope').textContent).toBe('t1/w1/staging');
+    expect(getByTestId('graph-anchors').textContent).toBe('root');
+    expect(getByTestId('graph-selection').textContent).toBe('1');
+    expect(getByTestId('graph-history').textContent).toBe('1');
+
+    rerender(
+      <GraphContextProvider scope={{ ...scope, workspace_id: 'w2' }} query={shareable}>
+        <GraphProbe />
+      </GraphContextProvider>,
+    );
+    expect(getByTestId('graph-scope').textContent).toBe('t1/w2/staging');
+    expect(getByTestId('graph-anchors').textContent).toBe('');
+    expect(getByTestId('graph-selection').textContent).toBe('0');
+    expect(getByTestId('graph-history').textContent).toBe('0');
   });
 });

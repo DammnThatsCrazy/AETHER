@@ -74,24 +74,40 @@ export type { ExplorationHistory } from './history';
 
 export {
   createExplorationStore,
+  createGraphExplorationStore,
   explorationActions,
+  graphExplorationActions,
   useExplorationStore,
+  useGraphExplorationStore,
   initialExplorationState,
   withAddedFilter,
   withoutFilterAt,
 } from './store';
-export type { ExplorationState, ExplorationStatus, ExplorationActions } from './store';
+export type {
+  ExplorationState,
+  ExplorationStatus,
+  ExplorationActions,
+  GraphExplorationState,
+  GraphExplorationActions,
+} from './store';
 
 export {
   ExplorationProvider,
+  GraphContextProvider,
   useExploration,
   useExplorationSelector,
   useExplorationContext,
   useExplorationClient,
   useExplorationStatus,
   useExplorationFilters,
+  useGraph,
+  useGraphActions,
+  useGraphContext,
+  useGraphContextSelector,
+  useGraphHistory,
+  useGraphSelection,
 } from './provider';
-export type { ExplorationProviderProps } from './provider';
+export type { ExplorationProviderProps, GraphContextProviderProps } from './provider';
 
 // Typed canonical API client. App-owned transports supply auth/CSRF/base URL;
 // the shared client owns endpoint contracts, validation, and stale-response
