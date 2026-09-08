@@ -972,13 +972,13 @@
     {
       "id": "rights_irrl",
       "displayName": "Rights / IRRL runtime",
-      "description": "The Information Rights, Retention & Learning runtime: a first-class rights spine (DataRightsEnvelope, UseAuthority, DerivationClass, RetentionPolicy, Generalization Gateway, RightsDecision) mapped as a naming overlay onto the existing DataRightsGrant / ConsentPolicyDecision / storage-lifecycle machinery.",
+      "description": "The Information Rights, Retention & Learning (IRRL) composition spine: resolves a durable, versioned, evidence-linked RightsDecision over data use, retention, output derivation, learning, model-training eligibility, generalization, Olympus internal intelligence, disclosure, portability, and termination by composing the existing consent / data-rights / lifecycle / lineage / storage authorities. Speaks the canonical vocabulary registered in packages/shared/contracts/rights-vocabulary.json (python enums in Backend Architecture/aether-backend/services/integrations/data_rights/models.py; TS twin packages/shared/data-rights.ts).",
       "plane": "governance_contract",
       "spineKind": "truth_authority",
       "implementationState": "in_flight",
       "ownsCanonicalTruth": true,
-      "authorityDeclaration": "Authoritatively owns rights decisions over data use, retention, derivation, model-training permission, and the generalization gateway at the Graph-of-Graphs boundary.",
-      "nonOwnershipStatement": "Does not own consent purpose state or collection-time privacy evaluation (consent owns those); IRRL consumes ConsentPolicyDecision and retention machinery and must never fork a parallel rights registry.",
+      "authorityDeclaration": "Authoritatively resolves rights over data use, retention, output derivation, learning, model-training eligibility, generalization, Olympus internal intelligence, disclosure, portability, and termination by composing existing consent, data-rights, lifecycle, lineage, and storage authorities (canonical vocabulary: packages/shared/contracts/rights-vocabulary.json, RIGHTS_AUTHORITY_BLUEPRINT.md).",
+      "nonOwnershipStatement": "Does not own consent-purpose state, source facts, graph facts, identity, model state, or storage objects. It authorizes operations over those authorities and records the governing RightsDecision; it must never fork a parallel rights registry (ADR-011 D4 / RIGHTS_AUTHORITY_BLUEPRINT.md §13).",
       "canonicalContractRefs": [
         {
           "registry": "packages/shared/contracts/consent-registry.json",
@@ -995,18 +995,53 @@
             "not_entitled",
             "unavailable"
           ]
+        },
+        {
+          "registry": "packages/shared/contracts/rights-vocabulary.json",
+          "refIds": [
+            "source_representation",
+            "tenant_identifiable_derivative",
+            "aether_generated_intelligence",
+            "generalized",
+            "contributed_model_training",
+            "olympus_internal_intelligence",
+            "sovereign",
+            "collaborative",
+            "tenant_internal",
+            "generalized_external",
+            "platform_research",
+            "incident_response",
+            "preserve",
+            "hard_delete",
+            "blocked",
+            "denied"
+          ]
         }
       ],
       "ports": {
         "consumed": [
           "consent_decision",
-          "retention_policy"
+          "data_rights_grant",
+          "evidence_ref",
+          "lineage_ref",
+          "identity_watermark",
+          "temporal_watermark",
+          "storage_policy",
+          "retention_policy",
+          "agreement_ref",
+          "model_ref",
+          "artifact_ref"
         ],
         "published": [
-          "rights_decision",
-          "use_authority",
-          "derivation_class",
-          "rights_decision_ref"
+          "rights_decision_ref",
+          "effective_rights",
+          "output_rights",
+          "learning_authority",
+          "retention_decision",
+          "generalization_decision",
+          "olympus_internal_authority",
+          "rights_lineage",
+          "rights_impact"
         ]
       },
       "adapters": [],
@@ -1016,7 +1051,11 @@
           "contract_spine"
         ],
         "soft": [
-          "graph"
+          "graph",
+          "evidence_provenance",
+          "identity_resolution",
+          "temporal_kernel",
+          "model_governance"
         ],
         "runtime": [],
         "policy": []
@@ -1064,10 +1103,10 @@
       },
       "unresolvedRefs": [
         {
-          "ref": "DataRightsEnvelope / UseAuthority / DerivationClass / RetentionPolicy / Generalization Gateway / RightsDecision",
+          "ref": "IRRL vocabulary & naming-overlay terms (DataRightsEnvelope, UseAuthority, RightsDerivationClass, LearningClass, OwnershipClass, RightsDecision)",
           "kind": "vocabulary",
-          "reason": "IRRL terms are ASPIRATIONAL labels; the machinery exists under current names (DataRightsGrant, ConsentPolicyDecision, storage lifecycle, DATA_RIGHTS_LEDGER.md) but the IRRL naming overlay has not landed yet",
-          "resolvesIn": "Spine P0 phase 5 (IRRL naming overlay)"
+          "reason": "The IRRL vocabulary now resolves against real implementing homes rather than aspirational labels: the canonical value sets live in packages/shared/contracts/rights-vocabulary.json; the python (str, Enum) members land in Backend Architecture/aether-backend/services/integrations/data_rights/models.py; the TS twin is packages/shared/data-rights.ts; and the frozen contract/naming docs are RIGHTS_AUTHORITY_BLUEPRINT.md / IRRL_NAMING_OVERLAY.md / RIGHTS_TAXONOMY.md. Remaining to land across the program phases: the structured DataRightsGrant nested components' runtime parity surface (already in data_rights models + TS twin), the durable rdec_* RightsDecision persistence behind the Effective Rights Resolver, and the Generalization Gateway runtime adapter",
+          "resolvesIn": "Rights IRRL Authority program (feat/rights-irrl-authority; RIGHTS_AUTHORITY_BLUEPRINT.md §17 Phase 0–1)"
         }
       ],
       "legacyBindings": {
@@ -1082,11 +1121,14 @@
           "Backend Architecture/aether-backend/services/policy",
           "Backend Architecture/aether-backend/services/dsr_propagation",
           "Backend Architecture/aether-backend/services/storage_lifecycle",
-          "docs/source-of-truth/DATA_RIGHTS_LEDGER.md"
+          "docs/source-of-truth/DATA_RIGHTS_LEDGER.md",
+          "docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md",
+          "docs/source-of-truth/IRRL_NAMING_OVERLAY.md",
+          "docs/source-of-truth/RIGHTS_TAXONOMY.md"
         ],
         "migrationMode": "formalize_existing"
       },
-      "implementationBlueprint": "docs/source-of-truth/DATA_RIGHTS_LEDGER.md"
+      "implementationBlueprint": "docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md"
     },
     {
       "id": "upr",

@@ -721,6 +721,43 @@
         "python -m pytest tests/unit/test_native_event_codegen.py -q"
       ],
       "remediation": "The iOS AetherEventType enum, iOS eventConsentPurpose dict, and Android EVENT_CONSENT_PURPOSE map are marker-delimited regions inside the hand-authored Aether.swift/Aether.kt, generated from packages/shared/contracts/event-registry.json by scripts/generate_contracts.py (WS-A6). Hand-editing the regions is not supported - change the event registry or the generator emitters, rerun python scripts/generate_contracts.py, and keep validate_mobile_event_parity.py green (it checks region keys AND per-event primary-purpose values so the canonical gate still catches a single-event purpose re-gate even though repo-doctor does not run the generator --check). Move tests/unit/test_mobile_event_parity.py and tests/unit/test_native_event_codegen.py when the gate or emitters change."
+    },
+    {
+      "id": "rights_irrl_authority",
+      "name": "rights/IRRL authority program changed (canonical vocabulary, python/TS twins, spine row)",
+      "source_globs": [
+        "packages/shared/contracts/rights-vocabulary.json",
+        "packages/shared/data-rights.ts",
+        "Backend Architecture/**/data_rights/models.py",
+        "Backend Architecture/**/data_rights/service.py",
+        "Backend Architecture/**/rights_authority/**",
+        "packages/shared/contracts/spine-registry.json",
+        "scripts/validate_rights_vocabulary.py",
+        "scripts/validate_no_parallel_rights_registries.py",
+        "docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md",
+        "docs/source-of-truth/RIGHTS_TAXONOMY.md",
+        "docs/source-of-truth/IRRL_NAMING_OVERLAY.md"
+      ],
+      "required_changed_globs": [
+        "docs/_generated/**",
+        "docs/source-of-truth/**",
+        "docs/REPO-INDEX.md",
+        "docs/AUTOMATION.md",
+        "packages/shared/index.ts",
+        "packages/shared/spine-registry.ts",
+        "tests/**",
+        "Backend Architecture/**/tests/**"
+      ],
+      "required_commands": [
+        "python scripts/validate_rights_vocabulary.py",
+        "python scripts/validate_no_parallel_rights_registries.py",
+        "make rights-vocabulary-check",
+        "make no-parallel-rights-registries-check",
+        "python scripts/validate_spine_registry.py",
+        "python scripts/generate_platform_contracts.py --check",
+        "python scripts/docs_drift.py --strict"
+      ],
+      "remediation": "The Rights Authority vocabulary is a tri-surface contract: packages/shared/contracts/rights-vocabulary.json (canonical snake_case values), the python (str, Enum) members in Backend Architecture/aether-backend/services/integrations/data_rights/models.py, and the as-const arrays in packages/shared/data-rights.ts must stay in exact sync (scripts/validate_rights_vocabulary.py enforces it; bindings under registeredCanonicalVocabularies in the JSON name the implementing class/array). No irrl-registry.json / ownership-registry.json / learning-rights-registry.json / retention-rights-registry.json / generalization-rights-registry.json duplicate ledger may exist (ADR-011 D4 / RIGHTS_AUTHORITY_BLUEPRINT.md §13). When the spine-registry.json rights_irrl row moves, regenerate the spine twins/docs (python scripts/generate_platform_contracts.py), and keep the source-linked rights docs (RIGHTS_AUTHORITY_BLUEPRINT.md / RIGHTS_TAXONOMY.md / IRRL_NAMING_OVERLAY.md) reviewed against their declared sources."
     }
   ]
 }

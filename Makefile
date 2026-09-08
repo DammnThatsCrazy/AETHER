@@ -542,6 +542,12 @@ intelligence-projection-check: ## CI gate — intelligence projection architectu
 spine-registry-check: ## CI gate — Spine Composition Kernel registry (schema, conformance, cross-registry, lifecycle, ownership, inventory)
 	$(GATE_PY) scripts/validate_spine_registry.py --check
 
+rights-vocabulary-check: ## CI gate — Rights Authority canonical-vocabulary tri-surface parity (rights-vocabulary.json ↔ python enums ↔ data-rights.ts twin)
+	$(GATE_PY) scripts/validate_rights_vocabulary.py --check
+
+no-parallel-rights-registries-check: ## CI gate — no parallel rights registries (ADR-011 D4 / RIGHTS_AUTHORITY_BLUEPRINT.md §13 forbidden duplicate-ledger names)
+	$(GATE_PY) scripts/validate_no_parallel_rights_registries.py --check
+
 # ---------------------------------------------------------------------------
 # Mobile / continuity / notification productization gates (program C0-C8)
 # ---------------------------------------------------------------------------
