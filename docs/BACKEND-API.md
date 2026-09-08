@@ -22,8 +22,10 @@ reviewed_source_commits:
     reason: "Reviewed 1f98cb83 (rights_authority __init__ surface + additive /v1/rights router for decisions/effective, decisions/{id}, revocations). The router is deliberately NOT wired into main.py (mounting is a later integration phase, matching the unmounted services/dsr_propagation precedent), so no live endpoint documented by this spec changed; no body change was required."
   - commit: "2697ddda"
     reason: "Reviewed 2697ddda (security hardening of the unmounted rights router: actor derived from the authenticated principal instead of client input, /revocations moved from 'read' to the established 'write' scope, ownership-guard documented). All changes are internal to the not-yet-mounted router; no live endpoint documented by this spec changed; no body change was required."
+  - commit: "d8a88e2b"
+    reason: "Reviewed d8a88e2b (docstring-only dispositions on the unmounted rights router: why the durable decision store is a tenant-scoped ledger with tenant (not actor) as the ownership boundary for GET /decisions/{id}, and why read-scoped POST /decisions/effective durably records its section-17 audit outcome while /revocations requires write). No behavior change and no live endpoint documented by this spec changed; no body change was required."
 source_hashes:
-  "Backend Architecture/aether-backend/services/": "sha256:67809c219f928fb80214dc5b7954aec9ceffa81678e8773b56a3f31cbf7201e4"
+  "Backend Architecture/aether-backend/services/": "sha256:790a6993d937c54a7341b345abb0d76fb3a5e596c47ea14664949e54e3ac2f9c"
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
 
