@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
-  restoreGraphContext,
-  serializeGraphContext,
+  restoreGraphContextFromPersistence,
+  serializeGraphContextForPersistence,
   switchGraphContextScope,
   validateGraphContext,
   type GraphContext,
   type GraphObjectRef,
   type GraphDiff,
   type GraphSnapshot,
+  validateGraphSnapshot,
+  validateCanonicalGraphQuery,
 } from './graph-context-contract';
 
 const ref = (id: string, tenant_id = 'tenant-a', environment_id = 'staging'): GraphObjectRef => ({
@@ -18,10 +20,7 @@ const context = (): GraphContext => ({
   version: '1',
   scope: { tenant_id: 'tenant-a', environment_id: 'staging', surface: 'graph' },
   temporal: { mode: 'window', field: 'occurred_at', timezone: 'UTC' },
-  selected: [ref('selected')],
-  focused: ref('focused'),
-  pinned: [ref('pinned')],
-  compared: [ref('compared')],
+  selection: { selected: [ref('selected')], focused: ref('focused'), pinned: [ref('pinned')], compared: [ref('compared')], snapshot_bound: [] },
   evidence: [],
   exploration_trail: [{ object: ref('focused'), action: 'open', occurred_at: '2026-01-01T00:00:00Z' }],
 });
@@ -29,23 +28,27 @@ const context = (): GraphContext => ({
 describe('GraphContext contract', () => {
   it('serializes deterministically and restores the same context', () => {
     const value = context();
-    const encoded = serializeGraphContext(value);
-    expect(encoded).toBe(serializeGraphContext({ ...value, evidence: [] }));
-    expect(restoreGraphContext(encoded)).toEqual(value);
+    const encoded = serializeGraphContextForPersistence(value);
+    expect(encoded).toBe(serializeGraphContextForPersistence({ ...value, evidence: [] }));
+    expect(restoreGraphContextFromPersistence(encoded)).toEqual(value);
   });
 
   it('keeps selection roles separate', () => {
     const value = context();
-    expect(value.selected).not.toContain(value.focused);
-    expect(value.pinned).not.toBe(value.selected);
-    expect(value.compared).not.toBe(value.selected);
+    expect(value.selection.selected).not.toContain(value.selection.focused);
+    expect(value.selection.pinned).not.toBe(value.selection.selected);
+    expect(value.selection.compared).not.toBe(value.selection.selected);
+    expect('selection' in value).toBe(true);
   });
 
   it('clears cross-tenant references and tenant-bound state on scope switch', () => {
-    const value = { ...context(), selected: [ref('local'), ref('foreign', 'tenant-b', 'prod')], saved_context_id: 'saved', snapshot_id: 'snap', diff_id: 'diff' };
+    const value = { ...context(), anchors: [ref('old-anchor', 'tenant-a', 'staging')], population: { logic: 'AND' as const, expressions: [{ field: 'old', op: 'eq' as const, value: true }] }, selection: { ...context().selection, selected: [ref('local'), ref('foreign', 'tenant-b', 'prod')] }, saved_context_id: 'saved', snapshot_id: 'snap', diff_id: 'diff', query: { kind: 'graph_query' as const, version: '1' as const, scope: { tenant_id: 'tenant-a', environment_id: 'staging' }, roots: [ref('old-anchor')] } };
     const switched = switchGraphContextScope(value, 'tenant-b', 'prod');
-    expect(switched.selected).toEqual([ref('foreign', 'tenant-b', 'prod')]);
-    expect(switched.focused).toBeNull();
+    expect(switched.anchors).toEqual([]);
+    expect(switched.population).toBeNull();
+    expect(switched.query).toBeNull();
+    expect(switched.selection.selected).toEqual([]);
+    expect(switched.selection.focused).toBeNull();
     expect(switched.saved_context_id).toBeNull();
     expect(switched.snapshot_id).toBeNull();
     expect(switched.diff_id).toBeNull();
@@ -53,7 +56,7 @@ describe('GraphContext contract', () => {
   });
 
   it('rejects out-of-scope references deterministically', () => {
-    const result = validateGraphContext({ ...context(), selected: [ref('foreign', 'tenant-b', 'prod')] });
+    const result = validateGraphContext({ ...context(), selection: { ...context().selection, selected: [ref('foreign', 'tenant-b', 'prod')] } });
     expect(result).toEqual({ valid: false, errors: ['selected[0] is out of scope or invalid'] });
   });
 
@@ -61,16 +64,17 @@ describe('GraphContext contract', () => {
     const query = { kind: 'graph_query' as const, version: '1' as const, scope: { tenant_id: 'tenant-a', environment_id: 'staging' } };
     const snapshot: GraphSnapshot = {
       kind: 'graph_snapshot', id: 'snapshot-1', tenant_id: 'tenant-a', environment_id: 'staging',
-      captured_at: '2026-01-01T00:00:00Z', as_of: '2025-12-31T23:59:59Z', query, objects: [ref('one')],
+      captured_at: '2026-01-01T00:00:00Z', workspace_id: 'workspace-1', as_of: '2025-12-31T23:59:59Z', query: { ...query, roots: [] }, objects: [ref('one')], graph_state_ref: 'graph-1', evidence_state_ref: 'evidence-1', source_state_ref: 'source-1', policy_version: 'policy-1', ontology_version: 'ontology-1', model_versions: ['model-1'],
       metadata: { source: 'graph-engine', complete: true },
     };
     const diff: GraphDiff = {
       kind: 'graph_diff', id: 'diff-1', tenant_id: 'tenant-a', environment_id: 'staging',
-      from_snapshot_id: 'snapshot-1', to_snapshot_id: 'snapshot-2', created_at: '2026-01-01T00:01:00Z',
-      added: [ref('two')], removed: [], unchanged: [ref('one')], metadata: { algorithm: 'set-v1' },
+      workspace_id: 'workspace-1', from_state_ref: 'state-1', to_state_ref: 'state-2', created_at: '2026-01-01T00:01:00Z',
+      changes: [{ kind: 'added', object: ref('two') }], summary: { added: 1, removed: 0, changed: 0 }, metadata: { algorithm: 'set-v1' },
     };
     expect(snapshot.metadata.source).toBe('graph-engine');
-    expect(diff.from_snapshot_id).toBe(snapshot.id);
-    expect(diff.id).not.toBe(diff.from_snapshot_id);
+    expect(validateGraphSnapshot(snapshot).valid).toBe(true);
+    expect(validateCanonicalGraphQuery(snapshot.query).valid).toBe(true);
+    expect(diff.from_state_ref).not.toBe(diff.to_state_ref);
   });
 });

@@ -11,7 +11,7 @@ import type { ExplorationContextV1 } from './exploration-contract';
 import type { FilterGroup, RelationshipLayer } from './graph-contract';
 import type { TemporalRange } from './temporal';
 import type { ComparisonDefinition, ComparisonRun } from './comparison-contract';
-import type { ProjectionContext, ProjectionResult } from './intelligence-projection';
+import type { ProjectionId } from './intelligence-projection';
 import type { EvidenceRef } from './operational-intelligence';
 
 export const graphContextContractVersion = '1' as const;
@@ -43,16 +43,27 @@ export interface ExplorationTrailEntry {
   readonly occurred_at: string;
 }
 
-/** Graph context keeps interaction roles separate: selected is not focused. */
-export interface GraphContext extends ExplorationContextV1 {
-  readonly scope: ExplorationContextV1['scope'] & {
-    readonly environment_id: string;
-  };
+export interface GraphSelectionState {
   readonly selected: readonly GraphObjectRef[];
   readonly focused: GraphObjectRef | null;
   readonly pinned: readonly GraphObjectRef[];
   readonly compared: readonly GraphObjectRef[];
-  readonly projection?: ProjectionContext | ProjectionResult | null;
+  readonly snapshot_bound: readonly GraphSnapshotRef[];
+}
+
+export interface GraphProjectionState {
+  readonly projection_id: ProjectionId | string;
+  readonly state: 'requested' | 'available' | 'degraded' | 'suppressed' | 'unavailable';
+  readonly digest?: string | null;
+}
+
+/** One selection authority; inherited ExplorationContextV1.selection is omitted. */
+export interface GraphContext extends Omit<ExplorationContextV1, 'selection'> {
+  readonly scope: ExplorationContextV1['scope'] & {
+    readonly environment_id: string;
+  };
+  readonly selection: GraphSelectionState;
+  readonly projection?: GraphProjectionState | null;
   readonly rights?: GraphRightsState | null;
   readonly evidence: readonly EvidenceRef[];
   readonly confidence?: GraphConfidenceState | null;
@@ -60,24 +71,30 @@ export interface GraphContext extends ExplorationContextV1 {
   readonly snapshot_id?: string | null;
   readonly diff_id?: string | null;
   readonly exploration_trail: readonly ExplorationTrailEntry[];
+  readonly query?: CanonicalGraphQuery | null;
 }
 
-export interface GraphQueryAst {
+export interface CanonicalGraphQuery {
   readonly kind: 'graph_query';
   readonly version: '1';
   readonly scope: { readonly tenant_id: string; readonly environment_id: string };
-  readonly anchors?: readonly GraphObjectRef[];
-  readonly node_kinds?: readonly string[];
-  readonly edge_types?: readonly string[];
+  readonly roots: readonly GraphObjectRef[];
+  readonly entity_types?: readonly string[];
+  readonly relationship_types?: readonly string[];
   readonly layers?: readonly RelationshipLayer[];
-  readonly filter?: FilterGroup | null;
-  readonly temporal?: TemporalRange | null;
-  readonly as_of?: string | null;
-  readonly depth?: number;
+  readonly predicates?: FilterGroup | null;
+  readonly traversal: Readonly<{ direction: 'in' | 'out' | 'both'; max_depth: number; shortest_path?: boolean }>;
+  readonly temporal?: Readonly<{ range?: TemporalRange | null; as_of?: string | null }>;
+  readonly evidence_policy?: 'omit' | 'include' | 'required';
+  readonly confidence_policy?: 'any' | 'minimum';
+  readonly rights_policy?: 'enforce' | 'explain' | 'ignore';
+  readonly aggregation?: Readonly<{ group_by: readonly string[]; measures: readonly string[] }> | null;
+  readonly ordering?: readonly Readonly<{ field: string; direction: 'asc' | 'desc' }>[];
   readonly limit?: number;
-  readonly include_evidence?: boolean;
-  readonly include_provenance?: boolean;
+  readonly projection?: string | null;
 }
+
+export type GraphQueryAst = CanonicalGraphQuery;
 
 export interface GraphSnapshot {
   readonly kind: 'graph_snapshot';
@@ -85,9 +102,16 @@ export interface GraphSnapshot {
   readonly tenant_id: string;
   readonly environment_id: string;
   readonly captured_at: string;
+  readonly workspace_id: string;
   readonly as_of: string;
   readonly query: GraphQueryAst;
   readonly objects: readonly GraphObjectRef[];
+  readonly graph_state_ref: string;
+  readonly evidence_state_ref: string;
+  readonly source_state_ref: string;
+  readonly policy_version: string;
+  readonly ontology_version: string;
+  readonly model_versions: readonly string[];
   readonly metadata: Readonly<Record<string, string | number | boolean | null>>;
 }
 
@@ -102,12 +126,12 @@ export interface GraphDiff {
   readonly id: string;
   readonly tenant_id: string;
   readonly environment_id: string;
-  readonly from_snapshot_id: string;
-  readonly to_snapshot_id: string;
+  readonly workspace_id: string;
+  readonly from_state_ref: string;
+  readonly to_state_ref: string;
   readonly created_at: string;
-  readonly added: readonly GraphObjectRef[];
-  readonly removed: readonly GraphObjectRef[];
-  readonly unchanged: readonly GraphObjectRef[];
+  readonly changes: readonly Readonly<{ kind: 'added' | 'removed' | 'changed'; object: GraphObjectRef; fields?: readonly string[] }>[];
+  readonly summary: Readonly<{ added: number; removed: number; changed: number }>;
   readonly metadata: Readonly<Record<string, string | number | boolean | null>>;
 }
 
@@ -123,6 +147,33 @@ export type GraphQuery = GraphQueryAst;
 export interface GraphContextValidation {
   readonly valid: boolean;
   readonly errors: readonly string[];
+}
+
+export function validateCanonicalGraphQuery(query: unknown): GraphContextValidation {
+  const errors: string[] = [];
+  if (!isRecord(query) || query.kind !== 'graph_query' || query.version !== '1') errors.push('query kind/version is invalid');
+  if (!isRecord(query) || !isRecord(query.scope) || typeof query.scope.tenant_id !== 'string' || typeof query.scope.environment_id !== 'string') errors.push('query scope is required');
+  if (isRecord(query) && (!Array.isArray(query.roots))) errors.push('query roots must be an array');
+  return { valid: errors.length === 0, errors };
+}
+
+export function validateGraphSnapshot(snapshot: unknown): GraphContextValidation {
+  const errors: string[] = [];
+  if (!isRecord(snapshot) || snapshot.kind !== 'graph_snapshot') errors.push('snapshot kind is invalid');
+  if (isRecord(snapshot)) {
+    if (typeof snapshot.tenant_id !== 'string' || typeof snapshot.environment_id !== 'string') errors.push('snapshot scope is required');
+    const query = validateCanonicalGraphQuery(snapshot.query);
+    if (!query.valid) errors.push(...query.errors.map(error => `query: ${error}`));
+    else if (isRecord(snapshot.query) && isRecord(snapshot.query.scope) && (snapshot.query.scope.tenant_id !== snapshot.tenant_id || snapshot.query.scope.environment_id !== snapshot.environment_id)) errors.push('snapshot query scope does not match snapshot scope');
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+export function validateGraphDiff(diff: unknown): GraphContextValidation {
+  const errors: string[] = [];
+  if (!isRecord(diff) || diff.kind !== 'graph_diff') errors.push('diff kind is invalid');
+  if (isRecord(diff) && (typeof diff.tenant_id !== 'string' || typeof diff.environment_id !== 'string' || typeof diff.from_state_ref !== 'string' || typeof diff.to_state_ref !== 'string')) errors.push('diff scope and state refs are required');
+  return { valid: errors.length === 0, errors };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -144,14 +195,21 @@ export function validateGraphContext(context: unknown): GraphContextValidation {
   const environment = isRecord(scope) && typeof scope.environment_id === 'string' ? scope.environment_id : '';
   if (!tenant) errors.push('scope.tenant_id is required');
   if (!environment) errors.push('scope.environment_id is required');
+  if (context.version !== graphContextContractVersion) errors.push('version must be 1');
+  const selection = context.selection;
+  if (!isRecord(selection)) errors.push('selection is required');
   for (const field of ['selected', 'pinned', 'compared'] as const) {
-    const refs = context[field];
+    const refs = isRecord(selection) ? selection[field] : undefined;
     if (!Array.isArray(refs)) errors.push(`${field} must be an array`);
     else refs.forEach((ref, i) => { if (!validRef(ref, tenant, environment)) errors.push(`${field}[${i}] is out of scope or invalid`); });
   }
-  if (context.focused !== null && !validRef(context.focused, tenant, environment)) errors.push('focused is out of scope or invalid');
+  if (isRecord(selection) && selection.focused !== null && !validRef(selection.focused, tenant, environment)) errors.push('focused is out of scope or invalid');
+  if (isRecord(selection) && Array.isArray(selection.snapshot_bound)) selection.snapshot_bound.forEach((ref, i) => { if (!isRecord(ref) || ref.tenant_id !== tenant || ref.environment_id !== environment) errors.push(`snapshot_bound[${i}] is out of scope or invalid`); });
   if (!Array.isArray(context.exploration_trail)) errors.push('exploration_trail must be an array');
   else context.exploration_trail.forEach((entry, i) => { if (!isRecord(entry) || !validRef(entry.object, tenant, environment)) errors.push(`exploration_trail[${i}] is out of scope or invalid`); });
+  if (Array.isArray(context.anchors)) context.anchors.forEach((ref, i) => { if (!validRef(ref, tenant, environment)) errors.push(`anchors[${i}] is out of scope or invalid`); });
+  const query = context.query;
+  if (query !== undefined && query !== null && (!isRecord(query) || !isRecord(query.scope) || query.scope.tenant_id !== tenant || query.scope.environment_id !== environment)) errors.push('query scope does not match context scope');
   return { valid: errors.length === 0, errors };
 }
 
@@ -161,14 +219,14 @@ function canonicalize(value: unknown): unknown {
   return value;
 }
 
-/** Stable JSON representation suitable for URLs, persistence, and hashing. */
-export function serializeGraphContext(context: GraphContext): string {
+/** Stable persistence representation. The existing registry-sanitized Exploration URL codec remains the URL authority; this includes tenant evidence/rights/trail and must not be used for URLs. */
+export function serializeGraphContextForPersistence(context: GraphContext): string {
   const result = validateGraphContext(context);
   if (!result.valid) throw new Error(`Invalid GraphContext: ${result.errors.join('; ')}`);
   return JSON.stringify(canonicalize(context));
 }
 
-export function restoreGraphContext(serialized: string): GraphContext {
+export function restoreGraphContextFromPersistence(serialized: string): GraphContext {
   let parsed: unknown;
   try { parsed = JSON.parse(serialized); } catch { throw new Error('Invalid serialized GraphContext JSON'); }
   const result = validateGraphContext(parsed);
@@ -178,21 +236,18 @@ export function restoreGraphContext(serialized: string): GraphContext {
 
 /** Switch scope while retaining only references that are valid in the target scope. */
 export function switchGraphContextScope(context: GraphContext, tenant_id: string, environment_id: string): GraphContext {
-  const keep = (ref: GraphObjectRef) => ref.tenant_id === tenant_id && ref.environment_id === environment_id;
+  const scope = { tenant_id, environment_id };
   return {
     ...context,
-    scope: { ...context.scope, tenant_id, environment_id },
-    selected: context.selected.filter(keep),
-    focused: context.focused && keep(context.focused) ? context.focused : null,
-    pinned: context.pinned.filter(keep),
-    compared: context.compared.filter(keep),
+    scope: { ...context.scope, ...scope }, anchors: [], population: null, graph: null, query: null,
+    selection: { selected: [], focused: null, pinned: [], compared: [], snapshot_bound: [] },
     evidence: [],
     rights: null,
     confidence: null,
     saved_context_id: null,
     snapshot_id: null,
     diff_id: null,
-    exploration_trail: context.exploration_trail.filter(entry => keep(entry.object)),
+    exploration_trail: [],
   };
 }
 
