@@ -20,8 +20,10 @@ reviewed_source_commits:
     reason: "Reviewed cef18ae4 (new services/rights_authority canonical package: rights resolver/decision core, generalization gateway, revocation & impact pipeline, durable rights repositories). It adds no HTTP surface on this lane — all seams are library/package-level, fail-closed, and tenant-scoped — so the doc's /v1/* endpoint tables are unaffected; no body change was required."
   - commit: "1f98cb83"
     reason: "Reviewed 1f98cb83 (rights_authority __init__ surface + additive /v1/rights router for decisions/effective, decisions/{id}, revocations). The router is deliberately NOT wired into main.py (mounting is a later integration phase, matching the unmounted services/dsr_propagation precedent), so no live endpoint documented by this spec changed; no body change was required."
+  - commit: "2697ddda"
+    reason: "Reviewed 2697ddda (security hardening of the unmounted rights router: actor derived from the authenticated principal instead of client input, /revocations moved from 'read' to the established 'write' scope, ownership-guard documented). All changes are internal to the not-yet-mounted router; no live endpoint documented by this spec changed; no body change was required."
 source_hashes:
-  "Backend Architecture/aether-backend/services/": "sha256:019706e34891492c4f23404f2912d98ebfbfffd93f94a874bd52a945aa0a513d"
+  "Backend Architecture/aether-backend/services/": "sha256:67809c219f928fb80214dc5b7954aec9ceffa81678e8773b56a3f31cbf7201e4"
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
 
