@@ -23,6 +23,7 @@ export interface GraphObjectRef {
   readonly kind: string;
   readonly id: string;
 }
+export interface GraphScope { readonly tenant_id: string; readonly workspace_id: string; readonly environment_id: string; readonly account_id?: string; readonly organization_id?: string; }
 
 export interface GraphRightsState {
   readonly decision_id?: string | null;
@@ -59,12 +60,7 @@ export interface GraphProjectionState {
 
 /** One selection authority; inherited ExplorationContextV1.selection is omitted. */
 export interface GraphContext extends Omit<ExplorationContextV1, 'selection' | 'anchors'> {
-  readonly scope: ExplorationContextV1['scope'] & {
-    readonly workspace_id: string;
-    readonly environment_id: string;
-    readonly account_id?: string;
-    readonly organization_id?: string;
-  };
+  readonly scope: ExplorationContextV1['scope'] & GraphScope;
   readonly anchors: readonly GraphObjectRef[];
   readonly selection: GraphSelectionState;
   readonly projection?: GraphProjectionState | null;
@@ -82,7 +78,7 @@ export interface GraphContext extends Omit<ExplorationContextV1, 'selection' | '
 export interface CanonicalGraphQuery extends Omit<UniversalGraphQueryRequest, 'tenant_id' | 'anchors' | 'node_types' | 'edge_types' | 'layers' | 'filter' | 'depth' | 'limit' | 'as_of' | 'include_evidence' | 'include_provenance'> {
   readonly kind: 'graph_query';
   readonly version: '1';
-  readonly scope: { readonly tenant_id: string; readonly environment_id: string };
+  readonly scope: GraphScope;
   readonly roots: readonly GraphObjectRef[];
   readonly entity_types?: readonly string[];
   readonly relationship_types?: readonly string[];
@@ -97,7 +93,7 @@ export interface CanonicalGraphQuery extends Omit<UniversalGraphQueryRequest, 't
   readonly aggregation?: Readonly<{ group_by: readonly string[]; measures: readonly string[] }> | null;
   readonly ordering?: readonly Readonly<{ field: string; direction: 'asc' | 'desc' }>[];
   readonly limit?: number;
-  readonly projection?: string | null;
+  readonly projection?: ProjectionId | null;
 }
 
 export type GraphQueryAst = CanonicalGraphQuery;
@@ -161,9 +157,17 @@ export function validateCanonicalGraphQuery(query: unknown): GraphContextValidat
   if (!isRecord(query) || !isRecord(query.scope) || typeof query.scope.tenant_id !== 'string' || typeof query.scope.environment_id !== 'string') errors.push('query scope is required');
   if (isRecord(query) && (!Array.isArray(query.roots))) errors.push('query roots must be an array');
   if (isRecord(query) && Array.isArray(query.roots) && isRecord(query.scope)) { const queryScope = query.scope; query.roots.forEach((root, i) => { if (!validRef(root, String(queryScope.tenant_id), String(queryScope.environment_id))) errors.push(`query roots[${i}] is out of scope`); }); }
-  if (isRecord(query) && (!isRecord(query.traversal) || !['in', 'out', 'both'].includes(String(query.traversal.direction)) || !Number.isInteger(query.traversal.max_depth) || Number(query.traversal.max_depth) < 0 || Number(query.traversal.max_depth) > 6)) errors.push('query traversal is invalid');
+  if (isRecord(query) && (!isRecord(query.traversal) || !['in', 'out', 'both'].includes(String(query.traversal.direction)) || !Number.isInteger(query.traversal.max_depth) || Number(query.traversal.max_depth) < 1 || Number(query.traversal.max_depth) > 6)) errors.push('query traversal is invalid');
   if (isRecord(query) && query.limit !== undefined && (!Number.isInteger(query.limit) || Number(query.limit) < 1 || Number(query.limit) > 500)) errors.push('query limit must be between 1 and 500');
   if (isRecord(query) && query.rights_policy !== undefined && !['enforce', 'explain'].includes(String(query.rights_policy))) errors.push('query rights_policy is invalid');
+  if (isRecord(query) && query.minimum_confidence !== undefined && (typeof query.minimum_confidence !== 'number' || query.minimum_confidence < 0 || query.minimum_confidence > 1)) errors.push('query minimum_confidence must be between 0 and 1');
+  if (isRecord(query) && isRecord(query.temporal)) {
+    const mode = String(query.temporal.mode);
+    if (mode === 'point' && typeof query.temporal.as_of !== 'string') errors.push('point temporal mode requires as_of');
+    if (mode === 'range' && !isRecord(query.temporal.range)) errors.push('range temporal mode requires range');
+    if ((mode === 'compare' || mode === 'diff') && (typeof query.temporal.known_then !== 'string' || typeof query.temporal.known_now !== 'string')) errors.push(`${mode} temporal mode requires known_then and known_now`);
+    if (query.temporal.known_then !== undefined && query.temporal.known_now === undefined) errors.push('known_then and known_now must be paired');
+  }
   return { valid: errors.length === 0, errors };
 }
 
@@ -171,7 +175,8 @@ export function validateGraphSnapshot(snapshot: unknown): GraphContextValidation
   const errors: string[] = [];
   if (!isRecord(snapshot) || snapshot.kind !== 'graph_snapshot') errors.push('snapshot kind is invalid');
   if (isRecord(snapshot)) {
-    if (typeof snapshot.tenant_id !== 'string' || typeof snapshot.environment_id !== 'string' || typeof snapshot.workspace_id !== 'string' || typeof snapshot.graph_state_ref !== 'string' || typeof snapshot.evidence_state_ref !== 'string' || typeof snapshot.source_state_ref !== 'string' || typeof snapshot.policy_version !== 'string' || typeof snapshot.ontology_version !== 'string' || !isRecord(snapshot.model_versions)) errors.push('snapshot scope, workspace, state refs, and versions are required');
+    if (typeof snapshot.tenant_id !== 'string' || typeof snapshot.environment_id !== 'string' || typeof snapshot.workspace_id !== 'string' || !snapshot.workspace_id || typeof snapshot.graph_state_ref !== 'string' || !snapshot.graph_state_ref || typeof snapshot.evidence_state_ref !== 'string' || !snapshot.evidence_state_ref || typeof snapshot.source_state_ref !== 'string' || !snapshot.source_state_ref || typeof snapshot.policy_version !== 'string' || !snapshot.policy_version || typeof snapshot.ontology_version !== 'string' || !snapshot.ontology_version || !isRecord(snapshot.model_versions) || Object.values(snapshot.model_versions).some(value => typeof value !== 'string' || !value)) errors.push('snapshot scope, workspace, state refs, and versions are required');
+    if (Array.isArray(snapshot.objects)) snapshot.objects.forEach((object, i) => { if (!validRef(object, String(snapshot.tenant_id), String(snapshot.environment_id))) errors.push(`snapshot objects[${i}] is out of scope`); });
     const query = validateCanonicalGraphQuery(snapshot.query);
     if (!query.valid) errors.push(...query.errors.map(error => `query: ${error}`));
     else if (isRecord(snapshot.query) && isRecord(snapshot.query.scope) && (snapshot.query.scope.tenant_id !== snapshot.tenant_id || snapshot.query.scope.environment_id !== snapshot.environment_id)) errors.push('snapshot query scope does not match snapshot scope');
@@ -272,11 +277,10 @@ export function restoreGraphContextFromPersistence(serialized: string): GraphCon
 }
 
 /** Switch scope while retaining only references that are valid in the target scope. */
-export function switchGraphContextScope(context: GraphContext, tenant_id: string, environment_id: string): GraphContext {
-  const scope = { tenant_id, environment_id };
+export function switchGraphContextScope(context: GraphContext, target: GraphScope): GraphContext {
   return {
     ...context,
-    scope: { ...context.scope, ...scope }, anchors: [], population: null, graph: null, query: null,
+    scope: { ...context.scope, ...target }, anchors: [], population: null, graph: null, query: null,
     selection: { selected: [], focused: null, pinned: [], compared: [], snapshot_bound: [] },
     evidence: [],
     rights: null,
@@ -285,7 +289,16 @@ export function switchGraphContextScope(context: GraphContext, tenant_id: string
     snapshot_id: null,
     diff_id: null,
     exploration_trail: [],
+    projection: context.projection ? { ...context.projection, state: 'requested', digest: null } : null,
   };
+}
+
+export function toUniversalGraphQueryRequest(query: CanonicalGraphQuery): UniversalGraphQueryRequest {
+  return { tenant_id: query.scope.tenant_id, anchors: query.roots.map(root => root.id), node_types: query.entity_types ? [...query.entity_types] : undefined, edge_types: query.relationship_types ? [...query.relationship_types] : undefined, layers: query.layers ? [...query.layers] : undefined, filter: query.predicates ?? undefined, depth: query.traversal.max_depth, limit: query.limit, as_of: query.temporal?.as_of ?? undefined, include_evidence: query.evidence_policy !== 'omit', include_provenance: query.evidence_policy === 'required' };
+}
+
+export function fromUniversalGraphQueryRequest(request: UniversalGraphQueryRequest, scope: GraphScope): CanonicalGraphQuery {
+  return { kind: 'graph_query', version: '1', scope, roots: (request.anchors ?? []).map(id => ({ tenant_id: scope.tenant_id, environment_id: scope.environment_id, kind: 'entity', id })), entity_types: request.node_types, relationship_types: request.edge_types, layers: request.layers, predicates: request.filter, traversal: { direction: 'both', max_depth: request.depth ?? 2 }, temporal: request.as_of ? { mode: 'point', as_of: request.as_of } : { mode: 'live' }, evidence_policy: request.include_provenance ? 'required' : request.include_evidence ? 'include' : 'omit', rights_policy: 'enforce', limit: request.limit };
 }
 
 export type { ComparisonDefinition, ComparisonRun };

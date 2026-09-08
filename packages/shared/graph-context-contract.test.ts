@@ -46,8 +46,8 @@ describe('GraphContext contract', () => {
   });
 
   it('clears cross-tenant references and tenant-bound state on scope switch', () => {
-    const value = { ...context(), anchors: [ref('old-anchor', 'tenant-a', 'staging')], population: { logic: 'AND' as const, expressions: [{ field: 'old', op: 'eq' as const, value: true }] }, selection: { ...context().selection, selected: [ref('local'), ref('foreign', 'tenant-b', 'prod')] }, saved_context_id: 'saved', snapshot_id: 'snap', diff_id: 'diff', query: { kind: 'graph_query' as const, version: '1' as const, scope: { tenant_id: 'tenant-a', environment_id: 'staging' }, roots: [ref('old-anchor')], traversal: { direction: 'both' as const, max_depth: 2 }, rights_policy: 'enforce' as const } };
-    const switched = switchGraphContextScope(value, 'tenant-b', 'prod');
+    const value = { ...context(), anchors: [ref('old-anchor', 'tenant-a', 'staging')], population: { logic: 'AND' as const, expressions: [{ field: 'old', op: 'eq' as const, value: true }] }, selection: { ...context().selection, selected: [ref('local'), ref('foreign', 'tenant-b', 'prod')] }, saved_context_id: 'saved', snapshot_id: 'snap', diff_id: 'diff', query: { kind: 'graph_query' as const, version: '1' as const, scope: { tenant_id: 'tenant-a', workspace_id: 'workspace-1', environment_id: 'staging' }, roots: [ref('old-anchor')], traversal: { direction: 'both' as const, max_depth: 2 }, rights_policy: 'enforce' as const } };
+    const switched = switchGraphContextScope(value, { tenant_id: 'tenant-b', workspace_id: 'workspace-2', environment_id: 'prod' });
     expect(switched.anchors).toEqual([]);
     expect(switched.population).toBeNull();
     expect(switched.query).toBeNull();
@@ -65,7 +65,7 @@ describe('GraphContext contract', () => {
   });
 
   it('preserves immutable snapshot metadata and diff identity', () => {
-    const query = { kind: 'graph_query' as const, version: '1' as const, scope: { tenant_id: 'tenant-a', environment_id: 'staging' }, roots: [], traversal: { direction: 'both' as const, max_depth: 2 }, rights_policy: 'enforce' as const, temporal: { mode: 'range' as const } };
+    const query = { kind: 'graph_query' as const, version: '1' as const, scope: { tenant_id: 'tenant-a', workspace_id: 'workspace-1', environment_id: 'staging' }, roots: [], traversal: { direction: 'both' as const, max_depth: 2 }, rights_policy: 'enforce' as const, temporal: { mode: 'live' as const } };
     const snapshot: GraphSnapshot = {
       kind: 'graph_snapshot', id: 'snapshot-1', tenant_id: 'tenant-a', environment_id: 'staging',
       captured_at: '2026-01-01T00:00:00Z', workspace_id: 'workspace-1', as_of: '2025-12-31T23:59:59Z', query, objects: [ref('one')], graph_state_ref: 'graph-1', evidence_state_ref: 'evidence-1', source_state_ref: 'source-1', policy_version: 'policy-1', ontology_version: 'ontology-1', model_versions: { graph: 'model-1' },
@@ -88,7 +88,7 @@ describe('GraphContext contract', () => {
   });
 
   it('rejects invalid query limits, rights, and root scopes', () => {
-    const query = { kind: 'graph_query', version: '1', scope: { tenant_id: 'tenant-a', environment_id: 'staging' }, roots: [ref('foreign', 'tenant-b')], traversal: { direction: 'both', max_depth: 2 }, limit: 501, rights_policy: 'ignore' };
+    const query = { kind: 'graph_query', version: '1', scope: { tenant_id: 'tenant-a', workspace_id: 'workspace-1', environment_id: 'staging' }, roots: [ref('foreign', 'tenant-b')], traversal: { direction: 'both', max_depth: 2 }, limit: 501, rights_policy: 'ignore' };
     expect(validateCanonicalGraphQuery(query).valid).toBe(false);
   });
 });
