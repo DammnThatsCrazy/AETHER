@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.olympuslabs.io/contracts/delivery/terraform-reconciliation/v1",
+  "title": "Aether TerraformReconciliation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile", "mode", "status", "resources", "actions", "summary"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "profile": {"type": "string", "minLength": 1},
+    "mode": {"const": "offline-dry-run"},
+    "status": {"enum": ["PASS", "CHANGES_REQUIRED", "BLOCKED"]},
+    "resources": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/resource"}
+    },
+    "actions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/action"}
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resources_total", "in_sync", "changes_required", "blocking"],
+      "properties": {
+        "resources_total": {"type": "integer", "minimum": 0},
+        "in_sync": {"type": "integer", "minimum": 0},
+        "changes_required": {"type": "integer", "minimum": 0},
+        "blocking": {"type": "integer", "minimum": 0}
+      }
+    }
+  },
+  "$defs": {
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "resource_type", "classification", "reason", "blocking", "action", "ownership"],
+      "properties": {
+        "address": {"type": "string", "minLength": 1},
+        "resource_type": {"type": "string", "minLength": 1},
+        "classification": {"enum": ["IN_SYNC", "CREATE", "UPDATE", "DESTROY", "DRIFT", "ORPHAN_STATE", "ORPHAN_REMOTE", "OWNERSHIP_CONFLICT", "AMBIGUOUS_OWNERSHIP", "UNKNOWN"]},
+        "reason": {"type": "string", "minLength": 1},
+        "blocking": {"type": "boolean"},
+        "action": {"enum": ["none", "create", "update", "destroy", "review"]},
+        "ownership": {"enum": ["terraform", "external", "shared", "unknown"]}
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "action", "blocking", "reason"],
+      "properties": {
+        "address": {"type": "string", "minLength": 1},
+        "action": {"enum": ["create", "update", "destroy", "review"]},
+        "blocking": {"type": "boolean"},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

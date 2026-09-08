@@ -21,7 +21,14 @@ source_files:
   - contracts/delivery/migration-evidence.schema.json
   - contracts/delivery/staging-lifecycle-result.schema.json
   - contracts/delivery/environment-resolution.schema.json
+  - contracts/delivery/environment-capability-snapshot.schema.json
+  - contracts/delivery/effective-iam-evidence.schema.json
+  - contracts/delivery/effective-iam-comparison.schema.json
+  - contracts/delivery/terraform-remote-inventory.schema.json
+  - contracts/delivery/terraform-reconciliation.schema.json
   - config/environment_requirements.yaml
+  - config/staging_apply_iam_policy.yaml
+  - config/terraform_resource_contracts.yaml
   - scripts/artifact_builder.py
   - scripts/delivery_contracts.py
   - scripts/change_plan.py
@@ -35,6 +42,9 @@ source_files:
   - scripts/validate_delivery_profiles.py
   - scripts/validate_delivery_registries.py
   - scripts/release/resolve_environment.py
+  - scripts/release/discover_environment_capabilities.py
+  - scripts/release/compare_effective_iam.py
+  - scripts/release/terraform_reconciliation.py
   - scripts/release/check_environment_requirements.py
   - scripts/validate_verification_router.py
   - scripts/release/check_deployment_operator_surface.py
@@ -161,6 +171,18 @@ read-only with respect to AWS and Terraform, so its output can safely gate
 planning or application delivery without fabricating cloud evidence. Use
 `make resolve-environment PROFILE=staging CAPABILITIES='vpc=PASS ...'` for a
 local decision/evidence record.
+
+The companion capability snapshot tool keeps discovery credential-safe:
+offline fixtures are the default, Terraform plan shape is reported as
+`UNKNOWN` rather than remote readiness, and live discovery requires both an
+explicit credential source and an injected read-only adapter. Effective IAM
+requirements can be compared with `scripts/release/compare_effective_iam.py`
+against captured policy evidence without invoking AWS. Finally,
+`scripts/release/terraform_reconciliation.py` compares desired plan entries,
+Terraform state, and a complete remote inventory in a dry-run only; missing or
+ambiguous ownership, identity drift, and plaintext secret material are
+blocking outcomes. These tools produce evidence for review, not live AWS
+verification or mutation authority.
 
 PR CI compiles workspace packages once, archives the resulting `dist`
 directories, and creates `release-candidate.json` bound to that archive, the
