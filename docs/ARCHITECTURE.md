@@ -16,7 +16,7 @@ toc_depth: 3
 source_hashes:
   "Backend Architecture/aether-backend/main.py": "sha256:4f2b65d2b09e59b46fa07dc5c4d61fbddc449efb0a47be7766f92ee527a91252"
   "Backend Architecture/aether-backend/middleware/middleware.py": "sha256:e320a85428e219bd745ff298a6b3a8a7404a1f72b562e65d4f7682e722ecb79c"
-  "packages/shared/": "sha256:94bbd34a5bc09698b166a0f7442198068811a8be19a24e96432f4be3c3d541e0"
+  "packages/shared/": "sha256:93135a64192c25548db852734cbb043d2a82f72a361da7237b07103c64d7eefc"
 ---
 # Aether vNext — Architecture Guide
 
@@ -499,6 +499,31 @@ projection-backed surface adapters
 The design decision is [ADR-010](decisions/ADR-010-intelligence-projection-plane.md);
 the source-of-truth is
 [INTELLIGENCE_PROJECTION_ARCHITECTURE.md](source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md).
+
+### Graph operating contracts
+
+The graph-first product runtime adds shared contracts without creating a
+second truth system. `packages/shared/graph-context-contract.ts` defines the
+authoritative `GraphScope` tuple (tenant, workspace, and environment), scoped
+object references, one selection vocabulary, immutable snapshots and diffs,
+scope-safe persistence, and deterministic scope switching. Its canonical query
+adapter accepts the existing `UniversalGraphQueryRequest` and reports any
+lossy translation explicitly. Contract validation fails closed when references,
+workspace scope, temporal modes, depth, or result bounds are inconsistent.
+
+`packages/shared/action-runtime-contract.ts` defines the decision, execution,
+approval, impact, and rollback/reversibility envelopes used to govern graph
+actions. Its transition guards require approval validity and bound execution
+evidence before terminal states can be recorded. These modules are exported
+from the shared package as types and deterministic validation/transition
+helpers; they do not introduce a parallel executor, a new source of record, or
+proof that an application host has mounted the runtime.
+
+Lens identity remains registry-governed: `packages/shared/contracts/lens-registry.json`
+generates `packages/shared/lenses_generated.ts`, and projection availability
+continues to come from the intelligence-projection registry. Frontend lens
+composition joins those generated authorities instead of hardcoding duplicate
+readiness or truth claims.
 
 ### Provider transport adapters
 

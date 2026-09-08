@@ -35,7 +35,7 @@ reviewed_source_commits:
 source_hashes:
   "frontend/aether/src/": "sha256:06b973755587d159ca09b1ec24215e985cc9ce6524ee1ccf490b96c66c626592"
   "frontend/kyber/src/": "sha256:0231b24d315cbd3dff15c4ad1b1da5864e53b2a07aa8da27f079461996aa2ca2"
-  "frontend/shared/src/": "sha256:5d8c4967068ea43d5944f68685b7a9d00c33d1bc6343c2c2172170c4e4e5f681"
+  "frontend/shared/src/": "sha256:740a53c451be599293c200e140e6b0610b36979705fa1105e368304ddc5f924e"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -131,6 +131,25 @@ There are two separate frontend applications. **Do not mix them up.**
   [brand-system architecture](brand-system/architecture.md), and
   [migration guide](brand-system/migration.md).
 - `TimeWindowSelector`, `FreshnessIndicator`, `EvidenceDrawer`, `UsageBar`, `Toast`, etc.
+- **Graph-first exploration runtime** (`frontend/shared/src/exploration/`):
+  `GraphContextProvider` extends the existing exploration provider/store with
+  one authoritative graph context for query, selection, presentation,
+  snapshots, and diffs. Hosts must supply the full tenant/workspace/environment
+  scope; changing any scope coordinate clears scoped selection and exploration
+  history rather than leaking them into the new workspace.
+- **Authority-free graph deep links:** URL state is restricted to bounded,
+  registry-valid exploration inputs. Tenant and surface remain host-owned, and
+  workspace, environment, truth/evidence, rights, confidence, history, and
+  approval state are never accepted from the URL.
+- **Governed lens composition:** the frontend lens runtime joins the generated
+  lens, intelligence-projection, and surface registries. A family with no
+  canonical registry entry or compatible projection is reported as pending or
+  not ready; the UI does not manufacture availability.
+- Aether and Kyber application gates still mount the legacy
+  `ExplorationProvider` until their backend session/profile boundary supplies
+  authoritative workspace and environment scope. Availability of the shared
+  Phase 1 runtime is therefore not an application-host migration or readiness
+  claim.
 - **Canonical value display** (`frontend/shared/src/value/`): `ValueDisplay`, `USDValue`, `NativeValueBreakdown`, `ValuationWarning` + `formatUSD` / `formatNativeValue` / `formatAetherValue`. USD-first with native drilldown; absent/unpriced values render "Value unavailable", never `$0.00`. All financial values must render through these — enforced by `scripts/validate_frontend_value_display.py`. See [`FINANCIAL_VALUE_SEMANTICS.md`](source-of-truth/FINANCIAL_VALUE_SEMANTICS.md).
 - Graph layer type contracts: `RelationshipLayer` (`H2H | H2A | A2H | A2A`), `RELATIONSHIP_LAYERS`, `LAYER_DESCRIPTIONS`, `EDGE_LAYER_MAP`, `classifyEdgeType`, `countEdgesByLayer` — shared between Aether and Kyber graph health features
 - **Path intelligence types** (Phase 20): `PathClassification`, `PathNode`, `PathEdge`, `PathScoreBreakdown`, `RelationshipPath`, `PathExplanation`, `TraversalSnapshot`, `PathQuery`, `PathQueryResponse`, `NodeExpansionRequest`, `NodeExpansionResponse`, `DeepTraversalJob` — canonical TS contracts in `packages/shared/operational-intelligence.ts`, mirroring the Pydantic models exactly
