@@ -33,7 +33,7 @@ source_hashes:
   "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_simulation.py": "sha256:9365aeced6274ca792563a9d8931a54e387e4cced758bfeec7114adc6e932838"
   "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_source_authority.py": "sha256:b3506114be9179b6592dbc08dfc616de066aea4856d274db16f46cf0f8c17422"
   "Backend Architecture/aether-backend/config/settings.py": "sha256:27f7b15209c14a857112fd3dfff3558ebd9e45c21def782d4dd63ccecfc0aa3c"
-  "Backend Architecture/aether-backend/main.py": "sha256:b35f5697fd8423287bf51289239f8134105f93f2b061225fce69cfc65858eb0e"
+  "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
   "Backend Architecture/aether-backend/services/kyber/access/": "sha256:b9b0c98e3f9b467678f79d14a0c19b401503cd92da209e7cb0ca51ddb932a24a"
   "Backend Architecture/aether-backend/services/managed_integrations/": "sha256:ea501954b47eb179a1b21ae6ea48cdfc8964e6256c08147c08e4e932ae091cd1"
   "config/route_registry.yaml": "sha256:7af5f658004930d3f07e991e7f843687cbab634bf1a2909b1fb17f11e3c618c6"
