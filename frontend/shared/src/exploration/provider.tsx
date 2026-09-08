@@ -62,7 +62,7 @@ interface ExplorationContextValue {
   toQuery: () => string;
 }
 
-interface GraphContextValue {
+export interface GraphContextValue {
   store: Store<GraphExplorationState>;
   actions: GraphExplorationActions;
   client?: ExplorationClient | undefined;

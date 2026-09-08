@@ -137,7 +137,7 @@ export {
   useGraphHistory,
   useGraphSelection,
 } from './provider';
-export type { ExplorationProviderProps, GraphContextProviderProps } from './provider';
+export type { ExplorationProviderProps, GraphContextProviderProps, GraphContextValue } from './provider';
 
 // Typed canonical API client. App-owned transports supply auth/CSRF/base URL;
 // the shared client owns endpoint contracts, validation, and stale-response

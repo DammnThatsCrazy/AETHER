@@ -124,6 +124,7 @@ describe('GraphContextProvider host scope authority', () => {
     return (
       <div>
         <span data-testid="graph-scope">{context.scope.tenant_id}/{context.scope.workspace_id}/{context.scope.environment_id}</span>
+        <span data-testid="graph-surface">{context.scope.surface}</span>
         <span data-testid="graph-anchors">{context.anchors.map((anchor) => anchor.id).join(',')}</span>
         <span data-testid="graph-selection">{selection.selected.length}</span>
         <span data-testid="graph-history">{history.entries.length}</span>
@@ -163,5 +164,35 @@ describe('GraphContextProvider host scope authority', () => {
     expect(getByTestId('graph-anchors').textContent).toBe('');
     expect(getByTestId('graph-selection').textContent).toBe('0');
     expect(getByTestId('graph-history').textContent).toBe('0');
+  });
+
+  it('preserves safe graph state across routes inside the same authority scope', () => {
+    const graphQuery = encodeExplorationContext({
+      ...base('graph'),
+      anchors: [{ kind: 'entity', id: 'root' }],
+      selection: { selected: [{ kind: 'entity', id: 'root' }] },
+    });
+    const profileQuery = encodeExplorationContext({
+      ...base('profile360'),
+      anchors: [{ kind: 'entity', id: 'root' }],
+      selection: { selected: [{ kind: 'entity', id: 'root' }] },
+    });
+    const { getByTestId, rerender } = render(
+      <GraphContextProvider scope={scope} surface="graph" query={graphQuery}>
+        <GraphProbe />
+      </GraphContextProvider>,
+    );
+    expect(getByTestId('graph-history').textContent).toBe('1');
+
+    rerender(
+      <GraphContextProvider scope={scope} surface="profile360" query={profileQuery}>
+        <GraphProbe />
+      </GraphContextProvider>,
+    );
+
+    expect(getByTestId('graph-surface').textContent).toBe('profile360');
+    expect(getByTestId('graph-anchors').textContent).toBe('root');
+    expect(getByTestId('graph-selection').textContent).toBe('1');
+    expect(getByTestId('graph-history').textContent).toBe('1');
   });
 });
