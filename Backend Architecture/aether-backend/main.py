@@ -337,6 +337,7 @@ from services.security.admin_routes import admin_router as security_admin_router
 from services.integrity.routes import router as ledger_integrity_router
 from services.policy.routes import router as policy_router
 from services.dsr_propagation.routes import router as dsr_propagation_router
+from services.rights_authority.routes import router as rights_router
 from services.tenant_readiness.routes import router as tenant_readiness_router
 from services.readiness_graph.routes import (
     router as readiness_graph_router,
@@ -998,6 +999,7 @@ def create_app() -> FastAPI:
     app.include_router(ledger_integrity_router)    # /v1/security/ledger -- Bronze truth-chain verification status (LEDGER M3)
     app.include_router(policy_router)
     app.include_router(dsr_propagation_router)     # /v1/dsr — DSR propagation records + impact indexes
+    app.include_router(rights_router)              # /v1/rights — Rights Authority tenant surface (blueprint §16/§17/§66)
     app.include_router(tenant_readiness_router)    # /v1/tenant/readiness — launch readiness + trust states
     # Capability readiness graph — read-only dependency graph for one capability.
     # Tenant surface /v1/tenant/readiness-graph/{capability}; operator surface

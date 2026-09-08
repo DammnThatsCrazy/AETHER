@@ -56,13 +56,24 @@ class EffectiveRightsResolveRequest(BaseModel):
     """
 
     tenant_id: str
-    source: list[str] = Field(
-        default_factory=list, description="governing rights/source refs"
+    source: str = Field(
+        min_length=1,
+        description="governing rights/source id (single ref, mirroring "
+        "RightsDecisionRequest.source_id — the resolver resolves one governing "
+        "source per decision)",
     )
     artifact: Optional[str] = None
     requested_use: str
-    purpose: Optional[str] = None
-    destination: Optional[str] = None
+    purpose: str = Field(
+        min_length=1,
+        description="purpose of the requested use (required: the resolver and "
+        "the consent authority match grants/receipts by purpose)",
+    )
+    destination: str = Field(
+        min_length=1,
+        description="destination/scope of the requested use (required by the "
+        "resolver's decision identity)",
+    )
     as_of: Optional[str] = None
 
 
@@ -81,6 +92,25 @@ def _same_tenant_or_403(request: Request, tenant_id: str) -> None:
         raise HTTPException(status_code=403, detail="cross-tenant access denied")
 
 
+def _ensure_active() -> None:
+    """Blueprint §13 activation gate.
+
+    The authority is INERT while rollout is ``off`` (the default): the mounted
+    surface returns 503 rather than resolving or revoking, so nothing acts on
+    tenant data until an operator activates a phase by setting
+    ``RIGHTS_AUTHORITY_ROLLOUT=shadow|warn|enforce``. Fail-closed: an unset or
+    invalid mode is ``off`` (see ``services.rights_authority.rollout``).
+    """
+    from .rollout import RolloutMode, current_mode
+
+    if current_mode() == RolloutMode.OFF:
+        raise HTTPException(
+            status_code=503,
+            detail="rights authority disabled: rollout=off "
+            "(set RIGHTS_AUTHORITY_ROLLOUT to shadow/warn/enforce to activate)",
+        )
+
+
 @router.post("/decisions/effective")
 async def resolve_effective_decision(
     body: EffectiveRightsResolveRequest,
@@ -97,6 +127,7 @@ async def resolve_effective_decision(
     primary query unusable for read-only principals. Destructive operations
     (``POST /v1/rights/revocations``) DO require the ``write`` scope.
     """
+    _ensure_active()
     _same_tenant_or_403(request, body.tenant_id)
     from .resolver import effective_rights_resolver
 
@@ -138,6 +169,7 @@ async def get_decision(
     added to the record at schema-migration time and a dedicated endpoint —
     deliberately out of scope for this ledger surface.
     """
+    _ensure_active()
     actor = tenant_actor(request)
     from .repositories import rights_decision_repository
 
@@ -162,6 +194,7 @@ async def run_revocation(
     single decision/impact row is recorded. ``body.grant_id`` never names an
     owner; the grant's tenant is authoritative.
     """
+    _ensure_active()
     _same_tenant_or_403(request, body.tenant_id)
     from .impact import RevocationError, revocation_pipeline
 

@@ -49,23 +49,34 @@ class RightsDecisionRepository(_ScopedRepo):
 
     async def record(
         self,
-        decision: RightsDecision,
+        decision: RightsDecision | dict,
         *,
         identity_key: Optional[str] = None,
     ) -> dict:
         """Persist a decision idempotently by decision_id.
+
+        ``decision`` may be a ``RightsDecision`` model or an already-dumped row
+        dict (revocation pipeline records a deny decision built as a dict);
+        both are normalized to a JSON body here so every caller survives the
+        real repository boundary.
 
         ``identity_key`` is the decision-idempotency key (blueprint §17: tenant +
         actor + purpose + artifact + requested_use + destination + policy_version +
         as-of). It is stored in the JSON body so identical requests can be re-found
         without conflicting decision rows.
         """
-        body = decision.model_dump(mode="json")
-        body["decision_id"] = decision.decision_id
-        body["tenant_id"] = decision.tenant_id
+        body = (
+            decision.model_dump(mode="json")
+            if hasattr(decision, "model_dump")
+            else dict(decision)
+        )
+        body["decision_id"] = body.get("decision_id") or getattr(
+            decision, "decision_id", None
+        )
+        body["tenant_id"] = body.get("tenant_id") or getattr(decision, "tenant_id", None)
         if identity_key:
             body["identity_key"] = identity_key
-        return await self.insert(decision.decision_id, body)
+        return await self.insert(body["decision_id"], body)
 
     async def get(self, decision_id: str) -> Optional[dict]:
         return await self.find_by_id(decision_id)
@@ -143,12 +154,22 @@ class RightsImpactRepository(_ScopedRepo):
     def __init__(self) -> None:
         super().__init__("rights_impacts")
 
-    async def record(self, impact: RightsImpact) -> dict:
-        body = impact.model_dump(mode="json")
-        body["impact_id"] = impact.impact_id
-        if impact.tenant_id is not None:
-            body["tenant_id"] = impact.tenant_id
-        return await self.insert(impact.impact_id, body)
+    async def record(self, impact: RightsImpact | dict) -> dict:
+        """Persist an impact row (``RightsImpact`` model or dumped dict).
+
+        Impact producers (``impact.persist_impact_items``, revocation pipeline)
+        emit row dicts; normalizing here keeps the real repository boundary safe
+        for model and dict callers alike.
+        """
+        body = (
+            impact.model_dump(mode="json")
+            if hasattr(impact, "model_dump")
+            else dict(impact)
+        )
+        body["impact_id"] = body.get("impact_id") or getattr(impact, "impact_id", None)
+        if body.get("tenant_id") is None:
+            body["tenant_id"] = getattr(impact, "tenant_id", None)
+        return await self.insert(body["impact_id"], body)
 
     async def get(self, impact_id: str) -> Optional[dict]:
         return await self.find_by_id(impact_id)
