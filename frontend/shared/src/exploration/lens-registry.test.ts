@@ -9,7 +9,7 @@ import {
   resolveLensAvailability,
   resolveLensSetAvailability,
   type LensResolutionContext,
-} from './lens-registry';
+} from './index';
 
 const objectContext: LensResolutionContext = {
   objectKind: 'entity',

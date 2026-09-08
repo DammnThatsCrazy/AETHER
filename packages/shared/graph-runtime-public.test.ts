@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ActionRuntimeTransitionError,
   graphContextContractVersion,
+  lensRegistryContractVersion,
   resolveCapabilityState,
   validateCanonicalGraphQuery,
   type GraphContext,
@@ -14,6 +15,7 @@ describe('graph runtime public package surface', () => {
     const context: GraphContext | null = null;
     expect(context).toBeNull();
     expect(graphContextContractVersion).toBe('1');
+    expect(lensRegistryContractVersion).toBe('1.0.0');
     expect(validateCanonicalGraphQuery(null).valid).toBe(false);
   });
 

@@ -73,6 +73,36 @@ export {
 export type { ExplorationHistory } from './history';
 
 export {
+  allBlueprintLenses,
+  allLenses,
+  blueprintLensIds,
+  blueprintLensRegistry,
+  getBlueprintLens,
+  getLens,
+  getLensEntry,
+  isKnownBlueprintLens,
+  lensRegistry,
+  lensSupportsObject,
+  lensSupportsSurface,
+  phase1LensRegistry,
+  resolveLens,
+  resolveLensAvailability,
+  resolveLensSet,
+  resolveLensSetAvailability,
+  supportsObject,
+  supportsSurface,
+} from './lens-registry';
+export type {
+  BlueprintLensId,
+  LensAvailability,
+  LensCapabilityInput,
+  LensRegistryEntry,
+  LensResolution,
+  LensResolutionContext,
+  LensSetResolution,
+} from './lens-registry';
+
+export {
   createExplorationStore,
   createGraphExplorationStore,
   explorationActions,
