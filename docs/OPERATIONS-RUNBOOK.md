@@ -16,7 +16,7 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "Backend Architecture/aether-backend/config/settings.py": "sha256:27f7b15209c14a857112fd3dfff3558ebd9e45c21def782d4dd63ccecfc0aa3c"
-  "Backend Architecture/aether-backend/main.py": "sha256:b35f5697fd8423287bf51289239f8134105f93f2b061225fce69cfc65858eb0e"
+  "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
   "Backend Architecture/aether-backend/services/provider_runtime/": "sha256:222fdaf7349cf2f190d5a512550b7f0f45b2d26473ecbbe87d20476f4f4d2ad9"
   "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
 ---
@@ -713,3 +713,23 @@ and per-tenant usage at `GET /v1/data-exchange/usage`; failed export/report
 renders surface as `failed`-status artifacts with the durable job recorded on
 the artifact envelope. See `docs/BACKEND-API.md` (the "Data Exchange Plane"
 section) and `docs/plans/data-exchange-api.md` for the full contract.
+
+## Rights Authority (`/v1/rights`) — rollout gate
+
+The Rights Authority tenant surface is **always mounted** in `main.py` (beside
+`/v1/dsr`) but is **inert by default**: while `RIGHTS_AUTHORITY_ROLLOUT` is
+unset or invalid every `/v1/rights/*` request returns HTTP 503
+`rights authority disabled: rollout=off ...`. This is fail-closed by design
+(blueprint §13) — mounting the router changes nothing operationally until an
+operator deliberately activates a phase. A `503` on `/v1/rights` with this body
+is the expected default, not an incident.
+
+**Activation.** Set `RIGHTS_AUTHORITY_ROLLOUT=shadow|warn|enforce` and restart.
+`off` is the default and the only inert value; `shadow`/`warn` are staged
+pre-enforcement phases and `enforce` engages the resolver's consent seam and
+the §66 revocation pipeline end-to-end.
+
+**Scoping.** Routes enforce the canonical read/write scopes and the caller's
+tenant server-side; unknown or cross-tenant decision reads and grant revocations
+return `404`. Endpoint reference: `docs/BACKEND-API.md` (the "Rights Authority"
+section).

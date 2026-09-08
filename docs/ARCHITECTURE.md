@@ -14,9 +14,9 @@ canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/main.py": "sha256:b35f5697fd8423287bf51289239f8134105f93f2b061225fce69cfc65858eb0e"
+  "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
   "Backend Architecture/aether-backend/middleware/middleware.py": "sha256:e320a85428e219bd745ff298a6b3a8a7404a1f72b562e65d4f7682e722ecb79c"
-  "packages/shared/": "sha256:94bbd34a5bc09698b166a0f7442198068811a8be19a24e96432f4be3c3d541e0"
+  "packages/shared/": "sha256:11b4d4a05c0f8d3136da1b3b37ed304a0215b603b305b521c34b1901e5752fad"
 ---
 # Aether vNext — Architecture Guide
 

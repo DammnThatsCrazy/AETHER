@@ -144,6 +144,12 @@ export * from './social-provider-capability-vocabulary';
 // ADR-011 D3 common spine envelope (composes canonical primitives; redefines nothing).
 export * from './spine-envelope';
 
+// Rights Authority structured contracts — canonical TS twin of the
+// DataRightsGrant nested authorities (SourceUseAuthority, GeneratedOutputRights,
+// LearningAuthority, DisclosureAuthority, TerminationAuthority + rights vocabulary).
+// Hand-authored; parity is asserted by tests/unit/test_data_rights_contract_parity.py.
+export * from './data-rights';
+
 // ADR-011 Spine Composition Kernel — generated registry twin
 // (packages/shared/contracts/spine-registry.json → scripts/generate_platform_contracts.py).
 export * from './spine-registry';

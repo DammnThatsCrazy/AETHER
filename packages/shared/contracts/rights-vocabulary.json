@@ -1,0 +1,209 @@
+{
+  "schemaVersion": "2.0.0",
+  "contractVersion": "8.12.0",
+  "description": "Aether canonical Rights vocabulary (Rights Authority blueprint / IRRL naming overlay). Owns the enumerated vocabularies of the structured rights contract (rights-derivation classes, learning classes, ownership classes, intelligence-rights profiles, disclosure boundaries, Olympus purposes, lifecycle actions, model revocation states, rights decision dispositions) plus the profile-default, migration, generalization and termination tables. It is a plain canonical JSON contract, not a generator registry: the Python enums in Backend Architecture/aether-backend/services/integrations/data_rights/models.py and the TS twin packages/shared/data-rights.ts are hand-authored to these EXACT snake_case values and cross-checked by scripts/validate_rights_vocabulary.py. rights-vocabulary.json adds no data-authority rows: every term below stays owned by the consent/data-rights/retention/evidence machinery; it resolves and records rights over those authorities (blueprint §13, §14).",
+  "rightsDerivationClasses": [
+    "source_representation",
+    "normalized",
+    "tenant_identifiable_derivative",
+    "aether_generated_intelligence",
+    "aggregated",
+    "generalized",
+    "model_derived",
+    "platform_knowledge"
+  ],
+  "learningClasses": [
+    "inference",
+    "tenant_adaptation",
+    "generalized_learning",
+    "resolver_calibration",
+    "ontology_learning",
+    "schema_mapping_learning",
+    "benchmarking",
+    "contributed_model_training",
+    "olympus_internal_intelligence"
+  ],
+  "ownershipClasses": [
+    "contributed_source",
+    "canonicalized",
+    "aether_generated_intelligence",
+    "generalized_knowledge"
+  ],
+  "intelligenceRightsProfiles": [
+    "sovereign",
+    "private",
+    "standard",
+    "collaborative"
+  ],
+  "disclosureBoundaries": [
+    "tenant_internal",
+    "olympus_internal",
+    "cross_tenant_identifiable",
+    "external_identifiable",
+    "generalized_cross_tenant",
+    "generalized_external"
+  ],
+  "olympusPurposes": [
+    "platform_research",
+    "model_improvement",
+    "security_research",
+    "fraud_research",
+    "resolver_calibration",
+    "ontology_research",
+    "product_analytics",
+    "benchmark_analysis",
+    "support_investigation",
+    "incident_response"
+  ],
+  "lifecycleActions": [
+    "preserve",
+    "delete",
+    "hard_delete",
+    "tombstone",
+    "quarantine",
+    "suppress",
+    "invalidate",
+    "recompute",
+    "retrain",
+    "anonymize",
+    "generalize",
+    "legal_hold"
+  ],
+  "modelRevocationStates": [
+    "no_action_required",
+    "retrain_required",
+    "model_quarantine_required",
+    "evaluation_required",
+    "legal_review_required",
+    "blocked"
+  ],
+  "rightsDecisionDispositions": [
+    "allowed",
+    "denied",
+    "redacted",
+    "suppressed"
+  ],
+  "rightsProfileDefaults": {
+    "sovereign": {
+      "generated_output_retention": "minimal",
+      "generalized_learning": false,
+      "olympus_internal_intelligence": false,
+      "contributed_model_training": false
+    },
+    "private": {
+      "generated_output_retention": "required_operations_only",
+      "generalized_learning": false,
+      "olympus_internal_intelligence": false,
+      "contributed_model_training": false
+    },
+    "standard": {
+      "generated_output_retention": "yes",
+      "generalized_learning": true,
+      "olympus_internal_intelligence": true,
+      "contributed_model_training": false
+    },
+    "collaborative": {
+      "generated_output_retention": "yes",
+      "generalized_learning": true,
+      "olympus_internal_intelligence": true,
+      "contributed_model_training": true
+    }
+  },
+  "learningAuthorityFlags": [
+    "inference",
+    "tenant_adaptation",
+    "generalized_learning",
+    "resolver_calibration",
+    "ontology_learning",
+    "schema_mapping_learning",
+    "benchmarking",
+    "contributed_model_training",
+    "olympus_internal_intelligence"
+  ],
+  "terminationAuthorityActions": {
+    "contributed_source_data": "delete_by_policy",
+    "tenant_identifiable_derived_data": "recompute_or_delete",
+    "tenant_exports": "tenant_retains",
+    "audit_records": "retain_as_required",
+    "generalized_derivatives": "retain_if_independently_qualified",
+    "model_weights": "retain_if_non_reconstructable_and_permitted",
+    "benchmarks": "retain_if_generalization_passed",
+    "ontology_improvements": "retain",
+    "security_fraud_signatures": "governed_retention"
+  },
+  "generalizationDestinations": [
+    "olympus_graph",
+    "platform_learning",
+    "benchmark",
+    "model_training"
+  ],
+  "generalizationTransformations": [
+    "pii_strip",
+    "tenant_identifier_removal",
+    "tenant_metadata_strip",
+    "subject_pseudonymization",
+    "bucketing",
+    "cohort_thresholding",
+    "k_anonymity_minimum_population",
+    "distribution_aggregation",
+    "outlier_suppression",
+    "edge_abstraction",
+    "feature_coarsening",
+    "temporal_coarsening",
+    "geographic_coarsening",
+    "sensitivity_reduction"
+  ],
+  "modelRevocationSemantics": {
+    "legacyBoolean": "model_training_allowed",
+    "mapsTo": "contributed_model_training",
+    "broadens": false
+  },
+  "migrationMappings": [
+    {
+      "legacyBoolean": "model_training_allowed",
+      "mapsTo": "contributed_model_training",
+      "broadens": false
+    }
+  ],
+  "registeredCanonicalVocabularies": [],
+  "bindings": {
+    "_note": "Tri-surface parity contract consumed by scripts/validate_rights_vocabulary.py. A vocabulary key is either bound to its Python enum class (pythonEnum) and TS as-const array (tsArray) with EXACT member/literal equality to this JSON, or allowlisted (allowlisted: true) because it is a record/table or a vocabulary carried by a later runtime surface rather than a Phase-0 twin surface. Covering every vocabulary key here is mandatory.",
+    "rightsDerivationClasses": { "pythonEnum": "RightsDerivationClass", "tsArray": "rightsDerivationClasses" },
+    "learningClasses": { "pythonEnum": "LearningClass", "tsArray": "learningClasses" },
+    "ownershipClasses": { "pythonEnum": "OwnershipClass", "tsArray": "ownershipClasses" },
+    "intelligenceRightsProfiles": { "pythonEnum": "IntelligenceRightsProfile", "tsArray": "intelligenceRightsProfiles" },
+    "disclosureBoundaries": { "pythonEnum": "DisclosureBoundary", "tsArray": "disclosureBoundaries" },
+    "olympusPurposes": { "pythonEnum": "OlympusPurpose", "tsArray": "olympusPurposes" },
+    "lifecycleActions": { "pythonEnum": "LifecycleAction", "tsArray": "lifecycleActions" },
+    "modelRevocationStates": { "pythonEnum": "ModelRevocationState", "tsArray": "modelRevocationStates" },
+    "rightsDecisionDispositions": { "pythonEnum": "RightsDecisionDisposition", "tsArray": "rightsDecisionDispositions" },
+    "rightsProfileDefaults": {
+      "allowlisted": true,
+      "reason": "Per-profile policy-preset record (blueprint §3.6); not a single enumerated surface — its four profile keys equal intelligenceRightsProfiles and are validated structurally."
+    },
+    "learningAuthorityFlags": {
+      "allowlisted": true,
+      "reason": "The nine LearningAuthority boolean flag keys; must equal learningClasses as a set (validated structurally). No independent enum/array surface."
+    },
+    "terminationAuthorityActions": {
+      "allowlisted": true,
+      "reason": "Termination artifact to blueprint-disposition table (blueprint §3.5); dispositions are lifecycle/retention strings validated structurally, not a Phase-0 twin enum."
+    },
+    "generalizationDestinations": {
+      "allowlisted": true,
+      "reason": "Generalization Gateway destination vocabulary (blueprint §6); enforced by the rights_irrl-owned gateway adapter. Twin surface lands with the gateway runtime, not the Phase-0 canonical-enum surface."
+    },
+    "generalizationTransformations": {
+      "allowlisted": true,
+      "reason": "Generalization Gateway transformation vocabulary (blueprint §6); enforced by the rights_irrl-owned gateway adapter. Twin surface lands with the gateway runtime, not the Phase-0 canonical-enum surface."
+    },
+    "modelRevocationSemantics": {
+      "allowlisted": true,
+      "reason": "Single migration-semantics record (legacyBoolean -> mapsTo, broadens:false) cross-checked structurally against learningClasses; no enum surface."
+    },
+    "migrationMappings": {
+      "allowlisted": true,
+      "reason": "Migration-map record list (legacyBoolean -> mapsTo, broadens:false); each mapsTo must be a learningClasses member and broadens must stay false. No enum surface."
+    }
+  }
+}

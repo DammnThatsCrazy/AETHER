@@ -7284,7 +7284,7 @@
         "ops"
       ],
       "status": "draft",
-      "estimated_read_minutes": 7,
+      "estimated_read_minutes": 9,
       "canonical_owner": "compliance@aether"
     },
     {
@@ -7714,7 +7714,7 @@
       ],
       "status": "experimental",
       "since_version": "8.12.0",
-      "estimated_read_minutes": 5,
+      "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
@@ -7938,6 +7938,41 @@
       "status": "stable",
       "since_version": "8.9.0",
       "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md",
+      "title": "Aether Canonical Semantic + Rights Authority — Implementation Blueprint",
+      "slug": "architecture/rights-authority-blueprint",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "exec",
+        "compliance"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 25,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/RIGHTS_TAXONOMY.md",
+      "title": "Rights Taxonomy — Aether Canonical Rights Vocabulary",
+      "slug": "architecture/rights-taxonomy",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "architect",
+        "dev-senior",
+        "compliance"
+      ],
+      "status": "experimental",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
