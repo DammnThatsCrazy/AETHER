@@ -2,12 +2,16 @@ import type {
   GraphObjectRef,
   GraphSelectionState,
   GraphSnapshotRef,
+  GraphScope,
 } from '@aether/shared/graph-context-contract';
 
-export interface SelectionScope {
-  readonly tenant_id: string;
-  readonly environment_id: string;
-}
+/**
+ * The host-authoritative scope for selection state.
+ *
+ * GraphObjectRef deliberately has no workspace_id, so workspace identity must
+ * travel with the scope supplied at every selection boundary.
+ */
+export type SelectionScope = Pick<GraphScope, 'tenant_id' | 'workspace_id' | 'environment_id'>;
 
 export const EMPTY_SELECTION: GraphSelectionState = {
   selected: [],

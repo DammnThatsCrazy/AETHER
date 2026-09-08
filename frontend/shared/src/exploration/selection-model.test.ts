@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { bindSnapshot, clearSelection, createSelectionState, focusObject, replaceSelection, selectObject, setCompared, togglePin } from './selection-model';
 import type { GraphObjectRef } from '@aether/shared/graph-context-contract';
 
-const scope = { tenant_id: 't1', environment_id: 'staging' } as const;
+const scope = { tenant_id: 't1', workspace_id: 'w1', environment_id: 'staging' } as const;
 const ref = (id: string, extra = {}): GraphObjectRef => ({ ...scope, kind: 'entity', id, ...extra });
 const other = ref('x', { tenant_id: 't2' });
 const snapshot = { ...scope, snapshot_id: 's1' };
