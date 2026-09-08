@@ -15,8 +15,8 @@ const context: ExplorationContextV1 = {
   anchors: [{ kind: 'entity', id: 'root-1' }],
   population: { logic: 'AND', expressions: [{ field: 'risk.risk_score', op: 'gte', value: 0.8 }] },
   temporal: { mode: 'window', field: 'occurred_at', timezone: 'UTC', range: { kind: 'instant', start: '2025-01-01T00:00:00Z', endExclusive: '2025-01-02T00:00:00Z' } },
-  graph: { layers: ['identity'], edge_types: ['related_to'], depth: 3 },
-  dimensions: ['entity'], lens_set: ['risk-v1'], temporal_mode: 'live',
+  graph: { layers: ['H2H'], edge_types: ['related_to'], depth: 3 },
+  dimensions: ['entity'], lens_set: ['risk'], temporal_mode: 'live',
   presentation: { view: 'graph', sort: [{ field: 'risk.risk_score', direction: 'desc' }] },
   truth: { include_evidence: true },
 };
@@ -52,14 +52,14 @@ describe('graph context adapter', () => {
   });
 
   it('maps roots, FilterGroup, graph constraints, temporal state, evidence, and lens IDs', () => {
-    const result = explorationContextToGraphContext(context, scope, { projection_id: 'network' as never });
+    const result = explorationContextToGraphContext(context, scope, { projection_id: 'profile360' });
     expect(result.anchors[0]).toMatchObject({ tenant_id: 'tenant-a', environment_id: 'prod', id: 'root-1' });
     expect(result.selection).toEqual({ selected: [], focused: null, pinned: [], compared: [], snapshot_bound: [] });
     const query = explorationContextToCanonicalGraphQuery(context, scope);
     expect(query.predicates).toEqual(context.population);
-    expect(query.layers).toEqual(['identity']);
+    expect(query.layers).toEqual(['H2H']);
     expect(query.temporal).toMatchObject({ mode: 'range', range: context.temporal.range });
-    expect(result.lens_set).toEqual(['risk-v1']);
+    expect(result.lens_set).toEqual(['risk']);
   });
 
   it('fails closed for roots carrying a foreign scope', () => {
