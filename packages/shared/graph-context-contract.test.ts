@@ -10,6 +10,9 @@ import {
   type GraphSnapshot,
   validateGraphSnapshot,
   validateCanonicalGraphQuery,
+  createImmutableGraphSnapshot,
+  createImmutableGraphDiff,
+  validateGraphDiff,
 } from './graph-context-contract';
 
 const ref = (id: string, tenant_id = 'tenant-a', environment_id = 'staging'): GraphObjectRef => ({
@@ -18,7 +21,8 @@ const ref = (id: string, tenant_id = 'tenant-a', environment_id = 'staging'): Gr
 
 const context = (): GraphContext => ({
   version: '1',
-  scope: { tenant_id: 'tenant-a', environment_id: 'staging', surface: 'graph' },
+  scope: { tenant_id: 'tenant-a', environment_id: 'staging', workspace_id: 'workspace-1', surface: 'graph' },
+  anchors: [],
   temporal: { mode: 'window', field: 'occurred_at', timezone: 'UTC' },
   selection: { selected: [ref('selected')], focused: ref('focused'), pinned: [ref('pinned')], compared: [ref('compared')], snapshot_bound: [] },
   evidence: [],
@@ -42,7 +46,7 @@ describe('GraphContext contract', () => {
   });
 
   it('clears cross-tenant references and tenant-bound state on scope switch', () => {
-    const value = { ...context(), anchors: [ref('old-anchor', 'tenant-a', 'staging')], population: { logic: 'AND' as const, expressions: [{ field: 'old', op: 'eq' as const, value: true }] }, selection: { ...context().selection, selected: [ref('local'), ref('foreign', 'tenant-b', 'prod')] }, saved_context_id: 'saved', snapshot_id: 'snap', diff_id: 'diff', query: { kind: 'graph_query' as const, version: '1' as const, scope: { tenant_id: 'tenant-a', environment_id: 'staging' }, roots: [ref('old-anchor')] } };
+    const value = { ...context(), anchors: [ref('old-anchor', 'tenant-a', 'staging')], population: { logic: 'AND' as const, expressions: [{ field: 'old', op: 'eq' as const, value: true }] }, selection: { ...context().selection, selected: [ref('local'), ref('foreign', 'tenant-b', 'prod')] }, saved_context_id: 'saved', snapshot_id: 'snap', diff_id: 'diff', query: { kind: 'graph_query' as const, version: '1' as const, scope: { tenant_id: 'tenant-a', environment_id: 'staging' }, roots: [ref('old-anchor')], traversal: { direction: 'both' as const, max_depth: 2 }, rights_policy: 'enforce' as const } };
     const switched = switchGraphContextScope(value, 'tenant-b', 'prod');
     expect(switched.anchors).toEqual([]);
     expect(switched.population).toBeNull();
@@ -61,10 +65,10 @@ describe('GraphContext contract', () => {
   });
 
   it('preserves immutable snapshot metadata and diff identity', () => {
-    const query = { kind: 'graph_query' as const, version: '1' as const, scope: { tenant_id: 'tenant-a', environment_id: 'staging' } };
+    const query = { kind: 'graph_query' as const, version: '1' as const, scope: { tenant_id: 'tenant-a', environment_id: 'staging' }, roots: [], traversal: { direction: 'both' as const, max_depth: 2 }, rights_policy: 'enforce' as const, temporal: { mode: 'range' as const } };
     const snapshot: GraphSnapshot = {
       kind: 'graph_snapshot', id: 'snapshot-1', tenant_id: 'tenant-a', environment_id: 'staging',
-      captured_at: '2026-01-01T00:00:00Z', workspace_id: 'workspace-1', as_of: '2025-12-31T23:59:59Z', query: { ...query, roots: [] }, objects: [ref('one')], graph_state_ref: 'graph-1', evidence_state_ref: 'evidence-1', source_state_ref: 'source-1', policy_version: 'policy-1', ontology_version: 'ontology-1', model_versions: ['model-1'],
+      captured_at: '2026-01-01T00:00:00Z', workspace_id: 'workspace-1', as_of: '2025-12-31T23:59:59Z', query, objects: [ref('one')], graph_state_ref: 'graph-1', evidence_state_ref: 'evidence-1', source_state_ref: 'source-1', policy_version: 'policy-1', ontology_version: 'ontology-1', model_versions: { graph: 'model-1' },
       metadata: { source: 'graph-engine', complete: true },
     };
     const diff: GraphDiff = {
@@ -76,5 +80,15 @@ describe('GraphContext contract', () => {
     expect(validateGraphSnapshot(snapshot).valid).toBe(true);
     expect(validateCanonicalGraphQuery(snapshot.query).valid).toBe(true);
     expect(diff.from_state_ref).not.toBe(diff.to_state_ref);
+    const frozenSnapshot = createImmutableGraphSnapshot(snapshot);
+    const frozenDiff = createImmutableGraphDiff(diff);
+    expect(Object.isFrozen(frozenSnapshot)).toBe(true);
+    expect(Object.isFrozen(frozenDiff.changes)).toBe(true);
+    expect(validateGraphDiff(frozenDiff).valid).toBe(true);
+  });
+
+  it('rejects invalid query limits, rights, and root scopes', () => {
+    const query = { kind: 'graph_query', version: '1', scope: { tenant_id: 'tenant-a', environment_id: 'staging' }, roots: [ref('foreign', 'tenant-b')], traversal: { direction: 'both', max_depth: 2 }, limit: 501, rights_policy: 'ignore' };
+    expect(validateCanonicalGraphQuery(query).valid).toBe(false);
   });
 });
