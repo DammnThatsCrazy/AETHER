@@ -37,20 +37,29 @@ from services.security.request_context import tenant_actor
 logger = get_logger("aether.rights_irrl.routes")
 router = APIRouter(prefix="/v1/rights", tags=["Rights Authority"])
 
-# Baseline tenant permission; real Kyber/tenant capability wiring is a later
-# phase (the resolver/revocation pipeline do their own tenant-scoped checks).
+# Baseline tenant permissions. Read/resolve surfaces use ``read``; the §66
+# revocation is a destructive mutation and requires the established ``write``
+# scope (never ``read``), so a read-only principal cannot revoke rights. Real
+# Kyber/tenant capability wiring is a later phase (the resolver/revocation
+# pipeline additionally enforce their own tenant-scoped checks server-side).
 _RIGHTS_READ_PERMISSION = "read"
+_RIGHTS_WRITE_PERMISSION = "write"
 
 
 class EffectiveRightsResolveRequest(BaseModel):
-    """Inputs for an effective-rights resolution (blueprint §16)."""
+    """Inputs for an effective-rights resolution (blueprint §16).
+
+    ``actor`` is deliberately NOT client-suppliable: the actor whose rights are
+    being resolved is the authenticated caller (derived server-side from
+    ``tenant_actor``). Cross-actor delegation, if ever needed, must ride an
+    explicit delegation capability — never a caller-asserted identity.
+    """
 
     tenant_id: str
     source: list[str] = Field(
         default_factory=list, description="governing rights/source refs"
     )
     artifact: Optional[str] = None
-    actor: str
     requested_use: str
     purpose: Optional[str] = None
     destination: Optional[str] = None
@@ -82,11 +91,15 @@ async def resolve_effective_decision(
     _same_tenant_or_403(request, body.tenant_id)
     from .resolver import effective_rights_resolver
 
+    # Actor is the authenticated caller — never a client-supplied identity. A
+    # principal resolving rights for itself is the only posture this minimal
+    # surface permits without an explicit delegation capability.
+    actor = tenant_actor(request).actor_id
     decision = await effective_rights_resolver.resolve(
         tenant=body.tenant_id,
         source=body.source,
         artifact=body.artifact,
-        actor=body.actor,
+        actor=actor,
         requested_use=body.requested_use,
         purpose=body.purpose,
         destination=body.destination,
@@ -115,9 +128,17 @@ async def get_decision(
 async def run_revocation(
     body: RevocationRequest,
     request: Request,
-    _tenant: TenantContext = Depends(require_permission(_RIGHTS_READ_PERMISSION)),
+    _tenant: TenantContext = Depends(require_permission(_RIGHTS_WRITE_PERMISSION)),
 ) -> dict:
-    """Run the §66 revocation pipeline (tenant ownership verified server-side)."""
+    """Run the §66 revocation pipeline.
+
+    Ownership is verified server-side at two layers: this route requires
+    ``body.tenant_id`` to equal the authenticated caller's tenant, and the
+    pipeline's Step-0 guard loads the grant by id and refuses any grant that is
+    unknown or owned by another tenant (``RevocationError`` → 404) before a
+    single decision/impact row is recorded. ``body.grant_id`` never names an
+    owner; the grant's tenant is authoritative.
+    """
     _same_tenant_or_403(request, body.tenant_id)
     from .impact import RevocationError, revocation_pipeline
 
