@@ -4,6 +4,7 @@ import {
   canonicalGraphQueryToUniversalRequest,
   explorationContextToCanonicalGraphQuery,
   explorationContextToGraphContext,
+  explorationContextToUniversalRequest,
   graphScopeAuthorityKey,
   graphScopeChangeRequiresReset,
 } from './graph-context-adapter';
@@ -24,6 +25,23 @@ describe('graph context adapter', () => {
   it('rejects absent host scope and tenant authority from URL context', () => {
     expect(() => explorationContextToGraphContext(context, { ...scope, tenant_id: '' })).toThrow('host scope tenant_id');
     expect(() => explorationContextToGraphContext({ ...context, scope: { ...context.scope, tenant_id: 'foreign' } }, scope)).toThrow('tenant');
+  });
+
+  it('rejects missing host workspace or environment even with no anchors', () => {
+    const emptyAnchors = { ...context, anchors: [] };
+    expect(() => explorationContextToGraphContext(emptyAnchors, { ...scope, workspace_id: '' })).toThrow('host scope workspace_id');
+    expect(() => explorationContextToCanonicalGraphQuery(emptyAnchors, { ...scope, environment_id: '' })).toThrow('host scope environment_id');
+
+    const query = explorationContextToCanonicalGraphQuery(emptyAnchors, scope);
+    expect(() => canonicalGraphQueryToUniversalRequest({ ...query, scope: { ...scope, workspace_id: '' } })).toThrow('host scope workspace_id');
+    expect(() => canonicalGraphQueryToUniversalRequest({ ...query, scope: { ...scope, environment_id: '' } })).toThrow('host scope environment_id');
+  });
+
+  it('checks context tenant authority when anchors are empty', () => {
+    const foreign = { ...context, anchors: [], scope: { ...context.scope, tenant_id: 'foreign' } };
+    expect(() => explorationContextToGraphContext(foreign, scope)).toThrow('tenant');
+    expect(() => explorationContextToCanonicalGraphQuery(foreign, scope)).toThrow('tenant');
+    expect(() => explorationContextToUniversalRequest(foreign, scope)).toThrow('tenant');
   });
 
   it('provides a stable authority key and resets on any scope boundary', () => {
@@ -49,10 +67,19 @@ describe('graph context adapter', () => {
     expect(() => explorationContextToCanonicalGraphQuery(foreign, scope)).toThrow('out of host scope');
   });
 
+  it('fails closed for graph depths outside the canonical 1–6 contract', () => {
+    for (const depth of [0, 7, 1.5, Number.NaN]) {
+      const invalid = { ...context, graph: { ...context.graph, depth } };
+      expect(() => explorationContextToGraphContext(invalid, scope)).toThrow('graph depth');
+      expect(() => explorationContextToCanonicalGraphQuery(invalid, scope)).toThrow('graph depth');
+    }
+  });
+
   it('returns explicit loss report for legacy request gaps', () => {
     const query = explorationContextToCanonicalGraphQuery(context, scope, { rights_policy: 'explain', aggregation: { group_by: ['entity'], measures: ['count'] } });
     const result = canonicalGraphQueryToUniversalRequest(query);
     expect(result.loss_report.lost_fields).toEqual(expect.arrayContaining(['rights', 'ordering', 'aggregation']));
+    expect(result.loss_report.lost_fields).toContain('scope');
     expect(result.request.tenant_id).toBe('tenant-a');
     expect(result.request.filter).toEqual(context.population);
   });
