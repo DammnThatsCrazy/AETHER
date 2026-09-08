@@ -65,7 +65,13 @@ export interface LensResolutionContext {
   readonly permissions?: Readonly<Record<string, boolean>>;
   /** Readiness is a fact from the caller, never inferred from a registry row. */
   readonly readiness?: Readonly<Record<string, boolean>>;
-  /** Other selected blueprint families, used only for incompatibility checks. */
+  /**
+   * Optional registry-surface temporal mode (window/as_of/compare/relative).
+   * The backend engine dispatches richer modes to this vocabulary before
+   * asking the frontend-facing resolver.
+   */
+  readonly temporalMode?: string | null;
+  /** Reserved for compatibility; canonical registries declare no pairwise conflicts. */
   readonly activeLensIds?: readonly string[];
 }
 
@@ -81,7 +87,6 @@ export interface LensRegistryEntry {
   readonly supportedFieldCategories: readonly SurfaceCategory[];
   readonly requiredPermissions: readonly string[];
   readonly requiredCapabilities: readonly string[];
-  readonly incompatibleWith: readonly BlueprintLensId[];
   /** True means the family has no canonical engine binding yet. */
   readonly pending: boolean;
 }
@@ -105,7 +110,6 @@ interface LensBinding {
   readonly supportedFieldCategories: readonly SurfaceCategory[];
   readonly requiredPermissions?: readonly string[];
   readonly requiredCapabilities?: readonly string[];
-  readonly incompatibleWith?: readonly BlueprintLensId[];
   readonly pending?: boolean;
 }
 
@@ -116,9 +120,10 @@ interface LensBinding {
 const BLUEPRINT_BINDINGS: Record<BlueprintLensId, LensBinding> = {
   object: {
     canonicalLensId: 'standard',
-    projectionIds: ['profile360'],
+    // Standard is the generic base lens. Profile360 is a separate, narrower
+    // projection and must not become the object family's implicit authority.
+    projectionIds: [],
     supportedFieldCategories: ['entity'],
-    incompatibleWith: ['syndicates'],
   },
   relationship: {
     canonicalLensId: 'relationship',
@@ -212,6 +217,11 @@ function projectionObjectKinds(
   return SUBJECT_KINDS.filter((kind) => kinds.has(kind));
 }
 
+function descriptorObjectKinds(descriptor: LensDescriptor | null): IntelligenceProjectionSubjectKind[] {
+  if (!descriptor) return [];
+  return SUBJECT_KINDS.filter((kind) => descriptor.applicableSubjectKinds.includes(kind));
+}
+
 function descriptorFor(canonicalLensId: LensId | null): LensDescriptor | null {
   return canonicalLensId ? lensDefinitions[canonicalLensId] ?? null : null;
 }
@@ -222,26 +232,51 @@ function projectionFor(id: IntelligenceProjectionId): IntelligenceProjectionDefi
 
 function unionRequiredCapabilities(
   projections: readonly IntelligenceProjectionDefinition[],
-  suffix: string,
+  operation: 'explore' | 'read',
 ): string[] {
+  const suffix = `.${operation}`;
   const values = new Set<string>();
   for (const projection of projections) {
     for (const key of projection.capabilityKeys) {
-      if (key.endsWith(suffix)) values.add(key);
+      // The generated projection registry is the sole owner of these keys.
+      // Keep read permissions and explore capabilities as separate sets.
+      if (key.endsWith(suffix) && key.length > suffix.length) values.add(key);
     }
   }
   return [...values].sort();
+}
+
+function supportedObjectKindsFor(
+  descriptor: LensDescriptor | null,
+  projections: readonly IntelligenceProjectionDefinition[],
+): IntelligenceProjectionSubjectKind[] {
+  const canonicalKinds = descriptorObjectKinds(descriptor);
+  if (!projections.length) return canonicalKinds;
+
+  // A projection binding can only narrow a canonical lens; it cannot broaden
+  // the subject kinds declared by the canonical lens.
+  const projectionKinds = projectionObjectKinds(projections);
+  return projectionKinds.filter((kind) => canonicalKinds.includes(kind));
+}
+
+function supportsTemporalMode(
+  context: LensResolutionContext,
+  descriptor: LensDescriptor | null,
+  projections: readonly IntelligenceProjectionDefinition[],
+): boolean {
+  const mode = context.temporalMode;
+  if (mode == null) return true;
+  if (descriptor && !descriptor.temporalModes.includes(mode)) return false;
+  if (projections.some((projection) => !projection.supportedTemporalModes.includes(mode))) return false;
+  const surface = surfaceCapabilities[context.surfaceId as ExplorationSurfaceId];
+  return surface?.supportedTemporalModes.some((supportedMode) => supportedMode === mode) ?? false;
 }
 
 function buildEntry(id: BlueprintLensId): LensRegistryEntry {
   const binding = BLUEPRINT_BINDINGS[id];
   const projections = binding.projectionIds.map(projectionFor);
   const descriptor = descriptorFor(binding.canonicalLensId);
-  const objectKinds = projections.length
-    ? projectionObjectKinds(projections)
-    : descriptor?.applicableSubjectKinds.filter((kind): kind is IntelligenceProjectionSubjectKind =>
-        SUBJECT_KINDS.includes(kind as IntelligenceProjectionSubjectKind),
-      ) ?? [];
+  const objectKinds = supportedObjectKindsFor(descriptor, projections);
   const surfaces = projections.length
     ? projectionSurfaceIds(projections)
     : explorationSurfaceIds.filter((surfaceId) => {
@@ -257,9 +292,8 @@ function buildEntry(id: BlueprintLensId): LensRegistryEntry {
     supportedObjectKinds: objectKinds,
     supportedSurfaceIds: surfaces,
     supportedFieldCategories: binding.supportedFieldCategories,
-    requiredPermissions: binding.requiredPermissions ?? unionRequiredCapabilities(projections, '.read'),
-    requiredCapabilities: binding.requiredCapabilities ?? unionRequiredCapabilities(projections, '.explore'),
-    incompatibleWith: binding.incompatibleWith ?? [],
+    requiredPermissions: binding.requiredPermissions ?? unionRequiredCapabilities(projections, 'read'),
+    requiredCapabilities: binding.requiredCapabilities ?? unionRequiredCapabilities(projections, 'explore'),
     pending: binding.pending ?? false,
   };
 }
@@ -325,24 +359,13 @@ function worstAvailability(states: readonly LensAvailability[]): LensAvailabilit
   return 'available';
 }
 
-function pairKey(a: BlueprintLensId, b: BlueprintLensId): string {
-  return [a, b].sort().join('::');
-}
-
-function incompatiblePairs(ids: readonly string[]): (readonly [BlueprintLensId, BlueprintLensId])[] {
-  const known = ids.filter(isKnownBlueprintLens);
-  const seen = new Set<string>();
-  const pairs: (readonly [BlueprintLensId, BlueprintLensId])[] = [];
-  for (const id of known) {
-    const entry = blueprintLensRegistry[id];
-    for (const other of entry.incompatibleWith) {
-      if (known.includes(other) && id !== other && !seen.has(pairKey(id, other))) {
-        seen.add(pairKey(id, other));
-        pairs.push([id, other]);
-      }
-    }
-  }
-  return pairs;
+/*
+ * Pairwise incompatibilities are not declared by either canonical registry.
+ * Keep the result shape for callers, but do not manufacture a frontend-only
+ * conflict vocabulary (for example, object versus syndicates).
+ */
+function incompatiblePairs(_ids: readonly string[]): (readonly [BlueprintLensId, BlueprintLensId])[] {
+  return [];
 }
 
 /** Resolve one family without consulting network state or inventing readiness. */
@@ -361,6 +384,12 @@ export function resolveLensAvailability(
   if (!lensSupportsSurface(lensId, context.surfaceId)) {
     states.push('not_ready');
     reasons.push('surface_not_supported');
+  }
+  const projections = entry.projectionIds.map(projectionFor);
+  const descriptor = descriptorFor(entry.canonicalLensId);
+  if (!supportsTemporalMode(context, descriptor, projections)) {
+    states.push('not_ready');
+    reasons.push(`temporal_mode_not_supported:${context.temporalMode}`);
   }
   if (entry.pending) {
     states.push('not_ready');
