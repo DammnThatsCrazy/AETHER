@@ -20,9 +20,10 @@ Doctrine (fail-closed, blueprint §9 / §10 "no fake completion"):
   produces one pending ``retention_review`` impact item. Retention is only ever
   implied by an explicit decision, never by absence of one.
 
-All timestamps are aware UTC. This module never calls ``datetime.now()``; it uses
-``shared.common.common.utc_now`` and ``shared.common.common.parse_event_time`` and
-refuses naive ``datetime`` input rather than guessing a zone.
+All timestamps are aware UTC. This module never calls the stdlib naive clock
+directly; it uses ``shared.common.common.utc_now`` and
+``shared.common.common.parse_event_time`` and refuses naive ``datetime`` input
+rather than guessing a zone.
 
 Integration boundary (REMAINING SEAM, deliberately not implemented here): the
 seam does NOT talk to any real artifact store. Wiring the artifact-store
