@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from shared.logger.logger import get_logger
 
@@ -26,8 +26,17 @@ from services.integrations.data_rights.models import (
     DataRightsGrantCreate,
     DataRightsGrantRevoke,
     DataRightsGrantSummary,
+    DisclosureAuthority,
+    ExternalDisclosureRights,
+    GeneratedOutputRights,
     GrantStatus,
+    LearningAuthority,
+    OlympusDerivationRights,
     PolicyCheckResult,
+    SourceUseAuthority,
+    SurvivalRights,
+    TenantLicenseRights,
+    TerminationAuthority,
 )
 
 logger = get_logger("aether.service.data_rights")
@@ -109,6 +118,119 @@ def _is_not_expired(grant: DataRightsGrant) -> bool:
         return datetime.now(timezone.utc) < expires
     except (ValueError, AttributeError):
         return False
+
+
+# ── Structured rights compatibility adapters (blueprint §3 / M0) ───────────────
+# These never broaden a legacy grant beyond its booleans. DataRightsGrant.
+# structured_rights() lazily imports derive_source_use_from_legacy and
+# effective_learning_authority from here (this module imports models, never the
+# reverse at import time), keeping a single source of truth for the migration map.
+
+def derive_source_use_from_legacy(
+    *,
+    tenant_lake_allowed: bool,
+    tenant_graph_allowed: bool,
+    tenant_insights_allowed: bool,
+    olympus_baseline_allowed: bool,
+    cross_tenant_aggregate_allowed: bool,
+    commercial_reuse_allowed: bool,
+) -> SourceUseAuthority:
+    """Map the six legacy source-use booleans 1:1 into SourceUseAuthority (§3.1)."""
+    return SourceUseAuthority(
+        tenant_lake=tenant_lake_allowed,
+        tenant_graph=tenant_graph_allowed,
+        tenant_insights=tenant_insights_allowed,
+        olympus_baseline=olympus_baseline_allowed,
+        cross_tenant_aggregate=cross_tenant_aggregate_allowed,
+        commercial_reuse=commercial_reuse_allowed,
+    )
+
+
+def derive_learning_from_legacy(model_training_allowed: bool) -> LearningAuthority:
+    """Migrate model_training_allowed → contributed_model_training ONLY (§3.3).
+
+    Every other LearningClass flag defaults False — raw-data model-training rights
+    remain explicit and nothing is broadened by migration.
+    """
+    return LearningAuthority(contributed_model_training=model_training_allowed)
+
+
+def effective_learning_authority(grant: DataRightsGrant) -> LearningAuthority:
+    """Explicit learning_authority wins; otherwise derive from the legacy boolean."""
+    if grant.learning_authority is not None:
+        return grant.learning_authority
+    return derive_learning_from_legacy(grant.model_training_allowed)
+
+
+def default_generated_output_rights() -> GeneratedOutputRights:
+    """Canonical STANDARD commercial preset for generated output (§3.2).
+
+    Exposed for the Effective Rights Resolver to apply when a grant's profile /
+    agreement makes STANDARD terms effective. NOT auto-applied to legacy grants.
+    """
+    return GeneratedOutputRights(
+        proprietary_holder="olympus",
+        tenant_license=TenantLicenseRights(
+            view=True,
+            use=True,
+            reproduce=True,
+            integrate=True,
+            export=True,
+            internal_commercial_use=True,
+        ),
+        olympus=OlympusDerivationRights(
+            retain=True,
+            analyze=True,
+            transform=True,
+            derive=True,
+            platform_improvement=True,
+            internal_research=True,
+        ),
+        external_disclosure=ExternalDisclosureRights(
+            identifiable=False,
+            generalized="governed",
+        ),
+        survival=SurvivalRights(
+            tenant_exported_outputs=True,
+            olympus_generalized_derivatives=True,
+        ),
+    )
+
+
+def default_disclosure_authority() -> DisclosureAuthority:
+    """Canonical STANDARD commercial disclosure preset (§3.4)."""
+    return DisclosureAuthority(
+        tenant_internal=True,
+        olympus_internal=True,
+        cross_tenant_identifiable=False,
+        external_identifiable=False,
+        generalized_cross_tenant=True,
+        generalized_external="governed",
+    )
+
+
+def default_termination_authority() -> TerminationAuthority:
+    """Canonical default termination dispositions (§3.5 / §14 table)."""
+    return TerminationAuthority(
+        contributed_source_data="delete_by_policy",
+        tenant_identifiable_derived_data="recompute_or_delete",
+        tenant_exports="tenant_retains",
+        audit_records="retain_as_required",
+        generalized_derivatives="retain_if_independently_qualified",
+        model_weights="retain_if_non_reconstructable_and_permitted",
+        benchmarks="retain_if_generalization_passed",
+        ontology_improvements="retain",
+        security_fraud_signatures="governed_retention",
+    )
+
+
+def resolve_structured_rights(grant: DataRightsGrant) -> Dict[str, Any]:
+    """Structured nested view of a grant, used by the resolver stream.
+
+    Delegates to DataRightsGrant.structured_rights(); see its docstring for the
+    non-broadening resolution semantics.
+    """
+    return grant.structured_rights()
 
 
 class DataRightsService:
@@ -195,6 +317,16 @@ class DataRightsService:
 
     async def get_grant(self, grant_id: str) -> Optional[DataRightsGrant]:
         return self._grants.get(grant_id)
+
+    async def get_grant_structured(self, grant_id: str) -> Optional[Dict[str, Any]]:
+        """Structured nested rights view for a stored grant (None if not found).
+
+        Convenience wrapper over resolve_structured_rights for the resolver stream.
+        """
+        grant = self._grants.get(grant_id)
+        if not grant:
+            return None
+        return resolve_structured_rights(grant)
 
     async def list_grants(
         self,
