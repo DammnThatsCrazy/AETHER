@@ -1,5 +1,5 @@
 /**
- * Shared harness for the End-User Lifecycle E2E suites A–E.
+ * Shared harness for the End-User Lifecycle E2E suites A–F.
  *
  * These suites exercise the R2-integrated tenant app end to end (see
  * docs/plans/ENDUSER_LIFECYCLE_PHASES.md §7 for the A–E acceptance scenarios and
@@ -35,13 +35,15 @@ export function lifecycleCredentials(): LifecycleCredentials | null {
   return { email, password };
 }
 
+export type LifecycleSuite = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
+
 /**
  * Per-suite tenant credentials. Each lifecycle suite is a serial journey over
  * ONE tenant whose starting state the R3/R4 integration env seeds; suites use
- * distinct tenants (`E2E_TENANT_EMAIL_A` … `_E`) so they can run in any order.
+ * distinct tenants (`E2E_TENANT_EMAIL_A` … `_F`) so they can run in any order.
  * Falls back to the shared pair when a suite-specific tenant is not provided.
  */
-export function lifecycleSuiteCredentials(suite: 'A' | 'B' | 'C' | 'D' | 'E'): LifecycleCredentials | null {
+export function lifecycleSuiteCredentials(suite: LifecycleSuite): LifecycleCredentials | null {
   const email = process.env[`E2E_TENANT_EMAIL_${suite}`] ?? process.env.E2E_TENANT_EMAIL;
   const password =
     process.env[`E2E_TENANT_PASSWORD_${suite}`] ?? process.env.E2E_TENANT_PASSWORD;
@@ -55,7 +57,7 @@ export const lifecycleRunReason =
   'requires E2E_TENANT_EMAIL/E2E_TENANT_PASSWORD (R3/R4 integration env: WS-1..WS-6 merged, seeded backend)';
 
 /** Per-suite gate + reason (see lifecycleSuiteCredentials). */
-export function suiteGate(suite: 'A' | 'B' | 'C' | 'D' | 'E'): boolean {
+export function suiteGate(suite: LifecycleSuite): boolean {
   return lifecycleSuiteCredentials(suite) === null;
 }
 export const suiteReason = lifecycleRunReason;

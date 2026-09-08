@@ -767,6 +767,20 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="align packages/shared/contracts/spine-registry.json with the shared contracts, generated artifacts, and the real routes/surfaces/services its rows bind; declare unresolved bindings pending in unresolvedRefs with a reason and resolving milestone (ADR-011 D1/D2)",
     )
     run(
+        [sys.executable, "scripts/validate_rights_vocabulary.py"],
+        name="Rights vocabulary tri-surface parity (canonical rights-vocabulary.json ↔ python enums ↔ data-rights.ts twin)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="keep packages/shared/contracts/rights-vocabulary.json, the python enums in Backend Architecture/aether-backend/services/integrations/data_rights/models.py, and the TS as-const arrays in packages/shared/data-rights.ts on the exact same snake_case vocabulary (RIGHTS_AUTHORITY_BLUEPRINT §3–§9); update the owning surface, then restamp bindings only on real vocabulary change",
+    )
+    run(
+        [sys.executable, "scripts/validate_no_parallel_rights_registries.py"],
+        name="No parallel rights registries (ADR-011 D4 / blueprint §13 forbidden duplicate-ledger names)",
+        results=results,
+        stop_on_failure=stop,
+        remediation="no new irrl-registry.json / ownership-registry.json / learning-rights-registry.json / retention-rights-registry.json / generalization-rights-registry.json file may exist unless it is a true canonical vocabulary registered under registeredCanonicalVocabularies in rights-vocabulary.json or the rights_irrl spine row's canonicalContractRefs (RIGHTS_AUTHORITY_BLUEPRINT.md §13); rename the duplicate ledger so rights state stays in its owning canonical authorities",
+    )
+    run(
         [sys.executable, "scripts/validate_financial_value_semantics.py"],
         name="Financial value semantics (USD-first contract + no cross-currency sums)",
         results=results,

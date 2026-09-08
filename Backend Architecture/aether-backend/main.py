@@ -337,6 +337,7 @@ from services.security.admin_routes import admin_router as security_admin_router
 from services.integrity.routes import router as ledger_integrity_router
 from services.policy.routes import router as policy_router
 from services.dsr_propagation.routes import router as dsr_propagation_router
+from services.rights_authority.routes import router as rights_router
 from services.tenant_readiness.routes import router as tenant_readiness_router
 from services.readiness_graph.routes import (
     router as readiness_graph_router,
@@ -998,6 +999,7 @@ def create_app() -> FastAPI:
     app.include_router(ledger_integrity_router)    # /v1/security/ledger -- Bronze truth-chain verification status (LEDGER M3)
     app.include_router(policy_router)
     app.include_router(dsr_propagation_router)     # /v1/dsr — DSR propagation records + impact indexes
+    app.include_router(rights_router)              # /v1/rights — Rights Authority tenant surface (blueprint §16/§17/§66)
     app.include_router(tenant_readiness_router)    # /v1/tenant/readiness — launch readiness + trust states
     # Capability readiness graph — read-only dependency graph for one capability.
     # Tenant surface /v1/tenant/readiness-graph/{capability}; operator surface
@@ -1205,6 +1207,7 @@ def create_app() -> FastAPI:
         )
         from services.integrations.connectors.routes import webhook_public_router, slack_notify_router
         from services.integrations.connectors.catalog_endpoints import catalog_router
+        from services.readiness_graph.tenant_integration_readiness_routes import router as tenant_integration_readiness_router
         app.include_router(connectors_router)
         # Public webhook route always mounted when connectors are enabled;
         # security is enforced by HMAC verification inside the handler.
@@ -1213,9 +1216,14 @@ def create_app() -> FastAPI:
         # Unified catalog read model (/v1/integration-catalog,
         # /v1/tenant-integrations, /v1/integration-readiness).
         app.include_router(catalog_router)
+        # Tenant-contextual joined readiness (/v1/tenant/integration-readiness):
+        # the catalog matrix joined with the tenant's connection-record facts
+        # (deferred from the catalog_endpoints docstring; router declares its
+        # own prefix, so no prefix is passed at mount).
+        app.include_router(tenant_integration_readiness_router)
         if settings.connectors.kyber_connector_health_enabled:
             app.include_router(connectors_admin_router)
-        logger.info("Connectors: ingestion routes mounted (/v1/integrations/connectors + /v1/integrations/webhooks + /v1/integrations/slack-notify + /v1/integration-catalog)")
+        logger.info("Connectors: ingestion routes mounted (/v1/integrations/connectors + /v1/integrations/webhooks + /v1/integrations/slack-notify + /v1/integration-catalog + /v1/tenant/integration-readiness)")
     else:
         logger.info("Connectors: disabled (set AETHER_CONNECTORS_ENABLED=true to enable)")
 

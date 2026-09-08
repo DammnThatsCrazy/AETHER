@@ -43,8 +43,8 @@ permission/capability gating (`G`). A failed request never counts as empty.
 | `/settings/webhooks` | webhook endpoint management | no | I | A | A | A | I | `settings-sections-route-state.test.tsx` |
 | `/settings/notification-preferences` | notification preferences (quiet hours, digest) | no | I | n/a | A | A | I | `settings-sections-route-state.test.tsx` |
 | `/onboarding` | readiness and blockers | no | I | A | A | — | I | parameterized route-state family |
-| `/activation` | activation status, first value, plan/sdk/keys/test-event | yes | A | A | A | A | I | `activation-landing.test.tsx` (activation-page.tsx) |
-| `/activate` | intent-driven guided activation (goals → connect plan) | yes | I | A | A | A | I | `activate-page-route-state.test.tsx` |
+| `/activation` | canonical guided activation: intent-driven connect plan + classic first-value finish | yes | A | A | A | A | I | `activate-page-route-state.test.tsx`, `activation-landing.test.tsx` (classic fold) |
+| `/activate` | compatibility alias → `/activation` (query-preserving redirect; served by canonical ActivatePage) | yes | I | A | A | A | I | `activate-page-route-state.test.tsx` (target page) |
 | `/billing` | account, subscription, invoices | yes | I | A | A | — | I | parameterized route-state family |
 | `/usage-plan` | measured usage and plan | yes | I | A | A | — | I | parameterized route-state family |
 | `/me` | tenant profile and measured usage | no | A | A | A | A | I | `me-data-truth.test.tsx` |

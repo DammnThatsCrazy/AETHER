@@ -65,7 +65,7 @@ capability has actually landed for that row.
 | Spine Composition Kernel (program capability) | `spine_composition_kernel` (`in_flight`) | common spine envelope (D1) | 14-item contract in-registry + validator; all `open` | PARTIAL |
 | spine-registry (program capability) | the canonical registry itself (`spine-registry.json`, contract v1.0.0) | — (registry plane) | `make spine-registry-check` + byte-stable twins in ci-check | PARTIAL |
 | Common spine envelope (program capability) | `common_spine_envelope` (`in_flight`) | `spine-envelope.ts` + `shared/spine/spine_envelope.py` (parity); `identity_watermark` / `rights_decision_ref` `@unpopulated` | envelope shape asserted by parity test | PARTIAL |
-| IRRL naming overlay (program capability) | `irrl_naming_overlay` (`in_flight`) | rights fields stay `@unpopulated` | naming overlay reconciles with `DATA_RIGHTS_LEDGER.md`; no parallel rights registry | PARTIAL |
+| IRRL naming overlay (program capability) | `irrl_naming_overlay` (`in_flight`) | rights fields stay `@unpopulated` | naming overlay reconciled with `RIGHTS_AUTHORITY_BLUEPRINT.md` + `DATA_RIGHTS_LEDGER.md`; structured contracts implementing; no parallel rights registry | PARTIAL |
 | 14-item conformance contract (program capability) | `spine_conformance_contract` (`in_flight`) | — (gate) | 14 ids are the in-registry conformance vocabulary; `SPINE_P0_CONFORMANCE_CHECKLIST.md` evidence mapping | PARTIAL |
 | Contract Spine (Truth Kernel: TS contracts + JSON registries + Pydantic mirrors + generation gates) | `contract_spine` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | Platform Authority | `platform_authority` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
@@ -84,7 +84,7 @@ capability has actually landed for that row.
 | Universal Provider Runtime | `upr` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | Connector Normalization + SDK & Universal Alignment | `connector_normalization` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | Computation substrate (shared measurement/computation engine) | `computation_substrate` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
-| Rights / IRRL runtime | `rights_irrl` (`in_flight`) | rights fields `@unpopulated` | 14 `open` in-registry; IRRL overlay reconciles existing names | PARTIAL |
+| Rights / IRRL runtime | `rights_irrl` (`in_flight`) | rights fields `@unpopulated` | 14 `open` in-registry; `rights_irrl` realized as composition authority per `RIGHTS_AUTHORITY_BLUEPRINT.md` (`services/rights_authority/` resolver + nested DataRightsGrant contracts implementing); IRRL overlay reconciles existing names | PARTIAL |
 | Findings / Investigations / Decision contracts | `decision_contracts` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | Agent / Execution contracts | `agentic_runtime_access` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | Product Runtime / Tenant Activation & Readiness | `tenant_readiness` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
@@ -116,6 +116,16 @@ capability has actually landed for that row.
   evidence/provenance — as the first rows that may move to `CANONICAL` once
   their 14 conformance checks carry verified evidence. None do yet; all remain
   `open` in-registry, so no row is declared `CANONICAL` in this pass.
+- **Rights Authority blueprint.** The `rights_irrl` and `irrl_naming_overlay`
+  rows are governed by
+  [RIGHTS_AUTHORITY_BLUEPRINT.md](./RIGHTS_AUTHORITY_BLUEPRINT.md), which
+  supersedes the standalone-IRRL-runtime framing and defines IRRL as the
+  canonical `rights_irrl` **composition authority** (nested DataRightsGrant
+  contracts + `services/rights_authority/` Effective Rights Resolver +
+  `RightsDecision`). Both rows stay `in_flight` with 14 conformance checks
+  `open` and grade `PARTIAL`; they advance toward `CANONICAL` only as the
+  blueprint phases land and their conformance evidence is verified end to end.
+  No row here claims `CANONICAL`.
 - **Terminology reconciliation** between this document's vocabulary and the
   existing repo (contract spine, hard spines, control spine) is in the
   repo-grounding annex of

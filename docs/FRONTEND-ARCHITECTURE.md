@@ -33,7 +33,7 @@ reviewed_source_commits:
   - commit: "8b1ca3dc"
     reason: "R2 WS-6 re-stamp after review (enduser-lifecycle lane, Phase 8 acceptance tail). Reviewed the new Playwright lifecycle suites A–E + shared harness added under frontend/aether/src/test/e2e/. This doc makes no claim about the tenant app's e2e/test inventory (its only test reference is Kyber unit tests at lines 842-844), and the suites are additive test surfaces, not runtime/IA changes — no body change required."
 source_hashes:
-  "frontend/aether/src/": "sha256:06b973755587d159ca09b1ec24215e985cc9ce6524ee1ccf490b96c66c626592"
+  "frontend/aether/src/": "sha256:343ecd7b778d620a55213da65cc508dff2583e9198a4caa15ce3104f62914e75"
   "frontend/kyber/src/": "sha256:0231b24d315cbd3dff15c4ad1b1da5864e53b2a07aa8da27f079461996aa2ca2"
   "frontend/shared/src/": "sha256:740a53c451be599293c200e140e6b0610b36979705fa1105e368304ddc5f924e"
 ---
@@ -65,6 +65,22 @@ There are two separate frontend applications. **Do not mix them up.**
   signup accepts `?name` and `?email` — read once via a `useState` initializer
   (never an effect) so the first step arrives pre-filled; nothing is persisted
   and the auth semantics are unchanged
+- **Marketing connect/manage handoff consumers** — the tenant-side half of the
+  marketing shell's app-origin deep links (`frontend/aether-marketing` emits
+  `/settings/integrations?family=<canonical>&experience=<category>&intent=connect|manage`
+  and `/activate?experience=…&intent=connect|manage`, round-tripped through
+  `/login?redirect=…`). Shared consumers in `features/settings/settings-handoff.ts`
+  and `features/auth/post-auth-redirect.ts` validate every param against the
+  single-sourced catalog vocabularies and turn it into focus + a one-time draft
+  prefill — never fabricated connection state and never auto-saved. Settings →
+  Integrations scrolls to and ring-highlights (`data-handoff-focus`) the named
+  provider row and, when `intent=connect` names a provider that is not yet
+  engaged, shows a `You came to connect {display_name} — continue below`
+  callout; `/activation` preselects matching goal chips and highlights the
+  matching plan block on landing. Post-auth routing accepts only clean single-`/`
+  internal paths: login's "Create one" forwards a genuine `?redirect` into
+  `/signup`, and a successful signup lands on the validated redirect, else the
+  handoff-derived `/settings/integrations?…` target, else `/settings`.
 - The intelligence **graph canvas** showing the tenant's users, organizations, and AI agents — layer/overlay toggles (H2H/H2A/A2H/A2A, risk, trust, campaign, economic, fraud), path finder with multi-hop traversal modes (Shortest / Strongest / K-Shortest), cluster panel, and cluster drill-down to Cluster360; summary strip (entity/relationship/cluster/risk-alert counts), truncation warning when entity set exceeds 200, replay mode with date picker, observation-class node styling (solid/dashed/dotted borders), Recommendation/Prediction outcome panel in Inspector, **PathInspector** panel (shown in right panel when a path is active — Overview/Hops/Evidence/Score tabs, save-to-investigation action)
 - **Cluster360** (`/clusters/:clusterId`) — 7-tab cluster surface: Overview (type, state, formation reason, confidence, risk score, properties), Members (paginated DataTable with confidence + join date), Timeline (merge/split/growth events), Economic (revenue, spend, LTV, value tier, top-member breakdown), Campaigns (attributed campaigns, top channel, conversion rate), Risk (aggregate score, fraud network link, alert count, evidence refs, high-risk members), Geography (country distribution bars, concentration score)
 - **Semantic zoom** — graph canvas supports server-backed macro→cluster→entity zoom: macro level uses a `depth: 1` query scoped to cluster node types (the backend minimum depth is 1; depth-0 is rejected); clicking a cluster fetches depth-1 member expansion via `useGraphZoom(tenantId?)`
@@ -102,7 +118,7 @@ There are two separate frontend applications. **Do not mix them up.**
 - **Campaign Intelligence** — campaign hierarchy, performance metrics, spend/ROAS time-series (`/measurement/campaigns`)
 - **Campaign 360** — full per-campaign drill-down: overview metrics, population funnel (observed→resolved→engaged→converted→attributed), identity clusters, entities, journeys, conversions, attribution model comparison, graph anchor, quality/freshness diagnostics (`/measurement/campaigns/:campaignId`); launched via "Campaign 360 →" links in Campaign Intelligence rows and Profile360 attribution panel. Also hosts **Outcome 360** / **Economic 360** intelligence-projection tabs (`features/projection-360/`) rendering typed projection section states for the campaign focus — never recomputing projection content
 - **Campaign Registry** (v8.11.0+) — canonical campaign list with origin/platform/status filters, alias management, external references view (`/campaign-intelligence/registry`)
-- **Campaign Sources** (v8.11.0+) — connected ad platform sources with sync controls and health indicators, plus the advertising connect flow: pick a supported ad platform, fill its catalog credential schema (secrets + the single account id), run a live credential test, and manage sources with explicit single-account selection (change account rotates the source) and disable/enable (`/campaign-intelligence/sources`)
+- **Campaign Sources** (v8.11.0+) — connected advertising platform sources with sync controls and connection health indicators. Adding an advertising platform is consolidated under Settings → Integrations → Advertising (the canonical connect path); this page hosts the `?connect=<family>` connect flow the advertising-row deep links open and lists sources for management and sync once connected. The flow collects the catalog credential schema (secrets + the single account id, manual selection — no discovery) and drives connect with backend-derived states only; it never claims live capability without evidence. For an existing degraded/failed/stale, disabled, or secret-missing row the same flow offers an in-place Reconnect form (`POST /v1/campaign-sources/{connector_id}/reconnect`) that swaps the stored credential set on the same row and resets health to the never-synced baseline — never offered on a healthy row and never presented as a healthy sync (`/campaign-intelligence/sources`)
 - **Mapping Review** (v8.11.0+) — unresolved/ambiguous attribution evidence queue; resolve/ignore actions create durable aliases and trigger reprocessing (`/campaign-intelligence/mapping-review`)
 - **Campaign Quality** (v8.11.0+) — measurement mapping rate gauges and quality metrics (`/campaign-intelligence/quality`)
 - **Custom Campaign** (v8.11.0+) — creation form for custom (non-platform) campaigns (`/campaign-intelligence/new`)
@@ -947,8 +963,9 @@ All components use `useQuery` / `useMutation` from `@aether/ui`, the `api.fraudN
 > `frontend/aether/src/pages/connectors/` re-exports them so legacy importers
 > keep resolving. The Settings shell itself splits the historical one-long-page
 > `/settings` into a sub-nav over `/settings` (API Keys),
-> `/settings/integrations`, `/settings/sdk-fleet`, `/settings/notifications`,
-> `/settings/notification-preferences`, and `/settings/webhooks`.
+> `/settings/integrations`, `/settings/data-exchange`, `/settings/sdk-fleet`,
+> `/settings/notifications`, `/settings/notification-preferences`, and
+> `/settings/webhooks`.
 
 ### Aether (tenant) — Delivery History
 
@@ -1081,16 +1098,14 @@ are flag-gated OFF by default; the section is **not** client-feature-flagged —
 it is capability-gated by the backend and self-reports a not-enabled state,
 consistent with the runtime data-truth contract.
 
-**Route + placement.** `/settings/data-exchange` was added to
-`frontend/aether/src/app/router.tsx` (lazy-loads the nested settings shell,
-`SettingsPage`, as the other `/settings/*` routes do). The shell's integration
-point is the `DataExchangeGate` from
-`frontend/aether/src/pages/settings/data-exchange-section.tsx`, mounted
-persistently at the foot of the shell beneath the settings sub-nav on every
-`/settings/*` tab — it is **not** a `SETTINGS_NAV` section. The shell's sub-nav
-resolver does not map `/settings/data-exchange` to a dedicated section, so
-visiting that route renders the default API Keys section with the Data Exchange
-card mounted below it. The gate is capability-gated on the backend-published
+**Route + placement.** `/settings/data-exchange` is a first-class
+`SETTINGS_NAV` section in the nested settings shell (router.tsx lazy-loads
+`SettingsPage` for it, as for the other `/settings/*` section routes). The
+shell renders the section body through the `DataExchangeGate` from
+`frontend/aether/src/pages/settings/data-exchange-section.tsx` when the
+resolver maps the URL to the `data-exchange` section — it is **not** mounted as
+a persistent footer under every `/settings/*` tab. The gate is
+capability-gated on the backend-published
 `feature_flags.data_exchange_enabled`: while off it renders the not-enabled
 EmptyState and never mounts the full `DataExchangeSection` (its data fetches
 never fire on a disabled plane); when on it mounts the section.

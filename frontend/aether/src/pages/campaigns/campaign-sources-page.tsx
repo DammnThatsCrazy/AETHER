@@ -1,10 +1,13 @@
 import { useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Badge, Button, Card, CardContent, CardHeader,
   EmptyState, ErrorState, LoadingState,
   formatCount, useTimeContext,
 } from '@aether/ui';
 import { useCampaignSources, useSyncCampaignSource } from '@aether-app/features/campaigns/use-campaign-sources';
+import { AdConnectFlow } from '@aether-app/features/campaigns/ad-connect-flow';
+import { isWorkspaceDestination } from '@aether-app/features/workspace/last-workspace';
 import {
   contextualReadiness,
   useTenantIntegrationReadiness,
@@ -100,9 +103,42 @@ function SourceCard({ source, onSync }: { source: Source; onSync: (id: string) =
 }
 
 export function CampaignSourcesPage() {
+  const navigate = useNavigate();
   const { data, isLoading, error, refetch } = useCampaignSources();
   const syncMutation = useSyncCampaignSource();
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // ``?connect=<family>`` drops the tenant straight into the advertising
+  // connect flow (linked from Settings → Integrations advertising rows). Any
+  // other query params are preserved; clearing ``connect`` returns the page to
+  // its plain sources-list behavior and lets the overview refresh.
+  const connectParam = searchParams.get('connect');
+  const showConnectFlow = connectParam !== null && connectParam.length > 0;
+
+  // Reconciled Settings bridge: the connecting deep link carries a ``return``
+  // target (Settings → Integrations advertising rows send
+  // ``return=/settings/integrations``). After a genuine connect completes we go
+  // back there; a raw query param is untrusted, so only a clean internal
+  // workspace path is ever honored as a redirect target. Cancelling never
+  // navigates — it just clears ``connect`` and stays on the sources list.
+  const rawReturn = searchParams.get('return');
+  const returnTarget =
+    rawReturn !== null && isWorkspaceDestination(rawReturn) ? rawReturn : null;
+
+  // Closing the connect flow (done or cancelled) drops both ``connect`` and its
+  // bridge ``return`` token: once the flow is gone a stale redirect target must
+  // not linger in the URL to steer some later interaction. Other params stay.
+  function clearConnectParam() {
+    const next = new URLSearchParams(searchParams);
+    next.delete('connect');
+    next.delete('return');
+    setSearchParams(next);
+  }
+
+  function handleConnectDone() {
+    clearConnectParam();
+    if (returnTarget !== null) navigate(returnTarget);
+  }
 
   // Only offer a "Connect advertising" action when the tenant has NOT already
   // engaged an advertising integration in the unified Integrations surface —
@@ -145,10 +181,18 @@ export function CampaignSourcesPage() {
         </p>
       </div>
 
+      {showConnectFlow && connectParam !== null && (
+        <AdConnectFlow
+          platform={connectParam}
+          onDone={handleConnectDone}
+          onCancel={clearConnectParam}
+        />
+      )}
+
       {error && <ErrorState title="Failed to load sources" message={String(error)} />}
       {isLoading && <LoadingState lines={4} />}
 
-      {!isLoading && !error && sources.length === 0 && (
+      {!showConnectFlow && !isLoading && !error && sources.length === 0 && (
         <EmptyState
           title="No campaign sources connected"
           description={adsNotEngaged

@@ -16,8 +16,20 @@ reviewed_source_commits:
     reason: "Reviewed c607780c (new services/measurement/connectors/ad_accounts.py account-identity/credential-probe module + its tests). It adds no HTTP surface — the doc's /v1/* endpoint tables are unaffected — so no body change was required."
   - commit: "41e8356b"
     reason: "Reviewed 41e8356b (additive /v1/campaign-sources overview/ad-options/connect/test/account/disable/enable endpoints in services/campaign/routes.py, orchestrated by new ad_source_links.py). This spec's Campaign Management Service section documents the /v1/campaigns CRUD surface and does not enumerate the /v1/campaign-sources registry router (covered in docs/api/CAMPAIGN_360_API.md), so the additions are additive to routes this doc does not describe; no body change was required."
+  - commit: "cef18ae4"
+    reason: "Reviewed cef18ae4 (new services/rights_authority canonical package: rights resolver/decision core, generalization gateway, revocation & impact pipeline, durable rights repositories). It adds no HTTP surface on this lane — all seams are library/package-level, fail-closed, and tenant-scoped — so the doc's /v1/* endpoint tables are unaffected; no body change was required."
+  - commit: "1f98cb83"
+    reason: "Reviewed 1f98cb83 (rights_authority __init__ surface + additive /v1/rights router for decisions/effective, decisions/{id}, revocations). The router is deliberately NOT wired into main.py (mounting is a later integration phase, matching the unmounted services/dsr_propagation precedent), so no live endpoint documented by this spec changed; no body change was required."
+  - commit: "2697ddda"
+    reason: "Reviewed 2697ddda (security hardening of the unmounted rights router: actor derived from the authenticated principal instead of client input, /revocations moved from 'read' to the established 'write' scope, ownership-guard documented). All changes are internal to the not-yet-mounted router; no live endpoint documented by this spec changed; no body change was required."
+  - commit: "d8a88e2b"
+    reason: "Reviewed d8a88e2b (docstring-only dispositions on the unmounted rights router: why the durable decision store is a tenant-scoped ledger with tenant (not actor) as the ownership boundary for GET /decisions/{id}, and why read-scoped POST /decisions/effective durably records its section-17 audit outcome while /revocations requires write). No behavior change and no live endpoint documented by this spec changed; no body change was required."
+  - commit: "4cbc67eb"
+    reason: "Reviewed 4cbc67eb (services/rights_authority production seams: server consent evaluator + resolver seam, spine-envelope rights-ref producers, rollout modes, retention + training-manifest adapters). All are library/package-level and additive, and no endpoint was live yet at this commit, so the doc's /v1/* tables were unaffected; no body change was required at this commit."
+  - commit: "33dfedb4"
+    reason: "Reviewed 33dfedb4 — the /v1/rights surface is now MOUNTED in main.py (always mounted beside /v1/dsr); the routes carry the rollout-OFF 503 gate and require scalar source/purpose/destination matching RightsDecisionRequest; the durable repositories accept dict-or-model rows. This commit makes /v1/rights live and supersedes the earlier not-wired-into-main.py review notes. Body change: the Rights Authority section below documents the three endpoints and their rollout-gated 503 posture."
 source_hashes:
-  "Backend Architecture/aether-backend/services/": "sha256:e974237719542f2535247a9c8d776a092a44c04b341c41087415f9b5db461c02"
+  "Backend Architecture/aether-backend/services/": "sha256:1f1715b3f40d2055c0d4e99aed2b2d841224f311370027d924cb3d706c567844"
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
 
@@ -3921,6 +3933,80 @@ Ops/hardening (M7) adds durable reconcile / expire / cleanup jobs
 `data_exchange.cleanup_artifacts`, `data_exchange.finalize_pending_egress`)
 that reconcile `data_artifacts` metadata against ObjectStore state with
 strict tenant-prefix-scoped deletion.
+
+## Rights Authority — `/v1/rights` (blueprint §16/§17/§66)
+
+The canonical rights/IRRL runtime surface: it resolves — and durably records —
+the *effective* rights decision governing a requested use of a source, reads a
+tenant's durable decision ledger, and runs the §66 revocation pipeline against a
+tenant-owned grant. Doctrine is *fail closed* (blueprint §1.5/§13): the router
+is **always mounted** in `main.py` beside `/v1/dsr`, but while the authority is
+in rollout `off` (the default) every route returns HTTP 503 and no data is
+read, resolved, or revoked.
+
+**Availability:** `RIGHTS_AUTHORITY_ROLLOUT=off|shadow|warn|enforce`, default
+`off`; unset or invalid ⇒ `off` ⇒ inert. Activation is deliberate: set
+`RIGHTS_AUTHORITY_ROLLOUT=shadow|warn|enforce` and restart. The resolver's
+consent seam (the server consent authority behind `services/consent/authority.py`)
+and the §66 revocation pipeline engage end-to-end only in `enforce`.
+
+**Authorization:** routes enforce the canonical read/write scopes and the
+caller's tenant server-side. The actor whose rights are resolved is the
+**authenticated caller** (derived from `tenant_actor`), never a
+client-supplied identity. The durable decision store is a tenant-scoped
+**ledger** — tenant (not actor) is the ownership boundary — so a read-only
+principal can resolve/read while only the `write` scope can revoke.
+Cross-tenant body/route mismatches are refused server-side (403) before any
+resolver/pipeline work; unknown or cross-tenant records read as 404. The
+Generalization Gateway is deliberately **not** exposed over HTTP: its
+eligibility context (PII/population/grants) is server-derived from lineage +
+data-profiling evidence, never client-asserted.
+
+### POST `/v1/rights/decisions/effective` — resolve + durably record an effective-rights decision
+
+Permission `read` (a read-class query that changes nothing; the §17 decision is
+recorded for the tenant audit ledger as a side effect). Rollout gate: `503`
+when `off`.
+
+| Field | Type | Notes |
+|---|---|---|
+| `tenant_id` | string | The caller's tenant (must equal the authenticated principal's tenant). |
+| `source` | string | Governing rights/source id — a **single** ref mirroring `RightsDecisionRequest.source_id` (lists are rejected). |
+| `artifact` | string? | Optional artifact being used. |
+| `requested_use` | string | The requested use. |
+| `purpose` | string | Purpose of the requested use (required — grants/receipts are matched by purpose). |
+| `destination` | string | Destination/scope of the requested use (required — part of the §17 decision identity). |
+| `as_of` | string? | Optional ISO as-of instant. |
+
+Response: `APIResponse.data` = the durable `RightsDecision` (`decision_id`
+`rdec_...`, disposition, reason codes, effective-as-of, §17 identity key).
+
+Errors: `503` rollout `off`; `403` cross-tenant; `422` validation (a list
+`source`, or a missing `purpose`/`destination`, is rejected).
+
+### GET `/v1/rights/decisions/{decision_id}` — tenant-scoped decision-ledger read
+
+Permission `read`. Rollout gate: `503` when `off`. The record must belong to
+the caller's tenant; unknown or cross-tenant records read as `404` (the store
+is tenant-isolated and the route checks tenant equality server-side). Returns
+the full durable `RightsDecision` row.
+
+### POST `/v1/rights/revocations` — run the §66 revocation pipeline
+
+Permission `write` (a destructive mutation — never `read`). Rollout gate: `503`
+when `off`.
+
+| Field | Type | Notes |
+|---|---|---|
+| `tenant_id` | string | The caller's tenant (must equal the authenticated principal's tenant). |
+| `grant_id` | string | Tenant-owned grant to revoke — ownership is verified inside the pipeline (Step-0 grant load), never asserted by the caller. |
+| `reason` | string | Revocation reason. |
+| `delivery_evidence` | string[] | Optional delivery/notice evidence. |
+
+The pipeline loads the grant by id and refuses any unknown or cross-tenant
+grant (`RevocationError` → `404`) before a single decision/impact row is
+recorded. Response: `APIResponse.data` = the revocation summary (decisions
+denied, impacts cascaded/queued, pending remediation).
 
 ## Reconciled Control Plane (operator surface, v8.12.0, flag-gated)
 

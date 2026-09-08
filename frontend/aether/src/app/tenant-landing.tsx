@@ -1,7 +1,12 @@
 import { Navigate, useNavigate } from 'react-router-dom';
 import { Button, EmptyState, LoadingState } from '@aether/ui';
 import { useOnboardingStatus } from '@aether-app/features/onboarding/use-onboarding';
+import { useAuth } from '@aether-app/features/auth';
 import { HomePage } from '@aether-app/pages/home/home-page';
+import {
+  isWorkspaceDestination,
+  readLastWorkspace,
+} from '@aether-app/features/workspace/last-workspace';
 
 // A tenant is "activated" once the operator implementation plan reaches a live
 // or value-proven status. Anything before that means the self-serve activation
@@ -9,18 +14,41 @@ import { HomePage } from '@aether-app/pages/home/home-page';
 const COMPLETE_STATUSES = new Set(['live', 'value_proven', 'expansion_ready']);
 
 /**
- * WS-3 (additive) seam: where an incomplete tenant lands. Today the classic
- * /activation flow remains the target (kept stable for the landing contract);
- * the guided intent-driven experience is already served at /activate, so the
- * post-auth resolver can be switched over without touching the landing logic.
+ * Canonical post-auth resolver order (Phase 2):
+ *
+ *   activation incomplete          → /activation (guided activation)
+ *   requested protected destination → (handled by RequireAuth: the guarded deep
+ *                                     link renders directly, so this resolver
+ *                                     never runs for it)
+ *   last useful workspace exists   → last workspace
+ *   otherwise                      → / (Home)
+ *
+ * /activation is the single guided-activation authority; /activate is a
+ * compatibility alias that redirects here. Complete tenants are never
+ * campaign-centric by default — Home summarises intelligence, and intent may
+ * recommend a first-value destination after activation.
  */
 export const INCOMPLETE_ACTIVATION_ROUTE = '/activation';
-export type LandingTarget = '/' | typeof INCOMPLETE_ACTIVATION_ROUTE | '/activate';
+export type LandingTarget = '/' | typeof INCOMPLETE_ACTIVATION_ROUTE;
 
-/** Post-auth resolver: '/' for a complete tenant, else the activation entry. */
+/** Post-auth decision for the onboarding completion axis alone. */
 export function resolveLandingTarget(status?: string | null): LandingTarget {
   if (status && COMPLETE_STATUSES.has(status)) return '/';
   return INCOMPLETE_ACTIVATION_ROUTE;
+}
+
+/**
+ * Destination for a COMPLETE tenant: their persisted last useful workspace when
+ * one exists and is a real workspace route, else Home. The requested-deep-link
+ * case never reaches here (the router renders it before TenantLanding).
+ */
+export function resolveCompleteLandingDestination(
+  lastWorkspace?: string | null,
+): string {
+  if (lastWorkspace && lastWorkspace !== '/' && isWorkspaceDestination(lastWorkspace)) {
+    return lastWorkspace;
+  }
+  return '/';
 }
 
 /**
@@ -28,12 +56,12 @@ export function resolveLandingTarget(status?: string | null): LandingTarget {
  * truth and NEVER falls back to the operator-oriented /settings page, and never
  * misroutes to /activation before a decision can be made.
  *
- *   loading  -> LoadingState (no premature navigation)
- *   complete -> HomePage
- *   incomplete -> /activation
- *   error    -> HomePage (safe, read-only landing; never /settings)
+ *   loading   -> LoadingState (no premature navigation)
+ *   complete  -> last useful workspace (scope-scoped) or HomePage
+ *   incomplete-> /activation (canonical guided activation)
+ *   error     -> HomePage (safe, read-only landing; never /settings)
  */
-export function TenantLanding() {
+export function TenantLanding({ scopeId }: { readonly scopeId?: string }) {
   const { data, isLoading, error } = useOnboardingStatus();
 
   // Initial load with nothing cached yet: hold on a skeleton so we never
@@ -47,9 +75,26 @@ export function TenantLanding() {
   if (!data) return <LoadingState lines={6} className="p-8" />;
 
   const status = data?.plan?.status;
-  if (status && COMPLETE_STATUSES.has(status)) return <HomePage />;
+  if (status && COMPLETE_STATUSES.has(status)) {
+    const lastWorkspace = scopeId ? readLastWorkspace(scopeId) : null;
+    const destination = resolveCompleteLandingDestination(lastWorkspace);
+    if (destination !== '/') return <Navigate to={destination} replace />;
+    return <HomePage />;
+  }
 
   return <Navigate to={INCOMPLETE_ACTIVATION_ROUTE} replace />;
+}
+
+/**
+ * Auth-scoped landing used by the router: the last-workspace preference is
+ * namespaced per user (multi-account safe), so the scope comes from the real
+ * session. Kept separate so `TenantLanding` itself stays provider-free and unit
+ * testable without an auth provider.
+ */
+export function AuthenticatedTenantLanding() {
+  const { user } = useAuth();
+  const email = user?.email;
+  return email ? <TenantLanding scopeId={email} /> : <TenantLanding />;
 }
 
 /**

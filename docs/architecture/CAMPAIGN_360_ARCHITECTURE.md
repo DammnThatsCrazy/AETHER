@@ -17,7 +17,7 @@ source_files:
   - Backend Architecture/aether-backend/services/traffic/repair.py
 source_hashes:
   "Backend Architecture/aether-backend/services/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
-  "Backend Architecture/aether-backend/services/campaign/routes.py": "sha256:b1c15a5daea35ed9cbabb848f71b1c6ccc9e324bb2c7296844af3138806ff872"
+  "Backend Architecture/aether-backend/services/campaign/routes.py": "sha256:d7a4747fba3fa05424c8c6a4ff5a1382739ce942e35c0738b43a9355ad38d26e"
   "Backend Architecture/aether-backend/services/measurement/repositories/attribution_run_repo.py": "sha256:02840a6564ea69576bb1d43fba35679a9fa41493bf9c10770c4c034d4d389978"
   "Backend Architecture/aether-backend/services/measurement/repositories/conversion_repo.py": "sha256:70be3473d422ac0fc495b579755289d2c0d2e5ea78224f217b8ec4c2981192f5"
   "Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py": "sha256:5f1ea2109ff37ba742f1236d651e4fcc00d14fe62b25eb08ae41b8693545f3d8"
@@ -127,10 +127,15 @@ architecture and does not change the explorer's read repos. It is orchestrated
 by `services/campaign/ad_source_links.py` over the canonical
 `measurement_connectors` store — the same rows the measurement ad connectors
 read at sync time. Connect is idempotent (one *active* source per
-tenant/family), requires a complete credential set at store time (the store has
-no config-update path), and treats account selection as an explicit rotation
-(archive + fresh active row carrying the credentials forward). Read models are
-redacted: `config` is never returned. The endpoints hang off the same
+tenant/family) and requires a complete credential set at store time — first
+connect never overwrites a stored config. Account selection remains an explicit
+rotation (archive + fresh active row carrying the credentials forward). A
+degraded/failed/stale, disabled, or secret-missing source instead has a separate
+in-place re-credential path, `POST /v1/campaign-sources/{connector_id}/reconnect`,
+which replaces the stored credential set on the SAME row and resets its
+health/error state to the never-synced baseline (refused with `409` while the
+row is active and healthy; a credential swap is not evidence of a healthy sync).
+Read models are redacted: `config` is never returned. The endpoints hang off the same
 `/v1/campaign-sources` router used by the registry API; ambiguous campaign
 resolution (mapping an external provider campaign to a canonical Aether
 campaign) stays in the `/v1/mapping-review` surface, which is unchanged.

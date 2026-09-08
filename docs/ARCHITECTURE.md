@@ -14,9 +14,9 @@ canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/main.py": "sha256:4f2b65d2b09e59b46fa07dc5c4d61fbddc449efb0a47be7766f92ee527a91252"
+  "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
   "Backend Architecture/aether-backend/middleware/middleware.py": "sha256:e320a85428e219bd745ff298a6b3a8a7404a1f72b562e65d4f7682e722ecb79c"
-  "packages/shared/": "sha256:93135a64192c25548db852734cbb043d2a82f72a361da7237b07103c64d7eefc"
+  "packages/shared/": "sha256:53f3f0bcade2ea0230d94194034a7ebf06cc4093e777acc20210aaa4ac0f3989"
 ---
 # Aether vNext — Architecture Guide
 
@@ -524,6 +524,14 @@ generates `packages/shared/lenses_generated.ts`, and projection availability
 continues to come from the intelligence-projection registry. Frontend lens
 composition joins those generated authorities instead of hardcoding duplicate
 readiness or truth claims.
+
+Graph rights resolve through the canonical Rights Authority rather than a
+graph-local ledger. `packages/shared/contracts/rights-vocabulary.json` and its
+TypeScript/Python bindings define the shared vocabulary, while the mounted,
+rollout-gated `/v1/rights` surface records effective decisions and revocation
+impact within the authenticated tenant boundary. The graph context carries
+rights policy and references only; enforcement, retention, training use, and
+generalization decisions remain owned by the Rights Authority.
 
 ### Provider transport adapters
 
