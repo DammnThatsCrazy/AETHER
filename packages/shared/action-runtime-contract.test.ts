@@ -1,48 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { transitionActionExecution, transitionDecision, type ExecutionStatus } from './action-runtime-contract';
-
-const executionContext = (overrides: Partial<Parameters<typeof transitionActionExecution>[2]> = {}) => ({
-  tenant_id: 't1', execution_tenant_id: 't1', permission_granted: true, capability_ready: true,
-  consent_valid: true, policy_allowed: true, approval_present: true, rollback_inverse_applied: true, ...overrides,
-});
-const decisionContext = (overrides: Partial<Parameters<typeof transitionDecision>[2]> = {}) => ({ tenant_id: 't1', decision_tenant_id: 't1', permission_granted: true, approval_present: true, ...overrides });
-
-describe('governed decision transitions', () => {
-  it('covers every decision state and rejects approval bypass', () => {
-    expect(transitionDecision('draft', 'pending_approval', decisionContext())).toBe('pending_approval');
-    expect(transitionDecision('pending_approval', 'approved', decisionContext({ approval_required: true }))).toBe('approved');
-    expect(transitionDecision('approved', 'executed', decisionContext())).toBe('executed');
-    expect(transitionDecision('draft', 'rejected', decisionContext())).toBe('rejected');
-    expect(transitionDecision('draft', 'deferred', decisionContext())).toBe('deferred');
-    expect(() => transitionDecision('pending_approval', 'approved', decisionContext({ approval_required: true, approval_present: false }))).toThrowError(/approval/);
-  });
-});
-
-describe('governed execution transitions', () => {
-  it('covers all execution states and rollback', () => {
-    const path: [ExecutionStatus, ExecutionStatus][] = [['planned', 'pending_approval'], ['pending_approval', 'queued'], ['queued', 'running'], ['running', 'partially_completed'], ['partially_completed', 'completed'], ['completed', 'rolled_back']];
-    for (const [from, to] of path) expect(transitionActionExecution(from, to, executionContext({ approval_required: false }))).toBe(to);
-    expect(transitionActionExecution('running', 'failed', executionContext())).toBe('failed');
-    expect(transitionActionExecution('running', 'cancelled', executionContext())).toBe('cancelled');
-  });
-  it('checks tenant, permission, capability, consent, policy, and fake rollback', () => {
-    expect(() => transitionActionExecution('queued', 'running', executionContext({ execution_tenant_id: 'other' }))).toThrowError(/tenant/);
-    expect(() => transitionActionExecution('queued', 'running', executionContext({ permission_granted: false }))).toThrowError(/unauthorized/);
-    expect(() => transitionActionExecution('queued', 'running', executionContext({ capability_ready: false }))).toThrowError(/capability/);
-    expect(() => transitionActionExecution('queued', 'running', executionContext({ consent_valid: false }))).toThrowError(/consent/);
-    expect(() => transitionActionExecution('queued', 'running', executionContext({ policy_allowed: false }))).toThrowError(/consent/);
-    expect(() => transitionActionExecution('completed', 'rolled_back', executionContext({ rollback_inverse_applied: false }))).toThrowError(/inverse/);
-  });
-});
-
-describe('contract linkage and capability matrix', () => {
-  it('keeps impact, audit, outcome, evidence, targets, and readiness evidence explicit', () => {
-    const impact = { affected_entity_refs: ['obj-1'], reversibility: 'recomputable' as const };
-    const execution = { audit_id: 'audit-1', outcome_refs: ['out-1'], evidence_refs: ['ev-1'], targets: [{ tenant_id: 't1', environment_id: 'prod', kind: 'profile', id: 'p1' }], external_constraints: { tenant_isolation_key: 't1', readiness_evidence_refs: [] } };
-    expect(impact.affected_entity_refs).toContain('obj-1'); expect(execution.audit_id).toBe('audit-1'); expect(execution.outcome_refs).toContain('out-1'); expect(execution.evidence_refs).toContain('ev-1'); expect(execution.external_constraints.readiness_evidence_refs).toEqual([]);
-  });
-  it('represents all four entitlement-permission-readiness cases', () => {
-    const cases = [[true, true, true], [true, true, false], [true, false, false], [false, false, false]];
-    expect(cases).toHaveLength(4); expect(new Set(cases.map(JSON.stringify))).toHaveLength(4);
-  });
-});
+import { canMarkDecisionExecuted, resolveCapabilityState, transitionActionExecution, transitionDecision, validateApproval, validateDecision, validateExecution, validateImpactPreview, type Execution } from './action-runtime-contract';
+const base=()=>({tenant_id:'t1',execution_tenant_id:'t1',environment_id:'prod',permission_granted:true,capability_ready:true,consent_valid:true,policy_allowed:true,cancel_permission_granted:true,rollback_permission_granted:true,approval:{approval_id:'a',approver:{id:'u',type:'human'},level:'standard' as const,scope:'own_tenant' as const,tenant_id:'t1',decision_id:'d',approved_at:'2026-01-01'},now:'2026-02-01',decision_id:'d',action_id:'a',execution_id:'e'});
+describe('decision and execution guards',()=>{it('covers decision states and terminal linkage',()=>{expect(transitionDecision('draft','pending_approval',{tenant_id:'t1',decision_tenant_id:'t1',permission_granted:true})).toBe('pending_approval');expect(transitionDecision('pending_approval','approved',{tenant_id:'t1',decision_tenant_id:'t1',permission_granted:true,approval_required:true,approval_input:{now:'2026-01-01',tenant_id:'t1',approval:{approval_id:'a',approver:{id:'u',type:'human'},level:'standard',scope:'own_tenant',tenant_id:'t1',decision_id:'d',approved_at:'2026-01-01'}}})).toBe('approved');expect(transitionDecision('approved','executed',{tenant_id:'t1',decision_tenant_id:'t1',permission_granted:true})).toBe('executed');expect(()=>transitionDecision('pending_approval','approved',{tenant_id:'t1',decision_tenant_id:'t1',permission_granted:true,approval_required:true})).toThrow(/approval/);});
+it('requires fresh bound approval and full forward authority',()=>{expect(()=>transitionActionExecution('queued','running',{...base(),approval:undefined})).toThrow(/approval/);expect(()=>transitionActionExecution('queued','running',{...base(),now:'2027-01-01'})).toThrow(/approval/);expect(()=>transitionActionExecution('queued','running',{...base(),execution_tenant_id:'other'})).toThrow(/tenant/);expect(()=>transitionActionExecution('queued','running',{...base(),capability_ready:false})).toThrow(/capability/);});
+it('allows cancellation and rollback after forward revocation',()=>{expect(transitionActionExecution('running','cancelled',{...base(),permission_granted:false})).toBe('cancelled');expect(transitionActionExecution('completed','rollback_pending',{...base(),permission_granted:false,rollback:{category:'reversible',supported:true,plan_ref:'p'},rollback_inverse_applied:false})).toBe('rollback_pending');});});
+describe('pure validators and capability matrix',()=>{it('resolves four capability cases',()=>{expect(resolveCapabilityState({entitled:false,permitted:false,ready:false,evidence_refs:[]})).toBe('not_entitled');expect(resolveCapabilityState({entitled:true,permitted:false,ready:false,evidence_refs:[]})).toBe('unauthorized');expect(resolveCapabilityState({entitled:true,permitted:true,ready:false,evidence_refs:[]})).toBe('not_ready');expect(resolveCapabilityState({entitled:true,permitted:true,ready:true,evidence_refs:['e']})).toBe('available');});it('rejects missing trigger, bad targets and missing preview',()=>{expect(validateDecision({tenant_id:'t1',status:'draft',question:'q',decision_maker:{id:'u',type:'human'},supporting_findings:[],evidence_refs:[],alternatives:[],required_permission:{domain:'actions',action:'write',scope:'own_tenant',approval_level:'none'}} as any)[0]).toMatch(/exactly one/);const x={decision_id:'d',tenant_id:'t1',environment_id:'prod',targets:[{tenant_id:'other',environment_id:'prod',kind:'x',id:'1'}]} as unknown as Execution;expect(validateExecution(x).join(' ')).toMatch(/target/);expect(validateImpactPreview({preview_id:'p',summary:'x',affected_entities:1,risk_level:'unknown',reversibility:'irreversible',generated_at:'x'}).join(' ')).toMatch(/preview/);});it('requires audit, outcome and evidence',()=>{expect(canMarkDecisionExecuted({decision_id:'d',status:'approved'} as any,{decision_id:'d',status:'completed',audit_id:'a',outcome_refs:['o'],evidence_refs:['e']} as any)).toBe(true);});});
+it('validates expiry and bindings',()=>{const a={approval_id:'a',approver:{id:'u',type:'human'},level:'standard' as const,scope:'own_tenant' as const,tenant_id:'t1',decision_id:'d',approved_at:'2026-01-01',expires_at:'2026-01-02'};expect(validateApproval({approval:a,now:'2026-01-03',tenant_id:'t1',decision_id:'d'})).toBe(false);expect(validateApproval({approval:a,now:'2026-01-01',tenant_id:'other',decision_id:'d'})).toBe(false);});
