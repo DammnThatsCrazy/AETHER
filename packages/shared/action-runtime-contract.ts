@@ -40,14 +40,62 @@ export type RuntimeTransitionErrorCode = 'unauthorized'|'approval_required'|'inv
 export class ActionRuntimeTransitionError extends Error { readonly code: RuntimeTransitionErrorCode; constructor(code: RuntimeTransitionErrorCode,message:string){super(message);this.name='ActionRuntimeTransitionError';this.code=code;} }
 export interface ApprovalValidationInput { readonly approval?: ApprovalReference; readonly now: string; readonly tenant_id: string; readonly decision_id?: string; readonly action_id?: string; readonly execution_id?: string; readonly required_level?: ApprovalLevel; readonly required_scope?: PermissionScope; }
 const level: Record<ApprovalLevel,number>={none:0,standard:1,elevated:2,critical:3};
-export function validateApproval(input: ApprovalValidationInput): boolean { const a=input.approval; if(!a||a.tenant_id!==input.tenant_id|| (input.decision_id!==undefined&&a.decision_id!==input.decision_id)||(input.action_id!==undefined&&a.action_id!==input.action_id)||(input.execution_id!==undefined&&a.execution_id!==input.execution_id)||(input.required_level&&level[a.level]<level[input.required_level])||(input.required_scope&&a.scope!==input.required_scope)||(a.expires_at!==undefined&&a.expires_at<=input.now)) return false; return true; }
+export function validateApproval(input: ApprovalValidationInput): boolean {
+  const approval = input.approval;
+  const now = Date.parse(input.now);
+  if (!approval || !Number.isFinite(now) || !Number.isFinite(Date.parse(approval.approved_at))) return false;
+  if (approval.tenant_id !== input.tenant_id) return false;
+  if (input.decision_id !== undefined && approval.decision_id !== input.decision_id) return false;
+  if (input.action_id !== undefined && approval.action_id !== input.action_id) return false;
+  if (input.execution_id !== undefined && approval.execution_id !== input.execution_id) return false;
+  if (input.required_level && level[approval.level] < level[input.required_level]) return false;
+  if (input.required_scope && approval.scope !== input.required_scope) return false;
+  if (approval.expires_at !== undefined) {
+    const expiresAt = Date.parse(approval.expires_at);
+    if (!Number.isFinite(expiresAt) || expiresAt <= now) return false;
+  }
+  return true;
+}
 export interface TransitionContext { readonly tenant_id:string; readonly execution_tenant_id:string; readonly environment_id:string; readonly target_environment_ids?: readonly string[]; readonly permission_granted:boolean; readonly cancel_permission_granted?:boolean; readonly rollback_permission_granted?:boolean; readonly capability_ready:boolean; readonly consent_valid:boolean; readonly policy_allowed:boolean; readonly approval?:ApprovalReference; readonly now?:string; readonly required_approval_level?:ApprovalLevel; readonly action_id?:string; readonly execution_id?:string; readonly decision_id?:string; readonly rollback?:RollbackMetadata; readonly rollback_inverse_applied?:boolean; }
-export interface DecisionTransitionContext { readonly tenant_id:string; readonly decision_tenant_id:string; readonly permission_granted:boolean; readonly approval_input?:ApprovalValidationInput; readonly approval_required?:boolean; }
+export interface DecisionTransitionContext { readonly tenant_id:string; readonly decision_tenant_id:string; readonly decision_id:string; readonly permission_granted:boolean; readonly approval_input?:ApprovalValidationInput; readonly approval_required?:boolean; readonly execution?:Execution; }
 const dnext:Record<DecisionStatus,readonly DecisionStatus[]>={draft:['pending_approval','approved','rejected','deferred'],pending_approval:['approved','rejected','deferred'],approved:['executed'],rejected:[],deferred:['pending_approval','rejected'],executed:[]};
 const enext:Record<ActionExecutionStatus,readonly ActionExecutionStatus[]>={planned:['pending_approval','queued','cancelled'],pending_approval:['queued','cancelled'],queued:['running','cancelled'],running:['partially_completed','completed','failed','cancelled'],partially_completed:['running','completed','failed','cancelled','rollback_pending'],completed:['rollback_pending','rolled_back'],failed:['rollback_pending','rolled_back'],cancelled:[],rolled_back:[],rollback_pending:['rolled_back','rollback_failed'],rollback_failed:['rollback_pending']};
 function fail(code:RuntimeTransitionErrorCode,msg:string):never{throw new ActionRuntimeTransitionError(code,msg);}
-export function transitionDecision(current:DecisionStatus,next:DecisionStatus,c:DecisionTransitionContext):DecisionStatus { if(c.tenant_id!==c.decision_tenant_id)fail('tenant_mismatch','decision tenant does not match context');if(!c.permission_granted)fail('unauthorized','decision transition is unauthorized');if(next==='approved'&&c.approval_required&&!validateApproval(c.approval_input??{now:'',tenant_id:c.tenant_id}))fail('approval_required','valid approval is required');if(!dnext[current].includes(next))fail('invalid_transition',`cannot transition from ${current} to ${next}`);return next; }
-export function transitionActionExecution(current:ActionExecutionStatus,next:ActionExecutionStatus,c:TransitionContext):ActionExecutionStatus { if(c.tenant_id!==c.execution_tenant_id)fail('tenant_mismatch','execution tenant does not match context');if(!enext[current].includes(next))fail('invalid_transition',`invalid transition edge`);if(next==='cancelled'){if(!enext[current].includes(next))fail('invalid_transition','invalid cancellation state');if(!c.cancel_permission_granted)fail('unauthorized','cancel authority is required');return next;}if(next==='rollback_pending'||next==='rolled_back'||next==='rollback_failed'){if(!c.rollback_permission_granted)fail('unauthorized','rollback authority is required');if(c.rollback?.category==='irreversible'||c.rollback?.supported!==true||(!c.rollback.plan_ref&&!c.rollback.compensation_ref&&!c.rollback.inverse_action_type))fail('fake_rollback','supported rollback plan and inverse are required');if(next==='rolled_back'&&!c.rollback_inverse_applied)fail('fake_rollback','inverse must be applied');if(!enext[current].includes(next))fail('invalid_transition',`cannot transition from ${current} to ${next}`);return next;}if(next==='queued'||next==='running'){if(!c.permission_granted)fail('unauthorized','fresh permission is required');if(!c.capability_ready)fail('capability_denied','capability is not ready');if(!c.consent_valid||!c.policy_allowed)fail('consent_or_policy_required','valid consent and policy are required');if(!validateApproval({approval:c.approval,now:c.now??'',tenant_id:c.tenant_id,decision_id:c.decision_id,action_id:c.action_id,execution_id:c.execution_id,required_level:c.required_approval_level}))fail('approval_required','fresh bound approval is required');if(c.environment_id!==undefined&&c.target_environment_ids?.some(e=>e!==c.environment_id))fail('environment_mismatch','target environment does not match execution');}if(!enext[current].includes(next))fail('invalid_transition',`cannot transition from ${current} to ${next}`);return next; }
+export function transitionDecision(current:DecisionStatus,next:DecisionStatus,c:DecisionTransitionContext):DecisionStatus {
+  if(c.tenant_id!==c.decision_tenant_id)fail('tenant_mismatch','decision tenant does not match context');
+  if(!dnext[current].includes(next))fail('invalid_transition',`cannot transition from ${current} to ${next}`);
+  if(!c.permission_granted)fail('unauthorized','decision transition is unauthorized');
+  if(next==='approved'&&c.approval_required&&!validateApproval(c.approval_input??{now:'',tenant_id:c.tenant_id}))fail('approval_required','valid approval is required');
+  if(next==='executed'){
+    const execution=c.execution;
+    if(!execution||execution.status!=='completed'||execution.trigger.kind!=='decision'||execution.trigger.decision_id!==c.decision_id||!execution.links.audit_event_refs.length||!execution.links.outcome_refs.length||!execution.links.evidence_refs.length)fail('missing_linkage','executed decision requires a matching completed execution with audit, outcome, and evidence');
+  }
+  return next;
+}
+export function transitionActionExecution(current:ActionExecutionStatus,next:ActionExecutionStatus,c:TransitionContext):ActionExecutionStatus {
+  if(c.tenant_id!==c.execution_tenant_id)fail('tenant_mismatch','execution tenant does not match context');
+  if(!enext[current].includes(next))fail('invalid_transition','invalid transition edge');
+  if(next==='cancelled'){
+    if(!c.cancel_permission_granted)fail('unauthorized','cancel authority is required');
+    return next;
+  }
+  if(next==='rollback_pending'||next==='rolled_back'||next==='rollback_failed'){
+    if(!c.rollback_permission_granted)fail('unauthorized','rollback authority is required');
+    if(c.rollback?.category==='irreversible'||c.rollback?.supported!==true||(!c.rollback.plan_ref&&!c.rollback.compensation_ref&&!c.rollback.inverse_action_type))fail('fake_rollback','supported rollback plan and inverse are required');
+    if(next==='rolled_back'&&!c.rollback_inverse_applied)fail('fake_rollback','inverse must be applied');
+    return next;
+  }
+  if(next==='pending_approval'&&!c.permission_granted)fail('unauthorized','planning permission is required');
+  if(next==='queued'||next==='running'){
+    if(!c.permission_granted)fail('unauthorized','fresh permission is required');
+    if(!c.capability_ready)fail('capability_denied','capability is not ready');
+    if(!c.consent_valid||!c.policy_allowed)fail('consent_or_policy_required','valid consent and policy are required');
+    const approvalRequired=c.required_approval_level!==undefined&&c.required_approval_level!=='none';
+    if(approvalRequired&&!validateApproval({approval:c.approval,now:c.now??'',tenant_id:c.tenant_id,decision_id:c.decision_id,action_id:c.action_id,execution_id:c.execution_id,required_level:c.required_approval_level}))fail('approval_required','fresh bound approval is required');
+    if(c.target_environment_ids?.some(e=>e!==c.environment_id))fail('environment_mismatch','target environment does not match execution');
+  }
+  return next;
+}
 export function validateDecision(d:Decision):string[]{const e:string[]=[];if(!d.decision_id)e.push('decision_id is required');if(!d.question)e.push('question is required');return e;}
 export function validateExecution(x:Execution):string[]{const e:string[]=[];if(!x.trigger||!x.links?.trigger||JSON.stringify(x.trigger)!==JSON.stringify(x.links.trigger))e.push('canonical trigger linkage is required');if(!x.targets)e.push('targets are required');else for(const t of x.targets)if(t.tenant_id!==x.tenant_id||t.environment_id!==x.environment_id)e.push('target is out of execution scope');if(!x.external_constraints||x.external_constraints.tenant_isolation_key!==x.tenant_id)e.push('tenant isolation key mismatch');if(x.execution_type!=='plan'&&x.execution_type!=='dry_run'&& !x.impact_preview&&!x.links?.impact_preview_ref)e.push('material execution requires impact preview');if(['completed','failed','cancelled','rolled_back'].includes(x.status)&&(!x.links?.audit_event_refs?.length||!x.links?.outcome_refs?.length||!x.links?.evidence_refs?.length))e.push('terminal execution requires audit, outcome and evidence');return e;}
 export function validateImpactPreview(p:ImpactPreview):string[]{const e:string[]=[];if(!p.preview_id||!p.graph_snapshot_id)e.push('preview and graph snapshot are required');if(!p.decision_id&&!p.execution_id)e.push('impact preview must link to decision or execution');return e;}
