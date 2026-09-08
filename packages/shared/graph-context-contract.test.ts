@@ -13,6 +13,8 @@ import {
   createImmutableGraphSnapshot,
   createImmutableGraphDiff,
   validateGraphDiff,
+  toUniversalGraphQueryRequest,
+  fromUniversalGraphQueryRequest,
 } from './graph-context-contract';
 
 const ref = (id: string, tenant_id = 'tenant-a', environment_id = 'staging'): GraphObjectRef => ({
@@ -90,5 +92,44 @@ describe('GraphContext contract', () => {
   it('rejects invalid query limits, rights, and root scopes', () => {
     const query = { kind: 'graph_query', version: '1', scope: { tenant_id: 'tenant-a', workspace_id: 'workspace-1', environment_id: 'staging' }, roots: [ref('foreign', 'tenant-b')], traversal: { direction: 'both', max_depth: 2 }, limit: 501, rights_policy: 'ignore' };
     expect(validateCanonicalGraphQuery(query).valid).toBe(false);
+  });
+
+  it('requires nonempty scope dimensions and keeps workspace authority aligned', () => {
+    expect(validateGraphContext({ ...context(), scope: { ...context().scope, workspace_id: '' } }).valid).toBe(false);
+    const query = { kind: 'graph_query' as const, version: '1' as const, scope: { tenant_id: 'tenant-a', workspace_id: 'workspace-2', environment_id: 'staging' }, roots: [], traversal: { direction: 'both' as const, max_depth: 2 }, temporal: { mode: 'live' as const } };
+    expect(validateGraphContext({ ...context(), query }).errors).toContain('query scope does not match context scope');
+    const snapshot = { kind: 'graph_snapshot' as const, id: 'snapshot-1', tenant_id: 'tenant-a', environment_id: 'staging', captured_at: '2026-01-01T00:00:00Z', workspace_id: 'workspace-1', as_of: '2025-12-31T23:59:59Z', query: { ...query, scope: { ...query.scope, workspace_id: 'workspace-2' } }, objects: [], graph_state_ref: 'graph-1', evidence_state_ref: 'evidence-1', source_state_ref: 'source-1', policy_version: 'policy-1', ontology_version: 'ontology-1', model_versions: { graph: 'model-1' }, metadata: {} };
+    expect(validateGraphSnapshot(snapshot).errors).toContain('snapshot query scope does not match snapshot scope');
+    expect(validateGraphDiff({ kind: 'graph_diff', id: 'diff-1', tenant_id: 'tenant-a', environment_id: 'staging', workspace_id: ' ', from_state_ref: 'state-1', to_state_ref: 'state-2', created_at: '2026-01-01T00:01:00Z', changes: [], summary: { added: 0, removed: 0, changed: 0 }, metadata: {} }).valid).toBe(false);
+  });
+
+  it('requires valid snapshot bindings and complete temporal modes', () => {
+    expect(validateGraphContext({ ...context(), selection: { ...context().selection, snapshot_bound: [{ tenant_id: 'tenant-a', environment_id: 'staging', snapshot_id: ' ' }] } }).valid).toBe(false);
+    const base = { kind: 'graph_query' as const, version: '1' as const, scope: { tenant_id: 'tenant-a', workspace_id: 'workspace-1', environment_id: 'staging' }, roots: [], traversal: { direction: 'both' as const, max_depth: 2 } };
+    expect(validateCanonicalGraphQuery({ ...base, temporal: { mode: 'point' as const } }).valid).toBe(false);
+    expect(validateCanonicalGraphQuery({ ...base, temporal: { mode: 'compare' as const, known_then: 'then' } }).valid).toBe(false);
+    expect(validateCanonicalGraphQuery({ ...base, temporal: { mode: 'live' as const, as_of: '2026-01-01T00:00:00Z' } }).valid).toBe(false);
+    expect(validateCanonicalGraphQuery({ ...base, traversal: { direction: 'both' as const, max_depth: 0 } }).valid).toBe(false);
+  });
+
+  it('fails closed in UniversalGraphQueryRequest adapters', () => {
+    const scope = { tenant_id: 'tenant-a', workspace_id: 'workspace-1', environment_id: 'staging' } as const;
+    const validRequest = { tenant_id: 'tenant-a', anchors: ['root'], depth: 3, limit: 25, as_of: '2026-01-01T00:00:00Z', include_evidence: true, include_provenance: true };
+    const canonical = fromUniversalGraphQueryRequest(validRequest, scope);
+    expect(canonical.scope).toEqual(scope);
+    expect(canonical.traversal.max_depth).toBe(3);
+    expect(toUniversalGraphQueryRequest(canonical)).toMatchObject({ tenant_id: 'tenant-a', anchors: ['root'], depth: 3, limit: 25, as_of: '2026-01-01T00:00:00Z', include_evidence: true, include_provenance: true });
+    expect(() => fromUniversalGraphQueryRequest({ ...validRequest, tenant_id: 'tenant-b' }, scope)).toThrow();
+    expect(() => fromUniversalGraphQueryRequest({ ...validRequest, depth: 7 }, scope)).toThrow();
+    expect(() => fromUniversalGraphQueryRequest(validRequest, { ...scope, workspace_id: '' })).toThrow();
+    expect(() => toUniversalGraphQueryRequest({ ...canonical, traversal: { ...canonical.traversal, max_depth: 0 } })).toThrow();
+  });
+
+  it('validates target scope and removes projection artifacts during a switch', () => {
+    const value = { ...context(), scope: { ...context().scope, account_id: 'old-account', organization_id: 'old-org' }, projection: { projection_id: 'profile360' as const, state: 'available' as const, digest: 'unsafe-old-digest' } };
+    const switched = switchGraphContextScope(value, { tenant_id: 'tenant-b', workspace_id: 'workspace-2', environment_id: 'prod' });
+    expect(switched.scope).toEqual({ tenant_id: 'tenant-b', workspace_id: 'workspace-2', environment_id: 'prod', surface: 'graph' });
+    expect(switched.projection).toBeNull();
+    expect(() => switchGraphContextScope(value, { tenant_id: 'tenant-b', workspace_id: '', environment_id: 'prod' })).toThrow();
   });
 });
