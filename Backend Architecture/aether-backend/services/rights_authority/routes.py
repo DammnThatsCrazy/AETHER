@@ -87,7 +87,16 @@ async def resolve_effective_decision(
     request: Request,
     _tenant: TenantContext = Depends(require_permission(_RIGHTS_READ_PERMISSION)),
 ) -> dict:
-    """Resolve (and durably record) the effective rights decision for a use."""
+    """Resolve (and durably record) the effective rights decision for a use.
+
+    Permission posture: this is deliberately a ``read``-scoped operation even
+    though it persists a durable ``RightsDecision``. Resolving effective rights
+    is a *read-class query* — it reports governed state and changes nothing —
+    and blueprint §17 requires every resolution to be durably recorded for the
+    tenant audit ledger. Gating it under ``write`` would make the surface's
+    primary query unusable for read-only principals. Destructive operations
+    (``POST /v1/rights/revocations``) DO require the ``write`` scope.
+    """
     _same_tenant_or_403(request, body.tenant_id)
     from .resolver import effective_rights_resolver
 
@@ -114,7 +123,21 @@ async def get_decision(
     request: Request,
     _tenant: TenantContext = Depends(require_permission(_RIGHTS_READ_PERMISSION)),
 ) -> dict:
-    """Tenant-scoped read of a durable RightsDecision (404 on unknown/cross-tenant)."""
+    """Tenant-scoped read of a durable RightsDecision (404 on unknown/cross-tenant).
+
+    Ownership boundary is the TENANT, not the actor — the durable decision store
+    is a tenant decision *ledger*. ``RightsDecision`` records carry no actor
+    field (the requesting actor is encoded only in the §17 ``identity_key``),
+    and tenant-wide reads are the required audit semantics: a compliance / Kyber
+    surface must see the whole tenant's decision history, so per-actor read
+    scoping would both be unrepresentable on the record and deny legitimate
+    tenant-wide audit. The tenant boundary is enforced server-side here (route
+    tenant equality against the authenticated principal) and by the repository's
+    tenant-isolated store, so unknown or cross-tenant records read as 404. An
+    actor-scoped "my decisions" portal, if ever required, needs an actor column
+    added to the record at schema-migration time and a dedicated endpoint —
+    deliberately out of scope for this ledger surface.
+    """
     actor = tenant_actor(request)
     from .repositories import rights_decision_repository
 
