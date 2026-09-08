@@ -28,6 +28,51 @@ export {
 export type { DecodeDefaults } from './url-codec';
 
 export {
+  adaptCanonicalGraphQueryToUniversalRequest,
+  adaptExplorationContextToCanonicalGraphQuery,
+  adaptExplorationContextToGraphContext,
+  canonicalGraphQueryToUniversalRequest,
+  explorationContextToCanonicalGraphQuery,
+  explorationContextToGraphContext,
+  explorationContextToUniversalRequest,
+  graphScopeAuthorityKey,
+  graphScopeChangeRequiresReset,
+  scopeAuthorityKey,
+  shouldResetForScopeChange,
+} from './graph-context-adapter';
+export type { GraphContextAdapterOptions, GraphQueryLossReport } from './graph-context-adapter';
+
+export {
+  EMPTY_SELECTION,
+  bindSnapshot,
+  clear,
+  clearSelection,
+  createSelectionState,
+  focus,
+  focusObject,
+  replaceSelection,
+  select,
+  selectObject,
+  setCompared,
+  togglePin,
+  unbindSnapshot,
+  unselect,
+  unselectObject,
+} from './selection-model';
+export type { SelectionScope } from './selection-model';
+
+export {
+  DEFAULT_EXPLORATION_TRAIL_MAX,
+  MAX_EXPLORATION_TRAIL_ENTRIES,
+  appendTrail,
+  clearHistory,
+  createExplorationHistory,
+  nextFocus,
+  previousFocus,
+} from './history';
+export type { ExplorationHistory } from './history';
+
+export {
   createExplorationStore,
   explorationActions,
   useExplorationStore,

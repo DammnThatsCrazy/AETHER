@@ -45,12 +45,57 @@ export * from './economic';
 export * from './contextual';
 export * from './graph-relationships';
 export * from './graph-contract';
+export * from './graph-context-contract';
 export * from './observation-envelope';
 export * from './intelligence';
 export * from './financials';
 export * from './profile360-contract';
 export * from './operational-intelligence'; // includes Phase 20 path intelligence types (RelationshipPath, PathQuery, PathExplanation, TraversalSnapshot, DeepTraversalJob)
 export * from './decision-outcome-intelligence';
+
+// Governed action runtime. DecisionStatus intentionally remains owned by
+// decision-outcome-intelligence at the package root; consumers that need the
+// action state machine use the unambiguous RuntimeDecisionStatus alias.
+export {
+  ActionRuntimeTransitionError,
+  canMarkDecisionExecuted,
+  resolveCapabilityState,
+  transitionActionExecution,
+  transitionDecision,
+  validateApproval,
+  validateDecision,
+  validateExecution,
+  validateImpactPreview,
+} from './action-runtime-contract';
+export type {
+  ActionCapabilityEvaluation,
+  ActionEvidenceLink,
+  ActionExecutionLinks,
+  ActionExecutionStatus,
+  ActionRuntimeDecision,
+  ActionRuntimeExecution,
+  ActionRuntimeSourceLinks,
+  ActorRef,
+  ApprovalReference,
+  ApprovalValidationInput,
+  CapabilityAvailability,
+  CapabilityMatrix,
+  DecisionAlternative,
+  DecisionTransitionContext,
+  EconomicValue,
+  ExecutionResult,
+  ExecutionStep,
+  ExecutionStatus,
+  ExecutionTrigger,
+  ExternalExecutionConstraints,
+  ImpactPreview,
+  ReversibilityCategory,
+  RollbackMetadata,
+  RuntimeDecisionStatus,
+  RuntimePermissionRequirement,
+  RuntimeTransitionErrorCode,
+  TransitionContext,
+} from './action-runtime-contract';
 
 // Existing partial contracts (already referenced by RN SDK).
 export * from './ecommerce-types';
