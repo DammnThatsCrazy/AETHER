@@ -12,12 +12,18 @@ mount (see its docstring); nothing here is auto-wired into ``main.py``.
 
 from __future__ import annotations
 
+from .consent import default_consent_evaluator
 from .contracts import (
     RightsContext,
     RightsDecision,
     RightsDecisionRequest,
     RightsImpact,
     RightsLineage,
+)
+from .envelope import (
+    apply_rights_ref,
+    decision_evidence_ref,
+    rights_envelope_fields,
 )
 from .generalization import (
     GeneralizationDecision,
@@ -44,6 +50,11 @@ from .model_governance import (
     model_training_eligibility,
     validate_training_manifest,
 )
+from .model_training import (
+    TrainingManifestVerification,
+    evaluate_training_manifest,
+    verify_training_request,
+)
 from .olympus import (
     OlympusInternalAuthority,
     OlympusInternalDecision,
@@ -58,9 +69,21 @@ from .repositories import (
 )
 from .resolver import (
     EffectiveRightsResolver,
+    configure_consent_evaluator,
     decision_identity,
     effective_rights_resolver,
     normalize_requested_use,
+)
+from .retention import (
+    RetentionResolution,
+    evaluate_retention,
+    schedule_retention,
+)
+from .rollout import (
+    RolloutMode,
+    configure_rollout,
+    current_mode,
+    reset_rollout,
 )
 
 __all__ = [
@@ -75,6 +98,26 @@ __all__ = [
     "effective_rights_resolver",
     "decision_identity",
     "normalize_requested_use",
+    "configure_consent_evaluator",
+    # consent seam
+    "default_consent_evaluator",
+    # envelope / spine propagation seam
+    "rights_envelope_fields",
+    "decision_evidence_ref",
+    "apply_rights_ref",
+    # rollout / activation
+    "RolloutMode",
+    "current_mode",
+    "configure_rollout",
+    "reset_rollout",
+    # retention
+    "RetentionResolution",
+    "evaluate_retention",
+    "schedule_retention",
+    # model training
+    "TrainingManifestVerification",
+    "evaluate_training_manifest",
+    "verify_training_request",
     # generalization gateway
     "GeneralizationGateway",
     "generalization_gateway",

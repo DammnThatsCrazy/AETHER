@@ -28,6 +28,15 @@ Determinism substrate: :func:`replay_ledger` applies ledger rows to a fresh
 ``_InMemoryGraphBackend`` and returns a stable sha256 digest;
 :func:`current_graph_digest` computes the same digest over a live
 GraphClient for ledger-vs-projection parity checks (``graph_checkpoints``).
+
+Rights propagation seam: :class:`MutationIntent` may optionally carry a
+governing ``rights_decision_ref`` (the durable ``rdec_...`` identity of the
+Rights Authority :class:`RightsDecision` that governs the write). When set it
+is surfaced on the versioned fact payload annotation — never on the projected
+edge/vertex nor on the typed ``MutationRecord`` ledger model — so a resolved
+rights decision can ride graph mutations while existing writers (which leave it
+``None``) stay byte-identical. See
+``docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md`` §11 / §17 Phase 3.
 """
 
 from __future__ import annotations
@@ -151,6 +160,16 @@ class MutationIntent:
     policy_refs: Optional[list[str]] = None
     consent_refs: Optional[list[str]] = None
     change_set_id: Optional[str] = None
+    # Governing rights-decision ref (Rights Authority seam, blueprint §11):
+    # the durable ``rdec_...`` identity whose RightsDecision governs this write.
+    # Additive + optional — ``None`` leaves the write byte-identical to today,
+    # and the ref is only surfaced on the gateway's own write surface (the
+    # versioned fact payload), never on the projected edge/vertex or the typed
+    # MutationRecord ledger model. Promoting it onto MutationRecord + the
+    # ledger DDL is the spine producer program's boundary (graph-mutation.ts is
+    # a generated twin; see docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md
+    # §11 / §17 Phase 3).
+    rights_decision_ref: Optional[str] = None
 
 
 @dataclass
@@ -559,33 +578,46 @@ class GraphMutationGateway:
 
     @staticmethod
     def _fact_payload(intent: MutationIntent) -> Optional[dict]:
-        """The replayable payload versioned into ``graph_fact_versions``."""
+        """The replayable payload versioned into ``graph_fact_versions``.
+
+        When the intent carries a governing ``rights_decision_ref`` it is
+        surfaced as a top-level payload annotation so the decision can ride the
+        graph mutation's durable version history without touching the projected
+        edge/vertex (graph topology is unchanged) or the typed
+        ``MutationRecord`` ledger model (its TS twin is generated). Replay and
+        digest parity ignore the annotation, so a ref never alters graph state.
+        """
+        payload: dict[str, Any]
         if intent.edge is not None:
             e = intent.edge
-            return {
+            payload = {
                 "kind": "edge",
                 "edge_type": e.edge_type,
                 "from_vertex_id": e.from_vertex_id,
                 "to_vertex_id": e.to_vertex_id,
                 "properties": dict(e.properties),
             }
-        if intent.vertex is not None:
+        elif intent.vertex is not None:
             v = intent.vertex
-            return {
+            payload = {
                 "kind": "node",
                 "vertex_type": v.vertex_type,
                 "vertex_id": v.vertex_id,
                 "properties": dict(v.properties),
             }
-        r = intent.revocation
-        assert r is not None
-        return {
-            "kind": "edge_revocation",
-            "edge_type": r.edge_type,
-            "from_vertex_id": r.from_vertex_id,
-            "to_vertex_id": r.to_vertex_id,
-            "reason": r.reason,
-        }
+        else:
+            r = intent.revocation
+            assert r is not None
+            payload = {
+                "kind": "edge_revocation",
+                "edge_type": r.edge_type,
+                "from_vertex_id": r.from_vertex_id,
+                "to_vertex_id": r.to_vertex_id,
+                "reason": r.reason,
+            }
+        if intent.rights_decision_ref is not None:
+            payload["rights_decision_ref"] = intent.rights_decision_ref
+        return payload
 
     async def _project(self, intent: MutationIntent) -> Any:
         """Stage 6: current projection through the existing GraphClient."""

@@ -61,6 +61,7 @@ from services.rights_authority.repositories import (
 __all__ = [
     "EffectiveRightsResolver",
     "effective_rights_resolver",
+    "configure_consent_evaluator",
     "decision_identity",
     "normalize_requested_use",
     "POLICY_VERSION",
@@ -827,5 +828,54 @@ class EffectiveRightsResolver:
         return "per_policy", "delete_by_policy", None
 
 
+# ── Consent seam default (server consent authority) ─────────────────────────
+
+async def _server_consent_evaluator(
+    request: RightsDecisionRequest,
+    grant: DataRightsGrant,
+) -> Optional[ConsentPolicyDecision]:
+    """Lazy default consent evaluator for the module singleton.
+
+    Defers to ``services.rights_authority.consent.default_consent_evaluator``
+    (a thin adapter over ``services/consent/authority.py::evaluate_consent``).
+    The import is lazy so ``main.py`` and bare module imports never pay for the
+    consent authority until a resolution actually needs it, and any failure here
+    returns ``None`` so the resolver's own fail-closed consent branch (DENIED
+    ``consent_required``) governs instead of an exception escaping ``resolve``.
+    """
+    try:
+        from services.rights_authority.consent import default_consent_evaluator
+
+        return await default_consent_evaluator(request, grant)
+    except Exception:  # pragma: no cover - fail-safe outer belt
+        return None
+
+
+def configure_consent_evaluator(
+    evaluator: Optional[
+        Callable[[RightsDecisionRequest, DataRightsGrant], Awaitable[Optional[ConsentPolicyDecision]]]
+    ],
+    *,
+    resolver: Optional[EffectiveRightsResolver] = None,
+) -> None:
+    """Install/clear the consent evaluator on the module singleton.
+
+    ``evaluator`` follows the resolver seam signature
+    ``async (request, grant) -> ConsentPolicyDecision | None``; pass ``None`` to
+    return the singleton to the built-in fail-closed (no-evaluator) behavior.
+    Bare ``EffectiveRightsResolver()`` construction is untouched — an instance's
+    seam is only changed when its own ``consent_evaluator`` was supplied or a
+    caller explicitly wires one here.
+    """
+    target = resolver if resolver is not None else effective_rights_resolver
+    target._consent_evaluator = evaluator
+
+
 # ── Module-level singleton (mirrors data_rights / policy / security) ──────────
-effective_rights_resolver = EffectiveRightsResolver()
+# Wired to the server consent authority by default so the live tenant surface
+# (routes.py) verifies subject consent through ``evaluate_consent`` instead of
+# the self-asserted ``consent_basis:...:unverified`` fallback. Bare
+# ``EffectiveRightsResolver()`` instances stay evaluator-less (fail closed).
+effective_rights_resolver = EffectiveRightsResolver(
+    consent_evaluator=_server_consent_evaluator,
+)
