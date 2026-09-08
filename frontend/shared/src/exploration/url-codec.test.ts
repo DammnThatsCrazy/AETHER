@@ -20,7 +20,7 @@ function baseContext(overrides: Partial<ExplorationContextV1> = {}): Exploration
 }
 
 function roundTrip(ctx: ExplorationContextV1): ExplorationContextV1 {
-  return decodeExplorationContext(encodeExplorationContext(ctx), { tenantId: TENANT });
+  return decodeExplorationContext(encodeExplorationContext(ctx), { tenantId: TENANT, surface: 'graph' });
 }
 
 describe('url-codec round-trip', () => {
@@ -92,15 +92,83 @@ describe('url-codec round-trip', () => {
         include_provenance: true,
       },
     });
-    expect(roundTrip(ctx)).toEqual(ctx);
+    expect(roundTrip(ctx)).toMatchObject({
+      version: '1',
+      scope: { tenant_id: TENANT, surface: 'graph' },
+      anchors: ctx.anchors,
+      population: ctx.population,
+      temporal: ctx.temporal,
+      graph: ctx.graph,
+      presentation: ctx.presentation,
+      selection: ctx.selection,
+    });
+    expect(roundTrip(ctx)).not.toHaveProperty('truth');
+    expect(roundTrip(ctx)).not.toHaveProperty('dimensions');
+    expect(roundTrip(ctx)).not.toHaveProperty('overlays');
   });
 
   it('re-supplies tenant_id from session, never from the URL', () => {
     const ctx = baseContext();
     const query = encodeExplorationContext(ctx);
     expect(query).not.toContain(TENANT);
-    const decoded = decodeExplorationContext(query, { tenantId: 'different_tenant' });
+    const decoded = decodeExplorationContext(query, { tenantId: 'different_tenant', surface: 'graph' });
     expect(decoded.scope.tenant_id).toBe('different_tenant');
+    expect(decoded.scope.surface).toBe('graph');
+    expect(query).not.toContain('surface=');
+  });
+
+  it('binds tenant and surface only from host defaults', () => {
+    const decoded = decodeExplorationContext(
+      'surface=fraud360&tenant_id=attacker&workspace_id=attacker&environment_id=prod&tmode=window',
+      { tenantId: 'host-tenant', surface: 'graph' },
+    );
+    expect(decoded.scope).toEqual({ tenant_id: 'host-tenant', surface: 'graph' });
+  });
+
+  it('drops unknown or unsafe values instead of widening authority', () => {
+    const decoded = decodeExplorationContext(
+      'tmode=not-a-mode&tfield=not-a-field&tz=not-a-zone&gdir=sideways&gdepth=Infinity&gk=-1'
+        + '&glayers=H2H,unknown&gedges=PAYS,UNKNOWN&pview=not-a-view&pgroup=unknown.field,entity.id'
+        + '&focus=entity:ok%25ZZ,broken&sel=entity:one,entity:one',
+      { tenantId: TENANT, surface: 'graph' },
+    );
+    expect(decoded.temporal).toEqual({ mode: 'window', field: 'occurred_at', timezone: 'UTC' });
+    expect(decoded.graph).toEqual({ layers: ['H2H'], edge_types: ['PAYS'] });
+    expect(decoded.presentation).toBeUndefined();
+    expect(decoded.selection).toEqual({ selected: [{ kind: 'entity', id: 'one' }] });
+  });
+
+  it('bounds deep-link size and cardinality', () => {
+    const anchors = Array.from({ length: 100 }, (_, i) => ({ kind: 'entity', id: `entity-${i}` }));
+    const query = encodeExplorationContext(baseContext({
+      anchors,
+      selection: { selected: anchors },
+      presentation: {
+        view: 'table',
+        columns: Array.from({ length: 100 }, () => 'entity.id'),
+      },
+    }));
+    expect(query.length).toBeLessThanOrEqual(4096);
+    const decoded = decodeExplorationContext(query, { tenantId: TENANT, surface: 'graph' });
+    expect(decoded.anchors?.length).toBeLessThanOrEqual(32);
+    expect(decoded.selection?.selected?.length).toBeLessThanOrEqual(64);
+    expect(decodeExplorationContext(`${query}${'x'.repeat(5000)}`, { tenantId: TENANT, surface: 'graph' }))
+      .toEqual({
+        version: '1',
+        scope: { tenant_id: TENANT, surface: 'graph' },
+        temporal: { mode: 'window', field: 'occurred_at', timezone: 'UTC' },
+      });
+  });
+
+  it('keeps legacy safe state readable while ignoring legacy authority fields', () => {
+    const decoded = decodeExplorationContext(
+      'surface=graph&tenant_id=old&anchors=entity%3Alegacy&gdepth=2&pview=graph',
+      { tenantId: TENANT, surface: 'timeline' },
+    );
+    expect(decoded.scope).toEqual({ tenant_id: TENANT, surface: 'timeline' });
+    expect(decoded.anchors).toEqual([{ kind: 'entity', id: 'legacy' }]);
+    expect(decoded.graph).toEqual({ depth: 2 });
+    expect(decoded.presentation).toEqual({ view: 'graph' });
   });
 });
 
@@ -155,6 +223,34 @@ describe('filter sanitisation (registry-only, no PII)', () => {
     const query = encodeExplorationContext(ctx);
     expect(query).not.toContain('pii.example');
     expect(query).not.toContain('user.email');
+  });
+
+  it('never emits evidence or truth filters, even when registered', () => {
+    const ctx = baseContext({
+      population: {
+        logic: 'AND',
+        expressions: [
+          { field: 'evidence.basis', op: 'eq', value: 'source' },
+          { field: 'truth.confidence_min', op: 'gte', value: 0.8 },
+          { field: 'risk.score', op: 'gte', value: 0.8 },
+        ],
+      },
+    });
+    const query = encodeExplorationContext(ctx);
+    expect(query).not.toContain('evidence');
+    expect(query).not.toContain('truth');
+    expect(decodeExplorationContext(query, { tenantId: TENANT, surface: 'graph' }).population).toEqual({
+      logic: 'AND',
+      expressions: [{ field: 'risk.score', op: 'gte', value: 0.8 }],
+    });
+  });
+
+  it('rejects arbitrary operators and malformed filter values on decode', () => {
+    const query = 'pop=AND%7Bentity.id%3Aeq%3A%22ok%22%7Crisk.score%3Acontains%3A%22bad%22%7Crisk.score%3Agte%3A%22NaN%22%7D';
+    expect(decodeExplorationContext(query, { tenantId: TENANT, surface: 'graph' }).population).toEqual({
+      logic: 'AND',
+      expressions: [{ field: 'entity.id', op: 'eq', value: 'ok' }],
+    });
   });
 });
 
