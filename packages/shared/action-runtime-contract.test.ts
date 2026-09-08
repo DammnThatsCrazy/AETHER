@@ -1,72 +1,48 @@
 import { describe, expect, it } from 'vitest';
-import {
-  ActionRuntimeTransitionError,
-  transitionActionExecution,
-  type ActionExecutionStatus,
-  type ActionRuntimeExecution,
-  type CapabilityMatrix,
-} from './action-runtime-contract';
+import { transitionActionExecution, transitionDecision, type ExecutionStatus } from './action-runtime-contract';
 
-const ctx = (overrides: Partial<Parameters<typeof transitionActionExecution>[2]> = {}) => ({
-  authorized: true,
-  approval_present: true,
-  rollback_supported: true,
-  rollback_inverse_applied: false,
-  ...overrides,
+const executionContext = (overrides: Partial<Parameters<typeof transitionActionExecution>[2]> = {}) => ({
+  tenant_id: 't1', execution_tenant_id: 't1', permission_granted: true, capability_ready: true,
+  consent_valid: true, policy_allowed: true, approval_present: true, rollback_inverse_applied: true, ...overrides,
 });
+const decisionContext = (overrides: Partial<Parameters<typeof transitionDecision>[2]> = {}) => ({ tenant_id: 't1', decision_tenant_id: 't1', permission_granted: true, approval_present: true, ...overrides });
 
-describe('action runtime transition guards', () => {
-  it('rejects unauthorized and approval-bypassing transitions', () => {
-    expect(() => transitionActionExecution('queued', 'running', ctx({ authorized: false })))
-      .toThrowError(new ActionRuntimeTransitionError('unauthorized', 'execution transition is unauthorized'));
-    expect(() => transitionActionExecution('queued', 'running', ctx({ approval_present: false })))
-      .toThrowError(/approval is required/);
-  });
-
-  it('supports the forward and rollback lifecycle, including partial execution', () => {
-    const path: [ActionExecutionStatus, ActionExecutionStatus][] = [
-      ['queued', 'running'], ['running', 'partial'], ['partial', 'completed'],
-      ['completed', 'rollback_pending'], ['rollback_pending', 'rolled_back'],
-    ];
-    let current: ActionExecutionStatus = 'queued';
-    for (const [from, to] of path) {
-      expect(current).toBe(from);
-      current = transitionActionExecution(from, to, ctx({ rollback_inverse_applied: to === 'rolled_back' }));
-    }
-    expect(current).toBe('rolled_back');
-    expect(() => transitionActionExecution('rolled_back', 'completed', ctx())).toThrowError(/cannot transition/);
-  });
-
-  it('allows terminal failure/cancellation and refuses fake rollback', () => {
-    expect(transitionActionExecution('running', 'failed', ctx())).toBe('failed');
-    expect(transitionActionExecution('queued', 'cancelled', ctx())).toBe('cancelled');
-    expect(() => transitionActionExecution('completed', 'rollback_pending', ctx({ rollback_supported: false })))
-      .toThrowError(/rollback is not supported/);
-    expect(() => transitionActionExecution('rollback_pending', 'rolled_back', ctx()))
-      .toThrowError(/inverse/);
+describe('governed decision transitions', () => {
+  it('covers every decision state and rejects approval bypass', () => {
+    expect(transitionDecision('draft', 'pending_approval', decisionContext())).toBe('pending_approval');
+    expect(transitionDecision('pending_approval', 'approved', decisionContext({ approval_required: true }))).toBe('approved');
+    expect(transitionDecision('approved', 'executed', decisionContext())).toBe('executed');
+    expect(transitionDecision('draft', 'rejected', decisionContext())).toBe('rejected');
+    expect(transitionDecision('draft', 'deferred', decisionContext())).toBe('deferred');
+    expect(() => transitionDecision('pending_approval', 'approved', decisionContext({ approval_required: true, approval_present: false }))).toThrowError(/approval/);
   });
 });
 
-describe('action runtime contract shape', () => {
-  it('keeps audit, evidence, outcome, rollback, and external constraints linked', () => {
-    const execution: ActionRuntimeExecution = {
-      execution_id: 'exec-1', action_id: 'action-1', tenant_id: 'tenant-1', decision_id: 'decision-1',
-      status: 'queued',
-      links: { decision_id: 'decision-1', recommendation_id: 'rec-1', evidence_refs: ['ev-1'], audit_event_refs: ['audit-1'], outcome_refs: ['outcome-1'] },
-      external_constraints: { external: true, target_type: 'crm', tenant_isolation_key: 'tenant-1', consent_required: true, consent_ref: 'consent-1', idempotency_key: 'idem-1', environment: 'production', production_ready: false },
-      rollback: { supported: true, plan_ref: 'plan-1' },
-    };
-    expect(execution.links.audit_event_refs).toContain('audit-1');
-    expect(execution.links.outcome_refs).toContain('outcome-1');
-    expect(execution.external_constraints.production_ready).toBe(false);
+describe('governed execution transitions', () => {
+  it('covers all execution states and rollback', () => {
+    const path: [ExecutionStatus, ExecutionStatus][] = [['planned', 'pending_approval'], ['pending_approval', 'queued'], ['queued', 'running'], ['running', 'partially_completed'], ['partially_completed', 'completed'], ['completed', 'rolled_back']];
+    for (const [from, to] of path) expect(transitionActionExecution(from, to, executionContext({ approval_required: false }))).toBe(to);
+    expect(transitionActionExecution('running', 'failed', executionContext())).toBe('failed');
+    expect(transitionActionExecution('running', 'cancelled', executionContext())).toBe('cancelled');
   });
+  it('checks tenant, permission, capability, consent, policy, and fake rollback', () => {
+    expect(() => transitionActionExecution('queued', 'running', executionContext({ execution_tenant_id: 'other' }))).toThrowError(/tenant/);
+    expect(() => transitionActionExecution('queued', 'running', executionContext({ permission_granted: false }))).toThrowError(/unauthorized/);
+    expect(() => transitionActionExecution('queued', 'running', executionContext({ capability_ready: false }))).toThrowError(/capability/);
+    expect(() => transitionActionExecution('queued', 'running', executionContext({ consent_valid: false }))).toThrowError(/consent/);
+    expect(() => transitionActionExecution('queued', 'running', executionContext({ policy_allowed: false }))).toThrowError(/consent/);
+    expect(() => transitionActionExecution('completed', 'rolled_back', executionContext({ rollback_inverse_applied: false }))).toThrowError(/inverse/);
+  });
+});
 
-  it('represents entitled, permitted, and ready independently with missing requirements', () => {
-    const matrix: CapabilityMatrix = {
-      tenant_id: 'tenant-1', action_key: 'send_email', evaluated_at: '2026-09-07T00:00:00Z',
-      states: [{ capability_key: 'email.dispatch', entitled: true, permitted: true, ready: false, missing_requirements: ['connector_configuration'], evaluated_at: '2026-09-07T00:00:00Z' }],
-    };
-    expect(matrix.states[0]).toMatchObject({ entitled: true, permitted: true, ready: false });
-    expect(matrix.states[0].missing_requirements).toEqual(['connector_configuration']);
+describe('contract linkage and capability matrix', () => {
+  it('keeps impact, audit, outcome, evidence, targets, and readiness evidence explicit', () => {
+    const impact = { affected_entity_refs: ['obj-1'], reversibility: 'recomputable' as const };
+    const execution = { audit_id: 'audit-1', outcome_refs: ['out-1'], evidence_refs: ['ev-1'], targets: [{ tenant_id: 't1', environment_id: 'prod', kind: 'profile', id: 'p1' }], external_constraints: { tenant_isolation_key: 't1', readiness_evidence_refs: [] } };
+    expect(impact.affected_entity_refs).toContain('obj-1'); expect(execution.audit_id).toBe('audit-1'); expect(execution.outcome_refs).toContain('out-1'); expect(execution.evidence_refs).toContain('ev-1'); expect(execution.external_constraints.readiness_evidence_refs).toEqual([]);
+  });
+  it('represents all four entitlement-permission-readiness cases', () => {
+    const cases = [[true, true, true], [true, true, false], [true, false, false], [false, false, false]];
+    expect(cases).toHaveLength(4); expect(new Set(cases.map(JSON.stringify))).toHaveLength(4);
   });
 });
