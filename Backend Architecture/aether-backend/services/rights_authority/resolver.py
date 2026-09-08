@@ -34,7 +34,7 @@ so the resolver never re-implements migration maps that P-A owns.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from shared.common.common import parse_event_time, utc_now
 from typing import Any, Awaitable, Callable, Optional
 
 from services.integrations.data_rights.models import (
@@ -194,16 +194,9 @@ def _flag(obj: Any, name: str, default: bool = False) -> bool:
     return bool(getattr(obj, name, default))
 
 
-def _as_dt(value: Optional[str]) -> Optional[datetime]:
-    if not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except (ValueError, AttributeError, TypeError):
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed
+def _as_dt(value: Optional[str]) -> Optional[Any]:
+    """Parse an ISO instant via the shared temporal parser (aware UTC, None-safe)."""
+    return parse_event_time(value)
 
 
 def _grant_status(grant: DataRightsGrant) -> str:
@@ -549,7 +542,7 @@ class EffectiveRightsResolver:
             if status not in _ACTIVE_GRANT_STATUS and status not in ("", "unknown"):
                 return ["grant_not_active"]
             expires = _as_dt(expires_at)
-            if expires is not None and expires <= datetime.now().astimezone():
+            if expires is not None and expires <= utc_now():
                 return ["grant_expired"]
             return []
 

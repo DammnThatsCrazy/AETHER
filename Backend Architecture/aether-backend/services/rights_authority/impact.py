@@ -415,6 +415,7 @@ __all__ = [
     "DEFAULT_IMPACT_ACTIONS",
     "RIGHTS_IMPACT_DIMENSIONS",
     "REMEDIATION_STATES",
+    "RevocationError",
     "RevocationSummary",
     "RightsImpactItem",
     "compute_rights_impact",

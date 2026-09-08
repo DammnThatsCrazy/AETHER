@@ -12,7 +12,6 @@ canonical row key is carried both as the DB ``id`` and inside the JSON body.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Optional
 
 from services.security.repositories import _ScopedRepo
@@ -33,16 +32,13 @@ __all__ = [
 ]
 
 
-def _iso_dt(value: Optional[str]) -> Optional[datetime]:
+def _iso_dt(value: Optional[str]):
+    """Parse an ISO instant via the shared temporal parser (aware UTC, None-safe)."""
     if not value:
         return None
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except (ValueError, AttributeError, TypeError):
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed
+    from shared.common.common import parse_event_time
+
+    return parse_event_time(value)
 
 
 class RightsDecisionRepository(_ScopedRepo):
