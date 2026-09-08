@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.olympuslabs.io/contracts/delivery/impact-graph-index/v1",
+  "title": "Aether deterministic impact graph index v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "changed_files", "direct_nodes", "transitive_nodes", "impacted_components", "impacted_contracts", "impacted_deployables", "unresolved_paths", "router"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "changed_files": {"type": "array", "items": {"type": "string"}},
+    "direct_nodes": {"type": "array", "items": {"type": "string"}},
+    "transitive_nodes": {"type": "array", "items": {"type": "string"}},
+    "impacted_components": {"type": "array", "items": {"type": "string"}},
+    "impacted_contracts": {"type": "array", "items": {"type": "string"}},
+    "impacted_deployables": {"type": "array", "items": {"type": "string"}},
+    "unresolved_paths": {"type": "array", "items": {"type": "string"}},
+    "router": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["affected_domains", "global_change", "minimum_lane", "selected_lane", "followup_required", "selected_checks", "selected_test_suites"],
+      "properties": {
+        "affected_domains": {"type": "array", "items": {"type": "string"}},
+        "global_change": {"type": "boolean"},
+        "minimum_lane": {"enum": ["fast", "pr", "integration", "regression", "release"]},
+        "selected_lane": {"enum": ["fast", "pr", "integration", "regression", "release"]},
+        "followup_required": {"type": "boolean"},
+        "selected_checks": {"type": "array", "items": {"type": "string"}},
+        "selected_test_suites": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "shadow_comparison": {"type": "object"}
+  }
+}
