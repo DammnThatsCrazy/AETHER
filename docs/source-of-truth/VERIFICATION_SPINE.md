@@ -20,6 +20,7 @@ source_files:
   - contracts/delivery/release-evidence-bundle.schema.json
   - contracts/delivery/migration-evidence.schema.json
   - contracts/delivery/staging-lifecycle-result.schema.json
+  - contracts/delivery/staging-orchestration-state.schema.json
   - contracts/delivery/environment-resolution.schema.json
   - contracts/delivery/environment-capability-snapshot.schema.json
   - contracts/delivery/effective-iam-evidence.schema.json
@@ -34,6 +35,7 @@ source_files:
   - scripts/change_plan.py
   - scripts/check_router.py
   - scripts/delivery_orchestrator.py
+  - scripts/staging_state_machine.py
   - scripts/release/evidence_bundle.py
   - scripts/lib/test_suites.py
   - scripts/run_pytest_files.py
@@ -48,6 +50,7 @@ source_files:
   - scripts/release/check_environment_requirements.py
   - scripts/validate_verification_router.py
   - scripts/release/check_deployment_operator_surface.py
+  - tests/unit/test_staging_state_machine.py
   - Makefile
 canonical_owner: platform@aether
 estimated_read_minutes: 8
@@ -142,6 +145,19 @@ detail. A missing candidate, incompatible profile, absent cloud identity, or
 failed command therefore remains a first-class blocked/failed outcome instead
 of an unexplained generic error.
 
+When a workflow or operator supplies `STATE=<checkpoint.json>` to
+`make deploy-staging`, `scripts/staging_state_machine.py` persists an atomic
+checkpoint after each passing stage. Every resume revalidates the checkpoint
+against the complete candidate identity (candidate id, commit, artifact
+digest, and profile) and, when `ENVIRONMENT_RESOLUTION=<json>` is supplied,
+the pre-mutation environment-resolution decision. It continues at the first
+incomplete stage. Pure
+promotion and rollback verifiers apply the same equality rule to both sides of
+the transition; they do not apply infrastructure or imply cloud evidence.
+Ephemeral demo/preview runs can also validate their cleanup policy, workflow
+matrix coverage, canonical lease path, and injected TTL offline. Missing or
+expired leases remain blocked, matching the fail-closed TTL guard.
+
 `make build-artifact CANDIDATE_ID=<id> PROFILE=<profile>
 COMPONENTS='backend=path frontend=path' LOCKFILES='package-lock.json'` records
 digests for already-built component files; it does not itself compile, sign,
@@ -153,7 +169,8 @@ presentation-only Kyber projection when `KYBER_OUTPUT` is supplied. These
 commands provide repository contracts and evidence validation, not evidence
 that AWS or a product journey actually ran.
 
-`make deploy-staging`, `make staging-migrate`, and
+`make deploy-staging` (optionally with `STATE=<checkpoint.json>`),
+`make staging-migrate`, and
 `make test-golden-journeys` provide the repository-side orchestration boundary.
 They emit structured evidence, preserve `DRY_RUN` as a distinct non-deployment
 state, and fail closed when candidate compatibility, AWS identity, database
@@ -221,7 +238,7 @@ full release-spine blueprint. The following work remains explicitly open:
 | Immutable artifact | PR CI builds once, packages real workspace `dist` outputs, creates ReleaseCandidate metadata, and verifies the exact candidate in the selected-verification consumer without rebuilding | Add backend/container components, contract/model/policy versions, endpoint/asset manifests, provenance/signing, durable registry upload, and exact-digest staging/production promotion. |
 | Profile compatibility | Repository gate validates required frontend identity/endpoint fields and rejects insecure/placeholders for deployable profiles | Generate the manifest from real builds and bind it to the candidate digest and staging preflight. |
 | Fallback governance | Audited profile-aware registry binds major fallback classes to implementation paths and blocks registered local fallbacks in staging/production | Resolve remaining candidate entrypoints with their owners, enforce selection at runtime across every deployable surface, and expose typed degradation in readiness. |
-| Staging preflight and lifecycle | Repository orchestrator requires a compatible candidate digest, verifies AWS identity, runs ordered commands, and emits distinct `DRY_RUN`, `BLOCKED`, `FAILED`, or `DEPLOYED` evidence | Bind the commands to the credentialed disposable-staging workflow, preserve external failure evidence, and exercise wake/sleep against AWS. |
+| Staging preflight and lifecycle | Repository orchestrator requires a compatible candidate digest, verifies AWS identity, runs ordered commands, emits distinct `DRY_RUN`, `BLOCKED`, `FAILED`, or `DEPLOYED` evidence, and can resume from an identity-bound checkpoint | Bind the commands to the credentialed disposable-staging workflow, preserve external failure evidence, and exercise wake/sleep against AWS. |
 | Migration contract | Versioned schema and orchestrator validate metadata, require `DATABASE_URL`, execute migration then validation, and emit fail-closed evidence | Run it against a real previous-schema staging baseline and add backfill/read-write/repair observations. |
 | Golden journeys | Registry requires the five named, owned journeys and assertion metadata | Implement and execute those journeys against a clean baseline; the registry gate is not journey execution evidence. |
 | Canonical evidence bundle | Validator enforces required checks and forbids READY with blockers/degradation; Kyber projection preserves the authoritative disposition | Aggregate real lane/deployment results, retain logs/traces, sign/publish bundles, and ingest them in Kyber. |

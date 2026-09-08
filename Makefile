@@ -347,7 +347,7 @@ validate-release-evidence: ## Validate a canonical evidence bundle (requires EVI
 
 deploy-staging: ## Orchestrate fail-closed staging lifecycle (requires CANDIDATE, PROFILE, OUTPUT; set DRY_RUN=1 to plan)
 	@test -n "$(CANDIDATE)" -a -n "$(PROFILE)" -a -n "$(OUTPUT)" || (echo "CANDIDATE, PROFILE, and OUTPUT are required"; exit 2)
-	$(GATE_PY) scripts/delivery_orchestrator.py staging --candidate "$(CANDIDATE)" --profile "$(PROFILE)" --output "$(OUTPUT)" $(if $(DRY_RUN),--dry-run) $(if $(PREFLIGHT_COMMAND),--preflight-command "$(PREFLIGHT_COMMAND)") $(if $(DEPLOY_COMMAND),--deploy-command "$(DEPLOY_COMMAND)") $(if $(MIGRATION_COMMAND),--migration-command "$(MIGRATION_COMMAND)") $(if $(ACTIVATION_COMMAND),--tenant-activation-command "$(ACTIVATION_COMMAND)") $(if $(JOURNEYS_COMMAND),--journeys-command "$(JOURNEYS_COMMAND)")
+	$(GATE_PY) scripts/delivery_orchestrator.py staging --candidate "$(CANDIDATE)" --profile "$(PROFILE)" --output "$(OUTPUT)" $(if $(STATE),--state "$(STATE)") $(if $(ENVIRONMENT_RESOLUTION),--environment-resolution "$(ENVIRONMENT_RESOLUTION)") $(if $(DRY_RUN),--dry-run) $(if $(PREFLIGHT_COMMAND),--preflight-command "$(PREFLIGHT_COMMAND)") $(if $(DEPLOY_COMMAND),--deploy-command "$(DEPLOY_COMMAND)") $(if $(MIGRATION_COMMAND),--migration-command "$(MIGRATION_COMMAND)") $(if $(ACTIVATION_COMMAND),--tenant-activation-command "$(ACTIVATION_COMMAND)") $(if $(JOURNEYS_COMMAND),--journeys-command "$(JOURNEYS_COMMAND)")
 
 staging-migrate: ## Rehearse a migration with evidence (requires MIGRATION_METADATA and OUTPUT)
 	@test -n "$(MIGRATION_METADATA)" -a -n "$(OUTPUT)" || (echo "MIGRATION_METADATA and OUTPUT are required"; exit 2)

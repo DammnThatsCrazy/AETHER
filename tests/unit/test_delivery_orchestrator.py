@@ -107,6 +107,34 @@ def test_staging_success_executes_every_ordered_command(tmp_path, monkeypatch):
     assert observed == ["aws sts get-caller-identity --output json", "preflight", "deploy", "migrate", "activate", "journeys"]
 
 
+def test_staging_checkpoint_mode_resumes_exact_candidate(tmp_path, monkeypatch):
+    monkeypatch.setenv("AWS_PROFILE", "test")
+    args = staging_args(
+        tmp_path,
+        state=tmp_path / "staging-state.json",
+        preflight_command="preflight",
+        deploy_command="deploy",
+        migration_command="migrate",
+        tenant_activation_command="activate",
+        journeys_command="journeys",
+    )
+    def first_attempt(command):
+        if command == "deploy":
+            return "BLOCKED", "deploy paused"
+        return "PASS", "passed"
+
+    monkeypatch.setattr(orchestrator, "run", first_attempt)
+    assert orchestrator.staging(args) == 1
+    assert json.loads(args.output.read_text())["status"] == "BLOCKED"
+
+    resumed_calls = []
+    monkeypatch.setattr(orchestrator, "run", lambda command: (resumed_calls.append(command) or ("PASS", "passed")))
+    assert orchestrator.staging(args) == 0
+    result = json.loads(args.output.read_text())
+    assert result["status"] == "DEPLOYED"
+    assert resumed_calls == ["deploy", "migrate", "activate", "journeys"]
+
+
 def test_migration_requires_database_credentials(tmp_path, monkeypatch):
     metadata = tmp_path / "migration.yaml"
     metadata.write_text("""migration_id: m1

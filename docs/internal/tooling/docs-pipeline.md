@@ -24,7 +24,7 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/repo-health.yml": "sha256:20c88ed21d120e0286d051c04ded3927b1268903de5b804e4c66af29719daa6c"
   ".pre-commit-config.yaml": "sha256:aabbf5350833f4d28448c5ef9f85bd5e516815458c6e76c1ac9f906b37947616"
-  "Makefile": "sha256:dccf27138afd889fdeea5d69a6b92407f9bc51cb5b0e5b4a3219559f1d6ef0c0"
+  "Makefile": "sha256:a2a20a5bd078b273fa95eb99f46b124a6c95723b6abf9b9af05b6c4c28a338e7"
   "scripts/docs_drift.py": "sha256:b6c0cd0a27f72b8c0d207d799f6daabdf0ed02e8bea17feaf6ccbfff43c1016a"
   "scripts/docs_extract/run_all.py": "sha256:404445eba05d12de88af585f79839b7496a1658411a110e606c46d5ed7e8c338"
   "scripts/docs_idempotency.py": "sha256:fe8628ef3a9b9d824645a5db062857754d2984b0f3f4d866b571df6232302f17"
@@ -137,6 +137,9 @@ make test-fast BASE=<ref> # bounded local evidence; reports stronger follow-up l
 make test-pr BASE=<ref>   # affected-domain PR verification selection
 make resolve-environment PROFILE=staging CAPABILITIES='vpc=PASS ...' # capability-aware pre-mutation resolution
 make validate-environment-requirements # validate capability/profile policy without cloud access
+
+# Staging orchestration can persist an identity-bound checkpoint for resume:
+make deploy-staging CANDIDATE=<json> PROFILE=staging OUTPUT=<json> STATE=<checkpoint.json> ENVIRONMENT_RESOLUTION=<json>
 
 # Deployment-profile enforcement (profile class, parity, cost policy, doctor)
 make validate-profile-config    # deployment-profile matrix + founding-tenant posture

@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.olympuslabs.io/contracts/delivery/staging-orchestration-state/v1",
+  "title": "Aether Staging Orchestration State v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "operation_id", "profile", "candidate_identity", "phase", "status", "completed_stages", "checks", "failures", "resume_count", "created_at", "updated_at"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "operation_id": {"type": "string", "minLength": 1},
+    "profile": {"type": "string", "minLength": 1},
+    "candidate_identity": {"$ref": "#/$defs/candidateIdentity"},
+    "environment_resolution": {"$ref": "#/$defs/environmentResolution"},
+    "phase": {"enum": ["aws_identity", "preflight", "deploy", "migration", "tenant_activation", "golden_journeys", "complete"]},
+    "status": {"enum": ["RUNNING", "BLOCKED", "FAILED", "COMPLETE"]},
+    "completed_stages": {"type": "array", "uniqueItems": true, "items": {"enum": ["aws_identity", "preflight", "deploy", "migration", "tenant_activation", "golden_journeys"]}},
+    "checks": {"type": "array", "items": {"$ref": "#/$defs/check"}},
+    "failures": {"type": "array", "items": {"$ref": "#/$defs/failureEnvelope"}},
+    "resume_count": {"type": "integer", "minimum": 0},
+    "ephemeral_cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "required", "profile", "env", "lease_path", "reason"],
+      "properties": {
+        "status": {"enum": ["PASS", "BLOCKED", "NOT_APPLICABLE"]},
+        "required": {"type": "boolean"},
+        "profile": {"type": "string", "minLength": 1},
+        "env": {"type": "string", "minLength": 1},
+        "lease_path": {"type": ["string", "null"]},
+        "expires_at": {"type": ["string", "null"], "format": "date-time"},
+        "reason": {"type": "string"}
+      }
+    },
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "environmentResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "requested_profile", "resolved_profile", "capabilities", "omitted", "promotion_equivalence", "production_equivalent", "disposition", "blockers"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "requested_profile": {"type": "string", "minLength": 1},
+        "resolved_profile": {"type": "string", "minLength": 1},
+        "capabilities": {"type": "object", "additionalProperties": {"type": "object"}},
+        "omitted": {"type": "array", "items": {"type": "object"}},
+        "promotion_equivalence": {"type": ["string", "null"]},
+        "production_equivalent": {"type": "boolean"},
+        "disposition": {"enum": ["PASS", "PASS_WITH_DEGRADATION", "BLOCKED_EXTERNAL"]},
+        "blockers": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "candidateIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["release_candidate_id", "commit_sha", "artifact_digest", "profile"],
+      "properties": {
+        "release_candidate_id": {"type": "string", "minLength": 1},
+        "commit_sha": {"type": "string", "pattern": "^[0-9a-f]{7,64}$"},
+        "artifact_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "profile": {"type": "string", "minLength": 1}
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check_id", "status", "reason"],
+      "properties": {
+        "check_id": {"type": "string", "minLength": 1},
+        "status": {"enum": ["PASS", "PASS_WITH_DEGRADATION", "BLOCKED", "FAILED", "NOT_APPLICABLE"]},
+        "reason": {"type": "string"}
+      }
+    },
+    "failureEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "operation_id", "stage", "status", "code", "message", "retryable", "blocking"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "operation_id": {"type": "string", "minLength": 1},
+        "stage": {"type": "string", "minLength": 1},
+        "status": {"enum": ["BLOCKED", "FAILED"]},
+        "code": {"type": "string", "minLength": 1},
+        "message": {"type": "string", "minLength": 1},
+        "retryable": {"type": "boolean"},
+        "blocking": {"const": true},
+        "evidence_ref": {"type": "string", "minLength": 1},
+        "details": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    }
+  }
+}

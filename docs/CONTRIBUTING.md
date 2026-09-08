@@ -16,7 +16,7 @@ estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
   "AGENTS.md": "sha256:9c93d298d9048a47ebbc2bbebdfba02095972cef5b0bd8f1a16b56a41b816f0e"
-  "Makefile": "sha256:dccf27138afd889fdeea5d69a6b92407f9bc51cb5b0e5b4a3219559f1d6ef0c0"
+  "Makefile": "sha256:a2a20a5bd078b273fa95eb99f46b124a6c95723b6abf9b9af05b6c4c28a338e7"
   "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:88620327df8f66f95bb246548a484530a7fcc02388ce54fd167c6555f6157e37"
   "scripts/repo_doctor.py": "sha256:b0b85444c639b4be64ccf1defd21b92c3f9e8b0085e7d9c66f858b9a567ec1ac"
 ---
@@ -41,6 +41,10 @@ The canonical CI gate also validates the impact-aware verification router, the
 environment capability requirement registry, and the GitHub-only deployment
 operator boundary. These checks validate repository policy; they do not claim
 that AWS credentials, runtime validation, or production promotion occurred.
+For a resumable staging attempt, `make deploy-staging` accepts
+`STATE=<checkpoint.json>` and optionally `ENVIRONMENT_RESOLUTION=<json>`; each
+resume is bound to the same release-candidate identity and pre-mutation
+resolution decision.
 
 ## Generated docs
 
