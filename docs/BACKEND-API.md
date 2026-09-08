@@ -29,7 +29,7 @@ reviewed_source_commits:
   - commit: "33dfedb4"
     reason: "Reviewed 33dfedb4 — the /v1/rights surface is now MOUNTED in main.py (always mounted beside /v1/dsr); the routes carry the rollout-OFF 503 gate and require scalar source/purpose/destination matching RightsDecisionRequest; the durable repositories accept dict-or-model rows. This commit makes /v1/rights live and supersedes the earlier not-wired-into-main.py review notes. Body change: the Rights Authority section below documents the three endpoints and their rollout-gated 503 posture."
 source_hashes:
-  "Backend Architecture/aether-backend/services/": "sha256:5bc1db6d9adceb6f16f0b560b0098b0290183eb75dba3ab47a9a75b6c012c923"
+  "Backend Architecture/aether-backend/services/": "sha256:1f1715b3f40d2055c0d4e99aed2b2d841224f311370027d924cb3d706c567844"
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
 
