@@ -33,15 +33,23 @@ from shared.exploration.models import (
     ExplorationOperation,
     PivotSpec,
     TemporalSelection,
+    ExplorationSnapshot,
+    ExplorationSnapshotComparison,
 )
 from services.exploration import service as exploration_service
 from services.exploration.store import ExplorationViewRepository
+from services.exploration.snapshots import (
+    ExplorationSnapshotRepository,
+    canonical_digest,
+    compare_result_data,
+)
 from services.client_sync.emitter import enqueue_sync_change
 
 logger = get_logger("aether.service.exploration")
 router = APIRouter(prefix="/v1/explore", tags=["Exploration Fabric"])
 
 _views = ExplorationViewRepository()
+_snapshots = ExplorationSnapshotRepository()
 
 
 def _require_enabled() -> None:
@@ -104,6 +112,13 @@ class QueryRequest(_ContextRequest):
 class FacetRequest(_ContextRequest):
     fields: list[str] = Field(default_factory=list)
     limit: int = Field(default=500, ge=1, le=500)
+
+
+class SnapshotCreateRequest(_ContextRequest):
+    """Execute and checkpoint one canonical exploration result."""
+
+    name: Optional[str] = None
+    limit: int = Field(default=100, ge=1, le=500)
 
 
 class ViewUpsertRequest(_ContextRequest):
@@ -218,6 +233,121 @@ async def facet_surface(
             "exploration_facet_suppressed_total", labels={"count": str(suppressed)}
         )
     return APIResponse(data={"envelope": envelope.model_dump(mode="json")})
+
+
+# ── Immutable result snapshots + change diff ────────────────────────────────
+
+@router.get("/snapshots")
+async def list_snapshots(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> APIResponse:
+    """List only snapshots owned by the authenticated tenant."""
+    tenant = _tenant(request, "read")
+    rows = await _snapshots.list_scoped(tenant.tenant_id, limit=limit, offset=offset)
+    # Listing returns metadata, not the potentially large captured result body.
+    items = [
+        {k: v for k, v in row.items() if k not in {"result", "context"}}
+        for row in rows
+    ]
+    return APIResponse(data={"snapshots": items})
+
+
+@router.post("/snapshots")
+async def create_snapshot(
+    request: Request,
+    payload: SnapshotCreateRequest,
+    graph=Depends(get_graph),
+    cache=Depends(get_cache),
+) -> APIResponse:
+    """Run the canonical query and persist an immutable tenant-scoped result."""
+    tenant = _tenant(request, "write")
+    context = _bind_scope(payload.context, tenant)
+    envelope = await exploration_service.execute_query(
+        context,
+        request=request,
+        graph=graph,
+        cache=cache,
+        limit=payload.limit,
+    )
+    snapshot_id = str(uuid.uuid4())
+    envelope_data = envelope.model_dump(mode="json")
+    record = ExplorationSnapshot(
+        snapshot_id=snapshot_id,
+        tenant_id=tenant.tenant_id,
+        name=payload.name,
+        context=context,
+        result=envelope.data,
+        result_digest=canonical_digest(envelope.data),
+        limit=payload.limit,
+        truth_state=str(envelope.truth.overall_state),
+        completeness=envelope.completeness,
+        applicability=envelope.applicability,
+        freshness_watermark=envelope.truth.freshness_watermark or utc_now().isoformat(),
+        created_by=tenant.user_id,
+        created_at=utc_now().isoformat(),
+    )
+    await _snapshots.create(
+        tenant.tenant_id,
+        snapshot_id,
+        record.model_dump(mode="json"),
+    )
+    metrics.increment("exploration_snapshots_created_total")
+    return APIResponse(
+        data={
+            "snapshot": record.model_dump(mode="json"),
+            "envelope": envelope_data,
+        }
+    )
+
+
+@router.get("/snapshots/{snapshot_id}")
+async def get_snapshot(request: Request, snapshot_id: str) -> APIResponse:
+    """Read a captured result, failing closed on tenant mismatch."""
+    tenant = _tenant(request, "read")
+    row = await _snapshots.get_scoped(tenant.tenant_id, snapshot_id)
+    if row is None:
+        raise NotFoundError("exploration snapshot")
+    return APIResponse(data={"snapshot": ExplorationSnapshot.model_validate(row).model_dump(mode="json")})
+
+
+@router.post("/snapshots/{snapshot_id}/compare")
+async def compare_snapshot(
+    request: Request,
+    snapshot_id: str,
+    graph=Depends(get_graph),
+    cache=Depends(get_cache),
+) -> APIResponse:
+    """Re-run a saved context and return deterministic changes since capture."""
+    tenant = _tenant(request, "read")
+    row = await _snapshots.get_scoped(tenant.tenant_id, snapshot_id)
+    if row is None:
+        raise NotFoundError("exploration snapshot")
+    snapshot = ExplorationSnapshot.model_validate(row)
+    current = await exploration_service.execute_query(
+        snapshot.context,
+        request=request,
+        graph=graph,
+        cache=cache,
+        limit=snapshot.limit,
+    )
+    current_data = current.data
+    diff = compare_result_data(snapshot.result, current_data)
+    result = ExplorationSnapshotComparison(
+        snapshot_id=snapshot_id,
+        tenant_id=tenant.tenant_id,
+        snapshot_watermark=snapshot.freshness_watermark,
+        current_watermark=current.truth.freshness_watermark or utc_now().isoformat(),
+        changed=canonical_digest(snapshot.result) != canonical_digest(current_data),
+        diff=diff,
+        current_truth_state=str(current.truth.overall_state),
+        current_completeness=current.completeness,
+        warnings=list(current.warnings),
+        computed_at=utc_now().isoformat(),
+    )
+    metrics.increment("exploration_snapshots_compared_total")
+    return APIResponse(data={"comparison": result.model_dump(mode="json")})
 
 
 # ── Saved views ───────────────────────────────────────────────────────────────

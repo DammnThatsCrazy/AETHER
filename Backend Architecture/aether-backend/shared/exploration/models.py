@@ -297,6 +297,39 @@ class ExplorationResultEnvelope(_Model):
     warnings: list[str] = Field(default_factory=list)
 
 
+class ExplorationSnapshot(_Model):
+    """Immutable result checkpoint for a tenant's exploration workflow."""
+
+    snapshot_id: str
+    tenant_id: str
+    name: Optional[str] = None
+    context: ExplorationContextV1
+    result: Any = None
+    result_digest: str
+    limit: int
+    truth_state: str
+    completeness: ExplorationCompleteness
+    applicability: ApplicabilityReport
+    freshness_watermark: str
+    created_by: Optional[str] = None
+    created_at: str
+
+
+class ExplorationSnapshotComparison(_Model):
+    """Diff between a saved envelope and a fresh execution of its context."""
+
+    snapshot_id: str
+    tenant_id: str
+    snapshot_watermark: str
+    current_watermark: str
+    changed: bool
+    diff: dict[str, Any]
+    current_truth_state: str
+    current_completeness: ExplorationCompleteness
+    warnings: list[str] = Field(default_factory=list)
+    computed_at: str
+
+
 class ContextLink(_Model):
     """A context-preserving navigation edge to another surface."""
 
@@ -338,6 +371,8 @@ __all__ = [
     "ExplorationExecution",
     "ExplorationPagination",
     "ExplorationResultEnvelope",
+    "ExplorationSnapshot",
+    "ExplorationSnapshotComparison",
     "ContextLink",
     "Union",
 ]

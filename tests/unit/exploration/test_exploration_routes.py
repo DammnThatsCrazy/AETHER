@@ -157,6 +157,64 @@ class TestSavedViews:
             )
 
 
+class TestSnapshots:
+    async def test_snapshot_captures_result_and_compares_against_same_context(self, monkeypatch):
+        import services.exploration.routes as routes
+
+        _enable(monkeypatch)
+        responses = [
+            FakeGraphResponse([FakeGraphNode("e1", {"state": "new"})]),
+            FakeGraphResponse([
+                FakeGraphNode("e1", {"state": "settled"}),
+                FakeGraphNode("e2", {"state": "new"}),
+            ]),
+        ]
+
+        async def runner(body, request, graph, cache):
+            return responses.pop(0)
+
+        import services.exploration.adapters.graph as gadapter
+        monkeypatch.setattr(gadapter, "run_universal_graph_query", runner)
+        req = _request()
+        created = await routes.create_snapshot(
+            req,
+            routes.SnapshotCreateRequest(context=context("graph"), name="morning"),
+            graph=None,
+            cache=None,
+        )
+        snapshot = created.data["snapshot"]
+        assert snapshot["name"] == "morning"
+        assert snapshot["result"]["nodes"][0]["id"] == "e1"
+        assert snapshot["result_digest"]
+
+        compared = await routes.compare_snapshot(
+            req, snapshot["snapshot_id"], graph=None, cache=None
+        )
+        comparison = compared.data["comparison"]
+        assert comparison["changed"] is True
+        assert comparison["diff"]["nodes"]["added_ids"] == ["e2"]
+        assert comparison["diff"]["nodes"]["changed"][0]["id"] == "e1"
+
+    async def test_snapshot_is_tenant_scoped_and_listing_omits_result(self, monkeypatch):
+        import services.exploration.routes as routes
+
+        _enable(monkeypatch)
+        _patch_graph(monkeypatch, FakeGraphResponse([FakeGraphNode("e1")]))
+        req = _request()
+        created = await routes.create_snapshot(
+            req,
+            routes.SnapshotCreateRequest(context=context("graph")),
+            graph=None,
+            cache=None,
+        )
+        snapshot_id = created.data["snapshot"]["snapshot_id"]
+        listed = await routes.list_snapshots(req, limit=100, offset=0)
+        assert listed.data["snapshots"][0]["snapshot_id"] == snapshot_id
+        assert "result" not in listed.data["snapshots"][0]
+        with pytest.raises(NotFoundError):
+            await routes.get_snapshot(_request("t2"), snapshot_id)
+
+
 class TestLinkResolver:
     async def test_link_retargets_surface_and_reports_applicability(self, monkeypatch):
         import services.exploration.routes as routes

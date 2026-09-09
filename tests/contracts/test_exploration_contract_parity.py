@@ -30,6 +30,8 @@ from shared.exploration.models import (  # noqa: E402
     ExplorationOpRecord,
     ExplorationOpResult,
     ExplorationResultEnvelope,
+    ExplorationSnapshot,
+    ExplorationSnapshotComparison,
     ExplorationSession,
     FilterApplicabilityEntry,
     PivotSpec,
@@ -107,6 +109,15 @@ def test_result_envelope_field_parity():
     assert ts_fields == py_fields, (
         f"ExplorationResultEnvelope drift: TS-only={ts_fields - py_fields}, "
         f"PY-only={py_fields - ts_fields}"
+    )
+
+
+def test_snapshot_contract_field_parity():
+    assert _interface_fields("ExplorationSnapshot") == set(
+        ExplorationSnapshot.model_fields
+    )
+    assert _interface_fields("ExplorationSnapshotComparison") == set(
+        ExplorationSnapshotComparison.model_fields
     )
 
 

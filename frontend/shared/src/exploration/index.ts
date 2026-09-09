@@ -162,6 +162,9 @@ export type {
   ResolveContextLinkRequest,
   ResolvedContextLink,
   ExplorationValidationResult,
+  ExplorationSnapshot,
+  ExplorationSnapshotComparison,
+  CreateExplorationSnapshotRequest,
   ExplorationClient,
 } from './client';
 
