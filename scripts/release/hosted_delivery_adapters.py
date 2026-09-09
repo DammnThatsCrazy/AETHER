@@ -25,7 +25,7 @@ _STATUSES = frozenset({"PASS", "PASS_WITH_DEGRADATION", "BLOCKED", "FAILED"})
 _AUTHORITIES = frozenset({"environment", "iam", "state", "artifact", "runtime", "release"})
 _CREDENTIAL_SOURCES = frozenset({"github_oidc", "aws_profile", "injected_read_only"})
 _SECRET_KEY = re.compile(
-    r"(?:^|[_-])(secret|token|password|passwd|api[_-]?key|private[_-]?key|access[_-]?key|credential)(?:$|[_-])",
+    r"(?:^|[_-])(secret|token|password|passwd|api[_-]?key|private[_-]?key|access[_-]?key)(?:$|[_-])",
     re.IGNORECASE,
 )
 _SECRET_VALUE = re.compile(

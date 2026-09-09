@@ -27,6 +27,10 @@ source_files:
   - contracts/delivery/effective-iam-comparison.schema.json
   - contracts/delivery/terraform-remote-inventory.schema.json
   - contracts/delivery/terraform-reconciliation.schema.json
+  - contracts/delivery/hosted-adapter-request.schema.json
+  - contracts/delivery/hosted-adapter-result.schema.json
+  - contracts/delivery/artifact-closure.schema.json
+  - contracts/delivery/profile-delivery-operation.schema.json
   - config/environment_requirements.yaml
   - config/staging_apply_iam_policy.yaml
   - config/terraform_resource_contracts.yaml
@@ -48,6 +52,10 @@ source_files:
   - scripts/release/discover_environment_capabilities.py
   - scripts/release/compare_effective_iam.py
   - scripts/release/terraform_reconciliation.py
+  - scripts/release/hosted_delivery_adapters.py
+  - scripts/release/artifact_closure.py
+  - scripts/release/profile_delivery_contracts.py
+  - scripts/release/check_hosted_delivery_contracts.py
   - scripts/release/release_candidate_adapter.py
   - scripts/release/check_environment_requirements.py
   - scripts/validate_verification_router.py
@@ -252,6 +260,24 @@ absent from state is classified as `UNMANAGED_ADOPTABLE` and produces
 `RECONCILIATION_REQUIRED` with an explicit `import` action; it is never
 recreated implicitly. These tools produce evidence for review, not live AWS
 verification or mutation authority.
+
+Hosted integration has one repository-owned adapter boundary. A GitHub
+workflow may inject a short-lived OIDC/profile reference and return typed
+capability, IAM, state, artifact, or runtime observations through
+`scripts/release/hosted_delivery_adapters.py`; the contract rejects plaintext
+secrets, mismatched operation/profile/candidate identities, and mutation from
+read-only requests. Offline fixtures are deliberately unable to claim a live
+hosted PASS. Artifact closure validation checks the exact candidate component
+bytes and required archive entries, while provenance remains
+`UNSIGNED_OR_UNVERIFIED` until a hosted registry/signature is supplied.
+
+Profile-aware operation contracts cover preview, demo, staging, promotion,
+rollback, and cleanup requests. Ephemeral profiles require a bounded TTL and
+passing cleanup evidence; promotion requires exact staging evidence; dry-run
+results cannot claim mutation. The operation telemetry event records queue,
+setup, execution, cache, retry, and failure-category metadata without
+credentials. These are the safe handoff contracts; they do not execute AWS,
+GitHub, Terraform, tenant journeys, or production promotion locally.
 
 PR CI compiles workspace packages once, archives the resulting `dist`
 directories, and creates `release-candidate.json` bound to that archive, the

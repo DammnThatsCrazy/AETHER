@@ -457,6 +457,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     run(
+        [sys.executable, "scripts/release/check_hosted_delivery_contracts.py"],
+        name="Credential-safe hosted delivery contracts",
+        results=results,
+        stop_on_failure=stop,
+        remediation="repair hosted adapter, artifact closure, profile operation, or delivery telemetry contracts",
+    )
+
+    run(
         [sys.executable, "scripts/validate_verification_router.py"],
         name="Impact-aware verification router",
         results=results,

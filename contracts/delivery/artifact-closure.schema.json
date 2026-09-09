@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.olympuslabs.io/contracts/delivery/artifact-closure/v1",
+  "title": "Aether ArtifactClosure v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status", "candidate_identity", "artifacts", "artifact_digest", "provenance"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "status": {"const": "PASS"},
+    "candidate_identity": {"$ref": "#/$defs/identity"},
+    "artifacts": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/artifact"}
+    },
+    "artifact_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "provenance": {"$ref": "#/$defs/provenance"}
+  },
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["release_candidate_id", "commit_sha", "artifact_digest", "profile"],
+      "properties": {
+        "release_candidate_id": {"type": "string", "minLength": 1},
+        "commit_sha": {"type": "string", "pattern": "^[0-9a-f]{7,64}$"},
+        "artifact_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "profile": {"type": "string", "minLength": 1}
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "digest", "required_entries", "closure"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "required_entries": {"type": "array", "items": {"type": "string"}},
+        "closure": {"const": "PASS"}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "builder", "signature_status"],
+      "properties": {
+        "source": {"enum": ["local", "github_artifact", "hosted_registry"]},
+        "builder": {"type": "string", "minLength": 1},
+        "registry_ref": {"type": ["string", "null"]},
+        "signature_ref": {"type": ["string", "null"]},
+        "signature_status": {"enum": ["VERIFIED", "UNSIGNED_OR_UNVERIFIED"]}
+      }
+    }
+  }
+}
