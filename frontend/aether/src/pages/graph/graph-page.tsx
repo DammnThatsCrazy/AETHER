@@ -356,7 +356,16 @@ const NODE_COLUMNS = [
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export function GraphPage() {
+export interface GraphPageProps {
+  /**
+   * Keeps the graph state machine and canvas/inspector composition intact
+   * while allowing a containing workspace to provide its own outer chrome.
+   * Standalone /graph keeps the historical default.
+   */
+  readonly embedded?: boolean;
+}
+
+export function GraphPage({ embedded = false }: GraphPageProps = {}) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const deepLinkedEntity = searchParams.get('entity') ?? searchParams.get('selected_entity');
@@ -580,7 +589,11 @@ export function GraphPage() {
   }
 
   return (
-    <div className="p-6 space-y-4 h-full flex flex-col">
+    <div
+      className={cn('p-6 space-y-4 h-full flex flex-col', embedded && 'graph-page--embedded')}
+      data-testid="graph-page"
+      data-graph-embedded={embedded ? 'true' : 'false'}
+    >
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
