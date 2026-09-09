@@ -40,6 +40,7 @@ import {
 } from '@aether/shared/exploration-contract';
 import { EDGE_LAYER_MAP, RELATIONSHIP_LAYERS } from '@aether/shared/graph-contract';
 import { temporalAuthorities } from '@aether/shared/temporal';
+import { isValidInstant, isValidTimeZone } from '../time';
 
 import {
   getFilterField,
@@ -96,18 +97,12 @@ function isFiniteNumber(value: unknown): value is number {
 
 function isSafeInstant(value: unknown): value is string {
   return isSafeToken(value, 80)
-    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
-    && Number.isFinite(Date.parse(value));
+    && isValidInstant(value);
 }
 
 function isSafeTimezone(value: unknown): value is string {
   if (!isSafeToken(value, 128) || value.includes('..') || value.startsWith('/')) return false;
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: value }).format();
-    return true;
-  } catch {
-    return false;
-  }
+  return isValidTimeZone(value);
 }
 
 function isValidRange(value: unknown): value is TemporalRange {
