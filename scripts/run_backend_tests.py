@@ -22,7 +22,19 @@ PERFORMANCE_TESTS = BACKEND_TESTS / "performance"
 
 
 def _run_pytest(*paths: str, serial: bool = False) -> int:
-    command = [sys.executable, "-m", "pytest", *paths, "-v", "--tb=short"]
+    # Backend feature areas intentionally reuse descriptive test module names
+    # (for example, several ``test_routes.py`` files).  Importlib mode keeps
+    # those files isolated by path during one tree-wide collection instead of
+    # treating them as conflicting top-level modules.
+    command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        *paths,
+        "-v",
+        "--tb=short",
+        "--import-mode=importlib",
+    ]
     if serial:
         # Override pyproject.toml's ``-n auto`` for wall-clock benchmarks.
         command.extend(["-n", "0"])
@@ -43,4 +55,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
