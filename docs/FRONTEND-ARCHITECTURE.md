@@ -33,9 +33,9 @@ reviewed_source_commits:
   - commit: "8b1ca3dc"
     reason: "R2 WS-6 re-stamp after review (enduser-lifecycle lane, Phase 8 acceptance tail). Reviewed the new Playwright lifecycle suites A–E + shared harness added under frontend/aether/src/test/e2e/. This doc makes no claim about the tenant app's e2e/test inventory (its only test reference is Kyber unit tests at lines 842-844), and the suites are additive test surfaces, not runtime/IA changes — no body change required."
 source_hashes:
-  "frontend/aether/src/": "sha256:343ecd7b778d620a55213da65cc508dff2583e9198a4caa15ce3104f62914e75"
+  "frontend/aether/src/": "sha256:60df60cb880ef8682e524e66825deaed96c0e90325b06d1fe3da593cd0a40a39"
   "frontend/kyber/src/": "sha256:0231b24d315cbd3dff15c4ad1b1da5864e53b2a07aa8da27f079461996aa2ca2"
-  "frontend/shared/src/": "sha256:740a53c451be599293c200e140e6b0610b36979705fa1105e368304ddc5f924e"
+  "frontend/shared/src/": "sha256:76362b4ce68552eacfc95161ffb3321b2c22260078d075e15d982da0c3db1b9c"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -161,11 +161,17 @@ There are two separate frontend applications. **Do not mix them up.**
   lens, intelligence-projection, and surface registries. A family with no
   canonical registry entry or compatible projection is reported as pending or
   not ready; the UI does not manufacture availability.
-- Aether and Kyber application gates still mount the legacy
-  `ExplorationProvider` until their backend session/profile boundary supplies
-  authoritative workspace and environment scope. Availability of the shared
-  Phase 1 runtime is therefore not an application-host migration or readiness
-  claim.
+- **Aether host binding:** authenticated Aether sessions fetch `/v1/me` and
+  mount `GraphContextProvider` only after the returned `graph_scope` matches the
+  authenticated tenant and supplies a workspace, logical environment, and the
+  supported `single_workspace_tenant_v1` authority model. Loading, transport
+  failure, incomplete scope, and tenant mismatch render explicit unavailable
+  states; no route or build-time environment value can become graph authority.
+  Kyber remains on its existing host runtime and is not part of this migration.
+- **Shared graph workspace chrome:** `GraphWorkspaceFrame`,
+  `GraphContextBar`, `GraphTimeRail`, and `NoesisContextStrip` are controlled
+  presentation components. They render supplied graph state without owning a
+  router, authentication, fetching, or a second context store.
 - **Canonical value display** (`frontend/shared/src/value/`): `ValueDisplay`, `USDValue`, `NativeValueBreakdown`, `ValuationWarning` + `formatUSD` / `formatNativeValue` / `formatAetherValue`. USD-first with native drilldown; absent/unpriced values render "Value unavailable", never `$0.00`. All financial values must render through these — enforced by `scripts/validate_frontend_value_display.py`. See [`FINANCIAL_VALUE_SEMANTICS.md`](source-of-truth/FINANCIAL_VALUE_SEMANTICS.md).
 - Graph layer type contracts: `RelationshipLayer` (`H2H | H2A | A2H | A2A`), `RELATIONSHIP_LAYERS`, `LAYER_DESCRIPTIONS`, `EDGE_LAYER_MAP`, `classifyEdgeType`, `countEdgesByLayer` — shared between Aether and Kyber graph health features
 - **Path intelligence types** (Phase 20): `PathClassification`, `PathNode`, `PathEdge`, `PathScoreBreakdown`, `RelationshipPath`, `PathExplanation`, `TraversalSnapshot`, `PathQuery`, `PathQueryResponse`, `NodeExpansionRequest`, `NodeExpansionResponse`, `DeepTraversalJob` — canonical TS contracts in `packages/shared/operational-intelligence.ts`, mirroring the Pydantic models exactly
@@ -236,8 +242,9 @@ The UX must surface these moments. **The graph makes the invisible visible.**
 The intelligence graph is the primary surface. Entity profiles are drilldowns from selected graph nodes.
 
 ```
-/graph                           → graph canvas, full tenant entity graph
-/graph?focus={entity_id}         → graph canvas centered on entity + 1-hop neighbors
+/explore                         → primary Aether graph workspace
+/explore?focus={entity_id}       → graph workspace centered on entity + 1-hop neighbors
+/graph[?query]                   → legacy redirect to /explore, preserving query and hash
 /profile/{entity_id}             → full-screen Profile360 for selected entity
 /profile/{entity_id}/{tab}       → Profile360 at a specific tab
 /geo                             → geographic intelligence view (global)
@@ -246,6 +253,16 @@ The intelligence graph is the primary surface. Entity profiles are drilldowns fr
 /payment-rails                   → payment rail observability (flag-gated, observation-only)
 /ai-efficiency                   → AI efficiency dashboard (flag-gated; proposals only)
 ```
+
+The authenticated tenant landing target is `/explore` once activation is
+complete. The minimal application rail exposes Explore plus real Sources and
+Settings capabilities; Findings, Investigations, Outcomes, and Reports remain
+visibly not ready instead of linking to fabricated surfaces. Explore composes
+the shared context bar, time rail, and collapsed Noesis context strip around
+the existing server-backed graph canvas, loading/error/empty states, table/path
+modes, and inspector. Lens controls remain in the existing graph workspace
+until the later lens-dock migration, and the Noesis strip links to the existing
+Noesis surface rather than synthesizing recommendations.
 
 Campaign360 gains a **Targeting Intelligence** tab and Cluster360 a
 **Targeting Impact** tab (flag-gated; observation-only — "Aether does not

@@ -29,7 +29,7 @@ reviewed_source_commits:
   - commit: "33dfedb4"
     reason: "Reviewed 33dfedb4 — the /v1/rights surface is now MOUNTED in main.py (always mounted beside /v1/dsr); the routes carry the rollout-OFF 503 gate and require scalar source/purpose/destination matching RightsDecisionRequest; the durable repositories accept dict-or-model rows. This commit makes /v1/rights live and supersedes the earlier not-wired-into-main.py review notes. Body change: the Rights Authority section below documents the three endpoints and their rollout-gated 503 posture."
 source_hashes:
-  "Backend Architecture/aether-backend/services/": "sha256:1f1715b3f40d2055c0d4e99aed2b2d841224f311370027d924cb3d706c567844"
+  "Backend Architecture/aether-backend/services/": "sha256:e9e6580634661c674eb15b808922e1d5c7240d609a5d71de337bb52a1231b4ff"
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
 
@@ -163,12 +163,20 @@ permission gate beyond authentication.
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/v1/me` | GET | Caller profile + plan summary |
+| `/v1/me` | GET | Caller profile + plan summary and server-owned graph scope |
 | `/v1/me/api-keys` | GET | List caller's API keys (paginated; honours `limit` + `cursor`) |
 | `/v1/me/api-keys` | POST | Create a new API key (self-service) |
 | `/v1/me/api-keys/{key_id}` | PATCH | Rename an existing API key |
 | `/v1/me/api-keys/{key_id}` | DELETE | Revoke an API key |
 | `/v1/me/account` | DELETE | Self-service account deletion (GDPR Article 17) |
+
+`GET /v1/me` includes `graph_scope` with `tenant_id`, `workspace_id`,
+`environment_id`, and `scope_model`. In the current
+`single_workspace_tenant_v1` model, the workspace is the authenticated tenant
+and `environment_id` is the logical graph environment `production`. These
+coordinates are server authority: client input, URL state, tenant-record
+metadata, and `AETHER_ENV` cannot override them. Multi-workspace selection is
+not exposed by this model.
 
 ### Contact & enterprise inquiries (`/v1/contact/*`, API key required)
 
