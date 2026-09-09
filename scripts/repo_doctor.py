@@ -988,7 +988,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             ),
         )
         run(
-            ["python", "scripts/validate_frontend_route_state_matrix.py", "--enforce"],
+            [sys.executable, "scripts/validate_frontend_route_state_matrix.py", "--enforce"],
             name="Frontend route-state coverage (Aether/Kyber)",
             results=results,
             stop_on_failure=stop,

@@ -18,7 +18,7 @@ source_hashes:
   "AGENTS.md": "sha256:9c93d298d9048a47ebbc2bbebdfba02095972cef5b0bd8f1a16b56a41b816f0e"
   "Makefile": "sha256:294db32271e7e84d8d29a61ae8b7c67e9a1acd25fdc320a9bf3c639398b73568"
   "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:88620327df8f66f95bb246548a484530a7fcc02388ce54fd167c6555f6157e37"
-  "scripts/repo_doctor.py": "sha256:dcfeb5d6ff8ed23f450235f531ea5a5633bee1713911824ba07ffa5d2fc8e464"
+  "scripts/repo_doctor.py": "sha256:a8751963154c6f1eb83f9d87eb2a45d961f847825dd82325d48edd854b2d7651"
 ---
 
 # Contributing
@@ -36,6 +36,10 @@ Before opening or updating a PR:
 5. Do not bypass TypeScript/package export failures.
 6. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
 7. PR is not complete until `make ci-check` exits 0.
+
+Repository-doctor Python subprocesses inherit the interpreter running
+`scripts/repo_doctor.py` (normally `.venv/bin/python` through the Makefile), so
+the canonical gate does not depend on a separate bare `python` executable.
 
 The canonical CI gate also validates the impact-aware verification router, the
 environment capability requirement registry, and the GitHub-only deployment
