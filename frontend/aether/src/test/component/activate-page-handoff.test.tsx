@@ -306,4 +306,23 @@ describe("ActivatePage activation deep-link prefill", () => {
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
     expect(state.mutation.mutate).not.toHaveBeenCalled();
   });
+
+  it("offers the graph workspace only when backend activation is exactly complete", () => {
+    setEmptyDurable();
+    state.status.data = { ...NOT_STARTED, state: "complete" };
+    renderActivateAt("/activation");
+
+    const handoff = screen.getByTestId("activation-explore-handoff");
+    expect(handoff).toHaveAttribute("href", "/explore");
+    expect(handoff).toHaveTextContent("Your graph workspace is available");
+  });
+
+  it("does not claim graph readiness for a non-complete activation state", () => {
+    setEmptyDurable();
+    state.status.data = { ...NOT_STARTED, state: "first_value_ready" };
+    renderActivateAt("/activation");
+
+    expect(screen.queryByTestId("activation-explore-handoff")).toBeNull();
+    expect(screen.queryByText(/graph workspace is available/i)).toBeNull();
+  });
 });

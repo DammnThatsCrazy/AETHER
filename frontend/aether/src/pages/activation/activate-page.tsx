@@ -598,6 +598,16 @@ export function ActivatePage() {
       <div className="max-w-3xl mx-auto space-y-6">
         {header}
 
+        {status.data?.state === "complete" && (
+          <Link
+            to="/explore"
+            data-testid="activation-explore-handoff"
+            className="block rounded-lg border border-border-focus bg-surface-raised px-4 py-3 text-sm font-semibold text-text-primary shadow-sm transition-colors hover:bg-surface-overlay focus:outline-none focus:ring-2 focus:ring-border-focus"
+          >
+            Your graph workspace is available — Explore Aether
+          </Link>
+        )}
+
         {status.isLoading && !status.data && <LoadingState lines={6} />}
 
         {!status.isLoading && status.error && (
