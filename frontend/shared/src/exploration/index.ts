@@ -201,3 +201,14 @@ export { ExplorationBreadcrumbs } from './components/breadcrumbs';
 export type { ExplorationBreadcrumbsProps } from './components/breadcrumbs';
 export { SavedViewChrome } from './components/saved-view-chrome';
 export type { SavedViewChromeProps, SavedView } from './components/saved-view-chrome';
+
+// Reusable graph-first workspace chrome. These components are controlled by
+// the host surface and intentionally do not read router, auth, URL, or global state.
+export { GraphWorkspaceFrame } from './components/graph-workspace-frame';
+export type { GraphWorkspaceFrameProps } from './components/graph-workspace-frame';
+export { GraphContextBar } from './components/graph-context-bar';
+export type { GraphContextBarProps } from './components/graph-context-bar';
+export { GraphTimeRail } from './components/graph-time-rail';
+export type { GraphTimeRailProps } from './components/graph-time-rail';
+export { NoesisContextStrip } from './components/noesis-context-strip';
+export type { NoesisContextStripProps } from './components/noesis-context-strip';
