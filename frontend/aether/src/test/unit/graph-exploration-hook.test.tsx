@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ExplorationClient } from '@aether/ui/exploration';
 import { GraphContextProvider } from '@aether/ui/exploration';
-import { useGraphData } from '@aether-app/features/graph/use-graph-data';
+import { api } from '@aether-app/lib/api/endpoints';
+import { useGraphData, useGraphZoom } from '@aether-app/features/graph/use-graph-data';
 
 describe('canonical graph exploration hook', () => {
   it('uses provider tenant authority and maps the confirmed graph adapter shape', async () => {
@@ -73,5 +74,30 @@ describe('canonical graph exploration hook', () => {
       environment_id: 'environment-authority',
       surface: 'graph',
     });
+  });
+
+  it('blocks semantic zoom when a legacy tenant argument conflicts with host scope', async () => {
+    const query = vi.spyOn(api.graphIntelligence, 'query').mockResolvedValue({ nodes: [], edges: [] });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <GraphContextProvider
+        scope={{
+          tenant_id: 'tenant-authority',
+          workspace_id: 'workspace-authority',
+          environment_id: 'environment-authority',
+        }}
+      >
+        {children}
+      </GraphContextProvider>
+    );
+
+    const { result } = renderHook(() => useGraphZoom('spoofed-tenant'), { wrapper });
+
+    await act(async () => {
+      await result.current.fetchMacro();
+    });
+
+    expect(result.current.error).toBe('Graph scope does not match the authenticated tenant');
+    expect(query).not.toHaveBeenCalled();
+    query.mockRestore();
   });
 });

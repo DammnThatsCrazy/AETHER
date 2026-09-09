@@ -313,6 +313,7 @@ interface ZoomState {
 }
 
 export function useGraphZoom(tenantId?: string) {
+  const graphContext = useGraphContext();
   const [zoomLevel, setZoomLevel] = useState<GraphZoomLevel>('entity');
   const [expandedClusterId, setExpandedClusterId] = useState<string | null>(null);
   const [zoomNodes, setZoomNodes] = useState<GraphNode[]>([]);
@@ -325,11 +326,20 @@ export function useGraphZoom(tenantId?: string) {
     cancelRef.current = false;
     setIsLoading(true);
     setError(null);
+    // This legacy helper predates GraphContext and only has a tenant-only
+    // backend contract. Never let its optional argument select another
+    // tenant; a mismatch is an explicit blocked state until the API gains a
+    // workspace/environment-aware request contract.
+    if (tenantId && tenantId !== graphContext.scope.tenant_id) {
+      setError('Graph scope does not match the authenticated tenant');
+      setIsLoading(false);
+      return;
+    }
     try {
       // depth=0 is rejected by the backend (min=1). Use depth=1 with cluster node_types
       // so we get only cluster-aggregate vertices without expanding their members.
       const resp = await api.graphIntelligence.query({
-        tenant_id: tenantId || undefined,
+        tenant_id: graphContext.scope.tenant_id,
         depth: 1,
         node_types: [
           'IdentityCluster', 'HouseholdCluster', 'OrgCluster', 'DeviceCluster',
@@ -351,15 +361,20 @@ export function useGraphZoom(tenantId?: string) {
     } finally {
       if (!cancelRef.current) setIsLoading(false);
     }
-  }, [tenantId]);
+  }, [graphContext.scope.tenant_id, tenantId]);
 
   const expandCluster = useCallback(async (clusterId: string) => {
     cancelRef.current = false;
     setIsLoading(true);
     setError(null);
+    if (tenantId && tenantId !== graphContext.scope.tenant_id) {
+      setError('Graph scope does not match the authenticated tenant');
+      setIsLoading(false);
+      return;
+    }
     try {
       const resp = await api.graphIntelligence.query({
-        tenant_id: tenantId || undefined,
+        tenant_id: graphContext.scope.tenant_id,
         anchors: [clusterId],
         depth: 1,
         limit: 500,
@@ -394,7 +409,7 @@ export function useGraphZoom(tenantId?: string) {
     } finally {
       if (!cancelRef.current) setIsLoading(false);
     }
-  }, [tenantId]);
+  }, [graphContext.scope.tenant_id, tenantId]);
 
   const resetZoom = useCallback(() => {
     cancelRef.current = true;
