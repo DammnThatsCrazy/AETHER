@@ -25,6 +25,14 @@ def test_frontend_change_routes_only_relevant_pr_suites():
     assert "integration" not in ids
 
 
+def test_unregistered_path_escalates_to_integration_with_explicit_unknown_domain():
+    result = route(["new-runtime-surface/worker.py"])
+    assert result["affected_domains"] == ["unknown_component"]
+    assert result["minimum_lane"] == "integration"
+    assert result["selected_lane"] == "integration"
+    assert "integration" in {item["check_id"] for item in result["checks"]}
+
+
 def test_fast_local_evidence_does_not_replace_required_integration_lane():
     result = route(["deploy/integration/docker-compose.durable.yml"], "fast")
     assert result["selected_lane"] == "fast"

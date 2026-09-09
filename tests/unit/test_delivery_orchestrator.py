@@ -5,18 +5,20 @@ from pathlib import Path
 import jsonschema
 
 from scripts import delivery_orchestrator as orchestrator
+from scripts.artifact_builder import aggregate_digest
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def candidate(tmp_path: Path, **overrides) -> Path:
     path = tmp_path / "candidate.json"
+    component_digests = {"repository-build": "sha256:" + "a" * 64}
     value = {
         "schema_version": 1,
         "release_candidate_id": "rc-test",
         "commit_sha": "a" * 40,
-        "artifact_digest": "sha256:" + "a" * 64,
-        "dependency_lock_hash": "sha256:" + "b" * 64,
+        "artifact_digest": aggregate_digest(component_digests),
+        "dependency_lock_hash": aggregate_digest({}),
         "dependency_lock_digests": {},
         "contract_versions": {},
         "migration_version": "none",
@@ -25,7 +27,7 @@ def candidate(tmp_path: Path, **overrides) -> Path:
         "deployment_profiles": ["staging"],
         "affected_domains": ["delivery"],
         "required_checks": ["canonical-consistency"],
-        "component_digests": {"repository-build": "sha256:" + "a" * 64},
+        "component_digests": component_digests,
         "deployment_impact": {
             "schema_version": 1,
             "profile": "staging",
@@ -42,6 +44,8 @@ def candidate(tmp_path: Path, **overrides) -> Path:
         "created_at": "2026-09-07T00:00:00+00:00",
     }
     value.update(overrides)
+    if "deployment_profiles" in overrides:
+        value["deployment_impact"]["profile"] = overrides["deployment_profiles"][0]
     path.write_text(json.dumps(value))
     return path
 
@@ -105,6 +109,34 @@ def test_staging_success_executes_every_ordered_command(tmp_path, monkeypatch):
     result = json.loads(args.output.read_text())
     assert result["status"] == "DEPLOYED"
     assert observed == ["aws sts get-caller-identity --output json", "preflight", "deploy", "migrate", "activate", "journeys"]
+
+
+def test_staging_checkpoint_mode_resumes_exact_candidate(tmp_path, monkeypatch):
+    monkeypatch.setenv("AWS_PROFILE", "test")
+    args = staging_args(
+        tmp_path,
+        state=tmp_path / "staging-state.json",
+        preflight_command="preflight",
+        deploy_command="deploy",
+        migration_command="migrate",
+        tenant_activation_command="activate",
+        journeys_command="journeys",
+    )
+    def first_attempt(command):
+        if command == "deploy":
+            return "BLOCKED", "deploy paused"
+        return "PASS", "passed"
+
+    monkeypatch.setattr(orchestrator, "run", first_attempt)
+    assert orchestrator.staging(args) == 1
+    assert json.loads(args.output.read_text())["status"] == "BLOCKED"
+
+    resumed_calls = []
+    monkeypatch.setattr(orchestrator, "run", lambda command: (resumed_calls.append(command) or ("PASS", "passed")))
+    assert orchestrator.staging(args) == 0
+    result = json.loads(args.output.read_text())
+    assert result["status"] == "DEPLOYED"
+    assert resumed_calls == ["deploy", "migrate", "activate", "journeys"]
 
 
 def test_migration_requires_database_credentials(tmp_path, monkeypatch):

@@ -20,6 +20,7 @@ source_files:
   - contracts/delivery/release-evidence-bundle.schema.json
   - contracts/delivery/migration-evidence.schema.json
   - contracts/delivery/staging-lifecycle-result.schema.json
+  - contracts/delivery/staging-orchestration-state.schema.json
   - contracts/delivery/environment-resolution.schema.json
   - contracts/delivery/environment-capability-snapshot.schema.json
   - contracts/delivery/effective-iam-evidence.schema.json
@@ -34,6 +35,7 @@ source_files:
   - scripts/change_plan.py
   - scripts/check_router.py
   - scripts/delivery_orchestrator.py
+  - scripts/staging_state_machine.py
   - scripts/release/evidence_bundle.py
   - scripts/lib/test_suites.py
   - scripts/run_pytest_files.py
@@ -49,6 +51,20 @@ source_files:
   - scripts/release/check_environment_requirements.py
   - scripts/validate_verification_router.py
   - scripts/release/check_deployment_operator_surface.py
+  - config/delivery_workflow_authority.yaml
+  - scripts/release/check_delivery_workflow_authority.py
+  - tests/unit/test_staging_state_machine.py
+  - config/impact_graph.json
+  - config/telemetry_contracts.json
+  - contracts/delivery/impact-graph-index.schema.json
+  - contracts/delivery/telemetry-event.schema.json
+  - scripts/impact_graph.py
+  - scripts/lib/impact_graph.py
+  - scripts/lib/telemetry.py
+  - scripts/validate_impact_graph.py
+  - scripts/validate_telemetry_contracts.py
+  - tests/unit/test_impact_graph.py
+  - tests/unit/test_telemetry_contracts.py
   - Makefile
 canonical_owner: platform@aether
 estimated_read_minutes: 8
@@ -83,7 +99,9 @@ latency regression.
    `make change-plan CHANGE_ID=<id> TITLE='<title>' OWNER=<owner>`.
 3. Run `make test-fast BASE=<git-ref>` for bounded local feedback.
 4. Run `make test-pr BASE=<git-ref>` for the merge-safety selection.
-5. Run `make docs-fix`, review source-linked drift, and run `make ci-check`
+5. Run `make docs-generate`, review source-linked drift, update only reviewed
+   pages with `make docs-generate-changed`, prove idempotence, and run
+   `make ci-check`
    before claiming repository completion.
 6. Treat integration, regression, and release as progressively stronger lanes;
    none may be substituted for profile-specific deployment evidence.
@@ -109,6 +127,20 @@ triggered, the inventory tests whose declared source or dependencies changed,
 and the selected check ids. This is impact evidence, not a claim that the
 currently registered suite commands have been narrowed to those tests; suite
 execution remains governed by the canonical registry and full completion gate.
+
+The Impact Graph v2 index extends that route result with registered components,
+owned contracts, transitive consumers, deployable surfaces, and unresolved
+paths. `scripts/impact_graph.py` emits a deterministic index and can compare
+targeted nodes with a legacy broad scope. A `targeted_miss` is retained as
+evidence for graph expansion; it never silently reduces verification. The
+telemetry contract records timing and disposition metadata only, with no
+credentials or hosted exporter, so shadow-cutover comparisons remain
+auditable without claiming cloud or release readiness.
+
+An unregistered changed path is an explicit `unknown_component` impact. The
+router escalates such a change to the `integration` lane until a component,
+contract, and deployable registration exists; uncertainty therefore cannot
+silently reduce verification.
 
 ## Lane semantics
 
@@ -142,12 +174,31 @@ identities so staging and promotion can refer to the exact same build. A
 re-check the exact component files, dependency locks, commit, profile, and
 rollback/approval implications before execution.
 
+Candidate validation is relational as well as structural: the aggregate
+artifact and lock digests must match their named maps, the deployment impact
+must match the candidate's profile/domains/components, and migration impact
+must agree with the migration version. A candidate that only has a valid JSON
+shape but mismatched identity fields is blocked before staging.
+
 Blocked or failed staging execution emits a typed `FailureEnvelope` alongside
 the lifecycle result. It records the operation, stage, stable failure code,
 retryability, and evidence reference while bounding and redacting command
 detail. A missing candidate, incompatible profile, absent cloud identity, or
 failed command therefore remains a first-class blocked/failed outcome instead
 of an unexplained generic error.
+
+When a workflow or operator supplies `STATE=<checkpoint.json>` to
+`make deploy-staging`, `scripts/staging_state_machine.py` persists an atomic
+checkpoint after each passing stage. Every resume revalidates the checkpoint
+against the complete candidate identity (candidate id, commit, artifact
+digest, and profile) and, when `ENVIRONMENT_RESOLUTION=<json>` is supplied,
+the pre-mutation environment-resolution decision. It continues at the first
+incomplete stage. Pure
+promotion and rollback verifiers apply the same equality rule to both sides of
+the transition; they do not apply infrastructure or imply cloud evidence.
+Ephemeral demo/preview runs can also validate their cleanup policy, workflow
+matrix coverage, canonical lease path, and injected TTL offline. Missing or
+expired leases remain blocked, matching the fail-closed TTL guard.
 
 `make build-artifact CANDIDATE_ID=<id> PROFILE=<profile>
 COMPONENTS='backend=path frontend=path' LOCKFILES='package-lock.json'` records
@@ -160,7 +211,8 @@ presentation-only Kyber projection when `KYBER_OUTPUT` is supplied. These
 commands provide repository contracts and evidence validation, not evidence
 that AWS or a product journey actually ran.
 
-`make deploy-staging`, `make staging-migrate`, and
+`make deploy-staging` (optionally with `STATE=<checkpoint.json>`),
+`make staging-migrate`, and
 `make test-golden-journeys` provide the repository-side orchestration boundary.
 They emit structured evidence, preserve `DRY_RUN` as a distinct non-deployment
 state, and fail closed when candidate compatibility, AWS identity, database
@@ -188,7 +240,10 @@ against captured policy evidence without invoking AWS. Finally,
 `scripts/release/terraform_reconciliation.py` compares desired plan entries,
 Terraform state, and a complete remote inventory in a dry-run only; missing or
 ambiguous ownership, identity drift, and plaintext secret material are
-blocking outcomes. These tools produce evidence for review, not live AWS
+blocking outcomes. A deterministic Terraform-owned remote object that is
+absent from state is classified as `UNMANAGED_ADOPTABLE` and produces
+`RECONCILIATION_REQUIRED` with an explicit `import` action; it is never
+recreated implicitly. These tools produce evidence for review, not live AWS
 verification or mutation authority.
 
 PR CI compiles workspace packages once, archives the resulting `dist`
@@ -228,7 +283,7 @@ full release-spine blueprint. The following work remains explicitly open:
 | Immutable artifact | PR CI builds once, packages real workspace `dist` outputs, creates ReleaseCandidate metadata, and verifies the exact candidate in the selected-verification consumer without rebuilding | Add backend/container components, contract/model/policy versions, endpoint/asset manifests, provenance/signing, durable registry upload, and exact-digest staging/production promotion. |
 | Profile compatibility | Repository gate validates required frontend identity/endpoint fields and rejects insecure/placeholders for deployable profiles | Generate the manifest from real builds and bind it to the candidate digest and staging preflight. |
 | Fallback governance | Audited profile-aware registry binds major fallback classes to implementation paths and blocks registered local fallbacks in staging/production | Resolve remaining candidate entrypoints with their owners, enforce selection at runtime across every deployable surface, and expose typed degradation in readiness. |
-| Staging preflight and lifecycle | Repository orchestrator requires a compatible candidate digest, verifies AWS identity, runs ordered commands, and emits distinct `DRY_RUN`, `BLOCKED`, `FAILED`, or `DEPLOYED` evidence | Bind the commands to the credentialed disposable-staging workflow, preserve external failure evidence, and exercise wake/sleep against AWS. |
+| Staging preflight and lifecycle | Repository orchestrator requires a compatible candidate digest, verifies AWS identity, runs ordered commands, emits distinct `DRY_RUN`, `BLOCKED`, `FAILED`, or `DEPLOYED` evidence, and can resume from an identity-bound checkpoint | Bind the commands to the credentialed disposable-staging workflow, preserve external failure evidence, and exercise wake/sleep against AWS. |
 | Migration contract | Versioned schema and orchestrator validate metadata, require `DATABASE_URL`, execute migration then validation, and emit fail-closed evidence | Run it against a real previous-schema staging baseline and add backfill/read-write/repair observations. |
 | Golden journeys | Registry requires the five named, owned journeys and assertion metadata | Implement and execute those journeys against a clean baseline; the registry gate is not journey execution evidence. |
 | Canonical evidence bundle | Validator enforces required checks and forbids READY with blockers/degradation; Kyber projection preserves the authoritative disposition | Aggregate real lane/deployment results, retain logs/traces, sign/publish bundles, and ingest them in Kyber. |

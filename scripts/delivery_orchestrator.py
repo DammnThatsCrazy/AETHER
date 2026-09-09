@@ -15,8 +15,10 @@ import yaml
 
 try:  # Works both as a script and when imported by the unit tests.
     from delivery_contracts import FailureEnvelope, sanitize_detail, validate_release_candidate
+    from staging_state_machine import StateMachineError, StagingStateMachine
 except ModuleNotFoundError:  # pragma: no cover - import-mode compatibility
     from scripts.delivery_contracts import FailureEnvelope, sanitize_detail, validate_release_candidate
+    from scripts.staging_state_machine import StateMachineError, StagingStateMachine
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -95,6 +97,71 @@ def staging(args: argparse.Namespace) -> int:
         failure = _failure(operation_id=rc["release_candidate_id"], stage="profile_compatibility", status=status,
                            code="PROFILE_INCOMPATIBLE", reason=f"candidate is not compatible with {args.profile}",
                            evidence_ref=args.output, retryable=False)
+    elif getattr(args, "state", None):
+        # Opt-in checkpointing keeps the historical one-shot command stable
+        # while allowing GitHub or an operator to resume the exact candidate
+        # after an interrupted stage.
+        try:
+            environment_resolution = None
+            if getattr(args, "environment_resolution", None):
+                environment_resolution = json.loads(
+                    args.environment_resolution.read_text(encoding="utf-8")
+                )
+            machine = StagingStateMachine.open(
+                args.state,
+                rc,
+                args.profile,
+                operation_id=rc["release_candidate_id"],
+                environment_resolution=environment_resolution,
+            )
+        except (OSError, StateMachineError) as exc:
+            checks.append({"check_id": "staging_checkpoint", "status": "BLOCKED", "reason": sanitize_detail(str(exc))})
+            status = "BLOCKED"
+            failure = _failure(
+                operation_id=rc["release_candidate_id"],
+                stage="staging_checkpoint",
+                status=status,
+                code="INVALID_STAGING_CHECKPOINT",
+                reason=str(exc),
+                evidence_ref=args.output,
+                retryable=False,
+            )
+        else:
+            commands = {
+                "preflight": args.preflight_command,
+                "deploy": args.deploy_command,
+                "migration": args.migration_command,
+                "tenant_activation": args.tenant_activation_command,
+                "golden_journeys": args.journeys_command,
+            }
+
+            def execute(stage: str) -> tuple[str, str]:
+                if stage == "aws_identity" and not os.environ.get("AWS_ACCESS_KEY_ID") and not os.environ.get("AWS_PROFILE"):
+                    return "BLOCKED", "AWS_ACCESS_KEY_ID or AWS_PROFILE is required"
+                command = "aws sts get-caller-identity --output json" if stage == "aws_identity" else commands[stage]
+                return run(command)
+
+            state = machine.run(execute, dry_run=args.dry_run)
+            checks = list(state["checks"])
+            status = "DRY_RUN" if args.dry_run else {
+                "COMPLETE": "DEPLOYED",
+                "BLOCKED": "BLOCKED",
+                "FAILED": "FAILED",
+                "RUNNING": "DEPLOYED",
+            }[state["status"]]
+            failure = state["failures"][-1] if state["failures"] else None
+            result = {
+                "schema_version": 1,
+                "release_candidate_id": rc["release_candidate_id"],
+                "profile": args.profile,
+                "artifact_digest": rc["artifact_digest"],
+                "status": status,
+                "checks": checks,
+                "timestamp": now(),
+            }
+            if failure is not None:
+                result["failure"] = failure
+            return write(result, args.output)
     elif args.dry_run:
         for name in ("preflight", "deploy", "migration", "tenant_activation", "golden_journeys"):
             checks.append({"check_id": name, "status": "NOT_APPLICABLE", "reason": "dry-run; command not executed"})
@@ -195,6 +262,8 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--candidate", type=Path, required=True)
     s.add_argument("--profile", required=True)
     s.add_argument("--output", type=Path, required=True)
+    s.add_argument("--state", type=Path, help="durable checkpoint path for resumable staging execution")
+    s.add_argument("--environment-resolution", type=Path, help="pre-mutation environment-resolution evidence to bind to the checkpoint")
     s.add_argument("--dry-run", action="store_true")
     for name in ("preflight", "deploy", "migration", "tenant-activation", "journeys"):
         s.add_argument(f"--{name}-command", default="")

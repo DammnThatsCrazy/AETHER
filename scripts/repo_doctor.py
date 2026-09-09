@@ -473,6 +473,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     run(
+        [sys.executable, "scripts/release/check_delivery_workflow_authority.py"],
+        name="Delivery workflow authority map",
+        results=results,
+        stop_on_failure=stop,
+        remediation="assign each blueprint delivery authority to one reviewed GitHub workflow owner",
+    )
+
+    run(
         [sys.executable, "scripts/release/evidence_bundle.py", "--check-registry"],
         name="Golden product journey registry",
         results=results,
