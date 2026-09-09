@@ -37,6 +37,7 @@ source_files:
   - scripts/release/evidence_bundle.py
   - scripts/lib/test_suites.py
   - scripts/run_pytest_files.py
+  - scripts/run_backend_tests.py
   - scripts/validate_makefile.py
   - tests/unit/test_repo_consistency_workflow_authority.py
   - scripts/validate_delivery_profiles.py
@@ -67,6 +68,12 @@ The repository remains authoritative for test commands in
 `config/test_suites.yaml`, routing policy in `config/verification_router.yaml`,
 delivery contracts under `contracts/delivery/`, and stable developer commands
 in the root `Makefile`.
+
+The canonical backend suite uses `scripts/run_backend_tests.py`: ordinary
+backend tests remain xdist-parallel, while the wall-clock performance
+guardrails run in a serial pass after the behavioral tree. This keeps the full
+tree covered without treating worker-scheduler contention as a product
+latency regression.
 
 ## Workflow
 
