@@ -418,6 +418,8 @@ export interface InvestigationCase {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  findingId?: string;
+  recommendationId?: string;
 }
 
 export interface InvestigationAnnotation {

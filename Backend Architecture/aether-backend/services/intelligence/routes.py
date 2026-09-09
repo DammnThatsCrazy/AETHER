@@ -642,6 +642,7 @@ async def record_decision(recommendation_id: str, body: DecisionRequest, request
     rejected = [c for c in candidates if c.action_key in set(body.rejected_action_keys)]
     decision = DecisionRecord(
         decision_id=str(uuid.uuid4()), recommendation_id=recommendation_id,
+        finding_id=rec.get("finding_id"), investigation_id=rec.get("investigation_id"),
         # Actor identity is authenticated server context. Keep body.actor_id in
         # the compatibility request schema, but never trust it for audit truth.
         actor_id=tenant.user_id or tenant.tenant_id,
@@ -684,6 +685,8 @@ async def log_action(body: ActionLogRequest, request: Request):
         raise BadRequestError("Elevated or critical actions require authorization metadata with approval_id")
     action = ActionFeedback(
         action_id=str(uuid.uuid4()), decision_id=body.decision_id,
+        recommendation_id=decision.get("recommendation_id"),
+        finding_id=decision.get("finding_id"), investigation_id=decision.get("investigation_id"),
         action_type=body.action_type, system=body.system, integration=body.integration,
         status=body.status, actor_type=body.actor_type,
         economic_payload=body.economic_payload, authorization_metadata=body.authorization_metadata,
@@ -831,6 +834,8 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
         action_id=action_id,
         decision_id=decision["decision_id"],
         recommendation_id=recommendation["recommendation_id"],
+        finding_id=recommendation.get("finding_id") or decision.get("finding_id"),
+        investigation_id=recommendation.get("investigation_id") or decision.get("investigation_id"),
         target_type=body.target_type,
         config_id=body.config_id,
         status="queued",
@@ -959,6 +964,9 @@ async def observe_outcome(action_id: str, body: OutcomeRequest, request: Request
     outcome = OutcomeObservation(
         outcome_id=str(uuid.uuid4()), action_id=action_id,
         recommendation_id=body.recommendation_id, entity_id=body.entity_id or rec.get("entity_id"),
+        finding_id=action.get("finding_id") or decision.get("finding_id") or rec.get("finding_id"),
+        investigation_id=(action.get("investigation_id") or decision.get("investigation_id")
+                          or rec.get("investigation_id")),
         population_id=body.population_id or rec.get("population_id"), outcome_type=body.outcome_type,
         value=body.value, currency=body.currency, label=body.label,
         observed_window=body.observed_window, computed_at=utc_now().isoformat(),
