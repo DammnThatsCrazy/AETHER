@@ -51,6 +51,17 @@ source_files:
   - scripts/validate_verification_router.py
   - scripts/release/check_deployment_operator_surface.py
   - tests/unit/test_staging_state_machine.py
+  - config/impact_graph.json
+  - config/telemetry_contracts.json
+  - contracts/delivery/impact-graph-index.schema.json
+  - contracts/delivery/telemetry-event.schema.json
+  - scripts/impact_graph.py
+  - scripts/lib/impact_graph.py
+  - scripts/lib/telemetry.py
+  - scripts/validate_impact_graph.py
+  - scripts/validate_telemetry_contracts.py
+  - tests/unit/test_impact_graph.py
+  - tests/unit/test_telemetry_contracts.py
   - Makefile
 canonical_owner: platform@aether
 estimated_read_minutes: 8
@@ -79,7 +90,9 @@ in the root `Makefile`.
    `make change-plan CHANGE_ID=<id> TITLE='<title>' OWNER=<owner>`.
 3. Run `make test-fast BASE=<git-ref>` for bounded local feedback.
 4. Run `make test-pr BASE=<git-ref>` for the merge-safety selection.
-5. Run `make docs-fix`, review source-linked drift, and run `make ci-check`
+5. Run `make docs-generate`, review source-linked drift, update only reviewed
+   pages with `make docs-generate-changed`, prove idempotence, and run
+   `make ci-check`
    before claiming repository completion.
 6. Treat integration, regression, and release as progressively stronger lanes;
    none may be substituted for profile-specific deployment evidence.
@@ -105,6 +118,15 @@ triggered, the inventory tests whose declared source or dependencies changed,
 and the selected check ids. This is impact evidence, not a claim that the
 currently registered suite commands have been narrowed to those tests; suite
 execution remains governed by the canonical registry and full completion gate.
+
+The Impact Graph v2 index extends that route result with registered components,
+owned contracts, transitive consumers, deployable surfaces, and unresolved
+paths. `scripts/impact_graph.py` emits a deterministic index and can compare
+targeted nodes with a legacy broad scope. A `targeted_miss` is retained as
+evidence for graph expansion; it never silently reduces verification. The
+telemetry contract records timing and disposition metadata only, with no
+credentials or hosted exporter, so shadow-cutover comparisons remain
+auditable without claiming cloud or release readiness.
 
 ## Lane semantics
 
