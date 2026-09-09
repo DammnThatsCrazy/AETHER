@@ -1143,6 +1143,36 @@ export const api = {
     recommendationInvestigation: (recommendationId: string) =>
       restClient.get(`/v1/intelligence/recommendations/${recommendationId}/investigation`, wrap(unknownSchema)).then(r => r.data),
 
+    /** Record the tenant's explicit proposal decision; this does not execute an action. */
+    recordDecision: (recommendationId: string, payload: {
+      actor_id: string;
+      selected_action_key?: string;
+      rejected_action_keys?: string[];
+      decision_status: 'approved' | 'rejected' | 'deferred' | 'escalated';
+      reason?: string;
+      comment?: string;
+    }) => restClient.post(`/v1/intelligence/recommendations/${recommendationId}/decision`, wrap(unknownSchema), payload).then(r => r.data),
+
+    /** Create the durable planned action after approval. Dispatch is a separate, explicit step. */
+    logAction: (payload: {
+      decision_id: string;
+      action_type: string;
+      system?: string;
+      integration?: string;
+      status?: 'planned' | 'queued' | 'executed' | 'failed' | 'cancelled';
+      actor_type?: 'human' | 'system' | 'agent';
+      authorization_metadata?: Record<string, unknown>;
+    }) => restClient.post('/v1/intelligence/actions', wrap(unknownSchema), payload).then(r => r.data),
+
+    /** Dispatch an approved, durable action through a configured tenant target. */
+    dispatchAction: (actionId: string, payload: {
+      target_type: string;
+      config_id?: string;
+      payload_overrides?: Record<string, unknown>;
+      approval_metadata?: Record<string, unknown>;
+      idempotency_key?: string;
+    }) => restClient.post(`/v1/intelligence/actions/${actionId}/dispatch`, wrap(unknownSchema), payload).then(r => r.data),
+
     outcomeLedger: () =>
       restClient.get(`/v1/intelligence/outcome-ledger`, wrap(unknownSchema)).then(r => r.data),
 

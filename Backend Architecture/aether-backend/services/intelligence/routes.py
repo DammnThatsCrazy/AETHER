@@ -595,7 +595,14 @@ async def get_recommendation_investigation(recommendation_id: str, request: Requ
     graph_edges = []
     try:
         neighbors = await get_registry().graph.get_neighbors(recommendation_id, direction="both")
-        graph_edges = [{"id": v.vertex_id, "type": v.vertex_type, "properties": v.properties} for v in neighbors[:50]]
+        # Graph stores can contain vertices from multiple tenants. The
+        # recommendation row is tenant-scoped, so fail closed and expose only
+        # vertices carrying this tenant's explicit ownership marker.
+        graph_edges = [
+            {"id": v.vertex_id, "type": v.vertex_type, "properties": v.properties}
+            for v in neighbors[:50]
+            if (getattr(v, "properties", {}) or {}).get("tenant_id") == tenant.tenant_id
+        ]
     except Exception as exc:  # pragma: no cover
         logger.warning(f"recommendation investigation graph lookup skipped: {exc}")
     data = {
@@ -635,7 +642,10 @@ async def record_decision(recommendation_id: str, body: DecisionRequest, request
     rejected = [c for c in candidates if c.action_key in set(body.rejected_action_keys)]
     decision = DecisionRecord(
         decision_id=str(uuid.uuid4()), recommendation_id=recommendation_id,
-        actor_id=body.actor_id, selected_action=selected, rejected_actions=rejected,
+        # Actor identity is authenticated server context. Keep body.actor_id in
+        # the compatibility request schema, but never trust it for audit truth.
+        actor_id=tenant.user_id or tenant.tenant_id,
+        selected_action=selected, rejected_actions=rejected,
         decision_status=body.decision_status, reason=body.reason, comment=body.comment,
         created_at=utc_now().isoformat(), tenant_id=tenant.tenant_id,
     ).model_dump()
@@ -780,6 +790,22 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
     )
     if not dispatch_policy.allowed:
         raise BadRequestError(dispatch_policy.reason)
+    if body.idempotency_key:
+        existing = await _dispatches.find_many(
+            {
+                "tenant_id": tenant.tenant_id,
+                "action_id": action_id,
+                "idempotency_key": body.idempotency_key,
+            },
+            limit=1,
+        )
+        if existing:
+            # Replays return the durable dispatch and its latest receipt; they
+            # never invoke an external connector a second time.
+            receipts = await _delivery_receipts.find_many(
+                {"dispatch_id": existing[0].get("dispatch_id")}, limit=1
+            )
+            return APIResponse(data={"dispatch": existing[0], "receipt": receipts[0] if receipts else None, "replayed": True}).to_dict()
     config = None
     if body.config_id:
         raw_config = await _integrations.find_by_id_or_fail(body.config_id)
