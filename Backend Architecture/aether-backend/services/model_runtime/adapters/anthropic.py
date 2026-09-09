@@ -53,8 +53,19 @@ class AnthropicModelProvider(BaseModelProvider):
         max_retries: int = 1,
     ) -> None:
         """api_key/model override env; defaults mirror the legacy Noesis provider."""
-        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
-        self.model = model or os.getenv("NOESIS_LLM_MODEL", "claude-haiku-4-5-20251001")
+        # ``None`` means "use the process environment"; an explicit empty
+        # string is a deliberate no-credential override.  Using ``or`` here
+        # would silently resurrect a process-wide key when a caller is
+        # intentionally constructing an unconfigured provider (and would
+        # violate the documented constructor-kwargs precedence).
+        self.api_key = (
+            os.getenv("ANTHROPIC_API_KEY", "") if api_key is None else api_key
+        )
+        self.model = (
+            os.getenv("NOESIS_LLM_MODEL", "claude-haiku-4-5-20251001")
+            if model is None
+            else model
+        )
         self.timeout_s = timeout_s
         self.max_tokens = max_tokens
         self.max_retries = max_retries
