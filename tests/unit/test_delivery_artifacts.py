@@ -7,6 +7,7 @@ import pytest
 
 from scripts.artifact_builder import aggregate_digest, digest_file, verify_candidate, write_once
 from scripts.delivery_contracts import DeploymentImpact
+from scripts.release.release_candidate_adapter import build_candidate, verify as verify_release_candidate
 from scripts.validate_delivery_profiles import load_yaml, validate_fallbacks, validate_frontend, validate_registry
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -86,6 +87,37 @@ def test_candidate_verification_binds_dependency_locks(tmp_path):
     lockfile.write_text("two")
     with pytest.raises(ValueError, match="dependency lock hash"):
         verify_candidate(candidate, [f"web={component}"], [str(lockfile)], "abc1234")
+
+
+def test_release_manifest_adapter_binds_hosted_artifacts_to_candidate(tmp_path):
+    artifacts = {}
+    for name in ("aether_spa", "kyber_spa", "migration_package", "configuration"):
+        path = tmp_path / f"{name}.bin"
+        path.write_bytes(name.encode())
+        artifacts[name] = {"file": str(path), "digest": digest_file(path)}
+    artifacts["backend_image"] = {
+        "uri": "123456789012.dkr.ecr.us-east-1.amazonaws.com/aether@sha256:" + "b" * 64,
+        "digest": "sha256:" + "b" * 64,
+    }
+    manifest = tmp_path / "release.json"
+    manifest.write_text(json.dumps({
+        "schema_version": 1,
+        "commit_sha": "a" * 40,
+        "workflow_run_id": "42",
+        "profile": "staging",
+        "artifacts": artifacts,
+    }))
+    lockfile = tmp_path / "package-lock.json"
+    lockfile.write_text("lock")
+    candidate = build_candidate(manifest, [lockfile])
+    candidate_path = tmp_path / "release-candidate.json"
+    candidate_path.write_text(json.dumps(candidate))
+    verified = verify_release_candidate(manifest, candidate_path, [lockfile], "a" * 40)
+    assert verified["release_candidate_id"] == "release-42"
+    assert verified["component_digests"]["backend_image"].startswith("sha256:")
+    (tmp_path / "aether_spa.bin").write_bytes(b"tampered")
+    with pytest.raises(ValueError, match="manifest artifact aether_spa digest"):
+        verify_release_candidate(manifest, candidate_path, [lockfile], "a" * 40)
 
 
 def valid_manifest():

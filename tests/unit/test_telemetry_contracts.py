@@ -61,3 +61,13 @@ def test_telemetry_rejects_invalid_enum_and_envelope_fields():
             },
             registry,
         )
+
+
+def test_telemetry_rejects_unregistered_producer_override():
+    registry = load_registry()
+    with pytest.raises(TelemetryContractError, match="producer override"):
+        registry.build_event(
+            "verification.route.evaluated",
+            _route_payload(),
+            producer="untrusted-script.py",
+        )

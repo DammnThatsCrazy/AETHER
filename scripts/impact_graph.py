@@ -138,6 +138,11 @@ def main() -> int:
         action="store_true",
         help="fail when the targeted scope misses graph truth",
     )
+    parser.add_argument(
+        "--fail-on-unresolved",
+        action="store_true",
+        help="fail when any changed path is outside the registered impact graph",
+    )
     args = parser.parse_args()
     try:
         paths = changed_files(args.base, args.changed_file)
@@ -164,6 +169,8 @@ def main() -> int:
                 args.telemetry_output, index=index, shadow=shadow, occurred_at=args.occurred_at
             )
         print(json.dumps(index, indent=2) + "\n", end="")
+        if args.fail_on_unresolved and index["unresolved_paths"]:
+            return 1
         if args.strict_shadow and shadow and shadow["classification"].startswith("targeted_miss"):
             return 1
         return 0

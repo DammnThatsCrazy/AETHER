@@ -5,14 +5,16 @@ from pathlib import Path
 import jsonschema
 
 from scripts import delivery_orchestrator as orchestrator
-from scripts.artifact_builder import aggregate_digest
+from scripts.artifact_builder import aggregate_digest, digest_file
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def candidate(tmp_path: Path, **overrides) -> Path:
     path = tmp_path / "candidate.json"
-    component_digests = {"repository-build": "sha256:" + "a" * 64}
+    component = tmp_path / "repository-build.tar"
+    component.write_bytes(b"verified component")
+    component_digests = {"repository-build": digest_file(component)}
     value = {
         "schema_version": 1,
         "release_candidate_id": "rc-test",
@@ -52,6 +54,7 @@ def candidate(tmp_path: Path, **overrides) -> Path:
 
 def staging_args(tmp_path: Path, **overrides):
     values = dict(candidate=candidate(tmp_path), profile="staging", output=tmp_path / "result.json", dry_run=False,
+                  component=[f"repository-build={tmp_path / 'repository-build.tar'}"], lockfile=[], expected_commit="a" * 40,
                   preflight_command="", deploy_command="", migration_command="", tenant_activation_command="", journeys_command="")
     values.update(overrides)
     return argparse.Namespace(**values)

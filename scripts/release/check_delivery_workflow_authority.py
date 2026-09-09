@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the transitional one-owner map for GitHub delivery workflows."""
+"""Validate the enforced one-owner map for GitHub delivery workflows."""
 
 from __future__ import annotations
 
@@ -47,6 +47,8 @@ def validate(config_path: Path = CONFIG, root: Path = ROOT) -> list[str]:
         errors.append("operator_surface must be github_actions")
     if config.get("kyber_mutation_controls") is not False:
         errors.append("kyber_mutation_controls must be false")
+    if config.get("status") != "enforced":
+        errors.append("status must be enforced")
     authorities = config.get("authorities")
     if not isinstance(authorities, list) or not authorities:
         return errors + ["authorities must be a non-empty list"]
@@ -58,6 +60,7 @@ def validate(config_path: Path = CONFIG, root: Path = ROOT) -> list[str]:
         authority_id = item.get("id")
         owner = item.get("owner")
         workflows = item.get("workflows")
+        required_commands = item.get("required_commands", [])
         if not isinstance(authority_id, str) or not authority_id.strip():
             errors.append("each authority requires a non-empty id")
             continue
@@ -84,6 +87,17 @@ def validate(config_path: Path = CONFIG, root: Path = ROOT) -> list[str]:
                 continue
             if not _workflow_triggers(workflow):
                 errors.append(f"{raw_path}: workflow must declare a trigger")
+        if not isinstance(required_commands, list) or any(not isinstance(command, str) or not command.strip() for command in required_commands):
+            errors.append(f"authority {authority_id} required_commands must be a list of non-empty strings")
+        else:
+            workflow_text = "\n".join(
+                (root / raw_path).read_text(encoding="utf-8")
+                for raw_path in workflows
+                if isinstance(raw_path, str) and raw_path.startswith(".github/workflows/") and (root / raw_path).is_file()
+            )
+            for command in required_commands:
+                if command not in workflow_text:
+                    errors.append(f"authority {authority_id} is not wired to required command {command!r}")
     missing = sorted(REQUIRED_AUTHORITIES - seen)
     extra = sorted(seen - REQUIRED_AUTHORITIES)
     if missing:

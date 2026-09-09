@@ -16,7 +16,11 @@ Endpoints:
 from __future__ import annotations
 
 import uuid
+import json
+import os
+import re
 from collections import Counter
+from pathlib import Path
 from typing import Any, Literal
 
 from config.settings import settings
@@ -1427,6 +1431,40 @@ def _readiness_for_package(pkg: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _delivery_evidence_projection() -> dict[str, Any]:
+    """Read a mounted GitHub evidence projection without inventing readiness."""
+    raw_path = os.environ.get("AETHER_DELIVERY_EVIDENCE_PATH")
+    if not raw_path:
+        return {
+            "status": "UNAVAILABLE",
+            "source": "github_actions_artifact",
+            "reason": "no reviewed delivery evidence projection is mounted",
+        }
+    try:
+        value = json.loads(Path(raw_path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {"status": "UNAVAILABLE", "source": "github_actions_artifact", "reason": str(exc)}
+    if not isinstance(value, dict):
+        return {"status": "UNAVAILABLE", "source": "github_actions_artifact", "reason": "evidence projection is not an object"}
+    required = ("release_candidate_id", "commit_sha", "artifact_digest", "status")
+    if any(not isinstance(value.get(key), str) or not value[key].strip() for key in required):
+        return {"status": "INVALID", "source": "github_actions_artifact", "reason": "evidence projection lacks candidate identity"}
+    if not re.fullmatch(r"[0-9a-f]{7,64}", value["commit_sha"]):
+        return {"status": "INVALID", "source": "github_actions_artifact", "reason": "evidence projection commit is not a Git SHA"}
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", value["artifact_digest"]):
+        return {"status": "INVALID", "source": "github_actions_artifact", "reason": "evidence projection artifact is not an immutable SHA-256 digest"}
+    if value["status"] not in {"PASS", "DEPLOYED", "PROMOTED", "COMPLETE"}:
+        return {"status": "BLOCKED", "source": "github_actions_artifact", "reason": "delivery evidence is not successful"}
+    return {
+        "status": "PASS",
+        "source": "github_actions_artifact",
+        "release_candidate_id": value["release_candidate_id"],
+        "commit_sha": value["commit_sha"],
+        "artifact_digest": value["artifact_digest"],
+        "deployment_mode": value.get("deployment_mode") if isinstance(value.get("deployment_mode"), str) else None,
+    }
+
+
 async def _tenant_usage_metrics(tenant_id: str, limit: int = 1000) -> dict[str, Any]:
     recs = await _recommendations.find_many({"tenant_id": tenant_id}, limit=limit)
     decisions = await _decisions.find_many({"tenant_id": tenant_id}, limit=limit)
@@ -1606,8 +1644,39 @@ async def kyber_deployment_modes(request: Request):
 @kyber_admin_router.get("/deployment-readiness")
 async def kyber_deployment_readiness(request: Request):
     request.state.tenant.require_permission("admin")
-    items = [m.model_dump() | {"checklist": {"access_controls": "required", "audit_exports": "implemented", "logging": "required", "tenant_isolation": "required", "integration_security": "secret_refs_only", "incident_response_docs": "required", "data_retention_docs": "required", "ai_risk_management_docs": "required", "deployment_documentation": "required", "known_gaps": m.known_gaps}} for m in DEPLOYMENT_MODES]
-    return APIResponse(data={"items": items}).to_dict()
+    evidence = _delivery_evidence_projection()
+    items = []
+    for mode in DEPLOYMENT_MODES:
+        item = mode.model_dump()
+        catalog_status = item["readiness_status"]
+        evidence_matches_mode = (
+            evidence.get("status") == "PASS"
+            and evidence.get("deployment_mode") == item["name"]
+        )
+        item["catalog_readiness_status"] = catalog_status
+        item["readiness_status"] = "evidence_verified" if evidence_matches_mode else "evidence_required"
+        if not evidence_matches_mode:
+            item["known_gaps"] = [
+                *item.get("known_gaps", []),
+                "No identity-bound delivery evidence verifies this deployment mode.",
+            ]
+        item.update({
+            "evidence": evidence,
+            "checklist": {
+                "access_controls": "required",
+                "audit_exports": "evidence_required",
+                "logging": "required",
+                "tenant_isolation": "required",
+                "integration_security": "secret_refs_only",
+                "incident_response_docs": "required",
+                "data_retention_docs": "required",
+                "ai_risk_management_docs": "required",
+                "deployment_documentation": "required",
+                "known_gaps": item.get("known_gaps", []),
+            },
+        })
+        items.append(item)
+    return APIResponse(data={"items": items, "evidence": evidence}).to_dict()
 
 
 @kyber_admin_router.get("/audit-export-health")

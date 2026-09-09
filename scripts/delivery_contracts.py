@@ -223,6 +223,11 @@ def validate_release_candidate(candidate: Mapping[str, Any]) -> list[str]:
         "created_at",
     }
     errors: list[str] = []
+    if not isinstance(candidate, Mapping):
+        return ["release candidate must be an object"]
+    unknown = sorted(set(candidate) - required)
+    if unknown:
+        errors.append("unknown fields: " + ", ".join(unknown))
     missing = sorted(required - set(candidate))
     if missing:
         errors.append("missing fields: " + ", ".join(missing))
@@ -241,11 +246,26 @@ def validate_release_candidate(candidate: Mapping[str, Any]) -> list[str]:
             errors.append(f"{field_name} must be a unique list of non-empty strings")
             continue
         if (
-            (not value and field_name == "deployment_profiles")
+            not value
             or any(not isinstance(item, str) or not item.strip() for item in value)
             or len(value) != len(set(value))
         ):
             errors.append(f"{field_name} must be a unique list of non-empty strings")
+    for field_name in ("contract_versions", "model_versions", "policy_versions"):
+        value = candidate.get(field_name)
+        if not isinstance(value, dict):
+            errors.append(f"{field_name} must be an object")
+        elif any(not isinstance(key, str) or not key.strip() for key in value):
+            errors.append(f"{field_name} must have non-empty string keys")
+    if not isinstance(candidate.get("migration_version"), str) or not candidate.get("migration_version", "").strip():
+        errors.append("migration_version must be a non-empty string")
+    value = candidate.get("model_versions")
+    if isinstance(value, dict) and any(not isinstance(item, str) for item in value.values()):
+        errors.append("model_versions values must be strings")
+    for field_name in ("contract_versions", "policy_versions"):
+        value = candidate.get(field_name)
+        if isinstance(value, dict) and any(not isinstance(item, (str, int, float)) or isinstance(item, bool) for item in value.values()):
+            errors.append(f"{field_name} values must be strings or numbers")
     components = candidate.get("component_digests")
     if not isinstance(components, dict) or not components:
         errors.append("component_digests must contain at least one component")
@@ -267,18 +287,41 @@ def validate_release_candidate(candidate: Mapping[str, Any]) -> list[str]:
     if not isinstance(impact, dict):
         errors.append("deployment_impact must be an object")
     else:
+        impact_keys = {
+            "schema_version", "profile", "affected_domains", "affected_components",
+            "migration_required", "data_contract_change", "security_sensitive",
+            "rollback_required", "approval_required", "risk_level", "rationale",
+        }
+        extra_impact = sorted(set(impact) - impact_keys)
+        if extra_impact:
+            errors.append("deployment_impact has unknown fields: " + ", ".join(extra_impact))
+        for boolean_name in ("migration_required", "data_contract_change", "security_sensitive", "rollback_required", "approval_required"):
+            if not isinstance(impact.get(boolean_name), bool):
+                errors.append(f"deployment_impact.{boolean_name} must be boolean")
         try:
+            impact_domains = impact.get("affected_domains")
+            impact_components = impact.get("affected_components")
+            if not isinstance(impact_domains, list) or any(not isinstance(item, str) or not item.strip() for item in impact_domains):
+                raise ValueError("affected_domains must be a list of non-empty strings")
+            if not isinstance(impact_components, list) or any(not isinstance(item, str) or not item.strip() for item in impact_components):
+                raise ValueError("affected_components must be a list of non-empty strings")
+            if not isinstance(impact.get("profile"), str) or not impact["profile"].strip():
+                raise ValueError("profile must be a non-empty string")
+            if not isinstance(impact.get("rationale"), str) or not impact["rationale"].strip():
+                raise ValueError("rationale must be a non-empty string")
+            if not isinstance(impact.get("risk_level"), str):
+                raise ValueError("risk_level must be a string")
             parsed_impact = DeploymentImpact(
-                profile=str(impact.get("profile", "")),
-                affected_domains=tuple(impact.get("affected_domains", [])),
-                affected_components=tuple(impact.get("affected_components", [])),
-                migration_required=bool(impact.get("migration_required")),
-                data_contract_change=bool(impact.get("data_contract_change")),
-                security_sensitive=bool(impact.get("security_sensitive")),
-                rollback_required=bool(impact.get("rollback_required")),
-                approval_required=bool(impact.get("approval_required")),
-                risk_level=str(impact.get("risk_level", "")),
-                rationale=str(impact.get("rationale", "")),
+                profile=impact["profile"],
+                affected_domains=tuple(impact_domains),
+                affected_components=tuple(impact_components),
+                migration_required=impact["migration_required"],
+                data_contract_change=impact["data_contract_change"],
+                security_sensitive=impact["security_sensitive"],
+                rollback_required=impact["rollback_required"],
+                approval_required=impact["approval_required"],
+                risk_level=impact["risk_level"],
+                rationale=impact["rationale"],
                 schema_version=impact.get("schema_version", 0),
             )
         except (TypeError, ValueError) as exc:
@@ -295,6 +338,9 @@ def validate_release_candidate(candidate: Mapping[str, Any]) -> list[str]:
             expected_migration = candidate.get("migration_version") != "none"
             if parsed_impact.migration_required != expected_migration:
                 errors.append("deployment_impact.migration_required must match migration_version")
+            expected_rollback = expected_migration or parsed_impact.security_sensitive
+            if parsed_impact.rollback_required != expected_rollback:
+                errors.append("deployment_impact.rollback_required must reflect migration or security impact")
 
     components = candidate.get("component_digests")
     if isinstance(components, dict) and components:

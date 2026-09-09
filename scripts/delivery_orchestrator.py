@@ -57,6 +57,24 @@ def candidate(path: Path) -> dict:
     return data
 
 
+def verify_candidate_artifacts(
+    path: Path,
+    components: list[str],
+    lockfiles: list[Path],
+    expected_commit: str | None,
+) -> dict:
+    """Verify the exact files consumed by staging immediately before execution."""
+    if not components:
+        raise ValueError("at least one --component NAME=PATH is required before staging")
+    if not expected_commit:
+        raise ValueError("--expected-commit is required before staging")
+    try:
+        from artifact_builder import verify_candidate
+    except ModuleNotFoundError:  # pragma: no cover - module execution compatibility
+        from scripts.artifact_builder import verify_candidate
+    return verify_candidate(path, components, [str(item) for item in lockfiles], expected_commit)
+
+
 def _failure(
     *,
     operation_id: str,
@@ -97,7 +115,36 @@ def staging(args: argparse.Namespace) -> int:
         failure = _failure(operation_id=rc["release_candidate_id"], stage="profile_compatibility", status=status,
                            code="PROFILE_INCOMPATIBLE", reason=f"candidate is not compatible with {args.profile}",
                            evidence_ref=args.output, retryable=False)
-    elif getattr(args, "state", None):
+    elif not args.dry_run:
+        try:
+            verify_candidate_artifacts(
+                args.candidate,
+                list(getattr(args, "component", [])),
+                list(getattr(args, "lockfile", [])),
+                getattr(args, "expected_commit", None),
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            checks.append({"check_id": "artifact_identity", "status": "BLOCKED", "reason": sanitize_detail(str(exc))})
+            status = "BLOCKED"
+            failure = _failure(
+                operation_id=rc["release_candidate_id"], stage="artifact_identity", status=status,
+                code="ARTIFACT_IDENTITY_UNVERIFIED", reason=str(exc), evidence_ref=args.output,
+                retryable=False,
+            )
+        else:
+            status = None
+            failure = None
+    else:
+        checks.append({"check_id": "artifact_identity", "status": "NOT_APPLICABLE", "reason": "dry-run; artifact files not consumed"})
+        status = None
+        failure = None
+
+    if status == "BLOCKED":
+        return write({"schema_version": 1, "release_candidate_id": rc["release_candidate_id"], "profile": args.profile,
+                      "artifact_digest": rc["artifact_digest"], "status": status, "checks": checks,
+                      "failure": failure, "timestamp": now()}, args.output)
+
+    if getattr(args, "state", None):
         # Opt-in checkpointing keeps the historical one-shot command stable
         # while allowing GitHub or an operator to resume the exact candidate
         # after an interrupted stage.
@@ -113,6 +160,7 @@ def staging(args: argparse.Namespace) -> int:
                 args.profile,
                 operation_id=rc["release_candidate_id"],
                 environment_resolution=environment_resolution,
+                persist=not args.dry_run,
             )
         except (OSError, StateMachineError) as exc:
             checks.append({"check_id": "staging_checkpoint", "status": "BLOCKED", "reason": sanitize_detail(str(exc))})
@@ -126,6 +174,9 @@ def staging(args: argparse.Namespace) -> int:
                 evidence_ref=args.output,
                 retryable=False,
             )
+            return write({"schema_version": 1, "release_candidate_id": rc["release_candidate_id"],
+                          "profile": args.profile, "artifact_digest": rc["artifact_digest"],
+                          "status": status, "checks": checks, "failure": failure, "timestamp": now()}, args.output)
         else:
             commands = {
                 "preflight": args.preflight_command,
@@ -142,7 +193,7 @@ def staging(args: argparse.Namespace) -> int:
                 return run(command)
 
             state = machine.run(execute, dry_run=args.dry_run)
-            checks = list(state["checks"])
+            checks.extend(state["checks"])
             status = "DRY_RUN" if args.dry_run else {
                 "COMPLETE": "DEPLOYED",
                 "BLOCKED": "BLOCKED",
@@ -264,6 +315,9 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--output", type=Path, required=True)
     s.add_argument("--state", type=Path, help="durable checkpoint path for resumable staging execution")
     s.add_argument("--environment-resolution", type=Path, help="pre-mutation environment-resolution evidence to bind to the checkpoint")
+    s.add_argument("--component", action="append", default=[], metavar="NAME=PATH", help="exact candidate component file to verify before staging")
+    s.add_argument("--lockfile", action="append", type=Path, default=[], help="exact dependency lockfile to verify before staging")
+    s.add_argument("--expected-commit", help="checked-out commit expected by the candidate")
     s.add_argument("--dry-run", action="store_true")
     for name in ("preflight", "deploy", "migration", "tenant-activation", "journeys"):
         s.add_argument(f"--{name}-command", default="")

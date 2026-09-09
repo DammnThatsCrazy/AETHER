@@ -481,6 +481,22 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     run(
+        [sys.executable, "scripts/validate_impact_graph.py"],
+        name="Impact graph registry and router bindings",
+        results=results,
+        stop_on_failure=stop,
+        remediation="repair config/impact_graph.json and its canonical router/test-suite references",
+    )
+
+    run(
+        [sys.executable, "scripts/validate_telemetry_contracts.py"],
+        name="Telemetry contract registry",
+        results=results,
+        stop_on_failure=stop,
+        remediation="repair config/telemetry_contracts.json and its typed event definitions",
+    )
+
+    run(
         [sys.executable, "scripts/release/evidence_bundle.py", "--check-registry"],
         name="Golden product journey registry",
         results=results,

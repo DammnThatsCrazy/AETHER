@@ -2,64 +2,34 @@
   "schema_version": 1,
   "canonical_source": "config/impact_graph.json",
   "components": [
-    {
-      "id": "verification-router",
-      "paths": ["config/verification_router.yaml", "scripts/lib/verification_router.py", "scripts/check_router.py"],
-      "domains": ["delivery"],
-      "contract_ids": ["verification-router", "test-suite-registry"],
-      "deployable_ids": ["repository-doctor"],
-      "depends_on_components": []
-    },
-    {
-      "id": "impact-graph",
-      "paths": ["config/impact_graph.json", "scripts/lib/impact_graph.py", "scripts/impact_graph.py"],
-      "domains": ["delivery"],
-      "contract_ids": ["impact-graph-index", "telemetry-contract"],
-      "deployable_ids": ["repository-doctor"],
-      "depends_on_components": ["verification-router", "telemetry"]
-    },
-    {
-      "id": "telemetry",
-      "paths": ["config/telemetry_contracts.json", "scripts/lib/telemetry.py", "scripts/validate_telemetry_contracts.py"],
-      "domains": ["delivery"],
-      "contract_ids": ["telemetry-contract"],
-      "deployable_ids": ["repository-doctor"],
-      "depends_on_components": []
-    }
+    {"id": "verification-router", "paths": ["config/verification_router.yaml", "scripts/lib/verification_router.py", "scripts/check_router.py"], "domains": ["delivery"], "contract_ids": ["verification-router", "test-suite-registry"], "deployable_ids": ["repository-doctor", "delivery-workflows"], "depends_on_components": []},
+    {"id": "impact-graph", "paths": ["config/impact_graph.json", "scripts/lib/impact_graph.py", "scripts/impact_graph.py", "scripts/validate_impact_graph.py"], "domains": ["delivery"], "contract_ids": ["impact-graph-index", "telemetry-contract"], "deployable_ids": ["repository-doctor", "delivery-workflows"], "depends_on_components": ["verification-router", "telemetry"]},
+    {"id": "telemetry", "paths": ["config/telemetry_contracts.json", "scripts/lib/telemetry.py", "scripts/validate_telemetry_contracts.py"], "domains": ["delivery"], "contract_ids": ["telemetry-contract"], "deployable_ids": ["repository-doctor", "delivery-workflows"], "depends_on_components": []},
+    {"id": "delivery-orchestrator", "paths": ["scripts/artifact_builder.py", "scripts/delivery_contracts.py", "scripts/delivery_orchestrator.py", "scripts/staging_state_machine.py", "contracts/delivery/*.schema.json", "config/delivery_workflow_authority.yaml"], "domains": ["delivery"], "contract_ids": ["release-candidate", "staging-orchestration-state"], "deployable_ids": ["delivery-workflows"], "depends_on_components": ["verification-router"]},
+    {"id": "environment-authorities", "paths": ["scripts/release/*.py", "config/environment_requirements.yaml", "config/deployment_profiles.yaml", "config/staging_apply_iam_policy.yaml"], "domains": ["delivery", "infrastructure"], "contract_ids": ["environment-capability-snapshot", "effective-iam-comparison", "terraform-reconciliation"], "deployable_ids": ["delivery-workflows", "infrastructure-promotion"], "depends_on_components": ["delivery-orchestrator"]},
+    {"id": "hosted-delivery", "paths": [".github/workflows/*.yml", "config/runtime_deployment.yaml"], "domains": ["delivery", "infrastructure"], "contract_ids": ["delivery-workflow-authority"], "deployable_ids": ["delivery-workflows", "infrastructure-promotion"], "depends_on_components": ["delivery-orchestrator", "environment-authorities"]},
+    {"id": "application-runtime", "paths": ["Backend Architecture/aether-backend/**", "frontend/aether/**", "packages/**", "apps/**", "ML Models/**"], "domains": ["backend", "frontend", "sdk", "machine_learning"], "contract_ids": ["test-suite-registry"], "deployable_ids": ["aether-runtime"], "depends_on_components": ["delivery-orchestrator"]},
+    {"id": "kyber-readiness", "paths": ["frontend/kyber/**", "Backend Architecture/aether-backend/services/intelligence/routes.py"], "domains": ["backend", "frontend"], "contract_ids": ["test-suite-registry"], "deployable_ids": ["kyber-operator"], "depends_on_components": ["delivery-orchestrator"]},
+    {"id": "infrastructure-runtime", "paths": ["AWS Deployment/**", "deploy/**", "docker-compose.yml"], "domains": ["infrastructure"], "contract_ids": ["test-suite-registry"], "deployable_ids": ["infrastructure-promotion"], "depends_on_components": ["environment-authorities"]},
+    {"id": "verification-and-documentation", "paths": ["tests/**", "docs/**", "README.md", "DEVELOPMENT.md", "CONTRIBUTING.md"], "domains": ["backend", "frontend", "sdk", "machine_learning", "documentation"], "contract_ids": ["test-suite-registry"], "deployable_ids": ["repository-doctor"], "depends_on_components": ["verification-router"]}
   ],
   "contracts": [
-    {
-      "id": "verification-router",
-      "paths": ["config/verification_router.yaml"],
-      "registry_ref": "config/verification_router.yaml",
-      "suite_ids": []
-    },
-    {
-      "id": "test-suite-registry",
-      "paths": ["config/test_suites.yaml"],
-      "registry_ref": "config/test_suites.yaml",
-      "suite_ids": ["root", "backend", "ml", "compliance", "agent-layer", "journey-service", "backend-observability", "smart-contracts", "datalake-backend", "sdk-shared", "sdk-web", "sdk-server", "sdk-react-native", "frontend-aether", "frontend-kyber", "frontend-kyber-component", "frontend-kyber-integration", "frontend-shared", "frontend-docs", "frontend-demo", "frontend-olympus-marketing", "frontend-aether-marketing"]
-    },
-    {
-      "id": "impact-graph-index",
-      "paths": ["config/impact_graph.json"],
-      "registry_ref": "config/impact_graph.json",
-      "suite_ids": []
-    },
-    {
-      "id": "telemetry-contract",
-      "paths": ["config/telemetry_contracts.json"],
-      "registry_ref": "config/telemetry_contracts.json",
-      "suite_ids": []
-    }
+    {"id": "verification-router", "paths": ["config/verification_router.yaml"], "registry_ref": "config/verification_router.yaml", "suite_ids": []},
+    {"id": "test-suite-registry", "paths": ["config/test_suites.yaml"], "registry_ref": "config/test_suites.yaml", "suite_ids": ["root", "backend", "ml", "compliance", "agent-layer", "journey-service", "backend-observability", "smart-contracts", "datalake-backend", "sdk-shared", "sdk-web", "sdk-server", "sdk-react-native", "frontend-aether", "frontend-kyber", "frontend-kyber-component", "frontend-kyber-integration", "frontend-shared", "frontend-docs", "frontend-demo", "frontend-olympus-marketing", "frontend-aether-marketing"]},
+    {"id": "impact-graph-index", "paths": ["config/impact_graph.json"], "registry_ref": "config/impact_graph.json", "suite_ids": []},
+    {"id": "telemetry-contract", "paths": ["config/telemetry_contracts.json"], "registry_ref": "config/telemetry_contracts.json", "suite_ids": []},
+    {"id": "release-candidate", "paths": ["contracts/delivery/release-candidate.schema.json"], "registry_ref": "contracts/delivery/release-candidate.schema.json", "suite_ids": []},
+    {"id": "staging-orchestration-state", "paths": ["contracts/delivery/staging-orchestration-state.schema.json"], "registry_ref": "contracts/delivery/staging-orchestration-state.schema.json", "suite_ids": []},
+    {"id": "environment-capability-snapshot", "paths": ["contracts/delivery/environment-capability-snapshot.schema.json"], "registry_ref": "contracts/delivery/environment-capability-snapshot.schema.json", "suite_ids": []},
+    {"id": "effective-iam-comparison", "paths": ["contracts/delivery/effective-iam-comparison.schema.json"], "registry_ref": "contracts/delivery/effective-iam-comparison.schema.json", "suite_ids": []},
+    {"id": "terraform-reconciliation", "paths": ["contracts/delivery/terraform-reconciliation.schema.json"], "registry_ref": "contracts/delivery/terraform-reconciliation.schema.json", "suite_ids": []},
+    {"id": "delivery-workflow-authority", "paths": ["config/delivery_workflow_authority.yaml"], "registry_ref": "config/delivery_workflow_authority.yaml", "suite_ids": []}
   ],
   "deployables": [
-    {
-      "id": "repository-doctor",
-      "paths": ["scripts/repo_doctor.py", "Makefile"],
-      "component_ids": ["verification-router", "impact-graph", "telemetry"],
-      "contract_ids": ["verification-router", "test-suite-registry", "impact-graph-index", "telemetry-contract"],
-      "depends_on_deployables": []
-    }
+    {"id": "repository-doctor", "paths": ["scripts/repo_doctor.py", "Makefile"], "component_ids": ["verification-router", "impact-graph", "telemetry", "verification-and-documentation"], "contract_ids": ["verification-router", "test-suite-registry", "impact-graph-index", "telemetry-contract"], "depends_on_deployables": []},
+    {"id": "delivery-workflows", "paths": [".github/workflows/*.yml", "scripts/delivery_orchestrator.py", "scripts/staging_state_machine.py"], "component_ids": ["delivery-orchestrator", "hosted-delivery", "environment-authorities", "impact-graph", "telemetry"], "contract_ids": ["release-candidate", "staging-orchestration-state", "delivery-workflow-authority"], "depends_on_deployables": ["repository-doctor"]},
+    {"id": "aether-runtime", "paths": ["Backend Architecture/aether-backend/**", "frontend/aether/**", "packages/**", "apps/**", "ML Models/**"], "component_ids": ["application-runtime"], "contract_ids": ["test-suite-registry"], "depends_on_deployables": ["delivery-workflows"]},
+    {"id": "kyber-operator", "paths": ["frontend/kyber/**", "Backend Architecture/aether-backend/services/intelligence/routes.py"], "component_ids": ["kyber-readiness"], "contract_ids": ["test-suite-registry"], "depends_on_deployables": ["delivery-workflows"]},
+    {"id": "infrastructure-promotion", "paths": ["AWS Deployment/**", "deploy/**", "docker-compose.yml", ".github/workflows/terraform-promote.yml"], "component_ids": ["infrastructure-runtime", "environment-authorities", "hosted-delivery"], "contract_ids": ["environment-capability-snapshot", "effective-iam-comparison", "terraform-reconciliation"], "depends_on_deployables": ["delivery-workflows"]}
   ]
 }

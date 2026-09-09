@@ -371,7 +371,12 @@ def load_impact_graph(
 
 def _ensure_paths(paths: Iterable[str], root: Path, where: str) -> None:
     for path in paths:
-        if not (root / path).is_file():
+        if any(token in path for token in "*?["):
+            pattern = path[:-3] + "/**/*" if path.endswith("/**") else path
+            matches = [candidate for candidate in root.glob(pattern) if candidate.is_file()]
+            if not matches:
+                raise ImpactGraphConfigError(f"{where} references missing path pattern {path!r}")
+        elif not (root / path).is_file():
             raise ImpactGraphConfigError(f"{where} references missing file {path!r}")
 
 

@@ -6,7 +6,7 @@ from scripts.release.check_delivery_workflow_authority import validate
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_transitional_delivery_authority_has_one_owner_per_blueprint_authority():
+def test_enforced_delivery_authority_has_one_owner_per_blueprint_authority():
     assert validate(root=ROOT) == []
 
 
