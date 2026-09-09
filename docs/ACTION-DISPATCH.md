@@ -19,7 +19,7 @@ toc_depth: 3
 source_hashes:
   "Backend Architecture/aether-backend/services/intelligence/action_targets/base.py": "sha256:983f23fdb3696c505d39e80232b5e91c22d917744fef156cc58900bbfde0c449"
   "Backend Architecture/aether-backend/services/intelligence/action_targets/registry.py": "sha256:06edc4a24ff4a7e14927a05414e5ce40b8da8d187af3895b0e893b21cb98d56c"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:6869337e19ec073673344c4d27986a717be807b852156ffe5807516105abdc35"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:51b4fc577bc989dd6ce4b9070125d4e4b62ef95fb19ce2072f648e0600850381"
 ---
 
 # Governed Action Dispatch
@@ -54,6 +54,12 @@ The built-in target registry supports Slack, webhook, CRM, marketing automation,
 ## Dispatch flow (as of 9.1.0)
 
 `POST /v1/intelligence/actions/{action_id}/dispatch` no longer produces a simulated receipt. The dispatch call now:
+
+Before invoking a target, an optional idempotency key is resolved within the
+authenticated tenant and action. A replay returns the existing durable dispatch
+and latest receipt with `replayed: true`; it does not invoke the external target
+a second time. Reusing the same key for a different action does not alias the
+two actions.
 
 1. Creates a `DeliveryIntent` (durable outbox record) atomically in the same DB transaction.
 2. Creates a `DeliveryJob` per configured destination channel.

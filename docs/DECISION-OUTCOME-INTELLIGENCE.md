@@ -36,7 +36,7 @@ source_hashes:
   "Backend Architecture/aether-backend/services/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
   "Backend Architecture/aether-backend/services/intelligence/recommendation_families.py": "sha256:9a1375244f013488f51e2a73bd5de32b452bb7232f67fea68ac4cc7955d80e43"
   "Backend Architecture/aether-backend/services/intelligence/repositories.py": "sha256:5dc6be1b18ffec874a1ef2026a8f8ab3e975f69119f7efa92928fc9f71b72610"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:6869337e19ec073673344c4d27986a717be807b852156ffe5807516105abdc35"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:51b4fc577bc989dd6ce4b9070125d4e4b62ef95fb19ce2072f648e0600850381"
 ---
 # Decision & Outcome Intelligence
 
@@ -76,7 +76,12 @@ Additive OODA edges:
 
 ## Tenant vs Kyber responsibilities
 
-- **Aether tenant app**: shows recommendation cards, evidence, decision drawer, entity recommendations, outcome history, and playbook controls for the current tenant.
+- **Aether tenant app**: shows recommendation cards, evidence, decision drawer,
+  entity recommendations, outcome history, and playbook controls for the current
+  tenant. Approval records the authenticated actor and creates a separate
+  durable `planned` action; it does not dispatch an external effect. Dispatch
+  remains a later explicit operation requiring a configured tenant target and
+  the applicable policy/approval checks.
 - **Kyber operator console**: shows aggregate system health, volume, approval/rejection rates, outcome capture rate, confidence drift, playbook performance, and stale loops.
 
 ## API examples
@@ -137,6 +142,9 @@ Feature flags continue to default disabled. Existing recommendation APIs remain 
 ## Enterprise packaging and audit exports
 
 Decision records now feed tenant-scoped audit exports and Kyber solution package readiness. Exports preserve actor, approval, selected/rejected action, reason/comment, and timestamp evidence without exposing cross-tenant data. See `docs/AUDIT-EXPORTS.md` and `docs/SOLUTION-PACKAGES.md`.
+
+Decision actor identity is derived from the authenticated tenant principal on
+the server. The compatibility request field cannot override audit identity.
 
 ## Fraud Intelligence Configuration
 

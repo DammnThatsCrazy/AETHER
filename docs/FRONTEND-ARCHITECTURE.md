@@ -33,7 +33,7 @@ reviewed_source_commits:
   - commit: "8b1ca3dc"
     reason: "R2 WS-6 re-stamp after review (enduser-lifecycle lane, Phase 8 acceptance tail). Reviewed the new Playwright lifecycle suites A–E + shared harness added under frontend/aether/src/test/e2e/. This doc makes no claim about the tenant app's e2e/test inventory (its only test reference is Kyber unit tests at lines 842-844), and the suites are additive test surfaces, not runtime/IA changes — no body change required."
 source_hashes:
-  "frontend/aether/src/": "sha256:60df60cb880ef8682e524e66825deaed96c0e90325b06d1fe3da593cd0a40a39"
+  "frontend/aether/src/": "sha256:16c0b8f7d8c5888cc3a425e6e076e37bb8382908b48bd4850e8e4eb1e4c98db9"
   "frontend/kyber/src/": "sha256:0231b24d315cbd3dff15c4ad1b1da5864e53b2a07aa8da27f079461996aa2ca2"
   "frontend/shared/src/": "sha256:76362b4ce68552eacfc95161ffb3321b2c22260078d075e15d982da0c3db1b9c"
 ---
@@ -260,9 +260,23 @@ Settings capabilities; Findings, Investigations, Outcomes, and Reports remain
 visibly not ready instead of linking to fabricated surfaces. Explore composes
 the shared context bar, time rail, and collapsed Noesis context strip around
 the existing server-backed graph canvas, loading/error/empty states, table/path
-modes, and inspector. Lens controls remain in the existing graph workspace
-until the later lens-dock migration, and the Noesis strip links to the existing
-Noesis surface rather than synthesizing recommendations.
+modes, and inspector. The lens dock reports availability from the generated
+lens/projection registries; it remains non-executing until the graph query seam
+accepts canonical lens identifiers, so a visible lens never implies a filter
+was applied. Selecting a real graph node synchronizes the shared GraphContext
+focus and URL, and entity nodes can open the existing Profile360 route. The
+Noesis strip links to the existing Noesis surface rather than synthesizing
+recommendations.
+
+Activation joins its server-owned lifecycle state with the typed tenant
+readiness snapshot to show the current stage, next permitted action, graph
+evidence state, and blocked/external recovery paths. It derives no numeric
+maturity score: `no_data`, `building`, and `ready` come from the named launch
+checks. Completed activation offers an explicit Explore handoff without an
+automatic redirect. The tenant decision panel likewise separates approval from
+execution: it records the authenticated decision, creates a durable planned
+action, and tells the user that a configured target is still required before
+dispatch.
 
 Campaign360 gains a **Targeting Intelligence** tab and Cluster360 a
 **Targeting Impact** tab (flag-gated; observation-only — "Aether does not
