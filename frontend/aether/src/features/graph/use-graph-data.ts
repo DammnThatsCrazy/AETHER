@@ -8,6 +8,7 @@ import type {
 import {
   useExplorationClient,
   useExplorationContext,
+  useGraphContext,
   type ExplorationStatus,
 } from '@aether/ui/exploration';
 import { api } from '@aether-app/lib/api/endpoints';
@@ -183,6 +184,10 @@ const ENTITY_LINK_SAMPLE = 30;
 export function useGraphData(options?: { asOf?: string | null; tenantId?: string }) {
   const client = useExplorationClient();
   const mountedContext = useExplorationContext();
+  // The graph provider is the host authority for the complete scope. The
+  // legacy exploration context only carries tenant + surface, so using it as
+  // the request scope would silently drop workspace/environment isolation.
+  const graphContext = useGraphContext();
   const [allNodes, setAllNodes] = useState<GraphNode[]>([]);
   const [allEdges, setAllEdges] = useState<GraphEdge[]>([]);
   const [clusters, setClusters] = useState<GraphCluster[]>([]);
@@ -199,8 +204,6 @@ export function useGraphData(options?: { asOf?: string | null; tenantId?: string
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
   const asOf = options?.asOf ?? null;
-  const tenantId = options?.tenantId ?? '';
-
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
@@ -210,7 +213,10 @@ export function useGraphData(options?: { asOf?: string | null; tenantId?: string
     async function fetchGraph(): Promise<{ nodes: GraphNode[]; edges: GraphEdge[]; clusters: GraphCluster[] }> {
       const context: ExplorationContextV1 = {
         ...mountedContext,
-        scope: { tenant_id: mountedContext.scope.tenant_id, surface: 'graph' },
+        scope: {
+          ...graphContext.scope,
+          surface: 'graph',
+        },
         temporal: asOf
           ? { ...mountedContext.temporal, mode: 'as_of', as_of: asOf }
           : mountedContext.temporal,
@@ -218,7 +224,7 @@ export function useGraphData(options?: { asOf?: string | null; tenantId?: string
       };
       const envelope = await client.queryLatest<{ nodes: unknown[]; edges: unknown[] }>(
         { context, limit: 500 },
-        { key: `graph:${mountedContext.scope.tenant_id}:${asOf ?? 'live'}` },
+        { key: `graph:${graphContext.scope.tenant_id}:${graphContext.scope.workspace_id}:${graphContext.scope.environment_id}:${asOf ?? 'live'}` },
       );
       assertCanonicalTruthState(envelope.truth.overall_state);
       const rawEntities = Array.isArray(envelope.data?.nodes) ? envelope.data.nodes : [];
@@ -259,7 +265,7 @@ export function useGraphData(options?: { asOf?: string | null; tenantId?: string
       });
 
     return () => { cancelled = true; };
-  }, [asOf, client, mountedContext]);
+  }, [asOf, client, graphContext, mountedContext]);
 
   const nodes = useMemo(() => allNodes, [allNodes]);
 

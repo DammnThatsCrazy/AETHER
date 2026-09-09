@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ExplorationClient } from '@aether/ui/exploration';
-import { ExplorationProvider } from '@aether/ui/exploration';
+import { GraphContextProvider } from '@aether/ui/exploration';
 import { useGraphData } from '@aether-app/features/graph/use-graph-data';
 
 describe('canonical graph exploration hook', () => {
@@ -39,13 +39,17 @@ describe('canonical graph exploration hook', () => {
     });
     const client = { queryLatest } as unknown as ExplorationClient;
     const wrapper = ({ children }: { children: ReactNode }) => (
-      <ExplorationProvider
-        tenantId="tenant-authority"
+      <GraphContextProvider
+        scope={{
+          tenant_id: 'tenant-authority',
+          workspace_id: 'workspace-authority',
+          environment_id: 'environment-authority',
+        }}
         surface="graph"
         client={client}
       >
         {children}
-      </ExplorationProvider>
+      </GraphContextProvider>
     );
 
     const { result } = renderHook(() => useGraphData(), { wrapper });
@@ -65,6 +69,8 @@ describe('canonical graph exploration hook', () => {
     const request = queryLatest.mock.calls[0]?.[0];
     expect(request.context.scope).toEqual({
       tenant_id: 'tenant-authority',
+      workspace_id: 'workspace-authority',
+      environment_id: 'environment-authority',
       surface: 'graph',
     });
   });
