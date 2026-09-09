@@ -16,7 +16,7 @@ toc_depth: 3
 source_hashes:
   "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
   "Backend Architecture/aether-backend/middleware/middleware.py": "sha256:e320a85428e219bd745ff298a6b3a8a7404a1f72b562e65d4f7682e722ecb79c"
-  "packages/shared/": "sha256:228db239325249a56150a1662971ed1f8c31017de1b99a702b07246980429a92"
+  "packages/shared/": "sha256:3710ceea4eedd190261337e0d26e2e728bf9c0e9035785bb6162402fa829a2a7"
 ---
 # Aether vNext — Architecture Guide
 
@@ -524,7 +524,10 @@ inconsistent with the authenticated tenant. The current
 `single_workspace_tenant_v1` authority maps one workspace to each tenant and
 uses the logical graph environment `production`; neither coordinate comes from
 the URL or deployment configuration. Kyber has not yet migrated to this
-runtime.
+runtime. The Aether `/explore` surface is nevertheless classified as
+parity-required in the generated Kyber feature-surface manifest, so authorized
+internal tenant-mirror inspection uses the existing generic mirror capability
+and disclosure policy rather than exposing Kyber in the customer product.
 
 Lens identity remains registry-governed: `packages/shared/contracts/lens-registry.json`
 generates `packages/shared/lenses_generated.ts`, and projection availability

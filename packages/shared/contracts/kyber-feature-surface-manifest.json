@@ -227,6 +227,22 @@
       ]
     },
     {
+      "feature_id": "explore",
+      "aether_route": "/explore",
+      "tenant_parity_required": true,
+      "parity_exception_reason": null,
+      "kyber_mirror_route": "/tenants/:tenantId/mirror/explore",
+      "minimum_disclosure": "D3",
+      "backend_capability": "kyber.tenant.mirror.read",
+      "operator_augmentations": [
+        "quality",
+        "lineage",
+        "policy",
+        "health",
+        "recomputeOptions"
+      ]
+    },
+    {
       "feature_id": "graph",
       "aether_route": "/graph",
       "tenant_parity_required": true,
