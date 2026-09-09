@@ -544,6 +544,10 @@ vi.mock('@aether-app/features/cluster360/use-cluster360', async importOriginal =
 });
 
 describe('Cluster360 page tab registration', () => {
+  // This page imports the full Cluster360 route lazily. Under the complete
+  // workspace suite, parallel workers can consume the default 5s test budget
+  // before the response-backed tab content mounts. Keep the same assertions
+  // and give this integration-shaped harness explicit headroom.
   it('registers the Targeting Impact tab and renders it on click', async () => {
     render(
       <MemoryRouter initialEntries={['/clusters/cluster_a']}>
@@ -557,5 +561,5 @@ describe('Cluster360 page tab registration', () => {
     await userEvent.click(trigger);
     await waitFor(() => expect(screen.getByText('Targeting funnel')).toBeInTheDocument());
     expect(screen.getByText('Spend (USD)')).toBeInTheDocument();
-  });
+  }, 15_000);
 });
