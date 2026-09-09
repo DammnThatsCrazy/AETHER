@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { GraphContext } from '@aether/shared/graph-context-contract';
 import {
@@ -6,12 +6,16 @@ import {
   GraphTimeRail,
   GraphWorkspaceFrame,
   NoesisContextStrip,
+  allBlueprintLenses,
+  resolveLensAvailability,
   useGraphActions,
   useGraphContext,
   useGraphHistory,
 } from '@aether/ui/exploration';
 import { GraphPage } from '@aether-app/pages/graph/graph-page';
 import { deriveGraphMaturity, useTenantReadiness } from '@aether-app/features/activation/use-tenant-readiness';
+import type { LensResolution } from '@aether/ui/exploration';
+import type { GraphNode } from '@aether-app/components/graph/graph-canvas';
 
 function temporalLabel(context: GraphContext): string {
   const temporal = context.temporal;
@@ -87,6 +91,54 @@ function GraphMaturityPanel() {
   );
 }
 
+function lensStatusLabel(resolution: LensResolution): string {
+  if (resolution.availability === 'available') return 'Available';
+  if (resolution.availability === 'not_entitled') return 'Not included';
+  if (resolution.availability === 'unauthorized') return 'No access';
+  return resolution.entry?.pending ? 'Pending engine binding' : 'Not ready';
+}
+
+function LensDock({ objectKind }: {
+  readonly objectKind: string;
+}) {
+  const resolutions = useMemo(() => allBlueprintLenses().map((lens) => resolveLensAvailability(lens.id, {
+    objectKind,
+    surfaceId: 'graph',
+    // Capability and readiness facts are intentionally absent here: the
+    // registry resolver must represent those lenses as not-ready, never infer
+    // entitlement from the presence of a UI control.
+    temporalMode: 'window',
+  })), [objectKind]);
+  return (
+    <div className="p-3 text-xs text-text-secondary">
+      <GraphMaturityPanel />
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-medium text-text-primary">Graph lenses</p>
+        <span className="text-[10px] text-text-muted" data-testid="lens-object-kind">{objectKind}</span>
+      </div>
+      <p className="mt-1">Registered lens availability for this graph context.</p>
+      <div className="mt-3 space-y-1" role="list" aria-label="Registered graph lenses">
+        {resolutions.map((resolution) => {
+          const entry = resolution.entry;
+          if (!entry) return null;
+          return (
+            <div
+              key={resolution.lensId}
+              role="listitem"
+              data-lens-availability={resolution.availability}
+              className="flex w-full items-center justify-between rounded border border-border-subtle px-2 py-1.5 text-left"
+            >
+              <span>{entry.displayName}</span>
+              <span className="ml-2 text-[10px] text-text-muted">{lensStatusLabel(resolution)}</span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-[10px] text-text-muted">Unavailable lenses stay visible with their registry state.</p>
+    </div>
+  );
+}
+
 /**
  * Graph-first tenant exploration workspace. GraphPage is deliberately
  * composed rather than reimplemented: its existing loading, empty, error,
@@ -107,6 +159,18 @@ export function ExplorePage() {
   const currentFocus = context.selection.focused;
   const historyEntries = history.entries;
   const currentTemporalLabel = temporalLabel(context);
+  const selectedObjectKind = currentFocus?.kind ?? 'entity';
+  const handleObjectSelected = useCallback((node: GraphNode) => {
+    const ref = {
+      tenant_id: context.scope.tenant_id,
+      environment_id: context.scope.environment_id,
+      kind: node.kind,
+      id: node.id,
+    } as const;
+    actions.focusObject(ref);
+    actions.selectObject(ref);
+    navigate(objectRoute(node.id));
+  }, [actions, context.scope.environment_id, context.scope.tenant_id, navigate]);
 
   function moveThroughHistory(direction: 'previous' | 'next') {
     const next = direction === 'previous'
@@ -168,13 +232,9 @@ export function ExplorePage() {
       <GraphWorkspaceFrame
         contextBar={contextBar}
         lensDock={(
-          <div className="p-3 text-xs text-text-secondary">
-            <GraphMaturityPanel />
-            <p className="font-medium text-text-primary">Graph lenses</p>
-            <p className="mt-1">Layer and overlay controls remain attached to the graph canvas.</p>
-          </div>
+          <LensDock objectKind={selectedObjectKind} />
         )}
-        canvas={<GraphPage embedded />}
+        canvas={<GraphPage embedded onObjectSelected={handleObjectSelected} />}
         timeRail={timeRail}
         noesisStrip={noesisStrip}
       />

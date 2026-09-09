@@ -159,6 +159,7 @@ type InspectorPayload =
   | { type: 'cluster'; cluster: GraphCluster };
 
 function Inspector({ data, onClose, tenantId }: { data: InspectorPayload; onClose: () => void; tenantId: string }) {
+  const navigate = useNavigate();
   return (
     <Card className="w-72 flex-shrink-0 overflow-hidden">
       <CardHeader>
@@ -185,6 +186,16 @@ function Inspector({ data, onClose, tenantId }: { data: InspectorPayload; onClos
                     <span className="text-sm font-mono text-text-primary truncate">{data.node.label}</span>
                   </div>
                   <code className="text-xs text-text-muted break-all block">{data.node.id}</code>
+                  {data.node.kind.toLowerCase() === 'entity' && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => navigate(`/users/${encodeURIComponent(data.node.id)}`)}
+                    >
+                      Open Profile360
+                    </Button>
+                  )}
                   <ScoreBar label="Trust" value={data.node.trustScore} colorFn={trustColor} />
                   <ScoreBar label="Risk" value={data.node.riskScore} colorFn={riskColor} />
                   {(typeof data.node.metadata.attributed_campaign_id === 'string' || typeof data.node.metadata.campaign_id === 'string') && (
@@ -363,9 +374,11 @@ export interface GraphPageProps {
    * Standalone /graph keeps the historical default.
    */
   readonly embedded?: boolean;
+  /** Optional host synchronization for graph-first surfaces. */
+  readonly onObjectSelected?: (node: GraphNode) => void;
 }
 
-export function GraphPage({ embedded = false }: GraphPageProps = {}) {
+export function GraphPage({ embedded = false, onObjectSelected }: GraphPageProps = {}) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const deepLinkedEntity = searchParams.get('entity') ?? searchParams.get('selected_entity');
@@ -464,7 +477,8 @@ export function GraphPage({ embedded = false }: GraphPageProps = {}) {
     }
     setHighlightedCluster(null);
     setInspector({ type: 'node', node, neighbors: getNeighbors(node.id) });
-  }, [pathMode, pathSource, traversalMode, kPaths, tenantId, getNeighbors]);
+    onObjectSelected?.(node);
+  }, [pathMode, pathSource, traversalMode, kPaths, tenantId, getNeighbors, onObjectSelected]);
 
   useEffect(() => {
     if (!deepLinkedEntity || isLoading || error) return;

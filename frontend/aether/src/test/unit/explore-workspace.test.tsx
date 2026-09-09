@@ -45,6 +45,8 @@ vi.mock('@aether-app/features/activation/use-tenant-readiness', () => ({
 }));
 
 vi.mock('@aether/ui/exploration', () => ({
+  allBlueprintLenses: () => [{ id: 'object', displayName: 'Objects', description: 'Objects', pending: false }],
+  resolveLensAvailability: (id: string) => ({ lensId: id, availability: 'available', entry: { id, displayName: 'Objects', pending: false } }),
   GraphContextBar: ({ workspaceLabel, environmentLabel, timeLabel }: Record<string, string>) => (
     <div data-testid="graph-context-bar">{workspaceLabel} · {environmentLabel} · {timeLabel}</div>
   ),
@@ -71,6 +73,7 @@ vi.mock('@aether/ui/exploration', () => ({
     </section>
   ),
   useGraphContext: () => runtime.context,
+  useGraph: () => ({ toQuery: () => 'entity=entity-2' }),
   useGraphHistory: () => runtime.history,
   useGraphActions: () => runtime.actions,
 }));
