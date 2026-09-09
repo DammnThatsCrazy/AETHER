@@ -132,8 +132,12 @@ class HostedAdapterRequest:
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "HostedAdapterRequest":
+        if not isinstance(value, Mapping):
+            raise HostedAdapterError("adapter request must be an object")
         if _secret_paths(value):
             raise HostedAdapterError("adapter request contains plaintext secret material")
+        if value.get("schema_version", SCHEMA_VERSION) != SCHEMA_VERSION:
+            raise HostedAdapterError("schema_version must be 1")
         operation_id = _string(value.get("operation_id"), "operation_id")
         authority = _string(value.get("authority"), "authority")
         if authority not in _AUTHORITIES:
@@ -150,7 +154,7 @@ class HostedAdapterRequest:
             raise HostedAdapterError(f"{authority} adapter requires a credential reference")
         if not read_only and authority not in {"environment", "state", "release"}:
             raise HostedAdapterError("only environment/state/release adapters may request mutation")
-        return cls(operation_id, authority, profile, credential, identity, read_only, value.get("schema_version", SCHEMA_VERSION))
+        return cls(operation_id, authority, profile, credential, identity, read_only, SCHEMA_VERSION)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -181,8 +185,12 @@ class HostedAdapterResult:
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "HostedAdapterResult":
+        if not isinstance(value, Mapping):
+            raise HostedAdapterError("adapter result must be an object")
         if _secret_paths(value):
             raise HostedAdapterError("adapter result contains plaintext secret material")
+        if value.get("schema_version", SCHEMA_VERSION) != SCHEMA_VERSION:
+            raise HostedAdapterError("schema_version must be 1")
         status = _string(value.get("status"), "status")
         if status not in _STATUSES:
             raise HostedAdapterError(f"status must be one of {sorted(_STATUSES)}")
@@ -210,7 +218,7 @@ class HostedAdapterResult:
             parsed_identity,
             value.get("evidence_ref"),
             value.get("next_action"),
-            value.get("schema_version", SCHEMA_VERSION),
+            SCHEMA_VERSION,
         )
 
     def as_dict(self) -> dict[str, Any]:

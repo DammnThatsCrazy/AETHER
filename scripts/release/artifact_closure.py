@@ -14,6 +14,7 @@ import hashlib
 import json
 import tarfile
 import zipfile
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -26,6 +27,8 @@ except ModuleNotFoundError:  # pragma: no cover
 
 SCHEMA_VERSION = 1
 _DIGEST_PREFIX = "sha256:"
+_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+_COMMIT = re.compile(r"^[0-9a-f]{7,64}$")
 _PROVENANCE_SOURCES = frozenset({"local", "github_artifact", "hosted_registry"})
 
 
@@ -141,6 +144,8 @@ def validate_closure_evidence(value: Mapping[str, Any]) -> list[str]:
     """Validate serialized closure evidence and reject fabricated hosted claims."""
 
     errors: list[str] = []
+    if not isinstance(value, Mapping):
+        return ["closure evidence must be an object"]
     if value.get("schema_version") != SCHEMA_VERSION:
         errors.append("schema_version must be 1")
     if value.get("status") != "PASS":
@@ -148,6 +153,22 @@ def validate_closure_evidence(value: Mapping[str, Any]) -> list[str]:
     identity = value.get("candidate_identity")
     if not isinstance(identity, Mapping):
         errors.append("candidate_identity must be an object")
+    else:
+        required_identity = ("release_candidate_id", "commit_sha", "artifact_digest", "profile")
+        missing = [key for key in required_identity if key not in identity]
+        if missing:
+            errors.append("candidate_identity is missing: " + ", ".join(missing))
+        elif (
+            not isinstance(identity["release_candidate_id"], str)
+            or not identity["release_candidate_id"].strip()
+            or not isinstance(identity["profile"], str)
+            or not identity["profile"].strip()
+            or not isinstance(identity["commit_sha"], str)
+            or not _COMMIT.fullmatch(identity["commit_sha"])
+            or not isinstance(identity["artifact_digest"], str)
+            or not _DIGEST.fullmatch(identity["artifact_digest"])
+        ):
+            errors.append("candidate_identity has invalid fields")
     artifacts = value.get("artifacts")
     if not isinstance(artifacts, Mapping) or not artifacts:
         errors.append("artifacts must be a non-empty object")
@@ -162,7 +183,7 @@ def validate_closure_evidence(value: Mapping[str, Any]) -> list[str]:
             errors.append("verified signature requires signature_ref")
         if source == "local" and provenance.get("signature_ref"):
             errors.append("local provenance cannot carry signature_ref")
-    if not isinstance(value.get("artifact_digest"), str) or not value.get("artifact_digest", "").startswith(_DIGEST_PREFIX):
+    if not isinstance(value.get("artifact_digest"), str) or not _DIGEST.fullmatch(value.get("artifact_digest", "")):
         errors.append("artifact_digest must be sha256")
     return sorted(set(errors))
 

@@ -9,6 +9,7 @@ resulting evidence before a later authority can consume it.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -29,6 +30,8 @@ EPHEMERAL_PROFILES = frozenset({"preview", "demo"})
 PROMOTION_PROFILES = frozenset({"production-lean", "production-scale", "enterprise-isolated"})
 OPERATIONS = frozenset({"wake", "sleep", "deploy", "validate", "promote", "rollback", "reconcile", "destroy"})
 RESULT_STATUSES = frozenset({"DRY_RUN", "BLOCKED", "FAILED", "DEPLOYED", "VALIDATED", "PROMOTED", "ROLLED_BACK", "SLEPT"})
+_COMMIT = re.compile(r"^[0-9a-f]{7,64}$")
+_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 class ProfileDeliveryError(ValueError):
@@ -42,12 +45,14 @@ def _string(value: Any, where: str) -> str:
 
 
 def _identity(value: Mapping[str, Any], where: str = "candidate_identity") -> dict[str, str]:
+    if not isinstance(value, Mapping):
+        raise ProfileDeliveryError(f"{where} must be an object")
     required = ("release_candidate_id", "commit_sha", "artifact_digest", "profile")
     missing = [key for key in required if key not in value]
     if missing:
         raise ProfileDeliveryError(f"{where} is missing: {', '.join(missing)}")
     result = {key: _string(value[key], f"{where}.{key}") for key in required}
-    if not result["commit_sha"].isalnum() or not result["artifact_digest"].startswith("sha256:"):
+    if not _COMMIT.fullmatch(result["commit_sha"]) or not _DIGEST.fullmatch(result["artifact_digest"]):
         raise ProfileDeliveryError(f"{where} has invalid commit or artifact digest")
     return result
 
@@ -79,6 +84,10 @@ class DeliveryRequest:
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "DeliveryRequest":
+        if not isinstance(value, Mapping):
+            raise ProfileDeliveryError("delivery request must be an object")
+        if value.get("schema_version", SCHEMA_VERSION) != SCHEMA_VERSION:
+            raise ProfileDeliveryError("schema_version must be 1")
         operation_id = _string(value.get("operation_id"), "operation_id")
         operation = _string(value.get("operation"), "operation")
         if operation not in OPERATIONS:
@@ -99,9 +108,11 @@ class DeliveryRequest:
         result = cls(
             operation_id, operation, profile, identity, requested_at, ttl_hours,
             optional_identity("staging_evidence"), optional_identity("from_candidate"),
-            optional_identity("to_candidate"), bool(value.get("dry_run", False)),
-            value.get("schema_version", SCHEMA_VERSION),
+            optional_identity("to_candidate"), value.get("dry_run", False),
+            SCHEMA_VERSION,
         )
+        if not isinstance(result.dry_run, bool):
+            raise ProfileDeliveryError("dry_run must be boolean")
         errors = validate_request(result)
         if errors:
             raise ProfileDeliveryError("invalid delivery request: " + "; ".join(errors))
@@ -159,6 +170,8 @@ def validate_request(request: DeliveryRequest) -> list[str]:
 
 def validate_result(request: DeliveryRequest, result: Mapping[str, Any]) -> list[str]:
     errors: list[str] = []
+    if not isinstance(result, Mapping):
+        return ["result must be an object"]
     try:
         status = _string(result.get("status"), "result.status")
         identity = _identity(result.get("candidate_identity"), "result.candidate_identity")

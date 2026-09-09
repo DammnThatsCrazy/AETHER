@@ -90,6 +90,19 @@ def test_fixture_cannot_claim_live_hosted_pass():
     assert any("cannot claim live" in error for error in validate_adapter_pair(req, result))
 
 
+def test_direct_contract_constructors_fail_closed_on_schema_and_shape():
+    assert any("schema_version" in error for error in validate_adapter_pair(
+        {"schema_version": 2, "operation_id": "op-1", "authority": "environment", "profile": "staging",
+         "credential": {"provider": "aws", "source": "github_oidc"}},
+        {},
+    ))
+    with pytest.raises(ValueError, match="candidate_identity must be an object"):
+        DeliveryRequest.from_mapping({
+            "operation_id": "op-1", "operation": "validate", "profile": "staging",
+            "candidate_identity": None, "requested_at": "2026-09-09T00:00:00Z", "dry_run": True,
+        })
+
+
 def test_artifact_closure_checks_archive_entries_and_candidate_digest(tmp_path: Path):
     archive = tmp_path / "backend.tar"
     with tarfile.open(archive, "w") as tar:
@@ -112,6 +125,22 @@ def test_artifact_closure_rejects_missing_runtime_entry(tmp_path: Path):
     digest = "sha256:" + __import__("hashlib").sha256(archive.read_bytes()).hexdigest()
     with pytest.raises(ArtifactClosureError, match="required closure entries"):
         verify_closure(candidate(component_digest=digest), {"backend": ArtifactSpec("backend", archive, ("app/*.py",))})
+
+
+def test_artifact_evidence_rejects_malformed_identity():
+    assert "candidate_identity has invalid fields" in validate_closure_evidence({
+        "schema_version": 1,
+        "status": "PASS",
+        "candidate_identity": {
+            "release_candidate_id": "rc-hosted",
+            "commit_sha": "not-a-commit",
+            "artifact_digest": "sha256:" + "a" * 64,
+            "profile": "staging",
+        },
+        "artifacts": {"backend": {}},
+        "artifact_digest": "sha256:" + "a" * 64,
+        "provenance": {"source": "local", "builder": "test", "signature_status": "UNSIGNED_OR_UNVERIFIED"},
+    })
 
 
 def test_profile_operations_require_ttl_and_exact_promotion_identity():
