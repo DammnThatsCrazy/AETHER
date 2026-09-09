@@ -32,8 +32,12 @@ reviewed_source_commits:
     reason: "WS-4 review (enduser-lifecycle lane, contextual readiness). Reviewed the additive features/integrations readiness surface (useTenantIntegrationReadiness calling restClient directly + readiness-context advisor + tenant-readiness zod types) and its consumers on the Campaign 360 / Campaign Sources / Profile360 pages. Added the 'Contextual integration readiness CTAs' subsection under Connector Pages documenting the hook/advisor + §6 copy invariants. body change was required and made."
   - commit: "8b1ca3dc"
     reason: "R2 WS-6 re-stamp after review (enduser-lifecycle lane, Phase 8 acceptance tail). Reviewed the new Playwright lifecycle suites A–E + shared harness added under frontend/aether/src/test/e2e/. This doc makes no claim about the tenant app's e2e/test inventory (its only test reference is Kyber unit tests at lines 842-844), and the suites are additive test surfaces, not runtime/IA changes — no body change required."
+  - commit: "b0313c2c"
+    reason: "Graph-first scope review: graph exploration requests now preserve the host-authoritative tenant/workspace/environment scope and include all coordinates in the cache key; the documented GraphContextProvider binding remains accurate."
+  - commit: "8b94e6c6"
+    reason: "Graph-first scope review: legacy semantic zoom now derives tenant authority from GraphContext and fails closed on a conflicting legacy tenant argument; backend traversal contracts remain tenant-only, so no workspace/environment claim was added."
 source_hashes:
-  "frontend/aether/src/": "sha256:16c0b8f7d8c5888cc3a425e6e076e37bb8382908b48bd4850e8e4eb1e4c98db9"
+  "frontend/aether/src/": "sha256:28b39cf5b9e7ee45776bd174aeb27824194b22efde918f5e952f6311cc631361"
   "frontend/kyber/src/": "sha256:0231b24d315cbd3dff15c4ad1b1da5864e53b2a07aa8da27f079461996aa2ca2"
   "frontend/shared/src/": "sha256:e2196fef30b0ee083ed921c5ab6644c9a4dcd56105e05ec584aa077a1be55eb9"
 ---
@@ -83,7 +87,7 @@ There are two separate frontend applications. **Do not mix them up.**
   handoff-derived `/settings/integrations?…` target, else `/settings`.
 - The intelligence **graph canvas** showing the tenant's users, organizations, and AI agents — layer/overlay toggles (H2H/H2A/A2H/A2A, risk, trust, campaign, economic, fraud), path finder with multi-hop traversal modes (Shortest / Strongest / K-Shortest), cluster panel, and cluster drill-down to Cluster360; summary strip (entity/relationship/cluster/risk-alert counts), truncation warning when entity set exceeds 200, replay mode with date picker, observation-class node styling (solid/dashed/dotted borders), Recommendation/Prediction outcome panel in Inspector, **PathInspector** panel (shown in right panel when a path is active — Overview/Hops/Evidence/Score tabs, save-to-investigation action)
 - **Cluster360** (`/clusters/:clusterId`) — 7-tab cluster surface: Overview (type, state, formation reason, confidence, risk score, properties), Members (paginated DataTable with confidence + join date), Timeline (merge/split/growth events), Economic (revenue, spend, LTV, value tier, top-member breakdown), Campaigns (attributed campaigns, top channel, conversion rate), Risk (aggregate score, fraud network link, alert count, evidence refs, high-risk members), Geography (country distribution bars, concentration score)
-- **Semantic zoom** — graph canvas supports server-backed macro→cluster→entity zoom: macro level uses a `depth: 1` query scoped to cluster node types (the backend minimum depth is 1; depth-0 is rejected); clicking a cluster fetches depth-1 member expansion via `useGraphZoom(tenantId?)`
+- **Semantic zoom** — graph canvas supports server-backed macro→cluster→entity zoom: macro level uses a `depth: 1` query scoped to cluster node types (the backend minimum depth is 1; depth-0 is rejected); clicking a cluster fetches depth-1 member expansion via `useGraphZoom(tenantId?)`. The helper derives tenant authority from `GraphContext` and fails closed if a legacy tenant argument conflicts; the current traversal API is tenant-only until a separate workspace/environment contract migration.
 - **Entity Profile360** panels — what tenants drill into when they click a graph node
 - **Geographic Intelligence** view — their users by location
 - **Social Intelligence** panels — their users' social platform presence
