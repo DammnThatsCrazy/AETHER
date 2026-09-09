@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ThemeProvider, ToastProvider } from '@aether/ui';
+import { GraphContextProvider } from '@aether/ui/exploration';
 import { ConnectorsPage } from '@kyber/pages/connectors';
 import { CommandPage } from '@kyber/pages/command';
 import { DiagnosticsPage } from '@kyber/pages/diagnostics';
@@ -377,7 +378,12 @@ function renderRoute(Page: ComponentType, route: string, routePattern = route) {
     <ThemeProvider>
       <ToastProvider>
         <MemoryRouter initialEntries={[route]}>
-          <Routes><Route path={routePattern} element={<Page />} /></Routes>
+          <GraphContextProvider
+            scope={{ tenant_id: 'tenant-test', workspace_id: 'workspace-test', environment_id: 'staging' }}
+            surface={route}
+          >
+            <Routes><Route path={routePattern} element={<Page />} /></Routes>
+          </GraphContextProvider>
         </MemoryRouter>
       </ToastProvider>
     </ThemeProvider>,
