@@ -31,7 +31,7 @@ reviewed_source_commits:
   - commit: "69185729"
     reason: "Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate."
 source_hashes:
-  "Backend Architecture/aether-backend/services/": "sha256:103db11dea00e6cfe5dc7dd1c18fbebcf79eb1dca0f0e353d62ac304bac10c9a"
+  "Backend Architecture/aether-backend/services/": "sha256:a6fc6874d3c067f1ad2f98313d3321cb7e18cb5cfec549e7de6bb26262911de0"
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
 
@@ -1583,7 +1583,8 @@ The Exploration Fabric (`/v1/explore`) is the context-preserving
 query/filter/presentation workbench over every analytical surface. Its
 validate/query/facets/views/links endpoints and the per-surface adapter model
 are documented in `docs/source-of-truth/EXPLORATION_FABRIC.md`; this section
-covers the **sessions + operations** surface, added over the S1 projection
+covers the **sessions + operations and immutable result snapshots** surface,
+added over the S1 projection
 engine. An `ExplorationSession` persists one tenant-scoped exploration —
 surface, seed `ExplorationContextV1`, op history, and current context — and
 every submitted filter stays accounted for (no silent drops). Flag-gated inside
@@ -1597,6 +1598,10 @@ off the surface answers 404, indistinguishable from an unmounted route.
 | GET | `/v1/explore/sessions/{session_id}` | Load one session (404 when absent) |
 | DELETE | `/v1/explore/sessions/{session_id}` | Delete one session (404 when absent) |
 | POST | `/v1/explore/sessions/{session_id}/operations` | Apply one operation to the session; returns `{result, session}` — `result` carries the post-op context, op status (`applied` \| `rejected` \| `degraded`), and, for projection surfaces, the S1 engine composition summary |
+| GET | `/v1/explore/snapshots` | List tenant-owned immutable exploration result snapshots (metadata only; `limit` ≤ 500, `offset` pagination) |
+| POST | `/v1/explore/snapshots` | Execute the canonical exploration query for a context and capture its result, digest, truth, completeness, applicability, and freshness watermark; requires `write` |
+| GET | `/v1/explore/snapshots/{snapshot_id}` | Retrieve one captured result; tenant mismatch and missing ids fail closed |
+| POST | `/v1/explore/snapshots/{snapshot_id}/compare` | Re-run the saved context against current graph/surface data and return deterministic graph node/edge changes (or an opaque digest change for non-graph data) |
 
 **Operation vocabulary:** `OPEN` \| `PIVOT` \| `EXPAND` \| `COLLAPSE` \|
 `FILTER_ADD` \| `FILTER_REMOVE` \| `LENS_ADD` \| `TIME_TRAVEL` \| `DRILL_DOWN`

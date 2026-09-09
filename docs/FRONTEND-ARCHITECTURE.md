@@ -38,8 +38,8 @@ reviewed_source_commits:
     reason: "Graph-first scope review: legacy semantic zoom now derives tenant authority from GraphContext and fails closed on a conflicting legacy tenant argument; backend traversal contracts remain tenant-only, so no workspace/environment claim was added."
 source_hashes:
   "frontend/aether/src/": "sha256:28b39cf5b9e7ee45776bd174aeb27824194b22efde918f5e952f6311cc631361"
-  "frontend/kyber/src/": "sha256:0231b24d315cbd3dff15c4ad1b1da5864e53b2a07aa8da27f079461996aa2ca2"
-  "frontend/shared/src/": "sha256:e2196fef30b0ee083ed921c5ab6644c9a4dcd56105e05ec584aa077a1be55eb9"
+  "frontend/kyber/src/": "sha256:30b10c0aa88d9e9784bc97bcbf174816b45479bfdb48f860a8290d2b41345e71"
+  "frontend/shared/src/": "sha256:b51d37070ccbc004c90b9a56d07deb8300727955907c16775dda900919c277f6"
 ---
 
 # Aether Frontend Architecture & Designer Handoff

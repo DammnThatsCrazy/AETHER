@@ -18,7 +18,7 @@ estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
   "Backend Architecture/aether-backend/services/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:51b4fc577bc989dd6ce4b9070125d4e4b62ef95fb19ce2072f648e0600850381"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:2784d6b5df878e843503d8e5dfdb7d22ad63b0c475d03d0c4ba9975672f342a8"
 ---
 # Kyber Strategic Observability
 

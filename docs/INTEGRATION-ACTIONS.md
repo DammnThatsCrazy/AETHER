@@ -18,8 +18,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/services/intelligence/decision_models.py": "sha256:ff7e6d657dcf68bbe4d9ac7d66736be7f7b7c446050cceec84c35dd59b6a2ee7"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:51b4fc577bc989dd6ce4b9070125d4e4b62ef95fb19ce2072f648e0600850381"
+  "Backend Architecture/aether-backend/services/intelligence/decision_models.py": "sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:2784d6b5df878e843503d8e5dfdb7d22ad63b0c475d03d0c4ba9975672f342a8"
 ---
 # Integration Actions
 
@@ -36,6 +36,10 @@ As of 9.1.0, dispatch creates a `DeliveryIntent` + `DeliveryJob` in the database
 ## Controls
 
 Integration actions require an approved decision before queued or executed status. Elevated and critical actions still require `authorization_metadata.approval_id`. Every action creates an `ActionFeedback` record, emits the action lifecycle event, supports later outcome observation, preserves tenant isolation, and remains auditable.
+
+When the action originated from a finding-backed investigation, its optional
+`finding_id` and `investigation_id` links are inherited from the decision and
+recommendation for end-to-end audit tracing.
 
 ## Audit export readiness
 

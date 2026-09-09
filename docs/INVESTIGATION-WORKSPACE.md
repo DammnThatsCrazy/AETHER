@@ -21,7 +21,7 @@ estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
   "Backend Architecture/aether-backend/services/intelligence/investigations.py": "sha256:3369a68e9650eedefd7709a2e2ff91e2294d3dabe50cf38659a6309365bef517"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:51b4fc577bc989dd6ce4b9070125d4e4b62ef95fb19ce2072f648e0600850381"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:2784d6b5df878e843503d8e5dfdb7d22ad63b0c475d03d0c4ba9975672f342a8"
 ---
 # Investigation Workspace
 
@@ -32,6 +32,11 @@ Every recommendation can be opened as an investigation workspace without leaving
 `GET /v1/intelligence/recommendations/{recommendation_id}/investigation`
 
 The response includes the recommendation, confidence breakdown, evidence, related profile/entity summary, related graph edges when available, related events, attribution path, candidate actions, decision history, action history, outcome history, prior similar tenant outcomes, governance flags, data freshness, and suppression reason.
+
+Finding-originated recommendations also retain `finding_id` and
+`investigation_id` on the recommendation and downstream loop records. This is
+an additive provenance link to the canonical finding/investigation planes; it
+does not copy case state or authorize action.
 
 When the recommendation carries canonical path references (populated by `_compute_path_refs` in the recommendation family), the workspace also returns:
 - `graph_paths` — list of canonical `path_id` strings (SHA256[:32]) linking to saved `TraversalSnapshot` records

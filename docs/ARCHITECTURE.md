@@ -16,7 +16,7 @@ toc_depth: 3
 source_hashes:
   "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
   "Backend Architecture/aether-backend/middleware/middleware.py": "sha256:e320a85428e219bd745ff298a6b3a8a7404a1f72b562e65d4f7682e722ecb79c"
-  "packages/shared/": "sha256:3710ceea4eedd190261337e0d26e2e728bf9c0e9035785bb6162402fa829a2a7"
+  "packages/shared/": "sha256:ad5a0b75cd1033394abd76ad303b9cd54c18eb7ac808ab1437ce5ac0c4a4f96b"
 ---
 # Aether vNext — Architecture Guide
 

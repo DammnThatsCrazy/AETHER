@@ -21,7 +21,7 @@ estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
   "Backend Architecture/aether-backend/services/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:51b4fc577bc989dd6ce4b9070125d4e4b62ef95fb19ce2072f648e0600850381"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:2784d6b5df878e843503d8e5dfdb7d22ad63b0c475d03d0c4ba9975672f342a8"
   "Backend Architecture/aether-backend/services/profile/routes.py": "sha256:f51979fa82968ca97bdac3520fd411b20e578c1734547077c594be2c42a6ed4f"
 ---
 # Outcome Ledger
@@ -39,6 +39,10 @@ The Outcome Ledger turns graph-native OODA records into tenant-visible ROI witho
 ## Calculations
 
 The ledger reports recommendations generated and viewed, decisions recorded, actions logged, outcomes observed, success/failure/neutral rates, expected value, observed value, value by recommendation type, value by playbook, value by entity, confidence deltas, outcome capture rate, stale loops, incomplete loops, and failed loops.
+
+Outcome observations retain optional finding and investigation provenance when
+they originate from a finding-backed loop, while aggregation continues to use
+the existing recommendation/action/outcome repositories.
 
 ## Governance and rollout
 

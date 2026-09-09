@@ -15,7 +15,7 @@ source_files:
 source_hashes:
   "frontend/aether/": "sha256:c14d61fc9ef9ab9cf6ddba2239fcb7e185c9c84e06a7513ee8f649fcf3b916db"
   "frontend/demo/": "sha256:34d2e8d3ad5ae8af2099a733f77ebb6ca695a25c69ca8b8a7de18a565ebc33fb"
-  "frontend/kyber/": "sha256:d7c5e6a6d83a8628960ccbf1bb640cf4a526d10e4dfc28e69dc1325cc6fa6649"
+  "frontend/kyber/": "sha256:b15401c58d3224403a9260ca8c20e8c90c5c0c053200de743deb4a468dc3a73d"
   "scripts/docs_extract/extract_frontend_data_truth_inventory.py": "sha256:d32fbf2cfaccccb7420cf6ba0ef4e25030a27dc43fc03d50a04e168db8c0cc92"
   "scripts/validate_frontend_data_truth.py": "sha256:2447697a49724cf7ddd297f95f2cf6554761993cebe07b30c721c7af9c22ec7a"
 ---
