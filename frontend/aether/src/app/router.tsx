@@ -20,7 +20,7 @@ const CampaignSourcesPage = lazy(() => import('@aether-app/pages/campaigns/campa
 const MappingReviewPage = lazy(() => import('@aether-app/pages/campaigns/mapping-review-page').then(m => ({ default: m.MappingReviewPage })));
 const CampaignQualityPage = lazy(() => import('@aether-app/pages/campaigns/campaign-quality-page').then(m => ({ default: m.CampaignQualityPage })));
 const CustomCampaignPage = lazy(() => import('@aether-app/pages/campaigns/custom-campaign-page').then(m => ({ default: m.CustomCampaignPage })));
-const GraphPage = lazy(() => import('@aether-app/pages/graph').then(m => ({ default: m.GraphPage })));
+const ExplorePage = lazy(() => import('@aether-app/pages/explore').then(m => ({ default: m.ExplorePage })));
 const ComparisonPage = lazy(() => import('@aether-app/pages/comparison').then(m => ({ default: m.ComparisonPage })));
 const NoesisPage = lazy(() => import('@aether-app/pages/noesis').then(m => ({ default: m.NoesisPage })));
 const SettingsPage = lazy(() => import('@aether-app/pages/settings/settings-page').then(m => ({ default: m.SettingsPage })));
@@ -78,7 +78,7 @@ function PageSuspense({ children }: { readonly children: React.ReactNode }) {
  * CTAs (/integrations?return=/campaigns/..) rely on those params surviving the
  * alias hop, so a plain <Navigate to> (which drops search) is never used here.
  */
-function RedirectPreservingQuery({ to }: { readonly to: string }) {
+export function RedirectPreservingQuery({ to }: { readonly to: string }) {
   const location = useLocation();
   return <Navigate to={`${to}${location.search}${location.hash}`} replace />;
 }
@@ -128,7 +128,9 @@ export function AppRouter() {
                 <Route path="/campaign-intelligence/mapping-review" element={<PageSuspense><MappingReviewPage /></PageSuspense>} />
                 <Route path="/campaign-intelligence/quality" element={<PageSuspense><CampaignQualityPage /></PageSuspense>} />
                 <Route path="/campaign-intelligence/campaigns/new" element={<PageSuspense><CustomCampaignPage /></PageSuspense>} />
-                <Route path="/graph" element={<PageSuspense><GraphPage /></PageSuspense>} />
+                <Route path="/explore" element={<PageSuspense><ExplorePage /></PageSuspense>} />
+                {/* Legacy graph URLs remain shareable, but Explore owns the workspace. */}
+                <Route path="/graph" element={<RedirectPreservingQuery to="/explore" />} />
                 <Route path="/compare" element={<PageSuspense><ComparisonPage /></PageSuspense>} />
                 <Route path="/noesis" element={<PageSuspense><NoesisPage /></PageSuspense>} />
                 {/* Nested Settings shell (WS-1): /settings stays the API Keys index;
