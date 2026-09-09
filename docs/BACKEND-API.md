@@ -28,8 +28,10 @@ reviewed_source_commits:
     reason: "Reviewed 4cbc67eb (services/rights_authority production seams: server consent evaluator + resolver seam, spine-envelope rights-ref producers, rollout modes, retention + training-manifest adapters). All are library/package-level and additive, and no endpoint was live yet at this commit, so the doc's /v1/* tables were unaffected; no body change was required at this commit."
   - commit: "33dfedb4"
     reason: "Reviewed 33dfedb4 — the /v1/rights surface is now MOUNTED in main.py (always mounted beside /v1/dsr); the routes carry the rollout-OFF 503 gate and require scalar source/purpose/destination matching RightsDecisionRequest; the durable repositories accept dict-or-model rows. This commit makes /v1/rights live and supersedes the earlier not-wired-into-main.py review notes. Body change: the Rights Authority section below documents the three endpoints and their rollout-gated 503 posture."
+  - commit: "69185729"
+    reason: "Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate."
 source_hashes:
-  "Backend Architecture/aether-backend/services/": "sha256:80cfaab1da2192c1af6a2015e1eafe6e0c539c41251e081b9eb54a0bc977fc42"
+  "Backend Architecture/aether-backend/services/": "sha256:103db11dea00e6cfe5dc7dd1c18fbebcf79eb1dca0f0e353d62ac304bac10c9a"
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
 
