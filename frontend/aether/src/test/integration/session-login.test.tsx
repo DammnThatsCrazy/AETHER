@@ -86,6 +86,12 @@ describe('Login flow — trust-plane session model', () => {
       billing: {},
       api_key_count: 1,
       is_admin: true,
+      graph_scope: {
+        tenant_id: 'tenant-1',
+        workspace_id: 'tenant-1',
+        environment_id: 'production',
+        scope_model: 'single_workspace_tenant_v1',
+      },
     });
   });
 

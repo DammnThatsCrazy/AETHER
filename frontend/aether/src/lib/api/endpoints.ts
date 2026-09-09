@@ -226,6 +226,16 @@ const deletionWorkflowSchema = z.object({
   }),
 });
 
+/** Server-owned graph authority returned by the authenticated /v1/me profile. */
+const graphScopeAuthoritySchema = z.object({
+  tenant_id: z.string(),
+  workspace_id: z.string(),
+  environment_id: z.string(),
+  scope_model: z.literal('single_workspace_tenant_v1'),
+});
+
+export type GraphScopeAuthority = z.infer<typeof graphScopeAuthoritySchema>;
+
 export type CustomerApiKey = z.infer<typeof apiKeySchema>;
 export type CustomerBillingPlan = z.infer<typeof billingPlanSchema>;
 export type CustomerInvoice = z.infer<typeof invoiceSchema>;
@@ -1690,7 +1700,7 @@ export const api = {
   me: {
     /** Authenticated tenant profile, plan, and billing. */
     profile: () =>
-      restClient.get('/v1/me', wrap(unknownSchema)).then(r => r.data as {
+      restClient.get('/v1/me', wrap(z.object({ graph_scope: graphScopeAuthoritySchema }).passthrough())).then(r => r.data as {
         tenant_id: string;
         name: string;
         contact_email: string;
@@ -1698,6 +1708,7 @@ export const api = {
         billing: { subscription_status?: string; current_period_end?: string | null };
         api_key_count: number;
         is_admin: boolean;
+        graph_scope: GraphScopeAuthority;
       }),
 
     /** Current-period event and RPM usage. */

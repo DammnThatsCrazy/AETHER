@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react';
 import { BrowserRouter, useLocation } from 'react-router-dom';
-import { CapabilityProvider, ThemeProvider, TimeProvider, ToastProvider } from '@aether/ui';
-import { ExplorationProvider } from '@aether/ui/exploration';
+import { CapabilityProvider, ErrorState, LoadingState, ThemeProvider, TimeProvider, ToastProvider, useQuery } from '@aether/ui';
+import { GraphContextProvider } from '@aether/ui/exploration';
 import { AuthProvider, useAuth } from '@aether-app/features/auth';
 import { AetherAuth0Provider } from '@aether-app/lib/auth/auth0-provider';
 import { JourneyProvider } from '@aether-app/features/journey';
 import { fetchTenantCapabilities } from '@aether-app/lib/api/capabilities';
 import { explorationClient } from '@aether-app/lib/api/exploration';
+import { api } from '@aether-app/lib/api/endpoints';
 import { BUILD_INFO } from '@aether-app/lib/build-info';
 import { ErrorBoundary } from './error-boundary';
 
@@ -29,29 +30,63 @@ function CapabilityGate({ children }: { readonly children: ReactNode }) {
 }
 
 /**
- * Binds the router's authoritative URL to the shared exploration store.
+ * Binds the router's shareable URL state to the backend-authoritative graph
+ * scope. The profile is fetched only for authenticated users; until it is
+ * available and complete, the gate renders an explicit loading/unavailable
+ * state rather than exposing graph-native children without graph authority.
  *
- * The provider is deliberately created only after backend authentication has
- * established the tenant.  Its key clears all query and selection state when
- * that authority changes; tenant identity is never accepted from the URL.
+ * The provider key includes every scope coordinate so no graph state can
+ * survive a tenant, workspace, or logical-environment transition. URL values
+ * are view/query state only and never supply scope coordinates.
  */
 export function ExplorationGate({ children }: { readonly children: ReactNode }) {
   const { isAuthenticated, user } = useAuth();
   const location = useLocation();
-  const tenantId = isAuthenticated ? user?.id : undefined;
+  const profileQuery = useQuery({
+    key: `me-profile:${user?.id ?? 'anonymous'}`,
+    fetcher: () => api.me.profile(),
+    enabled: isAuthenticated,
+  });
+  const graphScope = profileQuery.data?.graph_scope;
+  const hasCompleteScope = Boolean(
+    isAuthenticated
+      && !profileQuery.isLoading
+      && !profileQuery.error
+      && profileQuery.data?.tenant_id === graphScope?.tenant_id
+      && graphScope
+      && graphScope.scope_model === 'single_workspace_tenant_v1'
+      && graphScope.tenant_id
+      && graphScope.workspace_id
+      && graphScope.environment_id,
+  );
 
-  if (!tenantId) return children;
+  if (!isAuthenticated) return children;
+  if (profileQuery.isLoading) return <LoadingState lines={6} />;
+  if (!hasCompleteScope || !graphScope) {
+    return (
+      <ErrorState
+        title="Graph context unavailable"
+        message={profileQuery.error ?? 'Authenticated graph scope is unavailable.'}
+      />
+    );
+  }
+
+  const scopeKey = JSON.stringify([
+    graphScope.tenant_id,
+    graphScope.workspace_id,
+    graphScope.environment_id,
+  ]);
 
   return (
-    <ExplorationProvider
-      key={tenantId}
-      tenantId={tenantId}
+    <GraphContextProvider
+      key={scopeKey}
+      scope={graphScope}
       surface={location.pathname}
       query={location.search}
       client={explorationClient}
     >
       {children}
-    </ExplorationProvider>
+    </GraphContextProvider>
   );
 }
 
