@@ -241,7 +241,13 @@ def _identity(resource: Resource) -> str | None:
 def _classification(address: str, desired: Resource | None, state: Resource | None, remote: Resource | None) -> tuple[str, str, bool, str]:
     if remote and remote.owner not in {"terraform", "external", "shared"}:
         return "AMBIGUOUS_OWNERSHIP", "review remote ownership before reconciliation", True, "review"
-    if desired and remote and remote.owner != "terraform":
+    if desired and remote and state is None:
+        if remote.owner == "terraform":
+            desired_identity = _identity(desired)
+            remote_identity = _identity(remote)
+            if desired_identity and remote_identity and desired_identity == remote_identity:
+                return "UNMANAGED_ADOPTABLE", "deterministic Terraform-owned remote matches desired identity and can be imported", True, "import"
+            return "OWNERSHIP_CONFLICT", "Terraform-owned remote resource has no unambiguous desired identity", True, "review"
         return "OWNERSHIP_CONFLICT", f"desired Terraform resource overlaps {remote.owner} remote ownership", True, "review"
     if state and remote and _identity(state) and _identity(remote) and _identity(state) != _identity(remote):
         return "DRIFT", "Terraform state identity differs from the remote inventory", True, "review"
@@ -303,8 +309,13 @@ def reconcile(
         if action != "none":
             actions.append({"address": address, "action": action, "blocking": blocking, "reason": reason})
     blocking = [item for item in resources if item["blocking"]]
+    reconciliation = [item for item in resources if item["classification"] == "UNMANAGED_ADOPTABLE"]
     planned_changes = [item for item in actions if item["action"] in {"create", "update", "destroy"}]
-    status = "BLOCKED" if blocking else "CHANGES_REQUIRED" if planned_changes else "PASS"
+    status = (
+        "RECONCILIATION_REQUIRED"
+        if reconciliation
+        else "BLOCKED" if blocking else "CHANGES_REQUIRED" if planned_changes else "PASS"
+    )
     return {
         "schema_version": SCHEMA_VERSION,
         "profile": profile,
@@ -316,6 +327,7 @@ def reconcile(
             "resources_total": len(resources),
             "in_sync": sum(item["classification"] == "IN_SYNC" for item in resources),
             "changes_required": len(planned_changes),
+            "reconciliation_required": len(reconciliation),
             "blocking": len(blocking),
         },
     }

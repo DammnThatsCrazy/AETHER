@@ -50,6 +50,8 @@ source_files:
   - scripts/release/check_environment_requirements.py
   - scripts/validate_verification_router.py
   - scripts/release/check_deployment_operator_surface.py
+  - config/delivery_workflow_authority.yaml
+  - scripts/release/check_delivery_workflow_authority.py
   - tests/unit/test_staging_state_machine.py
   - config/impact_graph.json
   - config/telemetry_contracts.json
@@ -128,6 +130,11 @@ telemetry contract records timing and disposition metadata only, with no
 credentials or hosted exporter, so shadow-cutover comparisons remain
 auditable without claiming cloud or release readiness.
 
+An unregistered changed path is an explicit `unknown_component` impact. The
+router escalates such a change to the `integration` lane until a component,
+contract, and deployable registration exists; uncertainty therefore cannot
+silently reduce verification.
+
 ## Lane semantics
 
 | Lane | Purpose | Typical scope |
@@ -159,6 +166,12 @@ identities so staging and promotion can refer to the exact same build. A
 `DeploymentImpact`, which makes the artifact closure explicit: consumers can
 re-check the exact component files, dependency locks, commit, profile, and
 rollback/approval implications before execution.
+
+Candidate validation is relational as well as structural: the aggregate
+artifact and lock digests must match their named maps, the deployment impact
+must match the candidate's profile/domains/components, and migration impact
+must agree with the migration version. A candidate that only has a valid JSON
+shape but mismatched identity fields is blocked before staging.
 
 Blocked or failed staging execution emits a typed `FailureEnvelope` alongside
 the lifecycle result. It records the operation, stage, stable failure code,
@@ -220,7 +233,10 @@ against captured policy evidence without invoking AWS. Finally,
 `scripts/release/terraform_reconciliation.py` compares desired plan entries,
 Terraform state, and a complete remote inventory in a dry-run only; missing or
 ambiguous ownership, identity drift, and plaintext secret material are
-blocking outcomes. These tools produce evidence for review, not live AWS
+blocking outcomes. A deterministic Terraform-owned remote object that is
+absent from state is classified as `UNMANAGED_ADOPTABLE` and produces
+`RECONCILIATION_REQUIRED` with an explicit `import` action; it is never
+recreated implicitly. These tools produce evidence for review, not live AWS
 verification or mutation authority.
 
 PR CI compiles workspace packages once, archives the resulting `dist`

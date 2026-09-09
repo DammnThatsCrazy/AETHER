@@ -8,6 +8,8 @@ candidates, deployment impact, and fail-closed command outcomes.
 from __future__ import annotations
 
 import re
+import hashlib
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from types import MappingProxyType
@@ -37,6 +39,18 @@ def sanitize_detail(value: str, *, limit: int = 4000) -> str:
     for pattern, replacement in _SECRET_PATTERNS:
         result = pattern.sub(replacement, result)
     return result[-limit:]
+
+
+def _aggregate_digest(values: Mapping[str, Any]) -> str:
+    """Derive the canonical digest for a named digest map.
+
+    Candidate identity is a relationship, not merely a set of correctly
+    shaped strings.  Keeping this helper here lets every consumer verify the
+    same canonical serialization without importing the artifact builder.
+    """
+
+    payload = json.dumps(dict(values), sort_keys=True, separators=(",", ":")).encode()
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -223,8 +237,15 @@ def validate_release_candidate(candidate: Mapping[str, Any]) -> list[str]:
             errors.append(f"{field_name} must be an immutable sha256 digest")
     for field_name in ("deployment_profiles", "affected_domains", "required_checks"):
         value = candidate.get(field_name)
-        if not isinstance(value, list) or len(value) != len(set(value or [])):
-            errors.append(f"{field_name} must be a unique list")
+        if not isinstance(value, list):
+            errors.append(f"{field_name} must be a unique list of non-empty strings")
+            continue
+        if (
+            (not value and field_name == "deployment_profiles")
+            or any(not isinstance(item, str) or not item.strip() for item in value)
+            or len(value) != len(set(value))
+        ):
+            errors.append(f"{field_name} must be a unique list of non-empty strings")
     components = candidate.get("component_digests")
     if not isinstance(components, dict) or not components:
         errors.append("component_digests must contain at least one component")
@@ -235,12 +256,19 @@ def validate_release_candidate(candidate: Mapping[str, Any]) -> list[str]:
     lock_digests = candidate.get("dependency_lock_digests")
     if not isinstance(lock_digests, dict):
         errors.append("dependency_lock_digests must be an object")
+    else:
+        invalid_locks = [
+            name for name, digest in lock_digests.items()
+            if not isinstance(name, str) or not name.strip() or not DIGEST_RE.fullmatch(str(digest))
+        ]
+        if invalid_locks:
+            errors.append("dependency_lock_digests contains invalid entries")
     impact = candidate.get("deployment_impact")
     if not isinstance(impact, dict):
         errors.append("deployment_impact must be an object")
     else:
         try:
-            DeploymentImpact(
+            parsed_impact = DeploymentImpact(
                 profile=str(impact.get("profile", "")),
                 affected_domains=tuple(impact.get("affected_domains", [])),
                 affected_components=tuple(impact.get("affected_components", [])),
@@ -255,6 +283,29 @@ def validate_release_candidate(candidate: Mapping[str, Any]) -> list[str]:
             )
         except (TypeError, ValueError) as exc:
             errors.append(f"deployment_impact is invalid: {exc}")
+        else:
+            profiles = candidate.get("deployment_profiles") or []
+            if parsed_impact.profile not in profiles:
+                errors.append("deployment_impact.profile must be listed in deployment_profiles")
+            if set(parsed_impact.affected_domains) != set(candidate.get("affected_domains") or []):
+                errors.append("deployment_impact.affected_domains must match affected_domains")
+            component_names = set((candidate.get("component_digests") or {}).keys())
+            if set(parsed_impact.affected_components) != component_names:
+                errors.append("deployment_impact.affected_components must match component_digests")
+            expected_migration = candidate.get("migration_version") != "none"
+            if parsed_impact.migration_required != expected_migration:
+                errors.append("deployment_impact.migration_required must match migration_version")
+
+    components = candidate.get("component_digests")
+    if isinstance(components, dict) and components:
+        if all(isinstance(name, str) and isinstance(digest, str) for name, digest in components.items()):
+            if _aggregate_digest(components) != candidate.get("artifact_digest"):
+                errors.append("artifact_digest does not match component_digests")
+    if isinstance(lock_digests, dict) and all(
+        isinstance(name, str) and isinstance(digest, str) for name, digest in lock_digests.items()
+    ):
+        if _aggregate_digest(lock_digests) != candidate.get("dependency_lock_hash"):
+            errors.append("dependency_lock_hash does not match dependency_lock_digests")
     try:
         datetime.fromisoformat(str(candidate.get("created_at", "")).replace("Z", "+00:00"))
     except ValueError:

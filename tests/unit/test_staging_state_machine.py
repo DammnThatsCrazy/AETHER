@@ -7,6 +7,7 @@ from pathlib import Path
 import jsonschema
 import pytest
 
+from scripts.artifact_builder import aggregate_digest
 from scripts.delivery_contracts import DeploymentImpact
 from scripts.staging_state_machine import (
     StateMachineError,
@@ -23,12 +24,13 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def candidate(candidate_id: str = "rc-state", *, profile: str = "staging", commit: str = "a" * 40, digest_letter: str = "a") -> dict:
     digest = "sha256:" + digest_letter * 64
+    component_digests = {"repository-build": digest}
     return {
         "schema_version": 1,
         "release_candidate_id": candidate_id,
         "commit_sha": commit,
-        "artifact_digest": digest,
-        "dependency_lock_hash": "sha256:" + "b" * 64,
+        "artifact_digest": aggregate_digest(component_digests),
+        "dependency_lock_hash": aggregate_digest({}),
         "dependency_lock_digests": {},
         "contract_versions": {},
         "migration_version": "none",
@@ -37,7 +39,7 @@ def candidate(candidate_id: str = "rc-state", *, profile: str = "staging", commi
         "deployment_profiles": [profile],
         "affected_domains": ["delivery"],
         "required_checks": ["canonical-consistency"],
-        "component_digests": {"repository-build": digest},
+        "component_digests": component_digests,
         "deployment_impact": DeploymentImpact.for_candidate(
             profile=profile,
             components=["repository-build"],
@@ -119,7 +121,7 @@ def test_promotion_requires_exact_candidate_identity():
         "candidate_identity": {
             "release_candidate_id": "rc-state",
             "commit_sha": "a" * 40,
-            "artifact_digest": "sha256:" + "a" * 64,
+            "artifact_digest": rc["artifact_digest"],
             "profile": "staging",
         },
         "plan_run_id": "123",
@@ -139,13 +141,13 @@ def test_rollback_requires_exact_source_and_stable_target():
         "from_candidate": {
             "release_candidate_id": "rc-new",
             "commit_sha": "a" * 40,
-            "artifact_digest": "sha256:" + "a" * 64,
+            "artifact_digest": promoted["artifact_digest"],
             "profile": "staging",
         },
         "to_candidate": {
             "release_candidate_id": "rc-stable",
             "commit_sha": "b" * 40,
-            "artifact_digest": "sha256:" + "b" * 64,
+            "artifact_digest": stable["artifact_digest"],
             "profile": "staging",
         },
     }

@@ -48,12 +48,12 @@ def test_index_is_deterministic_and_transitive():
     assert first["impacted_deployables"] == ["repository-doctor"]
 
 
-def test_unresolved_paths_are_visible_without_changing_router_lane():
+def test_unresolved_paths_are_visible_and_escalate_router_lane():
     result = build_impact_index(["unregistered/new-component.py"])
     assert result["direct_nodes"] == []
     assert result["unresolved_paths"] == ["unregistered/new-component.py"]
-    assert result["router"]["minimum_lane"] == "fast"
-    assert result["router"]["selected_lane"] == "fast"
+    assert result["router"]["minimum_lane"] == "integration"
+    assert result["router"]["selected_lane"] == "integration"
 
 
 def test_shadow_comparison_distinguishes_targeted_miss_and_legacy_broad_result():

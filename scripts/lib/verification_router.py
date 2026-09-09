@@ -230,13 +230,28 @@ def classify_impact(
         any(matches(path, pattern) for pattern in config.global_paths) for path in changed
     )
     minimum_lane = "fast"
+    # A path that is not owned by any registered domain is a new executable
+    # or delivery surface until somebody registers it.  Treating that case as
+    # a fast, low-risk change is precisely the silent-omission failure this
+    # router is meant to prevent.  Keep the synthetic domain in the evidence
+    # so the operator can see why the conservative lane was selected.
+    matched_paths: set[str] = set()
     for domain_id, definition in config.domains.items():
-        if global_change or any(
-            matches(path, pattern) for path in changed for pattern in definition.paths
-        ):
+        domain_matches = {
+            path
+            for path in changed
+            if any(matches(path, pattern) for pattern in definition.paths)
+        }
+        if global_change or domain_matches:
             affected.add(domain_id)
+            matched_paths.update(domain_matches)
             if LANE_ORDER.index(definition.minimum_lane) > LANE_ORDER.index(minimum_lane):
                 minimum_lane = definition.minimum_lane
+
+    unknown_paths = set(changed) - matched_paths
+    if unknown_paths and not global_change:
+        affected.add("unknown_component")
+        minimum_lane = "integration"
 
     # Preserve the router's established behavior: with no requested lane, the
     # minimum lane for the affected paths is selected. ``default_lane`` is
@@ -250,7 +265,11 @@ def classify_impact(
     check_ids: set[str] = set(config.lanes[selected_lane][:2])
     if LANE_ORDER.index(selected_lane) >= LANE_ORDER.index(minimum_lane):
         for domain_id in affected:
-            check_ids.update(config.domains[domain_id].checks)
+            # ``unknown_component`` is a deliberate synthetic owner.  Its
+            # conservative integration lane supplies the checks; it has no
+            # registry-defined domain checks of its own.
+            if domain_id in config.domains:
+                check_ids.update(config.domains[domain_id].checks)
     check_ids.update(config.lanes[selected_lane])
     return VerificationImpact(
         changed_files=changed,

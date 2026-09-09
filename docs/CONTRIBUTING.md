@@ -16,9 +16,9 @@ estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
   "AGENTS.md": "sha256:9c93d298d9048a47ebbc2bbebdfba02095972cef5b0bd8f1a16b56a41b816f0e"
-  "Makefile": "sha256:a2a20a5bd078b273fa95eb99f46b124a6c95723b6abf9b9af05b6c4c28a338e7"
+  "Makefile": "sha256:7175e0ff8e3b934ef395b4a9597214d1bc31afb1c9f7eac4d79f1f67be8826a7"
   "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:88620327df8f66f95bb246548a484530a7fcc02388ce54fd167c6555f6157e37"
-  "scripts/repo_doctor.py": "sha256:b0b85444c639b4be64ccf1defd21b92c3f9e8b0085e7d9c66f858b9a567ec1ac"
+  "scripts/repo_doctor.py": "sha256:81f15ea259e57e162db53d1c4739694d6b9ea2b95a6f586699b4036a943218f4"
 ---
 
 # Contributing
@@ -38,9 +38,12 @@ Before opening or updating a PR:
 7. PR is not complete until `make ci-check` exits 0.
 
 The canonical CI gate also validates the impact-aware verification router, the
-environment capability requirement registry, and the GitHub-only deployment
-operator boundary. These checks validate repository policy; they do not claim
-that AWS credentials, runtime validation, or production promotion occurred.
+environment capability requirement registry, the GitHub-only deployment
+operator boundary, and the delivery workflow authority map. These checks
+validate repository policy; they do not claim that AWS credentials, runtime
+validation, or production promotion occurred. The authority map records which
+GitHub workflow currently owns each delivery authority while the workflow
+estate is being converged; it does not make Kyber a deployment surface.
 For a resumable staging attempt, `make deploy-staging` accepts
 `STATE=<checkpoint.json>` and optionally `ENVIRONMENT_RESOLUTION=<json>`; each
 resume is bound to the same release-candidate identity and pre-mutation

@@ -274,17 +274,18 @@ def discover(
     raw = aws_reader(profile)
     if not isinstance(raw, Mapping):
         raise CapabilityDiscoveryError("live AWS reader returned a non-object result")
-    observations = {
-        _require_string(name, "capability name"): CapabilityObservation(
-            capability=_require_string(name, "capability name"),
-            status=_status(item.get("status"), f"{name}.status"),
+    observations: dict[str, CapabilityObservation] = {}
+    for name, item in raw.items():
+        capability = _require_string(name, "capability name")
+        if not isinstance(item, Mapping):
+            raise CapabilityDiscoveryError(f"live AWS reader returned invalid observation for {capability}")
+        observations[capability] = CapabilityObservation(
+            capability=capability,
+            status=_status(item.get("status"), f"{capability}.status"),
             source="aws_read_only",
             reason=item.get("reason"),
             evidence_ref=item.get("evidence_ref"),
         )
-        for name, item in raw.items()
-        if isinstance(item, Mapping)
-    }
     if not observations:
         raise CapabilityDiscoveryError("live AWS reader returned no typed capabilities")
     return CapabilitySnapshot(profile=profile, capabilities=observations, mode="live")

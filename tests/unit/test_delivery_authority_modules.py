@@ -84,6 +84,16 @@ def test_live_capability_discovery_requires_explicit_credentials_and_reader():
         discover("staging", live=True, environ={"AWS_PROFILE": "reviewed"})
 
 
+def test_live_capability_discovery_rejects_untyped_reader_entries():
+    with pytest.raises(CapabilityDiscoveryError, match="invalid observation"):
+        discover(
+            "staging",
+            live=True,
+            environ={"AWS_PROFILE": "reviewed"},
+            aws_reader=lambda _profile: {"vpc": "PASS"},
+        )
+
+
 def test_plan_capability_discovery_stays_unknown_even_when_resources_exist(tmp_path):
     plan = {
         "format_version": "1.2",
@@ -292,6 +302,15 @@ def test_terraform_reconciliation_creates_only_when_remote_is_confirmed_absent(t
     assert report["status"] == "CHANGES_REQUIRED"
     assert report["resources"][0]["classification"] == "CREATE"
     assert report["actions"][0]["action"] == "create"
+
+
+def test_terraform_reconciliation_requires_import_for_deterministic_existing_resource(tmp_path):
+    desired, _state, remote = _terraform_inputs(tmp_path)
+    report = reconcile("staging", desired, (), remote)
+    assert report["status"] == "RECONCILIATION_REQUIRED"
+    assert report["resources"][0]["classification"] == "UNMANAGED_ADOPTABLE"
+    assert report["actions"][0]["action"] == "import"
+    assert report["summary"]["reconciliation_required"] == 1
 
 
 def test_terraform_reconciliation_rejects_plaintext_secret_material(tmp_path):

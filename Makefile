@@ -9,7 +9,7 @@
 # =============================================================================
 
 .DEFAULT_GOAL := help
-.PHONY: setup setup-dev setup-minimal doctor generate change-plan test-fast test-pr test-integration test-regression test-release build-artifact validate-delivery-profile validate-delivery-registries validate-release-evidence validate-golden-journeys deploy-staging staging-migrate test-golden-journeys \
+.PHONY: setup setup-dev setup-minimal doctor generate change-plan test-fast test-pr test-integration test-regression test-release build-artifact validate-delivery-profile validate-delivery-registries validate-delivery-workflow-authority validate-release-evidence validate-golden-journeys deploy-staging staging-migrate test-golden-journeys \
         test test-security test-ml test-coverage \
         ml-validate ml-test ml-test-unit ml-test-integration ml-test-security \
         ml-train-smoke ml-artifact-verify ml-docs-check ml-container-build ml-ci \
@@ -337,6 +337,9 @@ validate-delivery-profile: ## Validate a deployable frontend manifest and select
 
 validate-delivery-registries: ## Validate fallback implementation bindings and golden-journey execution status
 	$(GATE_PY) scripts/validate_delivery_registries.py
+
+validate-delivery-workflow-authority: ## Validate one GitHub owner for every delivery authority
+	$(GATE_PY) scripts/release/check_delivery_workflow_authority.py
 
 validate-golden-journeys: ## Validate ownership/assertions for all five journey definitions
 	$(GATE_PY) scripts/release/evidence_bundle.py --check-registry

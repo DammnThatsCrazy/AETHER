@@ -1,0 +1,48 @@
+# Transitional authority map for the GitHub-operated delivery spine.
+# Existing workflows remain the execution implementations while this registry
+# gives each blueprint authority one owner and prevents a second operator path
+# from being added accidentally.
+schema_version: 1
+canonical_source: config/delivery_workflow_authority.yaml
+operator_surface: github_actions
+kyber_mutation_controls: false
+status: transitional
+
+authorities:
+  - id: verification
+    owner: platform@aether
+    purpose: classify_and_verify_change
+    workflows:
+      - .github/workflows/repo-consistency.yml
+  - id: candidate
+    owner: release@aether
+    purpose: build_and_publish_immutable_candidate
+    workflows:
+      - .github/workflows/deploy.yml
+  - id: environment
+    owner: release@aether
+    purpose: resolve_and_operate_environment
+    workflows:
+      - .github/workflows/staging-lifecycle.yml
+  - id: infrastructure
+    owner: platform@aether
+    purpose: plan_and_apply_infrastructure
+    workflows:
+      - .github/workflows/infrastructure.yml
+      - .github/workflows/terraform-promote.yml
+  - id: promotion
+    owner: release@aether
+    purpose: promote_exact_candidate
+    workflows:
+      - .github/workflows/terraform-promote.yml
+  - id: regression
+    owner: quality@aether
+    purpose: broad_and_scheduled_regression
+    workflows:
+      - .github/workflows/production-equivalent-ci.yml
+  - id: ephemeral_cleanup
+    owner: platform@aether
+    purpose: expire_preview_demo_and_staging_leases
+    workflows:
+      - .github/workflows/ephemeral-ttl-guard.yml
+      - .github/workflows/staging-ttl-guard.yml

@@ -5,18 +5,20 @@ from pathlib import Path
 import jsonschema
 
 from scripts import delivery_orchestrator as orchestrator
+from scripts.artifact_builder import aggregate_digest
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def candidate(tmp_path: Path, **overrides) -> Path:
     path = tmp_path / "candidate.json"
+    component_digests = {"repository-build": "sha256:" + "a" * 64}
     value = {
         "schema_version": 1,
         "release_candidate_id": "rc-test",
         "commit_sha": "a" * 40,
-        "artifact_digest": "sha256:" + "a" * 64,
-        "dependency_lock_hash": "sha256:" + "b" * 64,
+        "artifact_digest": aggregate_digest(component_digests),
+        "dependency_lock_hash": aggregate_digest({}),
         "dependency_lock_digests": {},
         "contract_versions": {},
         "migration_version": "none",
@@ -25,7 +27,7 @@ def candidate(tmp_path: Path, **overrides) -> Path:
         "deployment_profiles": ["staging"],
         "affected_domains": ["delivery"],
         "required_checks": ["canonical-consistency"],
-        "component_digests": {"repository-build": "sha256:" + "a" * 64},
+        "component_digests": component_digests,
         "deployment_impact": {
             "schema_version": 1,
             "profile": "staging",
@@ -42,6 +44,8 @@ def candidate(tmp_path: Path, **overrides) -> Path:
         "created_at": "2026-09-07T00:00:00+00:00",
     }
     value.update(overrides)
+    if "deployment_profiles" in overrides:
+        value["deployment_impact"]["profile"] = overrides["deployment_profiles"][0]
     path.write_text(json.dumps(value))
     return path
 
