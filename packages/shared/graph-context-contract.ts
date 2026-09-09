@@ -237,7 +237,8 @@ function validateUniversalGraphQueryRequest(request: unknown): GraphContextValid
   if (!isRecord(request)) return { valid: false, errors: ['request must be an object'] };
   if (!isNonEmptyString(request.tenant_id)) errors.push('request tenant_id is required');
   for (const field of ['anchors', 'node_types', 'edge_types', 'layers', 'include_overlays'] as const) {
-    if (request[field] !== undefined && (!Array.isArray(request[field]) || request[field].some(value => !isNonEmptyString(value)))) errors.push(`request ${field} is invalid`);
+    const fieldValue = request[field];
+    if (fieldValue !== undefined && (!Array.isArray(fieldValue) || fieldValue.some((value: unknown) => !isNonEmptyString(value)))) errors.push(`request ${field} is invalid`);
   }
   if (request.filter !== undefined) errors.push(...validateFilterGroup(request.filter, 'request filter'));
   if (request.depth !== undefined && (!Number.isInteger(request.depth) || Number(request.depth) < 1 || Number(request.depth) > 6)) errors.push('request depth must be between 1 and 6');
