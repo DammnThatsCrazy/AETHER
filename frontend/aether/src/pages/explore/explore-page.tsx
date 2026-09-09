@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useMemo, useState, type ReactNode } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import type { GraphContext } from '@aether/shared/graph-context-contract';
 import {
   GraphContextBar,
@@ -11,6 +11,7 @@ import {
   useGraphHistory,
 } from '@aether/ui/exploration';
 import { GraphPage } from '@aether-app/pages/graph/graph-page';
+import { deriveGraphMaturity, useTenantReadiness } from '@aether-app/features/activation/use-tenant-readiness';
 
 function temporalLabel(context: GraphContext): string {
   const temporal = context.temporal;
@@ -41,6 +42,49 @@ function scopeLabels(context: GraphContext): ScopeLabels {
 
 function objectRoute(id: string): string {
   return `/explore?entity=${encodeURIComponent(id)}`;
+}
+
+function GraphMaturityPanel() {
+  const { data, isLoading, error } = useTenantReadiness();
+
+  let body: ReactNode;
+  if (isLoading && !data) {
+    body = <p data-testid="graph-maturity-loading">Checking graph foundations…</p>;
+  } else if (error) {
+    body = <p data-testid="graph-maturity-error">Graph foundation readiness could not be checked.</p>;
+  } else if (!data) {
+    body = <p data-testid="graph-maturity-unavailable">Graph foundation readiness is unavailable.</p>;
+  } else {
+    const maturity = deriveGraphMaturity(data);
+    if (maturity.state === 'no_data') {
+      body = (
+        <div data-testid="graph-maturity-no-data">
+          <p>The graph needs observed events and links before it can mature.</p>
+          <Link className="mt-1 inline-block text-accent underline hover:text-text-primary" to="/activate">
+            Connect a source in Activation
+          </Link>
+        </div>
+      );
+    } else if (maturity.state === 'building') {
+      body = (
+        <div data-testid="graph-maturity-building">
+          <p>Graph foundations are building — {maturity.blocking.length} check{maturity.blocking.length === 1 ? '' : 's'} still blocking verification.</p>
+          <ul className="mt-1 list-inside list-disc" aria-label="Blocking graph foundation checks">
+            {maturity.blocking.map((check) => <li key={check}>{check}</li>)}
+          </ul>
+        </div>
+      );
+    } else {
+      body = <p data-testid="graph-maturity-ready">Graph foundations are verified.</p>;
+    }
+  }
+
+  return (
+    <section data-testid="graph-maturity-panel" className="mb-3 rounded border border-border-subtle p-3 text-xs text-text-secondary">
+      <p className="font-medium text-text-primary">Graph maturity</p>
+      <div className="mt-1">{body}</div>
+    </section>
+  );
 }
 
 /**
@@ -125,6 +169,7 @@ export function ExplorePage() {
         contextBar={contextBar}
         lensDock={(
           <div className="p-3 text-xs text-text-secondary">
+            <GraphMaturityPanel />
             <p className="font-medium text-text-primary">Graph lenses</p>
             <p className="mt-1">Layer and overlay controls remain attached to the graph canvas.</p>
           </div>

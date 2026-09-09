@@ -65,6 +65,24 @@ const wrap = <T extends z.ZodType>(dataSchema: T) =>
 
 const unknownSchema = z.unknown();
 
+const tenantReadinessCheckSchema = z.object({
+  name: z.string(),
+  status: z.enum(['pending', 'passed', 'failed', 'not_applicable']),
+  evidence: z.unknown().optional(),
+});
+
+/** Typed payload returned by GET /v1/tenant/readiness. */
+export const tenantReadinessResponseSchema = z.object({
+  tenant_id: z.string(),
+  checks: z.array(tenantReadinessCheckSchema),
+  ready: z.boolean(),
+  blocking: z.array(z.string()),
+  recorded_at: z.string().optional(),
+});
+
+export type TenantReadinessResponse = z.infer<typeof tenantReadinessResponseSchema>;
+export type TenantReadinessCheck = z.infer<typeof tenantReadinessCheckSchema>;
+
 // Customer settings responses are validated at the transport boundary.  Keep
 // these schemas aligned with the explicit DTOs returned by services/me and
 // services/billing; callers must never guess between legacy field names.
@@ -416,7 +434,7 @@ export const api = {
 
   // ── Tenant launch readiness (read-only, tenant-scoped) ─────────────────────
   readiness: {
-    snapshot: () => restClient.get('/v1/tenant/readiness', wrap(unknownSchema)).then(r => r.data),
+    snapshot: () => restClient.get('/v1/tenant/readiness', wrap(tenantReadinessResponseSchema)).then(r => r.data),
     trustStates: () => restClient.get('/v1/tenant/readiness/trust-states', wrap(unknownSchema)).then(r => r.data),
   },
 

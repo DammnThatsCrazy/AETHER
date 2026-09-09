@@ -2,7 +2,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 
 const runtime = vi.hoisted(() => {
@@ -27,8 +27,22 @@ const runtime = vi.hoisted(() => {
       nextFocus: vi.fn(() => null),
       focusObject: vi.fn(),
     },
+    readiness: {
+      data: undefined as unknown,
+      isLoading: false,
+      error: null as Error | null,
+    },
+    maturity: {
+      state: 'ready' as 'no_data' | 'building' | 'ready',
+      blocking: [] as readonly string[],
+    },
   };
 });
+
+vi.mock('@aether-app/features/activation/use-tenant-readiness', () => ({
+  useTenantReadiness: () => runtime.readiness,
+  deriveGraphMaturity: () => runtime.maturity,
+}));
 
 vi.mock('@aether/ui/exploration', () => ({
   GraphContextBar: ({ workspaceLabel, environmentLabel, timeLabel }: Record<string, string>) => (
@@ -72,6 +86,11 @@ vi.mock('@aether-app/pages/graph/graph-page', () => ({
 
 afterEach(cleanup);
 
+beforeEach(() => {
+  runtime.readiness = { data: { checks: [] }, isLoading: false, error: null };
+  runtime.maturity = { state: 'ready', blocking: [] };
+});
+
 import { ExplorePage } from '@aether-app/pages/explore/explore-page';
 
 function LocationProbe() {
@@ -99,6 +118,7 @@ describe('ExplorePage graph-first workspace', () => {
     expect(screen.getByTestId('graph-context-bar')).toHaveTextContent('staging');
     expect(screen.getByTestId('graph-context-bar')).toHaveTextContent('As of 2026-09-01');
     expect(screen.getByTestId('graph-time-rail')).toHaveTextContent('History 2 of 2');
+    expect(screen.getByTestId('graph-maturity-ready')).toHaveTextContent('Graph foundations are verified.');
   });
 
   it('uses existing graph history actions and makes the selected destination explicit', async () => {
@@ -121,5 +141,40 @@ describe('ExplorePage graph-first workspace', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Open Noesis' }));
     expect(screen.getByTestId('location')).toHaveTextContent('/noesis');
+  });
+
+  it.each([
+    ['loading', { data: undefined, isLoading: true, error: null }, 'graph-maturity-loading', 'Checking graph foundations'],
+    ['error', { data: undefined, isLoading: false, error: new Error('unavailable') }, 'graph-maturity-error', 'could not be checked'],
+    ['unavailable', { data: undefined, isLoading: false, error: null }, 'graph-maturity-unavailable', 'is unavailable'],
+  ])('renders an explicit %s readiness state while keeping the real graph mounted', (_name, query, testId, text) => {
+    runtime.readiness = query;
+    renderWorkspace();
+
+    expect(screen.getByTestId(testId)).toHaveTextContent(text);
+    expect(screen.getByTestId('real-graph-page')).toBeInTheDocument();
+  });
+
+  it('renders observed-data guidance and links to Activation for no-data maturity', async () => {
+    runtime.maturity = { state: 'no_data', blocking: ['events_received'] };
+    renderWorkspace();
+
+    expect(screen.getByTestId('graph-maturity-no-data')).toHaveTextContent('needs observed events and links');
+    await userEvent.click(screen.getByRole('link', { name: 'Connect a source in Activation' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/activate');
+    expect(screen.getByTestId('real-graph-page')).toBeInTheDocument();
+  });
+
+  it('quantifies real blocking checks while the graph is building', () => {
+    runtime.maturity = {
+      state: 'building',
+      blocking: ['identity_resolution_verified', 'graph_projection_verified'],
+    };
+    renderWorkspace();
+
+    expect(screen.getByTestId('graph-maturity-building')).toHaveTextContent('2 checks still blocking verification');
+    expect(screen.getByTestId('graph-maturity-building')).toHaveTextContent('identity_resolution_verified');
+    expect(screen.getByTestId('graph-maturity-building')).toHaveTextContent('graph_projection_verified');
+    expect(screen.getByTestId('real-graph-page')).toBeInTheDocument();
   });
 });
