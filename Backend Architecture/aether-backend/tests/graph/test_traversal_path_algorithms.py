@@ -177,6 +177,81 @@ async def test_strongest_path_no_path_returns_empty():
 
 
 @pytest.mark.asyncio
+async def test_shortest_path_does_not_expand_past_depth_limit():
+    """A target one hop beyond max_depth must not be returned."""
+    client = await _build_client(
+        _v("A"), _v("B"), _v("C"),
+        edges=[_e("A", "B"), _e("B", "C")],
+    )
+    engine = GraphTraversalEngine(client)
+    result = await engine.shortest_path("A", "C", max_depth=1, tenant_id="t1")
+    assert result.nodes == []
+
+
+@pytest.mark.asyncio
+async def test_k_shortest_equal_cost_candidates_have_stable_tie_breaking():
+    """Equal-cost Yen candidates remain ordered and do not compare result objects."""
+    client = await _build_client(
+        _v("S"), _v("A"), _v("B"), _v("C"), _v("T"),
+        edges=[
+            _e("S", "A"), _e("A", "T"),
+            _e("S", "B"), _e("B", "T"),
+            _e("S", "C"), _e("C", "T"),
+        ],
+    )
+    results = await GraphTraversalEngine(client).k_shortest_paths(
+        "S", "T", k=3, max_depth=2, tenant_id="t1"
+    )
+    assert [[node.vertex_id for node in result.nodes] for result in results] == [
+        ["S", "A", "T"], ["S", "B", "T"], ["S", "C", "T"]
+    ]
+
+
+@pytest.mark.asyncio
+async def test_k_shortest_candidates_respect_total_depth_budget():
+    """Yen spur paths include the root hops in the caller's max-depth budget."""
+    client = await _build_client(
+        _v("S"), _v("A"), _v("B"), _v("T"), _v("LONG"),
+        edges=[
+            _e("S", "A"), _e("A", "T"),
+            _e("S", "B"), _e("B", "LONG"), _e("LONG", "T"),
+        ],
+    )
+    results = await GraphTraversalEngine(client).k_shortest_paths(
+        "S", "T", k=3, max_depth=2, tenant_id="t1"
+    )
+    assert [[node.vertex_id for node in result.nodes] for result in results] == [["S", "A", "T"]]
+
+
+@pytest.mark.asyncio
+async def test_temporal_shortest_path_reconstructs_target_order_not_branch():
+    """Temporal path mode returns only the ordered source-to-target route."""
+    client = await _build_client(
+        _v("S"), _v("BRANCH"), _v("N"), _v("T"),
+        edges=[
+            _e("S", "BRANCH"), _e("S", "N"), _e("N", "T"),
+        ],
+    )
+    result = await GraphTraversalEngine(client).temporal_shortest_path(
+        "S", "T", "2025-01-01T00:00:00+00:00", max_depth=3, tenant_id="t1"
+    )
+    assert result.ordered_node_ids == ["S", "N", "T"]
+    assert [node.vertex_id for node in result.nodes] == ["S", "N", "T"]
+
+
+@pytest.mark.asyncio
+async def test_temporal_shortest_path_returns_empty_when_target_disconnected():
+    client = await _build_client(
+        _v("S"), _v("BRANCH"), _v("T"), edges=[_e("S", "BRANCH")]
+    )
+    result = await GraphTraversalEngine(client).temporal_shortest_path(
+        "S", "T", "2025-01-01T00:00:00+00:00", max_depth=3, tenant_id="t1"
+    )
+    assert result.nodes == []
+    assert result.edges == []
+
+
+@pytest.mark.asyncio
 async def test_path_entry_points_reject_foreign_start_and_same_node():
     """Every path algorithm treats its caller-supplied anchor as tenant data."""
     client = await _build_client(

@@ -12,7 +12,9 @@ and applies three noise controls before a finding is surfaced:
 Suppression is never silent: every suppressed finding is still persisted
 with disposition ``suppressed`` and a typed ``suppression_reason``.
 
-Stored via the BaseRepository JSONB convention — NO alembic migrations.
+Stored via the BaseRepository JSONB convention — NO alembic migrations.  A
+small tenant-qualified mutation-counter table is retained across deletion so
+watchlist recreation cannot reuse a client-sync occurrence version.
 """
 
 from __future__ import annotations
@@ -79,6 +81,10 @@ class WatchlistDefinition(BaseModel):
     dimensions: list[str] = Field(default_factory=list)  # empty = all
     noise: NoiseControls = Field(default_factory=NoiseControls)
     created_by: Optional[str] = None
+    # Monotonic per-watchlist state-transition version used by the client-sync
+    # feed.  Content hashes alone cannot distinguish A -> B -> A: the final A
+    # must carry a different occurrence version from the initial A.
+    mutation_version: int = Field(default=0, ge=0)
 
     def model_post_init(self, __context) -> None:  # noqa: D105
         unknown = [d for d in self.dimensions if d not in COMPARISON_DIMENSIONS]
@@ -105,13 +111,87 @@ class NoiseDecision(BaseModel):
     watchlist_id: Optional[str] = None
 
 
+class _WatchlistMutationCounterRepository(TenantScopedComparisonRepository):
+    """Durable occurrence allocator retained after a watchlist is deleted."""
+
+    natural_id_key = "watchlist_id"
+
+    def __init__(self) -> None:
+        super().__init__("comparison_watchlist_mutation_counters")
+
+
 class WatchlistRepository(TenantScopedComparisonRepository):
     natural_id_key = "watchlist_id"
 
     def __init__(self) -> None:
         super().__init__("comparison_watchlists")
+        self._mutation_counters = _WatchlistMutationCounterRepository()
+
+    async def _remember_version(
+        self, tenant_id: str, watchlist_id: str, version: int
+    ) -> None:
+        """Ensure the retained counter is at least ``version``."""
+        counter = await self._mutation_counters.get_scoped(tenant_id, watchlist_id)
+        current = int((counter or {}).get("mutation_version", 0))
+        if current < version:
+            await self._mutation_counters.upsert_scoped(
+                tenant_id,
+                watchlist_id,
+                {"watchlist_id": watchlist_id, "mutation_version": version},
+            )
+
+    async def _allocate_version(
+        self, tenant_id: str, watchlist_id: str, minimum: int = 0
+    ) -> int:
+        """Allocate the next version, including after body-row deletion."""
+        counter = await self._mutation_counters.get_scoped(tenant_id, watchlist_id)
+        current = int((counter or {}).get("mutation_version", 0))
+        version = max(current + 1, minimum + 1, 1)
+        await self._mutation_counters.upsert_scoped(
+            tenant_id,
+            watchlist_id,
+            {"watchlist_id": watchlist_id, "mutation_version": version},
+        )
+        return version
 
     async def upsert(self, watchlist: WatchlistDefinition) -> dict[str, Any]:
+        """Persist a watchlist and allocate its state-transition version.
+
+        An identical retry keeps the current version, preserving the existing
+        client-sync idempotency contract.  A changed state increments the
+        version even when its content was seen before (for example A -> B -> A).
+        The version lives in the tenant-scoped watchlist record so it survives
+        process restarts and is not a process-local feed concern.
+        """
+        existing = await self.get_scoped(watchlist.tenant_id, watchlist.watchlist_id)
+        incoming_content = watchlist.model_dump(
+            mode="json", exclude={"mutation_version"}
+        )
+        if existing is None:
+            # The body may have been deleted previously; retain occurrence
+            # numbering in the counter table across that lifecycle boundary.
+            mutation_version = await self._allocate_version(
+                watchlist.tenant_id, watchlist.watchlist_id
+            )
+        else:
+            previous = WatchlistDefinition(**existing)
+            previous_content = previous.model_dump(
+                mode="json", exclude={"mutation_version"}
+            )
+            if incoming_content == previous_content:
+                mutation_version = max(previous.mutation_version, 1)
+                await self._remember_version(
+                    watchlist.tenant_id, watchlist.watchlist_id, mutation_version
+                )
+            else:
+                mutation_version = await self._allocate_version(
+                    watchlist.tenant_id,
+                    watchlist.watchlist_id,
+                    minimum=previous.mutation_version,
+                )
+        watchlist = watchlist.model_copy(
+            update={"mutation_version": mutation_version}
+        )
         return await self.upsert_scoped(
             watchlist.tenant_id, watchlist.watchlist_id, watchlist.model_dump(mode="json")
         )

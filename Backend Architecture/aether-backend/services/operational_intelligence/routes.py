@@ -1722,9 +1722,10 @@ async def graph_paths(
                 paths.append(rp)
 
     elif body.mode == "temporal" and body.as_of and body.target_id:
-        result = await engine.temporal_bfs(
-            body.source_id, body.as_of, depth=max_depth,
-            direction=body.direction, tenant_id=body.tenant_id,
+        result = await engine.temporal_shortest_path(
+            body.source_id, body.target_id, body.as_of,
+            max_depth=max_depth, direction=body.direction,
+            tenant_id=body.tenant_id,
         )
         if result.nodes:
             rp = _traversal_result_to_relationship_path(

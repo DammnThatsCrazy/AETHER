@@ -171,7 +171,10 @@ class GraphTraversalEngine:
 
         while queue:
             current_id, path_ids, path_edges = queue.pop(0)
-            if len(path_ids) > max_depth + 1:
+            # ``path_ids`` includes the source, so a path with max_depth hops
+            # has max_depth + 1 vertices.  Do not expand that terminal layer:
+            # doing so could return a target at max_depth + 1 hops.
+            if len(path_ids) >= max_depth + 1:
                 continue
 
             edges = await client.get_edges(current_id, direction="both")
@@ -300,6 +303,85 @@ class GraphTraversalEngine:
             current_layer = next_layer
 
         return TraversalResult(nodes=result_nodes, edges=result_edges)  # temporal_bfs
+
+    async def temporal_shortest_path(
+        self,
+        from_id: str,
+        to_id: str,
+        as_of: str,
+        max_depth: int = 6,
+        direction: str = "both",
+        tenant_id: Optional[str] = None,
+    ) -> TraversalResult:
+        """Find the shortest source-to-target path in a temporal graph.
+
+        Unlike :meth:`temporal_bfs`, this is target-aware and reconstructs only
+        the ordered path that reaches ``to_id``.  Both vertices and edges must
+        be valid at ``as_of``; tenant and direction checks are applied while
+        expanding, so an unrelated branch cannot be returned as the requested
+        path.
+        """
+        client = self._client
+        if not await _tenant_vertex_visible(client, from_id, tenant_id):
+            return TraversalResult()
+        source = await client.get_vertex(from_id)
+        target = await client.get_vertex(to_id)
+        if not source or not target:
+            return TraversalResult()
+
+        def vertex_valid(vertex: Vertex) -> bool:
+            valid_from = vertex.properties.get("valid_from") or vertex.created_at or ""
+            valid_to = vertex.properties.get("valid_to") or ""
+            return not (valid_from and valid_from > as_of) and not (valid_to and valid_to <= as_of)
+
+        def edge_valid(edge: Edge) -> bool:
+            valid_from = edge.properties.get("valid_from") or edge.created_at or ""
+            valid_to = edge.properties.get("valid_to") or ""
+            return not (valid_from and valid_from > as_of) and not (valid_to and valid_to <= as_of)
+
+        if not vertex_valid(source) or not vertex_valid(target):
+            return TraversalResult()
+        if tenant_id and tenant_of(target.properties) != str(tenant_id):
+            return TraversalResult()
+        if from_id == to_id:
+            return TraversalResult(nodes=[source], ordered_node_ids=[from_id])
+
+        queue: deque[tuple[str, list[str], list[Edge]]] = deque([(from_id, [from_id], [])])
+        visited = {from_id}
+        while queue:
+            current_id, path_ids, path_edges = queue.popleft()
+            if len(path_edges) >= max_depth:
+                continue
+            for edge in await client.get_edges(current_id, direction=direction):
+                if not edge_valid(edge):
+                    continue
+                if tenant_id and tenant_of(edge.properties) not in (None, str(tenant_id)):
+                    continue
+                neighbor_id = edge.to_vertex_id if edge.from_vertex_id == current_id else edge.from_vertex_id
+                if neighbor_id in visited:
+                    continue
+                neighbor = await client.get_vertex(neighbor_id)
+                if not neighbor or not vertex_valid(neighbor):
+                    continue
+                if tenant_id and tenant_of(neighbor.properties) != str(tenant_id):
+                    continue
+                next_ids = path_ids + [neighbor_id]
+                next_edges = path_edges + [edge]
+                if neighbor_id == to_id:
+                    path_nodes = [source]
+                    for path_id in next_ids[1:]:
+                        path_vertex = await client.get_vertex(path_id)
+                        if path_vertex:
+                            path_nodes.append(path_vertex)
+                    return TraversalResult(
+                        nodes=path_nodes,
+                        edges=next_edges,
+                        ordered_node_ids=next_ids,
+                        ordered_edge_ids=[_edge_key(item) for item in next_edges],
+                    )
+                visited.add(neighbor_id)
+                queue.append((neighbor_id, next_ids, next_edges))
+        return TraversalResult()
 
     async def strongest_path(
         self,
@@ -433,7 +515,11 @@ class GraphTraversalEngine:
 
         # A set of candidate paths (spur-based candidates not yet confirmed)
         A: list[TraversalResult] = []  # confirmed k-shortest paths
-        B: list[tuple[float, TraversalResult]] = []  # candidate heap
+        # Include a monotonic tie-breaker.  Comparing TraversalResult instances
+        # when two candidates have equal cost raises TypeError and makes path
+        # ordering depend on incidental graph insertion order.
+        B: list[tuple[float, int, TraversalResult]] = []  # candidate heap
+        candidate_sequence = 0
         seen_path_ids: set[str] = set()
 
         # Find the first shortest path using BFS (uniform cost = 1 per hop)
@@ -472,12 +558,18 @@ class GraphTraversalEngine:
 
                 # Blocked root nodes (avoid revisiting root path nodes except spur)
                 blocked_nodes: set[str] = set(root_path_ids[:-1])
+                # The spur search starts after ``i`` root hops.  Pass only the
+                # remaining budget so a later Yen candidate cannot exceed the
+                # caller's total max-depth even when its spur is valid alone.
+                remaining_depth = max_depth - i
+                if remaining_depth < 1:
+                    continue
 
                 spur_result = await self._shortest_path_excluding(
                     spur_node, to_id,
                     blocked_edge_ids={t[0] for t in blocked_edges},
                     blocked_node_ids=blocked_nodes,
-                    max_depth=max_depth,
+                    max_depth=remaining_depth,
                     tenant_id=tenant_id,
                 )
                 if not spur_result.nodes:
@@ -514,11 +606,12 @@ class GraphTraversalEngine:
                     1.0 - float(e.properties.get("confidence", 1.0) if e.properties else 1.0)
                     for e in merged_edges
                 )
-                heapq.heappush(B, (cost, candidate))  # type: ignore[misc]
+                candidate_sequence += 1
+                heapq.heappush(B, (cost, candidate_sequence, candidate))
 
             if not B:
                 break
-            _, next_path = heapq.heappop(B)
+            _, _, next_path = heapq.heappop(B)
             A.append(next_path)
 
         return A[:k]
@@ -551,7 +644,9 @@ class GraphTraversalEngine:
 
         while queue:
             current_id, path_ids, path_edges = queue.popleft()
-            if len(path_ids) > max_depth + 1:
+            # A max_depth-hop path contains max_depth + 1 vertices; once that
+            # layer is dequeued there is no legal expansion left.
+            if len(path_ids) >= max_depth + 1:
                 continue
 
             edges = await client.get_edges(current_id, direction="both")

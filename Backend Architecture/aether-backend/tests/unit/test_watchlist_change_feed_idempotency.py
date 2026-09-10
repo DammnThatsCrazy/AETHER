@@ -77,3 +77,46 @@ def test_changed_watchlist_revision_and_tenant_scope_are_preserved():
     assert len(a_rows) == 2
     assert len(b_rows) == 1
     assert a_rows[0]["revision"] != a_rows[1]["revision"]
+
+
+def test_returning_to_prior_watchlist_content_emits_new_occurrence():
+    """A -> B -> A must not be collapsed by the repeated content hash."""
+    for name in ("A", "B", "A"):
+        _run(comparison_routes.upsert_watchlist(
+            _request(),
+            comparison_routes.WatchlistUpsertRequest(watchlist_id="wl-cycle", name=name),
+        ))
+
+    rows = _run(get_client_sync_repository().read_since("t:tenant-a", 0, 100))
+    assert len(rows) == 3
+    assert [row["revision"].split(":", 1)[0] for row in rows] == ["1", "2", "3"]
+    assert rows[0]["revision"].split(":", 1)[1] == rows[2]["revision"].split(":", 1)[1]
+    assert [row["seq"] for row in rows] == [1, 2, 3]
+
+
+def test_identical_watchlist_retry_reuses_mutation_occurrence():
+    payload = comparison_routes.WatchlistUpsertRequest(
+        watchlist_id="wl-retry", name="Risk watches"
+    )
+    _run(comparison_routes.upsert_watchlist(_request(), payload))
+    _run(comparison_routes.upsert_watchlist(_request(), payload))
+
+    rows = _run(get_client_sync_repository().read_since("t:tenant-a", 0, 100))
+    assert len(rows) == 1
+    assert rows[0]["revision"].startswith("1:")
+
+
+def test_delete_recreate_does_not_reuse_watchlist_occurrence():
+    """The retained counter keeps delete -> recreate feed events distinct."""
+    payload = comparison_routes.WatchlistUpsertRequest(
+        watchlist_id="wl-lifecycle", name="A"
+    )
+    _run(comparison_routes.upsert_watchlist(_request(), payload))
+    _run(comparison_routes.delete_watchlist(_request(), "wl-lifecycle"))
+    _run(comparison_routes.upsert_watchlist(_request(), payload))
+
+    rows = _run(get_client_sync_repository().read_since("t:tenant-a", 0, 100))
+    assert len(rows) == 3
+    assert rows[0]["revision"].startswith("1:")
+    assert rows[1]["revision"] == "1:deleted"
+    assert rows[2]["revision"].startswith("2:")

@@ -78,9 +78,11 @@ def _engine():
 
 
 def _watchlist_revision(watchlist: WatchlistDefinition) -> str:
-    """Derive a stable mutation revision for the tenant change feed."""
+    """Derive a stable content revision for the tenant change feed."""
     payload = json.dumps(
-        watchlist.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
+        watchlist.model_dump(mode="json", exclude={"mutation_version"}),
+        sort_keys=True,
+        separators=(",", ":"),
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -258,7 +260,11 @@ async def upsert_watchlist(request: Request, payload: WatchlistUpsertRequest) ->
         created_by=tenant.user_id,
     )
     stored = await _watchlists.upsert(watchlist)
-    revision = _watchlist_revision(watchlist)
+    stored_watchlist = WatchlistDefinition(**stored)
+    # The occurrence version distinguishes a state that returns to an older
+    # content hash (A -> B -> A).  Retries of the same state retain the version
+    # and therefore remain idempotent on the client-sync source event id.
+    revision = f"{stored_watchlist.mutation_version}:{_watchlist_revision(stored_watchlist)}"
     await enqueue_sync_change(
         scope_key=f"t:{tenant.tenant_id}",
         principal_id=tenant.user_id or tenant.tenant_id,
@@ -266,7 +272,10 @@ async def upsert_watchlist(request: Request, payload: WatchlistUpsertRequest) ->
         resource_kind="watchlist",
         resource_id=watchlist.watchlist_id,
         revision=revision,
-        source_event_id=f"watchlist:{watchlist.watchlist_id}:upsert:{revision}",
+        source_event_id=(
+            f"watchlist:{watchlist.watchlist_id}:upsert:"
+            f"{stored_watchlist.mutation_version}"
+        ),
     )
     return APIResponse(data={"watchlist": stored})
 
@@ -274,17 +283,21 @@ async def upsert_watchlist(request: Request, payload: WatchlistUpsertRequest) ->
 @router.delete("/watchlists/{watchlist_id}")
 async def delete_watchlist(request: Request, watchlist_id: str) -> APIResponse:
     tenant = _tenant(request, "write")
+    existing = await _watchlists.get_scoped(tenant.tenant_id, watchlist_id)
     deleted = await _watchlists.delete_scoped(tenant.tenant_id, watchlist_id)
     if not deleted:
         raise NotFoundError("comparison watchlist")
+    deleted_version = WatchlistDefinition(**existing).mutation_version if existing else 0
     await enqueue_sync_change(
         scope_key=f"t:{tenant.tenant_id}",
         principal_id=tenant.user_id or tenant.tenant_id,
         change_type="watchlist_changed",
         resource_kind="watchlist",
         resource_id=watchlist_id,
-        revision="deleted",
-        source_event_id=f"watchlist:{watchlist_id}:delete",
+        revision=f"{max(deleted_version, 1)}:deleted",
+        source_event_id=(
+            f"watchlist:{watchlist_id}:delete:{max(deleted_version, 1)}"
+        ),
     )
     return APIResponse(data={"deleted": watchlist_id})
 

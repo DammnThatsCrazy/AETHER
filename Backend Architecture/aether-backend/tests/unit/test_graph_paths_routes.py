@@ -149,15 +149,15 @@ async def test_paths_k_shortest_mode():
 
 
 # ---------------------------------------------------------------------------
-# Test 4: temporal mode dispatches to temporal_bfs
+# Test 4: temporal mode reconstructs a target-aware path
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_paths_temporal_mode():
     from services.operational_intelligence.routes import graph_paths
     graph = await _build_graph(
-        _v("A"), _v("B"),
-        edges=[_e("A", "B")],
+        _v("A"), _v("BRANCH"), _v("M"), _v("B"),
+        edges=[_e("A", "BRANCH"), _e("A", "M"), _e("M", "B")],
     )
     body = PathQuery(
         tenant_id="t1", source_id="A", target_id="B",
@@ -165,6 +165,26 @@ async def test_paths_temporal_mode():
     )
     resp = await graph_paths(body, _make_request(), graph)
     assert "data" in resp
+    paths = resp["data"]["paths"]
+    assert len(paths) == 1
+    assert paths[0]["ordered_node_ids"] == ["A", "M", "B"]
+    assert paths[0]["source_id"] == "A"
+    assert paths[0]["target_id"] == "B"
+
+
+@pytest.mark.asyncio
+async def test_paths_temporal_mode_returns_no_path_for_disconnected_target():
+    from services.operational_intelligence.routes import graph_paths
+    graph = await _build_graph(
+        _v("A"), _v("BRANCH"), _v("B"),
+        edges=[_e("A", "BRANCH")],
+    )
+    body = PathQuery(
+        tenant_id="t1", source_id="A", target_id="B",
+        mode="temporal", as_of="2025-01-01T00:00:00Z",
+    )
+    resp = await graph_paths(body, _make_request(), graph)
+    assert resp["data"]["paths"] == []
 
 
 # ---------------------------------------------------------------------------
