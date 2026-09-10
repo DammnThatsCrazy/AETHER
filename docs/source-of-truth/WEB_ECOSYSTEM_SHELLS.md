@@ -64,15 +64,15 @@ build status for each surface.
 
 | Origin | Surface | Audience | Workspace | Status |
 | --- | --- | --- | --- | --- |
-| `olympuslabs.com` | Olympus Labs corporate marketing (company, products, research, principles, security, careers, legal) | Public | `frontend/olympus-marketing` | Phases 1–2 + 6 content; **code-complete, not deployed** ([deploy contract](../deployment/WEB_ECOSYSTEM_DEPLOYMENT.md)) |
-| `aether.olympuslabs.com` | Aether public marketing **including the auth routes** (`/login`, `/signup`, `/forgot-password`) | Public | `frontend/aether-marketing` | Phases 1–4 + 6 content; **code-complete, not deployed** ([deploy contract](../deployment/WEB_ECOSYSTEM_DEPLOYMENT.md)) |
-| `app.olympuslabs.com` | Protected Aether tenant application | Authenticated Aether tenants | `frontend/aether` | Existing |
-| `kyber.olympuslabs.com` | Kyber — Olympus Labs' internal operator application | Olympus workforce only | `frontend/kyber` | Existing |
-| `docs.olympuslabs.com` | Documentation | Public | `frontend/docs` | Existing |
-| `status.olympuslabs.com` | Status | Public | — | Planned |
+| `olympuslabsml.com` | Olympus Labs corporate marketing (company, products, research, principles, security, careers, legal) | Public | `frontend/olympus-marketing` | Phases 1–2 + 6 content; **code-complete, not deployed** ([deploy contract](../deployment/WEB_ECOSYSTEM_DEPLOYMENT.md)) |
+| `aether.olympuslabsml.com` | Aether public marketing **including the auth routes** (`/login`, `/signup`, `/forgot-password`) | Public | `frontend/aether-marketing` | Phases 1–4 + 6 content; **code-complete, not deployed** ([deploy contract](../deployment/WEB_ECOSYSTEM_DEPLOYMENT.md)) |
+| `app.olympuslabsml.com` | Protected Aether tenant application | Authenticated Aether tenants | `frontend/aether` | Existing |
+| `kyber.olympuslabsml.com` | Kyber — Olympus Labs' internal operator application | Olympus workforce only | `frontend/kyber` | Existing |
+| `docs.olympuslabsml.com` | Documentation | Public | `frontend/docs` | Existing |
+| `status.olympuslabsml.com` | Status | Public | — | Planned |
 
 The authentication routes belong to the **Aether public** surface
-(`aether.olympuslabs.com`), not to the tenant origin. The public experience
+(`aether.olympuslabsml.com`), not to the tenant origin. The public experience
 owns the threshold; the tenant application owns the protected session.
 
 ## 2. Shell-first architecture
@@ -124,10 +124,10 @@ weight differs by audience.
 
 | Surface | Rule |
 | --- | --- |
-| Corporate (`olympuslabs.com`) | Olympus Labs identity leads; Aether is presented as its product. |
-| Aether public (`aether.olympuslabs.com`) | **"Aether by Olympus Labs."** Aether mark leads; a quiet Olympus Labs attribution sits beside it. |
-| Aether tenant app (`app.olympuslabs.com`) | Aether identity leads; Olympus Labs branding is **secondary** inside the product environment. |
-| Kyber (`kyber.olympuslabs.com`) | **"Olympus Labs · Kyber"** — Olympus Labs ownership is explicit because Kyber is an Olympus application, not an Aether product. |
+| Corporate (`olympuslabsml.com`) | Olympus Labs identity leads; Aether is presented as its product. |
+| Aether public (`aether.olympuslabsml.com`) | **"Aether by Olympus Labs."** Aether mark leads; a quiet Olympus Labs attribution sits beside it. |
+| Aether tenant app (`app.olympuslabsml.com`) | Aether identity leads; Olympus Labs branding is **secondary** inside the product environment. |
+| Kyber (`kyber.olympuslabsml.com`) | **"Olympus Labs · Kyber"** — Olympus Labs ownership is explicit because Kyber is an Olympus application, not an Aether product. |
 
 The lockups and responsive reduction rules are defined in
 [brand-system](../brand-system/README.md) and implemented in
@@ -181,9 +181,9 @@ The threshold between public product and protected tenant environment lives in
 the **Aether public** experience (`frontend/aether-marketing`), rendered by
 **AuthLayout**:
 
-- `aether.olympuslabs.com/login`
-- `aether.olympuslabs.com/signup`
-- `aether.olympuslabs.com/forgot-password`
+- `aether.olympuslabsml.com/login`
+- `aether.olympuslabsml.com/signup`
+- `aether.olympuslabsml.com/forgot-password`
 
 AuthLayout is deliberately the quietest surface in the system: no decorative
 or ambient motion, minimal chrome, focused on the single task of getting the
@@ -197,12 +197,12 @@ collects and validates a workspace email (and, at signup, a name), then moves
 the browser to the matching Aether application route carrying the input as
 prefill only:
 
-- `aether.olympuslabs.com/login` →
-  `app.olympuslabs.com/login?email=…`
-- `aether.olympuslabs.com/signup` →
-  `app.olympuslabs.com/signup?name=…&email=…`
-- `aether.olympuslabs.com/forgot-password` →
-  `app.olympuslabs.com/login?email=…`
+- `aether.olympuslabsml.com/login` →
+  `app.olympuslabsml.com/login?email=…`
+- `aether.olympuslabsml.com/signup` →
+  `app.olympuslabsml.com/signup?name=…&email=…`
+- `aether.olympuslabsml.com/forgot-password` →
+  `app.olympuslabsml.com/login?email=…`
 
 The tenant application accepts that prefill — its login and signup pages read
 `?email` / `?name` once to fill the first step — and owns everything after:
@@ -219,10 +219,10 @@ straight to the application.
 
 ### 5.2 Boundaries that never change
 
-- **No broad parent-domain cookies.** A cookie set on `.olympuslabs.com` would
+- **No broad parent-domain cookies.** A cookie set on `.olympuslabsml.com` would
   be readable across every product surface. Session and tenant cookies stay
-  scoped to the origin that owns them (`app.olympuslabs.com` for the tenant
-  app, `kyber.olympuslabs.com` for Kyber).
+  scoped to the origin that owns them (`app.olympuslabsml.com` for the tenant
+  app, `kyber.olympuslabsml.com` for Kyber).
 - **Server-enforced authorization.** The client may hint at state; it never
   grants authority. Tenant scoping and capability decisions are decided and
   enforced by the backend (see the Kyber and tenant-access source-of-truth
@@ -231,7 +231,7 @@ straight to the application.
   sign out an Olympus operator's Kyber session, and vice versa. Each surface
   clears only its own origin-scoped session.
 - **Kyber is never reachable from public marketing.** No public page links to
-  `kyber.olympuslabs.com`, and no customer-facing flow routes an Aether tenant
+  `kyber.olympuslabsml.com`, and no customer-facing flow routes an Aether tenant
   into an Olympus operator console.
 
 ## 6. Content and truth principles

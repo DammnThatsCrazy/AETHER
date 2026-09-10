@@ -1,0 +1,66 @@
+version: 1
+applications:
+  - appRoot: frontend/olympus-marketing
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - npm run build --workspace=frontend/olympus-marketing
+      artifacts:
+        baseDirectory: frontend/olympus-marketing/dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+  - appRoot: frontend/aether-marketing
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - npm run build --workspace=frontend/aether-marketing
+      artifacts:
+        baseDirectory: frontend/aether-marketing/dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+  - appRoot: frontend/docs
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - npm run build --workspace=frontend/docs
+      artifacts:
+        baseDirectory: frontend/docs/dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+  - appRoot: frontend/aether
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - npm run build --workspace=frontend/aether
+      artifacts:
+        baseDirectory: frontend/aether/dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*

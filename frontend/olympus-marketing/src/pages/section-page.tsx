@@ -1,6 +1,8 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@aether/ui';
-import { CtaBand, PageHero } from '@olympus-marketing/components/marketing-section';
+import { CtaBand, Eyebrow, PageHero } from '@olympus-marketing/components/marketing-section';
+import { DemoRequestForm } from '@olympus-marketing/components/demo-request-form';
+import { WaitlistForm } from '@olympus-marketing/components/waitlist-form';
 import { findSection, type SectionCta, type SectionLink } from '@olympus-marketing/content/sections';
 import { usePageMeta } from '@olympus-marketing/lib/meta';
 import { AETHER_MARKETING_URL } from '@olympus-marketing/lib/env';
@@ -31,10 +33,43 @@ export function SectionPage() {
 
   const isLegal = section.slug === '/legal';
   const hasOwnCta = section.cta !== undefined;
+  const isContact = section.slug === '/contact';
+  const isCareers = section.slug === '/careers';
 
   return (
     <article>
       <PageHero eyebrow={section.eyebrow} title={section.title} lead={section.lead} />
+
+      {isContact && (
+        <section className="border-b border-border-default bg-surface-raised">
+          <div className="mkt-container py-16 md:py-20">
+            <Eyebrow>Request a demo</Eyebrow>
+            <h2 className="mkt-h2 mt-4 max-w-xl">Ask for a guided walkthrough of Aether.</h2>
+            <p className="mkt-body mt-4 max-w-xl">
+              Tell us what you would use Aether for, and we will follow up on the channel above.
+            </p>
+            <div className="mt-10 max-w-2xl rounded-lg border border-border-default bg-surface-base p-6 md:p-8">
+              <DemoRequestForm />
+            </div>
+          </div>
+        </section>
+      )}
+
+      {isCareers && (
+        <section className="border-b border-border-default bg-surface-raised">
+          <div className="mkt-container py-16 md:py-20">
+            <Eyebrow>Hear about open roles</Eyebrow>
+            <h2 className="mkt-h2 mt-4 max-w-xl">No open roles are posted right now.</h2>
+            <p className="mkt-body mt-4 max-w-xl">
+              Join the list and we will reach out when a role opens that matches what you do.
+            </p>
+            <div className="mt-10 max-w-2xl rounded-lg border border-border-default bg-surface-base p-6 md:p-8">
+              <WaitlistForm />
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="border-b border-border-default">
         <div className="mkt-container py-16 md:py-20">
           {section.paragraphs !== undefined && (

@@ -40,11 +40,11 @@ describe('usePageMeta', () => {
 
     expect(document.title).toBe('Aether — Olympus Labs');
     expect(document.querySelector('meta[name="description"]')?.getAttribute('content')).toBe('Platform description');
-    expect(canonicalHref()).toBe('https://olympuslabs.com/products/aether');
+    expect(canonicalHref()).toBe('https://olympuslabsml.com/products/aether');
     expect(document.querySelectorAll('link[rel="canonical"]')).toHaveLength(1);
     expect(document.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('Aether — Olympus Labs');
     expect(document.querySelector('meta[property="og:description"]')?.getAttribute('content')).toBe('Platform description');
-    expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe('https://olympuslabs.com/products/aether');
+    expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe('https://olympuslabsml.com/products/aether');
     expect(document.querySelector('meta[property="og:type"]')?.getAttribute('content')).toBe('website');
     expect(document.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe('Olympus Labs');
     expect(document.querySelector('meta[name="twitter:card"]')?.getAttribute('content')).toBe('summary');
@@ -61,20 +61,20 @@ describe('usePageMeta', () => {
       </MemoryRouter>,
     );
 
-    expect(canonicalHref()).toBe('https://olympuslabs.com/');
-    expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe('https://olympuslabs.com/');
+    expect(canonicalHref()).toBe('https://olympuslabsml.com/');
+    expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe('https://olympuslabsml.com/');
     unmount();
   });
 
   it('honors a canonical override', () => {
     const { unmount } = render(
       <MemoryRouter initialEntries={['/legal']}>
-        <Probe title="Legal — Olympus Labs" canonical="https://olympuslabs.com/legal-and-trust" />
+        <Probe title="Legal — Olympus Labs" canonical="https://olympuslabsml.com/legal-and-trust" />
       </MemoryRouter>,
     );
 
-    expect(canonicalHref()).toBe('https://olympuslabs.com/legal-and-trust');
-    expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe('https://olympuslabs.com/legal-and-trust');
+    expect(canonicalHref()).toBe('https://olympuslabsml.com/legal-and-trust');
+    expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe('https://olympuslabsml.com/legal-and-trust');
     unmount();
   });
 
@@ -96,12 +96,12 @@ describe('usePageMeta', () => {
     );
 
     expect(document.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('noindex,nofollow');
-    expect(canonicalHref()).toBe('https://olympuslabs.com/legal');
+    expect(canonicalHref()).toBe('https://olympuslabsml.com/legal');
 
     fireEvent.click(screen.getByRole('link', { name: 'Company' }));
 
     expect(document.querySelector('meta[name="robots"]')).toBeNull();
-    expect(canonicalHref()).toBe('https://olympuslabs.com/company');
+    expect(canonicalHref()).toBe('https://olympuslabsml.com/company');
     expect(document.querySelectorAll('link[rel="canonical"]')).toHaveLength(1);
     expect(document.querySelector('meta[name="description"]')?.getAttribute('content')).toBe('Company copy');
     expect(document.title).toBe('Company — Olympus Labs');

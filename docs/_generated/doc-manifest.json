@@ -3870,6 +3870,69 @@
       "since_version": "9.0.0"
     },
     {
+      "path": "docs/api/authentication.md",
+      "title": "API Authentication",
+      "slug": "api/authentication",
+      "section": "api",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/api/ingestion.md",
+      "title": "Event Ingestion API",
+      "slug": "api/ingestion",
+      "section": "api",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/api/profiles.md",
+      "title": "Profiles API",
+      "slug": "api/profiles",
+      "section": "api",
+      "visibility": "P",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/api/webhooks.md",
+      "title": "Webhooks",
+      "slug": "api/webhooks",
+      "section": "api",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md",
       "title": "Aether Backend Intelligence Architecture Blueprint",
       "slug": "architecture/backend-intelligence",
@@ -4852,6 +4915,106 @@
         "architect",
         "exec"
       ]
+    },
+    {
+      "path": "docs/concepts/journeys.md",
+      "title": "Journeys",
+      "slug": "concepts/journeys",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/concepts/lenses.md",
+      "title": "Lenses",
+      "slug": "concepts/lenses",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/concepts/profiles.md",
+      "title": "Profiles",
+      "slug": "concepts/profiles",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/concepts/signals.md",
+      "title": "Signals",
+      "slug": "concepts/signals",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/concepts/sources.md",
+      "title": "Sources",
+      "slug": "concepts/sources",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/concepts/tenants.md",
+      "title": "Tenants",
+      "slug": "concepts/tenants",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "buyer"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/decisions/ADR-001-docs-stamp-system.md",
@@ -6356,6 +6519,54 @@
       ],
       "status": "stable",
       "since_version": "8.12.0"
+    },
+    {
+      "path": "docs/quickstart/node-sdk.md",
+      "title": "Getting Started with the Node SDK",
+      "slug": "quickstart/node-sdk",
+      "section": "quickstart",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "sdk@aether"
+    },
+    {
+      "path": "docs/quickstart/react-sdk.md",
+      "title": "Getting Started with the React SDK",
+      "slug": "quickstart/react-sdk",
+      "section": "quickstart",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "sdk@aether"
+    },
+    {
+      "path": "docs/quickstart/web-sdk.md",
+      "title": "Getting Started with the Web SDK",
+      "slug": "quickstart/web-sdk",
+      "section": "quickstart",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "sdk@aether"
     },
     {
       "path": "docs/readiness/LEAN_PRODUCTION_READINESS_DOSSIER.md",
@@ -8232,6 +8443,40 @@
       "status": "beta",
       "since_version": "8.12.0",
       "estimated_read_minutes": 15,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/tutorials/shopify-integration.md",
+      "title": "Shopify Integration Guide",
+      "slug": "tutorials/shopify-integration",
+      "section": "tutorials",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "9.1.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/tutorials/stripe-integration.md",
+      "title": "Stripe Integration Guide",
+      "slug": "tutorials/stripe-integration",
+      "section": "tutorials",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "9.1.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
       "canonical_owner": "platform@aether"
     }
   ]

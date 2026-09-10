@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, cn } from '@aether/ui';
+import { AvailabilityBadge } from '@aether-marketing/components/availability-badge';
 import {
   CtaBand,
   Eyebrow,
@@ -137,6 +138,38 @@ export function DevelopersPage() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Illustrative quickstart shape */}
+      <section aria-labelledby="quickstart-heading" className="border-b border-border-default bg-surface-sunken">
+        <div className="mkt-container py-16 md:py-20">
+          <div className="flex flex-wrap items-center gap-3">
+            <Eyebrow>Quickstart</Eyebrow>
+            <AvailabilityBadge status="coming-soon" label="Illustrative — not a published API" />
+          </div>
+          <h2 id="quickstart-heading" className="mkt-h2 mt-4 max-w-2xl">
+            The shape a first integration takes
+          </h2>
+          <p className="mkt-body mt-4 max-w-2xl text-text-secondary">
+            This is a sketch of what sending a first event is expected to look like, written to orient a reader —
+            it is not a published SDK artifact, install command, or API. The documentation site is the canonical
+            reference once an SDK ships; nothing below should be copied into production code today.
+          </p>
+          <pre className="mt-8 overflow-x-auto rounded-md border border-border-default bg-surface-base p-6 text-sm leading-relaxed text-text-primary">
+            <code>{`import Aether from '@aether/sdk'; // illustrative — package not yet published
+
+Aether.init({ writeKey: process.env.AETHER_WRITE_KEY });
+
+Aether.track('order_completed', {
+  userId: 'user_123',
+  properties: { amount: 42.0, currency: 'USD' },
+});`}</code>
+          </pre>
+          <p className="mt-4 text-sm leading-relaxed text-text-secondary">
+            Once identity resolves, the same event is readable from the graph as part of that person's journey —
+            see the <a href={AETHER_DOCS_URL} target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2 mkt-motion-color hover:text-text-primary">documentation site</a> for the event model that actually governs validation today.
+          </p>
         </div>
       </section>
 

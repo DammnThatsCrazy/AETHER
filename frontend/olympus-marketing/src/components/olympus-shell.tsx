@@ -4,6 +4,7 @@ import { Button, OlympusLockup } from '@aether/ui';
 import { cn } from '@aether/ui';
 import { AETHER_MARKETING_URL } from '@olympus-marketing/lib/env';
 import { PRIMARY_NAV } from '@olympus-marketing/content/sections';
+import { analyticsFromEnv, trackPageView } from '@olympus-marketing/lib/analytics';
 
 function navClass({ isActive }: { readonly isActive: boolean }): string {
   return cn(
@@ -56,6 +57,10 @@ export function OlympusShell() {
   useEffect(() => {
     setMenuOpen(false);
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    // Page views are opt-in and a no-op on the default (unconfigured) build —
+    // see src/lib/analytics.ts. Firing on every path change, including the
+    // first render, keeps the very first route covered too.
+    trackPageView(analyticsFromEnv(), location.pathname);
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;

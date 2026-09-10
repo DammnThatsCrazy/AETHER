@@ -1,0 +1,69 @@
+---
+title: Tenants
+slug: concepts/tenants
+section: concepts
+visibility: P
+audience: [dev-senior, architect, buyer]
+status: stable
+since_version: "8.12.0"
+canonical_owner: platform@aether
+estimated_read_minutes: 4
+toc_depth: 3
+---
+
+# Tenants
+
+Aether is multi-tenant from the ingestion layer down through storage, the
+identity graph, and every API response. A tenant is your workspace — one
+tenant per company (or per business unit, if you run several brands through
+Aether independently).
+
+## What tenant scoping covers
+
+Every request that reaches the platform resolves to a `tenant_id` before
+anything else happens. That resolution comes from whichever credential you
+authenticated with — see [Authentication](/doc/api/authentication) — and it
+is attached to the request context (`request.state.tenant`) for the
+lifetime of the call.
+
+From there, tenant scoping is enforced at every layer:
+
+- **Ingestion** — every event written to the Bronze tier carries its
+  `tenant_id`; nothing is ever written unscoped.
+- **Storage** — Postgres rows, Neptune graph vertices/edges, and Redis keys
+  are all tenant-prefixed or tenant-partitioned.
+- **APIs** — every read endpoint filters by the caller's tenant; there is no
+  code path that returns another tenant's rows to a normal API key.
+- **Kyber (the operator console)** — the reverse boundary also holds: no
+  Aether tenant credential can reach Kyber's cross-tenant aggregate views,
+  and those views are tenant-anonymous even for operators.
+
+## API key scoping
+
+An API key belongs to exactly one tenant and carries a permission scope
+(`read`, `write`, `admin`, plus narrower scopes like `commerce:read` or
+`agent:manage` for specific subsystems). A **write key** can send events; it
+cannot read them back. A **read key** can query profiles, journeys, and
+campaigns; it cannot ingest. An **admin key** can do both, plus manage other
+keys, webhooks, and tenant settings. See
+[Authentication](/doc/api/authentication) for the full permission model.
+
+## Plans and quotas
+
+Every tenant is on a plan tier (Aether's public plan catalog, P1–P4) that
+governs rate limits, monthly event quotas, and which subsystems are
+available. Rate limits are enforced per tenant, per plan, in the request
+middleware; monthly quota overage is metered rather than blocked — your
+events keep flowing, and the overage is reflected in billing rather than
+producing dropped data.
+
+## Environments
+
+Within a tenant, events additionally carry an `environment_id` (for example
+`production` vs. `staging`) so you can exercise the full SDK and API surface
+against test data without mixing it into your production graph.
+
+## Next steps
+
+- [Sources](/doc/concepts/sources) — how data enters a tenant's graph.
+- [Authentication](/doc/api/authentication) — API key types in detail.

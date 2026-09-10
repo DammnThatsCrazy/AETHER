@@ -48,18 +48,18 @@ describe('resolveAnalytics', () => {
   });
 
   it('enables plausible only when the property id is non-empty', () => {
-    expect(resolveAnalytics({ provider: 'plausible', propertyId: 'olympuslabs.com' })).toEqual({
+    expect(resolveAnalytics({ provider: 'plausible', propertyId: 'olympuslabsml.com' })).toEqual({
       enabled: true,
       provider: 'plausible',
-      propertyId: 'olympuslabs.com',
+      propertyId: 'olympuslabsml.com',
     });
   });
 
   it('trims surrounding whitespace from a property id before enabling', () => {
-    expect(resolveAnalytics({ provider: 'plausible', propertyId: '  olympuslabs.com  ' })).toEqual({
+    expect(resolveAnalytics({ provider: 'plausible', propertyId: '  olympuslabsml.com  ' })).toEqual({
       enabled: true,
       provider: 'plausible',
-      propertyId: 'olympuslabs.com',
+      propertyId: 'olympuslabsml.com',
     });
   });
 

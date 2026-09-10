@@ -38,7 +38,7 @@ in docs.
 | Auth boundary | Forms lived only in the tenant app; no public threshold layout | **Missing** — `AuthLayout` + `/login` `/signup` `/forgot-password` threshold routes in the Aether public shell |
 | Docs/nomenclature | Brand-system docs framed Kyber as an Aether product | Restated Kyber ownership and the multi-shell hierarchy |
 | Registration | Workspaces/typecheck/test/test-registry enumerated literal apps | Add the two marketing workspaces to every registration surface |
-| Domains | No public origins deployed | `olympuslabs.com`, `aether.olympuslabs.com`, `app.olympuslabs.com`, `kyber.olympuslabs.com`, `docs.olympuslabs.com`, `status.olympuslabs.com` (deployment phases) |
+| Domains | No public origins deployed | `olympuslabsml.com`, `aether.olympuslabsml.com`, `app.olympuslabsml.com`, `kyber.olympuslabsml.com`, `docs.olympuslabsml.com`, `status.olympuslabsml.com` (deployment phases) |
 
 ## 2. Phase map
 
@@ -98,7 +98,7 @@ public shell + the authentication threshold:
   `/integrations`, `/security`, `/pricing`, `/resources`, `/company`.
 - `AuthLayout` — the quiet threshold layout — and the `/login`, `/signup`,
   `/forgot-password` threshold routes. Each is an honest Phase 1 page that
-  states where real sign-in lives and hands off to `app.olympuslabs.com`.
+  states where real sign-in lives and hands off to `app.olympuslabsml.com`.
 
 ### 3.2 Shared and registration changes
 
@@ -150,12 +150,12 @@ findings the program owns and recorded the honest release posture.
 
 - **M1 — status page claimed as live.** Olympus `/contact` and `/legal`
   asserted a real-time status page and linked
-  `status.olympuslabs.com` (a **planned** origin with no workspace, per the
+  `status.olympuslabsml.com` (a **planned** origin with no workspace, per the
   [deploy contract](../deployment/WEB_ECOSYSTEM_DEPLOYMENT.md)). Copy now states
   the page is in planning and is not published; the fabricated link cards were
   removed and the tests that asserted them were corrected.
 - **M2 — sign-up funnel jumped straight to the application.** The home hero and
-  every CTA band's "Start building" pointed at `app.olympuslabs.com/signup`,
+  every CTA band's "Start building" pointed at `app.olympuslabsml.com/signup`,
   bypassing the public `/signup` threshold that owns the marketing→application
   entry (WEB_ECOSYSTEM_SHELLS §5.1). All of those CTAs now route through the
   marketing `/signup` threshold, and the CTA/hero/signup copy and signup meta

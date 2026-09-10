@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aether.olympuslabs.io/contracts/delivery/hosted-adapter-result/v1",
+  "$id": "https://aether.olympuslabsml.com/contracts/delivery/hosted-adapter-result/v1",
   "title": "Aether HostedAdapterResult v1",
   "type": "object",
   "additionalProperties": false,

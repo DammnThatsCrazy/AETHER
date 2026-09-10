@@ -3,6 +3,7 @@ import { sectionsForTier, type NavSection } from '@content/nav.config';
 import { getDocsBySection } from '../lib/docs-loader';
 import { getBundleTier } from '../lib/tier';
 import type { ManifestEntry } from '../lib/docs-loader';
+import DocSearch from './DocSearch';
 
 const tier = getBundleTier();
 const visibleSections = sectionsForTier(tier);
@@ -16,25 +17,39 @@ const docsBySection = getDocsBySection([...VISIBLE_TIERS]);
 
 const SIDEBAR_W = 240;
 
+// Sections foregrounded as the primary "getting started" path — kept open by
+// default and listed first via nav.config's own ordering (quickstart →
+// concepts → sdks → api → …), which already reads as Getting Started / Core
+// Concepts / SDKs / API Reference to a new reader.
+const DEFAULT_OPEN_SECTIONS = new Set(['home', 'quickstart', 'concepts', 'sdks', 'api', 'tutorials']);
+
 function SectionBlock({ section, docs }: { section: NavSection; docs: ManifestEntry[] }) {
   if (docs.length === 0) return null;
   const { pathname } = useLocation();
+  const containsActive = docs.some((d) => pathname === `/doc/${encodeURIComponent(d.slug ?? '')}`);
 
   return (
-    <div style={{ marginBottom: '1.25rem' }}>
-      <div
+    <details
+      open={containsActive || DEFAULT_OPEN_SECTIONS.has(section.id)}
+      style={{ marginBottom: '0.5rem' }}
+    >
+      <summary
         style={{
           fontSize: '0.7rem',
           fontWeight: 700,
           textTransform: 'uppercase',
           letterSpacing: '0.07em',
           color: '#9ca3af',
-          padding: '0 0.75rem',
+          padding: '0.25rem 0.75rem',
           marginBottom: '0.25rem',
+          cursor: 'pointer',
+          userSelect: 'none',
+          listStyle: 'none',
         }}
       >
         {section.title}
-      </div>
+        <span style={{ float: 'right', marginRight: '0.1rem' }}>{docs.length}</span>
+      </summary>
       <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
         {docs.map((doc) => {
           const slug = doc.slug ?? '';
@@ -64,7 +79,7 @@ function SectionBlock({ section, docs }: { section: NavSection; docs: ManifestEn
           );
         })}
       </ul>
-    </div>
+    </details>
   );
 }
 
@@ -99,6 +114,8 @@ export default function Sidebar() {
       >
         Aether Docs
       </NavLink>
+
+      <DocSearch tiers={VISIBLE_TIERS} />
 
       {visibleSections.map((section) => (
         <SectionBlock

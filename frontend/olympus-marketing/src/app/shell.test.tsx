@@ -22,7 +22,7 @@ describe('OlympusShell', () => {
 
     // Aether bridge — Olympus marketing always links outward to Aether
     const exploreAether = screen.getByRole('link', { name: 'Explore Aether' });
-    expect(exploreAether).toHaveAttribute('href', 'https://aether.olympuslabs.com');
+    expect(exploreAether).toHaveAttribute('href', 'https://aether.olympuslabsml.com');
 
     // Footer brand attribution
     expect(screen.getByText(/Olympus Labs builds Aether/)).toBeInTheDocument();

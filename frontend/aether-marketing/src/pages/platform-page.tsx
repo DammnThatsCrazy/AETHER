@@ -86,17 +86,23 @@ function CapabilityExplorer() {
           apply, and the limits the runtime honors.
         </p>
         <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {CAPABILITIES.map((capability) => (
+          {CAPABILITIES.map((capability, index) => (
             <Link
               key={capability.slug}
               to={`/platform/${capability.slug}`}
               className="group flex flex-col gap-3 rounded-md border border-border-default p-6 mkt-motion-color hover:border-accent"
             >
+              <span aria-hidden="true" className="font-mono text-xs text-text-muted">
+                {String(index + 1).padStart(2, '0')}
+              </span>
               <h3 className="mkt-body font-medium text-text-primary group-hover:text-accent">
                 {capability.shortName}
               </h3>
               <p className="text-sm leading-relaxed text-text-secondary">{capability.description}</p>
               <span className="mkt-chip mt-auto">{capability.status}</span>
+              <span className="text-xs font-medium text-accent opacity-0 group-hover:opacity-100">
+                Learn more →
+              </span>
             </Link>
           ))}
         </div>

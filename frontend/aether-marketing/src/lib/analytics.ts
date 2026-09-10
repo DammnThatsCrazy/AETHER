@@ -121,3 +121,30 @@ export function initAnalytics(state: AnalyticsState): void {
     // Analytics is best-effort. A failure here must never affect the page.
   }
 }
+
+/**
+ * Record a client-side route change as a page view. Returns immediately when
+ * `state.enabled` is false (the default build), so a shell can call this
+ * unconditionally on every navigation without checking configuration first.
+ *
+ * GA4's gtag only reports the page it was booted on, so a single-page-app
+ * route change needs an explicit `page_view` event; Plausible's script
+ * already tracks History API navigation on its own, so this is a defensive
+ * no-op for that provider (calling the queued `plausible` function is safe
+ * either way — it dedupes on the server side).
+ */
+export function trackPageView(state: AnalyticsState, path: string): void {
+  if (!state.enabled) return;
+  if (typeof window === 'undefined') return;
+  try {
+    if (state.provider === 'ga4') {
+      const gtagWindow = window as Window & { gtag?: (...args: unknown[]) => void };
+      gtagWindow.gtag?.('event', 'page_view', { page_path: path });
+    } else if (state.provider === 'plausible') {
+      const plausibleWindow = window as Window & { plausible?: (...args: unknown[]) => void };
+      plausibleWindow.plausible?.('pageview');
+    }
+  } catch {
+    // Analytics is best-effort. A failure here must never affect navigation.
+  }
+}

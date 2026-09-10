@@ -1,0 +1,98 @@
+---
+title: Signals
+slug: concepts/signals
+section: concepts
+visibility: P
+audience: [dev-junior, dev-senior, architect]
+status: stable
+since_version: "8.12.0"
+canonical_owner: platform@aether
+estimated_read_minutes: 5
+toc_depth: 3
+---
+
+# Signals
+
+A signal is a single observed event as it moves through Aether: something
+happened (a page view, an order, a wallet transaction, an agent tool call),
+an SDK or connector captured it, and the platform validated, enriched, and
+routed it into storage and the graph.
+
+## Canonical event types
+
+Every signal carries a `type` drawn from a single canonical registry shared
+by every SDK, the backend, and the ingestion contract — currently a little
+over 400 event types across roughly two dozen families: core interaction
+(`page`, `track`, `conversion`), identity (`identify`), consent, commerce
+(`order_completed`, `payment_completed`, `entitlement_granted`, …), web3
+(`wallet`, `transaction`), agent lifecycle (`agent_task_created`,
+`agent_tool_called`, `agent_outcome_recorded`, …), and x402 micropayments,
+among others. Because the vocabulary is registry-driven rather than
+hand-maintained per SDK, `aether.observe('order_completed', …)` in the
+browser and `aether.track({ type: 'order_completed', … })` on the server
+mean exactly the same thing to the backend.
+
+An event type your app hasn't seen before is never silently mislabeled —
+unrecognized types are dropped at the SDK (with a debug warning) rather than
+shipped as something the registry doesn't understand.
+
+## Anatomy of a signal
+
+Every signal carries the same envelope, regardless of source:
+
+```jsonc
+{
+  "id": "evt_9f2c…",           // client-generated, used for idempotent dedup
+  "type": "order_completed",
+  "timestamp": "2026-01-14T18:02:11.401Z",
+  "sessionId": "…",
+  "anonymousId": "…",
+  "userId": "usr_18f2",         // present once identity is known
+  "properties": { "orderId": "ord_492", "total": 84.0 },
+  "context": {
+    "surface": "web",           // which SDK/plane emitted this
+    "schemaVersion": "1.0.0",
+    "sequence": { "event": 42 },// per-client monotonic counter
+    "consent": { "analytics": true, "...": "…" },
+    "journey": { "journeyId": "…", "journeyStatus": "continued" }
+  }
+}
+```
+
+`context.sequence` lets the backend detect gaps and reordering within a
+single client's stream; `context.surface` and `context.schemaVersion` let it
+attribute every signal to the exact plane and contract version that produced
+it. See [Ingestion API](/doc/api/ingestion) for the full wire schema.
+
+## Real-time processing
+
+Signals are durably written to the Bronze tier **before** they're published
+to the event bus — so a downstream failure never loses an accepted event,
+and a client retry is safe (idempotency key: `tenant_id:event_id:schema_version`,
+deduplicated server-side). From there:
+
+1. **Bronze** — the raw, durable, append-only record of every accepted
+   signal.
+2. **Bus (Kafka)** — accepted signals fan out to stream consumers.
+3. **Graph (Neptune)** — identity resolution and relationship edges update
+   in near-real-time.
+4. **Warm stores (PostgreSQL, Redis)** — serve low-latency reads for the
+   dashboard and API.
+5. **Lake (S3, Gold tier)** — the long-horizon analytical copy used for ML
+   feature extraction and lenses over historical windows.
+
+## Raw signals vs. confirmed facts
+
+Some signals start as *raw, unconfirmed* observations — for example, DOM
+heuristics that detect a likely checkout flow client-side. These travel with
+their own provenance and a `confirmation` block (`confirmed: false` at
+emission) rather than being asserted as settled fact; the backend's own
+server-side confirmation path is what ultimately marks them confirmed. This
+keeps client-observed signals honest about their own certainty.
+
+## Next steps
+
+- [Ingestion API](/doc/api/ingestion) — request/response contract for
+  `POST /v1/batch`.
+- [Profiles](/doc/concepts/profiles) — how signals accumulate into a
+  resolved identity.

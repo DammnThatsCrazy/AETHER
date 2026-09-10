@@ -130,11 +130,11 @@ export const SECTIONS: readonly SectionCopy[] = [
     eyebrow: 'Pricing',
     title: 'Pricing that matches usage, not guesswork',
     description: 'Aether pricing — plan audience, usage limits, capabilities, support, retention, environments, integration limits, and deployment options.',
-    lead: 'Aether is not yet generally available. When it opens to customers, pricing will be separated from account creation: plans will state their intended audience, usage limits, capabilities, support, retention, environments, integration limits, and upgrade triggers, and enterprise options will be described where they exist.',
+    lead: 'Every plan states its intended audience, monthly event allowance, seat cap, and overage rates. Self-serve tiers are billed monthly or annually (15% discount). Enterprise and specialized deployments are priced per engagement.',
     paragraphs: [
-      'Aether is not yet generally available, and the detailed pricing tables on this page ship with general availability rather than ahead of it. When the platform opens to customers, plans will state their intended audience, usage limits, capabilities, support, retention, environments, and integration limits — and the conditions that trigger a move between plans, so growth does not arrive as a surprise.',
-      'The interactive pricing estimator will be based on real plan logic only. Where a precise estimate would require pricing data the platform does not hold, the estimator will say so instead of faking precision, and no tool will pretend to produce a number the logic cannot support.',
-      'Enterprise and deployment options will be described where they exist, including the environment and integration questions a procurement or security team will ask. The goal is a pricing page a team can bring into a budget review. A reader should not need a sales conversation to decode what a plan includes and what it does not.',
+      'Each self-serve tier includes a monthly raw-event allowance and a seat cap. Usage beyond the included allowance is metered and billed at the published overage rate — no surprise tiers, no hidden multipliers, and no retroactive adjustments.',
+      'Aether Harness workloads (managed and BYOK) are metered separately per ACU. Managed workloads include provider execution; BYOK workloads carry a 50% discount with model-provider charges remaining separate.',
+      'Enterprise and specialized tiers — Epsilon, Omega, and Omicron — are scoped per engagement for organizations with volume, deployment, or governance needs beyond the self-serve plans. Contact Olympus Labs to discuss.',
     ],
   },
   {
@@ -167,7 +167,7 @@ export const SECTIONS: readonly SectionCopy[] = [
     lead: 'Olympus Labs builds Aether. Aether is the product; Olympus Labs is the company — the creator, owner, and operator of the platform, including the private internal operator environment used to run it.',
     paragraphs: [
       'Aether is a product of Olympus Labs. Olympus Labs is the company that builds, owns, and operates the platform, including the private internal operator environment used to run it. On this public site that relationship is stated plainly; inside the Aether product environment, Olympus Labs branding stays secondary to Aether.',
-      'The two names mark different things. Aether is the relationship intelligence platform Olympus Labs builds for customers and partners. Olympus Labs is the organization behind it, and the corporate site at olympuslabs.com carries the broader company narrative while this site stays focused on the Aether product.',
+      'The two names mark different things. Aether is the relationship intelligence platform Olympus Labs builds for customers and partners. Olympus Labs is the organization behind it, and the corporate site at olympuslabsml.com carries the broader company narrative while this site stays focused on the Aether product.',
       'The relationship is meant to be legible rather than layered. What Olympus Labs says about Aether on a corporate surface has to match what the platform actually does. The same governance discipline that governs customer relationships governs the platform’s own operator environment, so where Aether publishes availability, security, and ownership commitments, those pages describe reality rather than aspiration.',
     ],
     bullets: [

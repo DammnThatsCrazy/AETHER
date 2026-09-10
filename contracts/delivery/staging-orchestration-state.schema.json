@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aether.olympuslabs.io/contracts/delivery/staging-orchestration-state/v1",
+  "$id": "https://aether.olympuslabsml.com/contracts/delivery/staging-orchestration-state/v1",
   "title": "Aether Staging Orchestration State v1",
   "type": "object",
   "additionalProperties": false,

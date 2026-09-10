@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aether.olympuslabs.io/contracts/delivery/artifact-closure/v1",
+  "$id": "https://aether.olympuslabsml.com/contracts/delivery/artifact-closure/v1",
   "title": "Aether ArtifactClosure v1",
   "type": "object",
   "additionalProperties": false,

@@ -1,0 +1,112 @@
+---
+title: Webhooks
+slug: api/webhooks
+section: api
+visibility: P
+audience: [dev-senior, ops]
+status: stable
+since_version: "8.12.0"
+canonical_owner: platform@aether
+estimated_read_minutes: 5
+toc_depth: 3
+---
+
+# Webhooks
+
+Subscribe an HTTPS endpoint of yours to receive events *from* Aether — the
+reverse direction of [ingestion](/doc/api/ingestion). This is separate from
+[connector](/doc/tutorials/shopify-integration) webhooks, which is Aether
+*receiving* payloads from a provider like Shopify or Stripe.
+
+## Create a webhook
+
+```
+POST /v1/notifications/webhooks
+Authorization: Bearer <admin_key>
+Content-Type: application/json
+```
+
+```json
+{
+  "url": "https://your-service.example.com/aether-webhook",
+  "events": ["order.paid", "entitlement.granted", "approval.resolved"],
+  "active": true
+}
+```
+
+An admin-scoped key is required — webhook configuration changes what
+external systems receive tenant data, so it's gated the same way key
+management is. The response echoes the created record, including a
+generated signing `secret` (shown once, like an API key — store it
+alongside your other secrets).
+
+## List and delete
+
+```
+GET    /v1/notifications/webhooks
+DELETE /v1/notifications/webhooks/{webhook_id}
+```
+
+## Payload format
+
+Every delivery is a JSON body describing one event, plus standard headers:
+
+```http
+POST https://your-service.example.com/aether-webhook HTTP/1.1
+Content-Type: application/json
+X-Aether-Timestamp: 1768410131
+X-Aether-Signature: 5f2d3a1c9e0b7f4d6a2c…
+```
+
+```json
+{
+  "id": "whd_7f2c",
+  "event": "order.paid",
+  "occurred_at": "2026-01-14T18:02:11.401Z",
+  "tenant_id": "tnt_492",
+  "data": { "order_id": "ord_492", "total": 84.0 }
+}
+```
+
+## Verifying signatures
+
+Deliveries are signed with HMAC-SHA256 over the timestamp and raw request
+body, using the secret returned when the webhook was created:
+
+```
+signature = HMAC_SHA256(secret, "{timestamp}." + raw_body)
+```
+
+Compare it against `X-Aether-Signature` using a constant-time comparison,
+and reject anything where `X-Aether-Timestamp` is more than a few minutes
+old to guard against replay:
+
+```typescript
+import { createHmac, timingSafeEqual } from 'node:crypto';
+
+function verify(secret: string, timestamp: string, rawBody: string, signature: string): boolean {
+  const expected = createHmac('sha256', secret)
+    .update(`${timestamp}.${rawBody}`)
+    .digest('hex');
+  return timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+}
+```
+
+Outbound webhook URLs are also SSRF-validated server-side before every
+delivery attempt — Aether will refuse to send a webhook to a loopback,
+private, or link-local address, so pointing a webhook at internal
+infrastructure is not a viable way to reach it.
+
+## Retry policy
+
+A failed delivery (non-2xx response, timeout, or connection error) is
+retried with backoff up to 5 attempts total before it's marked failed.
+Delivery attempts are idempotent on your end — key on the payload's `id` to
+de-duplicate a retried delivery of the same event.
+
+## Next steps
+
+- [Ingestion API](/doc/api/ingestion) — the direction data flows *into*
+  Aether.
+- [Shopify integration](/doc/tutorials/shopify-integration) — a connector
+  that uses inbound provider webhooks, a related but distinct concept.

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aether.olympuslabs.io/contracts/delivery/release-candidate.schema.json",
+  "$id": "https://aether.olympuslabsml.com/contracts/delivery/release-candidate.schema.json",
   "title": "Aether ReleaseCandidate",
   "type": "object",
   "additionalProperties": false,

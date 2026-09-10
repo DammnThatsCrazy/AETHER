@@ -391,7 +391,7 @@ suites:
   - id: frontend-olympus-marketing
     subsystem: frontend-olympus-marketing
     paths: ["frontend/olympus-marketing"]
-    # Olympus Labs corporate marketing site (olympuslabs.com).
+    # Olympus Labs corporate marketing site (olympuslabsml.com).
     runner: ["npm", "run", "test", "--workspace=frontend/olympus-marketing"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
@@ -403,7 +403,7 @@ suites:
   - id: frontend-aether-marketing
     subsystem: frontend-aether-marketing
     paths: ["frontend/aether-marketing"]
-    # Aether public marketing + auth-threshold site (aether.olympuslabs.com).
+    # Aether public marketing + auth-threshold site (aether.olympuslabsml.com).
     runner: ["npm", "run", "test", "--workspace=frontend/aether-marketing"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]

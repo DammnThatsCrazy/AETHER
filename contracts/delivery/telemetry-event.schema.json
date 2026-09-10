@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aether.olympuslabs.io/contracts/delivery/telemetry-event/v1",
+  "$id": "https://aether.olympuslabsml.com/contracts/delivery/telemetry-event/v1",
   "title": "Aether local telemetry event v1",
   "description": "Secret-free operational metadata validated against config/telemetry_contracts.json. This contract defines no hosted exporter.",
   "type": "object",
