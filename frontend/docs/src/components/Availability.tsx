@@ -63,16 +63,16 @@ export function Availability({ status, label }: AvailabilityProps) {
 }
 
 /** Shorthand: `<Available />` */
-export function Available({ label }: { label?: string }) {
-  return <Availability status="available" label={label} />;
+export function Available(props: { label?: string }) {
+  return <Availability status="available" {...props} />;
 }
 
 /** Shorthand: `<Preview />` */
-export function Preview({ label }: { label?: string }) {
-  return <Availability status="preview" label={label} />;
+export function Preview(props: { label?: string }) {
+  return <Availability status="preview" {...props} />;
 }
 
 /** Shorthand: `<ComingSoon />` */
-export function ComingSoon({ label }: { label?: string }) {
-  return <Availability status="coming-soon" label={label} />;
+export function ComingSoon(props: { label?: string }) {
+  return <Availability status="coming-soon" {...props} />;
 }
