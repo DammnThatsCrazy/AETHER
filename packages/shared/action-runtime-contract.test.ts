@@ -194,4 +194,49 @@ describe('typed contract validation', () => {
     expect(validateApproval({ approval: approval({ expires_at: 'not-a-time' }), now: '2026-02-01T00:00:00Z', tenant_id: 'tenant-1' })).toBe(false);
     expect(validateApproval({ approval: approval(), now: '2026-02-01T00:00:00Z', tenant_id: 'other' })).toBe(false);
   });
+
+  it('covers decision transition authorization, approval, and deferred paths', () => {
+    expect(() => transitionDecision('draft', 'approved', {
+      tenant_id: 'tenant-1', decision_tenant_id: 'other', decision_id: 'decision-1', permission_granted: true,
+    })).toThrow(/tenant/);
+    expect(() => transitionDecision('executed', 'approved', {
+      tenant_id: 'tenant-1', decision_tenant_id: 'tenant-1', decision_id: 'decision-1', permission_granted: true,
+    })).toThrow(/cannot transition/);
+    expect(() => transitionDecision('draft', 'pending_approval', {
+      tenant_id: 'tenant-1', decision_tenant_id: 'tenant-1', decision_id: 'decision-1', permission_granted: false,
+    })).toThrow(/unauthorized/);
+    expect(() => transitionDecision('draft', 'approved', {
+      tenant_id: 'tenant-1', decision_tenant_id: 'tenant-1', decision_id: 'decision-1', permission_granted: true,
+      approval_required: true, approval_input: { approval: approval({ decision_id: 'other' }), now: '2026-02-01T00:00:00Z', tenant_id: 'other' },
+    })).toThrow(/approval/);
+    expect(transitionDecision('deferred', 'pending_approval', {
+      tenant_id: 'tenant-1', decision_tenant_id: 'tenant-1', decision_id: 'decision-1', permission_granted: true,
+    })).toBe('pending_approval');
+  });
+
+  it('fails closed for execution capability, consent, policy, and environment gates', () => {
+    expect(() => transitionActionExecution('planned', 'pending_approval', transitionContext({ permission_granted: false }))).toThrow(/planning/);
+    expect(() => transitionActionExecution('queued', 'running', transitionContext({ capability_ready: false }))).toThrow(/capability/);
+    expect(() => transitionActionExecution('queued', 'running', transitionContext({ consent_valid: false }))).toThrow(/consent/);
+    expect(() => transitionActionExecution('queued', 'running', transitionContext({ policy_allowed: false }))).toThrow(/consent/);
+    expect(() => transitionActionExecution('queued', 'running', transitionContext({ target_environment_ids: ['staging'] }))).toThrow(/environment/);
+    expect(() => transitionActionExecution('planned', 'queued', transitionContext({ cancel_permission_granted: false }))).not.toThrow();
+  });
+
+  it('requires authorized and real inverse rollback transitions', () => {
+    expect(() => transitionActionExecution('completed', 'rollback_pending', transitionContext({ rollback_permission_granted: false }))).toThrow(/rollback authority/);
+    expect(() => transitionActionExecution('completed', 'rolled_back', transitionContext({ rollback: { category: 'reversible', supported: true, plan_ref: 'plan' }, rollback_inverse_applied: false }))).toThrow(/inverse/);
+    expect(transitionActionExecution('completed', 'rolled_back', transitionContext())).toBe('rolled_back');
+    expect(transitionActionExecution('rollback_pending', 'rollback_failed', transitionContext())).toBe('rollback_failed');
+    expect(transitionActionExecution('rollback_failed', 'rollback_pending', transitionContext())).toBe('rollback_pending');
+  });
+
+  it('reports malformed decision, execution, and impact contracts', () => {
+    expect(validateDecision({ ...decision(), decision_id: '', question: '' })).toEqual(['decision_id is required', 'question is required']);
+    expect(validateExecution({ ...execution(), targets: undefined })).toContain('targets are required');
+    expect(validateExecution({ ...execution(), external_constraints: { ...execution().external_constraints, tenant_isolation_key: 'other' } })).toContain('tenant isolation key mismatch');
+    expect(validateExecution({ ...execution(), execution_type: 'profile_update', impact_preview: undefined, links: { ...execution().links, impact_preview_ref: undefined } })).toContain('material execution requires impact preview');
+    expect(validateImpactPreview({ ...impactPreview(), preview_id: '', graph_snapshot_id: '' })).toContain('preview and graph snapshot are required');
+    expect(validateImpactPreview({ ...impactPreview(), decision_id: undefined, execution_id: undefined })).toContain('impact preview must link to decision or execution');
+  });
 });
