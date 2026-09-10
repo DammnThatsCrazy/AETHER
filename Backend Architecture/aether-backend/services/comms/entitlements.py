@@ -62,6 +62,21 @@ COMMS_PLAN_LIMITS: dict[PlanTier, CommsPlanLimits] = {
         max_connections=None, max_provider_accounts=None, max_backfill_days=None,
         monthly_event_limit=None, premium_providers_allowed=True,
     ),
+    PlanTier.EPSILON: CommsPlanLimits(
+        provider_available=True, allowed_provider_families=_ALL_FAMILIES,
+        max_connections=None, max_provider_accounts=None, max_backfill_days=None,
+        monthly_event_limit=None, premium_providers_allowed=True,
+    ),
+    PlanTier.OMICRON: CommsPlanLimits(
+        provider_available=True, allowed_provider_families=_ALL_FAMILIES,
+        max_connections=None, max_provider_accounts=None, max_backfill_days=None,
+        monthly_event_limit=None, premium_providers_allowed=True,
+    ),
+    PlanTier.OMEGA: CommsPlanLimits(
+        provider_available=True, allowed_provider_families=_ALL_FAMILIES,
+        max_connections=None, max_provider_accounts=None, max_backfill_days=None,
+        monthly_event_limit=None, premium_providers_allowed=True,
+    ),
 }
 
 # Approaching threshold: warn at 80% of a quota before it is reached.

@@ -1,7 +1,8 @@
 """Aether Plans — Plan Catalog
 
-Single source of truth for the 4 self-serve plans (Alpha–Delta). Numeric
-values match the Stripe product catalog.
+Single source of truth for the 7 plan tiers: Alpha–Delta (self-serve) and
+Epsilon/Omicron/Omega (contract / contact-us). Numeric values match the
+Stripe product catalog and the canonical pricing spreadsheet.
 """
 
 from __future__ import annotations
@@ -72,6 +73,51 @@ PLAN_CATALOG: dict[PlanTier, PlanDefinition] = {
         byok_per_acu=Decimal("0.625"),
         service_count=41,
         pricing=PricingOptions(monthly=Decimal("3449"), annual=Decimal("35180")),
+    ),
+    PlanTier.EPSILON: PlanDefinition(
+        plan_id="epsilon",
+        display_name="Epsilon",
+        stripe_product_id="prod_VBMTchryHXE8RJ",
+        target_user="High-Volume / Contact Sales",
+        monthly_quota=54_000_000,
+        member_cap=0,
+        burst_rpm=10_000,
+        event_overage_per_1k=Decimal("0"),
+        acu_overage_per_1k=Decimal("0"),
+        managed_per_acu=Decimal("0"),
+        byok_per_acu=Decimal("0"),
+        service_count=41,
+        pricing=PricingOptions(monthly=Decimal("0"), annual=Decimal("0")),
+    ),
+    PlanTier.OMICRON: PlanDefinition(
+        plan_id="omicron",
+        display_name="Omicron",
+        stripe_product_id="prod_VBMVO9hFtBnvd0",
+        target_user="Dedicated / Governed Deployment",
+        monthly_quota=0,
+        member_cap=0,
+        burst_rpm=0,
+        event_overage_per_1k=Decimal("0"),
+        acu_overage_per_1k=Decimal("0"),
+        managed_per_acu=Decimal("0"),
+        byok_per_acu=Decimal("0"),
+        service_count=41,
+        pricing=PricingOptions(monthly=Decimal("0"), annual=Decimal("0")),
+    ),
+    PlanTier.OMEGA: PlanDefinition(
+        plan_id="omega",
+        display_name="Omega",
+        stripe_product_id="prod_VBMVpNS7m8fowq",
+        target_user="Private / Regulated",
+        monthly_quota=0,
+        member_cap=0,
+        burst_rpm=0,
+        event_overage_per_1k=Decimal("0"),
+        acu_overage_per_1k=Decimal("0"),
+        managed_per_acu=Decimal("0"),
+        byok_per_acu=Decimal("0"),
+        service_count=41,
+        pricing=PricingOptions(monthly=Decimal("0"), annual=Decimal("0")),
     ),
 }
 

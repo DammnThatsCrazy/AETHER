@@ -22,7 +22,7 @@ class PricingOptions:
 
 @dataclass(frozen=True)
 class PlanDefinition:
-    """A self-serve plan tier (Alpha–Delta)."""
+    """A plan tier (Alpha–Delta self-serve, Epsilon/Omicron/Omega contract)."""
     plan_id: str
     display_name: str
     stripe_product_id: str

@@ -23,6 +23,9 @@ _P1 = PlanTier.ALPHA
 _P2 = PlanTier.BETA
 _P3 = PlanTier.GAMMA
 _P4 = PlanTier.DELTA
+_P5 = PlanTier.EPSILON
+_P6 = PlanTier.OMICRON
+_P7 = PlanTier.OMEGA
 
 
 def _pricing(cost: str, opt_a: str, opt_b: str, opt_c: str) -> ServicePricing:

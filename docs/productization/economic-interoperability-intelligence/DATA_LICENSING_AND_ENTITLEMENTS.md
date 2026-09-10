@@ -12,7 +12,7 @@ source_files:
 canonical_owner: platform@aether
 source_hashes:
   "Backend Architecture/aether-backend/services/billing/revops.py": "sha256:7f3d358742375c078663758b879ab491a760f0d340b5b36b7250f5336d6ec6b2"
-  "Backend Architecture/aether-backend/shared/plans/service_catalog.py": "sha256:2c9572a3fee01c4391083a561216db4f8a3df4dd4cb4b3f21549661b07fd987e"
+  "Backend Architecture/aether-backend/shared/plans/service_catalog.py": "sha256:567462b1207296c2268b8dc9b3ca9f7f71bd792c3c3b48265b75bbce36a58c17"
 ---
 
 # Data Licensing and Entitlements

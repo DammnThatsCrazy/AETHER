@@ -14,9 +14,9 @@ canonical_owner: billing@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/services/billing/routes.py": "sha256:69bdc1fdfcd108890cda66a5c4b5858fb2acb67313c15046343ad14123429438"
-  "Backend Architecture/aether-backend/shared/billing/stripe_client.py": "sha256:8dfa74c28239a147c2f52afce32b83ba0f8c3e22ddfa219bb7f66fa9f87bd73a"
-  "Backend Architecture/aether-backend/shared/plans/catalog.py": "sha256:d28765489df86eade2843a0d1dc72f18a21a497e90629ee28f0e8912824c7f65"
+  "Backend Architecture/aether-backend/services/billing/routes.py": "sha256:92c9671caeca62bc7b8d0dfb3dd69ca2bec495467c9f9ef8756653f812850d22"
+  "Backend Architecture/aether-backend/shared/billing/stripe_client.py": "sha256:63cb77adc6a6af173b805d11eaa7716c4c4cdcb035e7eb6a68a89c96772b0ed1"
+  "Backend Architecture/aether-backend/shared/plans/catalog.py": "sha256:fb48b227d7df2f2924088bea3eac0f3b83a036becff0f36418b5e82dcc1522f8"
 ---
 # Stripe Billing — Aether P1–P4 Integration
 

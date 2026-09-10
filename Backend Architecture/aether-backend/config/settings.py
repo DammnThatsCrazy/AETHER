@@ -441,7 +441,7 @@ class StripeBillingConfig:
     amounts are NOT duplicated here — only the Stripe Price IDs themselves.
 
     In non-local environments with enabled=True, secret_key, webhook_secret,
-    price_alpha..price_delta, and checkout/portal URLs are required (validated in
+    price_alpha..price_omega, and checkout/portal URLs are required (validated in
     Settings.__post_init__). In AETHER_ENV=local, missing values are tolerated
     and provider operations return an explicit unavailable response.
 
@@ -456,6 +456,9 @@ class StripeBillingConfig:
     price_beta: str = _env("STRIPE_PRICE_BETA", "")
     price_gamma: str = _env("STRIPE_PRICE_GAMMA", "")
     price_delta: str = _env("STRIPE_PRICE_DELTA", "")
+    price_epsilon: str = _env("STRIPE_PRICE_EPSILON", "")
+    price_omicron: str = _env("STRIPE_PRICE_OMICRON", "")
+    price_omega: str = _env("STRIPE_PRICE_OMEGA", "")
     overage_price_id: str = _env("STRIPE_OVERAGE_PRICE_ID", "")
     checkout_success_url: str = _env(
         "STRIPE_CHECKOUT_SUCCESS_URL",

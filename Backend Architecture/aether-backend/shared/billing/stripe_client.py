@@ -50,6 +50,9 @@ def capability_status() -> dict[str, Any]:
         ("price_beta", cfg.price_beta),
         ("price_gamma", cfg.price_gamma),
         ("price_delta", cfg.price_delta),
+        ("price_epsilon", cfg.price_epsilon),
+        ("price_omicron", cfg.price_omicron),
+        ("price_omega", cfg.price_omega),
         ("checkout_success_url", cfg.checkout_success_url),
         ("checkout_cancel_url", cfg.checkout_cancel_url),
         ("portal_return_url", cfg.portal_return_url),
@@ -93,6 +96,9 @@ def get_stripe_price_id(plan_tier: PlanTier) -> str:
         PlanTier.BETA: cfg.price_beta,
         PlanTier.GAMMA: cfg.price_gamma,
         PlanTier.DELTA: cfg.price_delta,
+        PlanTier.EPSILON: cfg.price_epsilon,
+        PlanTier.OMICRON: cfg.price_omicron,
+        PlanTier.OMEGA: cfg.price_omega,
     }
     price_id = mapping.get(plan_tier, "")
     if not price_id:
@@ -116,6 +122,9 @@ def get_plan_for_price_id(price_id: str) -> Optional[PlanTier]:
         cfg.price_beta: PlanTier.BETA,
         cfg.price_gamma: PlanTier.GAMMA,
         cfg.price_delta: PlanTier.DELTA,
+        cfg.price_epsilon: PlanTier.EPSILON,
+        cfg.price_omicron: PlanTier.OMICRON,
+        cfg.price_omega: PlanTier.OMEGA,
     }
     # Strip empty keys to avoid matching a stub against unconfigured plans.
     reverse.pop("", None)

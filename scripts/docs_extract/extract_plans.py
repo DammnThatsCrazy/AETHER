@@ -9,28 +9,31 @@ canonical source of truth is::
 
 This generator parses that module with ``ast`` (no import, no
 dependencies on the rest of the backend) and emits a structured JSON
-catalog with each plan's quota, member cap, burst limit, overage rate,
-service count, and three pricing options.
+catalog with each plan's quota, member cap, burst limit, overage rates,
+service count, Stripe product ID, and monthly/annual pricing.
 
 Schema::
 
     {
-      "version": "8.9.0",
+      "version": "8.12.0",
       "generated_from": "Backend Architecture/aether-backend/shared/plans/catalog.py",
       "plans": [
         {
-          "plan_id": "P1",
-          "display_name": "Hobbyist",
-          "target_user": "Solo Devs",
-          "monthly_quota": 25000,
-          "member_cap": 1,
+          "plan_id": "alpha",
+          "display_name": "Alpha",
+          "stripe_product_id": "prod_VBIVKHD2G1maZC",
+          "target_user": "Individuals",
+          "monthly_quota": 3000000,
+          "member_cap": 2,
           "burst_rpm": 100,
-          "blended_overage_per_1k": "12.50",
-          "service_count": 10,
+          "event_overage_per_1k": "0.060",
+          "acu_overage_per_1k": "7.00",
+          "managed_per_acu": "0",
+          "byok_per_acu": "0",
+          "service_count": 11,
           "pricing": {
-            "option_a": "99",
-            "option_b": "299",
-            "option_c": "449"
+            "monthly": "0",
+            "annual": "0"
           }
         },
         ...
@@ -57,14 +60,20 @@ OUTPUT = ROOT / "docs" / "_generated" / "plans.json"
 SCALAR_FIELDS = {
     "plan_id",
     "display_name",
+    "stripe_product_id",
     "target_user",
     "monthly_quota",
     "member_cap",
     "burst_rpm",
     "service_count",
 }
-DECIMAL_FIELDS = {"blended_overage_per_1k"}
-PRICING_FIELDS = {"option_a", "option_b", "option_c"}
+DECIMAL_FIELDS = {
+    "event_overage_per_1k",
+    "acu_overage_per_1k",
+    "managed_per_acu",
+    "byok_per_acu",
+}
+PRICING_FIELDS = {"monthly", "annual"}
 
 
 class ParseError(Exception):
@@ -109,7 +118,7 @@ def _scalar_value(node: ast.AST) -> int | str:
 
 
 def _parse_pricing(call: ast.AST) -> dict[str, str]:
-    """Parse a ``PricingOptions(option_a=..., option_b=..., option_c=...)`` call."""
+    """Parse a ``PricingOptions(monthly=..., annual=...)`` call."""
     if not isinstance(call, ast.Call):
         raise ParseError("pricing= must be a PricingOptions(...) call")
     out: dict[str, str] = {}

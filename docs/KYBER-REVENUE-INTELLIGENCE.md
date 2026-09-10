@@ -18,7 +18,7 @@ related:
   - ai/recommendation-families
 source_hashes:
   "Backend Architecture/aether-backend/services/admin/kyber_strategic.py": "sha256:53235e2711b40308c0fe42c96b4f442290c9c73c054931ad1c5683f69123151f"
-  "Backend Architecture/aether-backend/services/admin/routes.py": "sha256:477a3fa9f92d09ea35ff4d7c10504e9ecae0837c9b6fb3aecb895a6bfc2be1e3"
+  "Backend Architecture/aether-backend/services/admin/routes.py": "sha256:3d184daf58201708a519d2efc25d3a90c9b87ef3f87bd4024337dc7872ee68aa"
   "frontend/kyber/src/components/recommendation-observability-panel.tsx": "sha256:7aa4bfb78ced06b43c567563ca81a208a9e2f85e53bd184265e736758318bae1"
 ---
 

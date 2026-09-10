@@ -34,6 +34,9 @@ SCORE_BINS_BY_PLAN: Dict[str, float] = {
     "BETA": 0.05,
     "GAMMA": 0.01,
     "DELTA": 0.001,
+    "EPSILON": 0.001,
+    "OMICRON": 0.001,
+    "OMEGA": 0.001,
 }
 
 DEFAULT_PLAN_TIER = "ALPHA"

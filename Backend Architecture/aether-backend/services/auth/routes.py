@@ -78,7 +78,7 @@ class FirstAdminBootstrapRequest(BaseModel):
     """
 
     name: str = Field(..., min_length=1, max_length=200)
-    plan_tier: str = Field(default="alpha", pattern="^(alpha|beta|gamma|delta)$")
+    plan_tier: str = Field(default="alpha", pattern="^(alpha|beta|gamma|delta|epsilon|omicron|omega)$")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -122,7 +122,8 @@ async def _issue_api_key(tenant_id: str, plan_tier_value: str, label: str) -> st
 
 
 def _legacy_plan_for_tier(plan_tier: str) -> str:
-    return {"alpha": "free", "beta": "pro", "gamma": "pro", "delta": "enterprise"}.get(
+    return {"alpha": "free", "beta": "pro", "gamma": "pro", "delta": "enterprise",
+            "epsilon": "enterprise", "omicron": "enterprise", "omega": "enterprise"}.get(
         plan_tier, "free"
     )
 
@@ -494,7 +495,7 @@ class RegisterRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=200)
     email: str = Field(..., min_length=5, max_length=254)
     password: str = Field(..., min_length=8, max_length=128)
-    plan_tier: str = Field(default="alpha", pattern="^(alpha|beta|gamma|delta)$")
+    plan_tier: str = Field(default="alpha", pattern="^(alpha|beta|gamma|delta|epsilon|omicron|omega)$")
 
 
 @router.post("/v1/auth/register")
@@ -798,7 +799,7 @@ async def login(body: LoginRequest, response: Response = None):
 
 class SSOCallbackRequest(BaseModel):
     token: str = Field(..., description="Auth0 access token (RS256 JWT)")
-    plan_tier: str = Field(default="alpha", pattern="^(alpha|beta|gamma|delta)$")
+    plan_tier: str = Field(default="alpha", pattern="^(alpha|beta|gamma|delta|epsilon|omicron|omega)$")
 
 
 @router.post("/v1/auth/sso/callback")

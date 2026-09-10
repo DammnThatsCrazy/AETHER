@@ -117,7 +117,7 @@ async def _contained_registration(body: "TenantRegistration") -> dict:
 class TenantRegistration(BaseModel):
     name: str = Field(..., min_length=2, max_length=200)
     contact_email: str = Field(..., min_length=5, max_length=254)
-    plan_tier: str = Field(default="alpha", pattern="^(alpha|beta|gamma|delta)$")
+    plan_tier: str = Field(default="alpha", pattern="^(alpha|beta|gamma|delta|epsilon|omicron|omega)$")
     settings: dict = Field(default_factory=dict)
 
 

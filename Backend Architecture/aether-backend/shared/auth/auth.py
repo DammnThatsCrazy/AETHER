@@ -43,11 +43,14 @@ class APIKeyTier(str, Enum):
 
 
 class PlanTier(str, Enum):
-    """Self-serve plan tiers (Alpha–Delta)."""
+    """Plan tiers: Alpha–Delta (self-serve) + Epsilon/Omicron/Omega (contract)."""
     ALPHA = "alpha"
     BETA = "beta"
     GAMMA = "gamma"
     DELTA = "delta"
+    EPSILON = "epsilon"
+    OMICRON = "omicron"
+    OMEGA = "omega"
 
 
 _LEGACY_TIER_TO_PLAN = {
