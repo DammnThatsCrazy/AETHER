@@ -656,12 +656,13 @@ async def preview_graph(
     from services.data_exchange.graph_preview import preview_graph as _preview_graph
 
     tenant = _tenant(request, "data_exchange.read")
-    canonical_id, _marker = await _resolve_canonical(tenant.tenant_id, import_id)
+    canonical_id, marker = await _resolve_canonical(tenant.tenant_id, import_id)
     mapping_version = body.mapping_version if body is not None else None
     payload = await _preview_graph(
         tenant.tenant_id,
         canonical_id,
         mapping_version=mapping_version,
+        source_context=marker,
     )
     # Translate the canonical id back into the envelope namespace (the
     # adapter reports the canonical import id it previewed).

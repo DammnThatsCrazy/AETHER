@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 from repositories.lake import gold_identity, gold_market
 from shared.common.common import APIResponse, BadRequestError, utc_now
 from shared.events import Event, Topic
+from shared.graph.graph import tenant_of
 from shared.logger.logger import get_logger, metrics
 from shared.scoring.trust_score import TrustScoreComposite
 
@@ -174,6 +175,17 @@ def _heuristic_completeness(limit: int, returned: int) -> dict:
     return {"limit": limit, "returned": returned, "truncated": truncated, "has_more": truncated}
 
 
+def _tenant_authorized_vertex(vertex: Any, tenant_id: str) -> bool:
+    """Require an explicit tenant owner marker on graph neighbors.
+
+    Graph traversal is not a tenant boundary.  Filtering before applying a
+    result cap is important: otherwise unrelated-tenant vertices can consume
+    the cap and hide authorized neighbors (or leak their count/order).
+    """
+    properties = getattr(vertex, "properties", None)
+    return isinstance(properties, dict) and tenant_of(properties) == str(tenant_id)
+
+
 @router.get("/wallet/{address}/risk")
 async def wallet_risk_score(address: str, request: Request):
     """
@@ -257,6 +269,10 @@ async def identity_cluster(entity_id: str, request: Request):
 
     # Get graph neighbors (all relationship types)
     neighbors = await graph.get_neighbors(entity_id, direction="both")
+    neighbors = [
+        vertex for vertex in neighbors
+        if _tenant_authorized_vertex(vertex, request.state.tenant.tenant_id)
+    ]
     cluster = []
     for v in neighbors:
         cluster.append({
@@ -322,6 +338,10 @@ async def wallet_profile(address: str, request: Request):
 
     # Graph neighbors
     neighbors = await registry.graph.get_neighbors(address, direction="both")
+    neighbors = [
+        vertex for vertex in neighbors
+        if _tenant_authorized_vertex(vertex, request.state.tenant.tenant_id)
+    ]
 
     # Risk score
     scorer = TrustScoreComposite()
@@ -499,6 +519,45 @@ async def _load_dispatch_context(tenant_id: str, action_id: str) -> tuple[dict[s
     return action, decision, recommendation
 
 
+async def _enqueue_action_delivery(
+    dispatch: ActionDispatch, config: ActionIntegrationConfig | None
+) -> dict[str, Any]:
+    """Hand a planned action to the canonical durable delivery worker seam."""
+    from repositories.delivery_repos import DeliveryIntentRepository, DeliveryJobRepository
+    from services.delivery.models import DeliveryChannel, DeliveryIntent, DeliveryJob
+
+    intent_id = f"action-{dispatch.dispatch_id}"
+    intent = DeliveryIntent(
+        id=intent_id,
+        tenant_id=dispatch.tenant_id,
+        source_type="action",
+        source_id=dispatch.dispatch_id,
+        channels=[dispatch.target_type],
+        idempotency_key=dispatch.idempotency_key or dispatch.dispatch_id,
+        metadata={"action_id": dispatch.action_id, "decision_id": dispatch.decision_id},
+    )
+    await DeliveryIntentRepository().insert(intent.id, intent.model_dump())
+    try:
+        channel = DeliveryChannel(dispatch.target_type)
+    except ValueError:
+        channel = DeliveryChannel.NOTIFICATION
+    provider_config = {
+        **(config.config if config is not None else {}),
+        "tenant_id": dispatch.tenant_id,
+        "destination": config.default_destination if config is not None else None,
+    }
+    job = DeliveryJob(
+        intent_id=intent.id,
+        tenant_id=dispatch.tenant_id,
+        channel=channel,
+        provider_adapter=dispatch.target_type,
+        payload=dispatch.payload,
+        provider_config=provider_config,
+        idempotency_key=dispatch.idempotency_key or dispatch.dispatch_id,
+    )
+    return await DeliveryJobRepository().insert(job.id, job.model_dump())
+
+
 def _suppress_if_needed(rec: dict[str, Any]) -> dict[str, Any]:
     if rec.get("confidence", {}).get("overall", 0.0) < settings.decision_outcome.confidence_threshold:
         rec["status"] = "suppressed"
@@ -598,10 +657,13 @@ async def get_recommendation_investigation(recommendation_id: str, request: Requ
         # Graph stores can contain vertices from multiple tenants. The
         # recommendation row is tenant-scoped, so fail closed and expose only
         # vertices carrying this tenant's explicit ownership marker.
+        authorized_neighbors = [
+            v for v in neighbors
+            if _tenant_authorized_vertex(v, tenant.tenant_id)
+        ]
         graph_edges = [
             {"id": v.vertex_id, "type": v.vertex_type, "properties": v.properties}
-            for v in neighbors[:50]
-            if (getattr(v, "properties", {}) or {}).get("tenant_id") == tenant.tenant_id
+            for v in authorized_neighbors[:50]
         ]
     except Exception as exc:  # pragma: no cover
         logger.warning(f"recommendation investigation graph lookup skipped: {exc}")
@@ -793,22 +855,6 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
     )
     if not dispatch_policy.allowed:
         raise BadRequestError(dispatch_policy.reason)
-    if body.idempotency_key:
-        existing = await _dispatches.find_many(
-            {
-                "tenant_id": tenant.tenant_id,
-                "action_id": action_id,
-                "idempotency_key": body.idempotency_key,
-            },
-            limit=1,
-        )
-        if existing:
-            # Replays return the durable dispatch and its latest receipt; they
-            # never invoke an external connector a second time.
-            receipts = await _delivery_receipts.find_many(
-                {"dispatch_id": existing[0].get("dispatch_id")}, limit=1
-            )
-            return APIResponse(data={"dispatch": existing[0], "receipt": receipts[0] if receipts else None, "replayed": True}).to_dict()
     config = None
     if body.config_id:
         raw_config = await _integrations.find_by_id_or_fail(body.config_id)
@@ -844,11 +890,91 @@ async def _dispatch_action(action_id: str, body: DispatchActionRequest, request:
         idempotency_key=body.idempotency_key,
         created_at=utc_now().isoformat(),
     )
-    receipt = await target.dispatch(dispatch, config)
+    # Reserve the tenant/action/key before invoking any connector.  A retry or
+    # concurrent request therefore observes the durable queued plan and cannot
+    # produce a second external side effect.
+    if body.idempotency_key:
+        saved_dispatch, created = await _dispatches.reserve(
+            tenant.tenant_id,
+            action_id,
+            body.idempotency_key,
+            dispatch.model_dump(),
+        )
+        if not created:
+            receipts = await _delivery_receipts.find_many(
+                {"dispatch_id": saved_dispatch.get("dispatch_id")}, limit=1
+            )
+            return APIResponse(data={
+                "dispatch": saved_dispatch,
+                "receipt": receipts[0] if receipts else None,
+                "replayed": True,
+            }).to_dict()
+    else:
+        saved_dispatch = await _dispatches.insert(dispatch.dispatch_id, dispatch.model_dump())
+
+    try:
+        receipt = await target.dispatch(dispatch, config)
+        if receipt.status == "delivered" and (
+            not receipt.external_id or str(receipt.external_id).startswith("sim-")
+        ):
+            raise ValueError("delivery receipt lacks a real external evidence id")
+    except NotImplementedError as exc:
+        # The action remains a durable plan.  Hand it to the canonical delivery
+        # worker when a provider adapter is available there; either way, do not
+        # fabricate a receipt or claim an external side effect in this request.
+        delivery_job = None
+        try:
+            delivery_job = await _enqueue_action_delivery(dispatch, config)
+        except Exception as enqueue_exc:
+            logger.warning(f"action delivery enqueue failed: {enqueue_exc}")
+        saved_dispatch = await _dispatches.update(dispatch.dispatch_id, {
+            "status": "queued",
+            "error": (
+                f"connector queued for durable delivery: {exc}"
+                if delivery_job is not None
+                else f"connector unavailable and delivery enqueue failed: {exc}"
+            ),
+            "delivery_job_id": delivery_job.get("id") if delivery_job else None,
+            "updated_at": utc_now().isoformat(),
+        })
+        await _actions.update(action_id, {"status": "queued", "integration": body.target_type})
+        return APIResponse(data={
+            "dispatch": saved_dispatch,
+            "receipt": None,
+            "planned": True,
+            "external_side_effect": False,
+            "delivery_job": delivery_job,
+        }).to_dict()
+    except Exception as exc:
+        # Preserve a retryable/auditable failure state rather than losing the
+        # reservation or allowing the next retry to create a second row.
+        saved_dispatch = await _dispatches.update(dispatch.dispatch_id, {
+            "status": "failed",
+            "error": str(exc)[:500],
+            "updated_at": utc_now().isoformat(),
+        })
+        failure_receipt = ActionDeliveryReceipt(
+            receipt_id=str(uuid.uuid4()),
+            dispatch_id=dispatch.dispatch_id,
+            target_type=body.target_type,
+            delivered_at=utc_now().isoformat(),
+            status="failed",
+            retry_count=dispatch.retry_count,
+            raw={"error": str(exc)[:500]},
+        )
+        saved_receipt = await _delivery_receipts.insert(
+            failure_receipt.receipt_id, failure_receipt.model_dump()
+        )
+        await _actions.update(action_id, {"status": "failed", "integration": body.target_type})
+        return APIResponse(data={
+            "dispatch": saved_dispatch,
+            "receipt": saved_receipt,
+            "external_side_effect": False,
+        }).to_dict()
     dispatch.status = receipt.status if receipt.status != "delivered" else "delivered"
     dispatch.dispatched_at = utc_now().isoformat()
     dispatch.updated_at = dispatch.dispatched_at
-    saved_dispatch = await _dispatches.insert(dispatch.dispatch_id, dispatch.model_dump())
+    saved_dispatch = await _dispatches.update(dispatch.dispatch_id, dispatch.model_dump())
     saved_receipt = await _delivery_receipts.insert(receipt.receipt_id, receipt.model_dump())
     metering = RevenueMeteringEvent(
         event_id=str(uuid.uuid4()),

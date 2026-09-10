@@ -10,11 +10,13 @@ untrustworthy.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from typing import Any, Optional
 
 from repositories.repos import BaseRepository
+from shared.common.common import utc_now
 
 
 def canonical_digest(value: Any) -> str:
@@ -32,6 +34,9 @@ def _public_record(record: dict[str, Any]) -> dict[str, Any]:
 class ExplorationSnapshotRepository(BaseRepository):
     """Tenant-qualified append-only snapshot records."""
 
+    _memory_lock: Optional[asyncio.Lock] = None
+    _memory_lock_loop: Any = None
+
     def __init__(self) -> None:
         super().__init__("exploration_result_snapshots")
 
@@ -39,14 +44,44 @@ class ExplorationSnapshotRepository(BaseRepository):
     def _record_id(tenant_id: str, snapshot_id: str) -> str:
         return f"{tenant_id}:{snapshot_id}"
 
+    @classmethod
+    def _lock(cls) -> asyncio.Lock:
+        loop = asyncio.get_running_loop()
+        if cls._memory_lock is None or cls._memory_lock_loop is not loop:
+            cls._memory_lock = asyncio.Lock()
+            cls._memory_lock_loop = loop
+        return cls._memory_lock
+
     async def create(self, tenant_id: str, snapshot_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        if not tenant_id or not snapshot_id:
+            raise ValueError("tenant_id and snapshot_id are required")
         record = {**data, "tenant_id": tenant_id, "snapshot_id": snapshot_id}
-        # A duplicate id must never silently replace historical data.
-        existing = await self.find_by_id(self._record_id(tenant_id, snapshot_id))
-        if existing is not None:
+        record_id = self._record_id(tenant_id, snapshot_id)
+        pool = await self._ensure_pool()
+        if pool is None:
+            # The check and insert must be one critical section. BaseRepository
+            # insert is an upsert, so a check-then-insert race would otherwise
+            # silently replace an immutable historical snapshot.
+            async with self._lock():
+                if await self.find_by_id(record_id) is not None:
+                    raise ValueError("exploration snapshot ids are immutable and cannot be reused")
+                stored = await self.insert(record_id, record)
+                return _public_record(stored)
+
+        await self._ensure_table()
+        now = utc_now().isoformat()
+        row = await pool.fetchrow(
+            f"""INSERT INTO {self.table_name} (id, data, tenant_id, created_at, updated_at)
+                VALUES ($1, $2::jsonb, $3, NOW(), NOW())
+                ON CONFLICT (id) DO NOTHING
+                RETURNING data""",
+            record_id,
+            json.dumps({**record, "id": record_id, "created_at": now, "updated_at": now}, default=str),
+            tenant_id,
+        )
+        if row is None:
             raise ValueError("exploration snapshot ids are immutable and cannot be reused")
-        stored = await self.insert(self._record_id(tenant_id, snapshot_id), record)
-        return _public_record(stored)
+        return _public_record(json.loads(row["data"]))
 
     async def get_scoped(self, tenant_id: str, snapshot_id: str) -> Optional[dict[str, Any]]:
         record = await self.find_by_id(self._record_id(tenant_id, snapshot_id))

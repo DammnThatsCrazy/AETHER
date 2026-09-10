@@ -174,3 +174,24 @@ async def test_strongest_path_no_path_returns_empty():
     result = await engine.strongest_path("X", "Y", max_depth=4, tenant_id="t1")
     assert result.nodes == [], "Expected empty nodes for disconnected path"
     assert result.edges == [], "Expected empty edges for disconnected path"
+
+
+@pytest.mark.asyncio
+async def test_path_entry_points_reject_foreign_start_and_same_node():
+    """Every path algorithm treats its caller-supplied anchor as tenant data."""
+    client = await _build_client(
+        _v("FOREIGN", tenant="t2"), _v("LOCAL", tenant="t1"),
+        edges=[_e("FOREIGN", "LOCAL")],
+    )
+    engine = GraphTraversalEngine(client)
+
+    assert (await engine.shortest_path("FOREIGN", "LOCAL", tenant_id="t1")).nodes == []
+    assert (await engine.temporal_bfs(
+        "FOREIGN", as_of="2024-01-02T00:00:00+00:00", tenant_id="t1"
+    )).nodes == []
+    assert (await engine.strongest_path("FOREIGN", "LOCAL", tenant_id="t1")).nodes == []
+    assert (await engine.shortest_path("FOREIGN", "FOREIGN", tenant_id="t1")).nodes == []
+    result = await engine.multi_source_bfs(
+        ["FOREIGN", "LOCAL"], depth=1, tenant_id="t1"
+    )
+    assert all(node.properties.get("tenantId") == "t1" for node in result.nodes)

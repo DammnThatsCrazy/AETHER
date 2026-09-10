@@ -13,6 +13,8 @@ unmounted route. Reads require the ``read`` permission, writes ``write``.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from datetime import datetime
 from typing import Any, Optional
@@ -73,6 +75,14 @@ def _engine():
     from services.intelligence.comparison.jobs import _default_engine
 
     return _default_engine()
+
+
+def _watchlist_revision(watchlist: WatchlistDefinition) -> str:
+    """Derive a stable mutation revision for the tenant change feed."""
+    payload = json.dumps(
+        watchlist.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 # ── Request models ──────────────────────────────────────────────────────────
@@ -248,12 +258,15 @@ async def upsert_watchlist(request: Request, payload: WatchlistUpsertRequest) ->
         created_by=tenant.user_id,
     )
     stored = await _watchlists.upsert(watchlist)
+    revision = _watchlist_revision(watchlist)
     await enqueue_sync_change(
         scope_key=f"t:{tenant.tenant_id}",
         principal_id=tenant.user_id or tenant.tenant_id,
         change_type="watchlist_changed",
         resource_kind="watchlist",
         resource_id=watchlist.watchlist_id,
+        revision=revision,
+        source_event_id=f"watchlist:{watchlist.watchlist_id}:upsert:{revision}",
     )
     return APIResponse(data={"watchlist": stored})
 
@@ -270,6 +283,8 @@ async def delete_watchlist(request: Request, watchlist_id: str) -> APIResponse:
         change_type="watchlist_changed",
         resource_kind="watchlist",
         resource_id=watchlist_id,
+        revision="deleted",
+        source_event_id=f"watchlist:{watchlist_id}:delete",
     )
     return APIResponse(data={"deleted": watchlist_id})
 

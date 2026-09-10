@@ -113,10 +113,13 @@ def main() -> int:
     if not components:
         parser.error("at least one --component is required")
     lock_digests = {str(Path(p)): digest_file(Path(p)) for p in sorted(args.lockfile)}
+    # Keep the default in one normalized value so candidate validation and
+    # DeploymentImpact cannot disagree when callers omit --affected-domain.
+    affected_domains = sorted(set(args.affected_domain or ["delivery"]))
     impact = DeploymentImpact.for_candidate(
         profile=args.profile[0],
         components=sorted(components),
-        affected_domains=args.affected_domain,
+        affected_domains=affected_domains,
         migration_version=args.migration_version,
         risk_level=args.risk_level,
         security_sensitive=args.security_sensitive,
@@ -133,7 +136,7 @@ def main() -> int:
         "contract_versions": {}, "migration_version": args.migration_version,
         "model_versions": {}, "policy_versions": {},
         "deployment_profiles": sorted(set(args.profile)),
-        "affected_domains": sorted(set(args.affected_domain)),
+        "affected_domains": affected_domains,
         "required_checks": sorted(set(args.required_check)),
         "component_digests": components,
         "deployment_impact": impact.as_dict(),

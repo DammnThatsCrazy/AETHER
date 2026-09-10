@@ -242,6 +242,76 @@ def validate_environment_resolution(resolution: Mapping[str, Any], profile: str)
         raise StateMachineError("environment resolution capabilities, omitted, and blockers have invalid shapes")
     if resolution.get("disposition") == "BLOCKED_EXTERNAL":
         raise StateMachineError("environment resolution is BLOCKED_EXTERNAL")
+    # PASS evidence is a promotion input, so it must be reproducible from the
+    # canonical profile requirements.  A hand-edited/stale envelope must not
+    # turn an unavailable capability into a mutation authorization.  Older
+    # degraded envelopes may intentionally contain only the capability that
+    # triggered degradation; retain their shape compatibility, but never grant
+    # that compatibility to PASS evidence.
+    capabilities = resolution["capabilities"]
+    if any(
+        not isinstance(name, str)
+        or not isinstance(entry, Mapping)
+        or entry.get("status") not in {"PASS", "UNAVAILABLE", "BLOCKED", "UNKNOWN"}
+        or not isinstance(entry.get("required"), bool)
+        for name, entry in capabilities.items()
+    ):
+        raise StateMachineError("environment resolution capabilities contain malformed evidence")
+    try:
+        from scripts.release.resolve_environment import load_requirements, resolve
+    except ModuleNotFoundError:  # pragma: no cover - direct script execution
+        from release.resolve_environment import load_requirements, resolve
+
+    try:
+        requirements = load_requirements()
+        spec = requirements["profiles"][profile]
+        canonical_names = set(spec.get("required", [])) | set(spec.get("optional", []))
+        observed = {name: entry["status"] for name, entry in capabilities.items()}
+        if resolution.get("disposition") == "PASS" and set(observed) != canonical_names:
+            missing_caps = sorted(canonical_names - set(observed))
+            extra_caps = sorted(set(observed) - canonical_names)
+            details = []
+            if missing_caps:
+                details.append("missing capabilities: " + ", ".join(missing_caps))
+            if extra_caps:
+                details.append("unknown capabilities: " + ", ".join(extra_caps))
+            raise StateMachineError("PASS environment resolution is incomplete: " + "; ".join(details))
+        recomputed = resolve(profile, observed, requirements=requirements)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise StateMachineError(f"cannot recompute environment resolution: {exc}") from exc
+    if resolution.get("disposition") == "PASS":
+        for field in ("resolved_profile", "promotion_equivalence", "production_equivalent", "disposition", "blockers", "omitted"):
+            if resolution.get(field) != recomputed.get(field):
+                raise StateMachineError(f"environment resolution {field} is stale or inconsistent with canonical requirements")
+        if dict(capabilities) != recomputed.get("capabilities"):
+            raise StateMachineError("environment resolution capabilities are stale or inconsistent with canonical requirements")
+    else:
+        # Degraded evidence may be intentionally sparse (older callers record
+        # only the capability that caused degradation), but its disposition and
+        # cross-field claims still have to be coherent. A malformed degraded
+        # envelope must never be accepted as a mutation input.
+        spec = requirements["profiles"][profile]
+        degradable = set(spec.get("degradable", []))
+        if resolution.get("resolved_profile") != f"{profile}-degraded":
+            raise StateMachineError("degraded environment resolution has an invalid resolved_profile")
+        if resolution.get("production_equivalent") is not False:
+            raise StateMachineError("degraded environment resolution cannot be production equivalent")
+        if resolution.get("blockers"):
+            raise StateMachineError("degraded environment resolution cannot contain blockers")
+        omitted = resolution.get("omitted") or []
+        if not omitted:
+            raise StateMachineError("degraded environment resolution must name an omitted capability")
+        omitted_names: set[str] = set()
+        for item in omitted:
+            if not isinstance(item, Mapping) or not isinstance(item.get("capability"), str):
+                raise StateMachineError("environment resolution omitted entries are malformed")
+            name = item["capability"]
+            omitted_names.add(name)
+            if item.get("impact") != "DEGRADED" or name not in degradable:
+                raise StateMachineError("degraded environment resolution names a non-degradable capability")
+        for name, entry in capabilities.items():
+            if entry["status"] != "PASS" and name not in omitted_names:
+                raise StateMachineError("degraded environment resolution omits a non-passing capability")
     return dict(resolution)
 
 
@@ -437,9 +507,16 @@ class StagingStateMachine:
         if dry_run:
             for stage in STAGES:
                 if stage not in self.state["completed_stages"]:
-                    self.record(stage, "NOT_APPLICABLE", "dry-run; command not executed")
-            self.state["status"] = "COMPLETE"
-            self.state["phase"] = "complete"
+                    # NOT_APPLICABLE is evidence that execution was skipped,
+                    # not evidence that the stage passed.  In particular do
+                    # not use record(), whose contract advances checkpoints.
+                    self.state["checks"].append({
+                        "check_id": stage,
+                        "status": "NOT_APPLICABLE",
+                        "reason": "dry-run; command not executed",
+                    })
+            self.state["status"] = "RUNNING"
+            self.state["phase"] = self.next_stage or "complete"
             self.state["updated_at"] = _now()
             self._save()
             return self.state

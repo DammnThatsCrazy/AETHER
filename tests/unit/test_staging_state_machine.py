@@ -83,6 +83,24 @@ def test_checkpoint_is_schema_valid_and_resumes_at_first_incomplete_stage(tmp_pa
     ).validate(final_state)
 
 
+def test_dry_run_records_skips_without_completing_executable_stages(tmp_path: Path):
+    rc = candidate()
+    state_path = tmp_path / "dry-run-state.json"
+    machine = StagingStateMachine.open(state_path, rc, "staging")
+    observed: list[str] = []
+    state = machine.run(lambda stage: (observed.append(stage) or ("PASS", "should not run")), dry_run=True)
+    assert observed == []
+    assert state["status"] == "RUNNING"
+    assert state["phase"] == "aws_identity"
+    assert state["completed_stages"] == []
+    assert all(check["status"] == "NOT_APPLICABLE" for check in state["checks"])
+
+    resumed = StagingStateMachine.open(state_path, rc, "staging")
+    resumed.run(lambda stage: (observed.append(stage) or ("PASS", f"{stage} passed")))
+    assert observed == list(("aws_identity", "preflight", "deploy", "migration", "tenant_activation", "golden_journeys"))
+    assert resumed.state["status"] == "COMPLETE"
+
+
 def test_checkpoint_refuses_a_different_candidate_or_profile(tmp_path: Path):
     state_path = tmp_path / "state.json"
     rc = candidate()
@@ -112,6 +130,33 @@ def test_checkpoint_binds_environment_resolution_and_rejects_blocked_input(tmp_p
     blocked = dict(resolution, disposition="BLOCKED_EXTERNAL", blockers=["aurora: UNAVAILABLE"])
     with pytest.raises(StateMachineError, match="BLOCKED_EXTERNAL"):
         validate_environment_resolution(blocked, "staging")
+
+
+def test_pass_environment_resolution_is_recomputed_from_canonical_requirements():
+    from scripts.release.resolve_environment import load_requirements, resolve
+
+    spec = load_requirements()["profiles"]["staging"]
+    observed = {name: "PASS" for name in set(spec["required"]) | set(spec["optional"])}
+    resolution = resolve("staging", observed)
+    resolution["capabilities"]["vpc"]["status"] = "UNKNOWN"
+    with pytest.raises(StateMachineError, match="stale or inconsistent"):
+        validate_environment_resolution(resolution, "staging")
+
+
+def test_degraded_environment_resolution_rejects_incoherent_claims():
+    resolution = {
+        "schema_version": 1,
+        "requested_profile": "staging",
+        "resolved_profile": "staging-degraded",
+        "capabilities": {"aurora": {"status": "UNAVAILABLE", "required": True}},
+        "omitted": [{"capability": "aurora", "reason": "unavailable", "impact": "DEGRADED"}],
+        "promotion_equivalence": "production-lean",
+        "production_equivalent": True,
+        "disposition": "PASS_WITH_DEGRADATION",
+        "blockers": [],
+    }
+    with pytest.raises(StateMachineError, match="production equivalent"):
+        validate_environment_resolution(resolution, "staging")
 
 
 def test_promotion_requires_exact_candidate_identity():

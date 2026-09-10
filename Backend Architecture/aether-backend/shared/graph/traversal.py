@@ -13,12 +13,27 @@ from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from services.operational_intelligence.models import PathExplanation, RelationshipPath
 
-from shared.graph.graph import Edge, GraphClient, Vertex
+from shared.graph.graph import Edge, GraphClient, Vertex, tenant_of
 from shared.graph.path_scoring import classify_path, compute_evidence_coverage, make_path_id, score_path
 
 def _edge_key(edge: Edge) -> str:
     """Stable synthetic edge identifier derived from the edge's three-part key."""
     return f"{edge.from_vertex_id}:{edge.to_vertex_id}:{edge.edge_type}"
+
+
+async def _tenant_vertex_visible(
+    client: GraphClient, vertex_id: str, tenant_id: Optional[str]
+) -> bool:
+    """Validate a caller-supplied graph anchor before any path search.
+
+    A missing tenant marker is intentionally not a wildcard.  The helper is
+    shared by every traversal entry point so shortest/temporal/weighted paths
+    cannot bypass the stricter BFS tenant boundary.
+    """
+    if not tenant_id:
+        return await client.get_vertex(vertex_id) is not None
+    vertex = await client.get_vertex(vertex_id)
+    return vertex is not None and tenant_of(vertex.properties) == str(tenant_id)
 
 
 # A2A edge types that participate in agent-to-agent orchestration chains.
@@ -66,6 +81,13 @@ class GraphTraversalEngine:
         isolation on top of the API-level _require_read check.
         """
         client = self._client
+        # A caller-supplied start id is not authorization.  Validate the
+        # anchor before traversing so a foreign entity cannot be used as a
+        # bridge into an otherwise authorized neighbourhood.
+        if tenant_id:
+            start = await client.get_vertex(start_id)
+            if start is None or tenant_of(start.properties) != str(tenant_id):
+                return TraversalResult()
         visited: set[str] = {start_id}
         accepted: set[str] = {start_id}  # vertices that passed tenant check
         current_layer: list[str] = [start_id]
@@ -83,6 +105,8 @@ class GraphTraversalEngine:
                     break
                 edges = await client.get_edges(vid, direction=direction)
                 for edge in edges:
+                    if tenant_id and tenant_of(edge.properties) not in (None, str(tenant_id)):
+                        continue
                     if edge_types and edge.edge_type not in edge_types:
                         continue
                     neighbor_id = (
@@ -100,7 +124,7 @@ class GraphTraversalEngine:
                         visited.add(neighbor_id)
                         neighbor = await client.get_vertex(neighbor_id)
                         if neighbor:
-                            if tenant_id and neighbor.properties.get("tenantId") != tenant_id:
+                            if tenant_id and tenant_of(neighbor.properties) != str(tenant_id):
                                 pass  # cross-tenant: fail closed, do not add
                             else:
                                 accepted.add(neighbor_id)
@@ -135,6 +159,8 @@ class GraphTraversalEngine:
         matching tenantId property (fail-closed cross-tenant isolation).
         """
         client = self._client
+        if tenant_id and not await _tenant_vertex_visible(client, from_id, tenant_id):
+            return TraversalResult()
         if from_id == to_id:
             vertex = await client.get_vertex(from_id)
             return TraversalResult(nodes=[vertex] if vertex else [], edges=[])
@@ -150,6 +176,8 @@ class GraphTraversalEngine:
 
             edges = await client.get_edges(current_id, direction="both")
             for edge in edges:
+                if tenant_id and tenant_of(edge.properties) not in (None, str(tenant_id)):
+                    continue
                 neighbor_id = (
                     edge.to_vertex_id
                     if edge.from_vertex_id == current_id
@@ -162,7 +190,7 @@ class GraphTraversalEngine:
                     # Verify the destination vertex belongs to the tenant
                     if tenant_id:
                         dest = await client.get_vertex(neighbor_id)
-                        if dest and dest.properties.get("tenantId") != tenant_id:
+                        if not dest or tenant_of(dest.properties) != str(tenant_id):
                             continue  # destination is cross-tenant; skip this path
                     vertices: list[Vertex] = []
                     for vid in new_path_ids:
@@ -174,7 +202,7 @@ class GraphTraversalEngine:
                 if neighbor_id not in visited:
                     neighbor = await client.get_vertex(neighbor_id)
                     if neighbor:
-                        if tenant_id and neighbor.properties.get("tenantId") != tenant_id:
+                        if tenant_id and tenant_of(neighbor.properties) != str(tenant_id):
                             visited.add(neighbor_id)  # mark visited to prevent retry
                             continue  # cross-tenant vertex: fail closed
                     visited.add(neighbor_id)
@@ -205,6 +233,8 @@ class GraphTraversalEngine:
         are silently dropped (fail-closed cross-tenant isolation).
         """
         client = self._client
+        if tenant_id and not await _tenant_vertex_visible(client, start_id, tenant_id):
+            return TraversalResult()
         visited: set[str] = {start_id}
         accepted: set[str] = {start_id}
         current_layer: list[str] = [start_id]
@@ -241,6 +271,8 @@ class GraphTraversalEngine:
                     break
                 edges = await client.get_edges(vid, direction=direction)
                 for edge in edges:
+                    if tenant_id and tenant_of(edge.properties) not in (None, str(tenant_id)):
+                        continue
                     if not _edge_valid_at(edge):
                         continue
                     if edge_types and edge.edge_type not in edge_types:
@@ -253,7 +285,7 @@ class GraphTraversalEngine:
                         visited.add(neighbor_id)
                         neighbor = await client.get_vertex(neighbor_id)
                         if neighbor and _vertex_valid_at(neighbor):
-                            if tenant_id and neighbor.properties.get("tenantId") != tenant_id:
+                            if tenant_id and tenant_of(neighbor.properties) != str(tenant_id):
                                 pass  # cross-tenant: fail closed
                             else:
                                 accepted.add(neighbor_id)
@@ -283,6 +315,8 @@ class GraphTraversalEngine:
         Returns an empty TraversalResult when no path exists.
         """
         client = self._client
+        if tenant_id and not await _tenant_vertex_visible(client, from_id, tenant_id):
+            return TraversalResult()
         if from_id == to_id:
             vertex = await client.get_vertex(from_id)
             result = TraversalResult(
@@ -321,6 +355,8 @@ class GraphTraversalEngine:
 
             edges = await client.get_edges(current_id, direction="both")
             for edge in edges:
+                if tenant_id and tenant_of(edge.properties) not in (None, str(tenant_id)):
+                    continue
                 neighbor_id = (
                     edge.to_vertex_id if edge.from_vertex_id == current_id else edge.from_vertex_id
                 )
@@ -332,7 +368,7 @@ class GraphTraversalEngine:
                     neighbor = await client.get_vertex(neighbor_id)
                     if not neighbor:
                         continue
-                    if tenant_id and neighbor.properties.get("tenantId") != tenant_id:
+                    if tenant_id and tenant_of(neighbor.properties) != str(tenant_id):
                         continue  # cross-tenant: fail closed
                     accepted.add(neighbor_id)
 
@@ -498,6 +534,8 @@ class GraphTraversalEngine:
     ) -> TraversalResult:
         """BFS shortest path that skips specific edges and nodes (used by Yen's algorithm)."""
         client = self._client
+        if tenant_id and not await _tenant_vertex_visible(client, from_id, tenant_id):
+            return TraversalResult()
         if from_id == to_id:
             vertex = await client.get_vertex(from_id)
             nodes = [vertex] if vertex else []
@@ -520,6 +558,8 @@ class GraphTraversalEngine:
             for edge in edges:
                 if _edge_key(edge) in blocked_edge_ids:
                     continue
+                if tenant_id and tenant_of(edge.properties) not in (None, str(tenant_id)):
+                    continue
                 neighbor_id = (
                     edge.to_vertex_id if edge.from_vertex_id == current_id else edge.from_vertex_id
                 )
@@ -532,7 +572,7 @@ class GraphTraversalEngine:
                 if neighbor_id == to_id:
                     if tenant_id:
                         dest = await client.get_vertex(neighbor_id)
-                        if dest and dest.properties.get("tenantId") != tenant_id:
+                        if dest and tenant_of(dest.properties) != str(tenant_id):
                             continue
                     vertices: list[Vertex] = []
                     for vid in new_path_ids:
@@ -549,7 +589,7 @@ class GraphTraversalEngine:
                 if neighbor_id not in visited:
                     neighbor = await client.get_vertex(neighbor_id)
                     if neighbor:
-                        if tenant_id and neighbor.properties.get("tenantId") != tenant_id:
+                        if tenant_id and tenant_of(neighbor.properties) != str(tenant_id):
                             visited.add(neighbor_id)
                             continue
                     visited.add(neighbor_id)
@@ -573,9 +613,19 @@ class GraphTraversalEngine:
         (union of all reachable nodes/edges within depth hops).
         """
         client = self._client
-        visited: set[str] = set(start_ids)
-        accepted: set[str] = set(start_ids)
-        current_layer: list[str] = list(start_ids)
+        if tenant_id:
+            visible_starts = [
+                vertex_id
+                for vertex_id in start_ids
+                if await _tenant_vertex_visible(client, vertex_id, tenant_id)
+            ]
+        else:
+            visible_starts = list(start_ids)
+        if not visible_starts:
+            return TraversalResult()
+        visited: set[str] = set(visible_starts)
+        accepted: set[str] = set(visible_starts)
+        current_layer: list[str] = visible_starts
         result_nodes: list[Vertex] = []
         result_edges: list[Edge] = []
         seen_edge_keys: set[tuple[str, str, str]] = set()
@@ -589,6 +639,8 @@ class GraphTraversalEngine:
                     break
                 edges = await client.get_edges(vid, direction=direction)
                 for edge in edges:
+                    if tenant_id and tenant_of(edge.properties) not in (None, str(tenant_id)):
+                        continue
                     if edge_types and edge.edge_type not in edge_types:
                         continue
                     neighbor_id = (
@@ -599,7 +651,7 @@ class GraphTraversalEngine:
                         visited.add(neighbor_id)
                         neighbor = await client.get_vertex(neighbor_id)
                         if neighbor:
-                            if tenant_id and neighbor.properties.get("tenantId") != tenant_id:
+                            if tenant_id and tenant_of(neighbor.properties) != str(tenant_id):
                                 pass  # cross-tenant: fail closed
                             else:
                                 accepted.add(neighbor_id)

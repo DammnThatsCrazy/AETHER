@@ -10,7 +10,7 @@ for a preview against a specific version of the import's mapping.
 
 from __future__ import annotations
 
-from typing import Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from repositories.imports_repo import get_imports_repository
 from shared.common.common import BadRequestError, ConflictError
@@ -35,6 +35,7 @@ async def preview_graph(
     import_id: str,
     *,
     mapping_version: Optional[int] = None,
+    source_context: Optional[dict[str, Any]] = None,
     preview_seam: Optional[GraphPreviewSeam] = None,
     mapping_seam: Optional[LatestMappingSeam] = None,
 ) -> dict:
@@ -59,6 +60,27 @@ async def preview_graph(
             )
 
     payload = await preview_seam(tenant_id, import_id)
+    # The canonical import planner owns graph candidates and file lineage.
+    # This envelope-only context joins the already tenant-authorized source
+    # artifact without creating a second provenance store or rights decision.
+    if source_context is not None:
+        lineage = dict(payload.get("lineage") or {})
+        source = dict(source_context.get("source_or_destination") or {})
+        lineage["source_context"] = {
+            "artifact_id": source_context.get("artifact_id"),
+            "source_type": source.get("source_type") or "file",
+            "ownership": source.get("ownership") or "unknown",
+            "terms_status": source.get("terms_status") or "unknown",
+            "provenance": dict(source.get("provenance") or {}),
+        }
+        lineage["rights_context"] = {
+            "ownership": source.get("ownership") or "unknown",
+            "terms_status": source.get("terms_status") or "unknown",
+            "authorization_status": "not_evaluated",
+            "activation_allowed": False,
+            "reason": "preview_only",
+        }
+        payload["lineage"] = lineage
     payload["import_id"] = import_id
     if mapping_version is not None:
         payload["mapping_version"] = int(mapping_version)
