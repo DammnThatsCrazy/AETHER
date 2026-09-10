@@ -5,14 +5,16 @@ from pathlib import Path
 import jsonschema
 
 from scripts import delivery_orchestrator as orchestrator
-from scripts.artifact_builder import aggregate_digest
+from scripts.artifact_builder import aggregate_digest, digest_file
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def candidate(tmp_path: Path, **overrides) -> Path:
     path = tmp_path / "candidate.json"
-    component_digests = {"repository-build": "sha256:" + "a" * 64}
+    component = tmp_path / "repository-build.tar"
+    component.write_bytes(b"verified component")
+    component_digests = {"repository-build": digest_file(component)}
     value = {
         "schema_version": 1,
         "release_candidate_id": "rc-test",
@@ -52,6 +54,7 @@ def candidate(tmp_path: Path, **overrides) -> Path:
 
 def staging_args(tmp_path: Path, **overrides):
     values = dict(candidate=candidate(tmp_path), profile="staging", output=tmp_path / "result.json", dry_run=False,
+                  component=[f"repository-build={tmp_path / 'repository-build.tar'}"], lockfile=[], expected_commit="a" * 40,
                   preflight_command="", deploy_command="", migration_command="", tenant_activation_command="", journeys_command="")
     values.update(overrides)
     return argparse.Namespace(**values)
@@ -137,6 +140,21 @@ def test_staging_checkpoint_mode_resumes_exact_candidate(tmp_path, monkeypatch):
     result = json.loads(args.output.read_text())
     assert result["status"] == "DEPLOYED"
     assert resumed_calls == ["deploy", "migrate", "activate", "journeys"]
+
+
+def test_malformed_environment_resolution_emits_blocked_checkpoint_evidence(tmp_path):
+    resolution = tmp_path / "malformed-resolution.json"
+    resolution.write_text("{not-json", encoding="utf-8")
+    args = staging_args(
+        tmp_path,
+        state=tmp_path / "staging-state.json",
+        environment_resolution=resolution,
+    )
+
+    assert orchestrator.staging(args) == 1
+    result = json.loads(args.output.read_text())
+    assert result["status"] == "BLOCKED"
+    assert result["failure"]["code"] == "INVALID_STAGING_CHECKPOINT"
 
 
 def test_migration_requires_database_credentials(tmp_path, monkeypatch):

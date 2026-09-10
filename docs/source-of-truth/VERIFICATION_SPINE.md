@@ -27,6 +27,10 @@ source_files:
   - contracts/delivery/effective-iam-comparison.schema.json
   - contracts/delivery/terraform-remote-inventory.schema.json
   - contracts/delivery/terraform-reconciliation.schema.json
+  - contracts/delivery/hosted-adapter-request.schema.json
+  - contracts/delivery/hosted-adapter-result.schema.json
+  - contracts/delivery/artifact-closure.schema.json
+  - contracts/delivery/profile-delivery-operation.schema.json
   - config/environment_requirements.yaml
   - config/staging_apply_iam_policy.yaml
   - config/terraform_resource_contracts.yaml
@@ -48,6 +52,11 @@ source_files:
   - scripts/release/discover_environment_capabilities.py
   - scripts/release/compare_effective_iam.py
   - scripts/release/terraform_reconciliation.py
+  - scripts/release/hosted_delivery_adapters.py
+  - scripts/release/artifact_closure.py
+  - scripts/release/profile_delivery_contracts.py
+  - scripts/release/check_hosted_delivery_contracts.py
+  - scripts/release/release_candidate_adapter.py
   - scripts/release/check_environment_requirements.py
   - scripts/validate_verification_router.py
   - scripts/release/check_deployment_operator_surface.py
@@ -65,6 +74,8 @@ source_files:
   - scripts/validate_telemetry_contracts.py
   - tests/unit/test_impact_graph.py
   - tests/unit/test_telemetry_contracts.py
+  - Backend Architecture/aether-backend/services/intelligence/routes.py
+  - frontend/kyber/src/pages/deployment-readiness/deployment-readiness-page.tsx
   - Makefile
 canonical_owner: platform@aether
 estimated_read_minutes: 8
@@ -131,11 +142,11 @@ execution remains governed by the canonical registry and full completion gate.
 The Impact Graph v2 index extends that route result with registered components,
 owned contracts, transitive consumers, deployable surfaces, and unresolved
 paths. `scripts/impact_graph.py` emits a deterministic index and can compare
-targeted nodes with a legacy broad scope. A `targeted_miss` is retained as
-evidence for graph expansion; it never silently reduces verification. The
-telemetry contract records timing and disposition metadata only, with no
-credentials or hosted exporter, so shadow-cutover comparisons remain
-auditable without claiming cloud or release readiness.
+targeted nodes with a legacy broad scope. Hosted PR verification runs the index
+with `--fail-on-unresolved` and emits validated local telemetry alongside it;
+unresolved paths therefore block the workflow instead of silently reducing
+verification. Telemetry remains operational metadata and is not a hosted
+production exporter.
 
 An unregistered changed path is an explicit `unknown_component` impact. The
 router escalates such a change to the `integration` lane until a component,
@@ -193,7 +204,9 @@ checkpoint after each passing stage. Every resume revalidates the checkpoint
 against the complete candidate identity (candidate id, commit, artifact
 digest, and profile) and, when `ENVIRONMENT_RESOLUTION=<json>` is supplied,
 the pre-mutation environment-resolution decision. It continues at the first
-incomplete stage. Pure
+incomplete stage. Dry runs never mark stages complete and never create or
+modify a checkpoint; non-dry execution verifies exact component files and
+lockfiles immediately before the first staging command. Pure
 promotion and rollback verifiers apply the same equality rule to both sides of
 the transition; they do not apply infrastructure or imply cloud evidence.
 Ephemeral demo/preview runs can also validate their cleanup policy, workflow
@@ -229,7 +242,9 @@ decision; and only explicitly degradable staging capabilities may produce
 read-only with respect to AWS and Terraform, so its output can safely gate
 planning or application delivery without fabricating cloud evidence. Use
 `make resolve-environment PROFILE=staging CAPABILITIES='vpc=PASS ...'` for a
-local decision/evidence record.
+local decision/evidence record. The staging consumer recomputes the submitted
+decision against this resolver and rejects contradictory capability statuses,
+omissions, profiles, or equivalence claims.
 
 The companion capability snapshot tool keeps discovery credential-safe:
 offline fixtures are the default, Terraform plan shape is reported as
@@ -246,13 +261,32 @@ absent from state is classified as `UNMANAGED_ADOPTABLE` and produces
 recreated implicitly. These tools produce evidence for review, not live AWS
 verification or mutation authority.
 
+Hosted integration has one repository-owned adapter boundary. A GitHub
+workflow may inject a short-lived OIDC/profile reference and return typed
+capability, IAM, state, artifact, or runtime observations through
+`scripts/release/hosted_delivery_adapters.py`; the contract rejects plaintext
+secrets, mismatched operation/profile/candidate identities, and mutation from
+read-only requests. Offline fixtures are deliberately unable to claim a live
+hosted PASS. Artifact closure validation checks the exact candidate component
+bytes and required archive entries, while provenance remains
+`UNSIGNED_OR_UNVERIFIED` until a hosted registry/signature is supplied.
+
+Profile-aware operation contracts cover preview, demo, staging, promotion,
+rollback, and cleanup requests. Ephemeral profiles require a bounded TTL and
+passing cleanup evidence; promotion requires exact staging evidence; dry-run
+results cannot claim mutation. The operation telemetry event records queue,
+setup, execution, cache, retry, and failure-category metadata without
+credentials. These are the safe handoff contracts; they do not execute AWS,
+GitHub, Terraform, tenant journeys, or production promotion locally.
+
 PR CI compiles workspace packages once, archives the resulting `dist`
 directories, and creates `release-candidate.json` bound to that archive, the
-commit SHA, and dependency locks. The selected-verification job downloads that
-same archive and candidate and verifies their component, aggregate, and commit
-digests before running checks; it does not rebuild. GitHub's workflow artifact
-is transport between PR jobs, not a production registry, signature, or release
-promotion claim.
+commit SHA, and dependency locks. The hosted release manifest is adapted to
+the same candidate contract by `scripts/release/release_candidate_adapter.py`;
+build, approved-release, deploy, and staging consumers reverify the candidate
+and exact files before mutation. GitHub's workflow artifact is transport
+between PR jobs, not a production registry, signature, or release promotion
+claim.
 
 ## Intentional boundaries and remaining phases
 
@@ -279,15 +313,15 @@ full release-spine blueprint. The following work remains explicitly open:
 | Strictly read-only doctor | `--check` runs generators in a temporary Git mirror | Extend mutation regression coverage as new generators are registered; keep fixes explicit. |
 | Per-test inventory | `config/test_inventory.yaml` and its validator establish ownership/dependency/quarantine metadata | Complete inventory coverage and collect measured runtime/flakiness/meaningful-failure history. |
 | Changed-test selection | Paths route to domain suites | Build an import/contract dependency index and select changed tests plus transitive consumers instead of whole domain suites. |
-| PR workflow authority | CI has explicit classify, build, selected-verification, repo-consistency, and fail-closed evidence-publication jobs | Extract reusable setup/build outputs after runtime measurement; `make ci-check` remains the independent PR-completion authority during migration. |
-| Immutable artifact | PR CI builds once, packages real workspace `dist` outputs, creates ReleaseCandidate metadata, and verifies the exact candidate in the selected-verification consumer without rebuilding | Add backend/container components, contract/model/policy versions, endpoint/asset manifests, provenance/signing, durable registry upload, and exact-digest staging/production promotion. |
+| PR workflow authority | Enforced one-owner GitHub authority map validates workflow ownership and required command wiring; CI has explicit classify, build, selected-verification, repo-consistency, and fail-closed evidence-publication jobs | Extract reusable setup/build outputs after runtime measurement; `make ci-check` remains the independent PR-completion authority. |
+| Immutable artifact | PR and hosted delivery paths share the adapter-backed candidate identity and verify exact files before staging/promotion | Add provenance/signing, durable registry upload, and external registry attestation. |
 | Profile compatibility | Repository gate validates required frontend identity/endpoint fields and rejects insecure/placeholders for deployable profiles | Generate the manifest from real builds and bind it to the candidate digest and staging preflight. |
 | Fallback governance | Audited profile-aware registry binds major fallback classes to implementation paths and blocks registered local fallbacks in staging/production | Resolve remaining candidate entrypoints with their owners, enforce selection at runtime across every deployable surface, and expose typed degradation in readiness. |
-| Staging preflight and lifecycle | Repository orchestrator requires a compatible candidate digest, verifies AWS identity, runs ordered commands, emits distinct `DRY_RUN`, `BLOCKED`, `FAILED`, or `DEPLOYED` evidence, and can resume from an identity-bound checkpoint | Bind the commands to the credentialed disposable-staging workflow, preserve external failure evidence, and exercise wake/sleep against AWS. |
+| Staging preflight and lifecycle | Orchestrator verifies candidate files, preserves non-mutating dry runs, validates environment decisions, and resumes only identity-bound checkpoints | Bind all ordered stage commands to credentialed disposable staging and exercise wake/sleep against AWS. |
 | Migration contract | Versioned schema and orchestrator validate metadata, require `DATABASE_URL`, execute migration then validation, and emit fail-closed evidence | Run it against a real previous-schema staging baseline and add backfill/read-write/repair observations. |
 | Golden journeys | Registry requires the five named, owned journeys and assertion metadata | Implement and execute those journeys against a clean baseline; the registry gate is not journey execution evidence. |
-| Canonical evidence bundle | Validator enforces required checks and forbids READY with blockers/degradation; Kyber projection preserves the authoritative disposition | Aggregate real lane/deployment results, retain logs/traces, sign/publish bundles, and ingest them in Kyber. |
-| Kyber readiness authority | Existing readiness surfaces and vocabulary exist | Display candidate/digest/profile, pass/fail/block reasons, evidence, next repair, approvals, deploy health, rollback, and reconciliation without recomputing evidence client-side. |
+| Canonical evidence bundle | Validator enforces required checks and forbids READY with blockers/degradation; hosted candidate evidence is identity-bound | Aggregate real lane/deployment results, retain logs/traces, sign/publish bundles, and ingest them in Kyber. |
+| Kyber readiness authority | Read-only endpoint projects a mounted, identity-bearing GitHub evidence record and reports `UNAVAILABLE` when none is mounted | Mount the signed aggregate bundle and add approval, deploy-health, rollback, and reconciliation fields without recomputing evidence client-side. |
 | Debt removal and performance | Deterministic isolated test execution is established | Measure runtime and meaningful failures, consolidate duplicates, relocate expensive cases, enforce quarantine expiry, then establish measured warm-local and PR budgets. |
 
 ## Expected testing impact

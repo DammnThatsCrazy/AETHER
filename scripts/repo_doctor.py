@@ -457,6 +457,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     run(
+        [sys.executable, "scripts/release/check_hosted_delivery_contracts.py"],
+        name="Credential-safe hosted delivery contracts",
+        results=results,
+        stop_on_failure=stop,
+        remediation="repair hosted adapter, artifact closure, profile operation, or delivery telemetry contracts",
+    )
+
+    run(
         [sys.executable, "scripts/validate_verification_router.py"],
         name="Impact-aware verification router",
         results=results,
@@ -478,6 +486,22 @@ def main(argv: Sequence[str] | None = None) -> None:
         results=results,
         stop_on_failure=stop,
         remediation="assign each blueprint delivery authority to one reviewed GitHub workflow owner",
+    )
+
+    run(
+        [sys.executable, "scripts/validate_impact_graph.py"],
+        name="Impact graph registry and router bindings",
+        results=results,
+        stop_on_failure=stop,
+        remediation="repair config/impact_graph.json and its canonical router/test-suite references",
+    )
+
+    run(
+        [sys.executable, "scripts/validate_telemetry_contracts.py"],
+        name="Telemetry contract registry",
+        results=results,
+        stop_on_failure=stop,
+        remediation="repair config/telemetry_contracts.json and its typed event definitions",
     )
 
     run(

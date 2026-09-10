@@ -9,7 +9,7 @@
 # =============================================================================
 
 .DEFAULT_GOAL := help
-.PHONY: setup setup-dev setup-minimal doctor generate change-plan test-fast test-pr test-integration test-regression test-release build-artifact validate-delivery-profile validate-delivery-registries validate-delivery-workflow-authority validate-release-evidence validate-golden-journeys deploy-staging staging-migrate test-golden-journeys \
+.PHONY: setup setup-dev setup-minimal doctor generate change-plan test-fast test-pr test-integration test-regression test-release build-artifact validate-delivery-profile validate-delivery-registries validate-delivery-workflow-authority validate-impact-graph validate-telemetry-contracts validate-release-evidence validate-golden-journeys deploy-staging staging-migrate test-golden-journeys \
         test test-security test-ml test-coverage \
         ml-validate ml-test ml-test-unit ml-test-integration ml-test-security \
         ml-train-smoke ml-artifact-verify ml-docs-check ml-container-build ml-ci \
@@ -340,6 +340,9 @@ resolve-environment: ## Resolve a canonical profile against observed capabilitie
 validate-environment-requirements: ## Validate profile capability requirements without cloud access
 	$(GATE_PY) scripts/release/check_environment_requirements.py
 
+validate-hosted-delivery-contracts: ## Validate credential-safe hosted adapter and profile operation contracts
+	$(GATE_PY) scripts/release/check_hosted_delivery_contracts.py
+
 validate-delivery-profile: ## Validate a deployable frontend manifest and selected fallbacks (requires MANIFEST)
 	@test -n "$(MANIFEST)" || (echo "MANIFEST is required"; exit 2)
 	$(GATE_PY) scripts/validate_delivery_profiles.py "$(MANIFEST)" $(foreach fallback,$(ACTIVE_FALLBACKS),--active-fallback "$(fallback)")
@@ -350,6 +353,12 @@ validate-delivery-registries: ## Validate fallback implementation bindings and g
 validate-delivery-workflow-authority: ## Validate one GitHub owner for every delivery authority
 	$(GATE_PY) scripts/release/check_delivery_workflow_authority.py
 
+validate-impact-graph: ## Validate the repository impact graph and router bindings
+	$(GATE_PY) scripts/validate_impact_graph.py
+
+validate-telemetry-contracts: ## Validate repository-owned telemetry event contracts
+	$(GATE_PY) scripts/validate_telemetry_contracts.py
+
 validate-golden-journeys: ## Validate ownership/assertions for all five journey definitions
 	$(GATE_PY) scripts/release/evidence_bundle.py --check-registry
 
@@ -359,7 +368,7 @@ validate-release-evidence: ## Validate a canonical evidence bundle (requires EVI
 
 deploy-staging: ## Orchestrate fail-closed staging lifecycle (requires CANDIDATE, PROFILE, OUTPUT; set DRY_RUN=1 to plan)
 	@test -n "$(CANDIDATE)" -a -n "$(PROFILE)" -a -n "$(OUTPUT)" || (echo "CANDIDATE, PROFILE, and OUTPUT are required"; exit 2)
-	$(GATE_PY) scripts/delivery_orchestrator.py staging --candidate "$(CANDIDATE)" --profile "$(PROFILE)" --output "$(OUTPUT)" $(if $(STATE),--state "$(STATE)") $(if $(ENVIRONMENT_RESOLUTION),--environment-resolution "$(ENVIRONMENT_RESOLUTION)") $(if $(DRY_RUN),--dry-run) $(if $(PREFLIGHT_COMMAND),--preflight-command "$(PREFLIGHT_COMMAND)") $(if $(DEPLOY_COMMAND),--deploy-command "$(DEPLOY_COMMAND)") $(if $(MIGRATION_COMMAND),--migration-command "$(MIGRATION_COMMAND)") $(if $(ACTIVATION_COMMAND),--tenant-activation-command "$(ACTIVATION_COMMAND)") $(if $(JOURNEYS_COMMAND),--journeys-command "$(JOURNEYS_COMMAND)")
+	$(GATE_PY) scripts/delivery_orchestrator.py staging --candidate "$(CANDIDATE)" --profile "$(PROFILE)" --output "$(OUTPUT)" $(foreach component,$(COMPONENTS),--component "$(component)") $(foreach lockfile,$(LOCKFILES),--lockfile "$(lockfile)") --expected-commit "$(or $(EXPECTED_COMMIT),$(shell git rev-parse HEAD))" $(if $(STATE),--state "$(STATE)") $(if $(ENVIRONMENT_RESOLUTION),--environment-resolution "$(ENVIRONMENT_RESOLUTION)") $(if $(DRY_RUN),--dry-run) $(if $(PREFLIGHT_COMMAND),--preflight-command "$(PREFLIGHT_COMMAND)") $(if $(DEPLOY_COMMAND),--deploy-command "$(DEPLOY_COMMAND)") $(if $(MIGRATION_COMMAND),--migration-command "$(MIGRATION_COMMAND)") $(if $(ACTIVATION_COMMAND),--tenant-activation-command "$(ACTIVATION_COMMAND)") $(if $(JOURNEYS_COMMAND),--journeys-command "$(JOURNEYS_COMMAND)")
 
 staging-migrate: ## Rehearse a migration with evidence (requires MIGRATION_METADATA and OUTPUT)
 	@test -n "$(MIGRATION_METADATA)" -a -n "$(OUTPUT)" || (echo "MIGRATION_METADATA and OUTPUT are required"; exit 2)

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.olympuslabs.io/contracts/delivery/hosted-adapter-request/v1",
+  "title": "Aether HostedAdapterRequest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "operation_id", "authority", "profile", "read_only"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "operation_id": {"type": "string", "minLength": 1},
+    "authority": {"enum": ["environment", "iam", "state", "artifact", "runtime", "release"]},
+    "profile": {"type": "string", "minLength": 1},
+    "read_only": {"type": "boolean"},
+    "candidate_identity": {"$ref": "#/$defs/identity"},
+    "credential": {"$ref": "#/$defs/credential"}
+  },
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["release_candidate_id", "commit_sha", "artifact_digest", "profile"],
+      "properties": {
+        "release_candidate_id": {"type": "string", "minLength": 1},
+        "commit_sha": {"type": "string", "pattern": "^[0-9a-f]{7,64}$"},
+        "artifact_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "profile": {"type": "string", "minLength": 1}
+      }
+    },
+    "credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "source", "scopes"],
+      "properties": {
+        "provider": {"type": "string", "minLength": 1},
+        "source": {"enum": ["github_oidc", "aws_profile", "injected_read_only"]},
+        "role_arn": {"type": "string", "minLength": 1},
+        "expires_at": {"type": "string", "format": "date-time"},
+        "scopes": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}
+      }
+    }
+  }
+}

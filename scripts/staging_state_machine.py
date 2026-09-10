@@ -42,8 +42,12 @@ STAGES = (
     "tenant_activation",
     "golden_journeys",
 )
-PASSING_STAGE_STATUSES = frozenset({"PASS", "NOT_APPLICABLE", "PASS_WITH_DEGRADATION"})
-STAGE_STATUSES = PASSING_STAGE_STATUSES | frozenset({"BLOCKED", "FAILED"})
+# ``NOT_APPLICABLE`` is valid evidence for a dry-run projection, but it is
+# never a successful non-dry-run stage.  Keeping it out of this set ensures an
+# injected executor cannot advance (or loop over) a checkpoint after a stage
+# was skipped.
+PASSING_STAGE_STATUSES = frozenset({"PASS", "PASS_WITH_DEGRADATION"})
+STAGE_STATUSES = PASSING_STAGE_STATUSES | frozenset({"NOT_APPLICABLE", "BLOCKED", "FAILED"})
 
 
 class StateMachineError(ValueError):
@@ -357,9 +361,10 @@ def _atomic_write(path: Path, value: Mapping[str, Any]) -> None:
 class StagingStateMachine:
     """Persisted stage runner that can safely resume after a failed attempt."""
 
-    def __init__(self, state_path: Path, state: dict[str, Any]) -> None:
+    def __init__(self, state_path: Path, state: dict[str, Any], *, persist: bool = True) -> None:
         self.state_path = state_path
         self.state = state
+        self.persist = persist
 
     @classmethod
     def open(
@@ -371,6 +376,7 @@ class StagingStateMachine:
         operation_id: str | None = None,
         cleanup: Mapping[str, Any] | None = None,
         environment_resolution: Mapping[str, Any] | None = None,
+        persist: bool = True,
     ) -> "StagingStateMachine":
         identity = candidate_identity(candidate, profile)
         validated_resolution = (
@@ -405,14 +411,17 @@ class StagingStateMachine:
                 state["status"] = "RUNNING"
                 state["resume_count"] = int(state.get("resume_count", 0)) + 1
                 state["updated_at"] = _now()
-                _atomic_write(state_path, state)
+                if persist:
+                    _atomic_write(state_path, state)
             elif cleanup_updated:
                 state["updated_at"] = _now()
-                _atomic_write(state_path, state)
+                if persist:
+                    _atomic_write(state_path, state)
             elif resolution_updated:
                 state["updated_at"] = _now()
-                _atomic_write(state_path, state)
-            return cls(state_path, state)
+                if persist:
+                    _atomic_write(state_path, state)
+            return cls(state_path, state, persist=persist)
         state = {
             "schema_version": SCHEMA_VERSION,
             "operation_id": operation_id or f"staging-{identity.release_candidate_id}",
@@ -450,8 +459,9 @@ class StagingStateMachine:
                     "reason": "environment resolved with explicit degradation",
                 })
         cls._validate_state(state)
-        _atomic_write(state_path, state)
-        return cls(state_path, state)
+        if persist:
+            _atomic_write(state_path, state)
+        return cls(state_path, state, persist=persist)
 
     @staticmethod
     def _validate_state(state: Mapping[str, Any]) -> None:
@@ -515,16 +525,19 @@ class StagingStateMachine:
             self.state["phase"] = self.next_stage or "complete"
             self.state["status"] = "COMPLETE" if self.next_stage is None else "RUNNING"
         else:
+            failure_status = "BLOCKED" if status == "NOT_APPLICABLE" else status
             failure = FailureEnvelope.from_result(
                 operation_id=self.state["operation_id"],
                 stage=stage,
-                status=status,
-                code="STAGE_BLOCKED" if status == "BLOCKED" else "STAGE_FAILED",
-                reason=reason,
+                status=failure_status,
+                code=("STAGE_NOT_EXECUTED" if status == "NOT_APPLICABLE" else
+                      "STAGE_BLOCKED" if status == "BLOCKED" else "STAGE_FAILED"),
+                reason=(reason if status != "NOT_APPLICABLE" else
+                        "stage was not executed; a non-dry run cannot treat NOT_APPLICABLE as completion"),
                 evidence_ref=evidence_ref or str(self.state_path),
             ).as_dict()
             self.state["failures"].append(failure)
-            self.state["status"] = status
+            self.state["status"] = failure_status
         self.state["updated_at"] = _now()
         self._save()
 
@@ -561,7 +574,8 @@ class StagingStateMachine:
 
     def _save(self) -> None:
         self._validate_state(self.state)
-        _atomic_write(self.state_path, self.state)
+        if self.persist:
+            _atomic_write(self.state_path, self.state)
 
 
 __all__ = [

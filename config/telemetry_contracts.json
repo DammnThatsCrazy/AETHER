@@ -50,6 +50,32 @@
         "legacy_extra": {"type": "array", "items": "string", "required": true},
         "legacy_missing": {"type": "array", "items": "string", "required": true}
       }
+    },
+    {
+      "id": "delivery.operation.completed",
+      "description": "A profile-aware hosted delivery operation emitted typed outcome and timing metadata.",
+      "producer": "scripts/release/profile_delivery_contracts.py",
+      "data_classification": "operational_metadata",
+      "fields": {
+        "operation_id": {"type": "string", "required": true},
+        "operation": {"type": "string", "enum": ["wake", "sleep", "deploy", "validate", "promote", "rollback", "reconcile", "destroy"], "required": true},
+        "profile": {"type": "string", "required": true},
+        "release_candidate_id": {"type": "string", "required": true},
+        "commit_sha": {"type": "string", "required": true},
+        "artifact_digest": {"type": "string", "required": true},
+        "status": {"type": "string", "enum": ["DRY_RUN", "BLOCKED", "FAILED", "DEPLOYED", "VALIDATED", "PROMOTED", "ROLLED_BACK", "SLEPT"], "required": true},
+        "mutation_occurred": {"type": "boolean", "required": true},
+        "retryable": {"type": "boolean", "required": true},
+        "resumed": {"type": "boolean", "required": true},
+        "duration_seconds": {"type": "integer", "required": true},
+        "queue_seconds": {"type": "integer", "required": true},
+        "setup_seconds": {"type": "integer", "required": true},
+        "execution_seconds": {"type": "integer", "required": true},
+        "cache_hit": {"type": "boolean", "required": true},
+        "failure_category": {"type": "string", "required": true},
+        "next_action": {"type": "string", "required": true},
+        "evidence_ref": {"type": "string", "required": true}
+      }
     }
   ]
 }

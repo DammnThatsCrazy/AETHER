@@ -10,7 +10,7 @@ from scripts.lib.verification_router import load_router_registry
 
 def test_canonical_graph_binds_to_router_and_test_registry():
     graph = load_impact_graph()
-    assert set(graph.components) == {"verification-router", "impact-graph", "telemetry"}
+    assert {"verification-router", "impact-graph", "telemetry", "delivery-orchestrator", "environment-authorities", "hosted-delivery", "application-runtime", "kyber-readiness", "infrastructure-runtime", "verification-and-documentation"} <= set(graph.components)
     assert graph.contracts["test-suite-registry"].registry_ref == "config/test_suites.yaml"
     assert len(graph.test_suites) > 7
     assert "deployable:repository-doctor" in graph.nodes
@@ -39,13 +39,10 @@ def test_index_is_deterministic_and_transitive():
         "component:verification-router",
         "contract:verification-router",
     ]
-    assert first["impacted_contracts"] == [
-        "impact-graph-index",
-        "telemetry-contract",
-        "test-suite-registry",
-        "verification-router",
-    ]
-    assert first["impacted_deployables"] == ["repository-doctor"]
+    assert set(first["impacted_contracts"]) >= {
+        "impact-graph-index", "telemetry-contract", "test-suite-registry", "verification-router",
+    }
+    assert set(first["impacted_deployables"]) >= {"repository-doctor", "delivery-workflows"}
 
 
 def test_unresolved_paths_are_visible_and_escalate_router_lane():

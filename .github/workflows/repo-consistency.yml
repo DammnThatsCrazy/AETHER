@@ -50,6 +50,23 @@ jobs:
           name: verification-selection-evidence
           path: release-evidence/verification-selection.json
           if-no-files-found: error
+      - name: Index complete impact graph and emit telemetry evidence
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
+        run: |
+          .venv/bin/python scripts/impact_graph.py \
+            --base "$BASE_SHA" \
+            --fail-on-unresolved \
+            --telemetry-output release-evidence/telemetry.json \
+            > release-evidence/impact-graph.json
+          .venv/bin/python scripts/validate_telemetry_contracts.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: impact-telemetry-evidence
+          path: |
+            release-evidence/impact-graph.json
+            release-evidence/telemetry.json
+          if-no-files-found: error
 
   build-artifact:
     name: Build PR artifact (build authority)

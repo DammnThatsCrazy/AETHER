@@ -90,13 +90,17 @@ class TelemetryRegistry:
     ) -> dict[str, Any]:
         """Build one validated envelope without performing any I/O."""
         event = self.event(event_id)
+        if producer is not None and producer != event.producer:
+            raise TelemetryContractError(
+                f"event {event_id!r} producer override {producer!r} does not match registered producer {event.producer!r}"
+            )
         data = self.validate_payload(event_id, payload)
         envelope = {
             "schema_version": SCHEMA_VERSION,
             "event_id": event_id_value or f"tel_{uuid.uuid4().hex}",
             "event_name": event_id,
             "occurred_at": occurred_at or datetime.now(timezone.utc).isoformat(),
-            "producer": producer or event.producer,
+            "producer": event.producer,
             "data": data,
         }
         validate_envelope(envelope, self)
@@ -257,6 +261,9 @@ def validate_envelope(
         datetime.fromisoformat(occurred_at.replace("Z", "+00:00"))
     except ValueError as exc:
         raise TelemetryContractError("telemetry envelope.occurred_at must be ISO-8601") from exc
+    event = registry.event(str(envelope["event_name"]))
+    if envelope["producer"] != event.producer:
+        raise TelemetryContractError("telemetry envelope.producer does not match the registered event producer")
     registry.validate_payload(str(envelope["event_name"]), envelope["data"])
 
 

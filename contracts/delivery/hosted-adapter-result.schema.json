@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.olympuslabs.io/contracts/delivery/hosted-adapter-result/v1",
+  "title": "Aether HostedAdapterResult v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "operation_id", "authority", "profile", "status", "source", "mutation_occurred", "retryable", "payload"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "operation_id": {"type": "string", "minLength": 1},
+    "authority": {"enum": ["environment", "iam", "state", "artifact", "runtime", "release"]},
+    "profile": {"type": "string", "minLength": 1},
+    "status": {"enum": ["PASS", "PASS_WITH_DEGRADATION", "BLOCKED", "FAILED"]},
+    "source": {"enum": ["offline_fixture", "github_artifact", "aws_read_only", "github_environment"]},
+    "mutation_occurred": {"type": "boolean"},
+    "retryable": {"type": "boolean"},
+    "payload": {"type": "object"},
+    "candidate_identity": {"$ref": "#/$defs/identity"},
+    "evidence_ref": {"type": "string", "minLength": 1},
+    "next_action": {"type": "string", "minLength": 1}
+  },
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["release_candidate_id", "commit_sha", "artifact_digest", "profile"],
+      "properties": {
+        "release_candidate_id": {"type": "string", "minLength": 1},
+        "commit_sha": {"type": "string", "pattern": "^[0-9a-f]{7,64}$"},
+        "artifact_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "profile": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

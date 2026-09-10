@@ -252,6 +252,10 @@ jobs:
           Path('release.json').write_text(json.dumps(data))
           PY
           python scripts/release/release_manifest.py release.json --expected-sha "$GITHUB_SHA" --write-checksum
+          python scripts/release/release_candidate_adapter.py \
+            --manifest release.json \
+            --lockfile package-lock.json --lockfile pyproject.toml \
+            --output release-candidate.json
           echo "checksum=$(cat release.json.sha256)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
@@ -259,6 +263,7 @@ jobs:
           path: |
             release.json
             release.json.sha256
+            release-candidate.json
             aether-spa.tar.gz
             kyber-spa.tar.gz
             migrations.tar.gz
@@ -330,7 +335,19 @@ jobs:
         run: |
           set -euo pipefail
           SHA=$(python -c "import json; print(json.load(open('release.json'))['commit_sha'])")
+          # The approved candidate may be older than the dispatch revision.
+          # Verify it against the lockfiles from the source run, not whatever
+          # happens to be current on the operator's checkout.
+          case "$SHA" in
+            ''|*[!0-9a-f]*) echo '::error::candidate commit is not a lowercase Git SHA'; exit 1 ;;
+          esac
+          git fetch --no-tags origin "$SHA"
+          git checkout --detach "$SHA"
           python scripts/release/release_manifest.py release.json --expected-sha "$SHA" --checksum "$RELEASE_MANIFEST_CHECKSUM"
+          python scripts/release/release_candidate_adapter.py --verify \
+            --manifest release.json --candidate release-candidate.json \
+            --expected-sha "$SHA" \
+            --lockfile package-lock.json --lockfile pyproject.toml
           python - <<'PY'
           import hashlib,json,pathlib
           m=json.load(open('release.json'))
@@ -344,6 +361,7 @@ jobs:
           path: |
             release.json
             release.json.sha256
+            release-candidate.json
             aether-spa.tar.gz
             kyber-spa.tar.gz
             migrations.tar.gz
@@ -385,7 +403,19 @@ jobs:
           set -euo pipefail
           CHECKSUM=$(cat release.json.sha256)
           SHA=$(python -c "import json; print(json.load(open('release.json'))['commit_sha'])")
+          # Production promotion can intentionally evaluate an older staged
+          # candidate.  Re-check out that candidate before reading lockfiles
+          # so dependency identity is bound to the source run.
+          case "$SHA" in
+            ''|*[!0-9a-f]*) echo '::error::candidate commit is not a lowercase Git SHA'; exit 1 ;;
+          esac
+          git fetch --no-tags origin "$SHA"
+          git checkout --detach "$SHA"
           python scripts/release/release_manifest.py release.json --expected-sha "$SHA" --checksum "$CHECKSUM"
+          python scripts/release/release_candidate_adapter.py --verify \
+            --manifest release.json --candidate release-candidate.json \
+            --expected-sha "$SHA" \
+            --lockfile package-lock.json --lockfile pyproject.toml
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:

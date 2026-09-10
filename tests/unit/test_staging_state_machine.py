@@ -101,6 +101,22 @@ def test_dry_run_records_skips_without_completing_executable_stages(tmp_path: Pa
     assert resumed.state["status"] == "COMPLETE"
 
 
+def test_non_dry_run_not_applicable_stage_blocks_without_repeating(tmp_path: Path):
+    rc = candidate()
+    machine = StagingStateMachine.open(tmp_path / "not-applicable.json", rc, "staging")
+    observed: list[str] = []
+
+    state = machine.run(
+        lambda stage: (observed.append(stage) or ("NOT_APPLICABLE", "stage is not armed"))
+    )
+
+    assert observed == ["aws_identity"]
+    assert state["status"] == "BLOCKED"
+    assert state["completed_stages"] == []
+    assert len(state["checks"]) == 1
+    assert state["failures"][0]["code"] == "STAGE_NOT_EXECUTED"
+
+
 def test_checkpoint_refuses_a_different_candidate_or_profile(tmp_path: Path):
     state_path = tmp_path / "state.json"
     rc = candidate()

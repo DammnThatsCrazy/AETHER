@@ -415,6 +415,11 @@ jobs:
             || { echo "::error::release manifest commit ${sha} is not intended release ${INTENDED_RELEASE_SHA}"; exit 1; }
           python "${GITHUB_WORKSPACE}/scripts/release/release_manifest.py" release.json \
             --expected-sha "$sha" --checksum "$RELEASE_MANIFEST_CHECKSUM"
+          python "${GITHUB_WORKSPACE}/scripts/release/release_candidate_adapter.py" --verify \
+            --manifest release.json --candidate release-candidate.json \
+            --expected-sha "$sha" \
+            --lockfile "${GITHUB_WORKSPACE}/package-lock.json" \
+            --lockfile "${GITHUB_WORKSPACE}/pyproject.toml"
           digest="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['digest'])")"
           case "$digest" in
             sha256:*) ;;
@@ -1016,6 +1021,11 @@ jobs:
             || { echo "::error::release manifest commit ${sha} is not intended release ${INTENDED_RELEASE_SHA}"; exit 1; }
           python "${GITHUB_WORKSPACE}/scripts/release/release_manifest.py" release.json \
             --expected-sha "$sha" --checksum "$RELEASE_MANIFEST_CHECKSUM"
+          python "${GITHUB_WORKSPACE}/scripts/release/release_candidate_adapter.py" --verify \
+            --manifest release.json --candidate release-candidate.json \
+            --expected-sha "$sha" \
+            --lockfile "${GITHUB_WORKSPACE}/package-lock.json" \
+            --lockfile "${GITHUB_WORKSPACE}/pyproject.toml"
           python - <<'PY'
           import hashlib, json, pathlib, sys
           manifest = json.load(open("release.json"))
