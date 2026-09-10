@@ -211,11 +211,6 @@ export function ExplorePage() {
       : actions.nextFocus(currentFocus);
     if (!next) return;
     actions.focusObject(next);
-    actions.appendHistory({
-      object: next,
-      action: 'select',
-      occurred_at: new Date().toISOString(),
-    });
     navigateWithContext();
   }
 
@@ -256,7 +251,10 @@ export function ExplorePage() {
           <button
             type="button"
             className="text-accent underline hover:text-text-primary"
-            onClick={() => navigate('/noesis')}
+            onClick={() => {
+              const query = graph.toQuery();
+              navigate(query ? `/noesis?${query}` : '/noesis');
+            }}
           >
             Open Noesis
           </button>

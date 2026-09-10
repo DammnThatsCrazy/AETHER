@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { BrowserRouter, useLocation } from 'react-router-dom';
 import { CapabilityProvider, ErrorState, LoadingState, ThemeProvider, TimeProvider, ToastProvider, useQuery } from '@aether/ui';
-import { GraphContextProvider } from '@aether/ui/exploration';
+import { GraphContextProvider, isKnownSurface } from '@aether/ui/exploration';
 import { AuthProvider, useAuth } from '@aether-app/features/auth';
 import { AetherAuth0Provider } from '@aether-app/lib/auth/auth0-provider';
 import { JourneyProvider } from '@aether-app/features/journey';
@@ -13,6 +13,30 @@ import { ErrorBoundary } from './error-boundary';
 
 interface ProvidersProps {
   readonly children: ReactNode;
+}
+
+/**
+ * The router owns URL paths while the exploration fabric owns registered
+ * surface identifiers. Keep that boundary explicit: a route such as
+ * `/explore` must enter the backend's `graph` adapter, never leak its path as
+ * an unregistered surface. Routes without a dedicated exploration adapter
+ * continue to use the graph context as the host's safe default.
+ */
+const ROUTE_SURFACES: readonly (readonly [string, string])[] = [
+  ['/campaign-intelligence', 'campaign360'],
+  ['/campaigns', 'campaign360'],
+  ['/clusters', 'cluster360'],
+  ['/compare', 'comparison_workbench'],
+  ['/geo', 'geo'],
+  ['/users', 'profile360'],
+  ['/explore', 'graph'],
+  ['/graph', 'graph'],
+];
+
+function surfaceForRoute(pathname: string): string {
+  const match = ROUTE_SURFACES.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  const candidate = match?.[1] ?? 'graph';
+  return isKnownSurface(candidate) ? candidate : 'graph';
 }
 
 /** Fetches the tenant capability contract once the user is authenticated. */
@@ -76,12 +100,13 @@ export function ExplorationGate({ children }: { readonly children: ReactNode }) 
     graphScope.workspace_id,
     graphScope.environment_id,
   ]);
+  const surface = surfaceForRoute(location.pathname);
 
   return (
     <GraphContextProvider
       key={scopeKey}
       scope={graphScope}
-      surface={location.pathname}
+      surface={surface}
       query={location.search}
       client={explorationClient}
     >

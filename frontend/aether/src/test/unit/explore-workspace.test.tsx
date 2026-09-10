@@ -159,11 +159,13 @@ describe('ExplorePage graph-first workspace', () => {
 
   it('uses existing graph history actions and makes the selected destination explicit', async () => {
     renderWorkspace();
+    runtime.actions.appendHistory.mockClear();
 
     await userEvent.click(screen.getByRole('button', { name: 'Previous' }));
 
     expect(runtime.actions.previousFocus).toHaveBeenCalledWith(runtime.context.selection.focused);
     expect(runtime.actions.focusObject).toHaveBeenCalledWith(expect.objectContaining({ id: 'entity-1' }));
+    expect(runtime.actions.appendHistory).not.toHaveBeenCalled();
     expect(screen.getByTestId('location')).toHaveTextContent('/explore?tmode=as_of');
     expect(screen.getByTestId('location')).not.toHaveTextContent('entity=');
   });
@@ -214,7 +216,7 @@ describe('ExplorePage graph-first workspace', () => {
     expect(screen.getByText('Open Noesis')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Open Noesis' }));
-    expect(screen.getByTestId('location')).toHaveTextContent('/noesis');
+    expect(screen.getByTestId('location')).toHaveTextContent('/noesis?tmode=as_of');
   });
 
   it.each([

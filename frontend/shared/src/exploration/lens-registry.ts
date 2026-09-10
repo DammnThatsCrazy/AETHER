@@ -12,12 +12,14 @@ import {
   explorationSurfaceIds,
   surfaceCapabilities,
   type ExplorationSurfaceId,
-  type FilterFieldCategory,
+} from '@aether/shared/surface-capabilities';
+import type { FilterFieldCategory } from '@aether/shared/filter-fields';
+import {
   type IntelligenceProjectionDefinition,
   type IntelligenceProjectionId,
   type IntelligenceProjectionSubjectKind,
   intelligenceProjectionDefinitions,
-} from '@aether/shared';
+} from '@aether/shared/intelligence-projections_generated';
 import {
   lensDefinitions,
   type LensDescriptor,

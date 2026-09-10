@@ -37,6 +37,7 @@ vi.mock('@aether/ui', () => ({
   },
 }));
 vi.mock('@aether/ui/exploration', () => ({
+  isKnownSurface: (surface: string) => ['graph', 'campaign360', 'cluster360', 'comparison_workbench', 'geo', 'profile360'].includes(surface),
   GraphContextProvider: (props: {
     scope: {
       tenant_id: string;
@@ -79,7 +80,7 @@ describe('Aether ExplorationGate', () => {
       error: null,
     };
     render(
-      <MemoryRouter initialEntries={['/graph?tenant_id=spoofed&workspace_id=spoofed&environment_id=staging&surface=graph&tmode=as_of&tas=2026-01-01T00%3A00%3A00Z']}>
+      <MemoryRouter initialEntries={['/explore?tenant_id=spoofed&workspace_id=spoofed&environment_id=staging&surface=graph&tmode=as_of&tas=2026-01-01T00%3A00%3A00Z']}>
         <ExplorationGate><span>mounted</span></ExplorationGate>
       </MemoryRouter>,
     );
@@ -93,7 +94,7 @@ describe('Aether ExplorationGate', () => {
         environment_id: 'production',
         scope_model: 'single_workspace_tenant_v1',
       },
-      surface: '/graph',
+      surface: 'graph',
       query: '?tenant_id=spoofed&workspace_id=spoofed&environment_id=staging&surface=graph&tmode=as_of&tas=2026-01-01T00%3A00%3A00Z',
       client: mocks.explorationClient,
     }));

@@ -27,6 +27,15 @@ const ME_PROFILE = {
   tenant_id: 't_e2e_001',
   name: 'E2E Tenant',
   contact_email: 'e2e@acme.io',
+  // ExplorationGate validates the backend-owned graph scope before rendering
+  // any authenticated route. Keep the E2E profile aligned with that contract
+  // so this settings test reaches the capability-gated surface.
+  graph_scope: {
+    tenant_id: 't_e2e_001',
+    workspace_id: 'workspace_e2e_001',
+    environment_id: 'test',
+    scope_model: 'single_workspace_tenant_v1',
+  },
   plan: { plan_id: 'p_e2e', display_name: 'Demo', monthly_quota: 1000, burst_rpm: 100 },
   billing: {},
 };
