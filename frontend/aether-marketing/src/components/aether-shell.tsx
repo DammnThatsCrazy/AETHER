@@ -5,6 +5,7 @@ import { cn } from '@aether/ui';
 import { AetherMark, OlympusAttribution } from '@aether-marketing/components/brand-byline';
 import { PRIMARY_NAV } from '@aether-marketing/content/sections';
 import { AETHER_DOCS_URL, OLYMPUS_SITE_URL } from '@aether-marketing/lib/env';
+import { analyticsFromEnv, trackPageView } from '@aether-marketing/lib/analytics';
 
 function navClass({ isActive }: { readonly isActive: boolean }): string {
   return cn(
@@ -51,6 +52,10 @@ export function AetherShell() {
   useEffect(() => {
     setMenuOpen(false);
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    // Page views are opt-in and a no-op on the default (unconfigured) build —
+    // see src/lib/analytics.ts. Firing on every path change, including the
+    // first render, keeps the very first route covered too.
+    trackPageView(analyticsFromEnv(), location.pathname);
     // Move focus to the main landmark on route change (but not on the initial
     // page load, which should start at the top of the document). This keeps
     // keyboard and assistive-tech users on the new page's content after a

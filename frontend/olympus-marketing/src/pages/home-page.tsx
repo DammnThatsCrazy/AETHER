@@ -1,8 +1,29 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@aether/ui';
 import { Eyebrow } from '@olympus-marketing/components/marketing-section';
+import { WaitlistForm } from '@olympus-marketing/components/waitlist-form';
 import { usePageMeta } from '@olympus-marketing/lib/meta';
 import { AETHER_MARKETING_URL } from '@olympus-marketing/lib/env';
+
+const PRODUCT_CARDS: readonly {
+  readonly name: string;
+  readonly tag: string;
+  readonly text: string;
+  readonly cta: { readonly label: string; readonly to: string; readonly external?: boolean };
+}[] = [
+  {
+    name: 'Aether',
+    tag: 'Flagship — relationship intelligence',
+    text: 'Connects customer, entity, wallet, agent, campaign, communication, and commerce activity into a governed graph, so organizations can understand what happened, why it happened, and what to do next.',
+    cta: { label: 'Explore Aether', to: AETHER_MARKETING_URL, external: true },
+  },
+  {
+    name: 'What comes next',
+    tag: 'Roadmap — not yet named publicly',
+    text: 'Every product we ship shares Aether’s design system, motion philosophy, and truthful status language. When a second product is ready to name, it is announced here — not before.',
+    cta: { label: 'Read the principles', to: '/principles' },
+  },
+];
 
 /**
  * Olympus Labs home — company-first, editorial, spacious.
@@ -26,15 +47,18 @@ export function HomePage() {
         <div className="mkt-container py-24 md:py-36">
           <Eyebrow>Olympus Labs</Eyebrow>
           <h1 className="mkt-display mt-5 max-w-5xl">
-            A serious organization behind the relationship intelligence platform.
+            The parent company building intelligent infrastructure, starting with Aether.
           </h1>
           <p className="mkt-lead mt-7 max-w-2xl">
-            Olympus Labs is the creator, owner, and operator of Aether. We build intelligence
-            infrastructure with a governing philosophy — and we hold ourselves to the same standard of
-            proof we ask of our systems.
+            Olympus Labs is the creator, owner, and operator of Aether, its relationship intelligence
+            platform. We build intelligence infrastructure with a governing philosophy — and we hold
+            ourselves to the same standard of proof we ask of our systems.
           </p>
           <div className="mt-10 flex flex-wrap gap-4">
             <Button asChild variant="primary" size="lg">
+              <Link to="/contact">Request a demo</Link>
+            </Button>
+            <Button asChild variant="secondary" size="lg">
               <Link to="/company">About the company</Link>
             </Button>
             <Button asChild variant="secondary" size="lg">
@@ -68,28 +92,36 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* 3 · Featured product */}
+      {/* 3 · Product family */}
       <section className="border-b border-border-default bg-surface-raised">
         <div className="mkt-container py-20 md:py-28">
-          <Eyebrow>Featured product</Eyebrow>
-          <div className="mt-5 grid gap-10 lg:grid-cols-[1.2fr_1fr] lg:items-end">
-            <div>
-              <h2 className="mkt-h2">Aether — Olympus Labs’ relationship intelligence platform.</h2>
-              <p className="mkt-lead mt-5 max-w-2xl">
-                Aether connects customer, entity, wallet, agent, campaign, communication, and commerce
-                activity into a governed graph — so organizations can understand what happened, why it
-                happened, and what to do next.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Button asChild variant="primary" size="lg">
-                <Link to="/products/aether">Why Aether exists</Link>
-              </Button>
-              <Button asChild variant="secondary" size="lg">
-                <a href={AETHER_MARKETING_URL}>Explore the platform</a>
-              </Button>
-            </div>
+          <Eyebrow>Products</Eyebrow>
+          <h2 className="mkt-h2 mt-4 max-w-2xl">One foundation. Aether is the flagship.</h2>
+          <div className="mt-10 grid gap-4 md:grid-cols-2">
+            {PRODUCT_CARDS.map((product) => (
+              <article key={product.name} className="rounded-lg border border-border-default bg-surface-base p-8">
+                <p className="mkt-eyebrow">{product.tag}</p>
+                <h3 className="mt-3 text-xl font-semibold text-text-primary">{product.name}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-text-secondary">{product.text}</p>
+                <div className="mt-6">
+                  {product.cta.external === true ? (
+                    <Button asChild variant="primary" size="md">
+                      <a href={product.cta.to}>{product.cta.label}</a>
+                    </Button>
+                  ) : (
+                    <Button asChild variant="secondary" size="md">
+                      <Link to={product.cta.to}>{product.cta.label}</Link>
+                    </Button>
+                  )}
+                </div>
+              </article>
+            ))}
           </div>
+          <p className="mt-8">
+            <Button asChild variant="secondary" size="md">
+              <Link to="/products/aether">Why Aether exists</Link>
+            </Button>
+          </p>
         </div>
       </section>
 
@@ -154,7 +186,31 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* 7 · Company information */}
+      {/* 7 · Early access */}
+      <section className="border-b border-border-default">
+        <div className="mkt-container py-20 md:py-28">
+          <div className="grid gap-12 lg:grid-cols-[1fr_1fr] lg:items-start">
+            <div>
+              <Eyebrow>Early access</Eyebrow>
+              <h2 className="mkt-h2 mt-4">Get on the list for Aether workspace access.</h2>
+              <p className="mkt-lead mt-5 max-w-md">
+                Aether is not yet generally available. Join the waitlist and Olympus Labs will reach out
+                when workspace creation opens — or request a guided walkthrough now.
+              </p>
+              <p className="mt-6">
+                <Button asChild variant="secondary" size="md">
+                  <Link to="/contact">Request a demo instead</Link>
+                </Button>
+              </p>
+            </div>
+            <div className="rounded-lg border border-border-default bg-surface-raised p-6 md:p-8">
+              <WaitlistForm />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 8 · Company information */}
       <section className="border-b border-border-default">
         <div className="mkt-container py-16 md:py-20">
           <div className="grid gap-8 md:grid-cols-2">

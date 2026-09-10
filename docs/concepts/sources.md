@@ -1,0 +1,71 @@
+---
+title: Sources
+slug: concepts/sources
+section: concepts
+visibility: P
+audience: [dev-junior, dev-senior, architect]
+status: stable
+since_version: "8.12.0"
+canonical_owner: platform@aether
+estimated_read_minutes: 4
+toc_depth: 3
+---
+
+# Sources
+
+A **source** is anything that sends data into your Aether tenant. Every event
+in the graph traces back to exactly one source, which is how Aether can tell
+you not just *what* happened but *where the observation came from* — a
+prerequisite for both data-quality auditing and honest attribution.
+
+## Source types
+
+There are three families of source:
+
+1. **First-party SDKs** — `web`, `ios`, `android`, `react-native`, and
+   `server` are the platforms the backend recognizes directly. Each is
+   authenticated with its own write key(s) and reports through the same
+   canonical `POST /v1/batch` ingestion contract. See the
+   [Web](../quickstart/web-sdk.md), [React](../quickstart/react-sdk.md), and
+   [Node](../quickstart/node-sdk.md) quickstarts.
+2. **Connectors** — pull- and webhook-based integrations with third-party
+   platforms (Shopify, Stripe, HubSpot, Salesforce, Klaviyo, Segment,
+   Zendesk, and more) that normalize provider-specific payloads into the
+   same canonical event vocabulary the SDKs use. See
+   [Shopify](../tutorials/shopify-integration.md) and
+   [Stripe](../tutorials/stripe-integration.md) as worked examples.
+3. **API feeds** — back-office and batch imports (CSV, custom API feeds)
+   for data that doesn't arrive as a real-time event stream.
+
+## Choosing a source
+
+The **Activation** flow in the dashboard (`/activation`) walks you through
+picking your first source: select one or more SDK platforms, mint a
+tenant-scoped write key for them, and send a test event. Activation doesn't
+mark a source "connected" until a real event has landed in the Bronze tier —
+nothing is shown as ready until the backend confirms it.
+
+## Source health
+
+Each source has a lifecycle the dashboard tracks honestly rather than
+optimistically:
+
+| State | Meaning |
+|---|---|
+| Not connected | No credential exists yet for this source. |
+| Credential required | A key or provider credential is needed before this source can send data. |
+| Connection testing / initial sync pending | A credential exists; Aether hasn't confirmed a successful delivery yet. |
+| Connected | At least one real, accepted event has been observed from this source. |
+| Degraded | The source is connected but recent deliveries are failing or elevated in error rate. |
+| Sync failed | The most recent sync or delivery attempt failed. |
+
+A degraded or failed source doesn't silently drop data forever — connector
+syncs and webhook deliveries retry with backoff, and failures surface in
+**Settings → Integrations** rather than being swallowed.
+
+## Next steps
+
+- [Signals](signals.md) — what a source's events look like once they're in
+  the graph.
+- [Ingestion API](../api/ingestion.md) — the wire contract every source
+  ultimately normalizes into.

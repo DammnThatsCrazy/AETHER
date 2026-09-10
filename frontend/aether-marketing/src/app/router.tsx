@@ -9,6 +9,7 @@ import { HomePage } from '@aether-marketing/pages/home-page';
 import { IntegrationsPage } from '@aether-marketing/pages/integrations-page';
 import { NotFoundPage } from '@aether-marketing/pages/not-found';
 import { PlatformPage } from '@aether-marketing/pages/platform-page';
+import { PricingPage } from '@aether-marketing/pages/pricing-page';
 import { SectionPage } from '@aether-marketing/pages/section-page';
 import { SolutionPage } from '@aether-marketing/pages/solution-page';
 import { SolutionsPage } from '@aether-marketing/pages/solutions-page';
@@ -25,6 +26,7 @@ const DEDICATED_PAGES: Readonly<Record<string, ComponentType>> = {
   '/solutions': SolutionsPage,
   '/integrations': IntegrationsPage,
   '/developers': DevelopersPage,
+  '/pricing': PricingPage,
 };
 
 /**

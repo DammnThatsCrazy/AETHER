@@ -1,0 +1,25 @@
+{
+  "name": "@aether/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Shared deployment configuration surface — environment types, AWS Amplify environment mapping, and domain constants for the Aether/Olympus Labs monorepo frontends.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./env": "./src/env.ts",
+    "./amplify": "./src/amplify.ts",
+    "./domains": "./src/domains.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^2.1.0"
+  },
+  "license": "UNLICENSED"
+}

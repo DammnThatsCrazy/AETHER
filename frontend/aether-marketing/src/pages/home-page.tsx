@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@aether/ui';
 import { OlympusAttribution } from '@aether-marketing/components/brand-byline';
 import { CtaBand, Eyebrow } from '@aether-marketing/components/marketing-section';
+import { WaitlistSection } from '@aether-marketing/components/waitlist-section';
 import { OLYMPUS_SITE_URL } from '@aether-marketing/lib/env';
 import { usePageMeta } from '@aether-marketing/lib/meta';
 
@@ -193,6 +194,14 @@ export function HomePage() {
           </div>
         </div>
       </section>
+
+      <WaitlistSection
+        id="home-waitlist"
+        variant="waitlist"
+        eyebrow="Not ready to build yet?"
+        title="Join the waitlist"
+        body="Leave your email and Olympus Labs will follow up when Aether opens to more customers — or start building now with the real sign-up flow."
+      />
 
       <CtaBand
         title="Start building on Aether"
