@@ -130,11 +130,11 @@ export const SECTIONS: readonly SectionCopy[] = [
     eyebrow: 'Pricing',
     title: 'Pricing that matches usage, not guesswork',
     description: 'Aether pricing — plan audience, usage limits, capabilities, support, retention, environments, integration limits, and deployment options.',
-    lead: 'Aether is not yet generally available, so the tiers on this page are illustrative — a planning reference for the shape of pricing, not final commercial terms. When Aether opens to customers, plans will state their intended audience, usage limits, capabilities, support, retention, environments, integration limits, and upgrade triggers, and enterprise options will be described where they exist.',
+    lead: 'Every plan states its intended audience, monthly event allowance, seat cap, and overage rates. Self-serve tiers are billed monthly or annually (15% discount). Enterprise and specialized deployments are priced per engagement.',
     paragraphs: [
-      'The tiers below are labeled illustrative because the final numbers ship with general availability rather than ahead of it. They exist so a team can reason about the shape of a plan — audience, usage limits, seats, retention, and support — before committing to anything, not to represent a live billing system.',
-      'Where a specific number is shown, it is a planning estimate rather than a commitment. No estimator on this page pretends to produce a number the platform cannot yet support, and nothing here is billed — plans become real, with final numbers, at general availability.',
-      'Enterprise and deployment options are described at the same honesty level, including the environment and integration questions a procurement or security team will ask. The goal is a pricing page a team can bring into a budget review today, even while the underlying numbers remain illustrative.',
+      'Each self-serve tier includes a monthly raw-event allowance and a seat cap. Usage beyond the included allowance is metered and billed at the published overage rate — no surprise tiers, no hidden multipliers, and no retroactive adjustments.',
+      'Aether Harness workloads (managed and BYOK) are metered separately per ACU. Managed workloads include provider execution; BYOK workloads carry a 50% discount with model-provider charges remaining separate.',
+      'Enterprise and specialized tiers — Epsilon, Omega, and Omicron — are scoped per engagement for organizations with volume, deployment, or governance needs beyond the self-serve plans. Contact Olympus Labs to discuss.',
     ],
   },
   {
