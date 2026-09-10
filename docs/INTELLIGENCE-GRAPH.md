@@ -12,8 +12,11 @@ source_files:
 canonical_owner: graph@aether
 estimated_read_minutes: 15
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "0efa07cb"
+    reason: "Reviewed graph traversal hardening: temporal path queries reconstruct only valid source-to-target paths, shortest and K-shortest expansion respects the total hop budget, and equal-cost candidates have a deterministic tie-break."
 source_hashes:
-  "Backend Architecture/aether-backend/shared/graph/": "sha256:cf32149fb0de363c4c4432281004e4e28efa1b0926b2fbcd9dbca36631e3f8d9"
+  "Backend Architecture/aether-backend/shared/graph/": "sha256:2b0077ff61139fb08ae828360c19cff6daf929849ead8098826ca4e3d9afd987"
   "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:bfe704e317b86363155e3626d15f0e6a8816b674fad15858ac946d7bb4d9eb62"
 ---
 # Unified On-Chain Intelligence Graph v8.12.0
@@ -329,6 +332,13 @@ Canonical ordered-path types, path scoring, stronger algorithms, and dedicated p
 | `GET` | `/v1/graph/snapshots/{id}` | Retrieve a snapshot — fail-closed tenant ownership check |
 | `POST` | `/v1/graph/snapshots/{id}/compare` | Diff two snapshots: added/removed node and edge IDs |
 | `POST` | `/v1/graph/reconcile` | Operator-only: run silver reconciliation worker (read-only report) |
+
+Temporal path mode is target-aware: with `as_of` and a target anchor it
+reconstructs the shortest path whose vertices and edges are valid at that
+instant, preserving source-to-target ordering and tenant/direction filters.
+An invalid or disconnected target returns no path. Synchronous shortest and
+K-shortest searches treat `max_depth` as a total hop budget, including Yen
+spur prefixes; equal-cost alternatives are ordered with a stable tie-breaker.
 
 ### Agent Extensions
 

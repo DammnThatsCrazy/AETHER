@@ -40,10 +40,12 @@ reviewed_source_commits:
     reason: "Graph-first closure review: reviewed the governed Aether exploration controls, tenant/session-scoped readiness and client-sync caches, accessible graph object representation, context-preserving selection/history, and default-off snapshot/Noesis handoffs documented below."
   - commit: "402c5c48"
     reason: "Reviewed the Aether test-only timeout stabilization (static Cluster360 import and controlled signup field changes); no runtime architecture or data-truth behavior changed, so no body update was required."
+  - commit: "95e6c54f"
+    reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
-  "frontend/aether/src/": "sha256:e7a2ada74e275371931da7ba81df58503bb34c04ca9a2b4672e324fc89ce1b2d"
+  "frontend/aether/src/": "sha256:b7460a94acf4bc1d54795194a3fe95ab63f9dee8a52a0ce7dad8d6de2ae2bc3a"
   "frontend/kyber/src/": "sha256:30b10c0aa88d9e9784bc97bcbf174816b45479bfdb48f860a8290d2b41345e71"
-  "frontend/shared/src/": "sha256:b51d37070ccbc004c90b9a56d07deb8300727955907c16775dda900919c277f6"
+  "frontend/shared/src/": "sha256:abef2b4bb7b38a0124fbf2180dd1de701e533d1bbd57866d57b1848815332a2c"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -161,6 +163,10 @@ There are two separate frontend applications. **Do not mix them up.**
   snapshots, and diffs. Hosts must supply the full tenant/workspace/environment
   scope; changing any scope coordinate clears scoped selection and exploration
   history rather than leaking them into the new workspace.
+  The Aether host maps router paths such as `/explore`, `/graph`, and the
+  registered analytical deep links to exploration surface IDs before mounting
+  the provider; an unknown path uses the graph surface as the safe default, so
+  route names never become backend surface identifiers.
 - **Authority-free graph deep links:** URL state is restricted to bounded,
   registry-valid exploration inputs. Tenant and surface remain host-owned, and
   workspace, environment, truth/evidence, rights, confidence, history, and
@@ -184,9 +190,12 @@ There are two separate frontend applications. **Do not mix them up.**
   the endpoint's supported tenant/surface coordinates while cache keys retain
   the full host-authoritative tenant/workspace/environment scope. Object,
   cluster, edge, snapshot, and diff selections use the same typed
-  `GraphObjectRef`/history seam, preserving context on navigation. The graph
-  page also exposes a bounded keyboard-searchable object/relationship list for
-  non-visual access.
+  `GraphObjectRef`/history seam, preserving context on navigation. Production
+  selections append canonical history entries, while previous/next traversal
+  updates focus without mutating the trail order. Opening Noesis carries the
+  encoded `GraphContext` query so focus, filters, and temporal state remain
+  visible to the destination. The graph page also exposes a bounded
+  keyboard-searchable object/relationship list for non-visual access.
 - **Optional snapshot and Noesis governance controls:** immutable exploration
   snapshot/diff controls and Noesis trace/proposal handoff controls are
   default-OFF feature flags. Noesis routes governed recommendations to the

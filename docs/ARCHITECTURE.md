@@ -13,10 +13,13 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "5bfb9394"
+    reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
   "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
   "Backend Architecture/aether-backend/middleware/middleware.py": "sha256:e320a85428e219bd745ff298a6b3a8a7404a1f72b562e65d4f7682e722ecb79c"
-  "packages/shared/": "sha256:b89c3b38f8e2e4b2d57e872d1acdb5eba3f82f79fcc20bd161e76acbe29abf03"
+  "packages/shared/": "sha256:8e79c77f302663bfd0b7878519bd39736b4f3fc72d4f991f5db1ed3fda05c8cd"
 ---
 # Aether vNext — Architecture Guide
 
@@ -514,7 +517,11 @@ workspace scope, temporal modes, depth, or result bounds are inconsistent.
 `packages/shared/action-runtime-contract.ts` defines the decision, execution,
 approval, impact, and rollback/reversibility envelopes used to govern graph
 actions. Its transition guards require approval validity and bound execution
-evidence before terminal states can be recorded. These modules are exported
+evidence before terminal states can be recorded; requested approval level and
+scope are preserved while tenant and decision identity remain bound to the
+outer transition context. Execution validation checks every plan-step target
+against the execution tenant/environment and the canonical top-level target
+set. These modules are exported
 from the shared package as types and deterministic validation/transition
 helpers; they do not introduce a parallel executor, a new source of record, or
 proof that every application host has mounted the runtime. Aether now obtains

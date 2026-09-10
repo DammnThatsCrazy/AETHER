@@ -30,8 +30,10 @@ reviewed_source_commits:
     reason: "Reviewed 33dfedb4 — the /v1/rights surface is now MOUNTED in main.py (always mounted beside /v1/dsr); the routes carry the rollout-OFF 503 gate and require scalar source/purpose/destination matching RightsDecisionRequest; the durable repositories accept dict-or-model rows. This commit makes /v1/rights live and supersedes the earlier not-wired-into-main.py review notes. Body change: the Rights Authority section below documents the three endpoints and their rollout-gated 503 posture."
   - commit: "69185729"
     reason: "Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate."
+  - commit: "0efa07cb"
+    reason: "Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics."
 source_hashes:
-  "Backend Architecture/aether-backend/services/": "sha256:13fb419fdd9ea0817e93afcf8c79b947133bb10f13067a837884b51669b72512"
+  "Backend Architecture/aether-backend/services/": "sha256:c64dd790228b4cb0499803cfa3fef8995d4a45388929b56d0d9d6613804edd8f"
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
 
@@ -3470,6 +3472,13 @@ intelligence comparison watchlists (`watchlist_changed`), Kyber ops incidents
 and command receipts (`incident_changed`, `command_receipt_changed`), self-service
 and Kyber session revocation (`session_revoked`), and mobile installation
 revocation (`installation_revoked`).
+
+Watchlist change events use a durable occurrence revision in the form
+`{mutation_version}:{content_hash}`. Identical retries preserve the same
+`mutation_version` and source-event id, while every changed state increments
+the tenant-qualified counter—even when content returns to an earlier value
+(A→B→A). Delete and later recreation also receive distinct occurrences, so
+feed consumers can refetch the canonical watchlist without losing a transition.
 
 ---
 
