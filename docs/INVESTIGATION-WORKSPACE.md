@@ -21,7 +21,7 @@ estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
   "Backend Architecture/aether-backend/services/intelligence/investigations.py": "sha256:3369a68e9650eedefd7709a2e2ff91e2294d3dabe50cf38659a6309365bef517"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:4bf8131f300d81c867bb6536dc9751a2277be193ce5ed0d1f638cfa0b1f70617"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:8a705ad12ff7176d486afa586ba3f794da14017b9f9c108a3f9b6313da94884b"
 ---
 # Investigation Workspace
 

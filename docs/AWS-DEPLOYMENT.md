@@ -24,7 +24,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/staging-lifecycle.yml": "sha256:a24dd8551410ba2832ffb036271dc80b87474010f9eda42d02870488aba1e115"
+  ".github/workflows/staging-lifecycle.yml": "sha256:5f08e62b17304a5f32896a2e41d0b4e5c0ff5dff55d6e596fd068bf3261aab42"
   ".github/workflows/staging-state-reconcile.yml": "sha256:f84ebf15cff0d5cc46d30890f767d9dcf3ca584b4392b889df3bce7d8bbcc3ed"
   ".github/workflows/staging-ttl-guard.yml": "sha256:4fe2250c0ccb0f8486800c6e09c8f1adcf6c38371944e911269f103053f0f1da"
   ".github/workflows/terraform-promote.yml": "sha256:c6ba216364e25afee22be4b62c0e2b3629bc5e68e0f47389fba8cfc4c17f7ef4"

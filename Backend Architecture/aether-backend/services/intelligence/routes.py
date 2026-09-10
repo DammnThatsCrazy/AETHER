@@ -20,6 +20,7 @@ import json
 import os
 import re
 from collections import Counter
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
@@ -118,6 +119,121 @@ kyber_admin_router = APIRouter(
 
 # Anti-distillation: imported lazily at use site to avoid circular init
 _anti_distillation_service = None
+
+
+# Delivery profiles are the operator-facing environment vocabulary.  The
+# packaging catalog intentionally uses a smaller set of buyer/deployment modes;
+# keep the translation at this read-only presentation seam instead of making
+# every caller know both vocabularies.
+_PROFILE_TO_DEPLOYMENT_MODE = {
+    "local": "standard_saas",
+    "local-full": "standard_saas",
+    "demo": "standard_saas",
+    "preview": "standard_saas",
+    "staging": "standard_saas",
+    "production-lean": "standard_saas",
+    "production-scale": "standard_saas",
+    "enterprise-isolated": "enterprise_isolated_tenant",
+}
+_DELIVERY_REQUIRED_CHECKS_FALLBACK = frozenset(
+    {
+        "code_correctness",
+        "contract_compatibility",
+        "infrastructure_preflight",
+        "migration",
+        "tenant_activation",
+        "golden_journeys",
+        "security",
+        "operability",
+        "rollback",
+    }
+)
+_DELIVERY_CHECK_RESULTS = frozenset(
+    {"PASS", "PASS_WITH_DEGRADATION", "BLOCKED", "FAILED", "NOT_APPLICABLE"}
+)
+_DELIVERY_BUNDLE_REQUIRED_FIELDS = frozenset(
+    {
+        "schema_version",
+        "release_candidate_id",
+        "status",
+        "commit_sha",
+        "artifact_digest",
+        "deployment_profile",
+        "checks",
+        "known_degradations",
+        "evidence",
+        "timestamps",
+    }
+)
+
+
+@lru_cache(maxsize=1)
+def _delivery_required_checks() -> frozenset[str]:
+    """Load the canonical evidence check set, with a safe package fallback."""
+
+    schema_path = Path(__file__).resolve().parents[4] / "contracts/delivery/release-evidence-bundle.schema.json"
+    try:
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        required = schema["properties"]["checks"]["required"]
+        if isinstance(required, list) and all(isinstance(item, str) and item for item in required):
+            return frozenset(required)
+    except (OSError, KeyError, TypeError, json.JSONDecodeError):
+        pass
+    return _DELIVERY_REQUIRED_CHECKS_FALLBACK
+
+
+def _ready_evidence_check_error(
+    value: dict[str, Any], *, allow_degradation: bool = False
+) -> str | None:
+    """Return why a successful evidence record is not complete enough to trust."""
+
+    # A raw ReleaseEvidenceBundle has additional required properties beyond its
+    # check map.  A Kyber/projection result may also carry a ``status`` field
+    # and a nested candidate identity, but intentionally omits those producer
+    # fields.  Treat only the canonical top-level READY/degraded statuses (with
+    # no nested projection identity) as raw bundles; other status-bearing
+    # envelopes retain their own supported shape.
+    raw_status = value.get("status")
+    is_raw_bundle = (
+        "candidate_identity" not in value
+        and isinstance(raw_status, str)
+        and raw_status in {"READY", "PASS_WITH_DEGRADATION", "BLOCKED", "FAILED"}
+    )
+    if is_raw_bundle:
+        missing_bundle = sorted(_DELIVERY_BUNDLE_REQUIRED_FIELDS - set(value))
+        if missing_bundle:
+            return "raw delivery evidence is missing: " + ", ".join(missing_bundle)
+    checks = value.get("checks")
+    if not isinstance(checks, dict):
+        return "delivery evidence must include a complete checks object"
+    missing = sorted(_delivery_required_checks() - set(checks))
+    if missing:
+        return "delivery evidence is missing required checks: " + ", ".join(missing)
+    invalid = sorted(
+        str(name)
+        for name, result in checks.items()
+        if not isinstance(result, str) or result not in _DELIVERY_CHECK_RESULTS
+    )
+    if invalid:
+        return "delivery evidence contains invalid check results: " + ", ".join(invalid)
+    values = {result for result in checks.values() if isinstance(result, str)}
+    if values & {"BLOCKED", "FAILED"}:
+        return "delivery evidence contains a blocking check"
+    if "PASS_WITH_DEGRADATION" in values and not allow_degradation:
+        return "delivery evidence contains a degraded check"
+    if allow_degradation:
+        degradations = value.get("known_degradations")
+        if not isinstance(degradations, list) or not degradations:
+            return "degraded delivery evidence requires known_degradations"
+    return None
+
+
+def _catalog_deployment_mode(value: str | None) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    value = value.strip()
+    catalog_names = {mode.name for mode in DEPLOYMENT_MODES}
+    return value if value in catalog_names else _PROFILE_TO_DEPLOYMENT_MODE.get(value, value)
 
 
 def _get_anti_distillation():
@@ -1474,14 +1590,33 @@ def _delivery_evidence_projection() -> dict[str, Any]:
         return {"status": "INVALID", "source": "github_actions_artifact", "reason": "delivery evidence disposition is invalid"}
     if disposition in {"BLOCKED", "FAILED"}:
         return {"status": "BLOCKED", "source": "github_actions_artifact", "reason": "delivery evidence is not successful", "disposition": disposition}
-    # A READY bundle is only authoritative when its required checks are also
-    # free of blocking outcomes.  The canonical validator enforces this too,
-    # but retaining the invariant at the read boundary prevents hand-edited
-    # projections from becoming a readiness signal.
-    checks = value.get("checks")
-    if disposition == "READY" and isinstance(checks, dict) and any(item in {"BLOCKED", "FAILED"} for item in checks.values()):
-        return {"status": "BLOCKED", "source": "github_actions_artifact", "reason": "READY evidence contains a blocking check", "disposition": disposition}
-    profile = next((value.get(key) for key in ("deployment_mode", "deployment_profile", "profile") if isinstance(value.get(key), str) and value[key].strip()), None)
+    # A successful disposition is only authoritative when the complete
+    # canonical check map is present and free of blocking/degraded outcomes.
+    # The producer validates the same contract; retaining the invariant at this
+    # read boundary prevents hand-edited projections from becoming readiness
+    # signals when required checks are missing or renamed.
+    if disposition in successful or disposition == "PASS_WITH_DEGRADATION":
+        check_error = _ready_evidence_check_error(
+            value, allow_degradation=disposition == "PASS_WITH_DEGRADATION"
+        )
+        if check_error:
+            return {
+                "status": "BLOCKED",
+                "source": "github_actions_artifact",
+                "reason": check_error,
+                "disposition": disposition,
+            }
+    profile = next(
+        (
+            value.get(key)
+            for key in ("deployment_profile", "profile", "deployment_mode")
+            if isinstance(value.get(key), str) and value[key].strip()
+        ),
+        None,
+    )
+    deployment_mode = _catalog_deployment_mode(
+        value.get("deployment_mode") if isinstance(value.get("deployment_mode"), str) else profile
+    )
     return {
         "status": "PASS" if disposition in successful else "PASS_WITH_DEGRADATION",
         "source": "github_actions_artifact",
@@ -1489,7 +1624,7 @@ def _delivery_evidence_projection() -> dict[str, Any]:
         "commit_sha": identity["commit_sha"],
         "artifact_digest": identity["artifact_digest"],
         "deployment_profile": value.get("deployment_profile") if isinstance(value.get("deployment_profile"), str) else profile,
-        "deployment_mode": profile,
+        "deployment_mode": deployment_mode,
         "disposition": disposition,
     }
 

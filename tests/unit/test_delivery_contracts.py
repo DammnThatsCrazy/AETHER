@@ -63,5 +63,24 @@ def test_release_candidate_validation_requires_lock_digests_and_impact():
     assert any("deployment_impact" in error for error in errors)
 
 
+def test_release_candidate_validation_reports_missing_impact_boolean_without_raising():
+    errors = validate_release_candidate({
+        "schema_version": 1,
+        "deployment_impact": {
+            "schema_version": 1,
+            "profile": "staging",
+            "affected_domains": [],
+            "affected_components": [],
+            "migration_required": False,
+            "data_contract_change": False,
+            "security_sensitive": False,
+            "rollback_required": False,
+            "risk_level": "low",
+            "rationale": "validation fixture",
+        },
+    })
+    assert any("deployment_impact.approval_required must be boolean" in error for error in errors)
+
+
 def test_sanitize_detail_bounds_large_output():
     assert len(sanitize_detail("x" * 5000)) == 4000

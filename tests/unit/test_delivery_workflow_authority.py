@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.release.check_delivery_workflow_authority import validate
+from scripts.release.check_delivery_workflow_authority import _executable_run_text, validate
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,3 +19,23 @@ def test_delivery_authority_rejects_non_github_workflow_path(tmp_path: Path):
     )
     errors = validate(config_path=bad, root=ROOT)
     assert any("non-GitHub workflow path" in error for error in errors)
+
+
+def test_required_command_must_be_in_executable_run_not_step_name_or_comment():
+    workflow = {
+        "jobs": {
+            "plan": {
+                "steps": [
+                    {"name": "terraform plan", "run": "# terraform plan\necho plan omitted"},
+                    {"name": "log", "run": "echo terraform apply"},
+                    {"name": "quoted metadata", "run": "message='terraform apply'"},
+                    {"name": "heredoc", "run": "cat <<'EOF'\nterraform apply\nEOF"},
+                ]
+            },
+            "metadata": {"run": "terraform apply"},
+        }
+    }
+    assert "terraform plan" not in _executable_run_text(workflow)
+    assert "terraform apply" not in _executable_run_text(workflow)
+    workflow["jobs"]["plan"]["steps"].append({"run": "terraform plan -input=false"})
+    assert "terraform plan" in _executable_run_text(workflow)

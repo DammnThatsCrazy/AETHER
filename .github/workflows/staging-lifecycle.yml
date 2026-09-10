@@ -413,13 +413,24 @@ jobs:
           sha="$(python -c "import json; print(json.load(open('release.json'))['commit_sha'])")"
           test "$sha" = "$INTENDED_RELEASE_SHA" \
             || { echo "::error::release manifest commit ${sha} is not intended release ${INTENDED_RELEASE_SHA}"; exit 1; }
+          case "$sha" in
+            ''|*[!0-9a-f]*) echo '::error::candidate commit is not a lowercase Git SHA'; exit 1 ;;
+          esac
+          # The release candidate owns its dependency identity.  Read only its
+          # lockfiles so a staging dispatch cannot replace the reviewed
+          # workflow/control scripts with an older candidate checkout.
+          cd "${GITHUB_WORKSPACE}"
+          git fetch --no-tags origin "$sha"
+          cd "${RUNNER_TEMP}/release"
+          git -C "${GITHUB_WORKSPACE}" show "$sha:package-lock.json" > package-lock.json
+          git -C "${GITHUB_WORKSPACE}" show "$sha:pyproject.toml" > pyproject.toml
           python "${GITHUB_WORKSPACE}/scripts/release/release_manifest.py" release.json \
             --expected-sha "$sha" --checksum "$RELEASE_MANIFEST_CHECKSUM"
           python "${GITHUB_WORKSPACE}/scripts/release/release_candidate_adapter.py" --verify \
             --manifest release.json --candidate release-candidate.json \
             --expected-sha "$sha" \
-            --lockfile "${GITHUB_WORKSPACE}/package-lock.json" \
-            --lockfile "${GITHUB_WORKSPACE}/pyproject.toml"
+            --lockfile package-lock.json \
+            --lockfile pyproject.toml
           digest="$(python -c "import json; print(json.load(open('release.json'))['artifacts']['backend_image']['digest'])")"
           case "$digest" in
             sha256:*) ;;
@@ -1019,13 +1030,24 @@ jobs:
           sha="$(python -c "import json; print(json.load(open('release.json'))['commit_sha'])")"
           test "$sha" = "$INTENDED_RELEASE_SHA" \
             || { echo "::error::release manifest commit ${sha} is not intended release ${INTENDED_RELEASE_SHA}"; exit 1; }
+          case "$sha" in
+            ''|*[!0-9a-f]*) echo '::error::candidate commit is not a lowercase Git SHA'; exit 1 ;;
+          esac
+          # Reuse only the candidate commit's lockfiles, preserving the
+          # relative paths used when the immutable candidate was built while
+          # keeping all subsequent controls on this reviewed workflow SHA.
+          cd "${GITHUB_WORKSPACE}"
+          git fetch --no-tags origin "$sha"
+          cd "${RUNNER_TEMP}/release"
+          git -C "${GITHUB_WORKSPACE}" show "$sha:package-lock.json" > package-lock.json
+          git -C "${GITHUB_WORKSPACE}" show "$sha:pyproject.toml" > pyproject.toml
           python "${GITHUB_WORKSPACE}/scripts/release/release_manifest.py" release.json \
             --expected-sha "$sha" --checksum "$RELEASE_MANIFEST_CHECKSUM"
           python "${GITHUB_WORKSPACE}/scripts/release/release_candidate_adapter.py" --verify \
             --manifest release.json --candidate release-candidate.json \
             --expected-sha "$sha" \
-            --lockfile "${GITHUB_WORKSPACE}/package-lock.json" \
-            --lockfile "${GITHUB_WORKSPACE}/pyproject.toml"
+            --lockfile package-lock.json \
+            --lockfile pyproject.toml
           python - <<'PY'
           import hashlib, json, pathlib, sys
           manifest = json.load(open("release.json"))
