@@ -162,7 +162,7 @@ def staging(args: argparse.Namespace) -> int:
                 environment_resolution=environment_resolution,
                 persist=not args.dry_run,
             )
-        except (OSError, StateMachineError) as exc:
+        except (OSError, json.JSONDecodeError, StateMachineError) as exc:
             checks.append({"check_id": "staging_checkpoint", "status": "BLOCKED", "reason": sanitize_detail(str(exc))})
             status = "BLOCKED"
             failure = _failure(

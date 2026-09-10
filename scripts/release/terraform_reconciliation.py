@@ -31,7 +31,15 @@ SENSITIVE_VALUE = re.compile(
     r"(?:sk|rk)_(?:live|test)_[A-Za-z0-9]+|password\s*=|secret\s*=)",
     re.IGNORECASE,
 )
-REDACTED_VALUES = frozenset({"<sensitive>", "(sensitive value)", "REDACTED", "***"})
+REDACTED_VALUES = frozenset({
+    "<sensitive>",
+    "(sensitive value)",
+    "REDACTED",
+    "***",
+    # Canonical Terraform plan sanitisation marker emitted by
+    # scripts/release/sanitize_terraform_plan_json.py.
+    "__REDACTED_SENSITIVE__",
+})
 
 
 class ReconciliationError(ValueError):
@@ -65,8 +73,27 @@ def _read_json(path: Path) -> dict[str, Any]:
     return value
 
 
-def _secret_paths(value: Any, path: str = "$", *, key: str | None = None) -> list[str]:
+def _secret_paths(
+    value: Any,
+    path: str = "$",
+    *,
+    key: str | None = None,
+    sensitive_mask: bool = False,
+) -> list[str]:
     """Find plaintext secret material without returning its value."""
+
+    # Terraform's ``sensitive_values`` tree is a boolean mask describing
+    # which values are sensitive; it is not the value tree itself.  Walk it
+    # only for shape consistency and never classify its booleans as plaintext
+    # credentials.
+    if sensitive_mask:
+        if isinstance(value, dict):
+            for child_key, child in value.items():
+                _secret_paths(child, f"{path}.{child_key}", sensitive_mask=True)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                _secret_paths(child, f"{path}[{index}]", sensitive_mask=True)
+        return []
 
     found: list[str] = []
     key_is_reference = bool(key and re.search(r"(?:^|_)(?:arn|id|name|ref|version)(?:$|_)", key, re.IGNORECASE))
@@ -79,7 +106,14 @@ def _secret_paths(value: Any, path: str = "$", *, key: str | None = None) -> lis
         found.append(path)
     if isinstance(value, dict):
         for child_key, child in value.items():
-            found.extend(_secret_paths(child, f"{path}.{child_key}", key=str(child_key)))
+            found.extend(
+                _secret_paths(
+                    child,
+                    f"{path}.{child_key}",
+                    key=str(child_key),
+                    sensitive_mask=child_key == "sensitive_values",
+                )
+            )
     elif isinstance(value, list):
         for index, child in enumerate(value):
             found.extend(_secret_paths(child, f"{path}[{index}]"))

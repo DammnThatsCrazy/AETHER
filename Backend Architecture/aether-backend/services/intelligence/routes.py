@@ -1432,7 +1432,16 @@ def _readiness_for_package(pkg: dict[str, Any]) -> dict[str, Any]:
 
 
 def _delivery_evidence_projection() -> dict[str, Any]:
-    """Read a mounted GitHub evidence projection without inventing readiness."""
+    """Read a mounted GitHub evidence projection without inventing readiness.
+
+    ``scripts/release/evidence_bundle.py`` is the canonical producer.  Its
+    raw bundle calls the result ``status`` (with ``READY`` as the successful
+    disposition) and names the target ``deployment_profile``; the derived
+    Kyber projection renames those fields to ``disposition`` and retains the
+    profile name.  This adapter intentionally accepts both shapes and emits a
+    stable presentation vocabulary for the route below.  It never turns a
+    blocked or malformed bundle into readiness evidence.
+    """
     raw_path = os.environ.get("AETHER_DELIVERY_EVIDENCE_PATH")
     if not raw_path:
         return {
@@ -1446,22 +1455,42 @@ def _delivery_evidence_projection() -> dict[str, Any]:
         return {"status": "UNAVAILABLE", "source": "github_actions_artifact", "reason": str(exc)}
     if not isinstance(value, dict):
         return {"status": "UNAVAILABLE", "source": "github_actions_artifact", "reason": "evidence projection is not an object"}
-    required = ("release_candidate_id", "commit_sha", "artifact_digest", "status")
-    if any(not isinstance(value.get(key), str) or not value[key].strip() for key in required):
+    identity = value.get("candidate_identity") if isinstance(value.get("candidate_identity"), dict) else value
+    required = ("release_candidate_id", "commit_sha", "artifact_digest")
+    if any(not isinstance(identity.get(key), str) or not identity[key].strip() for key in required):
         return {"status": "INVALID", "source": "github_actions_artifact", "reason": "evidence projection lacks candidate identity"}
-    if not re.fullmatch(r"[0-9a-f]{7,64}", value["commit_sha"]):
+    if not re.fullmatch(r"[0-9a-f]{7,64}", identity["commit_sha"]):
         return {"status": "INVALID", "source": "github_actions_artifact", "reason": "evidence projection commit is not a Git SHA"}
-    if not re.fullmatch(r"sha256:[0-9a-f]{64}", value["artifact_digest"]):
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", identity["artifact_digest"]):
         return {"status": "INVALID", "source": "github_actions_artifact", "reason": "evidence projection artifact is not an immutable SHA-256 digest"}
-    if value["status"] not in {"PASS", "DEPLOYED", "PROMOTED", "COMPLETE"}:
-        return {"status": "BLOCKED", "source": "github_actions_artifact", "reason": "delivery evidence is not successful"}
+    disposition = value.get("status")
+    if not isinstance(disposition, str) or not disposition.strip():
+        disposition = value.get("disposition")
+    if not isinstance(disposition, str) or not disposition.strip():
+        return {"status": "INVALID", "source": "github_actions_artifact", "reason": "delivery evidence lacks a disposition"}
+    disposition = disposition.strip().upper()
+    successful = {"READY", "PASS", "DEPLOYED", "PROMOTED", "COMPLETE"}
+    if disposition not in successful and disposition not in {"PASS_WITH_DEGRADATION", "BLOCKED", "FAILED"}:
+        return {"status": "INVALID", "source": "github_actions_artifact", "reason": "delivery evidence disposition is invalid"}
+    if disposition in {"BLOCKED", "FAILED"}:
+        return {"status": "BLOCKED", "source": "github_actions_artifact", "reason": "delivery evidence is not successful", "disposition": disposition}
+    # A READY bundle is only authoritative when its required checks are also
+    # free of blocking outcomes.  The canonical validator enforces this too,
+    # but retaining the invariant at the read boundary prevents hand-edited
+    # projections from becoming a readiness signal.
+    checks = value.get("checks")
+    if disposition == "READY" and isinstance(checks, dict) and any(item in {"BLOCKED", "FAILED"} for item in checks.values()):
+        return {"status": "BLOCKED", "source": "github_actions_artifact", "reason": "READY evidence contains a blocking check", "disposition": disposition}
+    profile = next((value.get(key) for key in ("deployment_mode", "deployment_profile", "profile") if isinstance(value.get(key), str) and value[key].strip()), None)
     return {
-        "status": "PASS",
+        "status": "PASS" if disposition in successful else "PASS_WITH_DEGRADATION",
         "source": "github_actions_artifact",
-        "release_candidate_id": value["release_candidate_id"],
-        "commit_sha": value["commit_sha"],
-        "artifact_digest": value["artifact_digest"],
-        "deployment_mode": value.get("deployment_mode") if isinstance(value.get("deployment_mode"), str) else None,
+        "release_candidate_id": identity["release_candidate_id"],
+        "commit_sha": identity["commit_sha"],
+        "artifact_digest": identity["artifact_digest"],
+        "deployment_profile": value.get("deployment_profile") if isinstance(value.get("deployment_profile"), str) else profile,
+        "deployment_mode": profile,
+        "disposition": disposition,
     }
 
 

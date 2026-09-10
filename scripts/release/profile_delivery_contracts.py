@@ -30,6 +30,21 @@ EPHEMERAL_PROFILES = frozenset({"preview", "demo"})
 PROMOTION_PROFILES = frozenset({"production-lean", "production-scale", "enterprise-isolated"})
 OPERATIONS = frozenset({"wake", "sleep", "deploy", "validate", "promote", "rollback", "reconcile", "destroy"})
 RESULT_STATUSES = frozenset({"DRY_RUN", "BLOCKED", "FAILED", "DEPLOYED", "VALIDATED", "PROMOTED", "ROLLED_BACK", "SLEPT"})
+# A result status is meaningful only in the context of the operation that
+# requested it.  BLOCKED/FAILED remain valid for every operation because a
+# provider can fail before or during any stage; successful terminal statuses do
+# not cross operation boundaries.
+OPERATION_SUCCESS_STATUSES = {
+    "wake": frozenset({"DEPLOYED"}),
+    "sleep": frozenset({"SLEPT"}),
+    "deploy": frozenset({"DEPLOYED"}),
+    "validate": frozenset({"VALIDATED"}),
+    "promote": frozenset({"PROMOTED"}),
+    "rollback": frozenset({"ROLLED_BACK"}),
+    "reconcile": frozenset({"VALIDATED"}),
+    "destroy": frozenset({"SLEPT"}),
+}
+MUTATING_OPERATIONS = frozenset(OPERATION_SUCCESS_STATUSES) - {"validate"}
 _COMMIT = re.compile(r"^[0-9a-f]{7,64}$")
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 
@@ -181,8 +196,27 @@ def validate_result(request: DeliveryRequest, result: Mapping[str, Any]) -> list
         errors.append("result.status is invalid")
     if identity != request.candidate_identity:
         errors.append("result candidate identity does not match request")
-    if request.dry_run and status in {"DEPLOYED", "PROMOTED", "ROLLED_BACK", "SLEPT"}:
-        errors.append("dry-run cannot report a mutating result")
+    mutation = result.get("mutation_occurred", False)
+    if not isinstance(mutation, bool):
+        errors.append("result.mutation_occurred must be boolean")
+        mutation = False
+    if request.dry_run:
+        if status in {"DEPLOYED", "PROMOTED", "ROLLED_BACK", "SLEPT", "VALIDATED"} or mutation:
+            errors.append("dry-run cannot report a mutating result")
+        elif status not in {"DRY_RUN", "BLOCKED", "FAILED"}:
+            errors.append("dry-run result status is invalid")
+    elif status == "DRY_RUN":
+        errors.append("non-dry-run cannot report DRY_RUN")
+    elif status in OPERATION_SUCCESS_STATUSES.get(request.operation, frozenset()):
+        if request.operation == "validate" and mutation:
+            errors.append("validate result must set mutation_occurred=false")
+        elif request.operation in MUTATING_OPERATIONS and not mutation:
+            errors.append(f"{request.operation} result must set mutation_occurred=true")
+    elif status not in {"BLOCKED", "FAILED"}:
+        allowed = ", ".join(sorted(OPERATION_SUCCESS_STATUSES.get(request.operation, ())))
+        errors.append(f"result.status {status} is not valid for {request.operation}; expected {allowed}")
+    elif request.operation == "validate" and mutation:
+        errors.append("validate result must set mutation_occurred=false")
     if request.operation == "promote" and status == "PROMOTED" and not request.staging_evidence:
         errors.append("promoted result requires staging evidence")
     if request.profile in EPHEMERAL_PROFILES and status in {"DEPLOYED", "VALIDATED"}:

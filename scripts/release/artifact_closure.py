@@ -20,9 +20,9 @@ from pathlib import Path
 from typing import Any, Mapping
 
 try:
-    from delivery_contracts import validate_release_candidate
+    from delivery_contracts import _aggregate_digest, validate_release_candidate
 except ModuleNotFoundError:  # pragma: no cover
-    from scripts.delivery_contracts import validate_release_candidate
+    from scripts.delivery_contracts import _aggregate_digest, validate_release_candidate
 
 
 SCHEMA_VERSION = 1
@@ -172,6 +172,34 @@ def validate_closure_evidence(value: Mapping[str, Any]) -> list[str]:
     artifacts = value.get("artifacts")
     if not isinstance(artifacts, Mapping) or not artifacts:
         errors.append("artifacts must be a non-empty object")
+        artifact_digests: dict[str, str] = {}
+    else:
+        artifact_digests = {}
+        for name, artifact in artifacts.items():
+            if not isinstance(name, str) or not name.strip():
+                errors.append("artifacts must use non-empty string names")
+                continue
+            if not isinstance(artifact, Mapping):
+                errors.append(f"artifact {name} must be an object")
+                continue
+            required = {"path", "digest", "required_entries", "closure"}
+            missing = sorted(required - set(artifact))
+            if missing:
+                errors.append(f"artifact {name} is missing: {', '.join(missing)}")
+                continue
+            path = artifact.get("path")
+            if not isinstance(path, str) or not path.strip():
+                errors.append(f"artifact {name}.path must be a non-empty string")
+            digest = artifact.get("digest")
+            if not isinstance(digest, str) or not _DIGEST.fullmatch(digest):
+                errors.append(f"artifact {name}.digest must be an immutable sha256 digest")
+            else:
+                artifact_digests[name] = digest
+            entries = artifact.get("required_entries")
+            if not isinstance(entries, list) or any(not isinstance(entry, str) for entry in entries):
+                errors.append(f"artifact {name}.required_entries must be a list of strings")
+            if artifact.get("closure") != "PASS":
+                errors.append(f"artifact {name}.closure must be PASS")
     provenance = value.get("provenance")
     if not isinstance(provenance, Mapping):
         errors.append("provenance must be an object")
@@ -185,6 +213,11 @@ def validate_closure_evidence(value: Mapping[str, Any]) -> list[str]:
             errors.append("local provenance cannot carry signature_ref")
     if not isinstance(value.get("artifact_digest"), str) or not _DIGEST.fullmatch(value.get("artifact_digest", "")):
         errors.append("artifact_digest must be sha256")
+    else:
+        if isinstance(identity, Mapping) and identity.get("artifact_digest") != value.get("artifact_digest"):
+            errors.append("artifact_digest must match candidate_identity.artifact_digest")
+        if artifact_digests and _aggregate_digest(artifact_digests) != value.get("artifact_digest"):
+            errors.append("artifact_digest does not match serialized artifact digests")
     return sorted(set(errors))
 
 

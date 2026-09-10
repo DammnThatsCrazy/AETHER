@@ -143,6 +143,25 @@ def test_artifact_evidence_rejects_malformed_identity():
     })
 
 
+def test_artifact_evidence_binds_identity_digest_and_serialized_artifacts(tmp_path: Path):
+    archive = tmp_path / "backend.tar"
+    archive.write_bytes(b"runtime")
+    digest = "sha256:" + __import__("hashlib").sha256(archive.read_bytes()).hexdigest()
+    evidence = verify_closure(candidate(component_digest=digest), {"backend": ArtifactSpec("backend", archive)})
+
+    mismatched_identity = json.loads(json.dumps(evidence))
+    mismatched_identity["candidate_identity"]["artifact_digest"] = "sha256:" + "c" * 64
+    assert any("candidate_identity.artifact_digest" in error for error in validate_closure_evidence(mismatched_identity))
+
+    mismatched_artifacts = json.loads(json.dumps(evidence))
+    mismatched_artifacts["artifacts"]["backend"]["digest"] = "sha256:" + "d" * 64
+    assert any("serialized artifact digests" in error for error in validate_closure_evidence(mismatched_artifacts))
+
+    malformed_artifact = json.loads(json.dumps(evidence))
+    malformed_artifact["artifacts"]["backend"] = {}
+    assert any("artifact backend is missing" in error for error in validate_closure_evidence(malformed_artifact))
+
+
 def test_profile_operations_require_ttl_and_exact_promotion_identity():
     with pytest.raises(ValueError, match="ttl_hours"):
         request(profile="preview", operation="deploy")
@@ -163,6 +182,29 @@ def test_dry_run_result_cannot_claim_promotion_and_telemetry_is_registry_shape()
     registry = json.loads((ROOT / "config/telemetry_contracts.json").read_text())
     event = next(item for item in registry["events"] if item["id"] == "delivery.operation.completed")
     assert set(payload) <= set(event["fields"])
+
+
+def test_result_status_and_mutation_are_bound_to_operation():
+    validate_request = request(operation="validate", profile="staging", dry_run=False)
+    errors = validate_result(
+        validate_request,
+        {"status": "VALIDATED", "candidate_identity": identity("staging"), "mutation_occurred": True},
+    )
+    assert "mutation_occurred=false" in " ".join(errors)
+
+    deploy_request = request(operation="deploy", profile="staging", dry_run=False)
+    errors = validate_result(
+        deploy_request,
+        {"status": "SLEPT", "candidate_identity": identity("staging"), "mutation_occurred": True},
+    )
+    assert any("not valid for deploy" in error for error in errors)
+
+    wake_request = request(operation="wake", profile="staging", dry_run=False)
+    errors = validate_result(
+        wake_request,
+        {"status": "ROLLED_BACK", "candidate_identity": identity("staging"), "mutation_occurred": True},
+    )
+    assert any("not valid for wake" in error for error in errors)
 
 
 def test_contract_schemas_validate_sample_request_and_closure(tmp_path: Path):

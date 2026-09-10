@@ -142,6 +142,21 @@ def test_staging_checkpoint_mode_resumes_exact_candidate(tmp_path, monkeypatch):
     assert resumed_calls == ["deploy", "migrate", "activate", "journeys"]
 
 
+def test_malformed_environment_resolution_emits_blocked_checkpoint_evidence(tmp_path):
+    resolution = tmp_path / "malformed-resolution.json"
+    resolution.write_text("{not-json", encoding="utf-8")
+    args = staging_args(
+        tmp_path,
+        state=tmp_path / "staging-state.json",
+        environment_resolution=resolution,
+    )
+
+    assert orchestrator.staging(args) == 1
+    result = json.loads(args.output.read_text())
+    assert result["status"] == "BLOCKED"
+    assert result["failure"]["code"] == "INVALID_STAGING_CHECKPOINT"
+
+
 def test_migration_requires_database_credentials(tmp_path, monkeypatch):
     metadata = tmp_path / "migration.yaml"
     metadata.write_text("""migration_id: m1

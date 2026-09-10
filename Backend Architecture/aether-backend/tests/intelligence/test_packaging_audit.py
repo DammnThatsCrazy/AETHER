@@ -125,5 +125,35 @@ async def test_tenant_package_fit_and_kyber_readiness_endpoints():
     assert any(i["name"] == "government_ready_planning" for i in deployment["items"])
 
 
+def test_delivery_evidence_projection_accepts_raw_and_kyber_shapes(tmp_path, monkeypatch):
+    raw = {
+        "schema_version": 1,
+        "release_candidate_id": "rc-1",
+        "commit_sha": "a" * 40,
+        "artifact_digest": "sha256:" + "b" * 64,
+        "deployment_profile": "standard_saas",
+        "status": "READY",
+        "checks": {},
+    }
+    path = tmp_path / "evidence.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    monkeypatch.setenv("AETHER_DELIVERY_EVIDENCE_PATH", str(path))
+    projected = routes._delivery_evidence_projection()
+    assert projected["status"] == "PASS"
+    assert projected["disposition"] == "READY"
+    assert projected["deployment_mode"] == "standard_saas"
+
+    path.write_text(json.dumps({
+        "release_candidate_id": "rc-1",
+        "commit_sha": "a" * 40,
+        "artifact_digest": "sha256:" + "b" * 64,
+        "deployment_profile": "standard_saas",
+        "disposition": "READY",
+    }), encoding="utf-8")
+    projected = routes._delivery_evidence_projection()
+    assert projected["status"] == "PASS"
+    assert projected["deployment_mode"] == "standard_saas"
+
+
 def test_redact_secrets_helper_excludes_raw_secrets():
     assert redact_secrets({"api_key": "abc", "nested": {"secret": "xyz"}}) == {"api_key": "[redacted]", "nested": {"secret": "[redacted]"}}

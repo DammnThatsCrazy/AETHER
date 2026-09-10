@@ -246,7 +246,7 @@ def validate_release_candidate(candidate: Mapping[str, Any]) -> list[str]:
             errors.append(f"{field_name} must be a unique list of non-empty strings")
             continue
         if (
-            not value
+            (not value and field_name != "required_checks")
             or any(not isinstance(item, str) or not item.strip() for item in value)
             or len(value) != len(set(value))
         ):

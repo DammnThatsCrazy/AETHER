@@ -327,6 +327,24 @@ def test_terraform_reconciliation_rejects_plaintext_secret_material(tmp_path):
         load_remote_inventory(path)
 
 
+def test_terraform_reconciliation_accepts_canonical_redaction_marker_and_mask(tmp_path):
+    path = _write(tmp_path / "sanitised.json", {
+        "schema_version": 1,
+        "source": "offline_fixture",
+        "inventory_complete": True,
+        "resources": [{
+            "address": "aws_secretsmanager_secret.foo", "type": "aws_secretsmanager_secret",
+            "owner": "terraform",
+            "values": {
+                "client_secret": "__REDACTED_SENSITIVE__",
+                "sensitive_values": {"client_secret": True},
+            },
+        }],
+    })
+    inventory = load_remote_inventory(path)
+    assert inventory.resources[0].values["client_secret"] == "__REDACTED_SENSITIVE__"
+
+
 def test_terraform_reconciliation_schema_accepts_report(tmp_path):
     desired, state, remote = _terraform_inputs(tmp_path)
     report = reconcile("staging", desired, state, remote)
