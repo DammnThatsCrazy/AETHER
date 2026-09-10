@@ -29,7 +29,7 @@ async def test_test_event_writes_bronze_and_is_accepted(svc, make_request, onboa
 
     request = make_request(tenant)
     result = await svc.run_test_event(
-        request, tenant, TestEventRequest(event_type="track", properties={"plan": "P1"})
+        request, tenant, TestEventRequest(event_type="track", properties={"plan": "alpha"})
     )
 
     # The disposition comes straight from ingest_batch's per-event result.
@@ -105,7 +105,7 @@ async def test_billing_state_derived_active_from_seeded_stripe(svc):
     stripe_repository._mem_accounts[tenant] = {
         "tenant_id": tenant,
         "subscription_status": "active",
-        "plan_tier": "P2",
+        "plan_tier": "beta",
     }
     assert await svc.derive_billing_state(tenant) == S.billing_active
 
@@ -127,8 +127,8 @@ async def test_select_plan_performs_no_billing_write(svc):
     # Unseeded tenant: after selecting a plan, activation must NOT have created
     # a billing account (billing is read-only here).
     unseeded = "tenant-no-billing-write"
-    status = await svc.select_plan(unseeded, "P3")
-    assert status["selected_plan_tier"] == "P3"
+    status = await svc.select_plan(unseeded, "gamma")
+    assert status["selected_plan_tier"] == "gamma"
     assert status["billing_state"] == S.billing_pending.value
     assert unseeded not in stripe_repository._mem_accounts
 
@@ -137,10 +137,10 @@ async def test_select_plan_performs_no_billing_write(svc):
     stripe_repository._mem_accounts[seeded] = {
         "tenant_id": seeded,
         "subscription_status": "active",
-        "plan_tier": "P1",
+        "plan_tier": "alpha",
     }
     snapshot = dict(stripe_repository._mem_accounts[seeded])
-    status2 = await svc.select_plan(seeded, "P4")
+    status2 = await svc.select_plan(seeded, "delta")
     assert status2["billing_state"] == S.billing_active.value
     # The activation service left the billing account exactly as it found it.
     assert stripe_repository._mem_accounts[seeded] == snapshot

@@ -43,25 +43,23 @@ class APIKeyTier(str, Enum):
 
 
 class PlanTier(str, Enum):
-    """Self-serve plan tiers (P1-P4)."""
-    P1_HOBBYIST = "P1"
-    P2_PROFESSIONAL = "P2"
-    P3_GROWTH_INTELLIGENCE = "P3"
-    P4_PROTOCOL_MASTER = "P4"
+    """Self-serve plan tiers (Alpha–Delta)."""
+    ALPHA = "alpha"
+    BETA = "beta"
+    GAMMA = "gamma"
+    DELTA = "delta"
 
 
-# Mapping from legacy APIKeyTier -> PlanTier for backward compatibility.
-# FREE -> P1, PRO -> P2, ENTERPRISE -> P4 (P3 is new).
 _LEGACY_TIER_TO_PLAN = {
-    APIKeyTier.FREE: PlanTier.P1_HOBBYIST,
-    APIKeyTier.PRO: PlanTier.P2_PROFESSIONAL,
-    APIKeyTier.ENTERPRISE: PlanTier.P4_PROTOCOL_MASTER,
+    APIKeyTier.FREE: PlanTier.ALPHA,
+    APIKeyTier.PRO: PlanTier.BETA,
+    APIKeyTier.ENTERPRISE: PlanTier.DELTA,
 }
 
 
 def legacy_tier_to_plan(tier: APIKeyTier) -> PlanTier:
     """Map a legacy APIKeyTier to a PlanTier."""
-    return _LEGACY_TIER_TO_PLAN.get(tier, PlanTier.P1_HOBBYIST)
+    return _LEGACY_TIER_TO_PLAN.get(tier, PlanTier.ALPHA)
 
 
 @dataclass
@@ -71,7 +69,7 @@ class TenantContext:
     user_id: Optional[str] = None
     role: Role = Role.VIEWER
     api_key_tier: APIKeyTier = APIKeyTier.FREE
-    plan_tier: PlanTier = PlanTier.P1_HOBBYIST
+    plan_tier: PlanTier = PlanTier.ALPHA
     permissions: list[str] = field(default_factory=list)
     # Runtime authorization attributes.  Legacy API keys/JWTs default to the
     # only serving state; trust-plane credentials populate these values from

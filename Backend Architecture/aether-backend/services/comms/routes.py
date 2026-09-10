@@ -236,7 +236,7 @@ async def comms_entitlement(request: Request) -> dict:
     from services.comms.entitlements import CommsEntitlementPolicy, is_comms_connector
     from services.integrations.connectors.service import connector_service
 
-    plan = getattr(tenant, "plan_tier", PlanTier.P1_HOBBYIST)
+    plan = getattr(tenant, "plan_tier", PlanTier.ALPHA)
     policy = CommsEntitlementPolicy()
     connectors = await connector_service.list_for_tenant(tenant.tenant_id)
     comms_conns = [c for c in connectors if is_comms_connector(c.get("connector_type", ""))]

@@ -19,10 +19,10 @@ from shared.auth.auth import PlanTier
 from shared.plans.models import ServiceDefinition, ServicePricing
 
 
-_P1 = PlanTier.P1_HOBBYIST
-_P2 = PlanTier.P2_PROFESSIONAL
-_P3 = PlanTier.P3_GROWTH_INTELLIGENCE
-_P4 = PlanTier.P4_PROTOCOL_MASTER
+_P1 = PlanTier.ALPHA
+_P2 = PlanTier.BETA
+_P3 = PlanTier.GAMMA
+_P4 = PlanTier.DELTA
 
 
 def _pricing(cost: str, opt_a: str, opt_b: str, opt_c: str) -> ServicePricing:

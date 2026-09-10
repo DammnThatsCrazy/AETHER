@@ -204,7 +204,7 @@ class ActivationService:
     ) -> dict[str, Any]:
         record = await self._load_or_create(tenant_id)
         self.advance(record, S.keys_created, reason=f"count={count}")
-        tier = record.get("selected_plan_tier") or "P1"
+        tier = record.get("selected_plan_tier") or "alpha"
         keys = await self.provision_sdk_keys(tenant_id, count, label, tier=tier)
         record["created_key_ids"] = list(record.get("created_key_ids", [])) + [
             k["id"] for k in keys
@@ -216,7 +216,7 @@ class ActivationService:
         return {"keys": keys, "state": record["state"]}
 
     async def provision_sdk_keys(
-        self, tenant_id: str, count: int, label: str, tier: str = "P1"
+        self, tenant_id: str, count: int, label: str, tier: str = "alpha"
     ) -> list[dict[str, str]]:
         """Mint ``count`` API keys, reusing the registration key-mint sequence.
 

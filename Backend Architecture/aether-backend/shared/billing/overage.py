@@ -185,8 +185,4 @@ class OverageCalculator:
 
     def _plan_fee(self, plan_tier: PlanTier) -> Decimal:
         plan = PLAN_CATALOG[plan_tier]
-        if self._pricing_option == "A":
-            return plan.pricing.option_a
-        if self._pricing_option == "B":
-            return plan.pricing.option_b
-        return plan.pricing.option_c
+        return plan.pricing.monthly

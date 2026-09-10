@@ -30,13 +30,13 @@ logger = get_logger("aether.security.anti_distillation")
 # ── Score binning by plan tier ────────────────────────────────────────────────
 
 SCORE_BINS_BY_PLAN: Dict[str, float] = {
-    "P1_HOBBYIST": 0.1,
-    "P2_PROFESSIONAL": 0.05,
-    "P3_GROWTH": 0.01,
-    "P4_PROTOCOL": 0.001,
+    "ALPHA": 0.1,
+    "BETA": 0.05,
+    "GAMMA": 0.01,
+    "DELTA": 0.001,
 }
 
-DEFAULT_PLAN_TIER = "P1_HOBBYIST"
+DEFAULT_PLAN_TIER = "ALPHA"
 
 
 def apply_output_precision(score: float, plan_tier: str = DEFAULT_PLAN_TIER) -> float:

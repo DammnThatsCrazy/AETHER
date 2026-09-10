@@ -15,41 +15,43 @@ from shared.auth.auth import PlanTier
 
 @dataclass(frozen=True)
 class PricingOptions:
-    """Monthly subscription price under each pricing strategy."""
-    option_a: Decimal  # Market Entry
-    option_b: Decimal  # Ideal / Fair
-    option_c: Decimal  # Premium
+    """Subscription pricing (monthly and annual)."""
+    monthly: Decimal
+    annual: Decimal
 
 
 @dataclass(frozen=True)
 class PlanDefinition:
-    """A self-serve plan tier (P1-P4)."""
-    plan_id: str                      # "P1", "P2", "P3", "P4"
-    display_name: str                 # "Hobbyist", "Professional", etc.
-    target_user: str                  # "Solo Devs", "Small Teams", etc.
-    monthly_quota: int                # 25_000, 100_000, 250_000, 500_000
-    member_cap: int                   # 1, 3, 5, 10
-    burst_rpm: int                    # 100, 500, 1_200, 3_000
-    blended_overage_per_1k: Decimal   # Customer-facing fallback rate
-    service_count: int                # 10, 19, 29, 34
-    pricing: PricingOptions           # Subscription price under each option
+    """A self-serve plan tier (Alpha–Delta)."""
+    plan_id: str
+    display_name: str
+    stripe_product_id: str
+    target_user: str
+    monthly_quota: int
+    member_cap: int
+    burst_rpm: int
+    event_overage_per_1k: Decimal
+    acu_overage_per_1k: Decimal
+    managed_per_acu: Decimal
+    byok_per_acu: Decimal
+    service_count: int
+    pricing: PricingOptions
 
 
 @dataclass(frozen=True)
 class ServicePricing:
     """Per-1k-request pricing for one service across the 3 pricing options."""
-    cost_per_1k: Decimal       # AWS / underlying cost
-    option_a_per_1k: Decimal   # Market Entry overage rate
-    option_b_per_1k: Decimal   # Ideal / Fair overage rate
-    option_c_per_1k: Decimal   # Premium overage rate
+    cost_per_1k: Decimal
+    option_a_per_1k: Decimal
+    option_b_per_1k: Decimal
+    option_c_per_1k: Decimal
 
 
 @dataclass(frozen=True)
 class ServiceDefinition:
-    """One of the 34 Aether services with its endpoint, pricing, and gating."""
-    name: str                                          # "Omni-Capture"
-    pillar: str                                        # "Ingestion"
-    endpoint_pattern: str                              # "/v1/ingest/*"
+    """One of the Aether services with its endpoint, pricing, and gating."""
+    name: str
+    pillar: str
+    endpoint_pattern: str
     pricing: ServicePricing
-    # Map PlanTier -> access tier label or None (None = blocked).
     plan_access: dict = field(default_factory=dict)

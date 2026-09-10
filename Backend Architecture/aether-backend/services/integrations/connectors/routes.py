@@ -174,7 +174,7 @@ async def configure_connector(connector_type: str, body: ConnectorConfigure, req
             from shared.auth.auth import PlanTier
             from shared.common.common import ForbiddenError
             plan = getattr(getattr(request.state, "tenant", None), "plan_tier",
-                           PlanTier.P1_HOBBYIST)
+                           PlanTier.ALPHA)
             existing = await connector_service.list_for_tenant(tenant_id)
             current = sum(
                 1 for c in existing

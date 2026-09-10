@@ -78,7 +78,7 @@ class FirstAdminBootstrapRequest(BaseModel):
     """
 
     name: str = Field(..., min_length=1, max_length=200)
-    plan_tier: str = Field(default="P1", pattern="^(P1|P2|P3|P4)$")
+    plan_tier: str = Field(default="alpha", pattern="^(alpha|beta|gamma|delta)$")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ async def _issue_api_key(tenant_id: str, plan_tier_value: str, label: str) -> st
 
 
 def _legacy_plan_for_tier(plan_tier: str) -> str:
-    return {"P1": "free", "P2": "pro", "P3": "pro", "P4": "enterprise"}.get(
+    return {"alpha": "free", "beta": "pro", "gamma": "pro", "delta": "enterprise"}.get(
         plan_tier, "free"
     )
 
@@ -494,7 +494,7 @@ class RegisterRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=200)
     email: str = Field(..., min_length=5, max_length=254)
     password: str = Field(..., min_length=8, max_length=128)
-    plan_tier: str = Field(default="P1", pattern="^(P1|P2|P3|P4)$")
+    plan_tier: str = Field(default="alpha", pattern="^(alpha|beta|gamma|delta)$")
 
 
 @router.post("/v1/auth/register")
@@ -590,13 +590,13 @@ async def verify_email(body: VerifyEmailRequest, response: Response = None):
         pass
 
     name = pending.get("name", "")
-    plan_tier_value = pending.get("plan_tier", "P1")
+    plan_tier_value = pending.get("plan_tier", "alpha")
     pw_hash = pending.get("password_hash", "")
 
     try:
         plan_tier = PlanTier(plan_tier_value)
     except ValueError:
-        plan_tier = PlanTier.P1_HOBBYIST
+        plan_tier = PlanTier.ALPHA
 
     tenant_id = str(uuid.uuid4())
 
@@ -763,12 +763,12 @@ async def login(body: LoginRequest, response: Response = None):
         raise BadRequestError(_LOGIN_ERROR)
 
     # Confirm tenant is active
-    plan_tier_value = "P1"
+    plan_tier_value = "alpha"
     try:
         tenant_rec = await _repo.find_by_id(tenant_id) or {}
         if tenant_rec.get("status") == "inactive":
             raise BadRequestError("This account has been deactivated.")
-        plan_tier_value = tenant_rec.get("plan_tier", "P1") or "P1"
+        plan_tier_value = tenant_rec.get("plan_tier", "alpha") or "alpha"
     except BadRequestError:
         raise
     except Exception:
@@ -798,7 +798,7 @@ async def login(body: LoginRequest, response: Response = None):
 
 class SSOCallbackRequest(BaseModel):
     token: str = Field(..., description="Auth0 access token (RS256 JWT)")
-    plan_tier: str = Field(default="P1", pattern="^(P1|P2|P3|P4)$")
+    plan_tier: str = Field(default="alpha", pattern="^(alpha|beta|gamma|delta)$")
 
 
 @router.post("/v1/auth/sso/callback")
@@ -829,7 +829,7 @@ async def sso_callback(body: SSOCallbackRequest, response: Response = None):
     try:
         plan_tier = PlanTier(body.plan_tier)
     except ValueError:
-        plan_tier = PlanTier.P1_HOBBYIST
+        plan_tier = PlanTier.ALPHA
 
     # Look up existing tenant by Auth0 sub
     tenant_id: Optional[str] = None

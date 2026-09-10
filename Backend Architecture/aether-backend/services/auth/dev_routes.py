@@ -59,7 +59,7 @@ async def create_development_session(request: Request, response: Response):
             "tenant_id": _TENANT_ID,
             "name": "Local development",
             "contact_email": None,
-            "plan_tier": "P1",
+            "plan_tier": "alpha",
             "status": "active",
             "data_origin": "local_development_control_plane",
         },

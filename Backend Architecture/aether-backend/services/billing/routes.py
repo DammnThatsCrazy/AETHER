@@ -77,7 +77,7 @@ async def list_plans():
         {
             "plan_id": plan.plan_id,
             "display_name": plan.display_name,
-            "price_monthly": int(plan.pricing.option_a),
+            "price_monthly": int(plan.pricing.monthly),
             "currency": "USD",
             "contact_sales": False,
             "included_usage": plan.monthly_quota,

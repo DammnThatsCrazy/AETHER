@@ -95,7 +95,7 @@ def onboard_with_keys():
         service: ActivationService,
         tenant_id: str,
         count: int = 1,
-        plan_tier: str = "P1",
+        plan_tier: str = "alpha",
         platforms=("web",),
     ):
         await service.select_plan(tenant_id, plan_tier)

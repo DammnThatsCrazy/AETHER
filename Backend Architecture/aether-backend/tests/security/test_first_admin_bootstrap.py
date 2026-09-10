@@ -58,7 +58,7 @@ def _bootstrap_settings(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_first_admin_bootstrap_mints_admin_key_once(_bootstrap_settings):
-    body = routes.FirstAdminBootstrapRequest(name="Olympus staging", plan_tier="P1")
+    body = routes.FirstAdminBootstrapRequest(name="Olympus staging", plan_tier="alpha")
     response = await routes.bootstrap_first_admin(body, _request(_bootstrap_settings))
     data = response["data"]
 
@@ -76,7 +76,7 @@ async def test_first_admin_bootstrap_mints_admin_key_once(_bootstrap_settings):
 
 @pytest.mark.asyncio
 async def test_first_admin_bootstrap_rejects_wrong_token(_bootstrap_settings):
-    body = routes.FirstAdminBootstrapRequest(name="Olympus staging", plan_tier="P1")
+    body = routes.FirstAdminBootstrapRequest(name="Olympus staging", plan_tier="alpha")
     with pytest.raises(UnauthorizedError):
         await routes.bootstrap_first_admin(body, _request("wrong-token"))
 

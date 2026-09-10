@@ -441,7 +441,7 @@ class StripeBillingConfig:
     amounts are NOT duplicated here — only the Stripe Price IDs themselves.
 
     In non-local environments with enabled=True, secret_key, webhook_secret,
-    price_p1..price_p4, and checkout/portal URLs are required (validated in
+    price_alpha..price_delta, and checkout/portal URLs are required (validated in
     Settings.__post_init__). In AETHER_ENV=local, missing values are tolerated
     and provider operations return an explicit unavailable response.
 
@@ -452,10 +452,10 @@ class StripeBillingConfig:
     enabled: bool = _env_bool("STRIPE_BILLING_ENABLED", False)
     secret_key: str = _env("STRIPE_SECRET_KEY", "")
     webhook_secret: str = _env("STRIPE_WEBHOOK_SECRET", "")
-    price_p1: str = _env("STRIPE_PRICE_P1", "")
-    price_p2: str = _env("STRIPE_PRICE_P2", "")
-    price_p3: str = _env("STRIPE_PRICE_P3", "")
-    price_p4: str = _env("STRIPE_PRICE_P4", "")
+    price_alpha: str = _env("STRIPE_PRICE_ALPHA", "")
+    price_beta: str = _env("STRIPE_PRICE_BETA", "")
+    price_gamma: str = _env("STRIPE_PRICE_GAMMA", "")
+    price_delta: str = _env("STRIPE_PRICE_DELTA", "")
     overage_price_id: str = _env("STRIPE_OVERAGE_PRICE_ID", "")
     checkout_success_url: str = _env(
         "STRIPE_CHECKOUT_SUCCESS_URL",
@@ -2461,14 +2461,14 @@ class Settings:
                 missing.append("STRIPE_SECRET_KEY")
             if not sb.webhook_secret:
                 missing.append("STRIPE_WEBHOOK_SECRET")
-            if not sb.price_p1:
-                missing.append("STRIPE_PRICE_P1")
-            if not sb.price_p2:
-                missing.append("STRIPE_PRICE_P2")
-            if not sb.price_p3:
-                missing.append("STRIPE_PRICE_P3")
-            if not sb.price_p4:
-                missing.append("STRIPE_PRICE_P4")
+            if not sb.price_alpha:
+                missing.append("STRIPE_PRICE_ALPHA")
+            if not sb.price_beta:
+                missing.append("STRIPE_PRICE_BETA")
+            if not sb.price_gamma:
+                missing.append("STRIPE_PRICE_GAMMA")
+            if not sb.price_delta:
+                missing.append("STRIPE_PRICE_DELTA")
             if not sb.checkout_success_url:
                 missing.append("STRIPE_CHECKOUT_SUCCESS_URL")
             if not sb.checkout_cancel_url:

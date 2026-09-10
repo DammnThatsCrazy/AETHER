@@ -46,10 +46,10 @@ def capability_status() -> dict[str, Any]:
     for field, value in (
         ("secret_key", cfg.secret_key),
         ("webhook_secret", cfg.webhook_secret),
-        ("price_p1", cfg.price_p1),
-        ("price_p2", cfg.price_p2),
-        ("price_p3", cfg.price_p3),
-        ("price_p4", cfg.price_p4),
+        ("price_alpha", cfg.price_alpha),
+        ("price_beta", cfg.price_beta),
+        ("price_gamma", cfg.price_gamma),
+        ("price_delta", cfg.price_delta),
         ("checkout_success_url", cfg.checkout_success_url),
         ("checkout_cancel_url", cfg.checkout_cancel_url),
         ("portal_return_url", cfg.portal_return_url),
@@ -89,16 +89,16 @@ def get_stripe_price_id(plan_tier: PlanTier) -> str:
     """
     cfg = settings.stripe_billing
     mapping = {
-        PlanTier.P1_HOBBYIST: cfg.price_p1,
-        PlanTier.P2_PROFESSIONAL: cfg.price_p2,
-        PlanTier.P3_GROWTH_INTELLIGENCE: cfg.price_p3,
-        PlanTier.P4_PROTOCOL_MASTER: cfg.price_p4,
+        PlanTier.ALPHA: cfg.price_alpha,
+        PlanTier.BETA: cfg.price_beta,
+        PlanTier.GAMMA: cfg.price_gamma,
+        PlanTier.DELTA: cfg.price_delta,
     }
     price_id = mapping.get(plan_tier, "")
     if not price_id:
         raise BadRequestError(
             f"No Stripe Price ID configured for plan {plan_tier.value}. "
-            f"Set STRIPE_PRICE_{plan_tier.value} in env."
+            f"Set STRIPE_PRICE_{plan_tier.name} in env."
         )
     return price_id
 
@@ -112,10 +112,10 @@ def get_plan_for_price_id(price_id: str) -> Optional[PlanTier]:
         return None
     cfg = settings.stripe_billing
     reverse = {
-        cfg.price_p1: PlanTier.P1_HOBBYIST,
-        cfg.price_p2: PlanTier.P2_PROFESSIONAL,
-        cfg.price_p3: PlanTier.P3_GROWTH_INTELLIGENCE,
-        cfg.price_p4: PlanTier.P4_PROTOCOL_MASTER,
+        cfg.price_alpha: PlanTier.ALPHA,
+        cfg.price_beta: PlanTier.BETA,
+        cfg.price_gamma: PlanTier.GAMMA,
+        cfg.price_delta: PlanTier.DELTA,
     }
     # Strip empty keys to avoid matching a stub against unconfigured plans.
     reverse.pop("", None)
