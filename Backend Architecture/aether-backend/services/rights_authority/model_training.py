@@ -86,10 +86,22 @@ async def evaluate_training_manifest(
     pending ``model_training_input`` impact item on ``pending_impact`` so the
     caller can persist/surface it; when eligible, no impact item is fabricated.
     """
+    # Bind legacy manifests that predate the tenant field at the authenticated
+    # request boundary. A manifest that declares a different tenant is never
+    # rewritten: it is reported as a mismatch and cannot borrow another
+    # tenant's persisted decision.
+    validation_manifest = manifest
+    if not manifest.tenant_id:
+        validation_manifest = manifest.model_copy(update={"tenant_id": tenant_id})
     manifest_report = await validate_training_manifest(
-        manifest,
+        validation_manifest,
         decision_repository=decision_repository,
     )
+    if manifest.tenant_id and str(manifest.tenant_id) != str(tenant_id):
+        manifest_report.denial_reason_codes = sorted(set(
+            [*manifest_report.denial_reason_codes, "manifest_tenant_mismatch"]
+        ))
+        manifest_report.eligible = False
     eligibility_report = await model_training_eligibility(
         tenant_id,
         source_id=source_id,

@@ -131,7 +131,7 @@ async def test_grants_must_confirm_cross_tenant_raw_disclosure():
         grant_records=[grant],
     )
     assert decision.allowed is False
-    assert "cross_tenant_raw_not_authorized" in decision.reason_codes
+    assert "raw_disclosure_not_confirmed" in decision.reason_codes
 
 
 async def test_filter_graph_of_graphs_restricts_to_authorized_refs():

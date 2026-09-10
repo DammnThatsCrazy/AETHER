@@ -14,6 +14,7 @@ from __future__ import annotations
 import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
+from types import SimpleNamespace
 
 from services.rights_authority import routes
 from services.rights_authority.routes import EffectiveRightsResolveRequest
@@ -74,3 +75,38 @@ class TestActivationGate:
     def test_enforce_mode_allows(self):
         configure_rollout(RolloutMode.ENFORCE)
         routes._ensure_active()
+
+
+@pytest.mark.asyncio
+async def test_shadow_and_warn_resolution_are_observational(monkeypatch):
+    """Non-enforce modes expose the evaluated decision without binding it."""
+    body = routes.EffectiveRightsResolveRequest(
+        tenant_id="t1", source="source-1", requested_use="export",
+        purpose="analytics", destination="tenant",
+    )
+    request = SimpleNamespace(
+        state=SimpleNamespace(
+            tenant=SimpleNamespace(
+                tenant_id="t1", user_id="u1", permissions=["read"], role="viewer",
+            )
+        ),
+        client=None,
+        headers={},
+    )
+
+    async def _resolve(**_kwargs):
+        return {"tenant_id": "t1", "allowed": False, "reason_codes": ["denied"]}
+
+    monkeypatch.setattr(
+        "services.rights_authority.resolver.effective_rights_resolver",
+        SimpleNamespace(resolve=_resolve),
+    )
+    for mode in (RolloutMode.SHADOW, RolloutMode.WARN):
+        configure_rollout(mode)
+        result = await routes.resolve_effective_decision(body, request)
+        data = result["data"]
+        assert data["observed"] is True
+        assert data["enforced"] is False
+        assert data["rollout"] == mode.value
+        if mode is RolloutMode.WARN:
+            assert data["warnings"]

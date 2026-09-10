@@ -19,17 +19,15 @@ Mapping contract (documented, fail-closed)
 * CONSENT grants → the server authority is consulted for the grant-scoped data
   subject:
 
-      subject_id   = grant.consent_basis   (the single data-subject identifier;
-                                            DataRightsGrant carries no other
-                                            subject field)
+      subject_id   = grant.subject_ref   (the canonical data-subject reference)
       anonymous_id = None
 
-  ``consent_basis`` is deliberately NOT trusted as consent — it is only used as
+  ``subject_ref`` is deliberately NOT trusted as consent — it is only used as
   the *lookup key* into the server ConsentReceipt store, so the server record
   decides (this mirrors the ingestion ``evaluate_consent`` posture: a
   subject-less or receipt-less consent grant is DENIED
   ``consent_receipt_missing``, never silently fail-opened to allowed). When
-  ``consent_basis`` is empty there is no subject at all, which the authority
+  ``subject_ref`` is empty there is no subject at all, which the authority
   also treats as an absence-of-evidence denial.
 * PURPOSE → ``request.purpose`` verbatim. ``evaluate_consent`` requires a
   registry consent purpose (``CONSENT_PURPOSES`` in the shared consent
@@ -49,7 +47,7 @@ authority; it only means the evidence ref may not be cross-lookupable (logged).
 
 Residual seams (reported honestly)
 ----------------------------------
-* ``DataRightsGrant`` carries a single ``consent_basis`` string, so an
+* ``DataRightsGrant`` carries an optional ``subject_ref`` string, so an
   aggregate / multi-subject source grant cannot be verified against one data
   subject. A consent-based grant over an aggregate source fails closed at the
   server authority (no subject → ``consent_receipt_missing``) until grant
@@ -92,14 +90,16 @@ def _is_consent_grant(grant: "DataRightsGrant") -> bool:
     return legal == _CONSENT_LEGAL_BASIS
 
 
-def _subject_from_grant(grant: "DataRightsGrant") -> Optional[str]:
+def _subject_from_grant(
+    grant: "DataRightsGrant", request: Optional["RightsDecisionRequest"] = None
+) -> Optional[str]:
     """The grant-scoped data-subject identifier, if any.
 
-    ``consent_basis`` is the only subject-adjacent field on ``DataRightsGrant``.
-    It is NOT read as consent evidence — only as the identifier the server
-    authority should look receipts up by.
+    ``subject_ref`` is the canonical data-subject identifier.  ``consent_basis``
+    describes purpose/legal basis and must never be treated as an identifier.
     """
-    raw = str(getattr(grant, "consent_basis", "") or "").strip()
+    requested = str(getattr(request, "subject_ref", "") or "").strip()
+    raw = requested or str(getattr(grant, "subject_ref", "") or "").strip()
     return raw or None
 
 
@@ -163,7 +163,7 @@ async def default_consent_evaluator(
         return None
 
     purpose = str(request.purpose or "").strip()
-    subject_id = _subject_from_grant(grant)
+    subject_id = _subject_from_grant(grant, request)
 
     try:
         # Lazy import: keeps the consent authority off the module import graph

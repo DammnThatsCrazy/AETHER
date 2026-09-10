@@ -65,7 +65,12 @@ export function transitionDecision(current:DecisionStatus,next:DecisionStatus,c:
   if(c.tenant_id!==c.decision_tenant_id)fail('tenant_mismatch','decision tenant does not match context');
   if(!dnext[current].includes(next))fail('invalid_transition',`cannot transition from ${current} to ${next}`);
   if(!c.permission_granted)fail('unauthorized','decision transition is unauthorized');
-  if(next==='approved'&&c.approval_required&&!validateApproval(c.approval_input??{now:'',tenant_id:c.tenant_id}))fail('approval_required','valid approval is required');
+  if(next==='approved'&&c.approval_required){
+    // Tenant/decision binding comes from the authoritative transition context;
+    // callers may provide only the approval payload and evaluation timestamp.
+    const supplied=c.approval_input;
+    if(!validateApproval({approval:supplied?.approval,now:supplied?.now??'',tenant_id:c.tenant_id,decision_id:c.decision_id}))fail('approval_required','valid approval is required');
+  }
   if(next==='executed'){
     const execution=c.execution;
     if(!execution||execution.status!=='completed'||execution.trigger.kind!=='decision'||execution.trigger.decision_id!==c.decision_id||!execution.links.audit_event_refs.length||!execution.links.outcome_refs.length||!execution.links.evidence_refs.length)fail('missing_linkage','executed decision requires a matching completed execution with audit, outcome, and evidence');

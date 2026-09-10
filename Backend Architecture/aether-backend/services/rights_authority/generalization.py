@@ -694,7 +694,24 @@ class GeneralizationGateway:
             decision.denial_reason_codes.extend(await self._resolver_consult(request))
         if not grants:
             decision.denial_reason_codes.append("missing_active_grant")
-        active_grants = [g for g in grants if _grant_is_active(g)]
+        # Never union authority from unrelated grants.  A grant is eligible
+        # only when it belongs to this tenant and is explicitly linked by the
+        # request's grant/source refs (or is the governing grant for the
+        # requested artifact).  Status, expiry and revocation are checked here
+        # before any authority classes are aggregated.
+        requested_refs = set(ctx.grant_refs) | set(request.rights_refs)
+        active_grants = []
+        for grant in grants:
+            gtenant = getattr(grant, "tenant_id", None)
+            gid = str(getattr(grant, "data_rights_grant_id", "") or "")
+            if gtenant is None or str(gtenant) != request.tenant_id:
+                continue
+            if requested_refs and gid not in requested_refs:
+                continue
+            if _grant_is_active(grant):
+                active_grants.append(grant)
+        if grants and not active_grants:
+            decision.denial_reason_codes.append("no_matching_tenant_grant")
         if not active_grants:
             decision.denial_reason_codes.append("grant_not_active")
         if not decision.source_grant_refs:

@@ -14,7 +14,10 @@ import pytest
 from repositories.repos import reset_in_memory_stores
 from services.rights_authority import impact as impact_mod
 from services.rights_authority import model_training as model_training_mod
-from services.rights_authority.model_governance import TrainingDataManifest
+from services.rights_authority.model_governance import (
+    TrainingDataManifest,
+    validate_training_manifest,
+)
 from services.rights_authority.model_training import (
     TRAINING_BLOCK_ACTION,
     TRAINING_BLOCK_COMPONENT_TYPE,
@@ -97,6 +100,7 @@ def _training_grant(*, allows_training: bool) -> types.SimpleNamespace:
 def _eligible_manifest() -> TrainingDataManifest:
     return TrainingDataManifest(
         run_id="run_ok",
+        tenant_id="t1",
         model_ref="model_ok",
         dataset_artifact_refs=["dataset_a"],
         rights_decision_refs=["rdec_train_a"],
@@ -140,6 +144,32 @@ async def test_verify_eligible_manifest_passes_with_no_impact():
     assert verification.impact_ids == []
     assert verification.persisted is False
     assert await impact_mod.list_pending_impacts("t1") == []
+
+
+@pytest.mark.asyncio
+async def test_manifest_decisions_are_bound_to_training_tenant():
+    decision_repo = _FakeDecisionRepo()
+    decision_repo.seed({
+        "decision_id": "foreign-decision",
+        "tenant_id": "tenant-b",
+        "allowed": True,
+        "requested_use": "model_training",
+        "artifact_ref": "dataset_a",
+    })
+    manifest = TrainingDataManifest(
+        run_id="run-cross-tenant",
+        tenant_id="tenant-a",
+        model_ref="model-cross-tenant",
+        dataset_artifact_refs=["dataset_a"],
+        rights_decision_refs=["foreign-decision"],
+        exclusion_count=0,
+    )
+
+    report = await validate_training_manifest(manifest, decision_repository=decision_repo)
+
+    assert report.eligible is False
+    assert "decision_tenant_mismatch" in report.denial_reason_codes
+    assert "missing_rights_evidence" in report.denial_reason_codes
 
 
 # ═══════════════════════════════════════════════════════════════════════════

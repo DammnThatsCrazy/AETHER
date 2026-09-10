@@ -85,12 +85,13 @@ class TrainingDataManifest(BaseModel):
     """
 
     run_id: str
+    tenant_id: str = ""
     model_ref: str
     dataset_artifact_refs: list[str] = Field(default_factory=list)
     rights_decision_refs: list[str] = Field(default_factory=list)
     grant_refs: list[str] = Field(default_factory=list)
     learning_authority_classes: list[str] = Field(default_factory=list)
-    exclusion_count: int = 0
+    exclusion_count: Optional[int] = None
     transformation_refs: list[str] = Field(default_factory=list)
     temporal_snapshot: str = ""
     policy_version: str = POLICY_VERSION
@@ -141,7 +142,7 @@ class ModelRevocationAssessment(BaseModel):
 
 def _grant_source_match(grant: Any, tenant_id: str, source_id: str) -> bool:
     g_tenant = getattr(grant, "tenant_id", None)
-    if g_tenant is not None and _norm_enum_value(g_tenant) != _norm_enum_value(tenant_id):
+    if g_tenant is None or _norm_enum_value(g_tenant) != _norm_enum_value(tenant_id):
         return False
     g_source = getattr(grant, "source_id", None)
     if g_source is not None and _norm_enum_value(g_source) != _norm_enum_value(source_id):
@@ -149,6 +150,16 @@ def _grant_source_match(grant: Any, tenant_id: str, source_id: str) -> bool:
     if getattr(grant, "status", None) is not None:
         status = _norm_enum_value(getattr(grant, "status"))
         if status != "active":
+            return False
+    if getattr(grant, "revoked_at", None) is not None:
+        return False
+    expires_at = getattr(grant, "expires_at", None)
+    if expires_at:
+        try:
+            from shared.common.common import parse_event_time
+            if parse_event_time(str(expires_at)) <= utc_now():
+                return False
+        except Exception:
             return False
     return True
 
@@ -215,12 +226,36 @@ async def model_training_eligibility(
 async def _resolve_grants_for(
     tenant_id: str, source_id: str, artifact_ref: Optional[str]
 ) -> list[Any]:
-    """Secondary grant resolution via the P-B1 resolver when reachable."""
+    """Resolve structured grants from the canonical P-A store.
+
+    Training eligibility must not rely on a boolean resolver result that loses
+    the grant record (and therefore its tenant/source/expiry evidence). The
+    resolver remains a compatibility fallback for deployments where the P-A
+    service has not been loaded yet.
+    """
+    try:
+        from services.integrations.data_rights.service import data_rights_service
+
+        summaries = await data_rights_service.list_grants(tenant_id=tenant_id)
+        grants: list[Any] = []
+        for summary in summaries:
+            if source_id and str(getattr(summary, "source_id", "") or "") != source_id:
+                continue
+            grant_id = str(getattr(summary, "data_rights_grant_id", "") or "")
+            if not grant_id:
+                continue
+            grant = await data_rights_service.get_grant(grant_id)
+            if grant is not None:
+                grants.append(grant)
+        if grants:
+            return grants
+    except Exception as exc:  # pragma: no cover — service seam may be unavailable
+        logger.debug("canonical grant lookup unavailable: %s", exc)
     try:
         resolver = importlib.import_module("services.rights_authority.resolver")
         resolved = await resolver.effective_rights_resolver.resolve(
             tenant=tenant_id,
-            source=[source_id] if source_id else [],
+            source=source_id,
             artifact=artifact_ref or "",
             actor="system",
             requested_use="train",
@@ -253,18 +288,26 @@ async def validate_training_manifest(
     """
     repo = decision_repository or _pb1_repositories().rights_decision_repository
     report = LearningEligibilityReport(
-        tenant_id="",
+        tenant_id=manifest.tenant_id,
         source_id="",
         artifact_ref=None,
         learning_class=CONTRIBUTED_MODEL_TRAINING,
         manifest_refs=[manifest.run_id],
     )
     reasons: list[str] = []
+    if not manifest.tenant_id:
+        # A decision id is not a tenant boundary. Direct callers must bind the
+        # manifest to the authenticated training tenant before any artifact is
+        # accepted as verified; the higher-level request adapter performs that
+        # binding for legacy manifests that omitted the field.
+        reasons.append("missing_manifest_tenant")
     if not manifest.dataset_artifact_refs:
         reasons.append("missing_dataset_artifact_refs")
 
-    if manifest.exclusion_count < 0:
+    if manifest.exclusion_count is not None and manifest.exclusion_count < 0:
         reasons.append("negative_exclusion_count")
+    if manifest.exclusion_count is None:
+        reasons.append("exclusion_count_unknown")
 
     # Load every persisted decision referenced by the manifest.
     verified: set[str] = set()
@@ -279,6 +322,17 @@ async def validate_training_manifest(
     for decision_ref, row in decision_rows:
         if row is None:
             reasons.append("missing_rights_evidence")
+            continue
+        decision_tenant = (
+            row.get("tenant_id")
+            if isinstance(row, dict)
+            else getattr(row, "tenant_id", None)
+        )
+        if not decision_tenant or str(decision_tenant) != str(manifest.tenant_id):
+            # Repositories are intentionally addressed by id for this
+            # validation path, so the row's tenant must be checked explicitly
+            # before its allowed/artifact fields can contribute authority.
+            reasons.append("decision_tenant_mismatch")
             continue
         allowed = row.get("allowed") if isinstance(row, dict) else getattr(row, "allowed", None)
         requested_use = (

@@ -236,14 +236,19 @@ def decision_identity(
     artifact: Optional[str],
     requested_use: str,
     destination: str,
+    source_id: str = "",
+    governing_grant_ref: str = "",
+    subject_ref: str = "",
     policy_version: str = POLICY_VERSION,
     as_of: Optional[str] = None,
 ) -> str:
     """Deterministic decision identity (blueprint §17).
 
     Reproducible from: tenant + actor + purpose + artifact + requested_use +
-    destination + policy version + as-of time. Identical inputs must never yield
-    conflicting decisions.
+    destination + governing source/grant + subject + policy version + as-of time.
+    Identical inputs must never yield conflicting decisions; source/grant
+    authority is part of the identity so two otherwise-equal source requests
+    cannot replay one another.
     """
     material = "\0".join([
         tenant_id or "",
@@ -252,6 +257,9 @@ def decision_identity(
         artifact or "",
         requested_use or "",
         destination or "",
+        source_id or "",
+        governing_grant_ref or "",
+        subject_ref or "",
         policy_version or "",
         as_of or "",
     ])
@@ -317,6 +325,7 @@ class EffectiveRightsResolver:
         requested_use: str,
         purpose: str,
         destination: str,
+        subject_ref: Optional[str] = None,
         as_of: Optional[str] = None,
     ) -> RightsDecision:
         """Positional resolver (blueprint §16 ``resolve_effective_rights``)."""
@@ -329,6 +338,7 @@ class EffectiveRightsResolver:
                 requested_use=requested_use,
                 purpose=purpose,
                 destination=destination,
+                subject_ref=subject_ref,
                 as_of=as_of,
             )
         )
@@ -341,9 +351,11 @@ class EffectiveRightsResolver:
     ) -> RightsDecision:
         """Resolve a ``RightsDecisionRequest`` into a durable ``RightsDecision``.
 
-        ``replay_recorded`` enables decision idempotency (blueprint §17): when a
-        recorded decision exists for the same §17 identity and the grant is still
-        valid, the recorded decision is returned instead of a conflicting one.
+        ``replay_recorded`` enables historical decision idempotency (blueprint
+        §17): when a recorded decision exists for the same §17 identity and the
+        request supplies an immutable ``as_of`` timestamp, the recorded
+        snapshot is returned. Live requests always re-evaluate current grant and
+        consent state before any durable decision is returned.
         """
         evaluated_at = now_iso()
         effective_as_of = request.as_of or evaluated_at
@@ -354,6 +366,8 @@ class EffectiveRightsResolver:
             artifact=request.artifact_ref,
             requested_use=request.requested_use,
             destination=request.destination,
+            source_id=request.source_id,
+            subject_ref=request.subject_ref or "",
             policy_version=POLICY_VERSION,
             as_of=request.as_of,
         )
@@ -395,7 +409,10 @@ class EffectiveRightsResolver:
                 ),
             )
 
-        if replay_recorded:
+        # Historical decisions are immutable snapshots.  A live request must
+        # always re-evaluate current consent/grant state (revocations can occur
+        # after the original decision was recorded).
+        if replay_recorded and request.as_of is not None:
             prior = await self._repo.find_by_identity(request.tenant_id, identity)
             if prior is not None:
                 return RightsDecision(**prior)
