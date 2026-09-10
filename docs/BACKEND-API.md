@@ -33,7 +33,7 @@ reviewed_source_commits:
   - commit: "0efa07cb"
     reason: "Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics."
 source_hashes:
-  "Backend Architecture/aether-backend/services/": "sha256:a37f5b093871579d9d1a66d08489160e2ff6dc5abd735098e9437c290ef4edf0"
+  "Backend Architecture/aether-backend/services/": "sha256:2fb0819b1696adafe71b4f6bbafca049d59de1875047622cdae786135483242d"
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
 

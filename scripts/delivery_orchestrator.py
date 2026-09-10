@@ -200,7 +200,14 @@ def staging(args: argparse.Namespace) -> int:
                 "FAILED": "FAILED",
                 "RUNNING": "DEPLOYED",
             }[state["status"]]
-            failure = state["failures"][-1] if state["failures"] else None
+            # A resumed checkpoint retains historical failures for auditability.
+            # They must not be projected as the current result once every
+            # stage has subsequently completed successfully.
+            failure = (
+                state["failures"][-1]
+                if state["status"] in {"BLOCKED", "FAILED"} and state["failures"]
+                else None
+            )
             result = {
                 "schema_version": 1,
                 "release_candidate_id": rc["release_candidate_id"],

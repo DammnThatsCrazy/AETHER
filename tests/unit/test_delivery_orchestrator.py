@@ -139,6 +139,7 @@ def test_staging_checkpoint_mode_resumes_exact_candidate(tmp_path, monkeypatch):
     assert orchestrator.staging(args) == 0
     result = json.loads(args.output.read_text())
     assert result["status"] == "DEPLOYED"
+    assert "failure" not in result
     assert resumed_calls == ["deploy", "migrate", "activate", "journeys"]
 
 

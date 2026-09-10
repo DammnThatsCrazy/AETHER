@@ -126,6 +126,17 @@ async def test_tenant_package_fit_and_kyber_readiness_endpoints():
 
 
 def test_delivery_evidence_projection_accepts_raw_and_kyber_shapes(tmp_path, monkeypatch):
+    checks = {
+        "code_correctness": "PASS",
+        "contract_compatibility": "PASS",
+        "infrastructure_preflight": "PASS",
+        "migration": "PASS",
+        "tenant_activation": "PASS",
+        "golden_journeys": "PASS",
+        "security": "PASS",
+        "operability": "PASS",
+        "rollback": "PASS",
+    }
     raw = {
         "schema_version": 1,
         "release_candidate_id": "rc-1",
@@ -133,7 +144,10 @@ def test_delivery_evidence_projection_accepts_raw_and_kyber_shapes(tmp_path, mon
         "artifact_digest": "sha256:" + "b" * 64,
         "deployment_profile": "standard_saas",
         "status": "READY",
-        "checks": {},
+        "checks": checks,
+        "known_degradations": [],
+        "evidence": [],
+        "timestamps": {},
     }
     path = tmp_path / "evidence.json"
     path.write_text(json.dumps(raw), encoding="utf-8")
@@ -149,10 +163,44 @@ def test_delivery_evidence_projection_accepts_raw_and_kyber_shapes(tmp_path, mon
         "artifact_digest": "sha256:" + "b" * 64,
         "deployment_profile": "standard_saas",
         "disposition": "READY",
+        "checks": checks,
     }), encoding="utf-8")
     projected = routes._delivery_evidence_projection()
     assert projected["status"] == "PASS"
     assert projected["deployment_mode"] == "standard_saas"
+
+
+def test_delivery_evidence_projection_rejects_incomplete_ready_checks(tmp_path, monkeypatch):
+    path = tmp_path / "evidence.json"
+    path.write_text(json.dumps({
+        "release_candidate_id": "rc-1",
+        "commit_sha": "a" * 40,
+        "artifact_digest": "sha256:" + "b" * 64,
+        "deployment_profile": "staging",
+        "disposition": "READY",
+        "checks": {},
+    }), encoding="utf-8")
+    monkeypatch.setenv("AETHER_DELIVERY_EVIDENCE_PATH", str(path))
+    projected = routes._delivery_evidence_projection()
+    assert projected["status"] == "BLOCKED"
+    assert "missing required checks" in projected["reason"]
+
+
+def test_delivery_profile_maps_to_catalog_deployment_mode(tmp_path, monkeypatch):
+    checks = {name: "PASS" for name in routes._delivery_required_checks()}
+    path = tmp_path / "enterprise-evidence.json"
+    path.write_text(json.dumps({
+        "release_candidate_id": "rc-1",
+        "commit_sha": "a" * 40,
+        "artifact_digest": "sha256:" + "b" * 64,
+        "deployment_profile": "enterprise-isolated",
+        "disposition": "READY",
+        "checks": checks,
+    }), encoding="utf-8")
+    monkeypatch.setenv("AETHER_DELIVERY_EVIDENCE_PATH", str(path))
+    projected = routes._delivery_evidence_projection()
+    assert projected["deployment_profile"] == "enterprise-isolated"
+    assert projected["deployment_mode"] == "enterprise_isolated_tenant"
 
 
 def test_redact_secrets_helper_excludes_raw_secrets():

@@ -90,6 +90,21 @@ def test_fixture_cannot_claim_live_hosted_pass():
     assert any("cannot claim live" in error for error in validate_adapter_pair(req, result))
 
 
+def test_hosted_adapter_binds_candidate_profile_to_request():
+    request_value = {
+        "operation_id": "op-1",
+        "authority": "environment",
+        "profile": "staging",
+        "read_only": True,
+        "credential": {"provider": "aws", "source": "github_oidc", "scopes": []},
+        "candidate_identity": identity("production-lean"),
+    }
+    with pytest.raises(HostedAdapterError, match="candidate_identity.profile must match request profile"):
+        from scripts.release.hosted_delivery_adapters import HostedAdapterRequest
+
+        HostedAdapterRequest.from_mapping(request_value)
+
+
 def test_direct_contract_constructors_fail_closed_on_schema_and_shape():
     assert any("schema_version" in error for error in validate_adapter_pair(
         {"schema_version": 2, "operation_id": "op-1", "authority": "environment", "profile": "staging",
@@ -160,6 +175,25 @@ def test_artifact_evidence_binds_identity_digest_and_serialized_artifacts(tmp_pa
     malformed_artifact = json.loads(json.dumps(evidence))
     malformed_artifact["artifacts"]["backend"] = {}
     assert any("artifact backend is missing" in error for error in validate_closure_evidence(malformed_artifact))
+
+
+def test_artifact_evidence_requires_complete_provenance_fields(tmp_path: Path):
+    archive = tmp_path / "backend.tar"
+    archive.write_bytes(b"runtime")
+    digest = "sha256:" + __import__("hashlib").sha256(archive.read_bytes()).hexdigest()
+    evidence = verify_closure(candidate(component_digest=digest), {"backend": ArtifactSpec("backend", archive)})
+
+    missing_builder = json.loads(json.dumps(evidence))
+    del missing_builder["provenance"]["builder"]
+    assert any("provenance is missing: builder" in error for error in validate_closure_evidence(missing_builder))
+
+    invalid_signature = json.loads(json.dumps(evidence))
+    invalid_signature["provenance"]["signature_status"] = "VERIFIED_BUT_UNCHECKED"
+    assert any("provenance.signature_status is invalid" in error for error in validate_closure_evidence(invalid_signature))
+
+    extra_field = json.loads(json.dumps(evidence))
+    extra_field["provenance"]["unreviewed"] = True
+    assert any("provenance has unknown fields" in error for error in validate_closure_evidence(extra_field))
 
 
 def test_profile_operations_require_ttl_and_exact_promotion_identity():

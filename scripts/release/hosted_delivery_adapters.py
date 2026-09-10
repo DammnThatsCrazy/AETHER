@@ -147,6 +147,8 @@ class HostedAdapterRequest:
         credential = CredentialReference.from_mapping(raw_credential) if raw_credential is not None else None
         raw_identity = value.get("candidate_identity")
         identity = _identity(raw_identity) if raw_identity is not None else None
+        if identity is not None and identity["profile"] != profile:
+            raise HostedAdapterError("candidate_identity.profile must match request profile")
         read_only = value.get("read_only", True)
         if not isinstance(read_only, bool):
             raise HostedAdapterError("read_only must be boolean")

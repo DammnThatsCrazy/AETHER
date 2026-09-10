@@ -298,6 +298,16 @@ def validate_release_candidate(candidate: Mapping[str, Any]) -> list[str]:
         for boolean_name in ("migration_required", "data_contract_change", "security_sensitive", "rollback_required", "approval_required"):
             if not isinstance(impact.get(boolean_name), bool):
                 errors.append(f"deployment_impact.{boolean_name} must be boolean")
+        impact_booleans_valid = all(
+            isinstance(impact.get(boolean_name), bool)
+            for boolean_name in (
+                "migration_required",
+                "data_contract_change",
+                "security_sensitive",
+                "rollback_required",
+                "approval_required",
+            )
+        )
         try:
             impact_domains = impact.get("affected_domains")
             impact_components = impact.get("affected_components")
@@ -311,6 +321,8 @@ def validate_release_candidate(candidate: Mapping[str, Any]) -> list[str]:
                 raise ValueError("rationale must be a non-empty string")
             if not isinstance(impact.get("risk_level"), str):
                 raise ValueError("risk_level must be a string")
+            if not impact_booleans_valid:
+                raise ValueError("boolean fields must be boolean")
             parsed_impact = DeploymentImpact(
                 profile=impact["profile"],
                 affected_domains=tuple(impact_domains),

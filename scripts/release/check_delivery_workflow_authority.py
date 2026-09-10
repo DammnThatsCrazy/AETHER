@@ -35,6 +35,38 @@ def _workflow_triggers(workflow: dict[str, Any]) -> set[str]:
     return set()
 
 
+def _executable_run_text(workflow: dict[str, Any]) -> str:
+    """Return only shell bodies from executable ``run`` steps.
+
+    Authority commands must be present in code that a runner can execute.  A
+    comment, step name, or documentation block is not evidence that a command
+    is wired into the workflow, so those surfaces are deliberately excluded.
+    YAML action ``uses`` steps are also excluded because this registry's
+    required commands are shell command contracts.
+    """
+
+    runs: list[str] = []
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            run = value.get("run")
+            if isinstance(run, str):
+                runs.extend(
+                    line
+                    for line in run.splitlines()
+                    if not line.lstrip().startswith("#")
+                    and not line.lstrip().startswith(("echo ", "echo\t", "printf ", "printf\t"))
+                )
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(workflow.get("jobs", workflow))
+    return "\n".join(runs)
+
+
 def validate(config_path: Path = CONFIG, root: Path = ROOT) -> list[str]:
     errors: list[str] = []
     try:
@@ -72,6 +104,7 @@ def validate(config_path: Path = CONFIG, root: Path = ROOT) -> list[str]:
         if not isinstance(workflows, list) or not workflows:
             errors.append(f"authority {authority_id} requires workflows")
             continue
+        parsed_workflows: list[dict[str, Any]] = []
         for raw_path in workflows:
             if not isinstance(raw_path, str) or not raw_path.startswith(".github/workflows/"):
                 errors.append(f"authority {authority_id} has non-GitHub workflow path: {raw_path!r}")
@@ -87,14 +120,11 @@ def validate(config_path: Path = CONFIG, root: Path = ROOT) -> list[str]:
                 continue
             if not _workflow_triggers(workflow):
                 errors.append(f"{raw_path}: workflow must declare a trigger")
+            parsed_workflows.append(workflow)
         if not isinstance(required_commands, list) or any(not isinstance(command, str) or not command.strip() for command in required_commands):
             errors.append(f"authority {authority_id} required_commands must be a list of non-empty strings")
         else:
-            workflow_text = "\n".join(
-                (root / raw_path).read_text(encoding="utf-8")
-                for raw_path in workflows
-                if isinstance(raw_path, str) and raw_path.startswith(".github/workflows/") and (root / raw_path).is_file()
-            )
+            workflow_text = "\n".join(_executable_run_text(workflow) for workflow in parsed_workflows)
             for command in required_commands:
                 if command not in workflow_text:
                     errors.append(f"authority {authority_id} is not wired to required command {command!r}")

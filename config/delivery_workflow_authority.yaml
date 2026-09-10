@@ -60,4 +60,4 @@ authorities:
       - .github/workflows/ephemeral-ttl-guard.yml
       - .github/workflows/staging-ttl-guard.yml
     required_commands:
-      - staging awake lease
+      - aws ssm put-parameter

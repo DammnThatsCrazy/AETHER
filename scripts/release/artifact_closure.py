@@ -30,6 +30,15 @@ _DIGEST_PREFIX = "sha256:"
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _COMMIT = re.compile(r"^[0-9a-f]{7,64}$")
 _PROVENANCE_SOURCES = frozenset({"local", "github_artifact", "hosted_registry"})
+_PROVENANCE_SIGNATURE_STATUSES = frozenset({"VERIFIED", "UNSIGNED_OR_UNVERIFIED"})
+_CLOSURE_FIELDS = frozenset(
+    {"schema_version", "status", "candidate_identity", "artifacts", "artifact_digest", "provenance"}
+)
+_IDENTITY_FIELDS = frozenset({"release_candidate_id", "commit_sha", "artifact_digest", "profile"})
+_ARTIFACT_FIELDS = frozenset({"path", "digest", "required_entries", "closure"})
+_PROVENANCE_FIELDS = frozenset(
+    {"source", "builder", "registry_ref", "signature_ref", "signature_status"}
+)
 
 
 class ArtifactClosureError(ValueError):
@@ -102,6 +111,11 @@ def verify_closure(
         raise ArtifactClosureError("invalid release candidate: " + "; ".join(candidate_errors))
     if provenance_source not in _PROVENANCE_SOURCES:
         raise ArtifactClosureError(f"unsupported provenance source: {provenance_source}")
+    if not isinstance(builder, str) or not builder.strip():
+        raise ArtifactClosureError("builder must be a non-empty string")
+    for ref_name, ref in (("registry_ref", registry_ref), ("signature_ref", signature_ref)):
+        if ref is not None and (not isinstance(ref, str) or not ref.strip()):
+            raise ArtifactClosureError(f"{ref_name} must be a string or null")
     if signature_ref and provenance_source == "local":
         raise ArtifactClosureError("local closure cannot claim a hosted signature reference")
     component_digests = candidate.get("component_digests", {})
@@ -146,6 +160,12 @@ def validate_closure_evidence(value: Mapping[str, Any]) -> list[str]:
     errors: list[str] = []
     if not isinstance(value, Mapping):
         return ["closure evidence must be an object"]
+    unknown = sorted(set(value) - _CLOSURE_FIELDS)
+    if unknown:
+        errors.append("unknown fields: " + ", ".join(str(item) for item in unknown))
+    missing_top = sorted(_CLOSURE_FIELDS - set(value))
+    if missing_top:
+        errors.append("missing required fields: " + ", ".join(missing_top))
     if value.get("schema_version") != SCHEMA_VERSION:
         errors.append("schema_version must be 1")
     if value.get("status") != "PASS":
@@ -154,6 +174,12 @@ def validate_closure_evidence(value: Mapping[str, Any]) -> list[str]:
     if not isinstance(identity, Mapping):
         errors.append("candidate_identity must be an object")
     else:
+        unknown_identity = sorted(set(identity) - _IDENTITY_FIELDS)
+        if unknown_identity:
+            errors.append(
+                "candidate_identity has unknown fields: "
+                + ", ".join(str(item) for item in unknown_identity)
+            )
         required_identity = ("release_candidate_id", "commit_sha", "artifact_digest", "profile")
         missing = [key for key in required_identity if key not in identity]
         if missing:
@@ -182,6 +208,12 @@ def validate_closure_evidence(value: Mapping[str, Any]) -> list[str]:
             if not isinstance(artifact, Mapping):
                 errors.append(f"artifact {name} must be an object")
                 continue
+            unknown_artifact = sorted(set(artifact) - _ARTIFACT_FIELDS)
+            if unknown_artifact:
+                errors.append(
+                    f"artifact {name} has unknown fields: "
+                    + ", ".join(str(item) for item in unknown_artifact)
+                )
             required = {"path", "digest", "required_entries", "closure"}
             missing = sorted(required - set(artifact))
             if missing:
@@ -204,10 +236,31 @@ def validate_closure_evidence(value: Mapping[str, Any]) -> list[str]:
     if not isinstance(provenance, Mapping):
         errors.append("provenance must be an object")
     else:
+        unknown_provenance = sorted(set(provenance) - _PROVENANCE_FIELDS)
+        if unknown_provenance:
+            errors.append(
+                "provenance has unknown fields: "
+                + ", ".join(str(item) for item in unknown_provenance)
+            )
+        missing_provenance = sorted(
+            {"source", "builder", "signature_status"} - set(provenance)
+        )
+        if missing_provenance:
+            errors.append("provenance is missing: " + ", ".join(missing_provenance))
         source = provenance.get("source")
         if source not in _PROVENANCE_SOURCES:
             errors.append("provenance.source is invalid")
-        if provenance.get("signature_status") == "VERIFIED" and not provenance.get("signature_ref"):
+        builder = provenance.get("builder")
+        if not isinstance(builder, str) or not builder.strip():
+            errors.append("provenance.builder must be a non-empty string")
+        for ref_name in ("registry_ref", "signature_ref"):
+            ref = provenance.get(ref_name)
+            if ref is not None and (not isinstance(ref, str) or not ref.strip()):
+                errors.append(f"provenance.{ref_name} must be a string or null")
+        signature_status = provenance.get("signature_status")
+        if signature_status not in _PROVENANCE_SIGNATURE_STATUSES:
+            errors.append("provenance.signature_status is invalid")
+        if signature_status == "VERIFIED" and not provenance.get("signature_ref"):
             errors.append("verified signature requires signature_ref")
         if source == "local" and provenance.get("signature_ref"):
             errors.append("local provenance cannot carry signature_ref")

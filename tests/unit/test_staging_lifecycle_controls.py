@@ -276,6 +276,20 @@ def test_lifecycle_is_dispatch_only():
     assert _triggers(_workflow_yaml(LIFECYCLE)) == {"workflow_dispatch"}
 
 
+def test_staging_candidate_verification_uses_candidate_commit_lockfile_identity():
+    workflow = _workflow(LIFECYCLE)
+    # Both wake-plan and rehearsal verification must resolve the candidate
+    # source before hashing lockfiles.  Relative paths preserve the identity
+    # recorded by the candidate builder instead of changing it to the runner
+    # workspace's absolute spelling.
+    assert workflow.count('git fetch --no-tags origin "$sha"') >= 2
+    assert workflow.count('git checkout --detach "$sha"') >= 2
+    assert workflow.count("--lockfile package-lock.json") >= 2
+    assert workflow.count("--lockfile pyproject.toml") >= 2
+    assert '--lockfile "${GITHUB_WORKSPACE}/package-lock.json"' not in workflow
+    assert '--lockfile "${GITHUB_WORKSPACE}/pyproject.toml"' not in workflow
+
+
 # ---------------------------------------------------------------------------
 # No path applies without a reviewed, checksum-verified plan
 # ---------------------------------------------------------------------------
