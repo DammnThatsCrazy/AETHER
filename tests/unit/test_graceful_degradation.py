@@ -132,7 +132,7 @@ class TestRedisUnavailable:
             caught = False
             try:
                 result = asyncio.run(
-                    limiter.check("t-001", auth_mod.PlanTier.P1_HOBBYIST)
+                    limiter.check("t-001", auth_mod.PlanTier.ALPHA)
                 )
             except (ConnectionError, TimeoutError):
                 caught = True
@@ -157,7 +157,7 @@ class TestRedisUnavailable:
             try:
                 asyncio.run(
                     engine.check_and_increment(
-                        "t-001", auth_mod.PlanTier.P1_HOBBYIST, "/v1/analytics/events/query"
+                        "t-001", auth_mod.PlanTier.ALPHA, "/v1/analytics/events/query"
                     )
                 )
             except (ConnectionError, TimeoutError):
@@ -177,7 +177,7 @@ class TestRedisUnavailable:
 
             limiter = limiter_mod.BurstRateLimiter()
             result = asyncio.run(
-                limiter.check("t-degradation-001", auth_mod.PlanTier.P1_HOBBYIST)
+                limiter.check("t-degradation-001", auth_mod.PlanTier.ALPHA)
             )
             assert result is not None
             assert hasattr(result, "allowed")
@@ -194,7 +194,7 @@ class TestRedisUnavailable:
             engine = quota_mod.QuotaEngine()
             result = asyncio.run(
                 engine.check_and_increment(
-                    "t-degradation-quota", auth_mod.PlanTier.P1_HOBBYIST, "/v1/analytics/events/query"
+                    "t-degradation-quota", auth_mod.PlanTier.ALPHA, "/v1/analytics/events/query"
                 )
             )
             assert hasattr(result, "quota_limit")

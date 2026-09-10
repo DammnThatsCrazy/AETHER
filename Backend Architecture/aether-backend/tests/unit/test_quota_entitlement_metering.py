@@ -240,7 +240,7 @@ async def test_overage_calculator_prices_line_items_from_overage():
     assert item.price_per_1k == Decimal("0.05")  # option A for Omni-Capture
     assert item.line_total == Decimal("0.05")
     assert invoice.total_overage == Decimal("0.05")
-    assert invoice.period_total == Decimal("99.05")  # P1 option A fee + overage
+    assert invoice.period_total == Decimal("0.05")  # Alpha plan fee ($0) + overage
 
 
 @pytest.mark.asyncio

@@ -41,7 +41,7 @@ def test_score_binning_unknown_plan_falls_back_to_alpha():
 
 
 def test_score_bins_defined_for_all_plan_tiers():
-    expected_plans = {"ALPHA", "BETA", "GAMMA", "DELTA"}
+    expected_plans = {"ALPHA", "BETA", "GAMMA", "DELTA", "EPSILON", "OMICRON", "OMEGA"}
     assert set(SCORE_BINS_BY_PLAN.keys()) == expected_plans
 
 
@@ -50,9 +50,9 @@ def test_honeypot_wallet_detection():
         honeypot_wallets=["0xDEADBEEF0000000000000000000000000000DEAD"]
     )
     svc = AntiDistillationService(config)
-    result = svc.check_honeypot("0xDEADBEEF0000000000000000000000000000DEAD")
+    result = svc.is_honeypot_wallet("0xDEADBEEF0000000000000000000000000000DEAD")
     assert result.is_honeypot is True
     assert result.action == "flag"
 
-    result = svc.check_honeypot("0x1234567890123456789012345678901234567890")
+    result = svc.is_honeypot_wallet("0x1234567890123456789012345678901234567890")
     assert result.is_honeypot is False

@@ -230,7 +230,7 @@ async def test_calculate_returns_invoice(mock_metric, mock_find):
     from shared.auth.auth import PlanTier
     calc = _make_calculator(redis=redis, pricing_option="B")
 
-    invoice = await calc.calculate("tenant1", PlanTier.P1_HOBBYIST, "2026-05")
+    invoice = await calc.calculate("tenant1", PlanTier.ALPHA, "2026-05")
 
     assert invoice.tenant_id == "tenant1"
     assert invoice.billing_period == "2026-05"
@@ -257,7 +257,7 @@ async def test_calculate_no_overage_invoice(mock_metric, mock_find):
 
     from shared.auth.auth import PlanTier
     calc = _make_calculator(redis=redis)
-    invoice = await calc.calculate("tenant1", PlanTier.P1_HOBBYIST, "2026-05")
+    invoice = await calc.calculate("tenant1", PlanTier.ALPHA, "2026-05")
 
     assert invoice.line_items == []
     assert invoice.total_overage == Decimal("0")

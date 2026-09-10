@@ -220,7 +220,7 @@ class TestRateLimitMiddlewareIntegration:
 
             limiter = limiter_mod.BurstRateLimiter()
             result = asyncio.run(
-                limiter.check("t-ratelimit-001", auth_mod.PlanTier.P1_HOBBYIST)
+                limiter.check("t-ratelimit-001", auth_mod.PlanTier.ALPHA)
             )
             assert result is not None
             assert result.allowed is True
@@ -245,13 +245,13 @@ class TestRateLimitMiddlewareIntegration:
                     return RateLimitResult()
 
             limiter = LimitedRateLimiter()
-            result = asyncio.run(limiter.check("t-001", auth_mod.PlanTier.P1_HOBBYIST))
+            result = asyncio.run(limiter.check("t-001", auth_mod.PlanTier.ALPHA))
             assert result.allowed is False
             assert result.remaining == 0
             assert result.retry_after == 30
 
-    def test_p4_plan_has_higher_burst_rpm_than_p1(self, monkeypatch):
-        """P4 Protocol Master has higher RPM than P1 Hobbyist per plan catalog."""
+    def test_delta_plan_has_higher_burst_rpm_than_alpha(self, monkeypatch):
+        """Delta has higher RPM than Alpha per plan catalog."""
         monkeypatch.setenv("AETHER_ENV", "local")
         monkeypatch.setenv("JWT_SECRET", "test-secret-for-integration-tests!")
 
@@ -259,9 +259,9 @@ class TestRateLimitMiddlewareIntegration:
             auth_mod = importlib.import_module("shared.auth.auth")
             catalog_mod = importlib.import_module("shared.plans.catalog")
 
-            p1 = catalog_mod.PLAN_CATALOG[auth_mod.PlanTier.P1_HOBBYIST]
-            p4 = catalog_mod.PLAN_CATALOG[auth_mod.PlanTier.P4_PROTOCOL_MASTER]
-            assert p4.burst_rpm > p1.burst_rpm
+            alpha = catalog_mod.PLAN_CATALOG[auth_mod.PlanTier.ALPHA]
+            delta = catalog_mod.PLAN_CATALOG[auth_mod.PlanTier.DELTA]
+            assert delta.burst_rpm > alpha.burst_rpm
 
     def test_redis_failure_signals_fail_open(self, monkeypatch):
         """ConnectionError from rate limiter means middleware sets rl_result=None (allow)."""
@@ -278,7 +278,7 @@ class TestRateLimitMiddlewareIntegration:
             result = None
             try:
                 result = asyncio.run(
-                    DownLimiter().check("t-001", auth_mod.PlanTier.P1_HOBBYIST)
+                    DownLimiter().check("t-001", auth_mod.PlanTier.ALPHA)
                 )
             except (ConnectionError, TimeoutError):
                 caught = True
@@ -295,8 +295,8 @@ class TestRateLimitMiddlewareIntegration:
 class TestFeatureGateMiddlewareIntegration:
     """Tests for per-plan service access control."""
 
-    def test_p1_can_access_analytics_dashboard(self, monkeypatch):
-        """P1 plan has access to the analytics dashboard summary endpoint."""
+    def test_alpha_can_access_analytics_dashboard(self, monkeypatch):
+        """Alpha plan has access to the analytics dashboard summary endpoint."""
         monkeypatch.setenv("AETHER_ENV", "local")
         monkeypatch.setenv("JWT_SECRET", "test-secret-for-integration-tests!")
 
@@ -306,7 +306,7 @@ class TestFeatureGateMiddlewareIntegration:
 
             gate = gate_mod.FeatureGate()
             result = gate.check_access(
-                auth_mod.PlanTier.P1_HOBBYIST, "/v1/analytics/dashboard/summary"
+                auth_mod.PlanTier.ALPHA, "/v1/analytics/dashboard/summary"
             )
             assert result.allowed is True
 
@@ -320,12 +320,12 @@ class TestFeatureGateMiddlewareIntegration:
             gate_mod = importlib.import_module("shared.rate_limit.feature_gate")
 
             gate = gate_mod.FeatureGate()
-            result = gate.check_access(auth_mod.PlanTier.P1_HOBBYIST, "/v1/ml/predict")
+            result = gate.check_access(auth_mod.PlanTier.ALPHA, "/v1/ml/predict")
             assert hasattr(result, "allowed")
             assert hasattr(result, "minimum_plan")
 
-    def test_p4_passes_all_core_gates(self, monkeypatch):
-        """P4 Protocol Master passes the gate for all core service endpoints."""
+    def test_delta_passes_all_core_gates(self, monkeypatch):
+        """Delta passes the gate for all core service endpoints."""
         monkeypatch.setenv("AETHER_ENV", "local")
         monkeypatch.setenv("JWT_SECRET", "test-secret-for-integration-tests!")
 
@@ -339,8 +339,8 @@ class TestFeatureGateMiddlewareIntegration:
                 "/v1/fraud/evaluate",
                 "/v1/campaigns",
             ]:
-                result = gate.check_access(auth_mod.PlanTier.P4_PROTOCOL_MASTER, path)
-                assert result.allowed is True, f"P4 should pass gate for {path}"
+                result = gate.check_access(auth_mod.PlanTier.DELTA, path)
+                assert result.allowed is True, f"Delta should pass gate for {path}"
 
     def test_public_paths_are_in_bypass_set(self, monkeypatch):
         """PUBLIC_PATHS constant contains the known bypass paths."""
@@ -357,7 +357,7 @@ class TestFeatureGateMiddlewareIntegration:
             assert gate_mod.FeatureGate().is_public("/v1/billing/plans") is True
 
     def test_higher_plan_has_more_service_access(self, monkeypatch):
-        """P4 has access to more services than P1 (service_count in plan catalog)."""
+        """Delta has access to more services than Alpha (service_count in plan catalog)."""
         monkeypatch.setenv("AETHER_ENV", "local")
         monkeypatch.setenv("JWT_SECRET", "test-secret-for-integration-tests!")
 
@@ -365,9 +365,9 @@ class TestFeatureGateMiddlewareIntegration:
             auth_mod = importlib.import_module("shared.auth.auth")
             catalog_mod = importlib.import_module("shared.plans.catalog")
 
-            p1 = catalog_mod.PLAN_CATALOG[auth_mod.PlanTier.P1_HOBBYIST]
-            p4 = catalog_mod.PLAN_CATALOG[auth_mod.PlanTier.P4_PROTOCOL_MASTER]
-            assert p4.service_count >= p1.service_count
+            alpha = catalog_mod.PLAN_CATALOG[auth_mod.PlanTier.ALPHA]
+            delta = catalog_mod.PLAN_CATALOG[auth_mod.PlanTier.DELTA]
+            assert delta.service_count >= alpha.service_count
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -389,7 +389,7 @@ class TestQuotaMiddlewareIntegration:
             engine = quota_mod.QuotaEngine()
             result = asyncio.run(
                 engine.check_and_increment(
-                    "t-quota-fields", auth_mod.PlanTier.P1_HOBBYIST,
+                    "t-quota-fields", auth_mod.PlanTier.ALPHA,
                     "/v1/analytics/events/query"
                 )
             )
@@ -413,7 +413,7 @@ class TestQuotaMiddlewareIntegration:
             for _ in range(10):
                 result = asyncio.run(
                     engine.check_and_increment(
-                        tenant, auth_mod.PlanTier.P1_HOBBYIST,
+                        tenant, auth_mod.PlanTier.ALPHA,
                         "/v1/analytics/events/query"
                     )
                 )
@@ -433,15 +433,15 @@ class TestQuotaMiddlewareIntegration:
             try:
                 result = asyncio.run(
                     engine.check_and_increment(
-                        "t-quota-no-block", auth_mod.PlanTier.P1_HOBBYIST, "/v1/ml/predict"
+                        "t-quota-no-block", auth_mod.PlanTier.ALPHA, "/v1/ml/predict"
                     )
                 )
                 assert result is not None
             except Exception as e:
                 pytest.fail(f"QuotaEngine raised unexpectedly: {e}")
 
-    def test_p1_monthly_quota_is_25000(self, monkeypatch):
-        """P1 Hobbyist plan has 25,000 monthly quota as specified in plan catalog."""
+    def test_alpha_monthly_quota_is_3000000(self, monkeypatch):
+        """Alpha plan has 3,000,000 monthly quota as specified in plan catalog."""
         monkeypatch.setenv("AETHER_ENV", "local")
         monkeypatch.setenv("JWT_SECRET", "test-secret-for-integration-tests!")
 
@@ -449,11 +449,11 @@ class TestQuotaMiddlewareIntegration:
             auth_mod = importlib.import_module("shared.auth.auth")
             catalog_mod = importlib.import_module("shared.plans.catalog")
 
-            p1 = catalog_mod.PLAN_CATALOG[auth_mod.PlanTier.P1_HOBBYIST]
-            assert p1.monthly_quota == 25_000
+            alpha = catalog_mod.PLAN_CATALOG[auth_mod.PlanTier.ALPHA]
+            assert alpha.monthly_quota == 3_000_000
 
-    def test_p4_has_higher_quota_than_p1(self, monkeypatch):
-        """P4 monthly quota exceeds P1 monthly quota."""
+    def test_delta_has_higher_quota_than_alpha(self, monkeypatch):
+        """Delta monthly quota exceeds Alpha monthly quota."""
         monkeypatch.setenv("AETHER_ENV", "local")
         monkeypatch.setenv("JWT_SECRET", "test-secret-for-integration-tests!")
 
@@ -461,6 +461,6 @@ class TestQuotaMiddlewareIntegration:
             auth_mod = importlib.import_module("shared.auth.auth")
             catalog_mod = importlib.import_module("shared.plans.catalog")
 
-            p1 = catalog_mod.PLAN_CATALOG[auth_mod.PlanTier.P1_HOBBYIST]
-            p4 = catalog_mod.PLAN_CATALOG[auth_mod.PlanTier.P4_PROTOCOL_MASTER]
-            assert p4.monthly_quota > p1.monthly_quota
+            alpha = catalog_mod.PLAN_CATALOG[auth_mod.PlanTier.ALPHA]
+            delta = catalog_mod.PLAN_CATALOG[auth_mod.PlanTier.DELTA]
+            assert delta.monthly_quota > alpha.monthly_quota

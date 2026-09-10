@@ -153,14 +153,14 @@ class TestStripeSettings:
             STRIPE_BILLING_ENABLED="true",
             STRIPE_SECRET_KEY="sk_test_x",
             STRIPE_WEBHOOK_SECRET="whsec_x",
-            STRIPE_PRICE_P1="price_p1",
-            STRIPE_PRICE_P2="price_p2",
-            STRIPE_PRICE_P3="price_p3",
-            STRIPE_PRICE_P4="price_p4",
+            STRIPE_PRICE_ALPHA="price_alpha",
+            STRIPE_PRICE_BETA="price_beta",
+            STRIPE_PRICE_GAMMA="price_gamma",
+            STRIPE_PRICE_DELTA="price_delta",
         )
         with backend_path():
             mod = _reload_settings()
-            assert mod.settings.stripe_billing.price_p3 == "price_p3"
+            assert mod.settings.stripe_billing.price_gamma == "price_gamma"
             assert mod.settings.stripe_billing.overage_invoicing_enabled is False
 
 
@@ -177,23 +177,23 @@ class TestPriceIdMapping:
             STRIPE_BILLING_ENABLED="true",
             STRIPE_SECRET_KEY="sk_test_x",
             STRIPE_WEBHOOK_SECRET="whsec_x",
-            STRIPE_PRICE_P1="price_p1",
-            STRIPE_PRICE_P2="price_p2",
-            STRIPE_PRICE_P3="price_p3",
-            STRIPE_PRICE_P4="price_p4",
+            STRIPE_PRICE_ALPHA="price_alpha",
+            STRIPE_PRICE_BETA="price_beta",
+            STRIPE_PRICE_GAMMA="price_gamma",
+            STRIPE_PRICE_DELTA="price_delta",
         )
         with backend_path():
             _reload_settings()
             client = importlib.import_module("shared.billing.stripe_client")
             from shared.auth.auth import PlanTier
 
-            assert client.get_stripe_price_id(PlanTier.P1_HOBBYIST) == "price_p1"
-            assert client.get_stripe_price_id(PlanTier.P2_PROFESSIONAL) == "price_p2"
-            assert client.get_stripe_price_id(PlanTier.P3_GROWTH_INTELLIGENCE) == "price_p3"
-            assert client.get_stripe_price_id(PlanTier.P4_PROTOCOL_MASTER) == "price_p4"
+            assert client.get_stripe_price_id(PlanTier.ALPHA) == "price_alpha"
+            assert client.get_stripe_price_id(PlanTier.BETA) == "price_beta"
+            assert client.get_stripe_price_id(PlanTier.GAMMA) == "price_gamma"
+            assert client.get_stripe_price_id(PlanTier.DELTA) == "price_delta"
 
-            assert client.get_plan_for_price_id("price_p1") == PlanTier.P1_HOBBYIST
-            assert client.get_plan_for_price_id("price_p3") == PlanTier.P3_GROWTH_INTELLIGENCE
+            assert client.get_plan_for_price_id("price_alpha") == PlanTier.ALPHA
+            assert client.get_plan_for_price_id("price_gamma") == PlanTier.GAMMA
             assert client.get_plan_for_price_id("price_unknown") is None
             assert client.get_plan_for_price_id("") is None
 
@@ -211,7 +211,7 @@ class TestLocalProviderAvailability:
             STRIPE_BILLING_ENABLED="true",
         )
         # Clear price ids so config is "incomplete" for mocked-mode trigger
-        for k in ("STRIPE_PRICE_P1", "STRIPE_PRICE_P2", "STRIPE_PRICE_P3", "STRIPE_PRICE_P4",
+        for k in ("STRIPE_PRICE_ALPHA", "STRIPE_PRICE_BETA", "STRIPE_PRICE_GAMMA", "STRIPE_PRICE_DELTA",
                   "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"):
             monkeypatch.delenv(k, raising=False)
         with backend_path():
@@ -224,7 +224,7 @@ class TestLocalProviderAvailability:
                 asyncio.run(
                     client.create_checkout_session(
                         tenant_id="t-1",
-                        plan_tier=PlanTier.P3_GROWTH_INTELLIGENCE,
+                        plan_tier=PlanTier.GAMMA,
                         contact_email="dev@example.com",
                     )
                 )
@@ -253,10 +253,10 @@ class TestWebhookHandling:
             STRIPE_BILLING_ENABLED="true",
             STRIPE_SECRET_KEY="sk_test_x",
             STRIPE_WEBHOOK_SECRET="whsec_x",
-            STRIPE_PRICE_P1="price_p1",
-            STRIPE_PRICE_P2="price_p2",
-            STRIPE_PRICE_P3="price_p3",
-            STRIPE_PRICE_P4="price_p4",
+            STRIPE_PRICE_ALPHA="price_alpha",
+            STRIPE_PRICE_BETA="price_beta",
+            STRIPE_PRICE_GAMMA="price_gamma",
+            STRIPE_PRICE_DELTA="price_delta",
         )
 
     def test_webhook_rejects_missing_signature(self, monkeypatch):
@@ -288,16 +288,16 @@ class TestWebhookHandling:
                 "status": "active",
                 "current_period_end": 1_900_000_000,
                 "metadata": {"tenant_id": "t-1"},
-                "items": {"data": [{"price": {"id": "price_p3"}}]},
+                "items": {"data": [{"price": {"id": "price_gamma"}}]},
             }
             asyncio.run(wh._apply_subscription_state(
                 sub_obj, event_name="customer.subscription.updated",
             ))
 
             acct = asyncio.run(stripe_repository.get_billing_account("t-1"))
-            assert acct["plan_tier"] == "P3"
+            assert acct["plan_tier"] == "gamma"
             assert acct["subscription_status"] == "active"
-            assert acct["stripe_price_id"] == "price_p3"
+            assert acct["stripe_price_id"] == "price_gamma"
             assert acct["stripe_subscription_id"] == "sub_1"
 
     def test_subscription_deleted_downgrades_to_p1(self, monkeypatch):
@@ -306,18 +306,18 @@ class TestWebhookHandling:
             _reload_settings()
             from shared.billing import stripe_repository
             stripe_repository._reset_in_memory_for_tests()
-            asyncio.run(stripe_repository.update_plan_tier("t-2", "P3"))
+            asyncio.run(stripe_repository.update_plan_tier("t-2", "gamma"))
 
             wh = importlib.import_module("services.admin.webhook_routes")
             event_data = {"object": {
                 "id": "sub_2", "customer": "cus_2", "status": "canceled",
                 "ended_at": None,
                 "metadata": {"tenant_id": "t-2"},
-                "items": {"data": [{"price": {"id": "price_p3"}}]},
+                "items": {"data": [{"price": {"id": "price_gamma"}}]},
             }}
             asyncio.run(wh._handle_subscription_deleted(event_data))
             acct = asyncio.run(stripe_repository.get_billing_account("t-2"))
-            assert acct["plan_tier"] == "P1"
+            assert acct["plan_tier"] == "alpha"
             assert acct["subscription_status"] == "canceled"
 
     def test_checkout_session_completed_does_not_change_plan_tier(self, monkeypatch):
@@ -326,18 +326,18 @@ class TestWebhookHandling:
             _reload_settings()
             from shared.billing import stripe_repository
             stripe_repository._reset_in_memory_for_tests()
-            asyncio.run(stripe_repository.update_plan_tier("t-3", "P1"))
+            asyncio.run(stripe_repository.update_plan_tier("t-3", "alpha"))
 
             wh = importlib.import_module("services.admin.webhook_routes")
             event_data = {"object": {
                 "id": "cs_1", "customer": "cus_3", "subscription": "sub_3",
                 "client_reference_id": "t-3",
-                "metadata": {"tenant_id": "t-3", "requested_plan_tier": "P3"},
+                "metadata": {"tenant_id": "t-3", "requested_plan_tier": "gamma"},
             }}
             asyncio.run(wh._handle_checkout_session_completed(event_data))
             acct = asyncio.run(stripe_repository.get_billing_account("t-3"))
             # plan_tier must remain unchanged — subscription events own the tier
-            assert acct["plan_tier"] == "P1"
+            assert acct["plan_tier"] == "alpha"
             assert acct["stripe_customer_id"] == "cus_3"
             assert acct["stripe_subscription_id"] == "sub_3"
 
@@ -370,7 +370,7 @@ class TestWebhookHandling:
             _reload_settings()
             from shared.billing import stripe_repository
             stripe_repository._reset_in_memory_for_tests()
-            asyncio.run(stripe_repository.update_plan_tier("t-5", "P3"))
+            asyncio.run(stripe_repository.update_plan_tier("t-5", "gamma"))
             wh = importlib.import_module("services.admin.webhook_routes")
             event_data = {"object": {
                 "id": "in_5", "customer": "cus_5", "subscription": "sub_5",
@@ -381,7 +381,7 @@ class TestWebhookHandling:
             }}
             asyncio.run(wh._handle_invoice_payment_failed(event_data))
             acct = asyncio.run(stripe_repository.get_billing_account("t-5"))
-            assert acct["plan_tier"] == "P3"  # not downgraded — only subscription.deleted does that
+            assert acct["plan_tier"] == "gamma"  # not downgraded — only subscription.deleted does that
             assert acct["subscription_status"] == "past_due"
             invs = asyncio.run(stripe_repository.list_invoices("t-5"))
             assert invs[0]["status"] == "open"
@@ -414,7 +414,7 @@ class TestPlanSync:
             _reload_settings()
             from shared.billing import stripe_repository
             stripe_repository._reset_in_memory_for_tests()
-            asyncio.run(stripe_repository.update_plan_tier("tenant_001", "P3"))
+            asyncio.run(stripe_repository.update_plan_tier("tenant_001", "gamma"))
 
             from shared.auth.auth import APIKeyValidator, PlanTier
 
@@ -433,7 +433,7 @@ class TestPlanSync:
             v = APIKeyValidator(cache=Cache())
             ctx = asyncio.run(v.validate_async("ak_test_123"))
             assert ctx.tenant_id == "tenant_001"
-            assert ctx.plan_tier == PlanTier.P3_GROWTH_INTELLIGENCE
+            assert ctx.plan_tier == PlanTier.GAMMA
 
 
 # ---------------------------------------------------------------------------
@@ -449,8 +449,8 @@ class TestOverageInvoice:
             STRIPE_BILLING_ENABLED="true",
             STRIPE_SECRET_KEY="sk_test_x",
             STRIPE_WEBHOOK_SECRET="whsec_x",
-            STRIPE_PRICE_P1="p1", STRIPE_PRICE_P2="p2",
-            STRIPE_PRICE_P3="p3", STRIPE_PRICE_P4="p4",
+            STRIPE_PRICE_ALPHA="p1", STRIPE_PRICE_BETA="p2",
+            STRIPE_PRICE_GAMMA="p3", STRIPE_PRICE_DELTA="p4",
         )
         monkeypatch.delenv("STRIPE_OVERAGE_PRICE_ID", raising=False)
         with backend_path():
@@ -531,7 +531,7 @@ class TestOveragePlanTierResolution:
             from shared.billing import stripe_repository
             stripe_repository._reset_in_memory_for_tests()
             # Billed tenant is on P4.
-            asyncio.run(stripe_repository.update_plan_tier("billed-tenant", "P4"))
+            asyncio.run(stripe_repository.update_plan_tier("billed-tenant", "delta"))
 
             from shared.auth.auth import (
                 APIKeyTier, PlanTier, Role, TenantContext,
@@ -547,14 +547,14 @@ class TestOveragePlanTierResolution:
                 tenant_id="admin-tenant",
                 role=Role.ADMIN,
                 api_key_tier=APIKeyTier.PRO,
-                plan_tier=PlanTier.P2_PROFESSIONAL,  # caller's plan
+                plan_tier=PlanTier.BETA,  # caller's plan
                 permissions=["billing", "admin"],
             )
             plan = asyncio.run(
                 routes._resolve_plan_tier_for_tenant(req, "billed-tenant")
             )
-            # Must NOT inherit the caller's P2 plan; must read billed P4.
-            assert plan == PlanTier.P4_PROTOCOL_MASTER
+            # Must NOT inherit the caller's Beta plan; must read billed Delta.
+            assert plan == PlanTier.DELTA
 
     def test_resolve_plan_tier_for_self_uses_request_context(self, monkeypatch):
         _set_env(monkeypatch, AETHER_ENV="local", JWT_SECRET="x")
@@ -577,10 +577,10 @@ class TestOveragePlanTierResolution:
                 tenant_id="self-tenant",
                 role=Role.EDITOR,
                 api_key_tier=APIKeyTier.PRO,
-                plan_tier=PlanTier.P3_GROWTH_INTELLIGENCE,
+                plan_tier=PlanTier.GAMMA,
                 permissions=["billing"],
             )
             plan = asyncio.run(
                 routes._resolve_plan_tier_for_tenant(req, "self-tenant")
             )
-            assert plan == PlanTier.P3_GROWTH_INTELLIGENCE
+            assert plan == PlanTier.GAMMA

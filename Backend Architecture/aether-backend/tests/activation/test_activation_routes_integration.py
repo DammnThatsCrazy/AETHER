@@ -97,6 +97,6 @@ def test_status_reports_derived_billing_state_over_http() -> None:
 
 
 def test_select_plan_rejects_bad_tier_with_422() -> None:
-    """Pydantic validation on the mounted route rejects a non-P1..P4 tier."""
+    """Pydantic validation on the mounted route rejects a non-alpha..omega tier."""
     resp = _client().post("/v1/activation/select-plan", json={"plan_tier": "GOLD"})
     assert resp.status_code == 422, resp.text

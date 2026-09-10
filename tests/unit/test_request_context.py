@@ -42,10 +42,10 @@ class TestRequestContext:
 
     def test_with_tenant_enrichment_is_immutable(self):
         ctx = RequestContext(correlation_id="corr-3", path="/v1/x")
-        enriched = ctx.with_tenant("tenant-a", actor_id="user-1", plan_tier="P2")
+        enriched = ctx.with_tenant("tenant-a", actor_id="user-1", plan_tier="beta")
         assert enriched.tenant_id == "tenant-a"
         assert enriched.actor_id == "user-1"
-        assert enriched.plan_tier == "P2"
+        assert enriched.plan_tier == "beta"
         assert enriched.correlation_id == "corr-3"
         assert ctx.tenant_id is None  # original untouched
 

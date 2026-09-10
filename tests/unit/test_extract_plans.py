@@ -68,39 +68,42 @@ def test_decimal_literal_rejects_non_string_arg(ep):
 # --- end-to-end against the real catalog -----------------------------------
 
 
-def test_real_catalog_emits_four_plans(ep):
+def test_real_catalog_emits_seven_plans(ep):
     text = CATALOG_PY.read_text(encoding="utf-8")
     payload = ep.build_payload(text)
-    assert len(payload["plans"]) == 4
+    assert len(payload["plans"]) == 7
 
 
 def test_real_catalog_includes_canonical_tiers(ep):
     text = CATALOG_PY.read_text(encoding="utf-8")
     payload = ep.build_payload(text)
     plan_ids = [p["plan_id"] for p in payload["plans"]]
-    assert plan_ids == ["P1", "P2", "P3", "P4"]
+    assert plan_ids == ["alpha", "beta", "gamma", "delta", "epsilon", "omicron", "omega"]
 
 
 def test_real_catalog_plans_have_pricing_options(ep):
     text = CATALOG_PY.read_text(encoding="utf-8")
     payload = ep.build_payload(text)
     for plan in payload["plans"]:
-        assert {"option_a", "option_b", "option_c"} == set(plan["pricing"])
+        assert {"monthly", "annual"} == set(plan["pricing"])
 
 
-def test_real_catalog_quota_progression_is_monotonic(ep):
-    """Sanity: P1 < P2 < P3 < P4 on monthly_quota."""
+def test_real_catalog_quota_progression_self_serve(ep):
+    """Sanity: Alpha < Beta < Gamma < Delta on monthly_quota (self-serve tiers)."""
     text = CATALOG_PY.read_text(encoding="utf-8")
     payload = ep.build_payload(text)
-    quotas = [p["monthly_quota"] for p in payload["plans"]]
+    self_serve = [p for p in payload["plans"] if p["plan_id"] in ("alpha", "beta", "gamma", "delta")]
+    quotas = [p["monthly_quota"] for p in self_serve]
     assert quotas == sorted(quotas)
     assert len(set(quotas)) == 4
 
 
-def test_real_catalog_burst_progression_is_monotonic(ep):
+def test_real_catalog_burst_progression_self_serve(ep):
+    """Sanity: Alpha < Beta < Gamma < Delta on burst_rpm (self-serve tiers)."""
     text = CATALOG_PY.read_text(encoding="utf-8")
     payload = ep.build_payload(text)
-    bursts = [p["burst_rpm"] for p in payload["plans"]]
+    self_serve = [p for p in payload["plans"] if p["plan_id"] in ("alpha", "beta", "gamma", "delta")]
+    bursts = [p["burst_rpm"] for p in self_serve]
     assert bursts == sorted(bursts)
 
 
@@ -118,14 +121,18 @@ def test_pricing_missing_field_raises(ep):
         '    "P0": PlanDefinition(\n'
         '        plan_id="P0",\n'
         '        display_name="X",\n'
+        '        stripe_product_id="prod_test",\n'
         '        target_user="X",\n'
         '        monthly_quota=1,\n'
         '        member_cap=1,\n'
         '        burst_rpm=1,\n'
-        '        blended_overage_per_1k=Decimal("1"),\n'
+        '        event_overage_per_1k=Decimal("1"),\n'
+        '        acu_overage_per_1k=Decimal("1"),\n'
+        '        managed_per_acu=Decimal("0"),\n'
+        '        byok_per_acu=Decimal("0"),\n'
         '        service_count=1,\n'
         "        pricing=PricingOptions(\n"
-        '            option_a=Decimal("1"),\n'
+        '            monthly=Decimal("1"),\n'
         "        ),\n"
         "    ),\n"
         "}\n"
