@@ -54,8 +54,8 @@ function saveWaitlistEntry(entry: WaitlistEntry): void {
 }
 
 interface FieldErrors {
-  readonly name?: string;
-  readonly email?: string;
+  readonly name?: string | undefined;
+  readonly email?: string | undefined;
 }
 
 export function WaitlistForm({ className }: { readonly className?: string }) {

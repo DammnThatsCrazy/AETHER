@@ -50,10 +50,10 @@ function saveDemoRequest(request: DemoRequest): void {
 }
 
 interface FieldErrors {
-  readonly name?: string;
-  readonly email?: string;
-  readonly company?: string;
-  readonly useCase?: string;
+  readonly name?: string | undefined;
+  readonly email?: string | undefined;
+  readonly company?: string | undefined;
+  readonly useCase?: string | undefined;
 }
 
 export function DemoRequestForm({ className }: { readonly className?: string }) {

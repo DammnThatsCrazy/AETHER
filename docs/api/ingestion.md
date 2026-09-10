@@ -1,0 +1,116 @@
+---
+title: Event Ingestion API
+slug: api/ingestion
+section: api
+visibility: P
+audience: [dev-junior, dev-senior]
+status: stable
+since_version: "8.12.0"
+canonical_owner: platform@aether
+estimated_read_minutes: 6
+toc_depth: 3
+---
+
+# Event Ingestion API
+
+`POST /v1/batch` is the single canonical ingestion endpoint every first-party
+SDK sends through — the Web, iOS, Android, React Native, and Node SDKs all
+batch into this same contract. There is no separate `/track` or `/identify`
+endpoint: an identify-style update is just an event with `type: "identify"`
+in the same batch as everything else.
+
+## Authentication
+
+`Authorization: Bearer <write_key>` (or `X-API-Key: <write_key>`). The key
+must carry `write` permission — see [Authentication](authentication.md).
+
+## Request
+
+```http
+POST /v1/batch HTTP/1.1
+Authorization: Bearer <write_key>
+Content-Type: application/json
+```
+
+```json
+{
+  "batch": [
+    {
+      "id": "evt_9f2c9b9e",
+      "type": "page",
+      "timestamp": "2026-01-14T18:02:11.401Z",
+      "sessionId": "sess_a1b2",
+      "anonymousId": "anon_c3d4",
+      "userId": "usr_18f2",
+      "properties": { "url": "https://example.com/pricing", "referrer": "" },
+      "context": {
+        "library": { "name": "@aether/web", "version": "8.12.0" },
+        "surface": "web",
+        "schemaVersion": "1.0.0",
+        "sequence": { "event": 0 }
+      }
+    }
+  ],
+  "sentAt": "2026-01-14T18:02:11.500Z",
+  "consents": ["analytics"]
+}
+```
+
+| Field | Required | Notes |
+|---|---|---|
+| `batch` | yes | 1–500 `BaseEvent` objects per request. |
+| `batch[].id` | yes | Client-generated, unique. Used for idempotent dedup — retries with the same `id` are safe. |
+| `batch[].type` | yes | Canonical event type from the registry (see [Signals](../concepts/signals.md)). |
+| `batch[].timestamp` | yes | ISO-8601, when the event occurred. |
+| `batch[].sessionId` / `anonymousId` | yes | Non-empty; both required by the canonical envelope. |
+| `batch[].userId` | no | Present once identity is known. |
+| `batch[].properties` | no | Event-specific payload. |
+| `batch[].context` | no | Envelope context — page, device, campaign, consent, journey, etc. |
+| `sentAt` | yes | ISO-8601 timestamp of when the *batch* was sent (distinct from each event's own timestamp). |
+| `consents` | no | Batch-level consent hint, used as a fallback when an event has no per-event `context.consent`. |
+
+## Response
+
+```json
+{
+  "accepted": 1,
+  "duplicates": 0,
+  "rejected": 0,
+  "events": [
+    { "id": "evt_9f2c9b9e", "status": "accepted" }
+  ],
+  "batchId": "batch_7a1c",
+  "receivedAt": "2026-01-14T18:02:11.612Z"
+}
+```
+
+Each event resolves independently to `accepted`, `duplicate` (same
+idempotency key seen before — not re-published, not double-billed), or
+`rejected` (with a stable `reason` code, e.g. `unknown_event_type`,
+`consent_required`, `envelope_missing:sequence`). A batch is never
+all-or-nothing — one bad event in a batch of 50 does not fail the other 49.
+
+## Durability
+
+Accepted events are written to the durable Bronze tier **before** the event
+bus publish. If the bus publish fails, the request returns `503` so the SDK
+can retry — the Bronze write already succeeded and is itself idempotent, so
+a retried batch never double-counts.
+
+## Rate limits
+
+On every response: `X-RateLimit-Limit`, `X-RateLimit-Remaining`,
+`X-RateLimit-Reset`, plus quota headers `X-Quota-Limit`, `X-Quota-Used`,
+`X-Quota-Remaining`, `X-Quota-Reset` (and `X-Quota-Overage: true` once past
+your monthly quota). A burst over the per-plan limit returns `429` with
+`Retry-After`; monthly quota overage is **metered, never blocked** — your
+events keep flowing and the overage shows up in billing. A feature-gated
+subsystem your plan doesn't include returns `403` with the minimum required
+plan.
+
+## Next steps
+
+- [Signals](../concepts/signals.md) — what the `context` envelope's fields
+  mean and how signals flow downstream after acceptance.
+- [Webhooks](webhooks.md) — the reverse direction: Aether delivering events
+  to you.

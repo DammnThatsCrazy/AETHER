@@ -17,7 +17,7 @@ interface FieldShellProps {
   readonly id: string;
   readonly label: string;
   readonly error?: string | undefined;
-  readonly optional?: boolean;
+  readonly optional?: boolean | undefined;
 }
 
 function FieldLabel({ id, label, optional }: Pick<FieldShellProps, 'id' | 'label' | 'optional'>) {
