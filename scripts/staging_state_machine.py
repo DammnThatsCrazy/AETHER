@@ -286,11 +286,34 @@ def validate_environment_resolution(resolution: Mapping[str, Any], profile: str)
         if dict(capabilities) != recomputed.get("capabilities"):
             raise StateMachineError("environment resolution capabilities are stale or inconsistent with canonical requirements")
     else:
-        # Degraded evidence may be intentionally sparse (older callers record
-        # only the capability that caused degradation), but its disposition and
-        # cross-field claims still have to be coherent. A malformed degraded
-        # envelope must never be accepted as a mutation input.
-        spec = requirements["profiles"][profile]
+        # Degraded evidence is still a complete canonical capability record. A
+        # missing capability must remain UNKNOWN rather than being omitted,
+        # and only the profile's explicit degradable set may explain a
+        # non-PASS entry. This keeps degraded evidence reproducible and
+        # prevents a sparse envelope from hiding an unrelated blocker.
+        canonical_names = set(spec.get("required", [])) | set(spec.get("optional", []))
+        if set(capabilities) != canonical_names:
+            missing_caps = sorted(canonical_names - set(capabilities))
+            extra_caps = sorted(set(capabilities) - canonical_names)
+            details = []
+            if missing_caps:
+                details.append("missing capabilities: " + ", ".join(missing_caps))
+            if extra_caps:
+                details.append("unknown capabilities: " + ", ".join(extra_caps))
+            raise StateMachineError("degraded environment resolution is incomplete: " + "; ".join(details))
+        recomputed = resolve(profile, {name: entry["status"] for name, entry in capabilities.items()}, requirements=requirements)
+        if any(
+            capabilities[name].get("status") != entry.get("status")
+            or capabilities[name].get("required") != entry.get("required")
+            for name, entry in recomputed.get("capabilities", {}).items()
+        ):
+            raise StateMachineError("degraded environment resolution capabilities are stale or inconsistent with canonical requirements")
+        omitted_shape = {(item.get("capability"), item.get("impact")) for item in resolution.get("omitted", []) if isinstance(item, Mapping)}
+        recomputed_omitted_shape = {(item.get("capability"), item.get("impact")) for item in recomputed.get("omitted", []) if isinstance(item, Mapping)}
+        if omitted_shape != recomputed_omitted_shape:
+            raise StateMachineError("degraded environment resolution omitted entries are stale or inconsistent with canonical requirements")
+        if resolution.get("promotion_equivalence") != recomputed.get("promotion_equivalence"):
+            raise StateMachineError("degraded environment resolution promotion equivalence is stale or inconsistent with canonical requirements")
         degradable = set(spec.get("degradable", []))
         if resolution.get("resolved_profile") != f"{profile}-degraded":
             raise StateMachineError("degraded environment resolution has an invalid resolved_profile")
@@ -307,6 +330,11 @@ def validate_environment_resolution(resolution: Mapping[str, Any], profile: str)
                 raise StateMachineError("environment resolution omitted entries are malformed")
             name = item["capability"]
             omitted_names.add(name)
+            optional = set(spec.get("optional", []))
+            if item.get("impact") == "DEGRADED" and name in degradable:
+                continue
+            if item.get("impact") == "OPTIONAL" and name in optional:
+                continue
             if item.get("impact") != "DEGRADED" or name not in degradable:
                 raise StateMachineError("degraded environment resolution names a non-degradable capability")
         for name, entry in capabilities.items():

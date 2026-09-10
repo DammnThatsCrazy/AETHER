@@ -112,17 +112,15 @@ def test_checkpoint_refuses_a_different_candidate_or_profile(tmp_path: Path):
 
 
 def test_checkpoint_binds_environment_resolution_and_rejects_blocked_input(tmp_path: Path):
-    resolution = {
-        "schema_version": 1,
-        "requested_profile": "staging",
-        "resolved_profile": "staging-degraded",
-        "capabilities": {"aurora": {"status": "UNAVAILABLE", "required": True}},
-        "omitted": [{"capability": "aurora", "reason": "unavailable", "impact": "DEGRADED"}],
-        "promotion_equivalence": "production-lean",
-        "production_equivalent": False,
-        "disposition": "PASS_WITH_DEGRADATION",
-        "blockers": [],
+    from scripts.release.resolve_environment import load_requirements, resolve
+
+    requirements = load_requirements()
+    spec = requirements["profiles"]["staging"]
+    observed = {
+        name: ("UNAVAILABLE" if name == "aurora" else "PASS")
+        for name in set(spec["required"]) | set(spec["optional"])
     }
+    resolution = resolve("staging", observed, requirements=requirements)
     state_path = tmp_path / "state.json"
     machine = StagingStateMachine.open(state_path, candidate(), "staging", environment_resolution=resolution)
     assert machine.state["environment_resolution"]["disposition"] == "PASS_WITH_DEGRADATION"
@@ -144,18 +142,32 @@ def test_pass_environment_resolution_is_recomputed_from_canonical_requirements()
 
 
 def test_degraded_environment_resolution_rejects_incoherent_claims():
-    resolution = {
-        "schema_version": 1,
-        "requested_profile": "staging",
-        "resolved_profile": "staging-degraded",
-        "capabilities": {"aurora": {"status": "UNAVAILABLE", "required": True}},
-        "omitted": [{"capability": "aurora", "reason": "unavailable", "impact": "DEGRADED"}],
-        "promotion_equivalence": "production-lean",
-        "production_equivalent": True,
-        "disposition": "PASS_WITH_DEGRADATION",
-        "blockers": [],
+    from scripts.release.resolve_environment import load_requirements, resolve
+
+    requirements = load_requirements()
+    spec = requirements["profiles"]["staging"]
+    observed = {
+        name: ("UNAVAILABLE" if name == "aurora" else "PASS")
+        for name in set(spec["required"]) | set(spec["optional"])
     }
+    resolution = resolve("staging", observed, requirements=requirements)
+    resolution["production_equivalent"] = True
     with pytest.raises(StateMachineError, match="production equivalent"):
+        validate_environment_resolution(resolution, "staging")
+
+
+def test_degraded_environment_resolution_requires_complete_canonical_capabilities():
+    from scripts.release.resolve_environment import load_requirements, resolve
+
+    requirements = load_requirements()
+    spec = requirements["profiles"]["staging"]
+    observed = {
+        name: ("UNAVAILABLE" if name == "aurora" else "PASS")
+        for name in set(spec["required"]) | set(spec["optional"])
+    }
+    resolution = resolve("staging", observed, requirements=requirements)
+    resolution["capabilities"].pop("vpc")
+    with pytest.raises(StateMachineError, match="incomplete"):
         validate_environment_resolution(resolution, "staging")
 
 

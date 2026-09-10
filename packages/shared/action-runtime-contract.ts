@@ -69,7 +69,7 @@ export function transitionDecision(current:DecisionStatus,next:DecisionStatus,c:
     // Tenant/decision binding comes from the authoritative transition context;
     // callers may provide only the approval payload and evaluation timestamp.
     const supplied=c.approval_input;
-    if(!validateApproval({approval:supplied?.approval,now:supplied?.now??'',tenant_id:c.tenant_id,decision_id:c.decision_id}))fail('approval_required','valid approval is required');
+    if(!validateApproval({approval:supplied?.approval,now:supplied?.now??'',tenant_id:c.tenant_id,decision_id:c.decision_id,required_level:supplied?.required_level,required_scope:supplied?.required_scope}))fail('approval_required','valid approval is required');
   }
   if(next==='executed'){
     const execution=c.execution;
@@ -102,7 +102,25 @@ export function transitionActionExecution(current:ActionExecutionStatus,next:Act
   return next;
 }
 export function validateDecision(d:Decision):string[]{const e:string[]=[];if(!d.decision_id)e.push('decision_id is required');if(!d.question)e.push('question is required');return e;}
-export function validateExecution(x:Execution):string[]{const e:string[]=[];if(!x.trigger||!x.links?.trigger||JSON.stringify(x.trigger)!==JSON.stringify(x.links.trigger))e.push('canonical trigger linkage is required');if(!x.targets)e.push('targets are required');else for(const t of x.targets)if(t.tenant_id!==x.tenant_id||t.environment_id!==x.environment_id)e.push('target is out of execution scope');if(!x.external_constraints||x.external_constraints.tenant_isolation_key!==x.tenant_id)e.push('tenant isolation key mismatch');if(x.execution_type!=='plan'&&x.execution_type!=='dry_run'&& !x.impact_preview&&!x.links?.impact_preview_ref)e.push('material execution requires impact preview');if(['completed','failed','cancelled','rolled_back'].includes(x.status)&&(!x.links?.audit_event_refs?.length||!x.links?.outcome_refs?.length||!x.links?.evidence_refs?.length))e.push('terminal execution requires audit, outcome and evidence');return e;}
+export function validateExecution(x:Execution):string[]{
+  const e:string[]=[];
+  if(!x.trigger||!x.links?.trigger||JSON.stringify(x.trigger)!==JSON.stringify(x.links.trigger))e.push('canonical trigger linkage is required');
+  if(!x.targets)e.push('targets are required');
+  else {
+    const canonicalTargets = new Set(x.targets.map(t=>JSON.stringify(t)));
+    for(const t of x.targets)if(t.tenant_id!==x.tenant_id||t.environment_id!==x.environment_id)e.push('target is out of execution scope');
+    for(const step of x.plan ?? []) {
+      for(const t of step.target_refs ?? []) {
+        if(t.tenant_id!==x.tenant_id||t.environment_id!==x.environment_id)e.push('step target is out of execution scope');
+        if(!canonicalTargets.has(JSON.stringify(t)))e.push('step target is not declared in canonical execution targets');
+      }
+    }
+  }
+  if(!x.external_constraints||x.external_constraints.tenant_isolation_key!==x.tenant_id)e.push('tenant isolation key mismatch');
+  if(x.execution_type!=='plan'&&x.execution_type!=='dry_run'&& !x.impact_preview&&!x.links?.impact_preview_ref)e.push('material execution requires impact preview');
+  if(['completed','failed','cancelled','rolled_back'].includes(x.status)&&(!x.links?.audit_event_refs?.length||!x.links?.outcome_refs?.length||!x.links?.evidence_refs?.length))e.push('terminal execution requires audit, outcome and evidence');
+  return e;
+}
 export function validateImpactPreview(p:ImpactPreview):string[]{const e:string[]=[];if(!p.preview_id||!p.graph_snapshot_id)e.push('preview and graph snapshot are required');if(!p.decision_id&&!p.execution_id)e.push('impact preview must link to decision or execution');return e;}
 export function canMarkDecisionExecuted(d:Decision,x:Execution):boolean{return d.status==='approved'&&x.status==='completed'&&x.trigger?.kind==='decision'&&x.trigger.decision_id===d.decision_id&&Boolean(x.links?.audit_event_refs?.length&&x.links?.outcome_refs?.length&&x.links?.evidence_refs?.length);}
 export type ActionRuntimeSourceLinks={decision?:Decision|GraphDecisionRecord;recommendation_evidence?:RecommendationEvidence;mutation?:MutationRecord;audit?:SecurityAuditEvent;policy?:PolicyDecision;ai_invocation?:AIInvocationObserved};

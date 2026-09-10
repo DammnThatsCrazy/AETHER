@@ -193,6 +193,8 @@ describe('typed contract validation', () => {
     expect(validateApproval({ approval: approval(), now: 'not-a-time', tenant_id: 'tenant-1' })).toBe(false);
     expect(validateApproval({ approval: approval({ expires_at: 'not-a-time' }), now: '2026-02-01T00:00:00Z', tenant_id: 'tenant-1' })).toBe(false);
     expect(validateApproval({ approval: approval(), now: '2026-02-01T00:00:00Z', tenant_id: 'other' })).toBe(false);
+    expect(validateApproval({ approval: approval(), now: '2026-02-01T00:00:00Z', tenant_id: 'tenant-1', required_level: 'elevated' })).toBe(false);
+    expect(validateApproval({ approval: approval(), now: '2026-02-01T00:00:00Z', tenant_id: 'tenant-1', required_scope: 'assigned_tenant' })).toBe(false);
   });
 
   it('covers decision transition authorization, approval, and deferred paths', () => {
@@ -208,6 +210,10 @@ describe('typed contract validation', () => {
     expect(() => transitionDecision('draft', 'approved', {
       tenant_id: 'tenant-1', decision_tenant_id: 'tenant-1', decision_id: 'decision-1', permission_granted: true,
       approval_required: true, approval_input: { approval: approval({ decision_id: 'other' }), now: '2026-02-01T00:00:00Z', tenant_id: 'other' },
+    })).toThrow(/approval/);
+    expect(() => transitionDecision('draft', 'approved', {
+      tenant_id: 'tenant-1', decision_tenant_id: 'tenant-1', decision_id: 'decision-1', permission_granted: true,
+      approval_required: true, approval_input: { approval: approval(), now: '2026-02-01T00:00:00Z', tenant_id: 'attacker', required_level: 'elevated', required_scope: 'own_tenant' },
     })).toThrow(/approval/);
     expect(transitionDecision('deferred', 'pending_approval', {
       tenant_id: 'tenant-1', decision_tenant_id: 'tenant-1', decision_id: 'decision-1', permission_granted: true,
@@ -234,6 +240,8 @@ describe('typed contract validation', () => {
   it('reports malformed decision, execution, and impact contracts', () => {
     expect(validateDecision({ ...decision(), decision_id: '', question: '' })).toEqual(['decision_id is required', 'question is required']);
     expect(validateExecution({ ...execution(), targets: undefined })).toContain('targets are required');
+    expect(validateExecution({ ...execution(), plan: [{ ...execution().plan[0], target_refs: [{ ...target, id: 'foreign' }] }] })).toContain('step target is not declared in canonical execution targets');
+    expect(validateExecution({ ...execution(), plan: [{ ...execution().plan[0], target_refs: [{ ...target, tenant_id: 'other' }] }] })).toContain('step target is out of execution scope');
     expect(validateExecution({ ...execution(), external_constraints: { ...execution().external_constraints, tenant_isolation_key: 'other' } })).toContain('tenant isolation key mismatch');
     expect(validateExecution({ ...execution(), execution_type: 'profile_update', impact_preview: undefined, links: { ...execution().links, impact_preview_ref: undefined } })).toContain('material execution requires impact preview');
     expect(validateImpactPreview({ ...impactPreview(), preview_id: '', graph_snapshot_id: '' })).toContain('preview and graph snapshot are required');
