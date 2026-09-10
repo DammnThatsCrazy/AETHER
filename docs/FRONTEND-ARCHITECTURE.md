@@ -36,8 +36,10 @@ reviewed_source_commits:
     reason: "Graph-first scope review: graph exploration requests now preserve the host-authoritative tenant/workspace/environment scope and include all coordinates in the cache key; the documented GraphContextProvider binding remains accurate."
   - commit: "8b94e6c6"
     reason: "Graph-first scope review: legacy semantic zoom now derives tenant authority from GraphContext and fails closed on a conflicting legacy tenant argument; backend traversal contracts remain tenant-only, so no workspace/environment claim was added."
+  - commit: "a3af9833"
+    reason: "Graph-first closure review: reviewed the governed Aether exploration controls, tenant/session-scoped readiness and client-sync caches, accessible graph object representation, context-preserving selection/history, and default-off snapshot/Noesis handoffs documented below."
 source_hashes:
-  "frontend/aether/src/": "sha256:6a9ca46200bd7f7e826d94914f577f85f18e345fb77e3f54f473a156f567a5d8"
+  "frontend/aether/src/": "sha256:3ec3838512a5b611a8c78fb253d08569b2567b64174c11bc49f6a4dfd6d3bf6d"
   "frontend/kyber/src/": "sha256:30b10c0aa88d9e9784bc97bcbf174816b45479bfdb48f860a8290d2b41345e71"
   "frontend/shared/src/": "sha256:b51d37070ccbc004c90b9a56d07deb8300727955907c16775dda900919c277f6"
 ---
