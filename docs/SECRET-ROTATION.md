@@ -12,7 +12,7 @@ canonical_owner: security@aether
 estimated_read_minutes: 2
 toc_depth: 3
 source_hashes:
-  "scripts/generate_secrets.py": "sha256:e69f65190d3a775d5381be008100d33b45aa1b2f7f23a9b0a92672b519fbb3f9"
+  "scripts/generate_secrets.py": "sha256:9e3151b5f0784d583f8cf4186d0a9ff06c72029d9debcfe598ad743fe4d07a2d"
 ---
 # Secret Rotation Runbook
 

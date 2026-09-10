@@ -33,7 +33,7 @@ reviewed_source_commits:
   - commit: "0efa07cb"
     reason: "Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics."
 source_hashes:
-  "Backend Architecture/aether-backend/services/": "sha256:eb018a789fbe87872e081cf981278f6df7e2c9ce5de0cafe51aacc348bf1727f"
+  "Backend Architecture/aether-backend/services/": "sha256:a3018b6a771e8dd3a34455ab6e1c47540310b3fd46b4961d2cd12c35672780a4"
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
 
@@ -117,7 +117,7 @@ Example 429:
   "error": "rate_limit_exceeded",
   "message": "Burst rate limit exceeded. Limit: 500 RPM.",
   "retry_after_seconds": 12,
-  "plan_tier": "P2",
+  "plan_tier": "beta",
   "upgrade_url": "/v1/admin/billing/upgrade"
 }
 ```
@@ -319,9 +319,9 @@ projected period total. Pricing reflects the active `PRICING_OPTION`
 {
   "tenant_id": "acme-corp",
   "plan": {
-    "plan_id": "P2",
-    "display_name": "Professional",
-    "monthly_quota": 100000,
+    "plan_id": "beta",
+    "display_name": "Beta",
+    "monthly_quota": 9000000,
     "burst_rpm": 500,
     "member_cap": 3,
     "service_count": 19,
@@ -369,7 +369,7 @@ key. GETs require `read`; state-changing POSTs require `write`. Full behavior:
 | Method | Path | Permission | Notes |
 |---|---|---|---|
 | `GET`  | `/v1/activation/status` | read | Current activation record + derived billing state. |
-| `POST` | `/v1/activation/select-plan` | write | Body `{ "plan_tier": "P1".."P4" }`. Records the tier; does not start checkout. |
+| `POST` | `/v1/activation/select-plan` | write | Body `{ "plan_tier": "alpha".."omega" }`. Records the tier; does not start checkout. |
 | `POST` | `/v1/activation/sdk-selection` | write | Body `{ "platforms": ["web", …] }`. |
 | `POST` | `/v1/activation/create-sdk-keys` | write | Body `{ "count": 1, "label": "…" }`. Returns raw key(s) **once**. |
 | `POST` | `/v1/activation/test-event` | write | Sends a canonical event through `/v1/batch`; per-event `accepted \| duplicate \| rejected`. |
@@ -3023,7 +3023,7 @@ Feature-flagged (`KYBER_PROVIDER_SOURCE_CATALOG_ENABLED`). Operator permission r
 
 Feature-flagged (`KYBER_ANTI_DISTILLATION_ENABLED`). Operator permission required.
 
-Anti-distillation enforcement on intelligence query endpoints is activated by `AETHER_ANTI_DISTILLATION_ENABLED=true`. When enabled, wallet risk and profile endpoints run pattern detection (rapid diverse-query, honeypot wallet, sequential enumeration) on every request and emit audit events on suspicious activity. Honeypot wallet queries return `403 Forbidden`. Score precision is binned by plan tier (`P1_HOBBYIST=0.1`, `P2_PROFESSIONAL=0.05`, `P3_GROWTH=0.01`, `P4_PROTOCOL=0.001`).
+Anti-distillation enforcement on intelligence query endpoints is activated by `AETHER_ANTI_DISTILLATION_ENABLED=true`. When enabled, wallet risk and profile endpoints run pattern detection (rapid diverse-query, honeypot wallet, sequential enumeration) on every request and emit audit events on suspicious activity. Honeypot wallet queries return `403 Forbidden`. Score precision is binned by plan tier (`ALPHA=0.1`, `BETA=0.05`, `GAMMA=0.01`, `DELTA/EPSILON/OMICRON/OMEGA=0.001`).
 
 | Method | Path | Description |
 |--------|------|-------------|
