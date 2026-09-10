@@ -28,8 +28,12 @@ reviewed_source_commits:
     reason: "Reviewed 4cbc67eb (services/rights_authority production seams: server consent evaluator + resolver seam, spine-envelope rights-ref producers, rollout modes, retention + training-manifest adapters). All are library/package-level and additive, and no endpoint was live yet at this commit, so the doc's /v1/* tables were unaffected; no body change was required at this commit."
   - commit: "33dfedb4"
     reason: "Reviewed 33dfedb4 — the /v1/rights surface is now MOUNTED in main.py (always mounted beside /v1/dsr); the routes carry the rollout-OFF 503 gate and require scalar source/purpose/destination matching RightsDecisionRequest; the durable repositories accept dict-or-model rows. This commit makes /v1/rights live and supersedes the earlier not-wired-into-main.py review notes. Body change: the Rights Authority section below documents the three endpoints and their rollout-gated 503 posture."
+  - commit: "69185729"
+    reason: "Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate."
+  - commit: "0efa07cb"
+    reason: "Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics."
 source_hashes:
-  "Backend Architecture/aether-backend/services/": "sha256:1f1715b3f40d2055c0d4e99aed2b2d841224f311370027d924cb3d706c567844"
+  "Backend Architecture/aether-backend/services/": "sha256:c64dd790228b4cb0499803cfa3fef8995d4a45388929b56d0d9d6613804edd8f"
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
 
@@ -163,12 +167,20 @@ permission gate beyond authentication.
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/v1/me` | GET | Caller profile + plan summary |
+| `/v1/me` | GET | Caller profile + plan summary and server-owned graph scope |
 | `/v1/me/api-keys` | GET | List caller's API keys (paginated; honours `limit` + `cursor`) |
 | `/v1/me/api-keys` | POST | Create a new API key (self-service) |
 | `/v1/me/api-keys/{key_id}` | PATCH | Rename an existing API key |
 | `/v1/me/api-keys/{key_id}` | DELETE | Revoke an API key |
 | `/v1/me/account` | DELETE | Self-service account deletion (GDPR Article 17) |
+
+`GET /v1/me` includes `graph_scope` with `tenant_id`, `workspace_id`,
+`environment_id`, and `scope_model`. In the current
+`single_workspace_tenant_v1` model, the workspace is the authenticated tenant
+and `environment_id` is the logical graph environment `production`. These
+coordinates are server authority: client input, URL state, tenant-record
+metadata, and `AETHER_ENV` cannot override them. Multi-workspace selection is
+not exposed by this model.
 
 ### Contact & enterprise inquiries (`/v1/contact/*`, API key required)
 
@@ -1573,7 +1585,8 @@ The Exploration Fabric (`/v1/explore`) is the context-preserving
 query/filter/presentation workbench over every analytical surface. Its
 validate/query/facets/views/links endpoints and the per-surface adapter model
 are documented in `docs/source-of-truth/EXPLORATION_FABRIC.md`; this section
-covers the **sessions + operations** surface, added over the S1 projection
+covers the **sessions + operations and immutable result snapshots** surface,
+added over the S1 projection
 engine. An `ExplorationSession` persists one tenant-scoped exploration —
 surface, seed `ExplorationContextV1`, op history, and current context — and
 every submitted filter stays accounted for (no silent drops). Flag-gated inside
@@ -1587,6 +1600,17 @@ off the surface answers 404, indistinguishable from an unmounted route.
 | GET | `/v1/explore/sessions/{session_id}` | Load one session (404 when absent) |
 | DELETE | `/v1/explore/sessions/{session_id}` | Delete one session (404 when absent) |
 | POST | `/v1/explore/sessions/{session_id}/operations` | Apply one operation to the session; returns `{result, session}` — `result` carries the post-op context, op status (`applied` \| `rejected` \| `degraded`), and, for projection surfaces, the S1 engine composition summary |
+| GET | `/v1/explore/snapshots` | List tenant-owned immutable exploration result snapshots (metadata only; `limit` ≤ 500, `offset` pagination) |
+| POST | `/v1/explore/snapshots` | Execute the canonical exploration query for a context and capture its result, digest, truth, completeness, applicability, and freshness watermark; requires `write` |
+| GET | `/v1/explore/snapshots/{snapshot_id}` | Retrieve one captured result; tenant mismatch and missing ids fail closed |
+| POST | `/v1/explore/snapshots/{snapshot_id}/compare` | Re-run the saved context against current graph/surface data and return deterministic graph node/edge changes (or an opaque digest change for non-graph data) |
+
+Snapshot ids are immutable within a tenant; concurrent reuse is rejected
+instead of replacing historical evidence. The graph preview returned by the
+Data Exchange import adapter carries source-file checksums, mapping version,
+per-file row/mapping/error counts, and a fail-closed `rights_context` marked
+`not_evaluated`/`activation_allowed: false`; previewing never authorizes a
+commit or activation.
 
 **Operation vocabulary:** `OPEN` \| `PIVOT` \| `EXPAND` \| `COLLAPSE` \|
 `FILTER_ADD` \| `FILTER_REMOVE` \| `LENS_ADD` \| `TIME_TRAVEL` \| `DRILL_DOWN`
@@ -2438,6 +2462,11 @@ Deep entity profiling — aggregates identity, graph, temporal, financial, and b
 | POST | `/v1/entities/relationships/query` | Query graph relationships for an entity (H2H, H2A, A2H, A2A layers) |
 
 **Permissions:** `read`
+
+Entity profile, timeline, and relationship reads validate the requested anchor
+against the authenticated tenant and filter neighbours before counts or result
+limits. Both canonical `tenantId` and legacy `tenant_id` markers are accepted;
+missing ownership and foreign-tagged edges are omitted.
 
 ---
 
@@ -3444,6 +3473,13 @@ and command receipts (`incident_changed`, `command_receipt_changed`), self-servi
 and Kyber session revocation (`session_revoked`), and mobile installation
 revocation (`installation_revoked`).
 
+Watchlist change events use a durable occurrence revision in the form
+`{mutation_version}:{content_hash}`. Identical retries preserve the same
+`mutation_version` and source-event id, while every changed state increments
+the tenant-qualified counter—even when content returns to an earlier value
+(A→B→A). Delete and later recreation also receive distinct occurrences, so
+feed consumers can refetch the canonical watchlist without losing a transition.
+
 ---
 
 ## Mobile Gateway (v8.12.0)
@@ -3946,9 +3982,12 @@ read, resolved, or revoked.
 
 **Availability:** `RIGHTS_AUTHORITY_ROLLOUT=off|shadow|warn|enforce`, default
 `off`; unset or invalid ⇒ `off` ⇒ inert. Activation is deliberate: set
-`RIGHTS_AUTHORITY_ROLLOUT=shadow|warn|enforce` and restart. The resolver's
+`RIGHTS_AUTHORITY_ROLLOUT=shadow|warn|enforce` and restart. `shadow` and `warn`
+evaluate and return observational metadata without making a denial binding;
+`enforce` makes the decision/revocation result authoritative. The resolver's
 consent seam (the server consent authority behind `services/consent/authority.py`)
-and the §66 revocation pipeline engage end-to-end only in `enforce`.
+and the §66 revocation pipeline therefore remain fail-closed at the mutation
+boundary until `enforce`.
 
 **Authorization:** routes enforce the canonical read/write scopes and the
 caller's tenant server-side. The actor whose rights are resolved is the
@@ -3976,6 +4015,7 @@ when `off`.
 | `requested_use` | string | The requested use. |
 | `purpose` | string | Purpose of the requested use (required — grants/receipts are matched by purpose). |
 | `destination` | string | Destination/scope of the requested use (required — part of the §17 decision identity). |
+| `subject_ref` | string? | Optional canonical data-subject reference for consent receipt lookup; `consent_basis` remains legal/purpose metadata. |
 | `as_of` | string? | Optional ISO as-of instant. |
 
 Response: `APIResponse.data` = the durable `RightsDecision` (`decision_id`

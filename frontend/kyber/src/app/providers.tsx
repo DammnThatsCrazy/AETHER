@@ -3,7 +3,7 @@ import { BrowserRouter, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@kyber/features/auth';
 import { NotificationProvider } from '@kyber/features/notifications';
 import { CapabilityProvider, ThemeProvider, TimeProvider } from '@aether/ui';
-import { ExplorationProvider } from '@aether/ui/exploration';
+import { GraphContextProvider } from '@aether/ui/exploration';
 import { JourneyProvider } from '@kyber/features/journey';
 import { fetchOperatorCapabilities } from '@kyber/lib/api/capabilities';
 import { explorationClient } from '@kyber/lib/api/exploration';
@@ -38,23 +38,30 @@ export function ExplorationGate({ children }: { readonly children: ReactNode }) 
   const location = useLocation();
   if (!isAuthenticated || !principal) return children;
 
-  const tenantId = principal.active_scope?.status === 'active'
-    ? principal.active_scope.tenant_id
-    : `operator:${principal.operator_id}:${principal.session_id}`;
-  const authorityKey = principal.active_scope?.status === 'active'
-    ? principal.active_scope.scope_id
-    : principal.session_id;
+  const activeScope = principal.active_scope?.status === 'active' ? principal.active_scope : null;
+  // Workforce responses do not expose a separate workspace coordinate. For a
+  // tenant scope the backend's tenant is the workspace authority (the same
+  // single-workspace model used by Aether); without one, keep fleet state
+  // isolated to this authenticated operator session. Neither value comes
+  // from URL/deployment labels.
+  const tenantId = activeScope?.tenant_id ?? `operator:${principal.operator_id}:${principal.session_id}`;
+  const scope = {
+    tenant_id: tenantId,
+    workspace_id: activeScope?.tenant_id ?? `operator:${principal.operator_id}`,
+    environment_id: activeScope?.environment ?? principal.environment,
+  } as const;
+  const authorityKey = JSON.stringify([scope.tenant_id, scope.workspace_id, scope.environment_id]);
 
   return (
-    <ExplorationProvider
+    <GraphContextProvider
       key={authorityKey}
-      tenantId={tenantId}
+      scope={scope}
       surface={location.pathname}
       query={location.search}
       client={explorationClient}
     >
       {children}
-    </ExplorationProvider>
+    </GraphContextProvider>
   );
 }
 

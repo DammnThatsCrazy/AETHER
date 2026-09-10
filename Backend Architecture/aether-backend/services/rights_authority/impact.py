@@ -295,6 +295,22 @@ async def revocation_pipeline(
             f"{grant_tenant!r} does not match caller tenant {tenant_id!r}"
         )
 
+    # Update the canonical P-A grant before emitting any downstream denial or
+    # impact rows.  This closes the race where consumers reload the grant
+    # between the revocation decision and remediation enqueueing.
+    from services.integrations.data_rights.models import DataRightsGrantRevoke
+    from services.integrations.data_rights.service import data_rights_service
+    revoked = await data_rights_service.revoke_grant(
+        grant_id,
+        DataRightsGrantRevoke(
+            revocation_reason=reason,
+            revoked_by_user_id=f"tenant:{tenant_id}",
+        ),
+    )
+    if revoked is None:
+        raise RevocationError(f"revocation refused for grant {grant_id}: grant disappeared")
+    grant = revoked
+
     repos = _pb1_repositories()
     decision_repo = repos.rights_decision_repository
     gateway = gateway or _default_gateway()

@@ -111,6 +111,15 @@ async def get_my_profile(request: Request):
 
     return APIResponse(data={
         "tenant_id": tenant.tenant_id,
+        # Graph authority is server-owned.  The current product model has one
+        # workspace per tenant and one logical serving environment; neither
+        # value is derived from deployment configuration or client input.
+        "graph_scope": {
+            "tenant_id": tenant.tenant_id,
+            "workspace_id": tenant.tenant_id,
+            "environment_id": "production",
+            "scope_model": "single_workspace_tenant_v1",
+        },
         "name": tenant_record.get("name"),
         "contact_email": tenant_record.get("contact_email"),
         "plan": {

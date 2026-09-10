@@ -31,12 +31,12 @@ estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
   "Backend Architecture/aether-backend/config/settings.py": "sha256:27f7b15209c14a857112fd3dfff3558ebd9e45c21def782d4dd63ccecfc0aa3c"
-  "Backend Architecture/aether-backend/services/intelligence/decision_models.py": "sha256:ff7e6d657dcf68bbe4d9ac7d66736be7f7b7c446050cceec84c35dd59b6a2ee7"
+  "Backend Architecture/aether-backend/services/intelligence/decision_models.py": "sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25"
   "Backend Architecture/aether-backend/services/intelligence/ooda_engine.py": "sha256:bea93d08056d5cb9c7c2fc7d3738beaa3b42715c5930a0811900c55b6bb8a486"
   "Backend Architecture/aether-backend/services/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
   "Backend Architecture/aether-backend/services/intelligence/recommendation_families.py": "sha256:9a1375244f013488f51e2a73bd5de32b452bb7232f67fea68ac4cc7955d80e43"
-  "Backend Architecture/aether-backend/services/intelligence/repositories.py": "sha256:5dc6be1b18ffec874a1ef2026a8f8ab3e975f69119f7efa92928fc9f71b72610"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:6869337e19ec073673344c4d27986a717be807b852156ffe5807516105abdc35"
+  "Backend Architecture/aether-backend/services/intelligence/repositories.py": "sha256:e1640a8ffe056bb2c6347773e0efb6080fc470931b4da7a4efcb8cfbe109837a"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:c9c080216395b71d176710000889bc5d4d8a108c829f61cc7d61fa6840f7cb20"
 ---
 # Decision & Outcome Intelligence
 
@@ -54,7 +54,7 @@ Aether extends the existing intelligence graph into a graph-native OODA loop: **
 ## Recommendation lifecycle
 
 `generated → viewed → decided → outcome_observed → confidence_updated`.
-Recommendations include evidence, confidence decomposition, required approval level, policy/governance flags, graph snapshot id, and data freshness.
+Recommendations include evidence, confidence decomposition, required approval level, policy/governance flags, graph snapshot id, and data freshness. When a recommendation is promoted from a comparison finding, optional `finding_id` and `investigation_id` provenance links are carried onto the decision, planned action/dispatch, and observed outcome records so the full loop remains traceable.
 
 ## Graph relationships
 
@@ -74,9 +74,23 @@ Additive OODA edges:
 - Human-in-the-loop approval is preserved for elevated, critical, irreversible, or low-confidence actions.
 - Kyber observability uses aggregate health metrics and must not expose tenant-private intelligence across tenants.
 
+Dispatch and graph safeguards are part of this same OODA authority. Graph
+neighbours are filtered by the authenticated tenant before result limits are
+applied (both `tenantId` and legacy `tenant_id` markers are normalized;
+unattributed vertices are not a wildcard). An optional action idempotency key
+is reserved before any connector call, and a missing adapter leaves an
+auditable queued plan rather than claiming an external effect. Delivered
+receipts must contain real provider evidence; simulation-shaped receipts are
+not accepted.
+
 ## Tenant vs Kyber responsibilities
 
-- **Aether tenant app**: shows recommendation cards, evidence, decision drawer, entity recommendations, outcome history, and playbook controls for the current tenant.
+- **Aether tenant app**: shows recommendation cards, evidence, decision drawer,
+  entity recommendations, outcome history, and playbook controls for the current
+  tenant. Approval records the authenticated actor and creates a separate
+  durable `planned` action; it does not dispatch an external effect. Dispatch
+  remains a later explicit operation requiring a configured tenant target and
+  the applicable policy/approval checks.
 - **Kyber operator console**: shows aggregate system health, volume, approval/rejection rates, outcome capture rate, confidence drift, playbook performance, and stale loops.
 
 ## API examples
@@ -137,6 +151,9 @@ Feature flags continue to default disabled. Existing recommendation APIs remain 
 ## Enterprise packaging and audit exports
 
 Decision records now feed tenant-scoped audit exports and Kyber solution package readiness. Exports preserve actor, approval, selected/rejected action, reason/comment, and timestamp evidence without exposing cross-tenant data. See `docs/AUDIT-EXPORTS.md` and `docs/SOLUTION-PACKAGES.md`.
+
+Decision actor identity is derived from the authenticated tenant principal on
+the server. The compatibility request field cannot override audit identity.
 
 ## Fraud Intelligence Configuration
 

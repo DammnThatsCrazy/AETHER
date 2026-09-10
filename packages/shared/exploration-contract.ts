@@ -259,6 +259,37 @@ export interface ExplorationResultEnvelope<T> {
   warnings: string[];
 }
 
+/** An immutable checkpoint of one executed exploration result. */
+export interface ExplorationSnapshot<T = unknown> {
+  snapshot_id: string;
+  tenant_id: string;
+  name?: string | null;
+  context: ExplorationContextV1;
+  result: T;
+  result_digest: string;
+  limit: number;
+  truth_state: string;
+  completeness: ExplorationResultEnvelope<T>['completeness'];
+  applicability: ApplicabilityReport;
+  freshness_watermark: string;
+  created_by?: string | null;
+  created_at: string;
+}
+
+/** Deterministic comparison of a saved exploration result with a fresh run. */
+export interface ExplorationSnapshotComparison {
+  snapshot_id: string;
+  tenant_id: string;
+  snapshot_watermark: string;
+  current_watermark: string;
+  changed: boolean;
+  diff: Record<string, unknown>;
+  current_truth_state: string;
+  current_completeness: ExplorationResultEnvelope<unknown>['completeness'];
+  warnings: string[];
+  computed_at: string;
+}
+
 /** A context-preserving navigation edge to another surface. */
 export interface ContextLink {
   to: string;

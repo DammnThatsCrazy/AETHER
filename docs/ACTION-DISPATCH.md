@@ -19,7 +19,7 @@ toc_depth: 3
 source_hashes:
   "Backend Architecture/aether-backend/services/intelligence/action_targets/base.py": "sha256:983f23fdb3696c505d39e80232b5e91c22d917744fef156cc58900bbfde0c449"
   "Backend Architecture/aether-backend/services/intelligence/action_targets/registry.py": "sha256:06edc4a24ff4a7e14927a05414e5ce40b8da8d187af3895b0e893b21cb98d56c"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:6869337e19ec073673344c4d27986a717be807b852156ffe5807516105abdc35"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:c9c080216395b71d176710000889bc5d4d8a108c829f61cc7d61fa6840f7cb20"
 ---
 
 # Governed Action Dispatch
@@ -51,17 +51,28 @@ Action Dispatch connects approved Decision & Outcome Intelligence actions to ext
 
 The built-in target registry supports Slack, webhook, CRM, marketing automation, ticketing, and agent-assist workflows. Targets expose whether configuration, retries, delivery receipts, cancellation, and premium metering apply.
 
-## Dispatch flow (as of 9.1.0)
+## Dispatch flow (current)
 
-`POST /v1/intelligence/actions/{action_id}/dispatch` no longer produces a simulated receipt. The dispatch call now:
+`POST /v1/intelligence/actions/{action_id}/dispatch` never fabricates a
+successful delivery. Before invoking a target, an optional idempotency key is
+reserved within the authenticated tenant and action. A replay returns the
+existing durable dispatch and latest receipt with `replayed: true`; it does not
+invoke a connector a second time, and the same key on another action or tenant
+does not alias the reservation.
 
-1. Creates a `DeliveryIntent` (durable outbox record) atomically in the same DB transaction.
-2. Creates a `DeliveryJob` per configured destination channel.
-3. Returns `202 Accepted` with the job IDs.
-4. `DeliveryWorker` (background process) leases jobs and calls the concrete `ProviderAdapter.deliver()` method.
-5. A `ProviderReceipt` with a real `external_id` is required before the suggestion advances to DELIVERED.
+When a concrete target returns a delivered receipt, it must include a real
+external evidence id (simulation-shaped ids are rejected). When the target is
+not implemented, the already-reserved dispatch remains a durable `queued`
+plan and is handed to the canonical `DeliveryIntent`/`DeliveryJob` worker seam
+when available. The response marks `planned: true` and
+`external_side_effect: false`; it is not a claim that a provider was contacted.
+Connector errors are retained as an auditable failed dispatch and do not clear
+the reservation, so a retry cannot create a second external side effect.
 
-`BaseActionTarget.dispatch()` raises `NotImplementedError` — it is no longer callable. `ActionTargetRegistry` delegates adapter resolution to `ProviderAdapterRegistry`. See [Delivery Architecture](DELIVERY-ARCHITECTURE.md) and [ADR-001](architecture/adr-001-canonical-delivery-pipeline.md).
+`BaseActionTarget.dispatch()` raises `NotImplementedError` when no concrete
+adapter exists. `ActionTargetRegistry` delegates adapter resolution to
+`ProviderAdapterRegistry`. See [Delivery Architecture](DELIVERY-ARCHITECTURE.md)
+and [ADR-001](architecture/adr-001-canonical-delivery-pipeline.md).
 
 ## Secret handling
 

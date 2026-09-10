@@ -49,7 +49,12 @@ async def upsert_recommendation_graph(graph: GraphClient, recommendation: dict) 
         Vertex(
             VertexType.RECOMMENDATION,
             rec_id,
-            {"tenant_id": tenant_id, "type": recommendation.get("recommendation_type")},
+            {
+                "tenant_id": tenant_id,
+                "type": recommendation.get("recommendation_type"),
+                "finding_id": recommendation.get("finding_id"),
+                "investigation_id": recommendation.get("investigation_id"),
+            },
         ),
         operation="node_versioned",
         tenant_id=tenant_id,
@@ -99,7 +104,16 @@ async def upsert_decision_graph(graph: GraphClient, decision: dict) -> None:
     dec_id = decision["decision_id"]
     tenant_id = decision["tenant_id"]
     await gateway.apply(vertex_intent(
-        Vertex(VertexType.DECISION_RECORD, dec_id, {"tenant_id": tenant_id, "status": decision.get("decision_status")}),
+        Vertex(
+            VertexType.DECISION_RECORD,
+            dec_id,
+            {
+                "tenant_id": tenant_id,
+                "status": decision.get("decision_status"),
+                "finding_id": decision.get("finding_id"),
+                "investigation_id": decision.get("investigation_id"),
+            },
+        ),
         operation="node_versioned", tenant_id=tenant_id, actor_id=_ACTOR,
     ))
     await gateway.apply(edge_intent(
@@ -115,7 +129,17 @@ async def upsert_action_graph(graph: GraphClient, action: dict) -> None:
     action_id = action["action_id"]
     tenant_id = action["tenant_id"]
     await gateway.apply(vertex_intent(
-        Vertex(VertexType.ACTION_RECORD, action_id, {"tenant_id": tenant_id, "status": action.get("status")}),
+        Vertex(
+            VertexType.ACTION_RECORD,
+            action_id,
+            {
+                "tenant_id": tenant_id,
+                "status": action.get("status"),
+                "recommendation_id": action.get("recommendation_id"),
+                "finding_id": action.get("finding_id"),
+                "investigation_id": action.get("investigation_id"),
+            },
+        ),
         operation="node_versioned", tenant_id=tenant_id, actor_id=_ACTOR,
     ))
     await gateway.apply(edge_intent(
@@ -129,7 +153,16 @@ async def upsert_outcome_graph(graph: GraphClient, outcome: dict) -> None:
     outcome_id = outcome["outcome_id"]
     tenant_id = outcome["tenant_id"]
     await gateway.apply(vertex_intent(
-        Vertex(VertexType.OUTCOME_OBSERVATION, outcome_id, {"tenant_id": tenant_id, "label": outcome.get("label")}),
+        Vertex(
+            VertexType.OUTCOME_OBSERVATION,
+            outcome_id,
+            {
+                "tenant_id": tenant_id,
+                "label": outcome.get("label"),
+                "finding_id": outcome.get("finding_id"),
+                "investigation_id": outcome.get("investigation_id"),
+            },
+        ),
         operation="node_versioned", tenant_id=tenant_id, actor_id=_ACTOR,
     ))
     await gateway.apply(edge_intent(

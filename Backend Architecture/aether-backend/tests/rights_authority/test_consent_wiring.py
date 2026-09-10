@@ -93,9 +93,12 @@ def _grant(**overrides) -> DataRightsGrant:
 def _consent_grant(**overrides) -> DataRightsGrant:
     defaults = {
         "legal_basis": "consent",
-        "consent_basis": "subject-1",
+        "consent_basis": "explicit_consent",
+        "subject_ref": "subject-1",
     }
     defaults.update(overrides)
+    if "subject_ref" not in overrides and "consent_basis" in overrides and overrides["consent_basis"] is None:
+        defaults["subject_ref"] = None
     return _grant(**defaults)
 
 
@@ -182,6 +185,16 @@ async def test_adapter_allows_granted_registry_purpose():
     assert decision.subject_ref == "subject-1"
     assert decision.resource_id == _grant_obj.data_rights_grant_id
     assert "analytics" in decision.granted_purposes
+
+
+async def test_request_subject_reference_overrides_grant_default():
+    """A request may bind one subject without overloading consent_basis."""
+    await _seed_receipt(tenant_id="tenant_abc", subject_id="subject-2")
+    request = _request(subject_ref="subject-2")
+    decision = await default_consent_evaluator(request, _consent_grant())
+    assert decision is not None
+    assert decision.allowed is True
+    assert decision.subject_ref == "subject-2"
 
 
 async def test_adapter_denies_missing_receipt():

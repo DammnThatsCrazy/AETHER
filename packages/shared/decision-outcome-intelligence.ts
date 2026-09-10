@@ -64,6 +64,9 @@ export interface CandidateAction {
 export interface Recommendation {
   readonly recommendation_id: string;
   readonly tenant_id: string;
+  /** Finding/investigation provenance when promoted from the governed loop. */
+  readonly finding_id?: string;
+  readonly investigation_id?: string;
   readonly entity_id?: string;
   readonly population_id?: string;
   readonly recommendation_type: RecommendationType;
@@ -85,6 +88,8 @@ export interface Recommendation {
 export interface DecisionRecord {
   readonly decision_id: string;
   readonly recommendation_id: string;
+  readonly finding_id?: string;
+  readonly investigation_id?: string;
   readonly actor_id: string;
   readonly selected_action?: CandidateAction;
   readonly rejected_actions: CandidateAction[];
@@ -98,6 +103,9 @@ export interface DecisionRecord {
 export interface ActionFeedback {
   readonly action_id: string;
   readonly decision_id: string;
+  readonly recommendation_id?: string;
+  readonly finding_id?: string;
+  readonly investigation_id?: string;
   readonly action_type: string;
   readonly system?: string;
   readonly integration?: string;
@@ -142,6 +150,8 @@ export interface ActionDispatch {
   readonly action_id: string;
   readonly decision_id: string;
   readonly recommendation_id: string;
+  readonly finding_id?: string;
+  readonly investigation_id?: string;
   readonly target_type: string;
   readonly config_id?: string;
   readonly status: 'queued' | 'dispatched' | 'delivered' | 'failed' | 'cancelled';
@@ -184,6 +194,8 @@ export interface OutcomeObservation {
   readonly outcome_id: string;
   readonly action_id: string;
   readonly recommendation_id: string;
+  readonly finding_id?: string;
+  readonly investigation_id?: string;
   readonly entity_id?: string;
   readonly population_id?: string;
   readonly outcome_type: string;

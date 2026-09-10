@@ -6,9 +6,31 @@ from pathlib import Path
 import pytest
 
 from scripts.artifact_builder import aggregate_digest, digest_file, verify_candidate, write_once
+from scripts.delivery_contracts import DeploymentImpact
 from scripts.validate_delivery_profiles import load_yaml, validate_fallbacks, validate_frontend, validate_registry
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def candidate_metadata(component_names, lock_digests=None):
+    lock_digests = lock_digests or {}
+    return {
+        "schema_version": 1,
+        "release_candidate_id": "rc-test",
+        "commit_sha": "abc1234",
+        "dependency_lock_digests": lock_digests,
+        "contract_versions": {},
+        "migration_version": "none",
+        "model_versions": {},
+        "policy_versions": {},
+        "deployment_profiles": ["staging"],
+        "affected_domains": ["delivery"],
+        "required_checks": ["canonical-consistency"],
+        "deployment_impact": DeploymentImpact.for_candidate(
+            profile="staging", components=component_names, affected_domains=["delivery"], migration_version="none"
+        ).as_dict(),
+        "created_at": "2026-09-07T00:00:00+00:00",
+    }
 
 
 def test_component_digest_and_aggregate_are_stable(tmp_path):
@@ -32,11 +54,13 @@ def test_candidate_verification_binds_component_and_commit(tmp_path):
     component.write_bytes(b"built-once")
     digest = digest_file(component)
     candidate = tmp_path / "candidate.json"
-    candidate.write_text(json.dumps({
-        "commit_sha": "abc1234", "component_digests": {"web": digest},
+    value = candidate_metadata(["web"])
+    value.update({
+        "component_digests": {"web": digest},
         "artifact_digest": aggregate_digest({"web": digest}),
         "dependency_lock_hash": aggregate_digest({}),
-    }))
+    })
+    candidate.write_text(json.dumps(value))
     assert verify_candidate(candidate, [f"web={component}"], [], "abc1234")["commit_sha"] == "abc1234"
     component.write_bytes(b"rebuilt")
     with pytest.raises(ValueError, match="component digests"):
@@ -50,12 +74,14 @@ def test_candidate_verification_binds_dependency_locks(tmp_path):
     lockfile.write_text("one")
     digest = digest_file(component)
     candidate = tmp_path / "candidate.json"
-    candidate.write_text(json.dumps({
+    value = candidate_metadata(["web"], {str(lockfile): digest_file(lockfile)})
+    value.update({
         "commit_sha": "abc1234",
         "component_digests": {"web": digest},
         "artifact_digest": aggregate_digest({"web": digest}),
         "dependency_lock_hash": aggregate_digest({str(lockfile): digest_file(lockfile)}),
-    }))
+    })
+    candidate.write_text(json.dumps(value))
     verify_candidate(candidate, [f"web={component}"], [str(lockfile)], "abc1234")
     lockfile.write_text("two")
     with pytest.raises(ValueError, match="dependency lock hash"):

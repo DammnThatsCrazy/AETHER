@@ -74,6 +74,11 @@ class EffectiveRightsResolveRequest(BaseModel):
         description="destination/scope of the requested use (required by the "
         "resolver's decision identity)",
     )
+    subject_ref: Optional[str] = Field(
+        default=None,
+        description="optional canonical data-subject reference for consent "
+        "evaluation; consent_basis remains purpose/legal-basis metadata",
+    )
     as_of: Optional[str] = None
 
 
@@ -143,9 +148,28 @@ async def resolve_effective_decision(
         requested_use=body.requested_use,
         purpose=body.purpose,
         destination=body.destination,
+        subject_ref=body.subject_ref,
         as_of=body.as_of,
     )
-    return APIResponse(data=_dump(decision)).to_dict()
+    data = _dump(decision)
+    from .rollout import RolloutMode, current_mode
+    mode = current_mode()
+    if mode is not RolloutMode.ENFORCE:
+        # Shadow/warn are observational at this HTTP boundary. Preserve the
+        # evaluated decision for comparison/audit, but explicitly mark that a
+        # denial is not a binding authorization result until enforce mode.
+        data["observed"] = True
+        data["enforced"] = False
+        data["rollout"] = mode.value
+        if mode is RolloutMode.WARN and not data.get("allowed", False):
+            data["warnings"] = [
+                "rights authority denial observed; rollout is warn and is not binding"
+            ]
+    else:
+        data["observed"] = False
+        data["enforced"] = True
+        data["rollout"] = mode.value
+    return APIResponse(data=data).to_dict()
 
 
 @router.get("/decisions/{decision_id}")
@@ -196,6 +220,17 @@ async def run_revocation(
     """
     _ensure_active()
     _same_tenant_or_403(request, body.tenant_id)
+    from .rollout import RolloutMode, current_mode
+    if current_mode() is not RolloutMode.ENFORCE:
+        # Shadow/warn are observational: they must not revoke canonical state,
+        # emit a binding denial, or enqueue remediation.
+        return APIResponse(data={
+            "observed": True,
+            "enforced": False,
+            "rollout": current_mode().value,
+            "grant_id": body.grant_id,
+            "reason": body.reason,
+        }).to_dict()
     from .impact import RevocationError, revocation_pipeline
 
     try:

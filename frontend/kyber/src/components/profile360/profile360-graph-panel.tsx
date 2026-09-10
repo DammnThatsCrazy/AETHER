@@ -9,6 +9,7 @@ interface Profile360GraphPanelProps {
   readonly highlightedNodeIds: readonly string[];
   readonly onHighlight: (nodeIds: readonly string[]) => void;
   readonly onDrill: (reference: Profile360Reference) => void;
+  readonly onOpenReference?: (reference: Profile360Reference) => void;
 }
 
 const overlayOptions = [
@@ -83,7 +84,7 @@ function chunkByDegree(nodes: readonly GraphNode[], edges: readonly GraphEdge[],
   };
 }
 
-export function Profile360GraphPanel({ graph, highlightedNodeIds, onHighlight, onDrill }: Profile360GraphPanelProps) {
+export function Profile360GraphPanel({ graph, highlightedNodeIds, onHighlight, onDrill, onOpenReference }: Profile360GraphPanelProps) {
   const [overlay, setOverlay] = useState<GraphOverlay>('none');
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -172,12 +173,9 @@ export function Profile360GraphPanel({ graph, highlightedNodeIds, onHighlight, o
               />
               {Boolean(selectedNode.metadata?.profile_links) && (
                 <div className="flex gap-1">
-                  <a
-                    href={String((selectedNode.metadata.profile_links as Record<string, unknown>).full ?? '#')}
-                    className="flex-1 text-center text-xs px-2 py-1 rounded border border-border-subtle text-text-secondary hover:text-text-primary hover:border-border-default"
-                  >
+                  <Button size="sm" variant="secondary" className="flex-1" onClick={() => onOpenReference?.({ id: selectedNode.id, type: selectedNode.type === 'external' ? 'human' : selectedNode.type, label: selectedNode.label, metadata: selectedNode.metadata })}>
                     Open full profile →
-                  </a>
+                  </Button>
                 </div>
               )}
               <Button size="sm" className="w-full" onClick={() => onDrill({ id: selectedNode.id, type: selectedNode.type === 'external' ? 'human' : selectedNode.type, label: selectedNode.label, metadata: selectedNode.metadata })}>Drill into node</Button>

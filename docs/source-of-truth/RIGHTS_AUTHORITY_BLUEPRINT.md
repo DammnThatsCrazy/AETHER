@@ -133,6 +133,7 @@ class DataRightsGrant:
 
     legal_basis: str
     consent_basis: Optional[str]
+    subject_ref: Optional[str]
 
     granted_at: str
     expires_at: Optional[str]
@@ -308,7 +309,9 @@ mutation; create derived intelligence; export; disclose; train; benchmark; gener
 enter Olympus graph; Olympus internal query; retain after tenant termination.
 
 Decision identity reproducible from: tenant + actor + purpose + artifact + requested_use +
-destination + policy version + as-of time (decision idempotency, §17).
+destination + governing source/grant + subject reference + policy version + as-of time
+(decision idempotency, §17). Live requests re-evaluate current grant and consent state;
+only an explicit immutable `as_of` request may replay a historical decision snapshot.
 
 ---
 

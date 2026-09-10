@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.olympuslabs.io/contracts/delivery/effective-iam-evidence/v1",
+  "title": "Aether EffectiveIamEvidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "role_arn", "identity_statements", "boundary_statements", "policy_names", "source"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "role_arn": {"type": "string", "pattern": "^arn:[^:]+:iam::[0-9]{12}:role/.+"},
+    "identity_statements": {"type": "array", "items": {"$ref": "#/$defs/statement"}},
+    "boundary_statements": {"type": "array", "items": {"$ref": "#/$defs/statement"}},
+    "policy_names": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "source": {"enum": ["offline_fixture", "aws_read_only"]}
+  },
+  "$defs": {
+    "statement": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["Effect"],
+      "properties": {
+        "Effect": {"enum": ["Allow", "Deny"]},
+        "Action": {"type": ["string", "array"]},
+        "NotAction": {"type": ["string", "array"]},
+        "Resource": {"type": ["string", "array"]},
+        "NotResource": {"type": ["string", "array"]},
+        "Condition": {"type": "object"}
+      }
+    }
+  }
+}

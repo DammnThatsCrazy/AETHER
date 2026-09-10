@@ -67,15 +67,10 @@ suites:
   - id: backend
     subsystem: backend
     paths: ["Backend Architecture/aether-backend/tests"]
-    runner:
-      [
-        "python",
-        "-m",
-        "pytest",
-        "Backend Architecture/aether-backend/tests",
-        "-v",
-        "--tb=short",
-      ]
+    # Keep behavior tests parallel, then run the wall-clock performance
+    # guardrails serially so xdist scheduler contention cannot turn into a
+    # false regression. scripts/run_backend_tests.py covers both passes.
+    runner: ["python", "scripts/run_backend_tests.py"]
     requires:
       python_packages: []
       services: []

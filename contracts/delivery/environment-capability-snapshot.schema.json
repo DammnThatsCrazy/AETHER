@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.olympuslabs.io/contracts/delivery/environment-capability-snapshot/v1",
+  "title": "Aether EnvironmentCapabilitySnapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile", "mode", "capabilities"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "profile": {"type": "string", "minLength": 1},
+    "mode": {"enum": ["offline", "live"]},
+    "capabilities": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/observation"}
+    }
+  },
+  "$defs": {
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "source"],
+      "properties": {
+        "status": {"enum": ["PASS", "UNAVAILABLE", "BLOCKED", "UNKNOWN"]},
+        "source": {"enum": ["offline_fixture", "terraform_plan", "config", "aws_read_only"]},
+        "reason": {"type": "string", "minLength": 1},
+        "evidence_ref": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

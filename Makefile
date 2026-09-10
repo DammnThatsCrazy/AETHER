@@ -9,7 +9,7 @@
 # =============================================================================
 
 .DEFAULT_GOAL := help
-.PHONY: setup setup-dev setup-minimal doctor generate change-plan test-fast test-pr test-integration test-regression test-release build-artifact validate-delivery-profile validate-delivery-registries validate-release-evidence validate-golden-journeys deploy-staging staging-migrate test-golden-journeys \
+.PHONY: setup setup-dev setup-minimal doctor generate change-plan test-fast test-pr test-integration test-regression test-release build-artifact validate-delivery-profile validate-delivery-registries validate-delivery-workflow-authority validate-release-evidence validate-golden-journeys deploy-staging staging-migrate test-golden-journeys \
         test test-security test-ml test-coverage \
         ml-validate ml-test ml-test-unit ml-test-integration ml-test-security \
         ml-train-smoke ml-artifact-verify ml-docs-check ml-container-build ml-ci \
@@ -333,12 +333,22 @@ build-artifact: ## Record immutable ReleaseCandidate metadata (requires CANDIDAT
 	@test -n "$(CANDIDATE_ID)" -a -n "$(PROFILE)" -a -n "$(COMPONENTS)" || (echo "CANDIDATE_ID, PROFILE, and COMPONENTS are required"; exit 2)
 	$(GATE_PY) scripts/artifact_builder.py --candidate-id "$(CANDIDATE_ID)" --profile "$(PROFILE)" $(foreach component,$(COMPONENTS),--component "$(component)") $(foreach lockfile,$(LOCKFILES),--lockfile "$(lockfile)") --output "$(or $(OUTPUT),release-evidence/$(CANDIDATE_ID).json)"
 
+resolve-environment: ## Resolve a canonical profile against observed capabilities (requires PROFILE; CAPABILITIES='NAME=STATUS ...')
+	@test -n "$(PROFILE)" || (echo "PROFILE is required"; exit 2)
+	$(GATE_PY) scripts/release/resolve_environment.py --profile "$(PROFILE)" $(foreach capability,$(CAPABILITIES),--capability "$(capability)") $(if $(OUTPUT),--output "$(OUTPUT)")
+
+validate-environment-requirements: ## Validate profile capability requirements without cloud access
+	$(GATE_PY) scripts/release/check_environment_requirements.py
+
 validate-delivery-profile: ## Validate a deployable frontend manifest and selected fallbacks (requires MANIFEST)
 	@test -n "$(MANIFEST)" || (echo "MANIFEST is required"; exit 2)
 	$(GATE_PY) scripts/validate_delivery_profiles.py "$(MANIFEST)" $(foreach fallback,$(ACTIVE_FALLBACKS),--active-fallback "$(fallback)")
 
 validate-delivery-registries: ## Validate fallback implementation bindings and golden-journey execution status
 	$(GATE_PY) scripts/validate_delivery_registries.py
+
+validate-delivery-workflow-authority: ## Validate one GitHub owner for every delivery authority
+	$(GATE_PY) scripts/release/check_delivery_workflow_authority.py
 
 validate-golden-journeys: ## Validate ownership/assertions for all five journey definitions
 	$(GATE_PY) scripts/release/evidence_bundle.py --check-registry
@@ -349,7 +359,7 @@ validate-release-evidence: ## Validate a canonical evidence bundle (requires EVI
 
 deploy-staging: ## Orchestrate fail-closed staging lifecycle (requires CANDIDATE, PROFILE, OUTPUT; set DRY_RUN=1 to plan)
 	@test -n "$(CANDIDATE)" -a -n "$(PROFILE)" -a -n "$(OUTPUT)" || (echo "CANDIDATE, PROFILE, and OUTPUT are required"; exit 2)
-	$(GATE_PY) scripts/delivery_orchestrator.py staging --candidate "$(CANDIDATE)" --profile "$(PROFILE)" --output "$(OUTPUT)" $(if $(DRY_RUN),--dry-run) $(if $(PREFLIGHT_COMMAND),--preflight-command "$(PREFLIGHT_COMMAND)") $(if $(DEPLOY_COMMAND),--deploy-command "$(DEPLOY_COMMAND)") $(if $(MIGRATION_COMMAND),--migration-command "$(MIGRATION_COMMAND)") $(if $(ACTIVATION_COMMAND),--tenant-activation-command "$(ACTIVATION_COMMAND)") $(if $(JOURNEYS_COMMAND),--journeys-command "$(JOURNEYS_COMMAND)")
+	$(GATE_PY) scripts/delivery_orchestrator.py staging --candidate "$(CANDIDATE)" --profile "$(PROFILE)" --output "$(OUTPUT)" $(if $(STATE),--state "$(STATE)") $(if $(ENVIRONMENT_RESOLUTION),--environment-resolution "$(ENVIRONMENT_RESOLUTION)") $(if $(DRY_RUN),--dry-run) $(if $(PREFLIGHT_COMMAND),--preflight-command "$(PREFLIGHT_COMMAND)") $(if $(DEPLOY_COMMAND),--deploy-command "$(DEPLOY_COMMAND)") $(if $(MIGRATION_COMMAND),--migration-command "$(MIGRATION_COMMAND)") $(if $(ACTIVATION_COMMAND),--tenant-activation-command "$(ACTIVATION_COMMAND)") $(if $(JOURNEYS_COMMAND),--journeys-command "$(JOURNEYS_COMMAND)")
 
 staging-migrate: ## Rehearse a migration with evidence (requires MIGRATION_METADATA and OUTPUT)
 	@test -n "$(MIGRATION_METADATA)" -a -n "$(OUTPUT)" || (echo "MIGRATION_METADATA and OUTPUT are required"; exit 2)
@@ -899,8 +909,9 @@ test-terraform-profiles: ## Provider-mocked plan tests asserting per-profile mod
 test-runtime-topology: ## Execution-group topology: every worker role owned by exactly one service
 	python -m pytest tests/unit/test_runtime_topology.py tests/unit/test_runtime_execution_groups.py -q
 
-test-workflow-controls: ## Structural controls: no automatic apply, no false-green, reviewed-plan integrity
-	python -m pytest tests/unit/test_release_workflow_controls.py -q
+test-workflow-controls: ## Structural controls: no automatic apply, no false-green, reviewed-plan integrity, GitHub-only deployment operator
+	$(GATE_PY) -m pytest tests/unit/test_release_workflow_controls.py -q
+	$(GATE_PY) scripts/release/check_deployment_operator_surface.py
 
 test-cost-model: ## Cost-model unit tests (ceilings, fail-closed pricing, exception expiry)
 	python -m pytest tests/unit/test_cost_model.py -q

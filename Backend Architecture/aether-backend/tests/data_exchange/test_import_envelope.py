@@ -445,6 +445,40 @@ async def test_preview_graph_pins_mapping_version(
         )
 
 
+@pytest.mark.asyncio
+async def test_graph_preview_carries_source_and_fail_closed_rights_context() -> None:
+    """The envelope joins source metadata without asserting activation rights."""
+
+    async def _preview(tenant_id: str, import_id: str) -> dict:
+        return {"vertices": [], "edges": [], "counts": {"vertices": 0}}
+
+    result = await graph_preview_mod.preview_graph(
+        TENANT,
+        "canonical_imp_1",
+        preview_seam=_preview,
+        source_context={
+            "artifact_id": "artifact_1",
+            "source_or_destination": {
+                "source_type": "crm",
+                "ownership": "licensed",
+                "terms_status": "accepted",
+                "provenance": {"connector": "fixture"},
+            },
+        },
+    )
+
+    lineage = result["lineage"]
+    assert lineage["source_context"] == {
+        "artifact_id": "artifact_1",
+        "source_type": "crm",
+        "ownership": "licensed",
+        "terms_status": "accepted",
+        "provenance": {"connector": "fixture"},
+    }
+    assert lineage["rights_context"]["authorization_status"] == "not_evaluated"
+    assert lineage["rights_context"]["activation_allowed"] is False
+
+
 # ── POST /imports/{import_id}/commit ────────────────────────────────────────
 
 

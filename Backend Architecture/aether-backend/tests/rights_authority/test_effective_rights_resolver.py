@@ -267,8 +267,8 @@ async def test_historic_as_of_outside_grant_window_denied():
     assert "grant_expired" in after_expiry.reason_codes
 
 
-async def test_decision_idempotency_returns_same_decision_id():
-    """Blueprint §17: identical inputs never yield conflicting decisions."""
+async def test_live_resolution_rechecks_current_state():
+    """Live requests are re-evaluated rather than replaying stale decisions."""
     learning = LearningAuthority(contributed_model_training=True)
     grant = _grant(model_training_allowed=False, learning_authority=learning)
     resolver = EffectiveRightsResolver(grant_loader=_loader(grant))
@@ -283,4 +283,4 @@ async def test_decision_idempotency_returns_same_decision_id():
     )
     assert first.allowed is True
     assert second.allowed is True
-    assert first.decision_id == second.decision_id
+    assert first.decision_id != second.decision_id

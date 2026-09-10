@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,6 +16,7 @@ pytest.importorskip("fastapi")
 class FakeTenant:
     def __init__(self, tenant_id="tenant-route-1"):
         self.tenant_id = tenant_id
+        self.user_id = f"user-{tenant_id}"
 
     def require_permission(self, perm: str) -> None:
         return None
@@ -72,6 +74,7 @@ async def test_recommend_decide_act_learn_flow_is_tenant_scoped():
         )
         decision = decision_resp["data"]
         assert decision["decision_status"] == "approved"
+        assert decision["actor_id"] == "user-tenant-route-1"
 
         action_resp = await routes.log_action(
             routes.ActionLogRequest(decision_id=decision["decision_id"], action_type="manual", status="executed", actor_type="human"),
@@ -119,6 +122,7 @@ class FakeGraph:
     def __init__(self):
         self.vertices = []
         self.edges = []
+        self.neighbors = []
 
     async def upsert_vertex(self, vertex):
         self.vertices.append(vertex)
@@ -127,7 +131,7 @@ class FakeGraph:
         self.edges.append(edge)
 
     async def get_neighbors(self, *args, **kwargs):
-        return []
+        return self.neighbors
 
 
 class FakeProducer:
@@ -193,6 +197,39 @@ async def test_recommendation_generate_requires_write_and_persists(monkeypatch):
         assert registry.graph.vertices
         assert registry.graph.edges
         assert len(registry.producer.events) == 1
+    finally:
+        _restore_decision_flags(routes, previous_flags)
+
+
+@pytest.mark.asyncio
+async def test_recommendation_investigation_exposes_only_explicit_tenant_vertices(monkeypatch):
+    from repositories.repos import reset_in_memory_stores
+    from services.intelligence import routes
+
+    reset_in_memory_stores()
+    registry = FakeRegistry()
+    monkeypatch.setattr(routes, "get_registry", lambda: registry)
+    previous_flags = _set_decision_flags(routes, True)
+    try:
+        request = PermissionedRequest(permissions={"read", "write"})
+        rec = (await routes.generate_entity_recommendation(
+            routes.GenerateRecommendationRequest(
+                entity_id="entity-investigate",
+                signals={"churn_probability": 0.8},
+            ),
+            request,
+        ))["data"]
+        registry.graph.neighbors = [
+            SimpleNamespace(vertex_id="owned", vertex_type="Entity", properties={"tenant_id": "tenant-route-1"}),
+            SimpleNamespace(vertex_id="other", vertex_type="Entity", properties={"tenant_id": "other-tenant"}),
+            SimpleNamespace(vertex_id="unmarked", vertex_type="Entity", properties={}),
+        ]
+
+        investigation = await routes.get_recommendation_investigation(
+            rec["recommendation_id"], request
+        )
+
+        assert [item["id"] for item in investigation["data"]["related_graph_edges"]] == ["owned"]
     finally:
         _restore_decision_flags(routes, previous_flags)
 

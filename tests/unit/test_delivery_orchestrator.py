@@ -5,14 +5,47 @@ from pathlib import Path
 import jsonschema
 
 from scripts import delivery_orchestrator as orchestrator
+from scripts.artifact_builder import aggregate_digest
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def candidate(tmp_path: Path, **overrides) -> Path:
     path = tmp_path / "candidate.json"
-    value = {"release_candidate_id": "rc-test", "artifact_digest": "sha256:" + "a" * 64}
+    component_digests = {"repository-build": "sha256:" + "a" * 64}
+    value = {
+        "schema_version": 1,
+        "release_candidate_id": "rc-test",
+        "commit_sha": "a" * 40,
+        "artifact_digest": aggregate_digest(component_digests),
+        "dependency_lock_hash": aggregate_digest({}),
+        "dependency_lock_digests": {},
+        "contract_versions": {},
+        "migration_version": "none",
+        "model_versions": {},
+        "policy_versions": {},
+        "deployment_profiles": ["staging"],
+        "affected_domains": ["delivery"],
+        "required_checks": ["canonical-consistency"],
+        "component_digests": component_digests,
+        "deployment_impact": {
+            "schema_version": 1,
+            "profile": "staging",
+            "affected_domains": ["delivery"],
+            "affected_components": ["repository-build"],
+            "migration_required": False,
+            "data_contract_change": False,
+            "security_sensitive": False,
+            "rollback_required": False,
+            "approval_required": False,
+            "risk_level": "medium",
+            "rationale": "candidate contains immutable, digest-bound build outputs",
+        },
+        "created_at": "2026-09-07T00:00:00+00:00",
+    }
     value.update(overrides)
+    if "deployment_profiles" in overrides:
+        value["deployment_impact"]["profile"] = overrides["deployment_profiles"][0]
     path.write_text(json.dumps(value))
     return path
 
@@ -37,7 +70,9 @@ def test_staging_without_aws_credentials_is_blocked(tmp_path, monkeypatch):
     monkeypatch.delenv("AWS_PROFILE", raising=False)
     args = staging_args(tmp_path)
     assert orchestrator.staging(args) == 1
-    assert json.loads(args.output.read_text())["status"] == "BLOCKED"
+    result = json.loads(args.output.read_text())
+    assert result["status"] == "BLOCKED"
+    assert result["failure"]["code"] == "AWS_CREDENTIALS_MISSING"
 
 
 def test_staging_stops_on_missing_command(tmp_path, monkeypatch):
@@ -54,7 +89,9 @@ def test_staging_blocks_incompatible_candidate_profile(tmp_path):
     args = staging_args(tmp_path)
     args.candidate = candidate(tmp_path, deployment_profiles=["production-lean"])
     assert orchestrator.staging(args) == 1
-    assert json.loads(args.output.read_text())["checks"][0]["check_id"] == "profile_compatibility"
+    result = json.loads(args.output.read_text())
+    assert result["checks"][0]["check_id"] == "profile_compatibility"
+    assert result["failure"]["code"] == "PROFILE_INCOMPATIBLE"
 
 
 def test_staging_success_executes_every_ordered_command(tmp_path, monkeypatch):
@@ -72,6 +109,34 @@ def test_staging_success_executes_every_ordered_command(tmp_path, monkeypatch):
     result = json.loads(args.output.read_text())
     assert result["status"] == "DEPLOYED"
     assert observed == ["aws sts get-caller-identity --output json", "preflight", "deploy", "migrate", "activate", "journeys"]
+
+
+def test_staging_checkpoint_mode_resumes_exact_candidate(tmp_path, monkeypatch):
+    monkeypatch.setenv("AWS_PROFILE", "test")
+    args = staging_args(
+        tmp_path,
+        state=tmp_path / "staging-state.json",
+        preflight_command="preflight",
+        deploy_command="deploy",
+        migration_command="migrate",
+        tenant_activation_command="activate",
+        journeys_command="journeys",
+    )
+    def first_attempt(command):
+        if command == "deploy":
+            return "BLOCKED", "deploy paused"
+        return "PASS", "passed"
+
+    monkeypatch.setattr(orchestrator, "run", first_attempt)
+    assert orchestrator.staging(args) == 1
+    assert json.loads(args.output.read_text())["status"] == "BLOCKED"
+
+    resumed_calls = []
+    monkeypatch.setattr(orchestrator, "run", lambda command: (resumed_calls.append(command) or ("PASS", "passed")))
+    assert orchestrator.staging(args) == 0
+    result = json.loads(args.output.read_text())
+    assert result["status"] == "DEPLOYED"
+    assert resumed_calls == ["deploy", "migrate", "activate", "journeys"]
 
 
 def test_migration_requires_database_credentials(tmp_path, monkeypatch):

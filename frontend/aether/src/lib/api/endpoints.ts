@@ -65,6 +65,24 @@ const wrap = <T extends z.ZodType>(dataSchema: T) =>
 
 const unknownSchema = z.unknown();
 
+const tenantReadinessCheckSchema = z.object({
+  name: z.string(),
+  status: z.enum(['pending', 'passed', 'failed', 'not_applicable']),
+  evidence: z.unknown().optional(),
+});
+
+/** Typed payload returned by GET /v1/tenant/readiness. */
+export const tenantReadinessResponseSchema = z.object({
+  tenant_id: z.string(),
+  checks: z.array(tenantReadinessCheckSchema),
+  ready: z.boolean(),
+  blocking: z.array(z.string()),
+  recorded_at: z.string().optional(),
+});
+
+export type TenantReadinessResponse = z.infer<typeof tenantReadinessResponseSchema>;
+export type TenantReadinessCheck = z.infer<typeof tenantReadinessCheckSchema>;
+
 // Customer settings responses are validated at the transport boundary.  Keep
 // these schemas aligned with the explicit DTOs returned by services/me and
 // services/billing; callers must never guess between legacy field names.
@@ -225,6 +243,16 @@ const deletionWorkflowSchema = z.object({
     completion: z.string().optional(),
   }),
 });
+
+/** Server-owned graph authority returned by the authenticated /v1/me profile. */
+const graphScopeAuthoritySchema = z.object({
+  tenant_id: z.string(),
+  workspace_id: z.string(),
+  environment_id: z.string(),
+  scope_model: z.literal('single_workspace_tenant_v1'),
+});
+
+export type GraphScopeAuthority = z.infer<typeof graphScopeAuthoritySchema>;
 
 export type CustomerApiKey = z.infer<typeof apiKeySchema>;
 export type CustomerBillingPlan = z.infer<typeof billingPlanSchema>;
@@ -406,7 +434,7 @@ export const api = {
 
   // ── Tenant launch readiness (read-only, tenant-scoped) ─────────────────────
   readiness: {
-    snapshot: () => restClient.get('/v1/tenant/readiness', wrap(unknownSchema)).then(r => r.data),
+    snapshot: () => restClient.get('/v1/tenant/readiness', wrap(tenantReadinessResponseSchema)).then(r => r.data),
     trustStates: () => restClient.get('/v1/tenant/readiness/trust-states', wrap(unknownSchema)).then(r => r.data),
   },
 
@@ -1115,6 +1143,36 @@ export const api = {
     recommendationInvestigation: (recommendationId: string) =>
       restClient.get(`/v1/intelligence/recommendations/${recommendationId}/investigation`, wrap(unknownSchema)).then(r => r.data),
 
+    /** Record the tenant's explicit proposal decision; this does not execute an action. */
+    recordDecision: (recommendationId: string, payload: {
+      actor_id: string;
+      selected_action_key?: string;
+      rejected_action_keys?: string[];
+      decision_status: 'approved' | 'rejected' | 'deferred' | 'escalated';
+      reason?: string;
+      comment?: string;
+    }) => restClient.post(`/v1/intelligence/recommendations/${recommendationId}/decision`, wrap(unknownSchema), payload).then(r => r.data),
+
+    /** Create the durable planned action after approval. Dispatch is a separate, explicit step. */
+    logAction: (payload: {
+      decision_id: string;
+      action_type: string;
+      system?: string;
+      integration?: string;
+      status?: 'planned' | 'queued' | 'executed' | 'failed' | 'cancelled';
+      actor_type?: 'human' | 'system' | 'agent';
+      authorization_metadata?: Record<string, unknown>;
+    }) => restClient.post('/v1/intelligence/actions', wrap(unknownSchema), payload).then(r => r.data),
+
+    /** Dispatch an approved, durable action through a configured tenant target. */
+    dispatchAction: (actionId: string, payload: {
+      target_type: string;
+      config_id?: string;
+      payload_overrides?: Record<string, unknown>;
+      approval_metadata?: Record<string, unknown>;
+      idempotency_key?: string;
+    }) => restClient.post(`/v1/intelligence/actions/${actionId}/dispatch`, wrap(unknownSchema), payload).then(r => r.data),
+
     outcomeLedger: () =>
       restClient.get(`/v1/intelligence/outcome-ledger`, wrap(unknownSchema)).then(r => r.data),
 
@@ -1690,7 +1748,7 @@ export const api = {
   me: {
     /** Authenticated tenant profile, plan, and billing. */
     profile: () =>
-      restClient.get('/v1/me', wrap(unknownSchema)).then(r => r.data as {
+      restClient.get('/v1/me', wrap(z.object({ graph_scope: graphScopeAuthoritySchema }).passthrough())).then(r => r.data as {
         tenant_id: string;
         name: string;
         contact_email: string;
@@ -1698,6 +1756,7 @@ export const api = {
         billing: { subscription_status?: string; current_period_end?: string | null };
         api_key_count: number;
         is_admin: boolean;
+        graph_scope: GraphScopeAuthority;
       }),
 
     /** Current-period event and RPM usage. */

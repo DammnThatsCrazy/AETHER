@@ -449,6 +449,38 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     run(
+        [sys.executable, "scripts/release/check_environment_requirements.py"],
+        name="Environment capability requirement registry",
+        results=results,
+        stop_on_failure=stop,
+        remediation="align config/environment_requirements.yaml with the canonical deployment profiles",
+    )
+
+    run(
+        [sys.executable, "scripts/validate_verification_router.py"],
+        name="Impact-aware verification router",
+        results=results,
+        stop_on_failure=stop,
+        remediation="repair config/verification_router.yaml and its typed registry contract",
+    )
+
+    run(
+        [sys.executable, "scripts/release/check_deployment_operator_surface.py"],
+        name="GitHub-only deployment operator surface",
+        results=results,
+        stop_on_failure=stop,
+        remediation="keep Kyber read-only and route deployment mutation through reviewed GitHub workflows",
+    )
+
+    run(
+        [sys.executable, "scripts/release/check_delivery_workflow_authority.py"],
+        name="Delivery workflow authority map",
+        results=results,
+        stop_on_failure=stop,
+        remediation="assign each blueprint delivery authority to one reviewed GitHub workflow owner",
+    )
+
+    run(
         [sys.executable, "scripts/release/evidence_bundle.py", "--check-registry"],
         name="Golden product journey registry",
         results=results,
@@ -964,7 +996,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             ),
         )
         run(
-            ["python", "scripts/validate_frontend_route_state_matrix.py", "--enforce"],
+            [sys.executable, "scripts/validate_frontend_route_state_matrix.py", "--enforce"],
             name="Frontend route-state coverage (Aether/Kyber)",
             results=results,
             stop_on_failure=stop,

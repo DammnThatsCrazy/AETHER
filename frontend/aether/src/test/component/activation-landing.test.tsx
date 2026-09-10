@@ -50,6 +50,7 @@ function renderLanding(initial = '/', scopeId?: string) {
             element={scopeId ? <TenantLanding scopeId={scopeId} /> : <TenantLanding />}
           />
           <Route path="/activation" element={<div>ACTIVATION ROUTE</div>} />
+          <Route path="/explore" element={<div>EXPLORE WORKSPACE</div>} />
           <Route path="/settings" element={<div>SETTINGS ROUTE</div>} />
           <Route path="/campaigns" element={<div>CAMPAIGNS ROUTE</div>} />
         </Routes>
@@ -86,7 +87,7 @@ describe('Tenant landing routing', () => {
     expect(screen.queryByText('HOME WORKSPACE')).not.toBeInTheDocument();
   });
 
-  it('renders the workspace home for a completed tenant', () => {
+  it('routes a completed tenant to the canonical Explore workspace by default', () => {
     state.onboarding = {
       data: { plan: { status: 'live' } },
       isLoading: false,
@@ -94,7 +95,7 @@ describe('Tenant landing routing', () => {
       refetch: vi.fn(),
     };
     renderLanding('/');
-    expect(screen.getByText('HOME WORKSPACE')).toBeInTheDocument();
+    expect(screen.getByText('EXPLORE WORKSPACE')).toBeInTheDocument();
     expect(screen.queryByText('ACTIVATION ROUTE')).not.toBeInTheDocument();
   });
 
@@ -120,7 +121,7 @@ describe('Tenant landing routing', () => {
     };
     window.localStorage.setItem('aether:last-workspace:other@example.com', '/campaigns');
     renderLanding('/', 'acme@example.com');
-    expect(screen.getByText('HOME WORKSPACE')).toBeInTheDocument();
+    expect(screen.getByText('EXPLORE WORKSPACE')).toBeInTheDocument();
     expect(screen.queryByText('CAMPAIGNS ROUTE')).not.toBeInTheDocument();
   });
 

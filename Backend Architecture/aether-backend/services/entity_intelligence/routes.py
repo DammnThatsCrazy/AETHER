@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from dependencies.providers import get_graph
 from shared.common.common import APIResponse, ForbiddenError, NotFoundError
-from shared.graph.graph import GraphClient
+from shared.graph.graph import GraphClient, Edge, Vertex, tenant_of
 from shared.graph.traversal import GraphTraversalEngine
 from shared.logger.logger import get_logger, metrics
 from services.operational_intelligence.models import (
@@ -122,6 +122,49 @@ def _node_to_entity_ref(node_id: str, vertex_type: str, props: dict) -> EntityRe
     )
 
 
+def _tenant_visible(vertex: Optional[Vertex], tenant_id: str) -> bool:
+    """Return whether a graph vertex belongs to the authenticated tenant.
+
+    Graph data has both historical ``tenant_id`` and canonical ``tenantId``
+    spellings.  Missing tenant metadata is intentionally not a wildcard:
+    profile and investigation reads fail closed when the anchor or a
+    neighbour cannot be attributed to the requesting tenant.
+    """
+    return vertex is not None and tenant_of(vertex.properties) == str(tenant_id)
+
+
+async def _authorized_edges(
+    graph: GraphClient,
+    entity_id: str,
+    tenant_id: str,
+    *,
+    direction: str = "both",
+) -> list[Edge]:
+    """Return only edges whose opposite endpoint is tenant-authorized.
+
+    Filtering is performed before callers count, sort, or cap edges.  An edge
+    with an explicit tenant marker must agree with the endpoint as well; old
+    edge rows without a marker remain usable because endpoint ownership is the
+    canonical graph authorization seam.
+    """
+    edges = await graph.get_edges(entity_id, direction=direction)
+    authorized: list[Edge] = []
+    for edge in edges:
+        neighbor_id = (
+            edge.to_vertex_id
+            if edge.from_vertex_id == entity_id
+            else edge.from_vertex_id
+        )
+        neighbor = await graph.get_vertex(neighbor_id)
+        edge_tenant = tenant_of(edge.properties)
+        if not _tenant_visible(neighbor, tenant_id):
+            continue
+        if edge_tenant is not None and edge_tenant != str(tenant_id):
+            continue
+        authorized.append(edge)
+    return authorized
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/profile", response_model=EntityProfileResponse)
@@ -141,7 +184,7 @@ async def entity_profile(
     metrics.increment("entity_profile_read")
 
     vertex = await graph.get_vertex(body.entity.id)
-    if vertex is None:
+    if not _tenant_visible(vertex, body.tenantId):
         raise NotFoundError(f"Entity {body.entity.id!r} not found")
 
     requested_dims = body.dimensions or []
@@ -150,7 +193,11 @@ async def entity_profile(
     # Fetch edges once for all dimensions that need graph traversal
     _EDGE_DIMS = {"relationship", "wallet"}
     needs_edges = not requested_dims or bool(_EDGE_DIMS & set(requested_dims))
-    all_edges: list = await graph.get_edges(body.entity.id, direction="both") if needs_edges else []
+    all_edges: list[Edge] = (
+        await _authorized_edges(graph, body.entity.id, body.tenantId)
+        if needs_edges
+        else []
+    )
 
     # Relationship dimension
     if not requested_dims or "relationship" in requested_dims:
@@ -242,7 +289,12 @@ async def entity_timeline(
     metrics.increment("entity_timeline_query")
 
     event_edge_types = {"TRIGGERED_EVENT", "HAS_SESSION", "PERFORMED_ACTION", "ACTION_RECORD"}
-    edges = await graph.get_edges(body.entity.id, direction="out")
+    anchor = await graph.get_vertex(body.entity.id)
+    if not _tenant_visible(anchor, body.tenantId):
+        raise NotFoundError(f"Entity {body.entity.id!r} not found")
+    edges = await _authorized_edges(
+        graph, body.entity.id, body.tenantId, direction="out"
+    )
     edges = [e for e in edges if e.edge_type in event_edge_types]
 
     if body.fromTime:
@@ -306,6 +358,7 @@ async def entity_relationships(
         direction="both",
         edge_types=body.relationshipTypes,
         limit=body.limit,
+        tenant_id=body.tenantId,
     )
 
     relationships: list[ScoredRelationship] = []

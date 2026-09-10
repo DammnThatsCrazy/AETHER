@@ -7,13 +7,18 @@ audience: [architect, dev-senior, ai]
 source_files:
   - Backend Architecture/aether-backend/services/operational_intelligence/models.py
   - Backend Architecture/aether-backend/services/operational_intelligence/routes.py
+  - Backend Architecture/aether-backend/shared/graph/traversal.py
   - Backend Architecture/aether-backend/shared/graph/path_scoring.py
   - packages/shared/operational-intelligence.ts
+reviewed_source_commits:
+  - commit: "0efa07cb"
+    reason: "Reviewed the target-aware temporal path route and traversal depth/tie-breaking changes. Temporal mode now emits only an ordered source-to-target path when the target is valid at as_of; disconnected targets return no path, and shortest/K-shortest searches honor the total hop budget."
 source_hashes:
-  "Backend Architecture/aether-backend/services/operational_intelligence/models.py": "sha256:7f87d5d21705d6243e64694e3f10ef48ddd2b913bffce46d3bf8cdc773bcf100"
-  "Backend Architecture/aether-backend/services/operational_intelligence/routes.py": "sha256:19f8e7e069c436b890ee915608645227c7a0493ee9286e3694904eb616c52c3a"
+  "Backend Architecture/aether-backend/services/operational_intelligence/models.py": "sha256:815062a32e218e8835f81cddb4957ceb69b48d18c7cf8d81647ed4439c696e66"
+  "Backend Architecture/aether-backend/services/operational_intelligence/routes.py": "sha256:9a8b3859e2edfd03bee9d6aba42cb6a9684704fef29adf79dca9e7255051bb80"
   "Backend Architecture/aether-backend/shared/graph/path_scoring.py": "sha256:4bff43191e835d86308a2668dea5ee891ff6768da3d5fe332e32a7be2f592b07"
-  "packages/shared/operational-intelligence.ts": "sha256:5121c6c22553c81b5e5e2b922833964a3b51cc53ef9326d03fd79cea5ea7d49d"
+  "Backend Architecture/aether-backend/shared/graph/traversal.py": "sha256:d21ebdfd876838189023a32db93a1e08aa7c2e125f66a8125b3c797d94c05719"
+  "packages/shared/operational-intelligence.ts": "sha256:5631f8e8a9ad38167c7ea545837ab0259b3fa3e360af331fb7055d8fe9326d34"
 ---
 
 # Canonical Path Intelligence
@@ -136,6 +141,23 @@ Response: PathQueryResponse
   snapshot_id      string? (set when save_snapshot: true)
   meta             GraphResultMeta
 ```
+
+### Path algorithm guarantees
+
+The synchronous path budget is measured in total hops, not merely the number
+of queue layers visited. `shortest_path` and every Yen spur search stop
+expanding once the current path has reached `max_depth`; K-shortest candidates
+also receive only the remaining budget after their root prefix. Equal-cost Yen
+candidates use a stable insertion sequence so a branching graph cannot fail
+when two candidates have the same cost.
+
+For `mode="temporal"`, `as_of` and `target_id` are required for a path result.
+The backend performs a target-aware breadth-first search over vertices and
+edges valid at that instant, reconstructs nodes and edges in source-to-target
+order, and applies tenant and direction filters during expansion. If either
+anchor is absent/invalid or no valid path reaches the requested target within
+the budget, the response contains no path rather than relabelling an unrelated
+neighborhood as a source-target relationship.
 
 ### Node Expansion
 

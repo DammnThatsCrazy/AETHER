@@ -8,6 +8,7 @@ import type {
 import {
   useExplorationClient,
   useExplorationContext,
+  useGraphContext,
   type ExplorationStatus,
 } from '@aether/ui/exploration';
 import { api } from '@aether-app/lib/api/endpoints';
@@ -183,6 +184,10 @@ const ENTITY_LINK_SAMPLE = 30;
 export function useGraphData(options?: { asOf?: string | null; tenantId?: string }) {
   const client = useExplorationClient();
   const mountedContext = useExplorationContext();
+  // The graph provider is the host authority for the complete scope. The
+  // legacy exploration context only carries tenant + surface, so using it as
+  // the request scope would silently drop workspace/environment isolation.
+  const graphContext = useGraphContext();
   const [allNodes, setAllNodes] = useState<GraphNode[]>([]);
   const [allEdges, setAllEdges] = useState<GraphEdge[]>([]);
   const [clusters, setClusters] = useState<GraphCluster[]>([]);
@@ -199,8 +204,6 @@ export function useGraphData(options?: { asOf?: string | null; tenantId?: string
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
 
   const asOf = options?.asOf ?? null;
-  const tenantId = options?.tenantId ?? '';
-
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
@@ -210,7 +213,14 @@ export function useGraphData(options?: { asOf?: string | null; tenantId?: string
     async function fetchGraph(): Promise<{ nodes: GraphNode[]; edges: GraphEdge[]; clusters: GraphCluster[] }> {
       const context: ExplorationContextV1 = {
         ...mountedContext,
-        scope: { tenant_id: mountedContext.scope.tenant_id, surface: 'graph' },
+        scope: {
+          // `/v1/explore/query` currently accepts only the tenant and surface
+          // coordinates. Keep the complete graph scope above for authority
+          // and cache partitioning, but never serialize unsupported
+          // workspace/environment fields into this transport request.
+          tenant_id: graphContext.scope.tenant_id,
+          surface: 'graph',
+        },
         temporal: asOf
           ? { ...mountedContext.temporal, mode: 'as_of', as_of: asOf }
           : mountedContext.temporal,
@@ -218,7 +228,7 @@ export function useGraphData(options?: { asOf?: string | null; tenantId?: string
       };
       const envelope = await client.queryLatest<{ nodes: unknown[]; edges: unknown[] }>(
         { context, limit: 500 },
-        { key: `graph:${mountedContext.scope.tenant_id}:${asOf ?? 'live'}` },
+        { key: `graph:${graphContext.scope.tenant_id}:${graphContext.scope.workspace_id}:${graphContext.scope.environment_id}:${asOf ?? 'live'}` },
       );
       assertCanonicalTruthState(envelope.truth.overall_state);
       const rawEntities = Array.isArray(envelope.data?.nodes) ? envelope.data.nodes : [];
@@ -259,7 +269,7 @@ export function useGraphData(options?: { asOf?: string | null; tenantId?: string
       });
 
     return () => { cancelled = true; };
-  }, [asOf, client, mountedContext]);
+  }, [asOf, client, graphContext, mountedContext]);
 
   const nodes = useMemo(() => allNodes, [allNodes]);
 
@@ -307,6 +317,7 @@ interface ZoomState {
 }
 
 export function useGraphZoom(tenantId?: string) {
+  const graphContext = useGraphContext();
   const [zoomLevel, setZoomLevel] = useState<GraphZoomLevel>('entity');
   const [expandedClusterId, setExpandedClusterId] = useState<string | null>(null);
   const [zoomNodes, setZoomNodes] = useState<GraphNode[]>([]);
@@ -319,11 +330,20 @@ export function useGraphZoom(tenantId?: string) {
     cancelRef.current = false;
     setIsLoading(true);
     setError(null);
+    // This legacy helper predates GraphContext and only has a tenant-only
+    // backend contract. Never let its optional argument select another
+    // tenant; a mismatch is an explicit blocked state until the API gains a
+    // workspace/environment-aware request contract.
+    if (tenantId && tenantId !== graphContext.scope.tenant_id) {
+      setError('Graph scope does not match the authenticated tenant');
+      setIsLoading(false);
+      return;
+    }
     try {
       // depth=0 is rejected by the backend (min=1). Use depth=1 with cluster node_types
       // so we get only cluster-aggregate vertices without expanding their members.
       const resp = await api.graphIntelligence.query({
-        tenant_id: tenantId || undefined,
+        tenant_id: graphContext.scope.tenant_id,
         depth: 1,
         node_types: [
           'IdentityCluster', 'HouseholdCluster', 'OrgCluster', 'DeviceCluster',
@@ -345,15 +365,20 @@ export function useGraphZoom(tenantId?: string) {
     } finally {
       if (!cancelRef.current) setIsLoading(false);
     }
-  }, [tenantId]);
+  }, [graphContext.scope.tenant_id, tenantId]);
 
   const expandCluster = useCallback(async (clusterId: string) => {
     cancelRef.current = false;
     setIsLoading(true);
     setError(null);
+    if (tenantId && tenantId !== graphContext.scope.tenant_id) {
+      setError('Graph scope does not match the authenticated tenant');
+      setIsLoading(false);
+      return;
+    }
     try {
       const resp = await api.graphIntelligence.query({
-        tenant_id: tenantId || undefined,
+        tenant_id: graphContext.scope.tenant_id,
         anchors: [clusterId],
         depth: 1,
         limit: 500,
@@ -388,7 +413,7 @@ export function useGraphZoom(tenantId?: string) {
     } finally {
       if (!cancelRef.current) setIsLoading(false);
     }
-  }, [tenantId]);
+  }, [graphContext.scope.tenant_id, tenantId]);
 
   const resetZoom = useCallback(() => {
     cancelRef.current = true;

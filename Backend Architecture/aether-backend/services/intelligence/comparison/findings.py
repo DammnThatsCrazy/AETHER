@@ -237,6 +237,10 @@ class FindingsService:
             "createdBy": actor_id,
             "createdAt": now,
             "updatedAt": now,
+            # Keep the originating finding on the canonical investigation
+            # record.  This is provenance only; it does not create a second
+            # investigation ledger or expose Kyber internals to tenants.
+            "findingId": finding.get("finding_id") or finding.get("id"),
         }
         await InvestigationRepository().create(case)
         metrics.increment("comparison_finding_investigations_total")
@@ -282,9 +286,38 @@ class FindingsService:
             )
             return None
         recommendation = candidates[0].model_dump()
+        recommendation["finding_id"] = finding.get("finding_id") or finding.get("id")
+        investigation_id = finding.get("investigation_id")
+        if investigation_id:
+            # InvestigationRepository is not tenant-aware at the repository
+            # boundary, so verify the case before copying its id into another
+            # durable record.  A malformed/cross-tenant pointer degrades to a
+            # recommendation without case provenance rather than leaking it.
+            from repositories.repos import InvestigationRepository
+
+            case = await InvestigationRepository().find_by_id(investigation_id)
+            case_tenant = (case or {}).get("tenant_id") or (case or {}).get("tenantId")
+            if case is None or case_tenant != finding.get("tenant_id"):
+                logger.warning(
+                    "comparison_finding_investigation_link_rejected",
+                    extra={"finding_id": recommendation["finding_id"], "investigation_id": investigation_id},
+                )
+                investigation_id = None
+        recommendation["investigation_id"] = investigation_id
         await RecommendationRepository().insert(
             recommendation["recommendation_id"], recommendation
         )
+        if investigation_id:
+            # The investigation plane remains authoritative for case state;
+            # this additive pointer closes the reverse traversal without
+            # copying case data into the recommendation store.
+            await InvestigationRepository().update(
+                investigation_id,
+                {
+                    "recommendationId": recommendation["recommendation_id"],
+                    "updatedAt": utc_now().isoformat(),
+                },
+            )
         metrics.increment("comparison_finding_recommendations_total")
         return recommendation["recommendation_id"]
 

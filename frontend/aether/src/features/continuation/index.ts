@@ -13,6 +13,6 @@ export type {
   RecentContinuationsResponse,
   HandoffMutationInput,
 } from './use-continuations';
-export { useClientSync } from './use-client-sync';
+export { clientSyncQueryKey, useClientSync } from './use-client-sync';
 export { ContinueOnPhone } from './continue-on-phone';
 export { RecentActivity, SYNC_CHANGE_TYPE_LABELS, syncChangeTypeLabel } from './recent-activity';

@@ -140,4 +140,14 @@ describe('GraphPage — path API integration', () => {
     expect(screen.getByRole('button', { name: 'Strongest' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'K-Shortest' })).toBeInTheDocument();
   });
+
+  it('offers a keyboard-accessible object list with bounded search', async () => {
+    renderWithRouter();
+    fireEvent.click(await screen.findByText('Accessible graph object list'));
+
+    expect(screen.getByRole('searchbox', { name: 'Search graph objects' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Xander human/ })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search graph objects' }), { target: { value: 'does-not-exist' } });
+    expect(screen.getByText('No graph objects match this search.')).toBeInTheDocument();
+  });
 });

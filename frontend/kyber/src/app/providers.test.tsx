@@ -23,8 +23,8 @@ vi.mock('@aether/ui', () => ({
   TimeProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock('@aether/ui/exploration', () => ({
-  ExplorationProvider: (props: {
-    tenantId: string;
+  GraphContextProvider: (props: {
+    scope: { tenant_id: string; workspace_id: string; environment_id: string };
     surface: string;
     query?: string;
     client?: unknown;
@@ -39,6 +39,7 @@ import { ExplorationGate } from './providers';
 
 const principal = {
   operator_id: 'operator-1',
+  environment: 'staging',
   session_id: 'session-1',
   active_scope: null,
 };
@@ -55,7 +56,11 @@ describe('Kyber ExplorationGate', () => {
     );
     expect(screen.getByText('fleet')).toBeInTheDocument();
     expect(mocks.observed).toHaveBeenCalledWith(expect.objectContaining({
-      tenantId: 'operator:operator-1:session-1',
+      scope: {
+        tenant_id: 'operator:operator-1:session-1',
+        workspace_id: 'operator:operator-1',
+        environment_id: principal.environment,
+      },
       surface: '/mission',
       query: '?surface=mission&tmode=window',
       client: mocks.explorationClient,
@@ -71,7 +76,9 @@ describe('Kyber ExplorationGate', () => {
       },
     });
     render(<MemoryRouter initialEntries={['/tenant-mirror']}><ExplorationGate><span>tenant</span></ExplorationGate></MemoryRouter>);
-    expect(mocks.observed).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-9' }));
+    expect(mocks.observed).toHaveBeenCalledWith(expect.objectContaining({
+      scope: expect.objectContaining({ tenant_id: 'tenant-9', workspace_id: 'tenant-9' }),
+    }));
   });
 
   it('does not create exploration state before workforce authentication', () => {

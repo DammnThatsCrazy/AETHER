@@ -17,3 +17,4 @@ export {
   usePlaybookPerformance,
   usePlaybookPerformanceSummary,
 } from './use-intelligence';
+export { hasDecisionApprovalPermission } from './decision-permissions';

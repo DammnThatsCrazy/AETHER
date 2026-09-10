@@ -83,6 +83,8 @@ class CreateCaseRequest(TenantScopedRequest):
     title: str
     subjects: list[EntityRef] = Field(default_factory=list)
     createdBy: str
+    findingId: Optional[str] = None
+    recommendationId: Optional[str] = None
 
 
 class StatusTransitionRequest(BaseModel):
@@ -125,6 +127,8 @@ async def create_case(
         createdBy=body.createdBy,
         createdAt=now,
         updatedAt=now,
+        findingId=body.findingId,
+        recommendationId=body.recommendationId,
     )
     case_dict = case.model_dump()
     case_dict["tenant_id"] = case.tenantId  # repo filter key

@@ -12,6 +12,7 @@ from repositories.repos import reset_in_memory_stores
 from services.rights_authority import impact as impact_mod
 from services.rights_authority import lifecycle as lifecycle_mod
 from services.rights_authority.generalization import generalized_artifact_repository
+from services.integrations.data_rights import service as data_rights_service_module
 
 pytestmark = pytest.mark.asyncio
 
@@ -72,6 +73,16 @@ def _isolated(monkeypatch):
     monkeypatch.setattr(impact_mod, "_pb1_repositories", lambda: repos)
     monkeypatch.setattr(lifecycle_mod, "_pb1_repositories", lambda: repos)
     monkeypatch.setattr(impact_mod, "_grant_loader", _load_grant_for_test)
+    async def _revoke(grant_id, body):
+        grant = _TEST_GRANTS.get(grant_id)
+        if grant is None:
+            return None
+        values = vars(grant).copy()
+        values.update(status="revoked", revoked_at="2026-09-09T00:00:00Z")
+        updated = types.SimpleNamespace(**values)
+        _TEST_GRANTS[grant_id] = updated
+        return updated
+    monkeypatch.setattr(data_rights_service_module.data_rights_service, "revoke_grant", _revoke)
     yield repos
     reset_in_memory_stores()
 

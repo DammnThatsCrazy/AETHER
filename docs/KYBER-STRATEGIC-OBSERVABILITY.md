@@ -18,7 +18,7 @@ estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
   "Backend Architecture/aether-backend/services/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:6869337e19ec073673344c4d27986a717be807b852156ffe5807516105abdc35"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:c9c080216395b71d176710000889bc5d4d8a108c829f61cc7d61fa6840f7cb20"
 ---
 # Kyber Strategic Observability
 
@@ -37,6 +37,12 @@ Kyber strategic observability uses backend aggregate endpoints to show Olympus L
 ## Data boundaries
 
 Kyber may show tenant-level account health to Olympus Labs operators with `admin` permission. Cross-tenant views must remain aggregate, anonymized, or internal operational diagnostics. Raw tenant-private evidence, graph intelligence, and tenant-specific investigation content are not exposed across tenants.
+
+The aggregate routes also apply the graph boundary before capping results:
+neighbours are accepted only when their normalized `tenantId`/`tenant_id`
+ownership marker matches the requested tenant. Missing ownership is not treated
+as a wildcard, and action-delivery metrics distinguish queued plans and failed
+connectors from provider-confirmed delivery.
 
 ## Packaging command extensions
 

@@ -5,10 +5,12 @@ import { useExplorationContext } from '@aether/ui/exploration';
 import {
   buildNoesisRequestContext,
   NoesisContextActions,
+  NoesisResponseGovernance,
   useNoesisQuery,
 } from '@aether-app/features/noesis';
 import { ContinueOnPhone } from '@aether-app/features/continuation';
 import { restClient } from '@aether-app/lib/api/rest/client';
+import { isFeatureEnabled } from '@aether-app/lib/featureFlags';
 
 const capabilitiesSchema = z.object({
   capabilities: z.array(z.object({
@@ -134,6 +136,8 @@ export function NoesisPage() {
     }
   }
 
+  const latestResponse = [...messages].reverse().find(message => message.response)?.response;
+
   return (
     <div className="flex h-full gap-3">
       {pastConversations.length > 0 && (
@@ -165,6 +169,9 @@ export function NoesisPage() {
       <div className="flex-1 min-w-0">
         <NoesisContextActions />
         <ContinueOnPhone />
+        {isFeatureEnabled('enableNoesisGovernanceControls') && latestResponse ? (
+          <NoesisResponseGovernance response={latestResponse} />
+        ) : null}
         {(historyError || capabilitiesError) && (
           <div role="alert" className="mb-3 rounded border border-danger/40 bg-danger/10 p-3 text-xs text-danger">
             Noesis metadata unavailable. Conversation queries remain available; history or suggested prompts could not be loaded.

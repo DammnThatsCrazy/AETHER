@@ -3,6 +3,7 @@ title: Unified Exploration Fabric Source of Truth
 status: stable
 source_files:
   - packages/shared/exploration-contract.ts
+  - frontend/shared/src/exploration/client.ts
   - packages/shared/contracts/filter-field-registry.json
   - packages/shared/contracts/surface-capability-registry.json
   - packages/shared/filter-fields.ts
@@ -18,6 +19,7 @@ source_files:
   - Backend Architecture/aether-backend/services/exploration/operations.py
   - Backend Architecture/aether-backend/services/exploration/session.py
   - Backend Architecture/aether-backend/services/exploration/store.py
+  - Backend Architecture/aether-backend/services/exploration/snapshots.py
   - Backend Architecture/aether-backend/services/exploration/adapters/__init__.py
   - Backend Architecture/aether-backend/services/exploration/adapters/base.py
   - Backend Architecture/aether-backend/services/exploration/adapters/graph.py
@@ -62,6 +64,11 @@ envelope carries one applicability entry per requested filter
   `frontend/kyber` (`features/projection-360/`), rendering typed projection
   section states — never recomputing them; UI-less surfaces remain legal.
 
+The shared `frontend/shared/src/exploration/client.ts` transport exposes the
+same query/facet/view contracts plus snapshot list/create/get/compare methods;
+apps supply their existing authenticated transport and do not duplicate query
+or snapshot state.
+
 ## Backend (`services/exploration/`, flag-gated `AETHER_EXPLORATION_ENABLED`)
 
 | Module | Responsibility |
@@ -72,8 +79,9 @@ envelope carries one applicability entry per requested filter
 | `operations.py` | PURE context transforms — `apply_operation` dispatches one `ExplorationOperation` (`OPEN\|PIVOT\|EXPAND\|COLLAPSE\|FILTER_ADD\|FILTER_REMOVE\|LENS_ADD\|TIME_TRAVEL\|DRILL_DOWN\|RESET\|SAVE\|LOAD`) onto a per-op transform (`_pivot`, `_depth`, `_filter_add`, `_filter_remove`, `_lens_add`, `_time_travel`, `_drill_down`, …) yielding the post-op `ExplorationContextV1` + `ExplorationOpResult`. `SAVE`/`LOAD` are session-repository operations handled by the service layer, not pure transforms. Every submitted filter stays accounted for (no silent drops). |
 | `session.py` | `ExplorationSessionRepository(BaseRepository)` — JSONB store of `ExplorationSession` (id, tenant-qualified, surface, seed + current context, lens set / temporal mode, op history with per-op `applied\|rejected\|degraded` status); mirrors `ExplorationViewRepository`; no alembic migration. |
 | `facets.py` | Conditioned facets with cohort-minimum suppression — buckets below a field's registry-declared `minimum_cohort_size` (e.g. `geography.city` ≥ 25) are suppressed with a reason. |
-| `routes.py` | `/v1/explore` `validate` / `query` / `facets` / `views` + `links/resolve` (ContextLink retargeting) + sessions & operations: `POST /sessions`, `GET /sessions`, `GET /sessions/{session_id}`, `DELETE /sessions/{session_id}`, `POST /sessions/{session_id}/operations`. Flag-gated inside every handler (off → honest 404), tenant-scoped; reads require `read`, writes `write`. |
+| `routes.py` | `/v1/explore` `validate` / `query` / `facets` / `views` + immutable `snapshots` (`POST` execute-and-capture, `GET`/list, `POST /snapshots/{snapshot_id}/compare`) + `links/resolve` (ContextLink retargeting) + sessions & operations. Flag-gated inside every handler (off → honest 404), tenant-scoped; reads require `read`, writes `write`. |
 | `store.py` | Saved views on a `BaseRepository` JSONB store (tenant-qualified ids, no alembic migration). |
+| `snapshots.py` | Immutable, tenant-qualified snapshots of executed exploration envelopes. Snapshots retain the normalized context, original page limit, captured result digest, truth/completeness/applicability metadata, and a freshness watermark; comparisons re-run that saved context and return deterministic graph or digest-only changes without mutating history. |
 
 - Meters use the pre-registered `exploration_*` canonical names
   (`scripts/validate_meter_names.py`). The `/v1/explore` prefix is classified in

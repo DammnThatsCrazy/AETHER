@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "canonical_source": "config/telemetry_contracts.json",
+  "events": [
+    {
+      "id": "verification.route.evaluated",
+      "description": "The local change-aware router selected verification evidence for a path set.",
+      "producer": "scripts/check_router.py",
+      "data_classification": "operational_metadata",
+      "fields": {
+        "changed_files": {"type": "array", "items": "string", "required": true},
+        "affected_domains": {"type": "array", "items": "string", "required": true},
+        "minimum_lane": {"type": "string", "enum": ["fast", "pr", "integration", "regression", "release"], "required": true},
+        "selected_lane": {"type": "string", "enum": ["fast", "pr", "integration", "regression", "release"], "required": true},
+        "followup_required": {"type": "boolean", "required": true},
+        "selected_checks": {"type": "array", "items": "string", "required": true},
+        "affected_tests": {"type": "array", "items": "string", "required": true},
+        "global_change": {"type": "boolean", "required": true}
+      }
+    },
+    {
+      "id": "impact.graph.indexed",
+      "description": "The repository impact graph resolved direct and transitive delivery scope.",
+      "producer": "scripts/impact_graph.py",
+      "data_classification": "operational_metadata",
+      "fields": {
+        "changed_files": {"type": "array", "items": "string", "required": true},
+        "direct_nodes": {"type": "array", "items": "string", "required": true},
+        "impacted_components": {"type": "array", "items": "string", "required": true},
+        "impacted_contracts": {"type": "array", "items": "string", "required": true},
+        "impacted_deployables": {"type": "array", "items": "string", "required": true},
+        "transitive_nodes": {"type": "array", "items": "string", "required": true},
+        "unresolved_paths": {"type": "array", "items": "string", "required": true},
+        "router_minimum_lane": {"type": "string", "enum": ["fast", "pr", "integration", "regression", "release"], "required": true},
+        "router_selected_lane": {"type": "string", "enum": ["fast", "pr", "integration", "regression", "release"], "required": true},
+        "router_followup_required": {"type": "boolean", "required": true}
+      }
+    },
+    {
+      "id": "verification.shadow.comparison",
+      "description": "A targeted impact scope was compared with a legacy broad scope.",
+      "producer": "scripts/impact_graph.py",
+      "data_classification": "operational_metadata",
+      "fields": {
+        "classification": {"type": "string", "enum": ["equivalent", "targeted_miss", "legacy_broad_result", "targeted_miss_and_legacy_broad", "legacy_narrow_result"], "required": true},
+        "expected_nodes": {"type": "array", "items": "string", "required": true},
+        "targeted_nodes": {"type": "array", "items": "string", "required": true},
+        "legacy_nodes": {"type": "array", "items": "string", "required": true},
+        "targeted_missing": {"type": "array", "items": "string", "required": true},
+        "legacy_extra": {"type": "array", "items": "string", "required": true},
+        "legacy_missing": {"type": "array", "items": "string", "required": true}
+      }
+    }
+  ]
+}

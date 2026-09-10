@@ -37,6 +37,12 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    // Aether's component suites share a tenant/query-cache harness and Node's
+    // fetch realm. Running all 91 files concurrently starves jsdom timers and
+    // causes response-backed assertions to exceed Vitest's five-second test
+    // timeout; serial file scheduling completes the same assertions in ~45s.
+    // This is test-only scheduling, not a production runtime constraint.
+    fileParallelism: false,
     env: {
       VITE_AETHER_ENV: 'test',
       VITE_API_BASE_URL: 'http://localhost:8000',

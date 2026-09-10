@@ -7,12 +7,12 @@ import {
   DemoTenantBanner,
   Icon,
   NavigationIcon,
-  TimeLensControl,
   useTheme,
   useBuildInfo,
   useCapabilities,
   resolveDestinationAvailability,
   type CapabilityRequirement,
+  type IconName,
   type NavigationIconProps,
 } from '@aether/ui';
 import { AetherLogo } from '@aether-app/components/aether-logo';
@@ -21,43 +21,30 @@ import { SESSION_KEY } from '@aether-app/features/auth/auth-context';
 import { useDemoSeedStatus } from '@aether-app/features/demo-seed/use-demo-seed-status';
 import { persistLastWorkspace } from '@aether-app/features/workspace/last-workspace';
 
-interface NavItemProps {
-  to: string;
-  label: string;
-  destination: NavigationIconProps['destination'];
-}
-
 interface NavEntry {
-  readonly to: string;
   readonly label: string;
-  readonly destination: NavigationIconProps['destination'];
+  /** A real current route for an enabled tenant-facing destination. */
+  readonly to?: string;
+  readonly destination?: NavigationIconProps['destination'];
+  /** Icon name for truthful not-ready entries without a brand route mapping. */
+  readonly icon?: IconName;
   /** Backend capability required; excluded domain / off flag hides the link. */
   readonly requirement?: CapabilityRequirement;
+  /** The product surface is named, but has no current tenant route/capability. */
+  readonly notReady?: boolean;
 }
 
 const NAV_ITEMS: readonly NavEntry[] = [
-  { to: '/users', label: 'Users', destination: 'aether-users' },
-  { to: '/campaigns', label: 'Campaigns', destination: 'aether-campaigns' },
-  { to: '/graph', label: 'Graph', destination: 'aether-graph' },
-  { to: '/noesis', label: 'Noesis', destination: 'aether-noesis' },
-  { to: '/onboarding', label: 'Onboarding', destination: 'aether-onboarding' },
-  { to: '/notifications', label: 'Notifications', destination: 'aether-notifications' },
+  { to: '/explore', label: 'Explore', destination: 'aether-graph' },
+  { label: 'Findings', icon: 'search-check', notReady: true },
+  { label: 'Investigations', icon: 'search', notReady: true },
+  { label: 'Outcomes', icon: 'chart-no-axes-combined', notReady: true },
+  { label: 'Reports', icon: 'file-check-2', notReady: true },
+  { to: '/settings/integrations', label: 'Sources', destination: 'aether-integrations', requirement: { flag: 'connectors_enabled' } },
   { to: '/settings', label: 'Settings', destination: 'aether-settings' },
-  { to: '/billing', label: 'Billing', destination: 'aether-billing' },
-  { to: '/me', label: 'Profile', destination: 'aether-profile' },
-  { to: '/audit-exports', label: 'Audit Exports', destination: 'aether-audit-exports' },
-  { to: '/value-review', label: 'Value Review', destination: 'aether-value-review' },
-  { to: '/security', label: 'Security', destination: 'aether-security' },
-  { to: '/system-status', label: 'System Status', destination: 'aether-system-status' },
-  { to: '/data-quality', label: 'Data Quality', destination: 'aether-data-quality', requirement: { flag: 'data_quality_enabled' } },
-  { to: '/settings/integrations', label: 'Integrations', destination: 'aether-integrations', requirement: { flag: 'connectors_enabled' } },
-  { to: '/imports', label: 'Imports', destination: 'aether-imports' },
-  { to: '/deployments', label: 'Deployments', destination: 'aether-deployments' },
-  { to: '/payment-rails', label: 'Payment Rails', destination: 'aether-payment-rails', requirement: { domain: 'payments' } },
-  { to: '/ai-efficiency', label: 'AI Efficiency', destination: 'aether-ai-efficiency', requirement: { domain: 'economic' } },
 ];
 
-function NavItem({ to, label, destination }: NavItemProps) {
+function NavItem({ to, label, destination }: Required<Pick<NavEntry, 'to' | 'label' | 'destination'>>) {
   return (
     <NavLink
       to={to}
@@ -73,6 +60,21 @@ function NavItem({ to, label, destination }: NavItemProps) {
       <NavigationIcon destination={destination} decorative size="md" className="text-current" />
       <span>{label}</span>
     </NavLink>
+  );
+}
+
+function NotReadyNavItem({ label, icon = 'circle-off' }: Pick<NavEntry, 'label' | 'icon'>) {
+  return (
+    <div
+      aria-disabled="true"
+      aria-label={`${label} (not ready)`}
+      title="Not ready — no current tenant route or capability"
+      className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-text-muted opacity-60 cursor-not-allowed"
+    >
+      <Icon name={icon} decorative size="md" className="text-current" />
+      <span>{label}</span>
+      <span className="ml-auto text-[10px] font-mono uppercase tracking-wide">Not ready</span>
+    </div>
   );
 }
 
@@ -144,9 +146,6 @@ export function AppShell({ children }: AppShellProps) {
         {/* Brand */}
         <div className="px-4 py-4 border-b border-border-default">
           <AetherLogo size={28} />
-          {user && (
-            <p className="text-xs text-text-muted mt-0.5 truncate font-mono">{user.email}</p>
-          )}
           {build && (
             <p className="text-[10px] text-text-muted mt-1 font-mono truncate">
               v{build.version} · {build.gitSha.slice(0, 7)} · {build.profile}
@@ -156,16 +155,28 @@ export function AppShell({ children }: AppShellProps) {
 
         {/* Navigation — capability-gated: excluded domains / off flags hide links */}
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          {NAV_ITEMS.filter(
-            item => resolveDestinationAvailability(capabilities, item.requirement) === 'available',
-          ).map(item => (
-            <NavItem key={item.to} to={item.to} label={item.label} destination={item.destination} />
-          ))}
+          {NAV_ITEMS.map(item => {
+            if (item.notReady) {
+              return <NotReadyNavItem key={item.label} label={item.label} icon={item.icon ?? 'circle-off'} />;
+            }
+            if (
+              !item.to ||
+              !item.destination ||
+              resolveDestinationAvailability(capabilities, item.requirement) !== 'available'
+            ) {
+              return null;
+            }
+            return <NavItem key={item.to} to={item.to} label={item.label} destination={item.destination} />;
+          })}
         </nav>
 
         {/* Footer */}
         <div className="px-2 py-3 border-t border-border-default space-y-1">
-          <TimeLensControl className="px-3 py-1 flex-wrap" />
+          {user && (
+            <div className="px-3 pb-1 text-[11px] text-text-muted truncate font-mono" title={user.email}>
+              {user.email}
+            </div>
+          )}
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-text-secondary hover:text-text-primary hover:bg-surface-overlay transition-colors"

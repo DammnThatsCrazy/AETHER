@@ -3,6 +3,7 @@ import {
   clearLastWorkspace,
   isWorkspaceDestination,
   lastWorkspaceStorageKey,
+  normalizeLastWorkspace,
   persistLastWorkspace,
   readLastWorkspace,
 } from '@aether-app/features/workspace/last-workspace';
@@ -53,6 +54,16 @@ describe('last workspace — scope-scoped storage round trip', () => {
     );
     // Different account never sees it.
     expect(readLastWorkspace('other@example.com')).toBeNull();
+  });
+
+  it('normalizes legacy root and graph values to Explore, retaining view state', () => {
+    expect(normalizeLastWorkspace('/')).toBe('/explore');
+    expect(normalizeLastWorkspace('/graph')).toBe('/explore');
+    expect(normalizeLastWorkspace('/graph?entity=user-1#focus')).toBe(
+      '/explore?entity=user-1#focus',
+    );
+    persistLastWorkspace('acme@example.com', '/graph');
+    expect(readLastWorkspace('acme@example.com')).toBe('/explore');
   });
 
   it('never persists activation/auth/legal or off-origin values', () => {

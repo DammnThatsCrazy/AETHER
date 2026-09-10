@@ -78,9 +78,18 @@ function renderSignup(initialEntry: string) {
 /** Drives step 1 (register) → step 2 (OTP) → step 3 (all set). */
 async function completeSignupFlow() {
   const user = userEvent.setup();
-  await user.type(screen.getByLabelText("Full name"), "Ada Lovelace");
-  await user.type(screen.getByLabelText("Work email"), "ada@example.com");
-  await user.type(screen.getByLabelText("Password"), "password123");
+  // Controlled field changes preserve the registration payload while avoiding
+  // a per-keystroke delay that made this deterministic flow exceed Vitest's
+  // five-second default when the full workspace suite is under load.
+  fireEvent.change(screen.getByLabelText("Full name"), {
+    target: { value: "Ada Lovelace" },
+  });
+  fireEvent.change(screen.getByLabelText("Work email"), {
+    target: { value: "ada@example.com" },
+  });
+  fireEvent.change(screen.getByLabelText("Password"), {
+    target: { value: "password123" },
+  });
   await user.click(screen.getByRole("button", { name: "Continue →" }));
 
   await screen.findByText("Check your email");

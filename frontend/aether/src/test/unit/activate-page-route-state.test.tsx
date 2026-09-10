@@ -1,8 +1,8 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
-import { ThemeProvider } from '@aether/ui';
-import { ActivatePage } from '@aether-app/pages/activation/activate-page';
+import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
+import { ThemeProvider } from "@aether/ui";
+import { ActivatePage } from "@aether-app/pages/activation/activate-page";
 
 // Route-state evidence for the /activation row in the
 // FRONTEND-ROUTE-STATE-MATRIX ledger (empty/error/populated/loading automation).
@@ -25,20 +25,21 @@ const state = vi.hoisted(() => ({
 }));
 
 const NOT_STARTED = {
-  state: 'not_started',
+  state: "not_started",
   selected_plan_tier: null,
   sdk_selection: [],
   created_key_ids: [],
-  billing_state: 'billing_pending',
+  billing_state: "billing_pending",
   first_value_evidence: {},
   waiting_reason: null,
   history: [],
 };
 
-vi.mock('@aether-app/features/activation/use-activation', () => ({
-  ACTIVATION_PLAN_TIERS: ['P1', 'P2', 'P3', 'P4'],
+vi.mock("@aether-app/features/activation/use-activation", () => ({
+  ACTIVATION_PLAN_TIERS: ["P1", "P2", "P3", "P4"],
   activationStateLabel: (s: string) => s,
-  activationCapabilityState: () => 'provisioning',
+  activationNextAction: (s: string) => `next: ${s}`,
+  activationCapabilityState: () => "provisioning",
   useActivationStatus: () => state.status,
   useSelectPlan: () => state.mutation,
   useSelectSdks: () => state.mutation,
@@ -48,7 +49,16 @@ vi.mock('@aether-app/features/activation/use-activation', () => ({
   useCompleteActivation: () => state.mutation,
 }));
 
-vi.mock('@aether-app/features/activation/use-activation-intents', () => ({
+vi.mock("@aether-app/features/activation/use-tenant-readiness", () => ({
+  useTenantReadiness: () => ({
+    data: undefined,
+    isLoading: false,
+    error: null,
+  }),
+  deriveGraphMaturity: () => ({ state: "no_data", blocking: [] }),
+}));
+
+vi.mock("@aether-app/features/activation/use-activation-intents", () => ({
   useActivationIntentsCatalog: () => state.catalog,
   useActivationPlan: () => state.plan,
   useActivationConnectAction: () => state.mutation,
@@ -65,47 +75,132 @@ function renderActivate() {
   );
 }
 
-describe('/activation — ActivatePage route states', () => {
+describe("/activation — ActivatePage route states", () => {
   beforeEach(() => {
-    state.status = { data: null, isLoading: false, error: null, refetch: vi.fn() };
-    state.catalog = { data: { intents: [] }, isLoading: false, error: null, refetch: vi.fn() };
-    state.plan = { data: null, isLoading: false, error: null, refetch: vi.fn() };
-    state.mutation = { mutate: vi.fn(), isLoading: false, error: null, data: null, reset: vi.fn() };
-    state.firstValue = { data: null, isLoading: false, error: null, refetch: vi.fn() };
-    state.createKeys = { mutate: vi.fn(), isLoading: false, error: null, data: null, reset: vi.fn() };
-    state.sendEvent = { mutate: vi.fn(), isLoading: false, error: null, data: null, reset: vi.fn() };
+    state.status = {
+      data: null,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+    state.catalog = {
+      data: { intents: [] },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+    state.plan = {
+      data: null,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+    state.mutation = {
+      mutate: vi.fn(),
+      isLoading: false,
+      error: null,
+      data: null,
+      reset: vi.fn(),
+    };
+    state.firstValue = {
+      data: null,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+    state.createKeys = {
+      mutate: vi.fn(),
+      isLoading: false,
+      error: null,
+      data: null,
+      reset: vi.fn(),
+    };
+    state.sendEvent = {
+      mutate: vi.fn(),
+      isLoading: false,
+      error: null,
+      data: null,
+      reset: vi.fn(),
+    };
   });
 
-  it('renders a loading skeleton without drawing any activation conclusions', () => {
-    state.status = { data: null, isLoading: true, error: null, refetch: vi.fn() };
+  it("renders a loading skeleton without drawing any activation conclusions", () => {
+    state.status = {
+      data: null,
+      isLoading: true,
+      error: null,
+      refetch: vi.fn(),
+    };
     renderActivate();
-    expect(document.querySelector('.animate-pulse, .aether-skeleton')).not.toBeNull();
-    expect(screen.queryByText('Failed to load activation status')).not.toBeInTheDocument();
-    expect(screen.queryByText('No activation intents available')).not.toBeInTheDocument();
+    expect(
+      document.querySelector(".animate-pulse, .aether-skeleton"),
+    ).not.toBeNull();
+    expect(
+      screen.queryByText("Failed to load activation status"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No activation intents available"),
+    ).not.toBeInTheDocument();
   });
 
-  it('renders the successful-empty state when the intent catalog is empty', async () => {
-    state.status = { data: NOT_STARTED, isLoading: false, error: null, refetch: vi.fn() };
-    state.catalog = { data: { intents: [] }, isLoading: false, error: null, refetch: vi.fn() };
+  it("renders the successful-empty state when the intent catalog is empty", async () => {
+    state.status = {
+      data: NOT_STARTED,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+    state.catalog = {
+      data: { intents: [] },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    };
     renderActivate();
-    expect(await screen.findByText('No activation intents available')).toBeInTheDocument();
-    expect(screen.queryByText('Failed to load activation status')).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("No activation intents available"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Failed to load activation status"),
+    ).not.toBeInTheDocument();
   });
 
-  it('renders the unavailable state and never a successful empty when the status read fails', async () => {
-    state.status = { data: null, isLoading: false, error: 'activation service offline', refetch: vi.fn() };
+  it("renders the unavailable state and never a successful empty when the status read fails", async () => {
+    state.status = {
+      data: null,
+      isLoading: false,
+      error: "activation service offline",
+      refetch: vi.fn(),
+    };
     renderActivate();
-    expect(await screen.findByText('Failed to load activation status')).toBeInTheDocument();
-    expect(screen.queryByText('No activation intents available')).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("Failed to load activation status"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("No activation intents available"),
+    ).not.toBeInTheDocument();
   });
 
-  it('renders the populated intent picker when intents are available', async () => {
-    state.status = { data: NOT_STARTED, isLoading: false, error: null, refetch: vi.fn() };
+  it("renders the populated intent picker when intents are available", async () => {
+    state.status = {
+      data: NOT_STARTED,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    };
     state.catalog = {
       data: {
         intents: [
-          { token: 'grow_revenue', label: 'Grow revenue', description: 'Expand revenue streams' },
-          { token: 'engage_customers', label: 'Engage customers', description: 'Deepen customer relationships' },
+          {
+            token: "grow_revenue",
+            label: "Grow revenue",
+            description: "Expand revenue streams",
+          },
+          {
+            token: "engage_customers",
+            label: "Engage customers",
+            description: "Deepen customer relationships",
+          },
         ],
       },
       isLoading: false,
@@ -119,8 +214,10 @@ describe('/activation — ActivatePage route states', () => {
       refetch: vi.fn(),
     };
     renderActivate();
-    expect(await screen.findByText('Grow revenue')).toBeInTheDocument();
-    expect(screen.getByText('Engage customers')).toBeInTheDocument();
-    expect(screen.queryByText('No activation intents available')).not.toBeInTheDocument();
+    expect(await screen.findByText("Grow revenue")).toBeInTheDocument();
+    expect(screen.getByText("Engage customers")).toBeInTheDocument();
+    expect(
+      screen.queryByText("No activation intents available"),
+    ).not.toBeInTheDocument();
   });
 });

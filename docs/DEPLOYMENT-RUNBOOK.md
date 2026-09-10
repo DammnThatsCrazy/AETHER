@@ -26,6 +26,13 @@ Two things are being deployed and they travel on separate paths:
 Never conflate them. A release promotion changes what runs; a Terraform
 promotion changes what exists.
 
+Kyber is not a deployment control plane. Its Deployment Readiness page is a
+read-only review of readiness evidence, audit-export health, and known gaps;
+deployment execution and approval remain on the reviewed GitHub Actions
+workflows. The canonical boundary is recorded in
+`config/deployment_operator_surface.yaml` and enforced by
+`make test-workflow-controls`.
+
 ## Artifacts
 
 - Immutable backend image by digest, static Aether and Kyber archives, migration

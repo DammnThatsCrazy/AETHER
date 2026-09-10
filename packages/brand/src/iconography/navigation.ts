@@ -56,7 +56,7 @@ export const navigationDestinations = {
   'kyber-investigations': { product: 'kyber', path: '/investigations', icon: 'search-check', label: 'Investigations', decorativeByDefault: true, description: 'Operational investigations.' },
   'kyber-cis': { product: 'kyber', path: '/cis', icon: 'scan-search', label: 'CIS', decorativeByDefault: true, description: 'Continuous intelligence system.' },
   'kyber-packages': { product: 'kyber', path: '/packages', icon: 'package-check', label: 'Packages', decorativeByDefault: true, description: 'Solution packages.' },
-  'kyber-deployment-readiness': { product: 'kyber', path: '/deployment-readiness', icon: 'clipboard-signature', label: 'Deploy ready', decorativeByDefault: true, description: 'Deployment readiness.' },
+  'kyber-deployment-readiness': { product: 'kyber', path: '/deployment-readiness', icon: 'clipboard-signature', label: 'Deployment review', decorativeByDefault: true, description: 'Read-only deployment readiness review.' },
   'kyber-reliability': { product: 'kyber', path: '/reliability', icon: 'heart-pulse', label: 'Reliability', decorativeByDefault: true, description: 'Reliability operations.' },
   'kyber-journey-health': { product: 'kyber', path: '/journey-health', icon: 'map-pinned', label: 'Journey health', decorativeByDefault: true, description: 'Journey health operations.' },
   'kyber-intelligence-quality': { product: 'kyber', path: '/intelligence-quality', icon: 'circle-gauge', label: 'Intelligence quality', decorativeByDefault: true, description: 'Intelligence quality.' },

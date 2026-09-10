@@ -321,6 +321,9 @@ class DataRightsGrant(BaseModel):
     # ── Policy metadata ───────────────────────────────────────────────────────
     legal_basis: str = LegalBasis.OPERATOR_POLICY.value
     consent_basis: Optional[str] = None
+    # Stable data-subject reference used for consent evaluation.  The legal
+    # basis/purpose remains in consent_basis; it is never overloaded as an id.
+    subject_ref: Optional[str] = None
     granted_by_user_id: str
     granted_at: str
     expires_at: Optional[str] = None
@@ -431,6 +434,7 @@ class DataRightsGrantCreate(BaseModel):
     commercial_reuse_allowed: bool = False
     legal_basis: str = LegalBasis.OPERATOR_POLICY.value
     consent_basis: Optional[str] = None
+    subject_ref: Optional[str] = None
     contract_id: Optional[str] = None
     expires_at: Optional[str] = None
 

@@ -461,33 +461,84 @@ async def _project_silver(
 
 
 async def graph_preview(tenant_id: str, import_id: str) -> dict:
-    """Non-mutating: the vertices and edges a commit *would* produce."""
+    """Non-mutating: the vertices and edges a commit *would* produce.
+
+    The preview is also the import-to-graph lineage seam.  It returns the
+    tenant-scoped source-file checksums, mapping version, and per-file mapping
+    counts alongside the planned graph mutations.  Rights are deliberately
+    fail-closed here: a preview is not a commit and does not establish an
+    activation or licensing decision.
+    """
     from services.imports.analyzer import detect_format, read_rows
     from services.imports.storage import get_import_storage
 
     repo = get_imports_repository()
-    await repo.get_session(tenant_id, import_id)  # tenant guard
+    session = await repo.get_session(tenant_id, import_id)  # tenant guard
     mapping = await repo.get_latest_mapping(tenant_id, import_id)
     if mapping is None:
         raise BadRequestError("no mapping to preview")
     fields = _coerce_fields(mapping.get("fields", []))
     storage = get_import_storage()
     records: list[dict] = []
+    mapping_errors = 0
+    source_files: list[dict] = []
+    file_lineage: list[dict] = []
     for schema in await repo.list_schemas(tenant_id, import_id):
         file_id = schema.get("file_id")
         if not file_id:
             continue
         meta, content = await storage.get_content(tenant_id, file_id)
+        source_files.append({
+            key: meta.get(key)
+            for key in ("id", "filename", "content_type", "sha256", "size_bytes", "created_at")
+            if meta.get(key) is not None
+        })
         fmt = detect_format(meta["filename"], meta.get("content_type", ""), content)
         rows, _ = read_rows(content, fmt)
-        recs, _errs = build_primitive_records(fields, rows)
+        recs, errors = build_primitive_records(fields, rows)
+        mapping_errors += len(errors)
+        for rec in recs:
+            rec["file_id"] = file_id
         records.extend(recs)
+        file_lineage.append({
+            "file_id": file_id,
+            "filename": meta.get("filename"),
+            "sha256": meta.get("sha256"),
+            "row_count": len(rows),
+            "mapped_record_count": len(recs),
+            "mapping_error_count": len(errors),
+        })
     vertices, edges = plan_graph(tenant_id, records)
     return {
         "import_id": import_id,
         "vertices": vertices[:200],
         "edges": edges[:200],
-        "counts": {"vertices": len(vertices), "edges": len(edges), "records": len(records)},
+        "mapping_version": int(mapping.get("version", 1) or 1),
+        "counts": {
+            "vertices": len(vertices),
+            "edges": len(edges),
+            "records": len(records),
+            "mapping_errors": mapping_errors,
+        },
+        "lineage": {
+            "tenant_id": tenant_id,
+            "import_id": import_id,
+            "source_kind": session.get("source_kind") or "file_upload",
+            "source_checksum": session.get("source_checksum"),
+            "files": source_files,
+            "file_rollup": file_lineage,
+            "mapping": {
+                "mapping_id": mapping.get("id"),
+                "version": int(mapping.get("version", 1) or 1),
+            },
+            "rights_context": {
+                "ownership": "unknown",
+                "terms_status": "not_evaluated",
+                "authorization_status": "not_evaluated",
+                "activation_allowed": False,
+                "reason": "preview_only",
+            },
+        },
     }
 
 

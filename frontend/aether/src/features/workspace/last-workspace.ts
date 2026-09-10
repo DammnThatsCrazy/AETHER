@@ -2,8 +2,8 @@
  * Last useful workspace (Phase 2 — tenant landing resolution).
  *
  * A completed tenant should return to the workspace surface they were actually
- * using (a campaign, the graph, profiles, …) rather than always landing on
- * Home. The requested-deep-link leg of the resolver is handled upstream by
+ * using (Explore, a campaign, profiles, …) rather than always landing on a
+ * generic home page. The requested-deep-link leg of the resolver is handled upstream by
  * `RequireAuth` (a guarded destination is rendered directly after auth, so the
  * resolver never runs for it); this module supplies the persistence leg.
  *
@@ -21,6 +21,9 @@ const NON_WORKSPACE_PREFIXES = [
   '/signup',
   '/legal/',
 ] as const;
+
+/** Legacy roots are aliases for the canonical graph-first Explore workspace. */
+const LEGACY_EXPLORE_PATHS = new Set(['/', '/graph']);
 
 /**
  * A stored landing target is only ever trusted when it is a clean internal
@@ -48,13 +51,27 @@ export function isWorkspaceDestination(pathname: string): boolean {
   );
 }
 
+/**
+ * Normalize an untrusted stored destination before it is used by a router.
+ * Query/hash suffixes are retained as view state, while legacy roots become
+ * the canonical Explore route. Invalid, transient, and off-origin values are
+ * rejected instead of being restored.
+ */
+export function normalizeLastWorkspace(pathname: string | null | undefined): string | null {
+  if (!pathname || !isWorkspaceDestination(pathname)) return null;
+  const suffixStart = pathname.search(/[?#]/);
+  const base = suffixStart === -1 ? pathname : pathname.slice(0, suffixStart);
+  const suffix = suffixStart === -1 ? '' : pathname.slice(suffixStart);
+  return LEGACY_EXPLORE_PATHS.has(base) ? `/explore${suffix}` : pathname;
+}
+
 export function lastWorkspaceStorageKey(scopeId: string): string {
   return `aether:last-workspace:${scopeId}`;
 }
 
 export function readLastWorkspace(scopeId: string): string | null {
   try {
-    return window.localStorage.getItem(lastWorkspaceStorageKey(scopeId));
+    return normalizeLastWorkspace(window.localStorage.getItem(lastWorkspaceStorageKey(scopeId)));
   } catch {
     return null;
   }
@@ -70,9 +87,10 @@ export function clearLastWorkspace(scopeId: string): void {
 
 /** Persist a reached workspace path, ignoring non-workspace/transient routes. */
 export function persistLastWorkspace(scopeId: string, pathname: string): void {
-  if (!isWorkspaceDestination(pathname)) return;
+  const normalized = normalizeLastWorkspace(pathname);
+  if (!normalized) return;
   try {
-    window.localStorage.setItem(lastWorkspaceStorageKey(scopeId), pathname);
+    window.localStorage.setItem(lastWorkspaceStorageKey(scopeId), normalized);
   } catch {
     // best-effort only
   }

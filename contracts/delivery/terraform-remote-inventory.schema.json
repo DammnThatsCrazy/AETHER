@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.olympuslabs.io/contracts/delivery/terraform-remote-inventory/v1",
+  "title": "Aether TerraformRemoteInventory v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "source", "inventory_complete", "resources"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "source": {"const": "offline_fixture"},
+    "inventory_complete": {"const": true},
+    "resources": {"type": "array", "items": {"$ref": "#/$defs/resource"}}
+  },
+  "$defs": {
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "type", "owner", "values"],
+      "properties": {
+        "address": {"type": "string", "minLength": 1},
+        "type": {"type": "string", "minLength": 1},
+        "owner": {"enum": ["terraform", "external", "shared", "unknown"]},
+        "id": {"type": "string", "minLength": 1},
+        "remote_id": {"type": "string", "minLength": 1},
+        "values": {"type": "object"},
+        "tags": {"type": "object"}
+      }
+    }
+  }
+}

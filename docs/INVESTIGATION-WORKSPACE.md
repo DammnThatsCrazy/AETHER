@@ -21,7 +21,7 @@ estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
   "Backend Architecture/aether-backend/services/intelligence/investigations.py": "sha256:3369a68e9650eedefd7709a2e2ff91e2294d3dabe50cf38659a6309365bef517"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:6869337e19ec073673344c4d27986a717be807b852156ffe5807516105abdc35"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:c9c080216395b71d176710000889bc5d4d8a108c829f61cc7d61fa6840f7cb20"
 ---
 # Investigation Workspace
 
@@ -33,13 +33,18 @@ Every recommendation can be opened as an investigation workspace without leaving
 
 The response includes the recommendation, confidence breakdown, evidence, related profile/entity summary, related graph edges when available, related events, attribution path, candidate actions, decision history, action history, outcome history, prior similar tenant outcomes, governance flags, data freshness, and suppression reason.
 
+Finding-originated recommendations also retain `finding_id` and
+`investigation_id` on the recommendation and downstream loop records. This is
+an additive provenance link to the canonical finding/investigation planes; it
+does not copy case state or authorize action.
+
 When the recommendation carries canonical path references (populated by `_compute_path_refs` in the recommendation family), the workspace also returns:
 - `graph_paths` — list of canonical `path_id` strings (SHA256[:32]) linking to saved `TraversalSnapshot` records
 - `snapshot_ref` — the `snapshot_id` of the traversal snapshot most relevant to this recommendation
 
 ## Tenant isolation
 
-The route first verifies that the recommendation belongs to the authenticated tenant. Decision, action, outcome, and prior outcome reads are filtered by tenant id. Optional graph lookup degrades gracefully and filters tenant-tagged neighbors when graph context is present.
+The route first verifies that the recommendation belongs to the authenticated tenant. Decision, action, outcome, and prior outcome reads are filtered by tenant id. Optional graph lookup degrades gracefully and fails closed: neighbours are filtered before the response cap and must carry an explicit tenant marker matching the authenticated tenant (`tenantId` and legacy `tenant_id` are normalized). Unmarked and foreign-tenant vertices are omitted.
 
 ## Governance and rollout
 

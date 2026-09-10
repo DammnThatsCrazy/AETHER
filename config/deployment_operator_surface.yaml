@@ -1,0 +1,23 @@
+# Canonical deployment operator boundary.
+#
+# GitHub Actions is the deployment operator surface. Kyber may expose
+# readiness evidence, but it is not a deployment control plane.
+schema_version: 1
+canonical_source: config/deployment_operator_surface.yaml
+
+operator_surface:
+  system: github_actions
+  execution_paths:
+    - path: .github/workflows/deploy.yml
+      purpose: application_delivery
+      trigger_policy: [push, workflow_dispatch]
+    - path: .github/workflows/terraform-promote.yml
+      purpose: infrastructure_promotion
+      trigger_policy: [workflow_dispatch]
+  terraform_apply_path: .github/workflows/terraform-promote.yml
+
+kyber:
+  enabled: false
+  posture: read_only
+  readiness_route: /deployment-readiness
+  mutation_controls: []

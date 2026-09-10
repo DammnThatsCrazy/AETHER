@@ -25,9 +25,14 @@ import {
 } from "@aether-app/features/activation/use-activation-intents";
 import {
   activationCapabilityState,
+  activationNextAction,
   activationStateLabel,
   useActivationStatus,
 } from "@aether-app/features/activation/use-activation";
+import {
+  deriveGraphMaturity,
+  useTenantReadiness as useLaunchReadiness,
+} from "@aether-app/features/activation/use-tenant-readiness";
 import {
   CompleteStep,
   FirstValueStep,
@@ -460,6 +465,92 @@ function PlanCategoryBlock({
   );
 }
 
+function ActivationProgressPanel({
+  status,
+}: {
+  readonly status: ReturnType<typeof useActivationStatus>;
+}) {
+  const readiness = useLaunchReadiness();
+  const activation = status.data;
+  if (!activation) return null;
+
+  const maturity = readiness.data ? deriveGraphMaturity(readiness.data) : null;
+  return (
+    <Card data-testid="activation-progress-panel">
+      <CardHeader>
+        <CardTitle className="text-sm">Activation progress</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 text-xs text-text-secondary">
+        <div className="flex items-center justify-between gap-3">
+          <span>Current stage</span>
+          <Badge variant="default">
+            {activationStateLabel(activation.state)}
+          </Badge>
+        </div>
+        <p data-testid="activation-next-action">
+          <span className="font-medium text-text-primary">
+            Next permitted action:{" "}
+          </span>
+          {activationNextAction(activation.state)}
+        </p>
+        {(activation.state === "blocked" ||
+          activation.state === "externally_blocked" ||
+          activation.state === "manual_pending") &&
+          activation.waiting_reason && (
+            <p
+              data-testid="activation-blocker"
+              className="rounded border border-warning/40 bg-warning/10 px-2 py-1 text-warning"
+            >
+              {activation.waiting_reason}
+            </p>
+          )}
+        {readiness.error && (
+          <p data-testid="activation-readiness-unavailable">
+            Graph evidence is temporarily unavailable; activation state remains
+            authoritative.
+          </p>
+        )}
+        {!readiness.error && !readiness.data && readiness.isLoading && (
+          <p data-testid="activation-readiness-loading">
+            Checking graph evidence…
+          </p>
+        )}
+        {maturity?.state === "no_data" && (
+          <p data-testid="activation-zero-data">
+            No observed events yet. Connect a source or send a test event to
+            begin building graph evidence.
+          </p>
+        )}
+        {maturity?.state === "building" && (
+          <p data-testid="activation-graph-building">
+            Graph evidence is building; {maturity.blocking.length} verification
+            check{maturity.blocking.length === 1 ? "" : "s"} remain.
+          </p>
+        )}
+        {maturity?.state === "ready" && (
+          <p data-testid="activation-graph-ready">
+            Graph foundations are verified. Explore is available when activation
+            is complete.
+          </p>
+        )}
+        <div className="flex flex-wrap gap-3 pt-1">
+          {(activation.state === "blocked" ||
+            activation.state === "externally_blocked") && (
+            <Link className="underline" to="/integrations">
+              Review integrations
+            </Link>
+          )}
+          {activation.state === "complete" && (
+            <Link className="underline" to="/explore">
+              Open Explore
+            </Link>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -598,6 +689,16 @@ export function ActivatePage() {
       <div className="max-w-3xl mx-auto space-y-6">
         {header}
 
+        {status.data?.state === "complete" && (
+          <Link
+            to="/explore"
+            data-testid="activation-explore-handoff"
+            className="block rounded-lg border border-border-focus bg-surface-raised px-4 py-3 text-sm font-semibold text-text-primary shadow-sm transition-colors hover:bg-surface-overlay focus:outline-none focus:ring-2 focus:ring-border-focus"
+          >
+            Your graph workspace is available — Explore Aether
+          </Link>
+        )}
+
         {status.isLoading && !status.data && <LoadingState lines={6} />}
 
         {!status.isLoading && status.error && (
@@ -609,6 +710,7 @@ export function ActivatePage() {
 
         {status.data && (
           <>
+            <ActivationProgressPanel status={status} />
             <IntentPickerSection
               loading={picker.isLoading}
               error={picker.error ? String(picker.error) : null}

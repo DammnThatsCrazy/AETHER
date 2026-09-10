@@ -5,6 +5,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { queryCache } from '@aether/ui';
 import { CampaignTargetingIntelligenceTab, ClusterTargetingImpactTab } from '@aether-app/features/targeting-intelligence';
 import { TenantSuggestionCard } from '@aether-app/features/suggestions/components/TenantSuggestionCard';
+import { Cluster360Page } from '@aether-app/pages/cluster360';
 
 // The shared queryCache tracks in-flight fetches with `promise.finally(...)`,
 // which leaks an unhandled rejection when a fetcher rejects even though the
@@ -544,7 +545,6 @@ vi.mock('@aether-app/features/cluster360/use-cluster360', async importOriginal =
 
 describe('Cluster360 page tab registration', () => {
   it('registers the Targeting Impact tab and renders it on click', async () => {
-    const { Cluster360Page } = await import('@aether-app/pages/cluster360');
     render(
       <MemoryRouter initialEntries={['/clusters/cluster_a']}>
         <Routes>

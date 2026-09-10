@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, EntityAvatar, FreshnessIndicator, Icon, LoadingState, StatusIndicator, Tabs, TabsContent, TabsList, TabsTrigger, TerminalSeparator, TimeWindowSelector } from '@aether/ui';
 import type { TimeWindow } from '@aether/ui';
+import { GraphContextBar, useGraph, useGraphActions, useGraphContext } from '@aether/ui/exploration';
 import { useProfile360 } from '@kyber/features/profile360';
 import type { Profile360EntityType, Profile360Reference, Profile360ViewId } from '@kyber/types';
 import { entityDetailPath, profile360Path } from '@kyber/routes';
@@ -25,6 +26,7 @@ import {
   Profile360ProvenancePanel,
 } from './profile360-contextual-panels';
 import { KyberSocialIntelligencePanel } from './social-intelligence-panel';
+import { graphObjectRef, normalizeEvidence, refForEntity, temporalForWindow, withGraphContext } from '@kyber/features/profile360/profile360-context';
 
 interface Profile360ViewProps {
   readonly type: Profile360EntityType;
@@ -65,25 +67,77 @@ function wsVariant(status: string) {
 
 export function Profile360View({ type, id, onBack }: Profile360ViewProps) {
   const navigate = useNavigate();
+  const graph = useGraphContext();
+  const graphApi = useGraph();
+  const graphActions = useGraphActions();
   const [activeView, setActiveView] = useState<Profile360ViewId | 'social'>('identity');
   const [timeWindow, setTimeWindow] = useState<TimeWindow>('30d');
-  const { entity, sections, timeline, graph, highlightedNodeIds, isLoading, error, websocketStatus, actions } = useProfile360(type, id, timeWindow);
+  const { entity, sections, timeline, graph: profileGraph, highlightedNodeIds, isLoading, error, websocketStatus, actions } = useProfile360(type, id, timeWindow);
+
+  const scopedRef = useCallback((ref: Profile360Reference) => refForEntity(graph.scope, ref.id, ref.type), [graph.scope]);
+  const navigateWithContext = useCallback((path: string) => navigate(withGraphContext(path, graphApi.toQuery())), [graphApi, navigate]);
+
+  // Keep the shared graph context's temporal authority aligned with the
+  // Profile360 toolbar. The local store still owns presentation-only filtering;
+  // temporal state is shared so graph -> profile -> graph retains the window.
+  const onTimeWindowChange = useCallback((next: TimeWindow) => {
+    setTimeWindow(next);
+    graphActions.setGraphContext({ ...graph, temporal: temporalForWindow(next) });
+  }, [graph, graphActions]);
+
+  // Profile360 is a graph object too: seed the shared focus once the profile
+  // has loaded, without replacing a focus carried by a deep link.
+  useEffect(() => {
+    if (!id || graph.selection.focused || !entity) return;
+    graphActions.focusObject(refForEntity(graph.scope, entity.id, type));
+  }, [entity, graph.scope, graph.selection.focused, graphActions, id, type]);
+
+  // A successful profile response is backend evidence of the route's current
+  // permission decision. If the response carries richer rights/evidence
+  // metadata, retain it in GraphContext; otherwise keep rights unknown rather
+  // than asserting a client-side grant.
+  useEffect(() => {
+    const raw = profileGraph && entity ? entity.metadata : null;
+    if (!raw) return;
+    const rightsRaw = raw.rights ?? raw.permission ?? raw.authorization;
+    const rights = rightsRaw && typeof rightsRaw === 'object' ? rightsRaw as Record<string, unknown> : null;
+    const evidence = normalizeEvidence(raw.evidence ?? raw.evidence_refs ?? raw.provenance);
+    if (!rights && evidence.length === 0) return;
+    const current = graphApi.toGraphQueryContext();
+    const nextRights = rights && typeof rights.allowed === 'boolean' ? {
+      allowed: rights.allowed,
+      decision_id: typeof rights.decision_id === 'string' ? rights.decision_id : null,
+      evaluated_at: typeof rights.evaluated_at === 'string' ? rights.evaluated_at : null,
+      policy_version: typeof rights.policy_version === 'string' ? rights.policy_version : null,
+    } : current.rights;
+    const nextEvidence = evidence.length > 0 ? evidence : current.evidence;
+    if (JSON.stringify(nextRights) === JSON.stringify(current.rights)
+      && JSON.stringify(nextEvidence) === JSON.stringify(current.evidence)) return;
+    graphActions.setGraphContext({ ...current, rights: nextRights ?? null, evidence: nextEvidence });
+  }, [entity, graphActions, graphApi, profileGraph]);
 
   const onDrill = useCallback((reference: Profile360Reference) => {
     actions.pushDrill(reference);
-    if (reference.id) actions.highlightNodes([reference.id]);
-  }, [actions]);
+    if (reference.id) {
+      actions.highlightNodes([reference.id]);
+      graphActions.focusObject(scopedRef(reference));
+      graphActions.selectObject(scopedRef(reference));
+    }
+  }, [actions, graphActions, scopedRef]);
 
   const openReference = useCallback((reference: Profile360Reference) => {
-    navigate(profile360Path(reference.type, reference.id));
-  }, [navigate]);
+    const ref = scopedRef(reference);
+    graphActions.focusObject(ref);
+    graphActions.selectObject(ref);
+    navigateWithContext(profile360Path(reference.type, reference.id));
+  }, [graphActions, navigateWithContext, scopedRef]);
 
   const headlineMetrics = useMemo(() => [
     { label: 'Events', value: timeline.length },
-    { label: 'Nodes', value: graph.nodes.length },
-    { label: 'Edges', value: graph.edges.length },
+    { label: 'Nodes', value: profileGraph.nodes.length },
+    { label: 'Edges', value: profileGraph.edges.length },
     { label: 'Signals', value: Object.keys(entity?.metadata ?? {}).length },
-  ], [entity?.metadata, graph.edges.length, graph.nodes.length, timeline.length]);
+  ], [entity?.metadata, profileGraph.edges.length, profileGraph.nodes.length, timeline.length]);
 
   if (isLoading) return <LoadingState lines={8} className="p-8" />;
   if (error) return <EmptyState title="Profile360 failed to load" description={error} />;
@@ -109,7 +163,7 @@ export function Profile360View({ type, id, onBack }: Profile360ViewProps) {
           </div>
         </div>
         <div className="flex flex-col items-end gap-3">
-          <TimeWindowSelector value={timeWindow} onChange={setTimeWindow} />
+          <TimeWindowSelector value={timeWindow} onChange={onTimeWindowChange} />
           {Boolean(entity.metadata?.computed_at) && (
             <FreshnessIndicator computedAt={String(entity.metadata.computed_at)} />
           )}
@@ -126,16 +180,31 @@ export function Profile360View({ type, id, onBack }: Profile360ViewProps) {
 
       <TerminalSeparator />
 
+      <GraphContextBar
+        workspaceLabel={graph.scope.workspace_id}
+        environmentLabel={graph.scope.environment_id}
+        timeLabel={graph.temporal.mode === 'window' && graph.temporal.range?.kind === 'instant'
+          ? `${graph.temporal.range.start} → ${graph.temporal.range.endExclusive}`
+          : graph.temporal.mode}
+      />
+
       <Card>
         <CardHeader>
           <div>
             <CardTitle>Surfacing strategy</CardTitle>
             <p className="mt-1 text-xs text-text-secondary">Entity-first summaries keep the page dense while drill panels, graph selection, and timeline replay reveal deeper attribution only on demand.</p>
           </div>
-          <Button variant="secondary" size="sm" onClick={() => navigate(entityDetailPath(entity.type, entity.id))}>Legacy entity route</Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={() => navigateWithContext('/noesis/graph')}>Back to graph</Button>
+            <Button variant="secondary" size="sm" onClick={() => navigateWithContext(entityDetailPath(entity.type, entity.id))}>Legacy entity route</Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2">
+            <Badge variant={graph.rights?.allowed === false ? 'danger' : graph.rights?.allowed === true ? 'success' : 'warning'}>
+              Rights: {graph.rights?.allowed === false ? 'denied' : graph.rights?.allowed === true ? 'allowed' : 'backend-enforced'}
+            </Badge>
+            <Badge>Evidence: {graph.evidence.length > 0 ? graph.evidence.length : 'not returned'}</Badge>
             {['active hours', 'regions', 'spending', 'devices', 'browsers', 'platforms', 'protocols', 'rewards', 'automation ratio', 'trust/risk', 'wallet flows', 'execution traces'].map((label) => <Badge key={label}>{label}</Badge>)}
           </div>
         </CardContent>
@@ -163,7 +232,18 @@ export function Profile360View({ type, id, onBack }: Profile360ViewProps) {
         <TabsContent value="consent"><Profile360ConsentPanel sections={sections.consent ?? []} /></TabsContent>
         <TabsContent value="provenance"><Profile360ProvenancePanel sections={sections.provenance ?? []} /></TabsContent>
         <TabsContent value="quality"><Profile360QualityPanel sections={sections.quality ?? []} /></TabsContent>
-        <TabsContent value="graph"><Profile360GraphPanel graph={graph} highlightedNodeIds={highlightedNodeIds} onHighlight={actions.highlightNodes} onDrill={onDrill} /></TabsContent>
+        <TabsContent value="graph"><Profile360GraphPanel graph={profileGraph} highlightedNodeIds={highlightedNodeIds} onHighlight={(nodeIds) => {
+          actions.highlightNodes(nodeIds);
+          if (nodeIds[0]) {
+            const node = profileGraph.nodes.find((candidate) => candidate.id === nodeIds[0]);
+            if (node) graphActions.focusObject(graphObjectRef(graph.scope, node));
+          }
+        }} onDrill={onDrill} onOpenReference={(reference) => {
+          const ref = scopedRef(reference);
+          graphActions.focusObject(ref);
+          graphActions.selectObject(ref);
+          navigateWithContext(profile360Path(reference.type, reference.id));
+        }} /></TabsContent>
         <TabsContent value="timeline"><Profile360TimelinePanel events={timeline} onHighlight={actions.highlightNodes} onDrill={onDrill} /></TabsContent>
         <TabsContent value="analytics"><Profile360SectionGrid sections={sections.analytics ?? []} onDrill={onDrill} /></TabsContent>
         <TabsContent value="debug"><Profile360SectionGrid sections={sections.debug ?? []} onDrill={onDrill} /></TabsContent>

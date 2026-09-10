@@ -25,6 +25,7 @@ from services.rights_authority.generalization import _norm_enum_value
 logger = get_logger("aether.rights_irrl.olympus")
 
 OLYMPUS_INTERNAL_ACTOR = "olympus_internal"
+CANONICAL_OLYMPUS_ROLES = frozenset({"olympus_operator", "olympus_security_operator"})
 POLICY_VERSION = "irrl-2"
 OWNERSHIP_CLASS_OLYMPUS_KNOWLEDGE = "generalized_knowledge"
 
@@ -224,6 +225,7 @@ class KyberIntelligenceRequest(BaseModel):
     purpose: str
     requested_tenants: list[str] = Field(default_factory=list)
     requested_scope: str = ""
+    source_id: Optional[str] = None
     requested_data_classes: list[str] = Field(default_factory=list)
     requested_actions: list[str] = Field(default_factory=list)
 
@@ -307,7 +309,7 @@ class OlympusInternalAuthority:
         )
 
         # 1. Actor.
-        if request.role is None or str(request.role).strip() == "":
+        if _norm_enum_value(request.role) not in CANONICAL_OLYMPUS_ROLES:
             decision.reason_codes.append("actor_not_olympus_internal")
 
         # 2. Purpose allowlist.
@@ -384,13 +386,33 @@ class OlympusInternalAuthority:
         grant_records: Optional[list[Any]],
         decision: OlympusInternalDecision,
     ) -> None:
-        disclosure = _disclosure_classes(grant_records) if grant_records else frozenset()
-        source_use = _source_use_classes(grant_records) if grant_records else frozenset()
+        def relevant(grant: Any) -> bool:
+            tenant = getattr(grant, "tenant_id", None)
+            if request.requested_tenants and tenant not in request.requested_tenants:
+                return False
+            if request.source_id and getattr(grant, "source_id", None) != request.source_id:
+                return False
+            if _norm_enum_value(getattr(grant, "status", "active")) != "active":
+                return False
+            if getattr(grant, "revoked_at", None) is not None:
+                return False
+            expires = getattr(grant, "expires_at", None)
+            if expires:
+                try:
+                    from shared.common.common import parse_event_time
+                    if parse_event_time(str(expires)) <= utc_now():
+                        return False
+                except Exception:
+                    return False
+            return True
+        grants = [g for g in (grant_records or []) if relevant(g)]
+        disclosure = _disclosure_classes(grants) if grants else frozenset()
+        source_use = _source_use_classes(grants) if grants else frozenset()
         requested_classes = [_norm_enum_value(c) for c in request.requested_data_classes or []]
         raw_requested = any(c.startswith(RAW_DATA_CLASS_PREFIX) for c in requested_classes)
         cross_tenant = len(request.requested_tenants or []) > 1
 
-        if not grant_records:
+        if not grants:
             # No grant confirmation available → fail closed on anything that
             # could expose tenant-identifiable raw material.
             if raw_requested:

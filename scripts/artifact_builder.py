@@ -9,6 +9,11 @@ import json
 import subprocess
 from pathlib import Path
 
+try:  # Works both as ``python scripts/artifact_builder.py`` and as a module.
+    from delivery_contracts import DeploymentImpact, validate_release_candidate
+except ModuleNotFoundError:  # pragma: no cover - import-mode compatibility
+    from scripts.delivery_contracts import DeploymentImpact, validate_release_candidate
+
 
 def digest_file(path: Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
@@ -44,6 +49,9 @@ def verify_candidate(
     expected_commit: str | None,
 ) -> dict:
     candidate = json.loads(candidate_path.read_text())
+    errors = validate_release_candidate(candidate)
+    if errors:
+        raise ValueError("invalid release candidate: " + "; ".join(errors))
     actual: dict[str, str] = {}
     for item in components:
         name, separator, raw_path = item.partition("=")
@@ -58,6 +66,8 @@ def verify_candidate(
     if aggregate_digest(actual) != candidate.get("artifact_digest"):
         raise ValueError("aggregate artifact digest does not match immutable candidate")
     lock_digests = {str(Path(path)): digest_file(Path(path)) for path in sorted(lockfiles)}
+    if lock_digests != candidate.get("dependency_lock_digests"):
+        raise ValueError("dependency lock hash/digests do not match immutable candidate")
     if aggregate_digest(lock_digests) != candidate.get("dependency_lock_hash"):
         raise ValueError("dependency lock hash does not match immutable candidate")
     if expected_commit and candidate.get("commit_sha") != expected_commit:
@@ -74,6 +84,10 @@ def main() -> int:
     parser.add_argument("--affected-domain", action="append", default=[])
     parser.add_argument("--required-check", action="append", default=[])
     parser.add_argument("--migration-version", default="none")
+    parser.add_argument("--risk-level", choices=("low", "medium", "high", "critical"), default="medium")
+    parser.add_argument("--security-sensitive", action="store_true")
+    parser.add_argument("--data-contract-change", action="store_true")
+    parser.add_argument("--approval-required", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--verify", action="store_true", help="verify an existing candidate instead of creating it")
     parser.add_argument("--expected-commit")
@@ -99,20 +113,38 @@ def main() -> int:
     if not components:
         parser.error("at least one --component is required")
     lock_digests = {str(Path(p)): digest_file(Path(p)) for p in sorted(args.lockfile)}
+    # Keep the default in one normalized value so candidate validation and
+    # DeploymentImpact cannot disagree when callers omit --affected-domain.
+    affected_domains = sorted(set(args.affected_domain or ["delivery"]))
+    impact = DeploymentImpact.for_candidate(
+        profile=args.profile[0],
+        components=sorted(components),
+        affected_domains=affected_domains,
+        migration_version=args.migration_version,
+        risk_level=args.risk_level,
+        security_sensitive=args.security_sensitive,
+        data_contract_change=args.data_contract_change,
+        approval_required=args.approval_required,
+    )
     candidate = {
         "schema_version": 1,
         "release_candidate_id": args.candidate_id,
         "commit_sha": git_sha(),
         "artifact_digest": aggregate_digest(components),
         "dependency_lock_hash": aggregate_digest(lock_digests),
+        "dependency_lock_digests": lock_digests,
         "contract_versions": {}, "migration_version": args.migration_version,
         "model_versions": {}, "policy_versions": {},
         "deployment_profiles": sorted(set(args.profile)),
-        "affected_domains": sorted(set(args.affected_domain)),
+        "affected_domains": affected_domains,
         "required_checks": sorted(set(args.required_check)),
         "component_digests": components,
+        "deployment_impact": impact.as_dict(),
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
     }
+    errors = validate_release_candidate(candidate)
+    if errors:
+        parser.error("invalid release candidate: " + "; ".join(errors))
     write_once(args.output, candidate)
     print(json.dumps({"status": "PASS", "artifact_digest": candidate["artifact_digest"], "output": str(args.output)}))
     return 0

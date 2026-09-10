@@ -32,10 +32,20 @@ reviewed_source_commits:
     reason: "WS-4 review (enduser-lifecycle lane, contextual readiness). Reviewed the additive features/integrations readiness surface (useTenantIntegrationReadiness calling restClient directly + readiness-context advisor + tenant-readiness zod types) and its consumers on the Campaign 360 / Campaign Sources / Profile360 pages. Added the 'Contextual integration readiness CTAs' subsection under Connector Pages documenting the hook/advisor + §6 copy invariants. body change was required and made."
   - commit: "8b1ca3dc"
     reason: "R2 WS-6 re-stamp after review (enduser-lifecycle lane, Phase 8 acceptance tail). Reviewed the new Playwright lifecycle suites A–E + shared harness added under frontend/aether/src/test/e2e/. This doc makes no claim about the tenant app's e2e/test inventory (its only test reference is Kyber unit tests at lines 842-844), and the suites are additive test surfaces, not runtime/IA changes — no body change required."
+  - commit: "b0313c2c"
+    reason: "Graph-first scope review: graph exploration requests now preserve the host-authoritative tenant/workspace/environment scope and include all coordinates in the cache key; the documented GraphContextProvider binding remains accurate."
+  - commit: "8b94e6c6"
+    reason: "Graph-first scope review: legacy semantic zoom now derives tenant authority from GraphContext and fails closed on a conflicting legacy tenant argument; backend traversal contracts remain tenant-only, so no workspace/environment claim was added."
+  - commit: "a3af9833"
+    reason: "Graph-first closure review: reviewed the governed Aether exploration controls, tenant/session-scoped readiness and client-sync caches, accessible graph object representation, context-preserving selection/history, and default-off snapshot/Noesis handoffs documented below."
+  - commit: "402c5c48"
+    reason: "Reviewed the Aether test-only timeout stabilization (static Cluster360 import and controlled signup field changes); no runtime architecture or data-truth behavior changed, so no body update was required."
+  - commit: "95e6c54f"
+    reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
-  "frontend/aether/src/": "sha256:343ecd7b778d620a55213da65cc508dff2583e9198a4caa15ce3104f62914e75"
-  "frontend/kyber/src/": "sha256:c072360167fd4871bcb45a0489ba281e06c3dee71ecf00642ece041bfcd2f28c"
-  "frontend/shared/src/": "sha256:5d8c4967068ea43d5944f68685b7a9d00c33d1bc6343c2c2172170c4e4e5f681"
+  "frontend/aether/src/": "sha256:b7460a94acf4bc1d54795194a3fe95ab63f9dee8a52a0ce7dad8d6de2ae2bc3a"
+  "frontend/kyber/src/": "sha256:30b10c0aa88d9e9784bc97bcbf174816b45479bfdb48f860a8290d2b41345e71"
+  "frontend/shared/src/": "sha256:abef2b4bb7b38a0124fbf2180dd1de701e533d1bbd57866d57b1848815332a2c"
 ---
 
 # Aether Frontend Architecture & Designer Handoff
@@ -83,7 +93,7 @@ There are two separate frontend applications. **Do not mix them up.**
   handoff-derived `/settings/integrations?…` target, else `/settings`.
 - The intelligence **graph canvas** showing the tenant's users, organizations, and AI agents — layer/overlay toggles (H2H/H2A/A2H/A2A, risk, trust, campaign, economic, fraud), path finder with multi-hop traversal modes (Shortest / Strongest / K-Shortest), cluster panel, and cluster drill-down to Cluster360; summary strip (entity/relationship/cluster/risk-alert counts), truncation warning when entity set exceeds 200, replay mode with date picker, observation-class node styling (solid/dashed/dotted borders), Recommendation/Prediction outcome panel in Inspector, **PathInspector** panel (shown in right panel when a path is active — Overview/Hops/Evidence/Score tabs, save-to-investigation action)
 - **Cluster360** (`/clusters/:clusterId`) — 7-tab cluster surface: Overview (type, state, formation reason, confidence, risk score, properties), Members (paginated DataTable with confidence + join date), Timeline (merge/split/growth events), Economic (revenue, spend, LTV, value tier, top-member breakdown), Campaigns (attributed campaigns, top channel, conversion rate), Risk (aggregate score, fraud network link, alert count, evidence refs, high-risk members), Geography (country distribution bars, concentration score)
-- **Semantic zoom** — graph canvas supports server-backed macro→cluster→entity zoom: macro level uses a `depth: 1` query scoped to cluster node types (the backend minimum depth is 1; depth-0 is rejected); clicking a cluster fetches depth-1 member expansion via `useGraphZoom(tenantId?)`
+- **Semantic zoom** — graph canvas supports server-backed macro→cluster→entity zoom: macro level uses a `depth: 1` query scoped to cluster node types (the backend minimum depth is 1; depth-0 is rejected); clicking a cluster fetches depth-1 member expansion via `useGraphZoom(tenantId?)`. The helper derives tenant authority from `GraphContext` and fails closed if a legacy tenant argument conflicts; the current traversal API is tenant-only until a separate workspace/environment contract migration.
 - **Entity Profile360** panels — what tenants drill into when they click a graph node
 - **Geographic Intelligence** view — their users by location
 - **Social Intelligence** panels — their users' social platform presence
@@ -147,7 +157,55 @@ There are two separate frontend applications. **Do not mix them up.**
   [brand-system architecture](brand-system/architecture.md), and
   [migration guide](brand-system/migration.md).
 - `TimeWindowSelector`, `FreshnessIndicator`, `EvidenceDrawer`, `UsageBar`, `Toast`, etc.
+- **Graph-first exploration runtime** (`frontend/shared/src/exploration/`):
+  `GraphContextProvider` extends the existing exploration provider/store with
+  one authoritative graph context for query, selection, presentation,
+  snapshots, and diffs. Hosts must supply the full tenant/workspace/environment
+  scope; changing any scope coordinate clears scoped selection and exploration
+  history rather than leaking them into the new workspace.
+  The Aether host maps router paths such as `/explore`, `/graph`, and the
+  registered analytical deep links to exploration surface IDs before mounting
+  the provider; an unknown path uses the graph surface as the safe default, so
+  route names never become backend surface identifiers.
+- **Authority-free graph deep links:** URL state is restricted to bounded,
+  registry-valid exploration inputs. Tenant and surface remain host-owned, and
+  workspace, environment, truth/evidence, rights, confidence, history, and
+  approval state are never accepted from the URL.
+- **Governed lens composition:** the frontend lens runtime joins the generated
+  lens, intelligence-projection, and surface registries. A family with no
+  canonical registry entry or compatible projection is reported as pending or
+  not ready; the UI does not manufacture availability.
+- **Aether host binding:** authenticated Aether sessions fetch `/v1/me` and
+  mount `GraphContextProvider` only after the returned `graph_scope` matches the
+  authenticated tenant and supplies a workspace, logical environment, and the
+  supported `single_workspace_tenant_v1` authority model. Loading, transport
+  failure, incomplete scope, and tenant mismatch render explicit unavailable
+  states; no route or build-time environment value can become graph authority.
+  Kyber remains on its existing host runtime and is not part of this migration.
+- **Shared graph workspace chrome:** `GraphWorkspaceFrame`,
+  `GraphContextBar`, `GraphTimeRail`, and `NoesisContextStrip` are controlled
+  presentation components. They render supplied graph state without owning a
+  router, authentication, fetching, or a second context store.
+- **Graph-first interaction safeguards:** graph query transport serializes only
+  the endpoint's supported tenant/surface coordinates while cache keys retain
+  the full host-authoritative tenant/workspace/environment scope. Object,
+  cluster, edge, snapshot, and diff selections use the same typed
+  `GraphObjectRef`/history seam, preserving context on navigation. Production
+  selections append canonical history entries, while previous/next traversal
+  updates focus without mutating the trail order. Opening Noesis carries the
+  encoded `GraphContext` query so focus, filters, and temporal state remain
+  visible to the destination. The graph page also exposes a bounded
+  keyboard-searchable object/relationship list for non-visual access.
+- **Optional snapshot and Noesis governance controls:** immutable exploration
+  snapshot/diff controls and Noesis trace/proposal handoff controls are
+  default-OFF feature flags. Noesis routes governed recommendations to the
+  existing Decision Intelligence review surface; approval controls remain
+  permission-gated and no opaque response can dispatch an action directly.
 - **Canonical value display** (`frontend/shared/src/value/`): `ValueDisplay`, `USDValue`, `NativeValueBreakdown`, `ValuationWarning` + `formatUSD` / `formatNativeValue` / `formatAetherValue`. USD-first with native drilldown; absent/unpriced values render "Value unavailable", never `$0.00`. All financial values must render through these — enforced by `scripts/validate_frontend_value_display.py`. See [`FINANCIAL_VALUE_SEMANTICS.md`](source-of-truth/FINANCIAL_VALUE_SEMANTICS.md).
+- **Canonical temporal validation** (`frontend/shared/src/time/validation.ts`):
+  shareable graph state delegates ISO-instant and IANA-zone validation to the
+  shared time module. Exploration codecs do not introduce local `Date` or
+  `Intl` policy outside that authority.
 - Graph layer type contracts: `RelationshipLayer` (`H2H | H2A | A2H | A2A`), `RELATIONSHIP_LAYERS`, `LAYER_DESCRIPTIONS`, `EDGE_LAYER_MAP`, `classifyEdgeType`, `countEdgesByLayer` — shared between Aether and Kyber graph health features
 - **Path intelligence types** (Phase 20): `PathClassification`, `PathNode`, `PathEdge`, `PathScoreBreakdown`, `RelationshipPath`, `PathExplanation`, `TraversalSnapshot`, `PathQuery`, `PathQueryResponse`, `NodeExpansionRequest`, `NodeExpansionResponse`, `DeepTraversalJob` — canonical TS contracts in `packages/shared/operational-intelligence.ts`, mirroring the Pydantic models exactly
 
@@ -217,8 +275,9 @@ The UX must surface these moments. **The graph makes the invisible visible.**
 The intelligence graph is the primary surface. Entity profiles are drilldowns from selected graph nodes.
 
 ```
-/graph                           → graph canvas, full tenant entity graph
-/graph?focus={entity_id}         → graph canvas centered on entity + 1-hop neighbors
+/explore                         → primary Aether graph workspace
+/explore?focus={entity_id}       → graph workspace centered on entity + 1-hop neighbors
+/graph[?query]                   → legacy redirect to /explore, preserving query and hash
 /profile/{entity_id}             → full-screen Profile360 for selected entity
 /profile/{entity_id}/{tab}       → Profile360 at a specific tab
 /geo                             → geographic intelligence view (global)
@@ -227,6 +286,30 @@ The intelligence graph is the primary surface. Entity profiles are drilldowns fr
 /payment-rails                   → payment rail observability (flag-gated, observation-only)
 /ai-efficiency                   → AI efficiency dashboard (flag-gated; proposals only)
 ```
+
+The authenticated tenant landing target is `/explore` once activation is
+complete. The minimal application rail exposes Explore plus real Sources and
+Settings capabilities; Findings, Investigations, Outcomes, and Reports remain
+visibly not ready instead of linking to fabricated surfaces. Explore composes
+the shared context bar, time rail, and collapsed Noesis context strip around
+the existing server-backed graph canvas, loading/error/empty states, table/path
+modes, and inspector. The lens dock reports availability from the generated
+lens/projection registries; it remains non-executing until the graph query seam
+accepts canonical lens identifiers, so a visible lens never implies a filter
+was applied. Selecting a real graph node synchronizes the shared GraphContext
+focus and URL, and entity nodes can open the existing Profile360 route. The
+Noesis strip links to the existing Noesis surface rather than synthesizing
+recommendations.
+
+Activation joins its server-owned lifecycle state with the typed tenant
+readiness snapshot to show the current stage, next permitted action, graph
+evidence state, and blocked/external recovery paths. It derives no numeric
+maturity score: `no_data`, `building`, and `ready` come from the named launch
+checks. Completed activation offers an explicit Explore handoff without an
+automatic redirect. The tenant decision panel likewise separates approval from
+execution: it records the authenticated decision, creates a durable planned
+action, and tells the user that a configured target is still required before
+dispatch.
 
 Campaign360 gains a **Targeting Intelligence** tab and Cluster360 a
 **Targeting Impact** tab (flag-gated; observation-only — "Aether does not

@@ -12,10 +12,13 @@ source_files:
   - frontend/demo/
   - scripts/validate_frontend_data_truth.py
   - scripts/docs_extract/extract_frontend_data_truth_inventory.py
+reviewed_source_commits:
+  - commit: "95e6c54f"
+    reason: "Reviewed the Aether frontend route/history context fixes, explicit shared ESM imports, and Data Exchange E2E graph-scope fixture. Runtime data-truth counts and the test-only fixture classification remain unchanged, so no body update was required."
 source_hashes:
-  "frontend/aether/": "sha256:22244935448016945e4e674bf3f6d9e2dbb11c9f1876769fd4e6c89288403f95"
+  "frontend/aether/": "sha256:eea6b34d6996c949d06fe79e713861a2641d4a60acd65041afeddf9a6e8ebd6f"
   "frontend/demo/": "sha256:34d2e8d3ad5ae8af2099a733f77ebb6ca695a25c69ca8b8a7de18a565ebc33fb"
-  "frontend/kyber/": "sha256:0e592231a63bee0c6be0e75be15c3d586e7ccc95f8f94c1838f26ca556a3a248"
+  "frontend/kyber/": "sha256:b15401c58d3224403a9260ca8c20e8c90c5c0c053200de743deb4a468dc3a73d"
   "scripts/docs_extract/extract_frontend_data_truth_inventory.py": "sha256:d32fbf2cfaccccb7420cf6ba0ef4e25030a27dc43fc03d50a04e168db8c0cc92"
   "scripts/validate_frontend_data_truth.py": "sha256:2447697a49724cf7ddd297f95f2cf6554761993cebe07b30c721c7af9c22ec7a"
 ---
@@ -30,7 +33,7 @@ states the classification and release interpretation.
 
 ## Final disposition
 
-- Historical findings classified in PR1: 714.
+- Historical findings classified in PR1: 715.
 - Pending historical findings: 0.
 - Runtime Aether mock or fixture imports: 0.
 - Runtime Kyber mock or fixture imports: 0.

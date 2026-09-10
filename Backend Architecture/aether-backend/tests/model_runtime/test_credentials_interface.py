@@ -213,6 +213,10 @@ async def test_resolver_health():
 def test_is_configured_env_gated(monkeypatch):
     resolver = _EnvGatedResolver()
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    # The assertion below is about provider-specific gating, not the
+    # developer's ambient shell.  Keep the test deterministic when a local
+    # shell/CI runner happens to export a real Anthropic credential.
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert resolver.is_configured("openai") is False
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")

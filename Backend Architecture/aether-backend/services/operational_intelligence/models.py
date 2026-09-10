@@ -523,6 +523,10 @@ class InvestigationCase(ContractModel):
     createdBy: str
     createdAt: str
     updatedAt: str
+    # Optional loop provenance.  These are additive so existing cases and
+    # non-finding investigations continue to validate unchanged.
+    findingId: Optional[str] = None
+    recommendationId: Optional[str] = None
     snapshot_id: Optional[str] = None
     path_ids: list[str] = Field(default_factory=list)
     pinned_node_ids: list[str] = Field(default_factory=list)

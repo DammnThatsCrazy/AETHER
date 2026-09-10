@@ -13,10 +13,13 @@ source_files:
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
+reviewed_source_commits:
+  - commit: "5bfb9394"
+    reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
   "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
   "Backend Architecture/aether-backend/middleware/middleware.py": "sha256:e320a85428e219bd745ff298a6b3a8a7404a1f72b562e65d4f7682e722ecb79c"
-  "packages/shared/": "sha256:11b4d4a05c0f8d3136da1b3b37ed304a0215b603b305b521c34b1901e5752fad"
+  "packages/shared/": "sha256:8e79c77f302663bfd0b7878519bd39736b4f3fc72d4f991f5db1ed3fda05c8cd"
 ---
 # Aether vNext — Architecture Guide
 
@@ -499,6 +502,62 @@ projection-backed surface adapters
 The design decision is [ADR-010](decisions/ADR-010-intelligence-projection-plane.md);
 the source-of-truth is
 [INTELLIGENCE_PROJECTION_ARCHITECTURE.md](source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md).
+
+### Graph operating contracts
+
+The graph-first product runtime adds shared contracts without creating a
+second truth system. `packages/shared/graph-context-contract.ts` defines the
+authoritative `GraphScope` tuple (tenant, workspace, and environment), scoped
+object references, one selection vocabulary, immutable snapshots and diffs,
+scope-safe persistence, and deterministic scope switching. Its canonical query
+adapter accepts the existing `UniversalGraphQueryRequest` and reports any
+lossy translation explicitly. Contract validation fails closed when references,
+workspace scope, temporal modes, depth, or result bounds are inconsistent.
+
+`packages/shared/action-runtime-contract.ts` defines the decision, execution,
+approval, impact, and rollback/reversibility envelopes used to govern graph
+actions. Its transition guards require approval validity and bound execution
+evidence before terminal states can be recorded; requested approval level and
+scope are preserved while tenant and decision identity remain bound to the
+outer transition context. Execution validation checks every plan-step target
+against the execution tenant/environment and the canonical top-level target
+set. These modules are exported
+from the shared package as types and deterministic validation/transition
+helpers; they do not introduce a parallel executor, a new source of record, or
+proof that every application host has mounted the runtime. Aether now obtains
+its graph scope from the authenticated `/v1/me` profile and refuses to render
+graph-native children while that server-owned scope is loading, incomplete, or
+inconsistent with the authenticated tenant. The current
+`single_workspace_tenant_v1` authority maps one workspace to each tenant and
+uses the logical graph environment `production`; neither coordinate comes from
+the URL or deployment configuration. Kyber has not yet migrated to this
+runtime. The Aether `/explore` surface is nevertheless classified as
+parity-required in the generated Kyber feature-surface manifest, so authorized
+internal tenant-mirror inspection uses the existing generic mirror capability
+and disclosure policy rather than exposing Kyber in the customer product.
+
+Lens identity remains registry-governed: `packages/shared/contracts/lens-registry.json`
+generates `packages/shared/lenses_generated.ts`, and projection availability
+continues to come from the intelligence-projection registry. Frontend lens
+composition joins those generated authorities instead of hardcoding duplicate
+readiness or truth claims.
+
+Graph rights resolve through the canonical Rights Authority rather than a
+graph-local ledger. `packages/shared/contracts/rights-vocabulary.json` and its
+TypeScript/Python bindings define the shared vocabulary, while the mounted,
+rollout-gated `/v1/rights` surface records effective decisions and revocation
+impact within the authenticated tenant boundary. The graph context carries
+rights policy and references only; enforcement, retention, training use, and
+generalization decisions remain owned by the Rights Authority.
+
+The graph-first runtime keeps transport and authority separate: `/v1/explore`
+requests serialize only the tenant/surface coordinates currently supported by
+that endpoint, while client cache keys retain the full host-authoritative
+tenant/workspace/environment scope. Backend traversal validates anchors and
+filters explicitly foreign graph edges before limits. Immutable snapshot/diff
+controls and Noesis proposal review remain default-OFF and route any governed
+approval back through the existing permission-checked Decision Intelligence
+surface.
 
 ### Provider transport adapters
 

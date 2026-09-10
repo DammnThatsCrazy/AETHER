@@ -16,9 +16,9 @@ estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
   "AGENTS.md": "sha256:9c93d298d9048a47ebbc2bbebdfba02095972cef5b0bd8f1a16b56a41b816f0e"
-  "Makefile": "sha256:a4b5c4a15da7d8cf3dd315720519dd705ab07c6969bc941773e90cc593851a32"
+  "Makefile": "sha256:71b989d884944c3846eed23261929f0c89f07e19f8c4fd9031c6abfa1938287e"
   "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:88620327df8f66f95bb246548a484530a7fcc02388ce54fd167c6555f6157e37"
-  "scripts/repo_doctor.py": "sha256:4334d19a1e0b2388cd9f6c98775d43248181d00e8bbf4bd17e8723c3e8a63c7c"
+  "scripts/repo_doctor.py": "sha256:6006bff9bccd90d55070608eb2f9d05ddc0274a6b5b1ce129fc392a684ae96b2"
 ---
 
 # Contributing
@@ -36,6 +36,24 @@ Before opening or updating a PR:
 5. Do not bypass TypeScript/package export failures.
 6. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
 7. PR is not complete until `make ci-check` exits 0.
+
+Repository-doctor Python subprocesses inherit the interpreter running
+`scripts/repo_doctor.py` (normally `.venv/bin/python` through the Makefile), so
+the canonical gate does not depend on a separate bare `python` executable.
+
+The canonical CI gate also validates the impact-aware verification router, the
+environment capability requirement registry, the GitHub-only deployment
+operator boundary, and the delivery workflow authority map. These checks
+validate repository policy; they do not claim that AWS credentials, runtime
+validation, or production promotion occurred. The authority map records which
+GitHub workflow currently owns each delivery authority while the workflow
+estate is being converged; it does not make Kyber a deployment surface.
+The gate also enforces parity among the canonical rights vocabulary and its
+Python/TypeScript bindings and rejects parallel rights registries.
+For a resumable staging attempt, `make deploy-staging` accepts
+`STATE=<checkpoint.json>` and optionally `ENVIRONMENT_RESOLUTION=<json>`; each
+resume is bound to the same release-candidate identity and pre-mutation
+resolution decision.
 
 ## Generated docs
 

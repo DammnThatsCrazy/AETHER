@@ -62,6 +62,11 @@ class DataFreshness(BaseModel):
 class Recommendation(BaseModel):
     recommendation_id: str
     tenant_id: str
+    # Optional provenance links used when a recommendation is promoted from a
+    # finding/investigation.  Legacy recommendations remain valid, but new
+    # loop records can now be traced back to their initiating signal.
+    finding_id: str | None = None
+    investigation_id: str | None = None
     entity_id: str | None = None
     population_id: str | None = None
     recommendation_type: str
@@ -91,6 +96,8 @@ class Recommendation(BaseModel):
 class DecisionRecord(BaseModel):
     decision_id: str
     recommendation_id: str
+    finding_id: str | None = None
+    investigation_id: str | None = None
     actor_id: str
     selected_action: CandidateAction | None = None
     rejected_actions: list[CandidateAction] = Field(default_factory=list)
@@ -104,6 +111,9 @@ class DecisionRecord(BaseModel):
 class ActionFeedback(BaseModel):
     action_id: str
     decision_id: str
+    recommendation_id: str | None = None
+    finding_id: str | None = None
+    investigation_id: str | None = None
     action_type: str
     system: str | None = None
     integration: str | None = None
@@ -146,6 +156,8 @@ class ActionDispatch(BaseModel):
     action_id: str
     decision_id: str
     recommendation_id: str
+    finding_id: str | None = None
+    investigation_id: str | None = None
     target_type: str
     config_id: str | None = None
     status: Literal["queued", "dispatched", "delivered", "failed", "cancelled"] = "queued"
@@ -193,6 +205,8 @@ class OutcomeObservation(BaseModel):
     outcome_id: str
     action_id: str
     recommendation_id: str
+    finding_id: str | None = None
+    investigation_id: str | None = None
     entity_id: str | None = None
     population_id: str | None = None
     outcome_type: str

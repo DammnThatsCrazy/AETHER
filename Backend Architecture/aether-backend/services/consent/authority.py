@@ -165,6 +165,22 @@ class ConsentReceiptRepository(BaseRepository):
         else:
             return None
         rows = await self.find_many(filters=filters, limit=1)
+        # Compatibility with canonical envelopes written by newer adapters:
+        # some stores retain the subject under ``subject_ref`` while the
+        # legacy row shape uses ``subject_id``.  Keep tenant/purpose filtering
+        # authoritative and only accept an exact subject match.
+        if not rows:
+            candidates = await self.find_many(
+                filters={"tenant_id": tenant_id, "purpose": purpose}, limit=10000
+            )
+            key, expected = (
+                ("subject_id", subject_id) if subject_id else ("anonymous_id", anonymous_id)
+            )
+            rows = [
+                row for row in candidates
+                if row.get(key) == expected
+                or (subject_id is not None and row.get("subject_ref") == expected)
+            ]
         return rows[0] if rows else None
 
     async def record(

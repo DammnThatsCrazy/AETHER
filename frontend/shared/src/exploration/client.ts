@@ -13,7 +13,10 @@ import type {
   ExplorationAnchor,
   ExplorationContextV1,
   ExplorationResultEnvelope,
+  ExplorationSnapshot,
+  ExplorationSnapshotComparison,
 } from '@aether/shared/exploration-contract';
+export type { ExplorationSnapshot, ExplorationSnapshotComparison } from '@aether/shared/exploration-contract';
 import type {
   FilterExpression,
   FilterGroup,
@@ -83,6 +86,12 @@ export interface SaveExplorationViewRequest {
   context: ExplorationContextV1;
   name: string;
   view_id?: string | undefined;
+}
+
+export interface CreateExplorationSnapshotRequest {
+  context: ExplorationContextV1;
+  name?: string | undefined;
+  limit?: number | undefined;
 }
 
 export interface ResolveContextLinkRequest {
@@ -205,6 +214,22 @@ export interface ExplorationClient {
     options?: ExplorationRequestOptions,
   ): Promise<SavedExplorationView>;
   deleteView(viewId: string, options?: ExplorationRequestOptions): Promise<string>;
+  listSnapshots(
+    pagination?: { limit?: number | undefined; offset?: number | undefined },
+    options?: ExplorationRequestOptions,
+  ): Promise<Array<Omit<ExplorationSnapshot, 'result' | 'context'>>>;
+  createSnapshot<T = unknown>(
+    request: CreateExplorationSnapshotRequest,
+    options?: ExplorationRequestOptions,
+  ): Promise<{ snapshot: ExplorationSnapshot<T>; envelope: ExplorationResultEnvelope<T> }>;
+  getSnapshot<T = unknown>(
+    snapshotId: string,
+    options?: ExplorationRequestOptions,
+  ): Promise<ExplorationSnapshot<T>>;
+  compareSnapshot(
+    snapshotId: string,
+    options?: ExplorationRequestOptions,
+  ): Promise<ExplorationSnapshotComparison>;
   resolveLink(
     request: ResolveContextLinkRequest,
     options?: ExplorationRequestOptions,
@@ -352,6 +377,47 @@ export function createExplorationClient(transport: ExplorationTransport): Explor
         signal: options?.signal,
       });
       return response.data.deleted;
+    },
+    async listSnapshots(
+      pagination?: { limit?: number | undefined; offset?: number | undefined },
+      options?: ExplorationRequestOptions,
+    ) {
+      const queryParams = new URLSearchParams();
+      if (pagination?.limit !== undefined) queryParams.set('limit', String(pagination.limit));
+      if (pagination?.offset !== undefined) queryParams.set('offset', String(pagination.offset));
+      const suffix = queryParams.size ? `?${queryParams.toString()}` : '';
+      const response = await transport<{
+        snapshots: Array<Omit<ExplorationSnapshot, 'result' | 'context'>>;
+      }>({ method: 'GET', path: `/v1/explore/snapshots${suffix}`, signal: options?.signal });
+      return response.data.snapshots;
+    },
+    async createSnapshot<T = unknown>(
+      request: CreateExplorationSnapshotRequest,
+      options?: ExplorationRequestOptions,
+    ) {
+      assertRegistryValidContext(request.context);
+      let body = withOptional({ context: request.context }, 'name', request.name);
+      body = withOptional(body, 'limit', request.limit);
+      return post<{ snapshot: ExplorationSnapshot<T>; envelope: ExplorationResultEnvelope<T> }>(
+        '/v1/explore/snapshots', body, options?.signal,
+      );
+    },
+    async getSnapshot<T = unknown>(snapshotId: string, options?: ExplorationRequestOptions) {
+      const response = await transport<{ snapshot: ExplorationSnapshot<T> }>({
+        method: 'GET',
+        path: `/v1/explore/snapshots/${encodeURIComponent(snapshotId)}`,
+        signal: options?.signal,
+      });
+      return response.data.snapshot;
+    },
+    async compareSnapshot(snapshotId: string, options?: ExplorationRequestOptions) {
+      const response = await transport<{ comparison: ExplorationSnapshotComparison }>({
+        method: 'POST',
+        path: `/v1/explore/snapshots/${encodeURIComponent(snapshotId)}/compare`,
+        body: {},
+        signal: options?.signal,
+      });
+      return response.data.comparison;
     },
     resolveLink(request, options) {
       assertRegistryValidContext(request.context);

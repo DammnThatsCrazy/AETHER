@@ -377,6 +377,13 @@ export interface DisclosureAuthority {
   generalized_external?: DisclosureBoundary | 'governed';
 }
 
+/** RetentionAuthority (blueprint §3.5) — explicit lifecycle precedence and
+ * defaults; omission is an undecided, fail-closed authority. */
+export interface RetentionAuthority {
+  precedence?: string;
+  lifecycle_defaults?: readonly string[];
+}
+
 /**
  * TerminationAuthority (blueprint §3.5) — the rights-aware lifecycle outcomes
  * on tenant termination. Termination is NOT a universal hard delete; every
@@ -541,6 +548,7 @@ export interface DataRightsGrantStructured {
   // ── Policy metadata ───────────────────────────────────────────────────────
   legal_basis: string;
   consent_basis?: string;
+  subject_ref?: string;
   granted_by_user_id: string;
   granted_at: string;
   expires_at?: string;
@@ -560,6 +568,8 @@ export interface DataRightsGrantStructured {
   disclosure_authority?: DisclosureAuthority;
   /** Structured termination authority (§3.5). */
   termination_authority?: TerminationAuthority;
+  /** Structured retention authority (§3.5). */
+  retention_authority?: RetentionAuthority;
   /** Intelligence Rights Profile preset this grant conforms to (§3.6). */
   rights_profile?: IntelligenceRightsProfile;
 }
@@ -581,6 +591,7 @@ export const dataRightsStructuredFieldKeys = [
   'learning_authority',
   'disclosure_authority',
   'termination_authority',
+  'retention_authority',
   'rights_profile',
   // vocabulary `as const` array names
   'rightsDerivationClasses',

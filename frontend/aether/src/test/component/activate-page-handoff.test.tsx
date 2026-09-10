@@ -72,6 +72,7 @@ const AD_CATEGORY = {
 vi.mock("@aether-app/features/activation/use-activation", () => ({
   ACTIVATION_PLAN_TIERS: ["P1", "P2", "P3", "P4"],
   activationStateLabel: (s: string) => s,
+  activationNextAction: (s: string) => `next: ${s}`,
   activationCapabilityState: () => "provisioning",
   useActivationStatus: () => state.status,
   useSelectPlan: () => state.mutation,
@@ -80,6 +81,15 @@ vi.mock("@aether-app/features/activation/use-activation", () => ({
   useSendTestEvent: () => state.sendEvent,
   useFirstValue: () => state.firstValue,
   useCompleteActivation: () => state.mutation,
+}));
+
+vi.mock("@aether-app/features/activation/use-tenant-readiness", () => ({
+  useTenantReadiness: () => ({
+    data: undefined,
+    isLoading: false,
+    error: null,
+  }),
+  deriveGraphMaturity: () => ({ state: "no_data", blocking: [] }),
 }));
 
 vi.mock("@aether-app/features/activation/use-activation-intents", () => ({
@@ -305,5 +315,24 @@ describe("ActivatePage activation deep-link prefill", () => {
     expect(document.querySelector('[data-handoff-focus="true"]')).toBeNull();
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
     expect(state.mutation.mutate).not.toHaveBeenCalled();
+  });
+
+  it("offers the graph workspace only when backend activation is exactly complete", () => {
+    setEmptyDurable();
+    state.status.data = { ...NOT_STARTED, state: "complete" };
+    renderActivateAt("/activation");
+
+    const handoff = screen.getByTestId("activation-explore-handoff");
+    expect(handoff).toHaveAttribute("href", "/explore");
+    expect(handoff).toHaveTextContent("Your graph workspace is available");
+  });
+
+  it("does not claim graph readiness for a non-complete activation state", () => {
+    setEmptyDurable();
+    state.status.data = { ...NOT_STARTED, state: "first_value_ready" };
+    renderActivateAt("/activation");
+
+    expect(screen.queryByTestId("activation-explore-handoff")).toBeNull();
+    expect(screen.queryByText(/graph workspace is available/i)).toBeNull();
   });
 });

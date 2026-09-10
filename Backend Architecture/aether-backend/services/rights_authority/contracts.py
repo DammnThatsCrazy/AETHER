@@ -76,6 +76,7 @@ class RightsDecisionRequest(BaseModel):
     requested_use: str
     purpose: str
     destination: str
+    subject_ref: Optional[str] = None
     as_of: Optional[str] = None
 
 

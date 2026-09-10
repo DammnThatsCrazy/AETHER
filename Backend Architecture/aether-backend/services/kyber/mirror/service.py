@@ -73,6 +73,9 @@ SURFACE_VERTEX_TYPES: dict[str, tuple[str, ...]] = {
     "users": ("User",),
     "users-id": ("User",),
     "clusters-clusterId": ("IdentityCluster",),
+    # Explore is Aether's primary route over the canonical graph projection;
+    # the internal mirror must reuse the same resolver, not recompute a view.
+    "explore": ("Entity", "IdentityCluster"),
     "graph": ("Entity", "IdentityCluster"),
     # Campaigns
     "campaigns": ("Campaign",),

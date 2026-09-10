@@ -6,6 +6,8 @@ import {
   Tabs, TabsList, TabsTrigger, TabsContent,
   EmptyState,
 } from '@aether/ui';
+import type { TimeWindow } from '@aether/ui';
+import { useGraphActions, useGraphContext } from '@aether/ui/exploration';
 import { PageWrapper } from '@kyber/components/layout';
 import { cn } from '@kyber/lib/utils';
 import { GraphCanvas } from '@kyber/components/graph/graph-canvas';
@@ -14,6 +16,7 @@ import { GraphToolbar } from '@kyber/components/graph/graph-toolbar';
 import { GraphControls } from '@kyber/components/graph/graph-controls';
 import { useGraphData } from '@kyber/features/noesis';
 import type { GraphNode, GraphEdge, GraphCluster, GraphLayer, EntityType, GraphInspectorData } from '@kyber/types';
+import { graphObjectRef, temporalForWindow } from '@kyber/features/profile360/profile360-context';
 
 // ---------------------------------------------------------------------------
 // Edge layer classification
@@ -149,7 +152,10 @@ const NODE_TABLE_COLUMNS = [
 
 export function NoesisGraphExplorerPage() {
   const [searchParams] = useSearchParams();
-  const deepLinkedNodeId = searchParams.get('focus') ?? searchParams.get('entity') ?? searchParams.get('selected_entity');
+  const graphContext = useGraphContext();
+  const graphActions = useGraphActions();
+  const rawFocus = searchParams.get('focus') ?? searchParams.get('entity') ?? searchParams.get('selected_entity');
+  const deepLinkedNodeId = graphContext.selection.focused?.id ?? (rawFocus?.includes(':') ? rawFocus.slice(rawFocus.indexOf(':') + 1) : rawFocus);
 
   // ---- Source data (hook manages layer, overlay, visibility, and selection state) ----
   const {
@@ -162,7 +168,7 @@ export function NoesisGraphExplorerPage() {
   } = useGraphData();
 
   // ---- Local UI state ----
-  const [timeWindow, setTimeWindow] = useState('30d');
+  const [timeWindow, setTimeWindow] = useState<TimeWindow>('30d');
   const [viewMode, setViewMode] = useState<'graph' | 'table'>('graph');
 
   // ---- Selection state ----
@@ -232,9 +238,12 @@ export function NoesisGraphExplorerPage() {
     if (!node) return;
     setViewMode('graph');
     setSelectedNodeId(node.id);
+    const ref = graphObjectRef(graphContext.scope, node);
+    graphActions.focusObject(ref);
+    graphActions.selectObject(ref);
     setHighlightedClusterIds(null);
     setInspectorData({ type: 'node', data: node, neighbors: getNeighbors(node.id) });
-  }, [deepLinkedNodeId, isLoading, nodes, getNeighbors, setSelectedNodeId]);
+  }, [deepLinkedNodeId, graphActions, graphContext.scope, isLoading, nodes, getNeighbors, setSelectedNodeId]);
 
   // ---- Handle node selection ----
   const handleSelectNode = useCallback((node: GraphNode | null) => {
@@ -245,6 +254,10 @@ export function NoesisGraphExplorerPage() {
       }
       return;
     }
+
+    const ref = graphObjectRef(graphContext.scope, node);
+    graphActions.focusObject(ref);
+    graphActions.selectObject(ref);
 
     // Path mode: collect two nodes and compute shortest path
     if (pathMode) {
@@ -275,7 +288,7 @@ export function NoesisGraphExplorerPage() {
       data: node,
       neighbors: getNeighbors(node.id),
     });
-  }, [pathMode, pathSource, edges, getNeighbors]);
+  }, [pathMode, pathSource, edges, getNeighbors, graphActions, graphContext.scope]);
 
   // ---- Handle edge selection ----
   const handleSelectEdge = useCallback((edge: GraphEdge | null) => {
@@ -425,7 +438,11 @@ export function NoesisGraphExplorerPage() {
         activeOverlay={activeOverlay}
         onOverlayChange={setActiveOverlay}
         timeWindow={timeWindow}
-        onTimeWindowChange={setTimeWindow}
+        onTimeWindowChange={(next) => {
+          const window = next as TimeWindow;
+          setTimeWindow(window);
+          graphActions.setGraphContext({ ...graphContext, temporal: temporalForWindow(window) });
+        }}
         pathMode={pathMode}
         onPathModeChange={handlePathModeChange}
       />

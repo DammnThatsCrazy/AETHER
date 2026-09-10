@@ -23,6 +23,12 @@ const BACKEND_PROFILE = {
   billing: {},
   api_key_count: 1,
   is_admin: true,
+  graph_scope: {
+    tenant_id: 'tenant-from-backend',
+    workspace_id: 'tenant-from-backend',
+    environment_id: 'production',
+    scope_model: 'single_workspace_tenant_v1' as const,
+  },
 };
 
 function TestConsumer() {

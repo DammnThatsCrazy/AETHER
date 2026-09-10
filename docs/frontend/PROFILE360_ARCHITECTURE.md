@@ -13,8 +13,8 @@ canonical_owner: frontend@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "frontend/kyber/src/components/profile360/": "sha256:97915fc12711b18ca5693344ff5cb2c8d28a7d03b6c919c4ce5acb194597922e"
-  "frontend/kyber/src/features/profile360/": "sha256:cd65649e8a17ff011af23591ab9e9e2ca316f64ccc5c9c0c7a1360beec684066"
+  "frontend/kyber/src/components/profile360/": "sha256:1ff83559492baf1c8f94243087044db21ae6faa993a8c2410b8e8f199a57f740"
+  "frontend/kyber/src/features/profile360/": "sha256:1c583c2cef37ec6c3d8d2fe1754c35d38bc94fb03eb2a2dffc39d096ddf8e663"
 ---
 # Aether Profile360 Frontend Architecture
 
@@ -261,6 +261,19 @@ Backend payloads should prefer normalized references:
 Frontend adapters should perform thin field normalization only. Backend should provide pre-joined aggregations where possible to avoid frontend-side joins.
 
 ## 14. Incremental migration strategy
+
+### GraphContext continuity
+
+Kyber mounts the shared `GraphContextProvider` from the authenticated workforce
+scope. Profile360 and Noesis graph selections use tenant/environment-bound
+`GraphObjectRef` values, and route changes carry the canonical exploration query
+so temporal windows and selections survive graph → profile → graph navigation.
+The Profile360 graph offers an explicit **Back to graph** route, while rights
+and evidence remain backend-authoritative: returned rights/evidence metadata is
+retained in GraphContext, and absent metadata is rendered as unknown rather
+than treated as a client-side grant. Shared graph history is the continuity
+seam; Profile360's local store remains responsible for presentation caches and
+live profile updates.
 
 1. Ship additive Profile360 components alongside existing tabs.
 2. Feed mocked and existing profile APIs through adapters.

@@ -48,6 +48,15 @@ require monitoring, investigation, decision, or action.
   Outcome Ledger) landed in PR 3 on the existing jobs/intelligence planes —
   never a parallel finding or outcome system.
 
+Finding handoffs retain provenance across the existing loop. An investigation
+opened from a finding stores `findingId`; a recommendation promoted from that
+finding stores `finding_id` and (when present) `investigation_id`, and the
+decision, planned action/dispatch, and observed outcome records copy those
+links. This makes the complete path queryable without copying case state or
+introducing a second ledger. These links are additive and do not change the
+default-off comparison boundary or permit execution without an approved,
+policy-authorized decision.
+
 ## PR 3 engine (`services/intelligence/comparison/`, flag-gated `AETHER_COMPARISON_INTELLIGENCE_ENABLED`)
 
 | Module | Responsibility |

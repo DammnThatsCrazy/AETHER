@@ -28,25 +28,116 @@ export {
 export type { DecodeDefaults } from './url-codec';
 
 export {
+  adaptCanonicalGraphQueryToUniversalRequest,
+  adaptExplorationContextToCanonicalGraphQuery,
+  adaptExplorationContextToGraphContext,
+  canonicalGraphQueryToUniversalRequest,
+  explorationContextToCanonicalGraphQuery,
+  explorationContextToGraphContext,
+  explorationContextToUniversalRequest,
+  graphScopeAuthorityKey,
+  graphScopeChangeRequiresReset,
+  scopeAuthorityKey,
+  shouldResetForScopeChange,
+} from './graph-context-adapter';
+export type { GraphContextAdapterOptions, GraphQueryLossReport } from './graph-context-adapter';
+
+export {
+  EMPTY_SELECTION,
+  bindSnapshot,
+  clear,
+  clearSelection,
+  createSelectionState,
+  focus,
+  focusObject,
+  replaceSelection,
+  select,
+  selectObject,
+  setCompared,
+  togglePin,
+  unbindSnapshot,
+  unselect,
+  unselectObject,
+} from './selection-model';
+export type { SelectionScope } from './selection-model';
+
+export {
+  DEFAULT_EXPLORATION_TRAIL_MAX,
+  MAX_EXPLORATION_TRAIL_ENTRIES,
+  appendTrail,
+  clearHistory,
+  createExplorationHistory,
+  nextFocus,
+  previousFocus,
+} from './history';
+export type { ExplorationHistory } from './history';
+
+export {
+  allBlueprintLenses,
+  allLenses,
+  blueprintLensIds,
+  blueprintLensRegistry,
+  getBlueprintLens,
+  getLens,
+  getLensEntry,
+  isKnownBlueprintLens,
+  lensRegistry,
+  lensSupportsObject,
+  lensSupportsSurface,
+  phase1LensRegistry,
+  resolveLens,
+  resolveLensAvailability,
+  resolveLensSet,
+  resolveLensSetAvailability,
+  supportsObject,
+  supportsSurface,
+} from './lens-registry';
+export type {
+  BlueprintLensId,
+  LensAvailability,
+  LensCapabilityInput,
+  LensRegistryEntry,
+  LensResolution,
+  LensResolutionContext,
+  LensSetResolution,
+} from './lens-registry';
+
+export {
   createExplorationStore,
+  createGraphExplorationStore,
   explorationActions,
+  graphExplorationActions,
   useExplorationStore,
+  useGraphExplorationStore,
   initialExplorationState,
   withAddedFilter,
   withoutFilterAt,
 } from './store';
-export type { ExplorationState, ExplorationStatus, ExplorationActions } from './store';
+export type {
+  ExplorationState,
+  ExplorationStatus,
+  ExplorationActions,
+  GraphExplorationState,
+  GraphExplorationActions,
+} from './store';
 
 export {
   ExplorationProvider,
+  GraphContextProvider,
   useExploration,
   useExplorationSelector,
   useExplorationContext,
   useExplorationClient,
   useExplorationStatus,
   useExplorationFilters,
+  useGraph,
+  useGraphActions,
+  useGraphContext,
+  useGraphContextSelector,
+  useGraphHistory,
+  useGraphSelection,
 } from './provider';
-export type { ExplorationProviderProps } from './provider';
+export type { ExplorationProviderProps, GraphContextProviderProps, GraphContextValue } from './provider';
 
 // Typed canonical API client. App-owned transports supply auth/CSRF/base URL;
 // the shared client owns endpoint contracts, validation, and stale-response
@@ -71,6 +162,9 @@ export type {
   ResolveContextLinkRequest,
   ResolvedContextLink,
   ExplorationValidationResult,
+  ExplorationSnapshot,
+  ExplorationSnapshotComparison,
+  CreateExplorationSnapshotRequest,
   ExplorationClient,
 } from './client';
 
@@ -110,3 +204,14 @@ export { ExplorationBreadcrumbs } from './components/breadcrumbs';
 export type { ExplorationBreadcrumbsProps } from './components/breadcrumbs';
 export { SavedViewChrome } from './components/saved-view-chrome';
 export type { SavedViewChromeProps, SavedView } from './components/saved-view-chrome';
+
+// Reusable graph-first workspace chrome. These components are controlled by
+// the host surface and intentionally do not read router, auth, URL, or global state.
+export { GraphWorkspaceFrame } from './components/graph-workspace-frame';
+export type { GraphWorkspaceFrameProps } from './components/graph-workspace-frame';
+export { GraphContextBar } from './components/graph-context-bar';
+export type { GraphContextBarProps } from './components/graph-context-bar';
+export { GraphTimeRail } from './components/graph-time-rail';
+export type { GraphTimeRailProps } from './components/graph-time-rail';
+export { NoesisContextStrip } from './components/noesis-context-strip';
+export type { NoesisContextStripProps } from './components/noesis-context-strip';

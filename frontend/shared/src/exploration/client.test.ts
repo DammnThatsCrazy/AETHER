@@ -121,6 +121,14 @@ describe('exploration client', () => {
             saved_at: '2026-07-28T00:00:00Z',
           },
         };
+      } else if (request.path.startsWith('/v1/explore/snapshots?')) {
+        data = { snapshots: [] };
+      } else if (request.path === '/v1/explore/snapshots' && request.method === 'POST') {
+        data = { snapshot: { snapshot_id: 's1' }, envelope: envelope('s1') };
+      } else if (request.path === '/v1/explore/snapshots/s1' && request.method === 'GET') {
+        data = { snapshot: { snapshot_id: 's1' } };
+      } else if (request.path === '/v1/explore/snapshots/s1/compare') {
+        data = { comparison: { snapshot_id: 's1', changed: false } };
       } else {
         data = {
           link: {
@@ -140,12 +148,20 @@ describe('exploration client', () => {
     await client.listViews({ limit: 20, offset: 5 });
     await client.saveView({ context: context(), name: 'Risk' });
     await client.resolveLink({ context: context(), to: 'geo' });
+    await client.listSnapshots({ limit: 10 });
+    await client.createSnapshot({ context: context(), name: 'Risk', limit: 25 });
+    await client.getSnapshot('s1');
+    await client.compareSnapshot('s1');
 
     expect(requests.map(({ method, path }) => `${method} ${path}`)).toEqual([
       'POST /v1/explore/facets',
       'GET /v1/explore/views?limit=20&offset=5',
       'POST /v1/explore/views',
       'POST /v1/explore/links/resolve',
+      'GET /v1/explore/snapshots?limit=10',
+      'POST /v1/explore/snapshots',
+      'GET /v1/explore/snapshots/s1',
+      'POST /v1/explore/snapshots/s1/compare',
     ]);
   });
 
