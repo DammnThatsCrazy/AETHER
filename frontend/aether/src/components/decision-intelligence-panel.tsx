@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Card, CardHeader, CardContent, Badge, Button, ErrorState, LoadingState, Modal, ModalBody, ModalHeader } from '@aether/ui';
+import { Card, CardHeader, CardContent, Badge, Button, ErrorState, LoadingState, Modal, ModalBody, ModalHeader, useQuery } from '@aether/ui';
 import { useRecommendationInvestigation, useRecommendations, usePlaybooks } from '@aether-app/features/intelligence';
+import { hasDecisionApprovalPermission } from '@aether-app/features/intelligence/decision-permissions';
 import { useAuth } from '@aether-app/features/auth';
 import { api } from '@aether-app/lib/api/endpoints';
 
@@ -37,6 +38,14 @@ export function DecisionIntelligencePanel() {
   const [actionMessage, setActionMessage] = useState<Record<string, string>>({});
   const recommendations = useRecommendations(family === 'all' ? undefined : { family });
   const playbooks = usePlaybooks();
+  const approvalPermissions = useQuery<unknown>({
+    key: `security:decision-permissions:${user?.id ?? 'anonymous'}`,
+    fetcher: () => api.security.myPermissions(),
+    staleTime: 60_000,
+    enabled: Boolean(user?.id),
+  });
+  const approvalPermissionResolved = approvalPermissions.data !== null && !approvalPermissions.error;
+  const canApproveDecisions = approvalPermissionResolved && hasDecisionApprovalPermission(approvalPermissions.data);
   const recItems = asItems(recommendations.data).slice(0, 6) as Array<Record<string, unknown>>;
   const playbookItems = asItems(playbooks.data).slice(0, 3) as Array<Record<string, unknown>>;
 
@@ -77,7 +86,9 @@ export function DecisionIntelligencePanel() {
               const action = asRecord(rec.recommended_action);
               const confidence = asRecord(rec.confidence);
               const recommendationId = text(rec.recommendation_id, '');
-              const canApprove = Boolean(recommendationId && text(action.action_key, '')) && !['suppressed', 'decided'].includes(text(rec.status, ''));
+              const canApprove = Boolean(recommendationId && text(action.action_key, ''))
+                && !['suppressed', 'decided'].includes(text(rec.status, ''))
+                && canApproveDecisions;
               const approve = async () => {
                 if (!user?.id || !canApprove) return;
                 setBusyRecommendation(recommendationId);
@@ -121,6 +132,11 @@ export function DecisionIntelligencePanel() {
                       {busyRecommendation === recommendationId ? 'Approving…' : 'Approve & plan action'}
                     </Button>
                   </div>
+                  {!approvalPermissions.isLoading && !canApproveDecisions && (
+                    <p className="mt-2 text-xs text-text-muted">
+                      Approval controls are read-only until the tenant grants the decisions:approve permission.
+                    </p>
+                  )}
                   {actionMessage[recommendationId] && <p className="mt-2 text-xs text-text-secondary">{actionMessage[recommendationId]}</p>}
                 </div>
               );

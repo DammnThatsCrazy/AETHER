@@ -1,13 +1,17 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import type { GraphContext } from '@aether/shared/graph-context-contract';
+import type { GraphContext, GraphObjectRef } from '@aether/shared/graph-context-contract';
 import {
   GraphContextBar,
   GraphTimeRail,
   GraphWorkspaceFrame,
   NoesisContextStrip,
   allBlueprintLenses,
+  FilterBar,
+  FilterBuilder,
   resolveLensAvailability,
+  useExplorationFilters,
+  useGraph,
   useGraphActions,
   useGraphContext,
   useGraphHistory,
@@ -15,7 +19,9 @@ import {
 import { GraphPage } from '@aether-app/pages/graph/graph-page';
 import { deriveGraphMaturity, useTenantReadiness } from '@aether-app/features/activation/use-tenant-readiness';
 import type { LensResolution } from '@aether/ui/exploration';
-import type { GraphNode } from '@aether-app/components/graph/graph-canvas';
+import type { GraphEdge, GraphNode } from '@aether-app/components/graph/graph-canvas';
+import type { GraphCluster } from '@aether-app/features/graph/use-graph-data';
+import { ExploreSnapshotControls } from '@aether-app/features/graph/explore-snapshot-controls';
 
 function temporalLabel(context: GraphContext): string {
   const temporal = context.temporal;
@@ -42,10 +48,6 @@ function scopeLabels(context: GraphContext): ScopeLabels {
     ...(scope.account_id ? { account: scope.account_id } : {}),
     ...(scope.organization_id ? { organization: scope.organization_id } : {}),
   };
-}
-
-function objectRoute(id: string): string {
-  return `/explore?entity=${encodeURIComponent(id)}`;
 }
 
 function GraphMaturityPanel() {
@@ -101,6 +103,7 @@ function lensStatusLabel(resolution: LensResolution): string {
 function LensDock({ objectKind }: {
   readonly objectKind: string;
 }) {
+  const { population, addFilter, removeFilterAt, setPopulation } = useExplorationFilters();
   const resolutions = useMemo(() => allBlueprintLenses().map((lens) => resolveLensAvailability(lens.id, {
     objectKind,
     surfaceId: 'graph',
@@ -117,6 +120,17 @@ function LensDock({ objectKind }: {
         <span className="text-[10px] text-text-muted" data-testid="lens-object-kind">{objectKind}</span>
       </div>
       <p className="mt-1">Registered lens availability for this graph context.</p>
+      <details className="mt-3 rounded border border-border-subtle bg-surface-raised/40" data-testid="graph-query-controls">
+        <summary className="cursor-pointer px-2 py-1.5 font-medium text-text-primary">Query builder</summary>
+        <div className="space-y-2 border-t border-border-subtle p-2">
+          <FilterBar
+            population={population}
+            onRemove={removeFilterAt}
+            onClear={() => setPopulation(null)}
+          />
+          <FilterBuilder surface="graph" onAdd={addFilter} />
+        </div>
+      </details>
       <div className="mt-3 space-y-1" role="list" aria-label="Registered graph lenses">
         {resolutions.map((resolution) => {
           const entry = resolution.entry;
@@ -151,6 +165,7 @@ export function ExplorePage() {
   // environment identity. This route is intentionally not renderable without
   // that provider; no route or deployment label can stand in for its scope.
   const context = useGraphContext();
+  const graph = useGraph();
   const history = useGraphHistory();
   const actions = useGraphActions();
   const [noesisExpanded, setNoesisExpanded] = useState(false);
@@ -160,17 +175,35 @@ export function ExplorePage() {
   const historyEntries = history.entries;
   const currentTemporalLabel = temporalLabel(context);
   const selectedObjectKind = currentFocus?.kind ?? 'entity';
-  const handleObjectSelected = useCallback((node: GraphNode) => {
+  const navigateWithContext = useCallback(() => {
+    const query = graph.toQuery();
+    navigate(query ? `/explore?${query}` : '/explore');
+  }, [graph, navigate]);
+  const selectGraphObject = useCallback((object: Pick<GraphObjectRef, 'id' | 'kind'>) => {
     const ref = {
       tenant_id: context.scope.tenant_id,
       environment_id: context.scope.environment_id,
-      kind: node.kind,
-      id: node.id,
-    } as const;
-    actions.focusObject(ref);
+      kind: object.kind,
+      id: object.id,
+    } satisfies GraphObjectRef;
     actions.selectObject(ref);
-    navigate(objectRoute(node.id));
-  }, [actions, context.scope.environment_id, context.scope.tenant_id, navigate]);
+    actions.focusObject(ref);
+    actions.appendHistory({
+      object: ref,
+      action: 'select',
+      occurred_at: new Date().toISOString(),
+    });
+    navigateWithContext();
+  }, [actions, context.scope.environment_id, context.scope.tenant_id, navigateWithContext]);
+  const handleObjectSelected = useCallback((node: GraphNode) => {
+    selectGraphObject(node);
+  }, [selectGraphObject]);
+  const handleClusterSelected = useCallback((cluster: GraphCluster) => {
+    selectGraphObject({ id: cluster.id, kind: 'cluster' });
+  }, [selectGraphObject]);
+  const handleEdgeSelected = useCallback((edge: GraphEdge) => {
+    selectGraphObject({ id: edge.id, kind: 'edge' });
+  }, [selectGraphObject]);
 
   function moveThroughHistory(direction: 'previous' | 'next') {
     const next = direction === 'previous'
@@ -178,7 +211,12 @@ export function ExplorePage() {
       : actions.nextFocus(currentFocus);
     if (!next) return;
     actions.focusObject(next);
-    navigate(objectRoute(next.id));
+    actions.appendHistory({
+      object: next,
+      action: 'select',
+      occurred_at: new Date().toISOString(),
+    });
+    navigateWithContext();
   }
 
   const contextBar = (
@@ -234,10 +272,20 @@ export function ExplorePage() {
         lensDock={(
           <LensDock objectKind={selectedObjectKind} />
         )}
-        canvas={<GraphPage embedded onObjectSelected={handleObjectSelected} />}
+        canvas={(
+          <GraphPage
+            embedded
+            onObjectSelected={handleObjectSelected}
+            onClusterSelected={handleClusterSelected}
+            onEdgeSelected={handleEdgeSelected}
+          />
+        )}
         timeRail={timeRail}
         noesisStrip={noesisStrip}
       />
+      <div className="mt-3">
+        <ExploreSnapshotControls />
+      </div>
     </div>
   );
 }

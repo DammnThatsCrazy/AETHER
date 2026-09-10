@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { useExplorationClient, useExplorationContext } from '@aether/ui/exploration';
+import { useExploration, useExplorationClient, useExplorationContext } from '@aether/ui/exploration';
 import { exactContextHandoffLimitations } from './exploration-context';
 
 export function NoesisContextActions() {
   const context = useExplorationContext();
+  const { toQuery } = useExploration();
   const client = useExplorationClient();
   const [name, setName] = useState('Noesis context');
   const [status, setStatus] = useState<string | null>(null);
@@ -51,11 +52,26 @@ export function NoesisContextActions() {
         >
           {isSaving ? 'Saving…' : 'Save exact context'}
         </button>
+        <a
+          href={`/explore?${toQuery()}`}
+          className="inline-flex h-8 items-center rounded border border-border-default px-3 text-xs font-medium text-text-secondary hover:border-accent/50 hover:text-text-primary"
+        >
+          Open in Explore
+        </a>
+        <a
+          href="/settings/data-exchange"
+          className="inline-flex h-8 items-center rounded border border-border-default px-3 text-xs font-medium text-text-secondary hover:border-accent/50 hover:text-text-primary"
+        >
+          Open reporting
+        </a>
       </div>
       <div className="mt-2 grid gap-1 text-[10px] text-text-muted lg:grid-cols-2">
         <div>Investigation: {limitations.investigation}</div>
         <div>Query export: {limitations.export}</div>
       </div>
+      <p className="mt-2 text-[10px] text-text-muted">
+        Reports are created only from the capability-gated Data Exchange surface. Watch-to-automation registration and collaboration actions are not available from Noesis yet.
+      </p>
       {status && <div role="status" className="mt-2 text-xs text-text-secondary">{status}</div>}
     </section>
   );

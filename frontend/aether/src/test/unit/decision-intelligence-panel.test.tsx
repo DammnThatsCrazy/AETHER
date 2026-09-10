@@ -6,10 +6,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const runtime = vi.hoisted(() => ({
   recordDecision: vi.fn(),
   logAction: vi.fn(),
+  myPermissions: vi.fn(),
+  auth: { user: { id: 'authenticated-user' } },
 }));
 
 vi.mock('@aether-app/features/auth', () => ({
-  useAuth: () => ({ user: { id: 'authenticated-user' } }),
+  useAuth: () => runtime.auth,
 }));
 
 vi.mock('@aether-app/features/intelligence', () => ({
@@ -33,18 +35,23 @@ vi.mock('@aether-app/features/intelligence', () => ({
 }));
 
 vi.mock('@aether-app/lib/api/endpoints', () => ({
-  api: { intelligence: {
-    recordDecision: (...args: unknown[]) => runtime.recordDecision(...args),
-    logAction: (...args: unknown[]) => runtime.logAction(...args),
-  } },
+  api: {
+    intelligence: {
+      recordDecision: (...args: unknown[]) => runtime.recordDecision(...args),
+      logAction: (...args: unknown[]) => runtime.logAction(...args),
+    },
+    security: { myPermissions: (...args: unknown[]) => runtime.myPermissions(...args) },
+  },
 }));
 
 import { DecisionIntelligencePanel } from '@aether-app/components/decision-intelligence-panel';
 
 describe('DecisionIntelligencePanel governed action planning', () => {
   beforeEach(() => {
+    runtime.auth.user.id = 'authenticated-user';
     runtime.recordDecision.mockReset().mockResolvedValue({ decision_id: 'decision-1' });
     runtime.logAction.mockReset().mockResolvedValue({ action_id: 'action-1', status: 'planned' });
+    runtime.myPermissions.mockReset().mockResolvedValue({ permissions: [{ domain: 'decisions', action: 'approve' }] });
   });
 
   it('records approval before creating a planned action and does not dispatch', async () => {
@@ -73,5 +80,16 @@ describe('DecisionIntelligencePanel governed action planning', () => {
 
     expect(await screen.findByText('Approval unavailable.')).toBeInTheDocument();
     expect(runtime.logAction).not.toHaveBeenCalled();
+  });
+
+  it('keeps approval read-only when the tenant permission is absent', async () => {
+    runtime.auth.user.id = 'permission-denied-user';
+    runtime.myPermissions.mockResolvedValue({ permissions: [] });
+    render(<DecisionIntelligencePanel />);
+
+    const approve = screen.getByRole('button', { name: 'Approve & plan action' });
+    expect(approve).toBeDisabled();
+    expect(await screen.findByText(/decisions:approve permission/)).toBeInTheDocument();
+    expect(runtime.recordDecision).not.toHaveBeenCalled();
   });
 });

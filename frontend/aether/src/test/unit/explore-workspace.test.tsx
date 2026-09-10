@@ -26,7 +26,16 @@ const runtime = vi.hoisted(() => {
       previousFocus: vi.fn(() => previous),
       nextFocus: vi.fn(() => null),
       focusObject: vi.fn(),
+      selectObject: vi.fn(),
+      appendHistory: vi.fn(),
     },
+    filters: {
+      population: null,
+      addFilter: vi.fn(),
+      removeFilterAt: vi.fn(),
+      setPopulation: vi.fn(),
+    },
+    graphQuery: 'tmode=as_of&tfield=occurred_at&tz=UTC&tas=2026-09-01&focus=entity%3Aentity-2&sel=entity%3Aentity-2',
     readiness: {
       data: undefined as unknown,
       isLoading: false,
@@ -47,6 +56,8 @@ vi.mock('@aether-app/features/activation/use-tenant-readiness', () => ({
 vi.mock('@aether/ui/exploration', () => ({
   allBlueprintLenses: () => [{ id: 'object', displayName: 'Objects', description: 'Objects', pending: false }],
   resolveLensAvailability: (id: string) => ({ lensId: id, availability: 'available', entry: { id, displayName: 'Objects', pending: false } }),
+  FilterBar: () => <div data-testid="filter-bar">No active filters.</div>,
+  FilterBuilder: () => <div data-testid="filter-builder">Filter builder</div>,
   GraphContextBar: ({ workspaceLabel, environmentLabel, timeLabel }: Record<string, string>) => (
     <div data-testid="graph-context-bar">{workspaceLabel} · {environmentLabel} · {timeLabel}</div>
   ),
@@ -73,16 +84,29 @@ vi.mock('@aether/ui/exploration', () => ({
     </section>
   ),
   useGraphContext: () => runtime.context,
-  useGraph: () => ({ toQuery: () => 'entity=entity-2' }),
+  useExplorationContext: () => runtime.context,
+  useGraph: () => ({ toQuery: () => runtime.graphQuery }),
   useGraphHistory: () => runtime.history,
   useGraphActions: () => runtime.actions,
+  useExplorationFilters: () => runtime.filters,
 }));
 
 vi.mock('@aether-app/pages/graph/graph-page', () => ({
-  GraphPage: ({ embedded }: { embedded?: boolean }) => (
+  GraphPage: ({ embedded, onObjectSelected, onClusterSelected, onEdgeSelected }: {
+    embedded?: boolean;
+    onObjectSelected?: (node: { id: string; kind: string; label: string; metadata: Record<string, unknown> }) => void;
+    onClusterSelected?: (cluster: { id: string; label: string; nodeIds: string[]; size: number }) => void;
+    onEdgeSelected?: (edge: { id: string; source: string; target: string; relationType: string; interactionClass: string; weight: number; metadata: Record<string, unknown> }) => void;
+  }) => (
     <div data-testid="real-graph-page" data-graph-embedded={embedded ? 'true' : 'false'}>
       <button type="button">Real graph canvas</button>
       <button type="button">Real first-click inspector</button>
+      <button
+        type="button"
+        onClick={() => onObjectSelected?.({ id: 'entity-3', kind: 'organization', label: 'Entity three', metadata: {} })}
+      >Select object</button>
+      <button type="button" onClick={() => onClusterSelected?.({ id: 'cluster-1', label: 'Cluster one', nodeIds: ['entity-3'], size: 1 })}>Select cluster</button>
+      <button type="button" onClick={() => onEdgeSelected?.({ id: 'edge-1', source: 'entity-3', target: 'entity-4', relationType: 'DELEGATES', interactionClass: 'H2A', weight: 1, metadata: {} })}>Select edge</button>
     </div>
   ),
 }));
@@ -124,6 +148,15 @@ describe('ExplorePage graph-first workspace', () => {
     expect(screen.getByTestId('graph-maturity-ready')).toHaveTextContent('Graph foundations are verified.');
   });
 
+  it('exposes the registry-backed query builder from the canonical lens dock', async () => {
+    renderWorkspace();
+
+    await userEvent.click(screen.getByText('Query builder'));
+
+    expect(screen.getByTestId('filter-builder')).toHaveTextContent('Filter builder');
+    expect(screen.getByTestId('filter-bar')).toBeInTheDocument();
+  });
+
   it('uses existing graph history actions and makes the selected destination explicit', async () => {
     renderWorkspace();
 
@@ -131,7 +164,45 @@ describe('ExplorePage graph-first workspace', () => {
 
     expect(runtime.actions.previousFocus).toHaveBeenCalledWith(runtime.context.selection.focused);
     expect(runtime.actions.focusObject).toHaveBeenCalledWith(expect.objectContaining({ id: 'entity-1' }));
-    expect(screen.getByTestId('location')).toHaveTextContent('/explore?entity=entity-1');
+    expect(screen.getByTestId('location')).toHaveTextContent('/explore?tmode=as_of');
+    expect(screen.getByTestId('location')).not.toHaveTextContent('entity=');
+  });
+
+  it('merges object selection into canonical context and records the production transition', async () => {
+    renderWorkspace();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select object' }));
+
+    expect(runtime.actions.selectObject).toHaveBeenCalledWith(expect.objectContaining({
+      tenant_id: 'tenant-1',
+      environment_id: 'staging',
+      kind: 'organization',
+      id: 'entity-3',
+    }));
+    expect(runtime.actions.focusObject).toHaveBeenCalledWith(expect.objectContaining({ id: 'entity-3' }));
+    expect(runtime.actions.appendHistory).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'select',
+      object: expect.objectContaining({ id: 'entity-3' }),
+    }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/explore?tmode=as_of');
+    expect(screen.getByTestId('location')).not.toHaveTextContent('entity=');
+  });
+
+  it.each([
+    ['cluster', 'Select cluster', 'cluster-1'],
+    ['relationship', 'Select edge', 'edge-1'],
+  ])('routes %s selection through the canonical graph context', async (_kind, button, id) => {
+    renderWorkspace();
+
+    await userEvent.click(screen.getByRole('button', { name: button }));
+
+    expect(runtime.actions.selectObject).toHaveBeenCalledWith(expect.objectContaining({ id }));
+    expect(runtime.actions.focusObject).toHaveBeenCalledWith(expect.objectContaining({ id }));
+    expect(runtime.actions.appendHistory).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'select',
+      object: expect.objectContaining({ id }),
+    }));
+    expect(screen.getByTestId('location')).not.toHaveTextContent('entity=');
   });
 
   it('keeps Noesis collapsed until explicitly expanded and offers a truthful route action', async () => {

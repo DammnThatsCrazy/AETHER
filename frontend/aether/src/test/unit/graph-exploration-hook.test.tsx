@@ -70,10 +70,11 @@ describe('canonical graph exploration hook', () => {
     const request = queryLatest.mock.calls[0]?.[0];
     expect(request.context.scope).toEqual({
       tenant_id: 'tenant-authority',
-      workspace_id: 'workspace-authority',
-      environment_id: 'environment-authority',
       surface: 'graph',
     });
+    expect(queryLatest.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      key: 'graph:tenant-authority:workspace-authority:environment-authority:live',
+    }));
   });
 
   it('blocks semantic zoom when a legacy tenant argument conflicts with host scope', async () => {

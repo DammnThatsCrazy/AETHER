@@ -214,7 +214,11 @@ export function useGraphData(options?: { asOf?: string | null; tenantId?: string
       const context: ExplorationContextV1 = {
         ...mountedContext,
         scope: {
-          ...graphContext.scope,
+          // `/v1/explore/query` currently accepts only the tenant and surface
+          // coordinates. Keep the complete graph scope above for authority
+          // and cache partitioning, but never serialize unsupported
+          // workspace/environment fields into this transport request.
+          tenant_id: graphContext.scope.tenant_id,
           surface: 'graph',
         },
         temporal: asOf

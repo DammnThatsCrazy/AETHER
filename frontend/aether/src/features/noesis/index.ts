@@ -7,3 +7,8 @@ export {
 } from './exploration-context';
 export type { NoesisRequestContext } from './exploration-context';
 export { NoesisContextActions } from './noesis-context-actions';
+export {
+  NoesisResponseGovernance,
+  hasDecisionApprovalPermission,
+  responseHasGovernedProposal,
+} from './noesis-response-governance';

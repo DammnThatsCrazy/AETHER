@@ -13,6 +13,10 @@ interface AetherFeatureFlags {
   readonly enableContinuations: boolean;
   /** Client-sync change-feed consumption panel (M5c). */
   readonly enableClientSyncConsumption: boolean;
+  /** Immutable Explore snapshot/diff controls (default OFF until enabled). */
+  readonly enableExplorationSnapshots: boolean;
+  /** Noesis trace/proposal handoff controls (default OFF until enabled). */
+  readonly enableNoesisGovernanceControls: boolean;
   /** Tenant model-routing preference panel (ADR-008 D4/D9, model harness). */
   readonly enableModelHarness: boolean;
 }
@@ -21,6 +25,8 @@ const DEFAULT_FLAGS: AetherFeatureFlags = {
   // D8: default OFF — no runtime behavior change until a later milestone flips it.
   enableContinuations: false,
   enableClientSyncConsumption: false,
+  enableExplorationSnapshots: false,
+  enableNoesisGovernanceControls: false,
   enableModelHarness: false,
 };
 

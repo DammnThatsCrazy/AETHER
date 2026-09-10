@@ -376,9 +376,13 @@ export interface GraphPageProps {
   readonly embedded?: boolean;
   /** Optional host synchronization for graph-first surfaces. */
   readonly onObjectSelected?: (node: GraphNode) => void;
+  /** Optional host synchronization for canonical cluster selection. */
+  readonly onClusterSelected?: (cluster: GraphCluster) => void;
+  /** Optional host synchronization for canonical relationship selection. */
+  readonly onEdgeSelected?: (edge: GraphEdge) => void;
 }
 
-export function GraphPage({ embedded = false, onObjectSelected }: GraphPageProps = {}) {
+export function GraphPage({ embedded = false, onObjectSelected, onClusterSelected, onEdgeSelected }: GraphPageProps = {}) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const deepLinkedEntity = searchParams.get('entity') ?? searchParams.get('selected_entity');
@@ -398,6 +402,7 @@ export function GraphPage({ embedded = false, onObjectSelected }: GraphPageProps
   } = useGraphData({ asOf: replayDate, tenantId });
 
   const [viewMode, setViewMode] = useState<'graph' | 'table'>('graph');
+  const [accessibleSearch, setAccessibleSearch] = useState('');
   const [inspector, setInspector] = useState<InspectorPayload | null>(null);
   const [pathMode, setPathMode] = useState(false);
   const [traversalMode, setTraversalMode] = useState<PathMode>('shortest');
@@ -422,6 +427,14 @@ export function GraphPage({ embedded = false, onObjectSelected }: GraphPageProps
     }
     return Array.from(ids);
   }, [inspector, edges, highlightedCluster]);
+
+  const accessibleNodes = useMemo(() => {
+    const needle = accessibleSearch.trim().toLowerCase();
+    if (!needle) return nodes.slice(0, 100);
+    return nodes
+      .filter((node) => `${node.label} ${node.kind} ${node.id}`.toLowerCase().includes(needle))
+      .slice(0, 100);
+  }, [accessibleSearch, nodes]);
 
   const handleSelectNode = useCallback(async (node: GraphNode | null) => {
     if (!node) {
@@ -509,12 +522,14 @@ export function GraphPage({ embedded = false, onObjectSelected }: GraphPageProps
     if (!edge) { setInspector(null); return; }
     setHighlightedCluster(null);
     setInspector({ type: 'edge', edge });
-  }, []);
+    onEdgeSelected?.(edge);
+  }, [onEdgeSelected]);
 
   const handleClusterClick = useCallback((cluster: GraphCluster) => {
     setHighlightedCluster([...cluster.nodeIds]);
     setInspector({ type: 'cluster', cluster });
-  }, []);
+    onClusterSelected?.(cluster);
+  }, [onClusterSelected]);
 
   const handleClose = useCallback(() => {
     setInspector(null);
@@ -779,6 +794,67 @@ export function GraphPage({ embedded = false, onObjectSelected }: GraphPageProps
           }
         </div>
       )}
+
+      {/* Keyboard and non-visual graph representation. The canvas remains the
+          primary visual view, while this bounded list gives keyboard and
+          assistive-technology users the same selection/inspector actions. */}
+      <details className="rounded-md border border-border-default bg-surface-raised" data-testid="accessible-graph-representation">
+        <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-text-primary">
+          Accessible graph object list
+        </summary>
+        <div className="space-y-2 border-t border-border-default px-3 py-2">
+          <label className="block text-xs text-text-secondary" htmlFor="accessible-graph-search">
+            Search graph objects
+          </label>
+          <input
+            id="accessible-graph-search"
+            type="search"
+            value={accessibleSearch}
+            onChange={(event) => setAccessibleSearch(event.target.value)}
+            placeholder="Search by name, type, or id"
+            className="h-8 w-full rounded border border-border-default bg-surface-base px-2 text-xs text-text-primary"
+          />
+          <p className="text-[10px] text-text-muted" aria-live="polite">
+            Showing {accessibleNodes.length} graph object{accessibleNodes.length === 1 ? '' : 's'}{nodes.length > 100 ? ' (first 100)' : ''}.
+          </p>
+          {accessibleNodes.length === 0 ? (
+            <p className="text-xs text-text-muted">No graph objects match this search.</p>
+          ) : (
+            <ul className="max-h-56 space-y-1 overflow-auto" aria-label="Graph objects">
+              {accessibleNodes.map((node) => (
+                <li key={node.id}>
+                  <button
+                    type="button"
+                    className="w-full rounded border border-border-subtle px-2 py-1.5 text-left text-xs hover:border-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                    onClick={() => void handleSelectNode(node)}
+                  >
+                    <span className="font-medium text-text-primary">{node.label}</span>
+                    <span className="ml-2 text-text-muted">{node.kind} · {node.id}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {edges.length > 0 && (
+            <details>
+              <summary className="cursor-pointer text-xs text-text-secondary">Relationships</summary>
+              <ul className="mt-1 max-h-40 space-y-1 overflow-auto" aria-label="Graph relationships">
+                {edges.slice(0, 100).map((edge) => (
+                  <li key={edge.id}>
+                    <button
+                      type="button"
+                      className="w-full rounded border border-border-subtle px-2 py-1 text-left text-[10px] text-text-secondary hover:border-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus"
+                      onClick={() => handleSelectEdge(edge)}
+                    >
+                      {edge.relationType || 'Relationship'} · {edge.source} → {edge.target}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      </details>
 
       {/* Main area */}
       <div className="flex gap-3 flex-1 min-h-0" style={{ minHeight: '560px' }}>

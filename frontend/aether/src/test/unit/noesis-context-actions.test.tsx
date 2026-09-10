@@ -26,6 +26,7 @@ const mountedContext = {
 
 vi.mock('@aether/ui/exploration', () => ({
   useExplorationContext: () => mountedContext,
+  useExploration: () => ({ toQuery: () => 'context=encoded' }),
   useExplorationClient: () => ({ saveView }),
 }));
 
@@ -60,5 +61,8 @@ describe('NoesisContextActions', () => {
     render(<NoesisContextActions />);
     expect(screen.getByText(/Investigation: Unavailable/)).toBeInTheDocument();
     expect(screen.getByText(/Query export: Unavailable/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open in Explore' })).toHaveAttribute('href', '/explore?context=encoded');
+    expect(screen.getByRole('link', { name: 'Open reporting' })).toHaveAttribute('href', '/settings/data-exchange');
+    expect(screen.getByText(/Watch-to-automation registration/)).toBeInTheDocument();
   });
 });

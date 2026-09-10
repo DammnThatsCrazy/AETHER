@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider, ToastProvider, queryCache } from '@aether/ui';
 import {
+  clientSyncQueryKey,
   ContinueOnPhone,
   RecentActivity,
   SYNC_CHANGE_TYPE_LABELS,
@@ -28,12 +29,17 @@ vi.mock('@aether-app/lib/api/endpoints', () => ({
 }));
 
 vi.mock('@aether/ui/exploration', () => ({
+  useGraphContext: () => ({ scope: { tenant_id: 'tenant-a', workspace_id: 'workspace-a', environment_id: 'staging' } }),
   useExplorationContext: () => ({
     version: '1',
     scope: { tenant_id: 'tenant-a', surface: '/noesis' },
     temporal: { mode: 'window', field: 'occurred_at', timezone: 'UTC' },
     selection: { selected: [{ kind: 'user', id: 'usr_1' }] },
   }),
+}));
+
+vi.mock('@aether-app/features/auth', () => ({
+  useAuth: () => ({ isAuthenticated: true, user: { id: 'principal-a' } }),
 }));
 
 const CONTEXT = {
@@ -126,6 +132,15 @@ describe('Continue-on-phone + recent mobile activity surfaces (M5c)', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+  });
+
+  it('partitions client-sync cache keys by tenant and authenticated principal', () => {
+    expect(clientSyncQueryKey('tenant/a', 'principal:1', null))
+      .toBe('client-sync:tenant%2Fa:principal%3A1:start');
+    expect(clientSyncQueryKey('tenant/a', 'principal:1', 'cursor:2'))
+      .toBe('client-sync:tenant%2Fa:principal%3A1:cursor%3A2');
+    expect(clientSyncQueryKey('tenant/a', 'principal:1', null))
+      .not.toBe(clientSyncQueryKey('tenant/b', 'principal:1', null));
   });
 
   describe('feature flags default OFF (D8)', () => {
