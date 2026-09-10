@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aether.olympuslabs.io/contracts/delivery/profile-delivery-operation/v1",
+  "$id": "https://aether.olympuslabsml.com/contracts/delivery/profile-delivery-operation/v1",
   "title": "Aether ProfileDeliveryOperation v1",
   "type": "object",
   "additionalProperties": false,
