@@ -33,15 +33,15 @@ into the tenant app's S3/Terraform/deploy.yml paths (those are live machinery
 for the tenant application and Kyber and are untouched), and no claim that
 traffic is being served.
 
-Kyber stays internal. `kyber.olympuslabs.com` is declared only so the topology
+Kyber stays internal. `kyber.olympuslabsml.com` is declared only so the topology
 is explicit; public marketing never links to it.
 
 ## 2. The two shells and their advertised hosts
 
 | Workspace | Advertised host | Surface |
 | --- | --- | --- |
-| `frontend/aether-marketing` (`@aether/aether-marketing`) | `https://aether.olympuslabs.com` | Aether public marketing: platform, solutions, developers, integrations, security, pricing, resources, public auth-threshold routes |
-| `frontend/olympus-marketing` (`@olympus/olympus-marketing`) | `https://olympuslabs.com` | Olympus Labs corporate marketing |
+| `frontend/aether-marketing` (`@aether/aether-marketing`) | `https://aether.olympuslabsml.com` | Aether public marketing: platform, solutions, developers, integrations, security, pricing, resources, public auth-threshold routes |
+| `frontend/olympus-marketing` (`@olympus/olympus-marketing`) | `https://olympuslabsml.com` | Olympus Labs corporate marketing |
 
 Both builds run the same pipeline:
 
@@ -105,12 +105,12 @@ template ships as `frontend/<shell>/.env.example`.
 
 | Variable | Default (target origin) | Meaning |
 | --- | --- | --- |
-| `VITE_OLYMPUS_SITE_URL` | `https://olympuslabs.com` | Olympus Labs corporate marketing origin |
-| `VITE_AETHER_MARKETING_URL` | `https://aether.olympuslabs.com` | Aether public marketing origin |
-| `VITE_AETHER_APP_URL` | `https://app.olympuslabs.com` | Protected Aether tenant application origin |
-| `VITE_KYBER_URL` | `https://kyber.olympuslabs.com` | Olympus internal Kyber origin; never linked from public marketing |
-| `VITE_AETHER_DOCS_URL` | `https://docs.olympuslabs.com` | Aether documentation origin |
-| `VITE_AETHER_STATUS_URL` | `https://status.olympuslabs.com` | Planned public status origin (see STATUS-GAP below) |
+| `VITE_OLYMPUS_SITE_URL` | `https://olympuslabsml.com` | Olympus Labs corporate marketing origin |
+| `VITE_AETHER_MARKETING_URL` | `https://aether.olympuslabsml.com` | Aether public marketing origin |
+| `VITE_AETHER_APP_URL` | `https://app.olympuslabsml.com` | Protected Aether tenant application origin |
+| `VITE_KYBER_URL` | `https://kyber.olympuslabsml.com` | Olympus internal Kyber origin; never linked from public marketing |
+| `VITE_AETHER_DOCS_URL` | `https://docs.olympuslabsml.com` | Aether documentation origin |
+| `VITE_AETHER_STATUS_URL` | `https://status.olympuslabsml.com` | Planned public status origin (see STATUS-GAP below) |
 | `VITE_ANALYTICS_PROVIDER` | `off` | `off` \| `plausible` \| `ga4` |
 | `VITE_ANALYTICS_PROPERTY_ID` | *(empty)* | Plausible site domain or GA4 measurement id |
 
@@ -176,7 +176,7 @@ tenant application and Kyber, not these shells.
 
 ## 7. STATUS-GAP: the status origin is planned, not real
 
-`status.olympuslabs.com` is a **planned origin**. The real status source today
+`status.olympuslabsml.com` is a **planned origin**. The real status source today
 is the tenant-safe backend status surface (`/v1/status*` API) described in
 [App Routing & Domains](../APP-ROUTING-DOMAINS.md); it is owned by the tenant
 deployable, not by the marketing shells.
@@ -186,7 +186,7 @@ deployable, not by the marketing shells.
   `VITE_AETHER_STATUS_URL`, so it can later point at a real, public status page
   without a code change.
 - **No public status page is fabricated in this phase.** The marketing shells
-  must not present `status.olympuslabs.com` as a live surface. Until a real
+  must not present `status.olympuslabsml.com` as a live surface. Until a real
   status page is deployed, that footer link resolves to a target origin only.
 
 ## 8. Known coverage gap: marketing shells are outside data-truth/domain checks

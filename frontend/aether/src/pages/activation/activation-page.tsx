@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Badge,
   Button,
@@ -40,6 +40,43 @@ const SDK_PLATFORMS: readonly SourcePlatform[] = [
 
 function isSourcePlatform(value: string): value is SourcePlatform {
   return (SDK_PLATFORMS as readonly string[]).includes(value);
+}
+
+// One real quickstart snippet per platform — install + init only, enough to
+// send a first event. The full walkthrough for each lives in the docs site
+// (frontend/docs, quickstart/*.mdx); this is a nudge, not a substitute.
+const SDK_QUICKSTART: Record<SourcePlatform, { install: string; init: string }> = {
+  web: {
+    install: 'npm install @aether/web',
+    init: "import aether from '@aether/web';\n\naether.init({ apiKey: 'YOUR_WRITE_KEY' });\naether.track('signup_completed', { plan: 'pro' });",
+  },
+  'react-native': {
+    install: 'npm install @aether/react-native',
+    init: "import { AetherProvider } from '@aether/react-native';\n\n<AetherProvider config={{ apiKey: 'YOUR_WRITE_KEY' }}>\n  <App />\n</AetherProvider>",
+  },
+  server: {
+    install: 'npm install @aether/server',
+    init: "import { AetherServerSDK } from '@aether/server';\n\nconst aether = new AetherServerSDK({ writeKey: 'YOUR_WRITE_KEY' });\naether.track({ type: 'api_request_observed', properties: { method: 'GET', path: '/orders', statusCode: 200 } });",
+  },
+  ios: {
+    install: "pod 'AetherSDK'",
+    init: "let config = AetherConfig(apiKey: \"YOUR_WRITE_KEY\")\nAether.shared.initialize(config: config)",
+  },
+  android: {
+    install: "implementation(\"com.aether:sdk:8.12.0\")",
+    init: 'val config = AetherConfig(apiKey = "YOUR_WRITE_KEY")\nAether.initialize(application, config)',
+  },
+};
+
+function SdkSnippet({ platform }: { platform: SourcePlatform }) {
+  const snippet = SDK_QUICKSTART[platform];
+  return (
+    <div className="rounded border border-border-subtle bg-surface-sunken p-3 space-y-1.5">
+      <div className="text-[10px] uppercase tracking-wide text-text-muted font-mono">{platform}</div>
+      <pre className="text-[11px] font-mono text-text-secondary whitespace-pre-wrap break-words">{snippet.install}</pre>
+      <pre className="text-[11px] font-mono text-text-primary whitespace-pre-wrap break-words">{snippet.init}</pre>
+    </div>
+  );
 }
 
 function evidenceValue(value: unknown): string {
@@ -175,6 +212,16 @@ export function SdkStep({ status }: StepProps) {
             <p className="text-xs font-mono text-text-muted">
               Backend has recorded: {status.sdk_selection.join(', ')}
             </p>
+          )}
+          {draft.length > 0 && (
+            <div className="space-y-2 pt-1">
+              <p className="text-[10px] uppercase tracking-wide text-text-muted">
+                Quickstart{draft.length > 1 ? 's' : ''} for the SDK{draft.length > 1 ? 's' : ''} above
+              </p>
+              {draft.map(platform => (
+                <SdkSnippet key={platform} platform={platform} />
+              ))}
+            </div>
           )}
         </>
       )}
@@ -402,11 +449,30 @@ export function CompleteStep({ status }: StepProps) {
     <StepShell index={6} title="Complete activation" done={isComplete} available={canComplete || isComplete}>
       {complete.error && <ErrorState message={`Could not complete activation: ${complete.error}`} />}
       {isComplete ? (
-        <div className="space-y-3">
+        <div className="space-y-4">
           <p className="text-sm text-text-primary">Activation complete. Your workspace is live.</p>
           <Button variant="primary" size="sm" onClick={() => void navigate('/')}>
             Go to workspace
           </Button>
+          <div className="pt-1 space-y-1.5">
+            <p className="text-[10px] uppercase tracking-wide text-text-muted">Jump straight to</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                { to: '/users', label: 'Users' },
+                { to: '/campaigns', label: 'Campaigns' },
+                { to: '/explore', label: 'Explore' },
+                { to: '/settings', label: 'Settings' },
+              ].map(({ to, label }) => (
+                <Link
+                  key={to}
+                  to={to}
+                  className="rounded border border-border-default bg-surface-raised px-3 py-2 text-center text-xs font-medium text-text-primary hover:border-border-focus hover:bg-surface-overlay transition-colors"
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
       ) : (
         <div className="space-y-2">

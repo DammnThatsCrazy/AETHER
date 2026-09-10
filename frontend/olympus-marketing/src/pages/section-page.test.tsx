@@ -33,16 +33,16 @@ describe('SectionPage', () => {
 
     expect(screen.getByRole('link', { name: /Documentation and support/ })).toHaveAttribute(
       'href',
-      'https://docs.olympuslabs.com',
+      'https://docs.olympuslabsml.com',
     );
     // The status origin is a planned surface (deploy contract §7); marketing
     // must not present it as live, so no status link is rendered.
     expect(screen.queryByRole('link', { name: /Service status/ })).toBeNull();
     expect(screen.getByText(/public status page for the Aether platform is in planning/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Product sign-in/ })).toHaveAttribute('href', 'https://app.olympuslabs.com');
+    expect(screen.getByRole('link', { name: /Product sign-in/ })).toHaveAttribute('href', 'https://app.olympuslabsml.com');
 
     const explore = screen.getByRole('link', { name: 'Explore Aether' });
-    expect(explore).toHaveAttribute('href', 'https://aether.olympuslabs.com');
+    expect(explore).toHaveAttribute('href', 'https://aether.olympuslabsml.com');
     expect(explore).toHaveAttribute('target', '_blank');
     expect(explore).toHaveAttribute('rel', 'noreferrer');
     unmount();
@@ -62,7 +62,7 @@ describe('SectionPage', () => {
     const { unmount } = renderAt('/company');
 
     expect(screen.getByText('Explore the platform Olympus Labs builds.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Explore Aether' })).toHaveAttribute('href', 'https://aether.olympuslabs.com');
+    expect(screen.getByRole('link', { name: 'Explore Aether' })).toHaveAttribute('href', 'https://aether.olympuslabsml.com');
     expect(screen.getByRole('link', { name: 'Contact Olympus Labs' })).toHaveAttribute('href', '/contact');
     unmount();
   });

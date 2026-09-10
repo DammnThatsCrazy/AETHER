@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Badge, Button, DataTable, EmptyState, ErrorState,
   Input, LoadingState, Skeleton,
@@ -78,7 +78,18 @@ export function UsersPage() {
       ) : users.length === 0 ? (
         <EmptyState
           title="No users found"
-          description={search ? `No results for "${search}"` : 'No users have been ingested yet.'}
+          description={
+            search
+              ? `No results for "${search}"`
+              : 'Users appear here once your first source sends events — connect an SDK or a connector to get started.'
+          }
+          action={
+            !search && (
+              <Button asChild variant="primary" size="sm">
+                <Link to="/activation">Connect your first source</Link>
+              </Button>
+            )
+          }
         />
       ) : (
         <DataTable

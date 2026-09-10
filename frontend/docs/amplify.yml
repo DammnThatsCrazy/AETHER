@@ -1,0 +1,16 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - cd ../.. && npm ci
+    build:
+      commands:
+        - cd ../.. && npm run build --workspace=frontend/docs
+  artifacts:
+    baseDirectory: dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - ../../node_modules/**/*

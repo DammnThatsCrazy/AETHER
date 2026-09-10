@@ -188,7 +188,7 @@ export function HomePage() {
               <OlympusAttribution />
               <span aria-hidden="true">·</span>
               <a href={OLYMPUS_SITE_URL} className="underline underline-offset-2 mkt-motion-color hover:text-text-primary">
-                olympuslabs.com
+                olympuslabsml.com
               </a>
             </span>
           </div>

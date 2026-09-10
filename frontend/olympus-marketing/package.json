@@ -4,7 +4,7 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "Olympus Labs corporate marketing site (olympuslabs.com). Public, server-origin shell owned by Olympus Labs; links to Aether.",
+  "description": "Olympus Labs corporate marketing site (olympuslabsml.com). Public, server-origin shell owned by Olympus Labs; links to Aether.",
   "scripts": {
     "dev": "vite --port 5178",
     "build": "tsc --noEmit && vite build && node scripts/prerender.mjs",

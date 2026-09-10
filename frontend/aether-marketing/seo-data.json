@@ -1,5 +1,5 @@
 {
-  "host": "https://aether.olympuslabs.com",
+  "host": "https://aether.olympuslabsml.com",
   "robotsDisallow": ["/login", "/signup", "/forgot-password"],
   "routes": [
     {

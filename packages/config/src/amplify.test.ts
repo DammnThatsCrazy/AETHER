@@ -19,7 +19,7 @@ describe('buildAmplifyEnvironmentConfig', () => {
     const config = buildAmplifyEnvironmentConfig({
       AMPLIFY_ENV: 'production',
       AWS_BRANCH: 'release',
-      VITE_API_BASE_URL: 'https://api.olympuslabs.com',
+      VITE_API_BASE_URL: 'https://api.olympuslabsml.com',
       VITE_COGNITO_REGION: 'us-west-2',
       VITE_COGNITO_USER_POOL_ID: 'us-west-2_example',
       VITE_COGNITO_USER_POOL_CLIENT_ID: 'client-123',
@@ -27,7 +27,7 @@ describe('buildAmplifyEnvironmentConfig', () => {
     });
     expect(config.environment).toBe('production');
     expect(config.branch).toBe('release');
-    expect(config.apiUrl).toBe('https://api.olympuslabs.com');
+    expect(config.apiUrl).toBe('https://api.olympuslabsml.com');
     expect(config.authRegion).toBe('us-west-2');
     expect(config.userPoolId).toBe('us-west-2_example');
     expect(config.userPoolClientId).toBe('client-123');

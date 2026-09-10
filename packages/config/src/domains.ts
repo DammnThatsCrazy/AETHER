@@ -29,12 +29,12 @@ export interface DomainMap {
 
 /** Production defaults, matching every app's own `env.ts` fallback values. */
 export const PRODUCTION_DOMAINS: DomainMap = {
-  olympus: 'https://olympuslabs.com',
-  aetherMarketing: 'https://aether.olympuslabs.com',
-  aetherApp: 'https://app.olympuslabs.com',
-  docs: 'https://docs.olympuslabs.com',
-  status: 'https://status.olympuslabs.com',
-  kyber: 'https://kyber.olympuslabs.com',
+  olympus: 'https://olympuslabsml.com',
+  aetherMarketing: 'https://aether.olympuslabsml.com',
+  aetherApp: 'https://app.olympuslabsml.com',
+  docs: 'https://docs.olympuslabsml.com',
+  status: 'https://status.olympuslabsml.com',
+  kyber: 'https://kyber.olympuslabsml.com',
 };
 
 /**

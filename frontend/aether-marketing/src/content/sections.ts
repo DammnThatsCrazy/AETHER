@@ -167,7 +167,7 @@ export const SECTIONS: readonly SectionCopy[] = [
     lead: 'Olympus Labs builds Aether. Aether is the product; Olympus Labs is the company — the creator, owner, and operator of the platform, including the private internal operator environment used to run it.',
     paragraphs: [
       'Aether is a product of Olympus Labs. Olympus Labs is the company that builds, owns, and operates the platform, including the private internal operator environment used to run it. On this public site that relationship is stated plainly; inside the Aether product environment, Olympus Labs branding stays secondary to Aether.',
-      'The two names mark different things. Aether is the relationship intelligence platform Olympus Labs builds for customers and partners. Olympus Labs is the organization behind it, and the corporate site at olympuslabs.com carries the broader company narrative while this site stays focused on the Aether product.',
+      'The two names mark different things. Aether is the relationship intelligence platform Olympus Labs builds for customers and partners. Olympus Labs is the organization behind it, and the corporate site at olympuslabsml.com carries the broader company narrative while this site stays focused on the Aether product.',
       'The relationship is meant to be legible rather than layered. What Olympus Labs says about Aether on a corporate surface has to match what the platform actually does. The same governance discipline that governs customer relationships governs the platform’s own operator environment, so where Aether publishes availability, security, and ownership commitments, those pages describe reality rather than aspiration.',
     ],
     bullets: [

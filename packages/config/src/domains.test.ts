@@ -3,12 +3,12 @@ import { buildDomainMap, originFor, PRODUCTION_DOMAINS } from './domains';
 
 describe('PRODUCTION_DOMAINS', () => {
   it('matches the origins every app env.ts already defaults to', () => {
-    expect(PRODUCTION_DOMAINS.olympus).toBe('https://olympuslabs.com');
-    expect(PRODUCTION_DOMAINS.aetherMarketing).toBe('https://aether.olympuslabs.com');
-    expect(PRODUCTION_DOMAINS.aetherApp).toBe('https://app.olympuslabs.com');
-    expect(PRODUCTION_DOMAINS.docs).toBe('https://docs.olympuslabs.com');
-    expect(PRODUCTION_DOMAINS.status).toBe('https://status.olympuslabs.com');
-    expect(PRODUCTION_DOMAINS.kyber).toBe('https://kyber.olympuslabs.com');
+    expect(PRODUCTION_DOMAINS.olympus).toBe('https://olympuslabsml.com');
+    expect(PRODUCTION_DOMAINS.aetherMarketing).toBe('https://aether.olympuslabsml.com');
+    expect(PRODUCTION_DOMAINS.aetherApp).toBe('https://app.olympuslabsml.com');
+    expect(PRODUCTION_DOMAINS.docs).toBe('https://docs.olympuslabsml.com');
+    expect(PRODUCTION_DOMAINS.status).toBe('https://status.olympuslabsml.com');
+    expect(PRODUCTION_DOMAINS.kyber).toBe('https://kyber.olympuslabsml.com');
   });
 });
 

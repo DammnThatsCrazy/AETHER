@@ -19,7 +19,7 @@ export type AvailabilityStatus = 'available' | 'preview' | 'coming-soon';
 interface AvailabilityProps {
   status: AvailabilityStatus;
   /** Override the default label (e.g. "Beta" instead of "Preview"). */
-  label?: string;
+  label?: string | undefined;
 }
 
 const CONFIG: Record<AvailabilityStatus, { label: string; bg: string; fg: string }> = {

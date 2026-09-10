@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Badge, Button, Card, CardContent, CardHeader,
   DataTable, EmptyState, ErrorState, LoadingState, Skeleton, Tabs,
@@ -351,7 +351,18 @@ function CampaignListTab({ status }: { status?: string }) {
     return (
       <EmptyState
         title="No campaigns"
-        description={status ? `No ${status} campaigns found.` : 'No campaigns have been created yet.'}
+        description={
+          status
+            ? `No ${status} campaigns found.`
+            : 'Campaigns appear here once traffic and orders are attributed — connect a source to start building attribution.'
+        }
+        action={
+          !status && (
+            <Button asChild variant="primary" size="sm">
+              <Link to="/activation">Connect your first source</Link>
+            </Button>
+          )
+        }
       />
     );
   }

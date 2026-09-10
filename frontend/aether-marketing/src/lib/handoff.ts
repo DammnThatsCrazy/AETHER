@@ -2,7 +2,7 @@
  * Public → private handoff for the Aether marketing shell.
  *
  * Tenant sessions and credentials are scoped to the Aether application origin
- * (app.olympuslabs.com). This module is the ONLY place a public page may build
+ * (app.olympuslabsml.com). This module is the ONLY place a public page may build
  * an application-origin URL. The public marketing origin never stores tenant
  * credentials — no cookie, token, api key, PKCE verifier, or client-side
  * storage write belongs anywhere in this workspace.
@@ -139,7 +139,7 @@ export interface IntegrationsHandoffOptions {
 /**
  * Build the application-origin Settings→Integrations deep link for one
  * connectable family, e.g.
- *   https://app.olympuslabs.com/settings/integrations?family=google_ads&intent=connect
+ *   https://app.olympuslabsml.com/settings/integrations?family=google_ads&intent=connect
  *
  * Whitelisted: `family` is appended only when it resolves to a known directory
  * family (never a fabricated provider), `experience` only when it is one of the
@@ -181,7 +181,7 @@ export interface ActivationHandoffOptions {
 
 /**
  * Build the application-origin activation deep link, e.g.
- *   https://app.olympuslabs.com/activate?experience=advertising_campaigns&intent=connect
+ *   https://app.olympuslabsml.com/activate?experience=advertising_campaigns&intent=connect
  *
  * Same value whitelist as buildIntegrationsHandoffUrl.
  */
