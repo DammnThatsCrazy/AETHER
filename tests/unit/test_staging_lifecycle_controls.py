@@ -279,11 +279,13 @@ def test_lifecycle_is_dispatch_only():
 def test_staging_candidate_verification_uses_candidate_commit_lockfile_identity():
     workflow = _workflow(LIFECYCLE)
     # Both wake-plan and rehearsal verification must resolve the candidate
-    # source before hashing lockfiles.  Relative paths preserve the identity
-    # recorded by the candidate builder instead of changing it to the runner
-    # workspace's absolute spelling.
+    # lockfiles before hashing.  Relative paths preserve the identity recorded
+    # by the candidate builder instead of changing it to the runner workspace's
+    # absolute spelling, while the reviewed workflow checkout remains active.
     assert workflow.count('git fetch --no-tags origin "$sha"') >= 2
-    assert workflow.count('git checkout --detach "$sha"') >= 2
+    assert workflow.count('git -C "${GITHUB_WORKSPACE}" show "$sha:package-lock.json" > package-lock.json') >= 2
+    assert workflow.count('git -C "${GITHUB_WORKSPACE}" show "$sha:pyproject.toml" > pyproject.toml') >= 2
+    assert 'git checkout --detach "$sha"' not in workflow
     assert workflow.count("--lockfile package-lock.json") >= 2
     assert workflow.count("--lockfile pyproject.toml") >= 2
     assert '--lockfile "${GITHUB_WORKSPACE}/package-lock.json"' not in workflow

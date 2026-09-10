@@ -60,4 +60,5 @@ authorities:
       - .github/workflows/ephemeral-ttl-guard.yml
       - .github/workflows/staging-ttl-guard.yml
     required_commands:
-      - aws ssm put-parameter
+      - aws ecs update-service
+      - aws ssm delete-parameter

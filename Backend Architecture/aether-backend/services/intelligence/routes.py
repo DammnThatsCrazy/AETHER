@@ -188,10 +188,18 @@ def _ready_evidence_check_error(
     """Return why a successful evidence record is not complete enough to trust."""
 
     # A raw ReleaseEvidenceBundle has additional required properties beyond its
-    # check map.  A Kyber projection intentionally omits those producer fields,
-    # so validate the complete bundle shape only when the raw ``status`` field
-    # identifies it as such.
-    if "status" in value:
+    # check map.  A Kyber/projection result may also carry a ``status`` field
+    # and a nested candidate identity, but intentionally omits those producer
+    # fields.  Treat only the canonical top-level READY/degraded statuses (with
+    # no nested projection identity) as raw bundles; other status-bearing
+    # envelopes retain their own supported shape.
+    raw_status = value.get("status")
+    is_raw_bundle = (
+        "candidate_identity" not in value
+        and isinstance(raw_status, str)
+        and raw_status in {"READY", "PASS_WITH_DEGRADATION", "BLOCKED", "FAILED"}
+    )
+    if is_raw_bundle:
         missing_bundle = sorted(_DELIVERY_BUNDLE_REQUIRED_FIELDS - set(value))
         if missing_bundle:
             return "raw delivery evidence is missing: " + ", ".join(missing_bundle)
@@ -202,11 +210,13 @@ def _ready_evidence_check_error(
     if missing:
         return "delivery evidence is missing required checks: " + ", ".join(missing)
     invalid = sorted(
-        str(name) for name, result in checks.items() if result not in _DELIVERY_CHECK_RESULTS
+        str(name)
+        for name, result in checks.items()
+        if not isinstance(result, str) or result not in _DELIVERY_CHECK_RESULTS
     )
     if invalid:
         return "delivery evidence contains invalid check results: " + ", ".join(invalid)
-    values = set(checks.values())
+    values = {result for result in checks.values() if isinstance(result, str)}
     if values & {"BLOCKED", "FAILED"}:
         return "delivery evidence contains a blocking check"
     if "PASS_WITH_DEGRADATION" in values and not allow_degradation:

@@ -170,6 +170,27 @@ def test_delivery_evidence_projection_accepts_raw_and_kyber_shapes(tmp_path, mon
     assert projected["deployment_mode"] == "standard_saas"
 
 
+def test_delivery_evidence_projection_preserves_status_envelope_shape(tmp_path, monkeypatch):
+    identity = {
+        "release_candidate_id": "rc-1",
+        "commit_sha": "a" * 40,
+        "artifact_digest": "sha256:" + "b" * 64,
+        "profile": "staging",
+    }
+    path = tmp_path / "status-envelope.json"
+    path.write_text(json.dumps({
+        "status": "PASS",
+        "candidate_identity": identity,
+        "deployment_profile": "staging",
+        "checks": {name: "PASS" for name in routes._delivery_required_checks()},
+    }), encoding="utf-8")
+    monkeypatch.setenv("AETHER_DELIVERY_EVIDENCE_PATH", str(path))
+    projected = routes._delivery_evidence_projection()
+    assert projected["status"] == "PASS"
+    assert projected["deployment_profile"] == "staging"
+    assert projected["deployment_mode"] == "standard_saas"
+
+
 def test_delivery_evidence_projection_rejects_incomplete_ready_checks(tmp_path, monkeypatch):
     path = tmp_path / "evidence.json"
     path.write_text(json.dumps({
@@ -184,6 +205,24 @@ def test_delivery_evidence_projection_rejects_incomplete_ready_checks(tmp_path, 
     projected = routes._delivery_evidence_projection()
     assert projected["status"] == "BLOCKED"
     assert "missing required checks" in projected["reason"]
+
+
+def test_delivery_evidence_projection_rejects_compound_check_result(tmp_path, monkeypatch):
+    checks = {name: "PASS" for name in routes._delivery_required_checks()}
+    checks["code_correctness"] = []
+    path = tmp_path / "compound-check.json"
+    path.write_text(json.dumps({
+        "release_candidate_id": "rc-1",
+        "commit_sha": "a" * 40,
+        "artifact_digest": "sha256:" + "b" * 64,
+        "deployment_profile": "staging",
+        "disposition": "PASS",
+        "checks": checks,
+    }), encoding="utf-8")
+    monkeypatch.setenv("AETHER_DELIVERY_EVIDENCE_PATH", str(path))
+    projected = routes._delivery_evidence_projection()
+    assert projected["status"] == "BLOCKED"
+    assert "invalid check results" in projected["reason"]
 
 
 def test_delivery_profile_maps_to_catalog_deployment_mode(tmp_path, monkeypatch):
