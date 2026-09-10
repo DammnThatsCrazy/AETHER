@@ -3917,6 +3917,22 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/api/webhooks.md",
+      "title": "Webhooks",
+      "slug": "api/webhooks",
+      "section": "api",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md",
       "title": "Aether Backend Intelligence Architecture Blueprint",
       "slug": "architecture/backend-intelligence",
@@ -8427,6 +8443,40 @@
       "status": "beta",
       "since_version": "8.12.0",
       "estimated_read_minutes": 15,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/tutorials/shopify-integration.md",
+      "title": "Shopify Integration Guide",
+      "slug": "tutorials/shopify-integration",
+      "section": "tutorials",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "9.1.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/tutorials/stripe-integration.md",
+      "title": "Stripe Integration Guide",
+      "slug": "tutorials/stripe-integration",
+      "section": "tutorials",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "9.1.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
       "canonical_owner": "platform@aether"
     }
   ]
