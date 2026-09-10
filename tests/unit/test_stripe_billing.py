@@ -90,8 +90,8 @@ class TestStripeSettings:
             STRIPE_BILLING_ENABLED="true",
             STRIPE_SECRET_KEY="",
             STRIPE_WEBHOOK_SECRET="",
-            STRIPE_PRICE_P1="", STRIPE_PRICE_P2="",
-            STRIPE_PRICE_P3="", STRIPE_PRICE_P4="",
+            STRIPE_PRICE_ALPHA="", STRIPE_PRICE_BETA="",
+            STRIPE_PRICE_GAMMA="", STRIPE_PRICE_DELTA="",
         )
         with backend_path():
             mod = _reload_settings()
@@ -121,14 +121,14 @@ class TestStripeSettings:
             STRIPE_BILLING_ENABLED="true",
             STRIPE_SECRET_KEY="",
             STRIPE_WEBHOOK_SECRET="",
-            STRIPE_PRICE_P1="", STRIPE_PRICE_P2="",
-            STRIPE_PRICE_P3="", STRIPE_PRICE_P4="",
+            STRIPE_PRICE_ALPHA="", STRIPE_PRICE_BETA="",
+            STRIPE_PRICE_GAMMA="", STRIPE_PRICE_DELTA="",
         )
         with backend_path():
             with pytest.raises(RuntimeError) as exc:
                 _reload_settings()
             assert "STRIPE_SECRET_KEY" in str(exc.value)
-            assert "STRIPE_PRICE_P1" in str(exc.value)
+            assert "STRIPE_PRICE_ALPHA" in str(exc.value)
 
     def test_non_local_passes_when_all_stripe_vars_set(self, monkeypatch):
         _set_env(
