@@ -1,3 +1,15 @@
+---
+title: Pre-release Version and History Policy
+slug: reference/pre-release-policy
+section: reference
+visibility: I
+audience: [exec, dev-senior, ops]
+status: stable
+since_version: "0.1.0"
+canonical_owner: release@aether
+estimated_read_minutes: 4
+toc_depth: 3
+---
 # Pre-release version and history policy
 
 ## Current status

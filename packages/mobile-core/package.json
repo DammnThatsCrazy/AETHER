@@ -1,7 +1,7 @@
 {
   "name": "@aether/mobile-core",
   "version": "0.1.0",
-  "description": "Aether mobile SDK core \u2014 typed API client, config, and contract re-exports shared by the Aether and Kyber mobile apps. Platform-agnostic (no React Native / Expo dependency).",
+  "description": "Aether mobile SDK core — typed API client, config, and contract re-exports shared by the Aether and Kyber mobile apps. Platform-agnostic (no React Native / Expo dependency).",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "source": "src/index.ts",

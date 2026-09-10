@@ -13,11 +13,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aether/common": "8.7.1",
-    "@aether/logger": "8.7.1",
-    "@aether/auth": "8.7.1",
-    "@aether/cache": "8.7.1",
-    "@aether/events": "8.7.1"
+    "@aether/common": "0.1.0",
+    "@aether/logger": "0.1.0",
+    "@aether/auth": "0.1.0",
+    "@aether/cache": "0.1.0",
+    "@aether/events": "0.1.0"
   },
   "devDependencies": {
     "tsx": "^4.7.0",

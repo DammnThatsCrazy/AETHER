@@ -12,9 +12,20 @@ canonical_owner: release@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "CHANGELOG.md": "sha256:6700bf7d494153cd0e0a91c34b0d8325635139f8807290e25204118c4b8eddd0"
+  "CHANGELOG.md": "sha256:765ff3daad7571925389ad0b273ebb1339c2cb9ef2c10c4f6fc677d60a6f5199"
 ---
 # Changelog
+
+> **History status:** Aether has not published a production release. Numbered
+> `8.x` headings below are preserved internal engineering milestones, not Git
+> tags, public packages, or deployment evidence. See
+> [Pre-release Version and History Policy](PRE-RELEASE-POLICY.md).
+
+## [0.1.0] — pre-release baseline (not published)
+
+- Repository package and runtime version surfaces are aligned to `0.1.0`.
+- Earlier numbered entries remain internal development milestones rather than
+  evidence of public releases or production deployment.
 
 ## Unreleased — Hosted Agent Control Plane
 

@@ -2,7 +2,7 @@
   "name": "@aether/kyber-mobile",
   "version": "0.1.0",
   "private": true,
-  "description": "Kyber Mobile \u2014 the operator companion app (Expo). Consumes @aether/mobile-core; distinct bundle id and workforce auth audience from Aether Mobile. No Aether tenant code ships in this binary.",
+  "description": "Kyber Mobile — the operator companion app (Expo). Consumes @aether/mobile-core; distinct bundle id and workforce auth audience from Aether Mobile. No Aether tenant code ships in this binary.",
   "main": "src/index.ts",
   "scripts": {
     "start": "expo start",

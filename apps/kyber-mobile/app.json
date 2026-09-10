@@ -10,9 +10,7 @@
     "ios": {
       "bundleIdentifier": "com.aether.kyber",
       "supportsTablet": false,
-      "associatedDomains": [
-        "applinks:operator.aether.example"
-      ]
+      "associatedDomains": ["applinks:operator.aether.example"]
     },
     "android": {
       "package": "com.aether.kyber",
@@ -20,28 +18,15 @@
         {
           "action": "VIEW",
           "autoVerify": true,
-          "data": [
-            {
-              "scheme": "https",
-              "host": "operator.aether.example"
-            }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "data": [{ "scheme": "https", "host": "operator.aether.example" }],
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ]
     },
-    "plugins": [
-      "expo-secure-store"
-    ],
+    "plugins": ["expo-secure-store"],
     "extra": {
       "appKind": "kyber",
-      "distributionProfiles": {
-        "ios": "dev",
-        "android": "dev"
-      }
+      "distributionProfiles": { "ios": "dev", "android": "dev" }
     }
   }
 }

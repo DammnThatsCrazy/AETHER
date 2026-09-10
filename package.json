@@ -2,7 +2,7 @@
   "name": "aether-sdk",
   "version": "0.1.0",
   "private": true,
-  "description": "Aether SDK \u2014 Multi-platform behavioral analytics and Web3 data collection",
+  "description": "Aether SDK — Multi-platform behavioral analytics and Web3 data collection",
   "workspaces": [
     "packages/brand",
     "packages/config",

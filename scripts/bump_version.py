@@ -33,9 +33,12 @@ ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_JSONS = [
     ROOT / "package.json",
     ROOT / "packages" / "shared" / "package.json",
+    ROOT / "packages" / "config" / "package.json",
     ROOT / "packages" / "web" / "package.json",
     ROOT / "packages" / "react-native" / "package.json",
     ROOT / "packages" / "mobile-core" / "package.json",
+    ROOT / "packages" / "mobile-ui" / "package.json",
+    ROOT / "packages" / "server" / "package.json",
     ROOT / "apps" / "aether-mobile" / "package.json",
     ROOT / "apps" / "kyber-mobile" / "package.json",
     ROOT / "frontend" / "aether" / "package.json",
@@ -65,6 +68,29 @@ PACKAGE_JSONS = [
 # Native SDK version files (different format than package.json)
 IOS_PACKAGE_SWIFT = ROOT / "packages" / "ios" / "Package.swift"
 ANDROID_BUILD_GRADLE = ROOT / "packages" / "android" / "build.gradle.kts"
+PACKAGE_LOCKS = [
+    ROOT / "package-lock.json",
+    ROOT / "Data Ingestion Layer" / "package-lock.json",
+    ROOT / "Data Lake Architecture" / "aether-Datalake-backend" / "package-lock.json",
+]
+EXPO_APP_JSONS = [
+    ROOT / "apps" / "aether-mobile" / "app.json",
+    ROOT / "apps" / "kyber-mobile" / "app.json",
+]
+
+TEXT_VERSION_SURFACES = [
+    (ROOT / "packages" / "ios" / "AetherSDK.podspec", r'(s\.version\s*=\s*")[^"]+(".*)', r"\g<1>{version}\g<2>"),
+    (ROOT / "packages" / "android" / "gradle.properties", r'(?m)^(sdkVersion=).+$', r"\g<1>{version}"),
+    (ROOT / "packages" / "shared" / "sdk-version.ts", r"(SDK_VERSION = ')[^']+(')", r"\g<1>{version}\g<2>"),
+    (ROOT / "packages" / "web" / "src" / "index.ts", r"(SDK_VERSION = ')[^']+(')", r"\g<1>{version}\g<2>"),
+    (ROOT / "packages" / "web" / "src" / "core" / "event-queue.ts", r"(SDK_VERSION = ')[^']+(')", r"\g<1>{version}\g<2>"),
+    (ROOT / "packages" / "web" / "src" / "health" / "sdk-health-agent.ts", r"(SDK_VERSION = ')[^']+(')", r"\g<1>{version}\g<2>"),
+    (ROOT / "packages" / "react-native" / "src" / "modules" / "HealthAgent.ts", r"(SDK_VERSION = ')[^']+(')", r"\g<1>{version}\g<2>"),
+    (ROOT / "packages" / "react-native" / "src" / "context" / "SemanticContext.ts", r"(version: ')[^']+(')", r"\g<1>{version}\g<2>"),
+    (ROOT / "packages" / "shared" / "events-registry.test.ts", r"(SDK_VERSION is )[^']+(')", r"\g<1>{version}\g<2>"),
+    (ROOT / "packages" / "shared" / "events-registry.test.ts", r"(expect\(SDK_VERSION\)\.toBe\(')[^']+(')", r"\g<1>{version}\g<2>"),
+    (ROOT / "packages" / "react-native" / "src" / "__tests__" / "Observe.test.ts", r"(name: 'aether-react-native', version: ')[^']+(')", r"\g<1>{version}\g<2>"),
+]
 
 # Doc files where the FIRST heading contains a version like "v8.3.1" or "v8.3.0"
 DOC_HEADERS = [
@@ -144,11 +170,75 @@ def update_package_json(path: Path, new_version: str) -> None:
     if not path.exists():
         print(f"  SKIP (not found): {path.relative_to(ROOT)}")
         return
-    data = json.loads(path.read_text())
+    text = path.read_text(encoding="utf-8")
+    data = json.loads(text)
     old = data.get("version", "?")
+    text = re.sub(r'("version"\s*:\s*")[^"]+("\s*,)', rf'\g<1>{new_version}\g<2>', text, count=1)
+    def replace_internal_dependency(match: re.Match[str]) -> str:
+        prefix, value, suffix = match.groups()
+        if value == "*" or value.startswith(("workspace:", "file:")):
+            replacement = value
+        elif value.startswith("^"):
+            replacement = f"^{new_version}"
+        elif value.startswith(">="):
+            replacement = f">={new_version} <1.0.0"
+        else:
+            replacement = new_version
+        return f"{prefix}{replacement}{suffix}"
+
+    text = re.sub(
+        r'("@aether/[^"]+"\s*:\s*")([^"]+)("\s*[,}])',
+        replace_internal_dependency,
+        text,
+    )
+    json.loads(text)
+    path.write_text(text, encoding="utf-8")
+    print(f"  Updated: {_rel(path)} ({old} -> {new_version})")
+
+
+def update_expo_app(path: Path, new_version: str) -> None:
+    """Update Expo's top-level app version without reformatting app.json."""
+    text = path.read_text(encoding="utf-8")
+    updated = re.sub(r'("version"\s*:\s*")[^"]+("\s*,)', rf'\g<1>{new_version}\g<2>', text, count=1)
+    json.loads(updated)
+    path.write_text(updated, encoding="utf-8")
+    print(f"  Updated: {_rel(path)} -> {new_version}")
+
+
+def update_package_lock(path: Path, new_version: str) -> None:
+    """Synchronize repo-owned workspace entries in npm's lockfile."""
+    data = json.loads(path.read_text(encoding="utf-8"))
     data["version"] = new_version
-    path.write_text(json.dumps(data, indent=2) + "\n")
-    print(f"  Updated: {path.relative_to(ROOT)} ({old} -> {new_version})")
+    packages = data.get("packages", {})
+    for key, package in packages.items():
+        if key == "" or (isinstance(package, dict) and str(package.get("name", "")).startswith("@aether/")):
+            package["version"] = new_version
+        if not isinstance(package, dict):
+            continue
+        for field in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies"):
+            for name, value in package.get(field, {}).items():
+                if not name.startswith("@aether/") or not isinstance(value, str):
+                    continue
+                if value == "*" or value.startswith(("workspace:", "file:")):
+                    continue
+                if value.startswith("^"):
+                    package[field][name] = f"^{new_version}"
+                elif value.startswith(">="):
+                    package[field][name] = f">={new_version} <1.0.0"
+                else:
+                    package[field][name] = new_version
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"  Updated: {path.relative_to(ROOT)} -> {new_version}")
+
+
+def update_text_version_surfaces(new_version: str) -> None:
+    for path, pattern, replacement in TEXT_VERSION_SURFACES:
+        text = path.read_text(encoding="utf-8")
+        updated, count = re.subn(pattern, replacement.format(version=new_version), text, count=1)
+        if count != 1:
+            raise RuntimeError(f"could not update {_rel(path)}")
+        path.write_text(updated, encoding="utf-8")
+        print(f"  Updated: {path.relative_to(ROOT)} -> {new_version}")
 
 
 def update_doc_header(path: Path, new_version: str) -> None:
@@ -251,8 +341,18 @@ def check_version_alignment() -> int:
             if not isinstance(deps, dict):
                 continue
             for dep_name, dep_version in deps.items():
-                if dep_name.startswith("@aether/") and dep_version.startswith("^") and dep_version != f"^{canonical}":
-                    errors.append(f"{_rel(package_json)} {dep_field}.{dep_name} {dep_version!r} != ^{canonical}")
+                if not dep_name.startswith("@aether/") or not isinstance(dep_version, str):
+                    continue
+                if dep_version == "*" or dep_version.startswith(("workspace:", "file:")):
+                    continue
+                if dep_version.startswith("^"):
+                    expected = f"^{canonical}"
+                elif dep_version.startswith(">="):
+                    expected = f">={canonical} <1.0.0"
+                else:
+                    expected = canonical
+                if dep_version != expected:
+                    errors.append(f"{_rel(package_json)} {dep_field}.{dep_name} {dep_version!r} != {expected!r}")
 
     for package_json in sorted(INDEPENDENT_PACKAGE_JSONS):
         if package_json.exists():
@@ -281,6 +381,12 @@ def check_version_alignment() -> int:
         ROOT / "packages" / "android" / "gradle.properties": [f"sdkVersion={canonical}"],
         ROOT / "packages" / "web" / "src" / "index.ts": [f"SDK_VERSION = '{canonical}'"],
         ROOT / "packages" / "shared" / "sdk-version.ts": [f"SDK_VERSION = '{canonical}'"],
+        ROOT / "packages" / "web" / "src" / "core" / "event-queue.ts": [f"SDK_VERSION = '{canonical}'"],
+        ROOT / "packages" / "web" / "src" / "health" / "sdk-health-agent.ts": [f"SDK_VERSION = '{canonical}'"],
+        ROOT / "packages" / "react-native" / "src" / "modules" / "HealthAgent.ts": [f"SDK_VERSION = '{canonical}'"],
+        ROOT / "packages" / "react-native" / "src" / "context" / "SemanticContext.ts": [f"version: '{canonical}'"],
+        ROOT / "packages" / "shared" / "events-registry.test.ts": [f"SDK_VERSION is {canonical}", f"toBe('{canonical}')"],
+        ROOT / "packages" / "react-native" / "src" / "__tests__" / "Observe.test.ts": [f"name: 'aether-react-native', version: '{canonical}'"],
     }
     print("Checking SDK/native version constants...")
     for path, needles in native_expectations.items():
@@ -290,6 +396,16 @@ def check_version_alignment() -> int:
         body = path.read_text(encoding="utf-8")
         if not any(needle in body for needle in needles):
             errors.append(f"{_rel(path)} missing synchronized version {canonical}")
+
+    for app_json in EXPO_APP_JSONS:
+        version = json.loads(app_json.read_text(encoding="utf-8")).get("expo", {}).get("version")
+        if version != canonical:
+            errors.append(f"{_rel(app_json)} Expo version {version!r} != {canonical!r}")
+
+    for package_lock in PACKAGE_LOCKS:
+        lock = json.loads(package_lock.read_text(encoding="utf-8"))
+        if lock.get("version") != canonical or lock.get("packages", {}).get("", {}).get("version") != canonical:
+            errors.append(f"{_rel(package_lock)} root version is not synchronized to {canonical!r}")
 
     for warning in warnings:
         print(f"  warning: {warning}")
@@ -338,21 +454,28 @@ def main() -> None:
     print("\n2. package.json files:")
     for pj in PACKAGE_JSONS:
         update_package_json(pj, new_version)
+    for package_lock in PACKAGE_LOCKS:
+        update_package_lock(package_lock, new_version)
+
+    print("\n3. Expo application metadata:")
+    for app_json in EXPO_APP_JSONS:
+        update_expo_app(app_json, new_version)
 
     # 3. Doc headers
-    print("\n3. Doc headers:")
+    print("\n4. Doc headers:")
     for doc in DOC_HEADERS:
         update_doc_header(doc, new_version)
 
     # 4. README headers
-    print("\n4. README headers:")
+    print("\n5. README headers:")
     for readme in README_HEADERS:
         update_doc_header(readme, new_version)
 
     # 5. Native SDK versions
-    print("\n5. Native SDK versions:")
+    print("\n6. Native SDK versions:")
     update_ios_version(new_version)
     update_android_version(new_version)
+    update_text_version_surfaces(new_version)
 
     print(f"\nDone. Version bumped to {new_version} across all files.")
     print("Remember to update CHANGELOG.md with release notes.")

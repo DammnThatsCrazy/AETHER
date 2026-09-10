@@ -11,7 +11,7 @@ source_files:
   - packages/web/src/tracking/traffic-source-tracker.ts
 source_hashes:
   "packages/shared/acquisition-evidence.ts": "sha256:9f4b8011f9a596a08969cbf5ef1b14f8212715e00e8d6f920f23f48f09c5f855"
-  "packages/web/src/index.ts": "sha256:5bebe67525272c525ad9b68411df2323976b6372d04d4ccf81cf893b64fff749"
+  "packages/web/src/index.ts": "sha256:71f51490cb618c323ff85724acfcfba3eac59cdcfac7799df754e4474b8fea02"
   "packages/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
   "packages/web/src/types.ts": "sha256:37c3dcce06bfda66dc5f96232e9ccd00f112df47c6469067fa1b03f82dd80200"
 ---

@@ -1,5 +1,5 @@
 {
-  "version": "8.12.0",
+  "version": "0.1.0",
   "generated_from": "docs/**/*.{md,mdx}",
   "docs": [
     {
@@ -2410,6 +2410,23 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/PRE-RELEASE-POLICY.md",
+      "title": "Pre-release Version and History Policy",
+      "slug": "reference/pre-release-policy",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "release@aether"
+    },
+    {
       "path": "docs/PREPRODUCTION-READINESS.md",
       "title": "Pre-production Readiness",
       "slug": "operations/preproduction-readiness",
@@ -2749,6 +2766,24 @@
       "status": "stable",
       "since_version": "8.8.0",
       "estimated_read_minutes": 2,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/REPOSITORY-REALIGNMENT.md",
+      "title": "Repository Realignment",
+      "slug": "architecture/repository-realignment",
+      "section": "architecture",
+      "visibility": "I",
+      "audience": [
+        "exec",
+        "architect",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },

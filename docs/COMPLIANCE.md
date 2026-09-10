@@ -16,7 +16,7 @@ canonical_owner: compliance@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "GDPR & SOC2/aether-compliance/README.md": "sha256:64f2a85f26979f24c68aeea27f5c218bac3b6c2297db326887c23753b9e018ca"
+  "GDPR & SOC2/aether-compliance/README.md": "sha256:06a252c995edb2e18ee7a0e7a1771618672b3a8938f4073ec18def01110f6451"
   "GDPR & SOC2/aether-compliance/gdpr/": "sha256:8cd8165cd51300182bd4712ab461ac8cea863835c78ddd2436c24d9d980ac326"
   "GDPR & SOC2/aether-compliance/main.py": "sha256:2b8ddf37aca8aa4b645e40abb4a80be50828046b41afa9e97ddb1d29bf8ee2b8"
   "GDPR & SOC2/aether-compliance/policies/": "sha256:dcf1e2b334e497de4559884e7c4aeab0aa6d15bcbb9fb95f05e614f6e12e8f53"

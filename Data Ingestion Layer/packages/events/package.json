@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aether/common": "8.7.1",
-    "@aether/logger": "8.7.1"
+    "@aether/common": "0.1.0",
+    "@aether/logger": "0.1.0"
   }
 }

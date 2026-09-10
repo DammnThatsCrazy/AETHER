@@ -89,7 +89,7 @@ describe('Aether RN bridge — semantic envelope wiring', () => {
     const envelope = Aether.collectSemanticContext('sess-native-1', 'evt-9');
     expect(envelope.sessionId).toBe('sess-native-1');
     expect(envelope.eventId).toBe('evt-9');
-    expect(envelope.sdk).toEqual({ name: 'aether-react-native', version: '8.12.0' });
+    expect(envelope.sdk).toEqual({ name: 'aether-react-native', version: '0.1.0' });
     expect(envelope.platform).toBe('ios');
   });
 

@@ -10,9 +10,7 @@
     "ios": {
       "bundleIdentifier": "com.aether.mobile",
       "supportsTablet": false,
-      "associatedDomains": [
-        "applinks:app.aether.example"
-      ]
+      "associatedDomains": ["applinks:app.aether.example"]
     },
     "android": {
       "package": "com.aether.mobile",
@@ -20,28 +18,15 @@
         {
           "action": "VIEW",
           "autoVerify": true,
-          "data": [
-            {
-              "scheme": "https",
-              "host": "app.aether.example"
-            }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "data": [{ "scheme": "https", "host": "app.aether.example" }],
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ]
     },
-    "plugins": [
-      "expo-secure-store"
-    ],
+    "plugins": ["expo-secure-store"],
     "extra": {
       "appKind": "aether",
-      "distributionProfiles": {
-        "ios": "dev",
-        "android": "dev"
-      }
+      "distributionProfiles": { "ios": "dev", "android": "dev" }
     }
   }
 }

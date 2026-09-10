@@ -274,7 +274,7 @@ object Aether : DefaultLifecycleObserver {
     private val EVENT_CONSENT_PURPOSE = mapOf(
 // @generated-start aether-consent-purposes/android-map
 // @generated — DO NOT EDIT. Source: packages/shared/contracts/event-registry.json
-// Contract version: 0.1.0 — Run: python scripts/generate_contracts.py
+// Contract version: 8.12.0 — Run: python scripts/generate_contracts.py
         // core
         "track" to "analytics",
         "page" to "analytics",

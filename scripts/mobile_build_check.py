@@ -7,7 +7,7 @@ Three jobs, all honest:
      without a native toolchain: both apps exist and are complete (package.json,
      app.json, entry, SDK wiring); the two apps have DISTINCT bundle ids, schemes,
      and product planes (an Aether token can never call Kyber, and no Kyber code
-     ships in the Aether binary); each app pins version 8.12.0. These are real
+     ships in the Aether binary); each app pins the canonical platform version. These are real
      failures if violated (exit 1).
 
   1b. Enforce the per-build DISTRIBUTION PROFILE declaration: each app must
@@ -28,6 +28,7 @@ Exit codes:
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -39,7 +40,11 @@ EXPECTED = {
     "aether-mobile": {"app_kind": "aether", "bundle": "com.aether.mobile", "scheme": "aether"},
     "kyber-mobile": {"app_kind": "kyber", "bundle": "com.aether.kyber", "scheme": "kyber"},
 }
-PLATFORM_VERSION = "8.12.0"
+_PYPROJECT = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+_VERSION_MATCH = re.search(r'^version\s*=\s*"([^"]+)"', _PYPROJECT, re.MULTILINE)
+if _VERSION_MATCH is None:
+    raise RuntimeError("canonical version missing from pyproject.toml")
+PLATFORM_VERSION = _VERSION_MATCH.group(1)
 
 # Distribution profiles per platform family (snake_case). Must agree with
 # services/mobile/config.py DISTRIBUTION_PROFILES — drift-guarded by

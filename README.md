@@ -13,6 +13,8 @@ humans, organizations, AI agents, and onchain protocols.
 
 ## Quick links
 
+- [`docs/REPOSITORY-REALIGNMENT.md`](docs/REPOSITORY-REALIGNMENT.md) — canonical repository map and staged cleanup plan
+- [`docs/PRE-RELEASE-POLICY.md`](docs/PRE-RELEASE-POLICY.md) — pre-release version, history, evidence, and tagging rules
 - [`docs/source-of-truth/SDK_SCOPE.md`](docs/source-of-truth/SDK_SCOPE.md) — what the SDK is and is not
 - [`docs/source-of-truth/EVENT_REGISTRY.md`](docs/source-of-truth/EVENT_REGISTRY.md) — every event the SDK emits
 - [`docs/source-of-truth/CONSENT_MODEL.md`](docs/source-of-truth/CONSENT_MODEL.md) — canonical consent purposes (registry-derived from [`packages/shared/contracts/consent-registry.json`](packages/shared/contracts/consent-registry.json))

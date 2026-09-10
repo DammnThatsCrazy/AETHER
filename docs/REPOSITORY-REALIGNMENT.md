@@ -1,3 +1,15 @@
+---
+title: Repository Realignment
+slug: architecture/repository-realignment
+section: architecture
+visibility: I
+audience: [exec, architect, dev-senior, ops]
+status: experimental
+since_version: "0.1.0"
+canonical_owner: platform@aether
+estimated_read_minutes: 8
+toc_depth: 3
+---
 # Repository realignment
 
 ## Purpose

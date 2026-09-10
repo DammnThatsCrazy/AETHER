@@ -4,7 +4,7 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "Aether public marketing site (aether.olympuslabsml.com) \u2014 platform, solutions, developers, integrations, security, pricing, resources, and the public Aether authentication threshold layout.",
+  "description": "Aether public marketing site (aether.olympuslabsml.com) — platform, solutions, developers, integrations, security, pricing, resources, and the public Aether authentication threshold layout.",
   "scripts": {
     "dev": "vite --port 5179",
     "build": "tsc --noEmit && vite build && node scripts/prerender.mjs",

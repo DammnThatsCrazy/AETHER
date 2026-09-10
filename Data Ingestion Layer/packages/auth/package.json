@@ -8,6 +8,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aether/common": "8.7.1"
+    "@aether/common": "0.1.0"
   }
 }

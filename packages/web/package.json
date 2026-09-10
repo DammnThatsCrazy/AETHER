@@ -1,7 +1,7 @@
 {
   "name": "@aether/web",
   "version": "0.1.0",
-  "description": "Aether SDK for Web \u2014 Behavioral analytics with thin-client architecture",
+  "description": "Aether SDK for Web — Behavioral analytics with thin-client architecture",
   "main": "./dist/aether.cjs.js",
   "module": "./dist/aether.esm.js",
   "types": "./dist/index.d.ts",

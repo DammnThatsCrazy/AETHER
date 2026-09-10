@@ -19,7 +19,7 @@ reviewed_source_commits:
 source_hashes:
   "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
   "Backend Architecture/aether-backend/middleware/middleware.py": "sha256:e320a85428e219bd745ff298a6b3a8a7404a1f72b562e65d4f7682e722ecb79c"
-  "packages/shared/": "sha256:8e79c77f302663bfd0b7878519bd39736b4f3fc72d4f991f5db1ed3fda05c8cd"
+  "packages/shared/": "sha256:1434e98e23dde4047a3283015f73b625b9a77e4e9cebfd117670c936c3ff594f"
 ---
 # Aether vNext — Architecture Guide
 
@@ -89,7 +89,7 @@ The SDK also collects raw user interactions, device fingerprints, wallet events,
 ### Module Architecture (Web SDK)
 
 ```
-AetherSDK (index.ts) — v8.12.0
+AetherSDK (index.ts) — v0.1.0
 │
 ├── Core (always loaded)
 │   ├── EventQueue .............. Batch + offline queue (POST /v1/batch)

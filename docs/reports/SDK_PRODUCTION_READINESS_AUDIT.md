@@ -18,16 +18,23 @@ source_hashes:
   "docs/source-of-truth/PLATFORM_PARITY.md": "sha256:88b5009320b1cb749c0a34077083e99bb5edadb423b1e8f077f1013f9a69cbd2"
   "packages/shared/consent.ts": "sha256:e8cc43b2a64f70eca68d499d7a1fb7b85ceacb44bc94f77a70e105e0d05e8730"
   "packages/shared/events.ts": "sha256:216fa41739a8613800f057f2937071bf40a28ac35ba47b4a77f438cfd2fd9477"
-  "packages/shared/sdk-version.ts": "sha256:446e4684040b989bf0c4a7538b606ede3288ed2323f7c204296793f125551f20"
-  "packages/web/src/core/event-queue.ts": "sha256:265c816e72a32eefb89c8c6c9bf6bf063cb3bea2e1af5d8656eea7bb323a3be6"
-  "packages/web/src/health/sdk-health-agent.ts": "sha256:7199fce41d0016ef673152662f56482fb4c248afb201405ae5e5f78de7e2dde6"
-  "packages/web/src/index.ts": "sha256:5bebe67525272c525ad9b68411df2323976b6372d04d4ccf81cf893b64fff749"
+  "packages/shared/sdk-version.ts": "sha256:640feef1adcb6d3717804d8f4b11a1510470cdd22cf2a163678d8c2c3097d9ed"
+  "packages/web/src/core/event-queue.ts": "sha256:eebf42fdea9947db9d2560792f75f71c67ff6a4e8b1d8b13a9c3f67efd465105"
+  "packages/web/src/health/sdk-health-agent.ts": "sha256:7481cb6f4e28502757484af6531e16bf3b0ce4b878708fa0b0c0af1f4c01da88"
+  "packages/web/src/index.ts": "sha256:71f51490cb618c323ff85724acfcfba3eac59cdcfac7799df754e4474b8fea02"
 ---
 
 # Aether SDK Production Readiness Audit
 
 **Audit date:** 2026-06-27
-**SDK version audited:** 8.11.0
+**SDK version audited:** 8.11.0 (historical internal milestone)
+
+> **Historical evidence notice:** This report preserves the terminology and
+> version identifiers used when the audit was written. `SHIPPED` in its tables
+> means implemented in the repository at that internal milestone; it does not
+> mean published to a registry, deployed to production, or formally certified.
+> The current repository baseline is `0.1.0`; see
+> [Pre-release Version and History Policy](../PRE-RELEASE-POLICY.md).
 **Platforms covered:** Web, iOS, Android, React Native, Shared contracts
 **Prepared by:** SDK Productization Pass (automated audit)
 
