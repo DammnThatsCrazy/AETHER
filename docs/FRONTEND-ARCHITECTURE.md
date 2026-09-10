@@ -37,7 +37,7 @@ reviewed_source_commits:
   - commit: "8b94e6c6"
     reason: "Graph-first scope review: legacy semantic zoom now derives tenant authority from GraphContext and fails closed on a conflicting legacy tenant argument; backend traversal contracts remain tenant-only, so no workspace/environment claim was added."
 source_hashes:
-  "frontend/aether/src/": "sha256:28b39cf5b9e7ee45776bd174aeb27824194b22efde918f5e952f6311cc631361"
+  "frontend/aether/src/": "sha256:6a9ca46200bd7f7e826d94914f577f85f18e345fb77e3f54f473a156f567a5d8"
   "frontend/kyber/src/": "sha256:30b10c0aa88d9e9784bc97bcbf174816b45479bfdb48f860a8290d2b41345e71"
   "frontend/shared/src/": "sha256:b51d37070ccbc004c90b9a56d07deb8300727955907c16775dda900919c277f6"
 ---
@@ -176,6 +176,18 @@ There are two separate frontend applications. **Do not mix them up.**
   `GraphContextBar`, `GraphTimeRail`, and `NoesisContextStrip` are controlled
   presentation components. They render supplied graph state without owning a
   router, authentication, fetching, or a second context store.
+- **Graph-first interaction safeguards:** graph query transport serializes only
+  the endpoint's supported tenant/surface coordinates while cache keys retain
+  the full host-authoritative tenant/workspace/environment scope. Object,
+  cluster, edge, snapshot, and diff selections use the same typed
+  `GraphObjectRef`/history seam, preserving context on navigation. The graph
+  page also exposes a bounded keyboard-searchable object/relationship list for
+  non-visual access.
+- **Optional snapshot and Noesis governance controls:** immutable exploration
+  snapshot/diff controls and Noesis trace/proposal handoff controls are
+  default-OFF feature flags. Noesis routes governed recommendations to the
+  existing Decision Intelligence review surface; approval controls remain
+  permission-gated and no opaque response can dispatch an action directly.
 - **Canonical value display** (`frontend/shared/src/value/`): `ValueDisplay`, `USDValue`, `NativeValueBreakdown`, `ValuationWarning` + `formatUSD` / `formatNativeValue` / `formatAetherValue`. USD-first with native drilldown; absent/unpriced values render "Value unavailable", never `$0.00`. All financial values must render through these — enforced by `scripts/validate_frontend_value_display.py`. See [`FINANCIAL_VALUE_SEMANTICS.md`](source-of-truth/FINANCIAL_VALUE_SEMANTICS.md).
 - **Canonical temporal validation** (`frontend/shared/src/time/validation.ts`):
   shareable graph state delegates ISO-instant and IANA-zone validation to the

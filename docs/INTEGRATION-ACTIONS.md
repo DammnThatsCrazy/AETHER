@@ -19,7 +19,7 @@ estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
   "Backend Architecture/aether-backend/services/intelligence/decision_models.py": "sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:2784d6b5df878e843503d8e5dfdb7d22ad63b0c475d03d0c4ba9975672f342a8"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:c9c080216395b71d176710000889bc5d4d8a108c829f61cc7d61fa6840f7cb20"
 ---
 # Integration Actions
 
@@ -31,7 +31,15 @@ Integration-ready actions let tenants log governed action targets without forcin
 
 Supported targets: Slack, signed webhook, ticketing (delegates to Linear or Jira), agent-assist. CRM and marketing automation targets require a concrete provider config; they fail closed with `InvalidPayloadError` until configured.
 
-As of 9.1.0, dispatch creates a `DeliveryIntent` + `DeliveryJob` in the database. A `ProviderReceipt` with a real external ID is required before the suggestion advances to DELIVERED. Simulated dispatch (`{"simulated": true}`) has been removed. See [ADR-001](architecture/adr-001-canonical-delivery-pipeline.md).
+Dispatch reserves an optional idempotency key within the authenticated tenant
+and action before calling a connector. Replays return the existing durable
+dispatch and cannot invoke an external side effect twice. A concrete delivered
+receipt must contain a real external ID; simulation-shaped receipts are
+rejected. If a target adapter is not implemented, the reserved dispatch stays
+an auditable `queued` plan and is handed to the canonical delivery worker seam
+when available, with `planned: true` and `external_side_effect: false` in the
+response. Connector failures remain durable and retryable rather than silently
+creating a second dispatch. See [ADR-001](architecture/adr-001-canonical-delivery-pipeline.md).
 
 ## Controls
 

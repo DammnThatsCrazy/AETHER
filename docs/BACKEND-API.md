@@ -31,7 +31,7 @@ reviewed_source_commits:
   - commit: "69185729"
     reason: "Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate."
 source_hashes:
-  "Backend Architecture/aether-backend/services/": "sha256:a6fc6874d3c067f1ad2f98313d3321cb7e18cb5cfec549e7de6bb26262911de0"
+  "Backend Architecture/aether-backend/services/": "sha256:13fb419fdd9ea0817e93afcf8c79b947133bb10f13067a837884b51669b72512"
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
 
@@ -1603,6 +1603,13 @@ off the surface answers 404, indistinguishable from an unmounted route.
 | GET | `/v1/explore/snapshots/{snapshot_id}` | Retrieve one captured result; tenant mismatch and missing ids fail closed |
 | POST | `/v1/explore/snapshots/{snapshot_id}/compare` | Re-run the saved context against current graph/surface data and return deterministic graph node/edge changes (or an opaque digest change for non-graph data) |
 
+Snapshot ids are immutable within a tenant; concurrent reuse is rejected
+instead of replacing historical evidence. The graph preview returned by the
+Data Exchange import adapter carries source-file checksums, mapping version,
+per-file row/mapping/error counts, and a fail-closed `rights_context` marked
+`not_evaluated`/`activation_allowed: false`; previewing never authorizes a
+commit or activation.
+
 **Operation vocabulary:** `OPEN` \| `PIVOT` \| `EXPAND` \| `COLLAPSE` \|
 `FILTER_ADD` \| `FILTER_REMOVE` \| `LENS_ADD` \| `TIME_TRAVEL` \| `DRILL_DOWN`
 \| `RESET` \| `SAVE` \| `LOAD`. Operations are PURE context transforms over the
@@ -2453,6 +2460,11 @@ Deep entity profiling — aggregates identity, graph, temporal, financial, and b
 | POST | `/v1/entities/relationships/query` | Query graph relationships for an entity (H2H, H2A, A2H, A2A layers) |
 
 **Permissions:** `read`
+
+Entity profile, timeline, and relationship reads validate the requested anchor
+against the authenticated tenant and filter neighbours before counts or result
+limits. Both canonical `tenantId` and legacy `tenant_id` markers are accepted;
+missing ownership and foreign-tagged edges are omitted.
 
 ---
 
@@ -3961,9 +3973,12 @@ read, resolved, or revoked.
 
 **Availability:** `RIGHTS_AUTHORITY_ROLLOUT=off|shadow|warn|enforce`, default
 `off`; unset or invalid ⇒ `off` ⇒ inert. Activation is deliberate: set
-`RIGHTS_AUTHORITY_ROLLOUT=shadow|warn|enforce` and restart. The resolver's
+`RIGHTS_AUTHORITY_ROLLOUT=shadow|warn|enforce` and restart. `shadow` and `warn`
+evaluate and return observational metadata without making a denial binding;
+`enforce` makes the decision/revocation result authoritative. The resolver's
 consent seam (the server consent authority behind `services/consent/authority.py`)
-and the §66 revocation pipeline engage end-to-end only in `enforce`.
+and the §66 revocation pipeline therefore remain fail-closed at the mutation
+boundary until `enforce`.
 
 **Authorization:** routes enforce the canonical read/write scopes and the
 caller's tenant server-side. The actor whose rights are resolved is the
@@ -3991,6 +4006,7 @@ when `off`.
 | `requested_use` | string | The requested use. |
 | `purpose` | string | Purpose of the requested use (required — grants/receipts are matched by purpose). |
 | `destination` | string | Destination/scope of the requested use (required — part of the §17 decision identity). |
+| `subject_ref` | string? | Optional canonical data-subject reference for consent receipt lookup; `consent_basis` remains legal/purpose metadata. |
 | `as_of` | string? | Optional ISO as-of instant. |
 
 Response: `APIResponse.data` = the durable `RightsDecision` (`decision_id`

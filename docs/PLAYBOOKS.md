@@ -20,7 +20,7 @@ estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
   "Backend Architecture/aether-backend/services/intelligence/decision_models.py": "sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:2784d6b5df878e843503d8e5dfdb7d22ad63b0c475d03d0c4ba9975672f342a8"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:c9c080216395b71d176710000889bc5d4d8a108c829f61cc7d61fa6840f7cb20"
 ---
 # Playbooks
 
@@ -41,6 +41,12 @@ Initial templates include High-LTV churn save, Fraud cluster review, Campaign wa
 ## Lifecycle
 
 A playbook defines trigger conditions, recommendation families, candidate actions, approval threshold, outcome mapping, expected value model, run history, ROI aggregation, and stale run detection. Execution remains approval-aware and auditable.
+
+Playbook actions inherit the canonical dispatch safeguards: idempotency is
+reserved per tenant/action before connector invocation, real external evidence
+is required for a delivered receipt, and an unavailable adapter remains a
+durable queued plan with no claimed external side effect. This keeps playbook
+ROI and run history honest when execution is pending or failed.
 
 ## Package ROI and audit exports
 

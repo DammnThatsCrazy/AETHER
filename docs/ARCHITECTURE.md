@@ -16,7 +16,7 @@ toc_depth: 3
 source_hashes:
   "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
   "Backend Architecture/aether-backend/middleware/middleware.py": "sha256:e320a85428e219bd745ff298a6b3a8a7404a1f72b562e65d4f7682e722ecb79c"
-  "packages/shared/": "sha256:ad5a0b75cd1033394abd76ad303b9cd54c18eb7ac808ab1437ce5ac0c4a4f96b"
+  "packages/shared/": "sha256:4f1069691bbf3592db30d43ab8079d396086b58486b6d01b0485f07a040fa904"
 ---
 # Aether vNext — Architecture Guide
 
@@ -542,6 +542,15 @@ rollout-gated `/v1/rights` surface records effective decisions and revocation
 impact within the authenticated tenant boundary. The graph context carries
 rights policy and references only; enforcement, retention, training use, and
 generalization decisions remain owned by the Rights Authority.
+
+The graph-first runtime keeps transport and authority separate: `/v1/explore`
+requests serialize only the tenant/surface coordinates currently supported by
+that endpoint, while client cache keys retain the full host-authoritative
+tenant/workspace/environment scope. Backend traversal validates anchors and
+filters explicitly foreign graph edges before limits. Immutable snapshot/diff
+controls and Noesis proposal review remain default-OFF and route any governed
+approval back through the existing permission-checked Decision Intelligence
+surface.
 
 ### Provider transport adapters
 

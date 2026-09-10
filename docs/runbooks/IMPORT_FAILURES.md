@@ -16,7 +16,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/graph/graph.py
 source_hashes:
   "Backend Architecture/aether-backend/repositories/imports_repo.py": "sha256:d483f6e353ed70f170ff3738f4b3ac5eed1086722b2fc1c58e48df6315490b37"
-  "Backend Architecture/aether-backend/services/imports/commit.py": "sha256:543e19f89f10d895acd6cde57d48c2a83f6a8fc5bfb377ae3a027a2afadf9194"
+  "Backend Architecture/aether-backend/services/imports/commit.py": "sha256:f0932350e4d6d214d67b02488ddd4d64dce83df571c6c39365095719f6375c5d"
   "Backend Architecture/aether-backend/services/imports/kyber_routes.py": "sha256:5dda769c5213f881a57bb19c87078cd45cfcb62c9f54192c9216e70928074dff"
   "Backend Architecture/aether-backend/services/imports/service.py": "sha256:f687a509ed815ba121efb5d806a65b76a2cee6d5384ffdf6564b76979e0f8d3d"
   "Backend Architecture/aether-backend/shared/graph/graph.py": "sha256:689f7581a371f6f4f48ca17745a2fb31f88d45f5614da95d69e9d805c4212428"
@@ -53,6 +53,12 @@ terminals `DEAD_LETTERED` / `ROLLED_BACK`). The lowercase `status` above is a
 **parity-locked legacy projection** (`services/card_linked_payments/import_session.py`),
 kept so the frontend and existing commit/approve surfaces keep parsing. When the
 two could disagree, trust `lifecycle_state`.
+
+The graph preview is non-mutating and is the import-to-graph lineage seam. It
+reports the mapping version, source/session checksum, per-file checksums and
+row/mapped/error counts. Its `rights_context` is deliberately
+`authorization_status: not_evaluated` with `activation_allowed: false` and
+`reason: preview_only`; only the approved commit path can activate data.
 
 ## Triage
 

@@ -35,8 +35,8 @@ source_hashes:
   "Backend Architecture/aether-backend/services/intelligence/ooda_engine.py": "sha256:bea93d08056d5cb9c7c2fc7d3738beaa3b42715c5930a0811900c55b6bb8a486"
   "Backend Architecture/aether-backend/services/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
   "Backend Architecture/aether-backend/services/intelligence/recommendation_families.py": "sha256:9a1375244f013488f51e2a73bd5de32b452bb7232f67fea68ac4cc7955d80e43"
-  "Backend Architecture/aether-backend/services/intelligence/repositories.py": "sha256:5dc6be1b18ffec874a1ef2026a8f8ab3e975f69119f7efa92928fc9f71b72610"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:2784d6b5df878e843503d8e5dfdb7d22ad63b0c475d03d0c4ba9975672f342a8"
+  "Backend Architecture/aether-backend/services/intelligence/repositories.py": "sha256:e1640a8ffe056bb2c6347773e0efb6080fc470931b4da7a4efcb8cfbe109837a"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:c9c080216395b71d176710000889bc5d4d8a108c829f61cc7d61fa6840f7cb20"
 ---
 # Decision & Outcome Intelligence
 
@@ -73,6 +73,15 @@ Additive OODA edges:
 - Consent, policy flags, explanation requirements, freshness indicators, and approval levels are embedded in recommendation records.
 - Human-in-the-loop approval is preserved for elevated, critical, irreversible, or low-confidence actions.
 - Kyber observability uses aggregate health metrics and must not expose tenant-private intelligence across tenants.
+
+Dispatch and graph safeguards are part of this same OODA authority. Graph
+neighbours are filtered by the authenticated tenant before result limits are
+applied (both `tenantId` and legacy `tenant_id` markers are normalized;
+unattributed vertices are not a wildcard). An optional action idempotency key
+is reserved before any connector call, and a missing adapter leaves an
+auditable queued plan rather than claiming an external effect. Delivered
+receipts must contain real provider evidence; simulation-shaped receipts are
+not accepted.
 
 ## Tenant vs Kyber responsibilities
 

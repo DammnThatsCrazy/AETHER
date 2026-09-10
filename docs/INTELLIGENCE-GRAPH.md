@@ -13,7 +13,7 @@ canonical_owner: graph@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/shared/graph/": "sha256:f937885a141f1b534faad99e1d847b2d68c1d20e04440e58a99ac02eff02ce2d"
+  "Backend Architecture/aether-backend/shared/graph/": "sha256:cf32149fb0de363c4c4432281004e4e28efa1b0926b2fbcd9dbca36631e3f8d9"
   "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:bfe704e317b86363155e3626d15f0e6a8816b674fad15858ac946d7bb4d9eb62"
 ---
 # Unified On-Chain Intelligence Graph v8.12.0
@@ -36,6 +36,12 @@ Tenant-scoped erasure is a first-class graph operation. The cleanup path uses
 tenant-tagged edges (including edges touching a shared endpoint) and fails
 closed when the configured graph backend cannot complete the operation; system
 vertices and unscoped edges are never selected.
+
+The same normalization is enforced on graph reads. Traversal entry points
+validate the requested anchor before searching, reject an anchor with missing
+or foreign ownership, and skip explicitly foreign-tagged edges. Entity and
+intelligence routes filter authorized neighbours before applying result limits,
+so cross-tenant vertices cannot consume a cap or become a count leak.
 
 ## V1 Activation Guide
 

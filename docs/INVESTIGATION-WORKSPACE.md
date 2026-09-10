@@ -21,7 +21,7 @@ estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
   "Backend Architecture/aether-backend/services/intelligence/investigations.py": "sha256:3369a68e9650eedefd7709a2e2ff91e2294d3dabe50cf38659a6309365bef517"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:2784d6b5df878e843503d8e5dfdb7d22ad63b0c475d03d0c4ba9975672f342a8"
+  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:c9c080216395b71d176710000889bc5d4d8a108c829f61cc7d61fa6840f7cb20"
 ---
 # Investigation Workspace
 
@@ -44,7 +44,7 @@ When the recommendation carries canonical path references (populated by `_comput
 
 ## Tenant isolation
 
-The route first verifies that the recommendation belongs to the authenticated tenant. Decision, action, outcome, and prior outcome reads are filtered by tenant id. Optional graph lookup degrades gracefully and fails closed: only neighbors carrying an explicit `tenant_id` equal to the authenticated tenant are returned. Unmarked and foreign-tenant vertices are omitted.
+The route first verifies that the recommendation belongs to the authenticated tenant. Decision, action, outcome, and prior outcome reads are filtered by tenant id. Optional graph lookup degrades gracefully and fails closed: neighbours are filtered before the response cap and must carry an explicit tenant marker matching the authenticated tenant (`tenantId` and legacy `tenant_id` are normalized). Unmarked and foreign-tenant vertices are omitted.
 
 ## Governance and rollout
 

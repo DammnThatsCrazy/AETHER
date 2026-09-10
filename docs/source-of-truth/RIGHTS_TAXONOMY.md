@@ -64,6 +64,12 @@ generated output + commercialization + survival), `LearningAuthority` (learning)
 `TerminationAuthority` (deletion/survival at termination) — composed by the
 Effective Rights Resolver into each `RightsDecision` (blueprint §3–§5).
 
+Consent grants carry an explicit `subject_ref` for receipt lookup; the
+`consent_basis` field remains legal/purpose metadata. A missing or mismatched
+subject receipt is a denial, and live resolution rechecks current consent and
+grant status rather than replaying a prior decision. An `as_of` request is the
+explicit boundary for replaying an immutable historical decision.
+
 ## 3. Rights-derivation classes
 
 The rights-derivation taxonomy is **independent of the epistemic trust classes**

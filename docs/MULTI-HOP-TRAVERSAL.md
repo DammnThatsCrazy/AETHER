@@ -9,7 +9,7 @@ source_files:
   - Backend Architecture/aether-backend/shared/graph/path_scoring.py
 source_hashes:
   "Backend Architecture/aether-backend/shared/graph/path_scoring.py": "sha256:4bff43191e835d86308a2668dea5ee891ff6768da3d5fe332e32a7be2f592b07"
-  "Backend Architecture/aether-backend/shared/graph/traversal.py": "sha256:13f44e23b4a3698c5be3dc09289131b163c0b47b2ef1184568525b5407bff02b"
+  "Backend Architecture/aether-backend/shared/graph/traversal.py": "sha256:ef9dcd217ee5becf815c5305ec6ac5178e3fc3d863afdb0a5d9c11857a84f7d4"
 ---
 
 # Multi-Hop Traversal Algorithms
@@ -24,7 +24,12 @@ All algorithms copy the **two-set isolation pattern** from `bfs()`:
 - `visited`: nodes whose neighbours have been expanded
 - `accepted`: nodes that passed the tenant-id filter and were added to the result
 
-A vertex is only added to `accepted` when `vertex.tenant_id == tenant_id`. This prevents cross-tenant data leakage even if vertex IDs collide across tenants.
+A vertex is only added to `accepted` when the shared `tenant_of()` normalizer
+finds an explicit `tenantId` or legacy `tenant_id` equal to the authenticated
+tenant. Missing ownership is not a wildcard. Every entry point validates its
+start anchor before searching and skips an edge carrying a foreign tenant
+marker; entity/intelligence callers filter neighbours before applying result
+limits. This prevents cross-tenant data leakage even if vertex IDs collide.
 
 Edge keys are synthetic: `f"{from_vertex_id}:{to_vertex_id}:{edge_type}"`. The underlying `Edge` dataclass has no `edge_id` field.
 
@@ -51,7 +56,7 @@ while heap:
 
     for edge in graph.get_edges(node):
         neighbour = edge.to_vertex_id
-        if neighbour.tenant_id != tenant_id: continue   # two-set filter
+        if tenant_of(neighbour.properties) != tenant_id: continue   # two-set filter
         edge_cost = 1.0 - float(edge.properties.get("confidence", 1.0))
         new_cost = cost + edge_cost
         if new_cost < cost_to.get(neighbour, inf):
@@ -125,7 +130,7 @@ while frontier and len(accepted) < limit:
         if edge_types and edge.type not in edge_types: continue
         neighbour = edge.to_vertex_id
         if neighbour in visited: continue
-        if neighbour.tenant_id != tenant_id: continue   # isolation
+        if tenant_of(neighbour.properties) != tenant_id: continue   # isolation
         visited.add(neighbour)
         accepted.add(neighbour)
         result_nodes.append(neighbour)
