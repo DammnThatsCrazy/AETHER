@@ -23,7 +23,7 @@ source_hashes:
   "packages/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
 ---
 
-# Aether Web SDK v8.12.0 — Integration Guide
+# Aether Web SDK v0.1.0 — Integration Guide
 
 ## Installation
 

@@ -19,7 +19,7 @@ source_hashes:
   "Backend Architecture/aether-backend/shared/graph/": "sha256:2b0077ff61139fb08ae828360c19cff6daf929849ead8098826ca4e3d9afd987"
   "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:bfe704e317b86363155e3626d15f0e6a8816b674fad15858ac946d7bb4d9eb62"
 ---
-# Unified On-Chain Intelligence Graph v8.12.0
+# Unified On-Chain Intelligence Graph v0.1.0
 
 ## Overview
 

@@ -20,7 +20,7 @@ source_hashes:
   "Backend Architecture/aether-backend/services/provider_runtime/": "sha256:222fdaf7349cf2f190d5a512550b7f0f45b2d26473ecbbe87d20476f4f4d2ad9"
   "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
 ---
-# Operations Runbook v8.12.0
+# Operations Runbook v0.1.0
 
 Operations guide for the Aether backend services.
 

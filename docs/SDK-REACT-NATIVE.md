@@ -21,7 +21,7 @@ source_hashes:
   "packages/shared/events.ts": "sha256:216fa41739a8613800f057f2937071bf40a28ac35ba47b4a77f438cfd2fd9477"
 ---
 
-# Aether React Native SDK v8.12.0 — Integration Guide
+# Aether React Native SDK v0.1.0 — Integration Guide
 
 ## Installation
 

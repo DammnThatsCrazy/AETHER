@@ -8,6 +8,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Repository truth reset
+
+- Reset the shared repository version to the `0.1.0` pre-release baseline; prior
+  numbered changelog records represent internal milestones, not public releases.
+- Added a repository realignment map and an evidence-gated version, history, and
+  tagging policy. No historical tags are created or backdated by this reset.
+
 ### Card-Linked Payment Rail Observability V1
 
 #### Added — card-linked economic observability (flag-gated, default off)

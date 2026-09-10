@@ -147,7 +147,7 @@ public final class AetherHealthAgent {
 
         let payload = SDKHeartbeatPayload(
             sdk_id: sdkId,
-            sdk_version: "8.12.0",
+            sdk_version: "0.1.0",
             platform: platform,
             app_version: appVersion,
             queue_depth: state.queueDepth,

@@ -14,7 +14,7 @@ toc_depth: 3
 source_hashes:
   "security/model_extraction_defense/": "sha256:a39e9edab1b81febc20fb8432a61746b2ac840c1e82c2b8c1842f4e431d2b0b2"
 ---
-# Model Extraction Defense v8.12.0
+# Model Extraction Defense v0.1.0
 
 Modular defense layer against model extraction and knowledge distillation attacks on the Aether ML serving pipeline.
 

@@ -7,7 +7,7 @@
 > program (Phase 0) — see `docs/productization/sdk-universal-ingestion-alignment/`.
 > Physical removal is deferred to a later phase.
 
-# Aether Data Ingestion Layer v8.12.0
+# Aether Data Ingestion Layer v0.1.0
 
 High-throughput event ingestion pipeline for the Aether behavioral analytics platform. Receives, validates, enriches, and routes client-side events from the Aether SDK to downstream storage and streaming sinks.
 

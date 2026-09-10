@@ -14,7 +14,7 @@ toc_depth: 3
 source_hashes:
   "Backend Architecture/migrations/": "sha256:0d9b426e6c5b1c3275d73db82af71d68ec2978638aaab2b777053676ebbe8d3e"
 ---
-# Migration Runbook — Aether Platform v8.12.0
+# Migration Runbook — Aether Platform v0.1.0
 
 Procedures for deploying new versions of the Aether platform with zero or minimal downtime. Covers database migrations, service rollouts, and phased traffic shifting.
 

@@ -66,7 +66,7 @@ const SDK_SIGNAL_TO_WIRE_EVENT: Readonly<Record<CommerceSignalType, string>> = {
   order_confirmed: 'order_completed',
 };
 
-const SDK_VERSION = '8.12.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
+const SDK_VERSION = '0.1.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
 // Mirrors CONTRACT_SCHEMA_VERSION in packages/shared/schema-version.ts (web
 // bundles standalone; literal kept in sync by scripts/validate_sdk_release_alignment.py).
 const CONTRACT_SCHEMA_VERSION = '1.0.0';

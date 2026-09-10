@@ -14,7 +14,7 @@ toc_depth: 3
 source_hashes:
   "cicd/aether-cicd/stages/cd/": "sha256:852410bc89d500bb4c5f02b9971cd7ee49c8d5d5076feb5e1ee0f248380d1a0b"
 ---
-# Rollback Runbook — Aether Platform v8.12.0
+# Rollback Runbook — Aether Platform v0.1.0
 
 Step-by-step procedures for rolling back the Aether platform after a failed deployment or production incident.
 

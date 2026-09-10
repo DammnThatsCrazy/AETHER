@@ -16,7 +16,7 @@ source_hashes:
   "Backend Architecture/aether-backend/services/identity/": "sha256:fc5952ea3a19e80b02af7a5da89a9efdb8e5768b1fd9efcbf91322cea1f0c3b1"
   "packages/shared/identity.ts": "sha256:fc2571b1f61d3d9d1f508b07d49fb872db2cd4b1b5bc68adfe1f0ad405e3a89a"
 ---
-# Aether Identity Resolution v8.12.0 — Technical Guide
+# Aether Identity Resolution v0.1.0 — Technical Guide
 
 ## Overview
 
