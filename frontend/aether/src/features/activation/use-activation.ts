@@ -79,8 +79,8 @@ export interface FirstValueResult {
   readonly evidence: Record<string, unknown>;
 }
 
-// Plan tiers accepted by the backend (SelectPlanRequest pattern ^(P1|P2|P3|P4)$).
-export const ACTIVATION_PLAN_TIERS = ["P1", "P2", "P3", "P4"] as const;
+// Plan tiers accepted by the backend (SelectPlanRequest pattern ^(alpha|beta|gamma|delta|epsilon|omicron|omega)$).
+export const ACTIVATION_PLAN_TIERS = ["alpha", "beta", "gamma", "delta", "epsilon", "omicron", "omega"] as const;
 export type ActivationPlanTier = (typeof ACTIVATION_PLAN_TIERS)[number];
 
 /**

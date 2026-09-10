@@ -37,7 +37,7 @@ class ActivationState(str, Enum):
 class ActivationRecord(BaseModel):
     """Persisted self-serve activation state for one tenant.
 
-    ``selected_plan_tier`` is a plan tier (P1..P4) and NEVER a Stripe price id.
+    ``selected_plan_tier`` is a plan tier (alpha..omega) and NEVER a Stripe price id.
     ``created_key_ids`` holds HASHED key identifiers only — raw API keys are
     returned to the caller exactly once at creation time and are never stored.
     """
@@ -45,7 +45,7 @@ class ActivationRecord(BaseModel):
     activation_id: str
     tenant_id: str
     state: ActivationState = ActivationState.not_started
-    selected_plan_tier: Optional[str] = Field(default=None, pattern="^(P1|P2|P3|P4)$")
+    selected_plan_tier: Optional[str] = Field(default=None, pattern="^(alpha|beta|gamma|delta|epsilon|omicron|omega)$")
     sdk_selection: list[str] = Field(default_factory=list)
     created_key_ids: list[str] = Field(default_factory=list)
     first_event_id: Optional[str] = None
@@ -66,7 +66,7 @@ class ActivationRecord(BaseModel):
 
 
 class SelectPlanRequest(BaseModel):
-    plan_tier: str = Field(..., pattern="^(P1|P2|P3|P4)$")
+    plan_tier: str = Field(..., pattern="^(alpha|beta|gamma|delta|epsilon|omicron|omega)$")
 
 
 class SdkSelectionRequest(BaseModel):
