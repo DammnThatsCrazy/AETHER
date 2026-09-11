@@ -128,6 +128,12 @@ def test_ci_architecture_change_runs_universal_controls_and_escalates() -> None:
     result = build_disposition([".github/workflows/repo-consistency.yml"])
 
     assert result["status"] == "PLANNED"
-    assert result["impact"]["risk"] == "R5"
+    assert result["impact"]["risk"] == "R3"
     assert result["impact"]["selected_lane"] == "integration"
     assert "workflow_authority" in _ids(result)
+
+
+def test_risk_comes_from_selected_lane_policy() -> None:
+    result = build_disposition([".github/workflows/repo-consistency.yml"])
+    assert result["impact"]["selected_lane"] == "integration"
+    assert result["impact"]["risk"] == "R3"

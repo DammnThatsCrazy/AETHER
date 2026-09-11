@@ -304,7 +304,20 @@ def classify_impact(
                 for pattern, checks in definition.path_checks.items():
                     if any(matches(path, pattern) for path in domain_paths):
                         path_checks.update(checks)
-                check_ids.update(path_checks or definition.checks)
+                # Specialized checks are additive. If the domain contains a
+                # changed path without a specialized mapping, retain the
+                # domain defaults for that path instead of letting a sibling
+                # specialized match narrow the whole domain selection.
+                unmatched_domain_paths = {
+                    path
+                    for path in domain_paths
+                    if not any(
+                        matches(path, pattern) for pattern in definition.path_checks
+                    )
+                }
+                check_ids.update(path_checks)
+                if unmatched_domain_paths or not path_checks:
+                    check_ids.update(definition.checks)
     check_ids.update(config.lanes[selected_lane])
     return VerificationImpact(
         changed_files=changed,

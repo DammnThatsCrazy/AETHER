@@ -72,6 +72,20 @@ def test_runtime_budget_violation_is_reported() -> None:
     assert "p95_exceeds_hard_budget" in report["violations"][0]["reasons"]
 
 
+def test_failure_yield_counts_all_blocking_non_success_outcomes() -> None:
+    root_suite = next(suite for suite in load_suites(REGISTRY) if suite.id == "root")
+    report = build_runtime_report(
+        [
+            {"suite": "root", "runtime_seconds": 1, "selected_by": "impact-graph", "outcome": "timeout"},
+            {"suite": "root", "runtime_seconds": 1, "selected_by": "impact-graph", "outcome": "runner_failure"},
+            {"suite": "root", "runtime_seconds": 1, "selected_by": "impact-graph", "outcome": "pass"},
+            {"suite": "root", "runtime_seconds": 1, "selected_by": "impact-graph", "outcome": "failed", "blocking": False},
+        ],
+        [root_suite],
+    )
+    assert report["suites"][0]["failure_yield"] == pytest.approx(0.5)
+
+
 def test_unknown_suite_evidence_fails_closed() -> None:
     root_suite = next(suite for suite in load_suites(REGISTRY) if suite.id == "root")
     with pytest.raises(RuntimeBudgetError, match="unregistered suite"):

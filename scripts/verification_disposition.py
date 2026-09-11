@@ -27,6 +27,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
+import yaml
+
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -247,24 +249,58 @@ def _run_one(check: PlannedCheck, *, execute: bool) -> CommandResult:
 def _run_parallel(checks: Sequence[PlannedCheck], *, execute: bool) -> list[CommandResult]:
     if not checks:
         return []
-    workers = min(8, len(checks))
+    # Several registry commands already parallelize internally (the root and
+    # backend suites in particular). Four outer workers preserve overlap while
+    # preventing a global integration selection from exhausting a hosted
+    # runner and turning otherwise healthy suites into budget timeouts.
+    workers = min(4, len(checks))
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
         futures = [pool.submit(_run_one, check, execute=execute) for check in checks]
         results = [future.result() for future in futures]
     return sorted(results, key=lambda result: result.check_id)
 
 
-def _risk(index: dict[str, Any]) -> str:
+def _risk_lanes() -> dict[str, str]:
+    policy_path = ROOT / "config" / "verification_policy.yaml"
+    try:
+        policy = yaml.safe_load(policy_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise DispositionError(f"cannot load verification risk policy: {exc}") from exc
+    mapping = policy.get("risk_lanes") if isinstance(policy, dict) else None
+    if not isinstance(mapping, dict) or set(mapping) != {f"R{i}" for i in range(6)}:
+        raise DispositionError("verification policy risk_lanes must define R0 through R5")
+    if not all(isinstance(risk, str) and isinstance(lane, str) for risk, lane in mapping.items()):
+        raise DispositionError("verification policy risk_lanes entries must be strings")
+    return mapping
+
+
+def _risk(index: dict[str, Any], risk_lanes: dict[str, str]) -> str:
     lane = index["router"]["selected_lane"]
-    if lane == "release" or index["router"]["global_change"]:
-        return "R5"
-    if lane == "regression":
-        return "R4"
-    if lane == "integration":
-        return "R3"
-    if lane == "pr":
-        return "R2"
-    return "R0"
+    # The policy contains risk bands (for example R1/R2 both map to PR).
+    # Choose the least escalated risk that names the selected lane so a
+    # global/integration selection cannot be mislabeled as release risk. The
+    # registry has no distinct regression risk lane, so its highest lower-lane
+    # risk is the conservative fallback for an explicit regression run.
+    lane_order = {name: rank for rank, name in enumerate(("fast", "pr", "integration", "regression", "release"))}
+    selected_rank = lane_order.get(lane)
+    if selected_rank is None:
+        raise DispositionError(f"verification policy selected an unknown lane {lane!r}")
+    matches = sorted(
+        risk for risk, mapped_lane in risk_lanes.items() if mapped_lane == lane
+    )
+    if not matches:
+        matches = sorted(
+            (
+                risk
+                for risk, mapped_lane in risk_lanes.items()
+                if lane_order.get(mapped_lane, -1) < selected_rank
+            ),
+            key=lambda risk: int(risk[1:]),
+            reverse=True,
+        )
+    if not matches:
+        raise DispositionError(f"verification policy has no risk mapped to lane {lane!r}")
+    return matches[0]
 
 
 def build_disposition(
@@ -276,6 +312,7 @@ def build_disposition(
     router = load_router_registry(ROOT / "config" / "verification_router.yaml")
     suites_list = load_suites(ROOT / "config" / "test_suites.yaml")
     suites = {suite.id: suite for suite in suites_list}
+    risk_lanes = _risk_lanes()
     graph = load_impact_graph(router=router, suites=suites_list)
     index = build_impact_index(changed_files, graph, requested_lane=requested_lane, router=router)
     if index["unresolved_paths"]:
@@ -287,7 +324,7 @@ def build_disposition(
             "reason": "unresolved executable or delivery paths",
             "sha": os.environ.get("GITHUB_SHA"),
             "impact": {
-                "risk": _risk(index),
+                "risk": _risk(index, risk_lanes),
                 "components": index["impacted_components"],
                 "contracts": index["impacted_contracts"],
             },
@@ -322,6 +359,7 @@ def build_disposition(
             "components": index["impacted_components"],
             "retry": False,
             "cache": False,
+            "blocking": result.blocking,
         }
         for result in results
         if result.check_id in suites
@@ -334,7 +372,7 @@ def build_disposition(
         "status": disposition,
         "sha": os.environ.get("GITHUB_SHA"),
         "impact": {
-            "risk": _risk(index),
+            "risk": _risk(index, risk_lanes),
             "components": index["impacted_components"],
             "contracts": index["impacted_contracts"],
             "domains": index["router"]["affected_domains"],

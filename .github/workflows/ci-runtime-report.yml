@@ -46,11 +46,17 @@ jobs:
               return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
 
           def percentile(values, p):
+              # Keep this in lockstep with scripts/validate_ci_runtime_budgets.py:
+              # the canonical policy uses linear interpolation over n - 1.
               if not values:
                   return None
               ordered = sorted(values)
-              rank = max(1, math.ceil((p / 100.0) * len(ordered)))
-              return ordered[rank - 1]
+              rank = (p / 100.0) * (len(ordered) - 1)
+              lower = math.floor(rank)
+              upper = math.ceil(rank)
+              if lower == upper:
+                  return ordered[lower]
+              return ordered[lower] + (ordered[upper] - ordered[lower]) * (rank - lower)
 
           runs_url = (
               f"https://api.github.com/repos/{repo}/actions/workflows/"

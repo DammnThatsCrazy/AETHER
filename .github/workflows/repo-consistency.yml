@@ -98,7 +98,7 @@ jobs:
           python-version: "3.11"
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
       - name: Install dependencies
         run: npm ci --ignore-scripts
@@ -172,7 +172,9 @@ jobs:
           esac
       - name: Package selected build outputs once and create immutable candidate
         run: |
+          set -euo pipefail
           mkdir -p release-evidence
+          selected="$(python -c 'import json; print(json.load(open("release-evidence/build-selection.json"))["backend_image"])')"
           outputs=(release-evidence/build-selection.json)
           while IFS= read -r workspace; do
             [ -n "$workspace" ] || continue
@@ -182,10 +184,16 @@ jobs:
           done < release-evidence/build-workspaces.txt
           tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
             -czf release-evidence/repository-build.tar.gz "${outputs[@]}"
+          components=(--component repository-build=release-evidence/repository-build.tar.gz)
+          if [ "$selected" = "True" ]; then
+            docker save "aether-backend:pr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+              | gzip -n > release-evidence/backend-image.tar.gz
+            components+=(--component backend-image=release-evidence/backend-image.tar.gz)
+          fi
           python scripts/artifact_builder.py \
             --candidate-id "pr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             --profile bundle-certification \
-            --component repository-build=release-evidence/repository-build.tar.gz \
+            "${components[@]}" \
             --lockfile package-lock.json --lockfile pyproject.toml \
             --required-check verification/disposition \
             --output release-evidence/release-candidate.json
@@ -195,9 +203,11 @@ jobs:
           name: pr-build-evidence
           path: |
             release-evidence/build.json
+            release-evidence/build-selection.json
             release-evidence/release-candidate.json
             release-evidence/repository-build.tar.gz
-          if-no-files-found: error
+            release-evidence/backend-image.tar.gz
+          if-no-files-found: warn
 
   selected-verification:
     name: Affected verification execution
@@ -215,7 +225,7 @@ jobs:
           cache-dependency-path: pyproject.toml
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
       - run: make bootstrap
       - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
@@ -226,9 +236,17 @@ jobs:
           path: release-evidence
       - name: Verify exact build candidate before testing
         run: |
+          set -euo pipefail
+          components=(--component repository-build=release-evidence/repository-build.tar.gz)
+          selected="$(python -c 'import json; print(json.load(open("release-evidence/build-selection.json"))["backend_image"])')"
+          if [ "$selected" = "True" ]; then
+            test -f release-evidence/backend-image.tar.gz
+            gzip -dc release-evidence/backend-image.tar.gz | docker load
+            components+=(--component backend-image=release-evidence/backend-image.tar.gz)
+          fi
           python scripts/artifact_builder.py --verify \
             --expected-commit "$GITHUB_SHA" \
-            --component repository-build=release-evidence/repository-build.tar.gz \
+            "${components[@]}" \
             --lockfile package-lock.json --lockfile pyproject.toml \
             --output release-evidence/release-candidate.json
       - name: Materialize verified build outputs for consumers

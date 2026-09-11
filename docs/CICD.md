@@ -22,7 +22,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:471ba6ab67c1a5f2b4b10e637045f31d9dac9c02900ddd357b3d1acbfd2adad5"
+  ".github/workflows/": "sha256:cc93bdc0dd8ecd70b0fbd95332fbc0d0940d635c4f00135c34bad0b8c40eb24f"
   "AWS Deployment/aether-aws/terraform/modules/aurora/main.tf": "sha256:16c4beb8ccab1af164ff62f8aa2d515a5efc3f093b7878411f40aa14ce39e094"
   "AWS Deployment/aether-aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "AWS Deployment/aether-aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
@@ -46,9 +46,12 @@ blocking status: `verification / disposition`. The workflow classifies the
 changed paths with the Impact Graph, runs the universal-fast checks, selects
 the affected test suites and build workspaces, and publishes one machine-readable
 disposition. The old full `make ci-check` PR job has been retired after the
-representative hosted observation window recorded zero unexplained selection
-misses and an in-budget ordinary-PR p95; it remains available for local,
-trusted-main, nightly, and release evidence but does not determine mergeability.
+representative selection observation window recorded zero unexplained misses;
+it remains available for local, trusted-main, nightly, and release evidence but
+does not determine mergeability. Hosted p50/p95 timing is measured separately
+by `ci-runtime-report.yml`; its report remains `INSUFFICIENT_SAMPLES` until at
+least five completed adaptive PR authority runs are available, so local timing
+must not be presented as hosted timing evidence.
 
 `repo-health.yml` keeps documentation and PR-size signals advisory on pull requests
 and runs a bounded contract/impact/durable-integration authority after merges to
@@ -337,9 +340,9 @@ Two things get promoted, on two separate paths that must never be conflated: the
 | `staging-ttl-guard.yml` | hourly schedule; dispatch | Enforces the staging awake lease. Runs no Terraform at all; it can scale ECS to zero and lower the ECS autoscaling floor, which can only reduce running compute. **Not armed without `AWS_STAGING_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or enforce the TTL, reports it is a NO-OP and exits green — staging may still be running and will NOT be guarded; that is NOT a claim that staging is asleep. The moment the role is wired it enforces exactly as before, fail-closed in both directions. | no |
 | `ephemeral-ttl-guard.yml` | hourly schedule; dispatch | Fail-closed TTL guard for the demo/preview ephemeral profiles. Reads the SSM lease at `/aether/{profile}/{env}/lifecycle/expires-at` (written by `ephemeral_env.py provision`) and ends the run red when the lease is missing or expired; enforcement is the operator-run `ephemeral_env.py teardown` (scale-to-zero + floor-zeroing + lease removal). Runs no Terraform. **Not armed without `AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or trip the TTL, reports it is a NO-OP and exits green — demo/preview environments may still be running and will NOT be guarded; that is NOT a claim that demo/preview are asleep. The moment the role is wired it enforces exactly as before, fail-closed. | no |
 
-| `repo-consistency.yml` | PR / push to `main` | Classifies changed paths with the verification router, builds the Impact Graph-selected workspaces in dependency order, executes the universal and affected verification checks, and publishes the single blocking `verification / disposition` evidence. The broad `make ci-check` job is intentionally absent from the PR path after the completed observation window. | no |
+| `repo-consistency.yml` | PR / push to `main` | Classifies changed paths with the verification router, builds the Impact Graph-selected workspaces in dependency order, binds the selected workspace archive and any selected backend image into one immutable candidate, verifies and materializes that candidate in the consumer job, executes the universal and affected verification checks, and publishes the single blocking `verification / disposition` evidence. The broad `make ci-check` job is intentionally absent from the PR path after the completed selection observation window. | no |
 | `production-status.yml` | 12-hourly schedule; dispatch | `scripts/production_status.py --strict` + readiness scorecard artifact. | no |
-| `production-equivalent-ci.yml` | PR / push / schedule / dispatch | Runs a cheap Impact Graph classifier for every event. On PRs it provisions the Postgres + Redis real stack only for persistence-impacting backend/infrastructure changes, production-equivalent tests, or unresolved paths; pushes to `main`, nightly runs, and explicit dispatch retain full real-stack coverage. The lane remains non-blocking and is not a required merge check. | no |
+| `production-equivalent-ci.yml` | PR / push / schedule / dispatch | Runs a cheap Impact Graph classifier for every event. The PR trigger is deliberately unfiltered so measurement repository changes cannot be missed; on PRs it provisions the Postgres + Redis real stack only for persistence-impacting backend/infrastructure changes, production-equivalent tests, or unresolved paths. Pushes to `main`, nightly runs, and explicit dispatch retain full real-stack coverage. The lane remains non-blocking and is not a required merge check. | no |
 
 The reviewed-promotion credential boundary is intentional: a `plan` action
 requires only the plan role and read-only planning inputs. The apply role is

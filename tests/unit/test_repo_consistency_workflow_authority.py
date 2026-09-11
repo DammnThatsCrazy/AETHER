@@ -79,6 +79,16 @@ def test_built_candidate_is_verified_without_rebuilding_in_consumers() -> None:
     assert "build-artifact" in jobs["selected-verification"]["needs"]
 
 
+def test_backend_image_is_bound_to_candidate_and_loaded_by_consumer() -> None:
+    jobs = _workflow()["jobs"]
+    build = "\n".join(step.get("run", "") for step in jobs["build-artifact"]["steps"])
+    selected = "\n".join(step.get("run", "") for step in jobs["selected-verification"]["steps"])
+    assert "docker save" in build
+    assert "--component backend-image=release-evidence/backend-image.tar.gz" in build
+    assert "docker load" in selected
+    assert "--component backend-image=release-evidence/backend-image.tar.gz" in selected
+
+
 def test_publication_fails_when_any_required_stage_did_not_pass() -> None:
     publication = _workflow()["jobs"]["publish-evidence"]
     assert str(publication["if"]) == "always()"

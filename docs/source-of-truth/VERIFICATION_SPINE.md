@@ -296,7 +296,9 @@ GitHub, Terraform, tenant journeys, or production promotion locally.
 
 PR CI compiles workspace packages once, archives the resulting `dist`
 directories, and creates `release-candidate.json` bound to that archive, the
-commit SHA, and dependency locks. The hosted release manifest is adapted to
+commit SHA, and dependency locks. When the Impact Graph selects the backend,
+the Docker image is saved as a second candidate component and reloaded and
+verified by the consumer job. The hosted release manifest is adapted to
 the same candidate contract by `scripts/release/release_candidate_adapter.py`;
 build, approved-release, deploy, and staging consumers reverify the candidate
 and exact files before mutation. GitHub's workflow artifact is transport

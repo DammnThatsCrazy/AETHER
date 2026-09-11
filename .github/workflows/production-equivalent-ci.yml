@@ -11,10 +11,11 @@ name: Production-Equivalent CI (M1 + M2 + M4)
 # real asyncpg/Postgres path. This workflow boots real postgres + redis service
 # containers and runs the persistence paths against them.
 #
-# PR AUTHORITY: this lane is intentionally NOT a required merge check. On pull
-# requests it is impact-filtered at the workflow trigger so irrelevant changes
-# do not even provision Postgres/Redis runners. Pushes to main, nightly runs,
-# and explicit dispatch retain full real-stack coverage.
+# PR AUTHORITY: this lane is intentionally NOT a required merge check. The
+# pull_request trigger is deliberately unfiltered so measurement repository
+# changes cannot be missed; the impact classifier prevents irrelevant changes
+# from provisioning Postgres/Redis runners. Pushes to main, nightly runs, and
+# explicit dispatch retain full real-stack coverage.
 
 on:
   pull_request:

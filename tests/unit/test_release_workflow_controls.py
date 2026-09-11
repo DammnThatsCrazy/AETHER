@@ -182,6 +182,8 @@ def test_hardening_gate_is_read_only_and_never_rewrites_pr_history():
         assert forbidden not in workflow
     assert "run: make ci-check" in workflow
     assert "run: make release-gate" in workflow
+    assert 'git rev-parse HEAD' in workflow
+    assert '"sha":"%s"' in workflow
 
 
 def test_hardening_release_gate_is_not_an_ordinary_pr_check():

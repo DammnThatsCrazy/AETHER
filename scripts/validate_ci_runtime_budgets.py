@@ -210,8 +210,9 @@ def _normalize_record(record: Mapping[str, Any], index: int) -> dict[str, Any]:
         raise RuntimeBudgetError(f"{where}.component(s) must be a string or list of strings")
     retry = record.get("retry", False)
     cache = record.get("cache", False)
-    if not isinstance(retry, bool) or not isinstance(cache, bool):
-        raise RuntimeBudgetError(f"{where}.retry and {where}.cache must be booleans")
+    blocking = record.get("blocking", True)
+    if not isinstance(retry, bool) or not isinstance(cache, bool) or not isinstance(blocking, bool):
+        raise RuntimeBudgetError(f"{where}.retry, {where}.cache, and {where}.blocking must be booleans")
     return {
         "suite": suite_id,
         "runtime_seconds": runtime_seconds,
@@ -220,6 +221,7 @@ def _normalize_record(record: Mapping[str, Any], index: int) -> dict[str, Any]:
         "components": components,
         "retry": retry,
         "cache": cache,
+        "blocking": blocking,
     }
 
 
@@ -275,7 +277,11 @@ def build_runtime_report(
             "selection_frequency": len(suite_records) / total_runs if total_runs else 0.0,
             "selection_by": dict(sorted(Counter(selector for record in suite_records for selector in record["selected_by"]).items())),
             "outcomes": dict(sorted(Counter(record["outcome"] for record in suite_records).items())),
-            "failure_yield": sum(record["outcome"] == "failed" for record in suite_records) / len(suite_records),
+            "failure_yield": sum(
+                record["blocking"]
+                and record["outcome"].lower() not in {"pass", "success", "planned"}
+                for record in suite_records
+            ) / len(suite_records),
             "retry_count": sum(record["retry"] for record in suite_records),
             "cache_hit_count": sum(record["cache"] for record in suite_records),
         }

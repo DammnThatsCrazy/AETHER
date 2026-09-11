@@ -50,7 +50,8 @@ jobs:
       - name: Record hardening-release-gate evidence
         run: |
           mkdir -p release-evidence
-          printf '{"sha":"%s","job":"canonical-gates"}\n' "$GITHUB_SHA" > release-evidence/hardening-release-gate.json
+          checked_out_sha="$(git rev-parse HEAD)"
+          printf '{"sha":"%s","job":"canonical-gates"}\n' "$checked_out_sha" > release-evidence/hardening-release-gate.json
       - uses: actions/upload-artifact@v4
         with:
           name: hardening-release-gate-evidence

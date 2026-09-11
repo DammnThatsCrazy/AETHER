@@ -138,3 +138,12 @@ def test_route_exposes_inventory_impact_without_narrowing_suite_commands():
     assert result["impact"]["global_change"] is False
     assert result["impact"]["affected_tests"]
     assert {item["check_id"] for item in result["checks"]} >= {"toolchain", "test_inventory"}
+
+
+def test_mixed_domain_paths_keep_defaults_for_unmatched_paths():
+    result = route([
+        "Backend Architecture/aether-backend/services/profile/routes.py",
+        "Backend Architecture/services/web3/routes.py",
+    ])
+    ids = {item["check_id"] for item in result["checks"]}
+    assert {"root", "backend"} <= ids
