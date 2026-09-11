@@ -35,6 +35,11 @@
 #   - release_class: pr_gate (blocks a normal PR when applicable),
 #     live_certification (needs a live/credentialed environment to mean
 #     anything), advisory (informational, never blocks).
+#   - runtime-aware metadata: owner, components, contracts, dependencies,
+#     isolation, lane, profiles, expected_runtime_seconds, and
+#     hard_runtime_budget_seconds are required for every suite. Runtime
+#     budgets are authoritative here; config/ci_runtime_budgets.yaml contains
+#     telemetry policy only and must not duplicate suite definitions.
 # =============================================================================
 
 schema_version: 1
@@ -48,6 +53,15 @@ suites:
 
   - id: root
     subsystem: root
+    owner: platform
+    components: [repository]
+    contracts: [repository-consistency]
+    dependencies: []
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 120
+    hard_runtime_budget_seconds: 300
     paths: ["tests"]
     # Kyber and capability tests use process-global repositories. Execute each
     # file in its own process and parallelize files, preventing state leakage
@@ -66,6 +80,15 @@ suites:
 
   - id: backend
     subsystem: backend
+    owner: backend
+    components: [backend]
+    contracts: [backend]
+    dependencies: []
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 120
+    hard_runtime_budget_seconds: 300
     paths: ["Backend Architecture/aether-backend/tests"]
     # Keep behavior tests parallel, then run the wall-clock performance
     # guardrails serially so xdist scheduler contention cannot turn into a
@@ -84,6 +107,15 @@ suites:
 
   - id: ml
     subsystem: ml
+    owner: ml
+    components: [machine-learning]
+    contracts: [machine-learning]
+    dependencies: [python:joblib, python:sklearn]
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 45
+    hard_runtime_budget_seconds: 120
     paths: ["ML Models/aether-ml/tests"]
     runner:
       ["python", "-m", "pytest", "ML Models/aether-ml/tests", "-v", "--tb=short"]
@@ -105,6 +137,15 @@ suites:
 
   - id: compliance
     subsystem: compliance
+    owner: security
+    components: [compliance]
+    contracts: [compliance]
+    dependencies: []
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 30
+    hard_runtime_budget_seconds: 90
     paths: ["GDPR & SOC2/aether-compliance/tests"]
     runner:
       [
@@ -128,6 +169,15 @@ suites:
 
   - id: agent-layer
     subsystem: agent
+    owner: agent
+    components: [agent]
+    contracts: [agent]
+    dependencies: []
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 30
+    hard_runtime_budget_seconds: 90
     paths: ["Agent Layer/tests"]
     runner: ["python", "-m", "pytest", "Agent Layer/tests", "-v", "--tb=short"]
     requires:
@@ -143,6 +193,15 @@ suites:
 
   - id: journey-service
     subsystem: journey-service
+    owner: backend
+    components: [journey-service]
+    contracts: [journey-service]
+    dependencies: []
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 30
+    hard_runtime_budget_seconds: 90
     paths: ["Backend Architecture/services/journey-service/tests"]
     runner:
       [
@@ -166,6 +225,15 @@ suites:
 
   - id: backend-observability
     subsystem: observability
+    owner: observability
+    components: [backend-observability]
+    contracts: [observability]
+    dependencies: []
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 30
+    hard_runtime_budget_seconds: 90
     # One suite across all four *_observability services (two of the four —
     # agent_comm_observability and protocol_observability — currently ship no
     # test files at all; batching them into a single pytest invocation with
@@ -210,6 +278,15 @@ suites:
 
   - id: smart-contracts
     subsystem: smart-contracts
+    owner: protocols
+    components: [smart-contracts]
+    contracts: [smart-contracts]
+    dependencies: [node]
+    isolation: workspace
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 60
+    hard_runtime_budget_seconds: 180
     paths: ["Smart Contracts/test"]
     # Mirrors .github/workflows/smart-contract-analysis.yml's contract-tests
     # job (npm ci already run there before this executes).
@@ -227,6 +304,15 @@ suites:
 
   - id: datalake-backend
     subsystem: datalake
+    owner: platform
+    components: [datalake]
+    contracts: [datalake]
+    dependencies: [node]
+    isolation: workspace
+    lane: release
+    profiles: [local, release]
+    expected_runtime_seconds: 60
+    hard_runtime_budget_seconds: 180
     paths: ["Data Lake Architecture/aether-Datalake-backend/tests"]
     runner: ["bash", "-lc", "cd 'Data Lake Architecture/aether-Datalake-backend' && npm test"]
     requires:
@@ -267,6 +353,15 @@ suites:
 
   - id: sdk-shared
     subsystem: sdk-shared
+    owner: sdk
+    components: [sdk-shared]
+    contracts: [shared-sdk]
+    dependencies: [node]
+    isolation: workspace
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 30
+    hard_runtime_budget_seconds: 90
     paths: ["packages/shared"]
     runner: ["npm", "run", "test", "--workspace=packages/shared"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
@@ -278,6 +373,15 @@ suites:
 
   - id: sdk-web
     subsystem: sdk-web
+    owner: sdk
+    components: [sdk-web]
+    contracts: [web-sdk]
+    dependencies: [node]
+    isolation: workspace
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 30
+    hard_runtime_budget_seconds: 90
     paths: ["packages/web"]
     runner: ["npm", "run", "test", "--workspace=packages/web"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
@@ -289,6 +393,15 @@ suites:
 
   - id: sdk-server
     subsystem: sdk-server
+    owner: sdk
+    components: [sdk-server]
+    contracts: [server-sdk]
+    dependencies: [node]
+    isolation: workspace
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 30
+    hard_runtime_budget_seconds: 90
     paths: ["packages/server"]
     runner: ["npm", "run", "test", "--workspace=packages/server"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
@@ -300,6 +413,15 @@ suites:
 
   - id: sdk-react-native
     subsystem: sdk-react-native
+    owner: sdk
+    components: [sdk-react-native]
+    contracts: [react-native-sdk]
+    dependencies: [node]
+    isolation: workspace
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 30
+    hard_runtime_budget_seconds: 90
     paths: ["packages/react-native"]
     runner: ["npm", "run", "test", "--workspace=packages/react-native"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
@@ -311,6 +433,15 @@ suites:
 
   - id: frontend-aether
     subsystem: frontend-aether
+    owner: frontend
+    components: [frontend-aether]
+    contracts: [aether-ui]
+    dependencies: [node]
+    isolation: workspace
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 45
+    hard_runtime_budget_seconds: 120
     paths: ["frontend/aether"]
     runner: ["npm", "run", "test", "--workspace=frontend/aether"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
@@ -322,6 +453,15 @@ suites:
 
   - id: frontend-kyber
     subsystem: frontend-kyber
+    owner: frontend
+    components: [frontend-kyber]
+    contracts: [kyber-ui]
+    dependencies: [node]
+    isolation: workspace
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 45
+    hard_runtime_budget_seconds: 120
     paths: ["frontend/kyber"]
     runner: ["npm", "run", "test", "--workspace=frontend/kyber"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
@@ -333,6 +473,15 @@ suites:
 
   - id: frontend-kyber-component
     subsystem: frontend-kyber
+    owner: frontend
+    components: [frontend-kyber]
+    contracts: [kyber-ui]
+    dependencies: [node]
+    isolation: workspace
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 60
+    hard_runtime_budget_seconds: 180
     paths: ["frontend/kyber"]
     # Wired via .github/workflows/kyber-e2e.yml (working-directory: frontend/kyber).
     runner: ["npm", "run", "test:component", "--workspace=frontend/kyber"]
@@ -345,6 +494,15 @@ suites:
 
   - id: frontend-kyber-integration
     subsystem: frontend-kyber
+    owner: frontend
+    components: [frontend-kyber]
+    contracts: [kyber-ui-integration]
+    dependencies: [node]
+    isolation: workspace
+    lane: integration
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 90
+    hard_runtime_budget_seconds: 240
     paths: ["frontend/kyber"]
     # Wired via .github/workflows/kyber-e2e.yml (working-directory: frontend/kyber).
     runner: ["npm", "run", "test:integration", "--workspace=frontend/kyber"]
@@ -357,6 +515,15 @@ suites:
 
   - id: frontend-shared
     subsystem: frontend-shared
+    owner: frontend
+    components: [frontend-shared]
+    contracts: [shared-ui]
+    dependencies: [node]
+    isolation: workspace
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 30
+    hard_runtime_budget_seconds: 90
     paths: ["frontend/shared"]
     runner: ["npm", "run", "test", "--workspace=frontend/shared"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
@@ -368,6 +535,15 @@ suites:
 
   - id: frontend-docs
     subsystem: frontend-docs
+    owner: frontend
+    components: [frontend-docs]
+    contracts: [docs-ui]
+    dependencies: [node]
+    isolation: workspace
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 30
+    hard_runtime_budget_seconds: 90
     paths: ["frontend/docs"]
     runner: ["npm", "run", "test", "--workspace=frontend/docs"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
@@ -379,6 +555,15 @@ suites:
 
   - id: frontend-demo
     subsystem: frontend-demo
+    owner: frontend
+    components: [frontend-demo]
+    contracts: [demo-ui]
+    dependencies: [node]
+    isolation: workspace
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 30
+    hard_runtime_budget_seconds: 90
     paths: ["frontend/demo"]
     runner: ["npm", "run", "test", "--workspace=frontend/demo"]
     requires: {python_packages: [], services: [], docker: false, credentials: []}
@@ -390,6 +575,15 @@ suites:
 
   - id: frontend-olympus-marketing
     subsystem: frontend-olympus-marketing
+    owner: frontend
+    components: [olympus-marketing]
+    contracts: [marketing-ui]
+    dependencies: [node]
+    isolation: workspace
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 30
+    hard_runtime_budget_seconds: 90
     paths: ["frontend/olympus-marketing"]
     # Olympus Labs corporate marketing site (olympuslabsml.com).
     runner: ["npm", "run", "test", "--workspace=frontend/olympus-marketing"]
@@ -402,6 +596,15 @@ suites:
 
   - id: frontend-aether-marketing
     subsystem: frontend-aether-marketing
+    owner: frontend
+    components: [aether-marketing]
+    contracts: [marketing-ui]
+    dependencies: [node]
+    isolation: workspace
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 30
+    hard_runtime_budget_seconds: 90
     paths: ["frontend/aether-marketing"]
     # Aether public marketing + auth-threshold site (aether.olympuslabsml.com).
     runner: ["npm", "run", "test", "--workspace=frontend/aether-marketing"]

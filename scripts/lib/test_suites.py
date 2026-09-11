@@ -22,7 +22,8 @@ Two consumers exist today:
 Everything here is strict and fails loudly: unknown keys, bad enum values,
 paths that don't exist, and a ``documented_quarantine`` suite missing its
 required ``quarantine`` block are all typed ``TestSuiteConfigError``\\s, never
-silently-defaulted or coerced.
+silently-defaulted or coerced. Runtime-aware metadata is part of this same
+registry; it is not a second suite registry.
 """
 
 from __future__ import annotations
@@ -38,6 +39,8 @@ ROOT = Path(__file__).resolve().parents[2]
 ENVIRONMENTS = ("local", "ci", "release")
 SKIP_POLICIES = ("never", "local_only", "documented_quarantine")
 RELEASE_CLASSES = ("pr_gate", "live_certification", "advisory")
+ISOLATION_MODES = ("process", "workspace", "serial", "parallel")
+LANES = ("fast", "pr", "integration", "regression", "release")
 
 _REQUIRES_KEYS = {"python_packages", "services", "docker", "credentials"}
 _QUARANTINE_KEYS = {"reason", "owner", "expires"}
@@ -46,6 +49,15 @@ _SUITE_KEYS = {
     "paths",
     "runner",
     "subsystem",
+    "owner",
+    "components",
+    "contracts",
+    "dependencies",
+    "isolation",
+    "lane",
+    "profiles",
+    "expected_runtime_seconds",
+    "hard_runtime_budget_seconds",
     "requires",
     "environments",
     "skip_policy",
@@ -93,6 +105,15 @@ class TestSuite:
     paths: tuple[str, ...]
     runner: tuple[str, ...]
     subsystem: str
+    owner: str
+    components: tuple[str, ...]
+    contracts: tuple[str, ...]
+    dependencies: tuple[str, ...]
+    isolation: str
+    lane: str
+    profiles: tuple[str, ...]
+    expected_runtime_seconds: float
+    hard_runtime_budget_seconds: float
     requires: Requires
     environments: tuple[str, ...]
     skip_policy: str
@@ -133,6 +154,18 @@ def _require_str_list(data: dict, key: str, where: str, *, allow_empty: bool = F
     if not allow_empty and not value:
         raise _err(where, f"'{key}' must not be empty")
     return tuple(value)
+
+
+def _require_positive_number(data: dict, key: str, where: str) -> float:
+    if key not in data:
+        raise _err(where, f"missing required key '{key}'")
+    value = data[key]
+    # bool is an int subclass, but is never a meaningful runtime budget.
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise _err(where, f"'{key}' must be a positive finite number")
+    if value <= 0 or value != value or value in (float("inf"), float("-inf")):
+        raise _err(where, f"'{key}' must be a positive finite number")
+    return float(value)
 
 
 def _parse_requires(data: Any, where: str) -> Requires:
@@ -177,6 +210,24 @@ def _parse_suite(data: Any, index: int, root: Path) -> TestSuite:
 
     runner = _require_str_list(data, "runner", where)
     subsystem = _require_str(data, "subsystem", where)
+    owner = _require_str(data, "owner", where)
+    components = _require_str_list(data, "components", where)
+    contracts = _require_str_list(data, "contracts", where, allow_empty=True)
+    dependencies = _require_str_list(data, "dependencies", where, allow_empty=True)
+    isolation = _require_str(data, "isolation", where)
+    if isolation not in ISOLATION_MODES:
+        raise _err(where, f"invalid isolation {isolation!r} (allowed: {ISOLATION_MODES})")
+    lane = _require_str(data, "lane", where)
+    if lane not in LANES:
+        raise _err(where, f"invalid lane {lane!r} (allowed: {LANES})")
+    profiles = _require_str_list(data, "profiles", where)
+    expected_runtime_seconds = _require_positive_number(data, "expected_runtime_seconds", where)
+    hard_runtime_budget_seconds = _require_positive_number(data, "hard_runtime_budget_seconds", where)
+    if expected_runtime_seconds > hard_runtime_budget_seconds:
+        raise _err(
+            where,
+            "'expected_runtime_seconds' must not exceed 'hard_runtime_budget_seconds'",
+        )
     requires = _parse_requires(data.get("requires"), where)
 
     environments = _require_str_list(data, "environments", where)
@@ -229,6 +280,15 @@ def _parse_suite(data: Any, index: int, root: Path) -> TestSuite:
         paths=paths,
         runner=runner,
         subsystem=subsystem,
+        owner=owner,
+        components=components,
+        contracts=contracts,
+        dependencies=dependencies,
+        isolation=isolation,
+        lane=lane,
+        profiles=profiles,
+        expected_runtime_seconds=expected_runtime_seconds,
+        hard_runtime_budget_seconds=hard_runtime_budget_seconds,
         requires=requires,
         environments=environments,
         skip_policy=skip_policy,
@@ -242,11 +302,11 @@ def load_suites(path: str | Path, *, root: Path = ROOT) -> list[TestSuite]:
     """Load and strictly validate the canonical test-suite registry.
 
     Raises ``TestSuiteConfigError`` (never returns a partial/defaulted result)
-    on: unknown top-level or per-suite keys, invalid enum values, a suite path
-    that doesn't exist on disk, a ``documented_quarantine`` suite missing its
-    ``quarantine`` block (or a non-quarantined suite carrying one), a
-    duplicate suite id, or a suite that both needs live infra and claims
-    ``skip_policy: never``.
+    on: unknown top-level or per-suite keys, missing or invalid runtime-aware
+    metadata, invalid enum values, a suite path that doesn't exist on disk, a
+    ``documented_quarantine`` suite missing its ``quarantine`` block (or a
+    non-quarantined suite carrying one), a duplicate suite id, or a suite that
+    both needs live infra and claims ``skip_policy: never``.
     """
     resolved = Path(path)
     if not resolved.is_absolute():
