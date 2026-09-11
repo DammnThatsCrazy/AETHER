@@ -32,9 +32,9 @@
 - [ ] Management API application created in Auth0 Dashboard
 - [ ] Credentials exported (NEVER put in tfvars):
   ```bash
-  export AUTH0_DOMAIN="your-tenant.us.auth0.com"
-  export AUTH0_CLIENT_ID="your-management-app-client-id"
-  export AUTH0_CLIENT_SECRET="your-management-app-client-secret"
+  export AUTH0_DOMAIN="<your-tenant>.us.auth0.com"
+  export AUTH0_CLIENT_ID="<from Auth0 dashboard>"
+  export AUTH0_CLIENT_SECRET="<from Auth0 dashboard>"
   ```
 
 ### 4. Domain
