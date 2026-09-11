@@ -9,7 +9,9 @@ since_version: "8.9.0"
 source_files:
   - .github/workflows/repo-consistency.yml
   - config/verification_router.yaml
+  - config/verification_policy.yaml
   - config/test_suites.yaml
+  - config/ci_runtime_budgets.yaml
   - config/deployment_profile_compatibility.yaml
   - config/runtime_fallbacks.yaml
   - config/golden_journeys.yaml
@@ -38,6 +40,10 @@ source_files:
   - scripts/delivery_contracts.py
   - scripts/change_plan.py
   - scripts/check_router.py
+  - scripts/verification_disposition.py
+  - scripts/lib/build_selection.py
+  - scripts/lib/verification_router.py
+  - scripts/lib/impact_graph.py
   - scripts/delivery_orchestrator.py
   - scripts/staging_state_machine.py
   - scripts/release/evidence_bundle.py
@@ -46,6 +52,8 @@ source_files:
   - scripts/run_backend_tests.py
   - scripts/validate_makefile.py
   - tests/unit/test_repo_consistency_workflow_authority.py
+  - tests/unit/test_verification_disposition.py
+  - tests/unit/test_ci_runtime_budgets.py
   - scripts/validate_delivery_profiles.py
   - scripts/validate_delivery_registries.py
   - scripts/release/resolve_environment.py
@@ -59,6 +67,8 @@ source_files:
   - scripts/release/release_candidate_adapter.py
   - scripts/release/check_environment_requirements.py
   - scripts/validate_verification_router.py
+  - scripts/validate_verification_policy.py
+  - scripts/validate_ci_runtime_budgets.py
   - scripts/release/check_deployment_operator_surface.py
   - config/delivery_workflow_authority.yaml
   - scripts/release/check_delivery_workflow_authority.py
@@ -87,9 +97,13 @@ toc_depth: 3
 ## Purpose
 
 Aether uses a change-aware verification spine so ordinary work executes the
-smallest check set justified by its affected domains while preserving the full
-canonical `make ci-check` completion gate. Local or PR evidence proves only
-the selected lane; it never establishes staging or production readiness.
+smallest check set justified by its affected domains. Normal pull requests have
+one blocking authority, `verification / disposition`: the Impact Graph selects
+the affected checks and BuildSelection artifacts after the universal-fast lane.
+The legacy full `make ci-check` remains available for trusted-main, nightly, and
+release evidence, but it is not a second blocking PR authority or a PR job.
+Local or PR evidence proves only the selected lane; it never establishes
+staging or production readiness.
 
 The repository remains authoritative for test commands in
 `config/test_suites.yaml`, routing policy in `config/verification_router.yaml`,
@@ -117,13 +131,14 @@ latency regression.
 6. Treat integration, regression, and release as progressively stronger lanes;
    none may be substituted for profile-specific deployment evidence.
 
-Pull-request automation separates four authorities: `classify-change` owns the
-deterministic affected-surface decision, `build-artifact` owns build success,
-`selected-verification` owns the routed checks, and `publish-evidence` owns the
-combined disposition. The independent `repo-consistency` job remains the
-PR-completion authority and executes `make ci-check`. Publication runs even
-after an upstream failure so evidence is retained, but fails closed unless all
-blocking stages succeeded.
+Pull-request automation separates the implementation stages of one authority:
+`classify-change` owns the deterministic impact decision, `build-artifact` owns
+the selected build outputs, `selected-verification` executes the routed checks,
+and `publish-evidence` publishes the single blocking disposition. The legacy
+full-gate PR job was retired after representative hosted observation; the broad
+`make ci-check` command remains available outside ordinary PR mergeability.
+Publication runs even after an upstream failure so evidence is retained, but
+fails closed unless all blocking stages succeeded.
 
 Every router invocation emits JSON containing changed files, affected domains,
 the minimum lane, the selected lane, and exact commands. Passing `--output`
@@ -135,9 +150,9 @@ integration, regression, and release lanes cannot be downgraded.
 
 The same result includes an immutable impact record with whether a global path
 triggered, the inventory tests whose declared source or dependencies changed,
-and the selected check ids. This is impact evidence, not a claim that the
-currently registered suite commands have been narrowed to those tests; suite
-execution remains governed by the canonical registry and full completion gate.
+and the selected check ids. Suite selection is conservative at the registered
+suite boundary: it selects whole canonical commands, not individual test
+functions, and remains governed by the registry and full completion gate.
 
 The Impact Graph v2 index extends that route result with registered components,
 owned contracts, transitive consumers, deployable surfaces, and unresolved
@@ -281,7 +296,9 @@ GitHub, Terraform, tenant journeys, or production promotion locally.
 
 PR CI compiles workspace packages once, archives the resulting `dist`
 directories, and creates `release-candidate.json` bound to that archive, the
-commit SHA, and dependency locks. The hosted release manifest is adapted to
+commit SHA, and dependency locks. When the Impact Graph selects the backend,
+the Docker image is saved as a second candidate component and reloaded and
+verified by the consumer job. The hosted release manifest is adapted to
 the same candidate contract by `scripts/release/release_candidate_adapter.py`;
 build, approved-release, deploy, and staging consumers reverify the candidate
 and exact files before mutation. GitHub's workflow artifact is transport
@@ -312,8 +329,8 @@ full release-spine blueprint. The following work remains explicitly open:
 | --- | --- | --- |
 | Strictly read-only doctor | `--check` runs generators in a temporary Git mirror | Extend mutation regression coverage as new generators are registered; keep fixes explicit. |
 | Per-test inventory | `config/test_inventory.yaml` and its validator establish ownership/dependency/quarantine metadata | Complete inventory coverage and collect measured runtime/flakiness/meaningful-failure history. |
-| Changed-test selection | Paths route to domain suites | Build an import/contract dependency index and select changed tests plus transitive consumers instead of whole domain suites. |
-| PR workflow authority | Enforced one-owner GitHub authority map validates workflow ownership and required command wiring; CI has explicit classify, build, selected-verification, repo-consistency, and fail-closed evidence-publication jobs | Extract reusable setup/build outputs after runtime measurement; `make ci-check` remains the independent PR-completion authority. |
+| Changed-test selection | Paths and directly changed contract nodes select registered suites; contract consumers are named in the Impact Graph | Extend the contract-consumer map as new providers and consumers are added; keep selection-completeness tests current. |
+| PR workflow authority | Enforced one-owner GitHub authority map validates workflow ownership and required command wiring; CI has explicit impact, affected-build, verification-disposition, and fail-closed publication stages | Branch protection requires only the stable `verification / disposition` check; the legacy full gate is retired from the PR path. |
 | Immutable artifact | PR and hosted delivery paths share the adapter-backed candidate identity and verify exact files before staging/promotion | Add provenance/signing, durable registry upload, and external registry attestation. |
 | Profile compatibility | Repository gate validates required frontend identity/endpoint fields and rejects insecure/placeholders for deployable profiles | Generate the manifest from real builds and bind it to the candidate digest and staging preflight. |
 | Fallback governance | Audited profile-aware registry binds major fallback classes to implementation paths and blocks registered local fallbacks in staging/production | Resolve remaining candidate entrypoints with their owners, enforce selection at runtime across every deployable surface, and expose typed degradation in readiness. |
@@ -322,7 +339,7 @@ full release-spine blueprint. The following work remains explicitly open:
 | Golden journeys | Registry requires the five named, owned journeys and assertion metadata | Implement and execute those journeys against a clean baseline; the registry gate is not journey execution evidence. |
 | Canonical evidence bundle | Validator enforces required checks and forbids READY with blockers/degradation; hosted candidate evidence is identity-bound | Aggregate real lane/deployment results, retain logs/traces, sign/publish bundles, and ingest them in Kyber. |
 | Kyber readiness authority | Read-only endpoint projects a mounted, identity-bearing GitHub evidence record and reports `UNAVAILABLE` when none is mounted | Mount the signed aggregate bundle and add approval, deploy-health, rollback, and reconciliation fields without recomputing evidence client-side. |
-| Debt removal and performance | Deterministic isolated test execution is established | Measure runtime and meaningful failures, consolidate duplicates, relocate expensive cases, enforce quarantine expiry, then establish measured warm-local and PR budgets. |
+| Debt removal and performance | Runtime-aware suite metadata, hard budgets, deterministic local JSON/JSONL p50/p95 reporting, and bounded parallel disposition runner are implemented | Persist hosted history, classify meaningful failures and flakes, subdivide broad suites, and tune caches/setup against measured critical-path data. |
 
 ## Expected testing impact
 
@@ -332,15 +349,17 @@ the full safety net exists:
 * During an edit, `make test-fast BASE=<ref>` runs only toolchain and command
   metadata checks. It reports the stronger follow-up lane instead of expanding
   silently, so local feedback remains bounded.
-* Before a PR, `make test-pr BASE=<ref>` runs the suites registered for affected
-  domains plus shared contract checks. A frontend-only change therefore avoids
-  ML and infrastructure suites; an SDK/shared-contract change expands to its
-  registered consumers.
+* Before a PR, `make verification-disposition BASE=<ref> EXECUTE=1` runs the
+  universal-fast checks and the suites registered for affected domains plus
+  shared contract checks. A frontend-only change therefore avoids ML and
+  infrastructure suites; an SDK/shared-contract change expands to its
+  registered consumers. `make test-pr` remains the lower-level router command.
 * Infrastructure changes require integration before merge. Regression remains
   broad and is intended for scheduled or explicitly requested execution.
-* `make ci-check` remains the canonical completion gate during migration. It can
-  only become change-selected after the dependency index, workflow authority,
-  immutable artifacts, and evidence aggregation above are enforced and measured.
+* `make ci-check` remains the repository's broad consistency/regression gate,
+  but it is no longer the normal PR disposition. The PR shadow was retired
+  after representative hosted observation; trusted-main, nightly, and release
+  workflows retain broad coverage.
 * Release testing is not reduced: it adds profile preflight, exact-artifact
   deployment, migrations, activation, journeys, adversarial checks, and repair
   or rollback evidence. Local or PR success never implies deployment readiness.

@@ -45,7 +45,7 @@ jobs:
       - name: Set up Node.js (for Hardhat / solc)
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: 'Smart Contracts/package-lock.json'
 
@@ -140,7 +140,7 @@ jobs:
       - name: Set up Node.js (for Hardhat / solc)
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: 'Smart Contracts/package-lock.json'
 

@@ -19,7 +19,7 @@ source_files:
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  ".github/workflows/repo-health.yml": "sha256:20c88ed21d120e0286d051c04ded3927b1268903de5b804e4c66af29719daa6c"
+  ".github/workflows/repo-health.yml": "sha256:8e187ae831d16de47d075ae6b5e6ff07e7b1cdcfe3738124570c11bde94f25dd"
   "AWS Deployment/aether-aws/terraform/modules/s3/main.tf": "sha256:dcb227e3134ef55fc01757c85c28fd0ca5a33b58f915f27c5a58f13c83bd4de4"
   "ML Models/aether-ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
   "ML Models/aether-ml/common/feature_contracts.py": "sha256:42b763eaa9d0cd71191a3ab3b7b58f03c5176deff6c550979272449cc671bd99"
@@ -178,13 +178,15 @@ attack, and rollback events. Rules in
 
 ### Phase 8/9 — CI, Compose, Infrastructure
 
-**CI (G26):** ML path filter in `repo-health.yml` expanded to cover
+**CI (G26):** ML path coverage in the verification registries includes
 `ml_serving/`, `model_extraction_defense/`, `deploy/`, `AWS Deployment/`,
-and Kyber ML frontend paths.
+and Kyber ML frontend paths. Normal PR verification selects the registered ML
+suite only when the Impact Graph identifies ML impact; the broad ML runner is
+reserved for scheduled or explicitly dispatched regression.
 
-**CI job:** `ml-tests` job expanded from monolithic pytest to three named
-steps: ML registry validation (`make ml-validate`), full test suite, and
-docs consistency check (`make ml-docs-check`). The job carries
+**CI job:** the scheduled/manual `ml-tests` job is split into three named steps:
+ML registry validation (`make ml-validate`), full test suite, and docs
+consistency check (`make ml-docs-check`). The job carries
 `timeout-minutes: 60` — the highest bound in `repo-health.yml`, because the
 ML extras install (`[dev,security,backend,agent,ml]`) plus the training smoke
 is the heaviest job in the workflow.

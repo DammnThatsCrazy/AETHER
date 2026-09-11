@@ -233,8 +233,9 @@ def write_automation() -> None:
         "mock and fixture boundaries.",
         "- `make frontend-data-truth-bundles` — create explicit production builds "
         "and scan emitted bundles for prohibited synthetic literals.",
-        "- `make ci-check` — **canonical PR completion gate**; fails if generators produce a diff.",
-        "- `make release-gate` — `ci-check` + strict production status + ops readiness (release claims only).",
+        "- `make verification-disposition EXECUTE=1` — the single blocking normal-PR authority; it runs universal-fast plus the Impact Graph's affected checks and emits one disposition artifact.",
+        "- `make ci-check` — broad repository consistency/regression validation used for trusted-main, nightly, and release evidence; it is not a second blocking normal-PR status.",
+        "- `make release-gate` — strict production status + ops readiness against a release candidate (release claims only).",
         "",
         "## Generated vs authored docs",
         "",
@@ -256,17 +257,23 @@ def write_automation() -> None:
         "`python scripts/docs_drift.py --strict`, then update only those source "
         "hashes with `make docs-generate-changed`.",
         "- Confirm generator idempotency with `make docs-verify-idempotent`.",
-        "- Final gate: `make ci-check`. Weaker commands (`npm run test:docs`, "
-        "partial pytest runs, docs-only checks, `make repo-doctor` alone) are not "
-        "sufficient proof of PR completion.",
+        "- Normal PR authority: `make verification-disposition BASE=<base> EXECUTE=1`. "
+        "For repository completion and release evidence, also run `make ci-check`; "
+        "weaker commands (`npm run test:docs`, partial pytest runs, docs-only checks, "
+        "`make repo-doctor` alone) are not sufficient proof of repository completion.",
         "- The canonical gate runs both frontend data-truth checks. "
         "`npm run validate:frontend-data-truth` is also a named read-only workflow "
         "step so source violations are directly visible in pull requests.",
         "",
         "## Workflow enforcement",
         "",
-        "- `.github/workflows/repo-health.yml` runs read-only consistency checks on "
-        "every push and pull request; PR-head jobs have no write permissions.",
+        "- `.github/workflows/repo-consistency.yml` owns the blocking `verification / "
+        "disposition` status for normal pull requests; the retired legacy full "
+        "gate remains available through local, trusted-main, nightly, and release "
+        "commands but is not a PR job.",
+        "- `.github/workflows/repo-health.yml` keeps PR docs/size signals advisory "
+        "and runs broad regression on trusted `main`, nightly, or explicit dispatch; "
+        "PR-head jobs have no write permissions.",
         "- On trusted pushes to `main` only, a separate write-capable `docs-sync` "
         "job regenerates and auto-commits generated documentation so the branch "
         "stays self-healing.",

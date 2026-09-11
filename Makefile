@@ -9,7 +9,7 @@
 # =============================================================================
 
 .DEFAULT_GOAL := help
-.PHONY: setup setup-dev setup-minimal doctor generate change-plan test-fast test-pr test-integration test-regression test-release build-artifact validate-delivery-profile validate-delivery-registries validate-delivery-workflow-authority validate-impact-graph validate-telemetry-contracts validate-release-evidence validate-golden-journeys deploy-staging staging-migrate test-golden-journeys \
+.PHONY: setup setup-dev setup-minimal doctor generate change-plan test-fast test-pr test-integration test-regression test-release verification-disposition validate-verification-policy validate-ci-runtime-budgets build-artifact validate-delivery-profile validate-delivery-registries validate-delivery-workflow-authority validate-impact-graph validate-telemetry-contracts validate-release-evidence validate-golden-journeys deploy-staging staging-migrate test-golden-journeys \
         test test-security test-ml test-coverage \
         ml-validate ml-test ml-test-unit ml-test-integration ml-test-security \
         ml-train-smoke ml-artifact-verify ml-docs-check ml-container-build ml-ci \
@@ -383,6 +383,15 @@ test-fast: ## Execute the change-aware fast lane (BASE defaults to HEAD)
 
 test-pr: ## Execute the change-aware PR lane
 	$(GATE_PY) scripts/check_router.py --base "$(or $(BASE),HEAD)" --lane pr --execute
+
+verification-disposition: ## Run or plan the single blocking verification authority
+	$(GATE_PY) scripts/verification_disposition.py --base "$(or $(BASE),HEAD)" $(if $(EXECUTE),--execute) $(if $(OUTPUT),--output "$(OUTPUT)")
+
+validate-verification-policy: ## Validate the single normal PR verification authority policy
+	$(GATE_PY) scripts/validate_verification_policy.py
+
+validate-ci-runtime-budgets: ## Validate suite runtime metadata, or evidence when RUNTIME_EVIDENCE is supplied
+	$(GATE_PY) scripts/validate_ci_runtime_budgets.py $(if $(RUNTIME_EVIDENCE),"$(RUNTIME_EVIDENCE)",--check-registry)
 
 test-integration: ## Execute the selected integration lane
 	$(GATE_PY) scripts/check_router.py --base "$(or $(BASE),HEAD)" --lane integration --execute

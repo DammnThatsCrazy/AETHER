@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Validate the canonical release-check catalog against hosted workflows.
 
-The catalog is the authority consumed by release evidence.  This validator
-prevents a required SDK job from disappearing, becoming non-PR-triggered, or
-losing the shared-contract trigger that makes cross-platform validation
-authoritative before merge.
+The catalog is the authority consumed by release evidence. This validator
+prevents a required SDK job from disappearing, losing the shared-contract
+trigger that makes cross-platform validation authoritative before merge, or
+claiming a universal/path-scoped PR block that its workflow cannot provide.
+Release-only checks are valid when their catalog flags describe release
+surfaces rather than pull-request mergeability.
 """
 from __future__ import annotations
 
@@ -66,7 +68,12 @@ def validate(root: Path = ROOT) -> list[str]:
             errors.append(f"{check_id}: workflow has no job {check.get('job')!r}")
         # PyYAML treats the YAML 1.1 word `on` as a boolean, so use source text
         # for trigger checks rather than accepting an ambiguous parsed key.
-        if "pull_request:" not in text:
+        # A check that claims PR mergeability must be PR-triggered. Release-only
+        # checks, such as the hardening/release gate, deliberately do not run on
+        # ordinary pull requests and are governed by their release flag instead.
+        pr_blocking = any(check.get(flag) is True for flag in (
+            "blocks_pr_merge", "blocks_pr_merge_when_paths_touched"))
+        if pr_blocking and "pull_request:" not in text:
             errors.append(f"{check_id}: workflow is not triggered for pull requests")
         # Honest merge-blocker semantics: a workflow whose pull_request trigger
         # is filtered by `paths:` does not run on every PR, so it can never be

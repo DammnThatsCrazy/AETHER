@@ -34,6 +34,15 @@ def _suite_yaml(**overrides) -> str:
         "paths": ["tests"],
         "runner": '["python", "-m", "pytest"]',
         "subsystem": "core",
+        "owner": "platform",
+        "components": '["core"]',
+        "contracts": "[]",
+        "dependencies": "[]",
+        "isolation": "process",
+        "lane": "pr",
+        "profiles": '["local", "ci"]',
+        "expected_runtime_seconds": 10,
+        "hard_runtime_budget_seconds": 30,
         "environments": '["local", "ci"]',
         "skip_policy": "never",
         "release_class": "pr_gate",
@@ -44,6 +53,15 @@ def _suite_yaml(**overrides) -> str:
     lines.append(f"    paths: {base['paths']}")
     lines.append(f"    runner: {base['runner']}")
     lines.append(f"    subsystem: {base['subsystem']}")
+    lines.append(f"    owner: {base['owner']}")
+    lines.append(f"    components: {base['components']}")
+    lines.append(f"    contracts: {base['contracts']}")
+    lines.append(f"    dependencies: {base['dependencies']}")
+    lines.append(f"    isolation: {base['isolation']}")
+    lines.append(f"    lane: {base['lane']}")
+    lines.append(f"    profiles: {base['profiles']}")
+    lines.append(f"    expected_runtime_seconds: {base['expected_runtime_seconds']}")
+    lines.append(f"    hard_runtime_budget_seconds: {base['hard_runtime_budget_seconds']}")
     lines.append(f"    environments: {base['environments']}")
     lines.append(f"    skip_policy: {base['skip_policy']}")
     lines.append(f"    release_class: {base['release_class']}")
@@ -89,6 +107,51 @@ def test_unknown_keys_are_rejected(tmp_path: Path) -> None:
     bad.write_text(
         _suite_yaml(extra_lines=["skip_polcy: never"]), encoding="utf-8"
     )
+    with pytest.raises(TestSuiteConfigError):
+        load_suites(str(bad))
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "owner",
+        "components",
+        "contracts",
+        "dependencies",
+        "isolation",
+        "lane",
+        "profiles",
+        "expected_runtime_seconds",
+        "hard_runtime_budget_seconds",
+    ],
+)
+def test_runtime_metadata_is_required(tmp_path: Path, field: str) -> None:
+    bad = tmp_path / "suites.yaml"
+    entry = "\n".join(
+        line for line in _suite_yaml().splitlines() if not line.startswith(f"    {field}: ")
+    ) + "\n"
+    bad.write_text(entry, encoding="utf-8")
+    with pytest.raises(TestSuiteConfigError, match=f"missing required key '{field}'"):
+        load_suites(str(bad))
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("isolation", "remote"),
+        ("lane", "unknown"),
+        ("expected_runtime_seconds", "0"),
+        ("hard_runtime_budget_seconds", "9"),
+    ],
+)
+def test_runtime_metadata_invalid_values_are_rejected(
+    tmp_path: Path, field: str, value: str
+) -> None:
+    bad = tmp_path / "suites.yaml"
+    overrides = {field: value}
+    if field == "hard_runtime_budget_seconds":
+        overrides["expected_runtime_seconds"] = 10
+    bad.write_text(_suite_yaml(**overrides), encoding="utf-8")
     with pytest.raises(TestSuiteConfigError):
         load_suites(str(bad))
 

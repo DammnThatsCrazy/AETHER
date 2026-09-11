@@ -22,14 +22,14 @@ canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  ".github/workflows/repo-health.yml": "sha256:20c88ed21d120e0286d051c04ded3927b1268903de5b804e4c66af29719daa6c"
+  ".github/workflows/repo-health.yml": "sha256:8e187ae831d16de47d075ae6b5e6ff07e7b1cdcfe3738124570c11bde94f25dd"
   ".pre-commit-config.yaml": "sha256:aabbf5350833f4d28448c5ef9f85bd5e516815458c6e76c1ac9f906b37947616"
-  "Makefile": "sha256:19ffbddf81596f1eb3841d28c2b9f2ccdbfba65a78aefbd3aef63699019d2ccb"
+  "Makefile": "sha256:db03a26607229338b23f076237cdadc269c2fa68e9bee1645a6ae903532341f6"
   "scripts/docs_drift.py": "sha256:b6c0cd0a27f72b8c0d207d799f6daabdf0ed02e8bea17feaf6ccbfff43c1016a"
   "scripts/docs_extract/run_all.py": "sha256:404445eba05d12de88af585f79839b7496a1658411a110e606c46d5ed7e8c338"
   "scripts/docs_idempotency.py": "sha256:fe8628ef3a9b9d824645a5db062857754d2984b0f3f4d866b571df6232302f17"
   "scripts/docs_schema.json": "sha256:3193754ebab2af05e0985c72c3ab2cc6d7e7fc8118dff88235c93d5768f86226"
-  "scripts/sync_docs.py": "sha256:e6b84b1ab3c072b4d9350004a5147c79def0cbf603c1e2222537726c7ef425fd"
+  "scripts/sync_docs.py": "sha256:8103182e7a1b7d5683bd67b1d270bae627200eeefc84dc679220c5529b2103e5"
   "scripts/validate_contracts.py": "sha256:0ffda1a3b37627be929cd82b15c5e6e3c188faf8e190a98dc3727bba6b0d4816"
   "scripts/validate_docs.py": "sha256:a0831684326b8489fe7e2c65253bbb4dae1586d5ea4e8fcb367d59184e7b6031"
   "scripts/validate_frontmatter.py": "sha256:1b4ba24575565584f7fc5e01c01a245ee4702f5220c85aa701bc86af2bdaa0c4"
@@ -185,17 +185,17 @@ context, not a substitute for this gate or for hosted CI.
 `pre-commit install`. Mirrors the gates so contributors catch problems
 before pushing.
 
-**CI** — two workflows enforce documentation consistency:
+**CI** — documentation consistency is implemented by two workflows with
+different authority scopes:
 
-- `.github/workflows/repo-health.yml` — authoritative per-commit gate.
-  Runs `validate_docs`, `validate_frontmatter`, `docs_drift`,
-  regenerates `docs/_generated/`, and fails on uncommitted drift.
-- `.github/workflows/repo-consistency.yml` — PR/push gate that runs
-  `make ci-check` (the full `repo_doctor.py --ci` suite), covering
-  version alignment, generated docs, frontmatter, source-linked drift,
-  contracts, SDK alignment, the delivery-safety validator
-  (`scripts/release/validate_delivery_safety.py`), and tests in a single
-  step.
+- `.github/workflows/repo-health.yml` — advisory docs/size signals on PRs and
+  the trusted-main/nightly documentation runners. Its `docs-sync` write path is
+  restricted to pushes to `main`.
+- `.github/workflows/repo-consistency.yml` — the normal PR authority named
+  `verification / disposition`; it runs the selected documentation check when
+  the Impact Graph requires it. Its full `make ci-check` execution is retired
+  from PRs after the observation window, while the same broad command remains
+  available for trusted-main/nightly/release evidence.
 
 ## Routine: changing a documented system
 

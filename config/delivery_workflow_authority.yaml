@@ -15,7 +15,7 @@ authorities:
     workflows:
       - .github/workflows/repo-consistency.yml
     required_commands:
-      - make ci-check
+      - scripts/verification_disposition.py
       - scripts/impact_graph.py
   - id: candidate
     owner: release@aether

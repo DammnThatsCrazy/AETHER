@@ -1,0 +1,42 @@
+schema_version: 1
+authority: verification
+status_check: verification / disposition
+
+normal_pr:
+  blocking: true
+  universal_fast_lane: fast
+  affected_lane: pr
+  allowed_escalations: [integration, regression, release]
+
+shadow:
+  # Retired after the representative hosted PR observation window completed
+  # with zero unexplained selection misses and an in-budget ordinary-PR p95.
+  enabled: false
+  command: make ci-check
+  blocking: false
+  retired: true
+  exit_condition:
+    representative_pr_window: true
+    zero_unexplained_selection_misses: true
+    ordinary_pr_p95_within_budget: true
+
+integration:
+  trigger: push-main-or-explicit-escalation
+  blocking_on_pr: false
+
+regression:
+  trigger: nightly-or-explicit-escalation
+  blocking_on_pr: false
+
+release:
+  trigger: release-candidate-promotion-or-manual-dispatch
+  command: make release-gate
+  blocking_on_pr: false
+
+risk_lanes:
+  R0: fast
+  R1: pr
+  R2: pr
+  R3: integration
+  R4: integration
+  R5: release

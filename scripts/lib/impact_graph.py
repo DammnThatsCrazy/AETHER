@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from scripts.lib.test_suites import TestSuite, load_suites
+from scripts.lib.build_selection import select_builds
 from scripts.lib.verification_router import (
     VerificationRouterConfig,
     classify_impact,
@@ -401,7 +402,14 @@ def build_impact_index(
     transitive = graph.transitive_nodes(direct)
     router_impact = classify_impact(changed, router, requested_lane)
     known_suites = {suite.id for suite in graph.test_suites}
-    selected_suites = tuple(sorted(set(router_impact.selected_checks) & known_suites))
+    graph_selected_suites = {
+        suite_id
+        for reference in direct
+        if reference.startswith("contract:")
+        for suite_id in graph.contracts[reference.split(":", 1)[1]].suite_ids
+    }
+    selected_check_ids = set(router_impact.selected_checks) | graph_selected_suites
+    selected_suites = tuple(sorted(selected_check_ids & known_suites))
     unresolved = tuple(
         sorted(
             set(changed)
@@ -437,13 +445,16 @@ def build_impact_index(
         "impacted_contracts": list(by_kind["contract"]),
         "impacted_deployables": list(by_kind["deployable"]),
         "unresolved_paths": list(unresolved),
+        "build_selection": select_builds(
+            changed, global_change=router_impact.global_change
+        ),
         "router": {
             "affected_domains": list(router_impact.affected_domains),
             "global_change": router_impact.global_change,
             "minimum_lane": router_impact.minimum_lane,
             "selected_lane": router_impact.selected_lane,
             "followup_required": router_impact.followup_required,
-            "selected_checks": list(router_impact.selected_checks),
+            "selected_checks": sorted(selected_check_ids),
             "selected_test_suites": list(selected_suites),
         },
     }

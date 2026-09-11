@@ -1,0 +1,27 @@
+# Runtime-budget policy for the canonical suite registry.
+#
+# Suite ownership, selection metadata, and per-suite budgets live only in
+# config/test_suites.yaml. This file describes the evidence format and the
+# deterministic checks applied to that registry; it is not a second suite
+# registry.
+
+schema_version: 1
+canonical_registry: config/test_suites.yaml
+runtime_unit: seconds
+
+percentiles:
+  p50: 0.50
+  p95: 0.95
+  method: linear_interpolation
+
+violation_policy:
+  compare_percentile: p95
+  compare_maximum_sample: true
+  budget_field: hard_runtime_budget_seconds
+
+evidence:
+  accepted_formats: [json, jsonl]
+  required_fields: [suite, runtime_seconds, selected_by]
+  aliases:
+    suite: [suite_id]
+    runtime_seconds: [runtime]

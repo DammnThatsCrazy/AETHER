@@ -22,7 +22,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:61d269ee33dd8443c5877259e208d8637357cfc17b921027824f8212ec82266f"
+  ".github/workflows/": "sha256:cc93bdc0dd8ecd70b0fbd95332fbc0d0940d635c4f00135c34bad0b8c40eb24f"
   "AWS Deployment/aether-aws/terraform/modules/aurora/main.tf": "sha256:16c4beb8ccab1af164ff62f8aa2d515a5efc3f093b7878411f40aa14ce39e094"
   "AWS Deployment/aether-aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "AWS Deployment/aether-aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
@@ -38,6 +38,34 @@ source_hashes:
 # CI/CD Pipeline — Stages, Gates & SDK Release
 
 Internal reference for Aether's delivery pipeline.
+
+## Current verification authority
+
+For an ordinary pull request, `.github/workflows/repo-consistency.yml` owns one
+blocking status: `verification / disposition`. The workflow classifies the
+changed paths with the Impact Graph, runs the universal-fast checks, selects
+the affected test suites and build workspaces, and publishes one machine-readable
+disposition. The old full `make ci-check` PR job has been retired after the
+representative selection observation window recorded zero unexplained misses;
+it remains available for local, trusted-main, nightly, and release evidence but
+does not determine mergeability. Hosted p50/p95 timing is measured separately
+by `ci-runtime-report.yml`; its report remains `INSUFFICIENT_SAMPLES` until at
+least five completed adaptive PR authority runs are available, so local timing
+must not be presented as hosted timing evidence.
+
+`repo-health.yml` keeps documentation and PR-size signals advisory on pull requests
+and runs a bounded contract/impact/durable-integration authority after merges to
+`main`. Its broad Python/backend/TypeScript/E2E/preflight coverage runs nightly or
+on explicit dispatch as regression assurance. The hardening
+release workflow is invoked manually, from a release event, or by a release-candidate
+caller; `make release-gate` is not an ordinary pull-request check. Release validation
+therefore evaluates an immutable candidate in the release lifecycle rather than PR
+source in the normal critical path.
+
+The suite registry (`config/test_suites.yaml`) carries ownership, component/contract
+relationships, lane, isolation, and runtime-budget metadata. Local runtime evidence
+can be summarized with `scripts/validate_ci_runtime_budgets.py`; that validator reads
+JSON/JSONL files only and makes no hosted telemetry claim.
 
 Repo Health scopes its concurrency group by event type as well as branch. A
 push run therefore cannot cancel the pull request run that supplies the
@@ -312,9 +340,9 @@ Two things get promoted, on two separate paths that must never be conflated: the
 | `staging-ttl-guard.yml` | hourly schedule; dispatch | Enforces the staging awake lease. Runs no Terraform at all; it can scale ECS to zero and lower the ECS autoscaling floor, which can only reduce running compute. **Not armed without `AWS_STAGING_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or enforce the TTL, reports it is a NO-OP and exits green — staging may still be running and will NOT be guarded; that is NOT a claim that staging is asleep. The moment the role is wired it enforces exactly as before, fail-closed in both directions. | no |
 | `ephemeral-ttl-guard.yml` | hourly schedule; dispatch | Fail-closed TTL guard for the demo/preview ephemeral profiles. Reads the SSM lease at `/aether/{profile}/{env}/lifecycle/expires-at` (written by `ephemeral_env.py provision`) and ends the run red when the lease is missing or expired; enforcement is the operator-run `ephemeral_env.py teardown` (scale-to-zero + floor-zeroing + lease removal). Runs no Terraform. **Not armed without `AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or trip the TTL, reports it is a NO-OP and exits green — demo/preview environments may still be running and will NOT be guarded; that is NOT a claim that demo/preview are asleep. The moment the role is wired it enforces exactly as before, fail-closed. | no |
 
-| `repo-consistency.yml` | PR / push to `main` | Classifies changed paths with the verification router, uploads the JSON selection as PR evidence, then runs `make ci-check`, including documentation consistency, contract checks, and the targeted frontend-brand guardrail. The selection is advisory until the remaining verification-spine dependency and evidence work is complete; it does not weaken the canonical gate. | no |
+| `repo-consistency.yml` | PR / push to `main` | Classifies changed paths with the verification router, builds the Impact Graph-selected workspaces in dependency order, binds the selected workspace archive and any selected backend image into one immutable candidate, verifies and materializes that candidate in the consumer job, executes the universal and affected verification checks, and publishes the single blocking `verification / disposition` evidence. The broad `make ci-check` job is intentionally absent from the PR path after the completed selection observation window. | no |
 | `production-status.yml` | 12-hourly schedule; dispatch | `scripts/production_status.py --strict` + readiness scorecard artifact. | no |
-| `production-equivalent-ci.yml` | PR / push / dispatch | Boots Postgres + Redis service containers, applies the full Alembic graph to a **fresh** database (`alembic upgrade head` → single head), and runs real-pool ingestion tests against the real stack: a round-trip smoke test (M1) plus idempotency/concurrency tests (M2) that prove concurrent `ingest_many` of the same key is exactly-once via the real UNIQUE index + `ON CONFLICT`, plus measurement/attribution repo tests (M4) exercising `conversion_repo`/`spend_repo`/`attribution_run_repo` real ON CONFLICT, tenant-scope, FX-provenance round-trip, and the single-active-run invariant — properties the in-memory (`AETHER_ENV=local`) dict fallback gets "right" for free without proving (that path never runs Alembic). **Non-blocking** (not a required check); real-stack tests skip without `DATABASE_URL`. | no |
+| `production-equivalent-ci.yml` | PR / push / schedule / dispatch | Runs a cheap Impact Graph classifier for every event. The PR trigger is deliberately unfiltered so measurement repository changes cannot be missed; on PRs it provisions the Postgres + Redis real stack only for persistence-impacting backend/infrastructure changes, production-equivalent tests, or unresolved paths. Pushes to `main`, nightly runs, and explicit dispatch retain full real-stack coverage. The lane remains non-blocking and is not a required merge check. | no |
 
 The reviewed-promotion credential boundary is intentional: a `plan` action
 requires only the plan role and read-only planning inputs. The apply role is
@@ -455,10 +483,11 @@ component usage are documented in [`docs/brand-system/`](brand-system/README.md)
 
 These thresholds live in `cicd/aether-cicd/quality_gates/`, which is part of the
 reference model — they are not enforced by any workflow in
-`.github/workflows/`. The gates that actually block a merge are
-`repo-consistency.yml` (`make ci-check`) and the required-check catalog in
-`config/required_release_checks.yaml`, validated by
-`make validate-required-release-checks`.
+`.github/workflows/`. The normal pull-request gate that actually blocks a merge
+is the `verification / disposition` status published by
+`repo-consistency.yml`; the required-check catalog in
+`config/required_release_checks.yaml` governs path-scoped SDK checks and
+release-only evidence, and is validated by `make validate-required-release-checks`.
 
 ## SDK release
 
@@ -479,8 +508,11 @@ version in the manifest matches the git tag before publishing.
 
 1. Branch off `main`: `git checkout -b hotfix/description main`
 2. Apply the fix and increment the patch version.
-3. Open a PR targeting `main`. CI runs the full 8-stage suite.
-4. On merge, the CD pipeline executes the full canary rollout.
+3. Open a PR targeting `main`. The adaptive `verification / disposition` gate
+   runs universal-fast checks plus the affected suites/builds; the broad full
+   gate remains a local/trusted-main/nightly/release command, not a PR job.
+4. On merge, the bounded main-integration workflow runs; the CD pipeline
+   executes the full canary rollout when its deployment conditions are met.
 5. Immediately after merge to `main`, open a second PR to merge the hotfix into
    `develop` to keep branches in sync.
 
@@ -488,7 +520,8 @@ version in the manifest matches the git tag before publishing.
 
 In addition to the eight deploy-oriented stages above, a dedicated
 **Repo Consistency** workflow (`.github/workflows/repo-consistency.yml`)
-runs `make ci-check` on every PR and push to `main`. It enforces:
+publishes the blocking `verification / disposition` status on every PR and
+push to `main`. It enforces:
 
 - version alignment (`pyproject.toml` is canonical)
 - generated docs freshness (`docs/_generated/` diff check)
@@ -497,12 +530,17 @@ runs `make ci-check` on every PR and push to `main`. It enforces:
 - source-linked docs drift (`--strict` mode)
 - contract / event / consent alignment
 - SDK release alignment
-- npm lockfile integrity + TypeScript build/test
-- Python tests
+- Impact Graph selection, affected build artifacts, and Python/Node checks
+  justified by the changed paths
+- npm lockfile integrity + TypeScript build/test for selected workspaces
+- Python tests for selected suites
 
-This gate is separate from `repo-health.yml` and uses the single
-orchestrator script (`scripts/repo_doctor.py`) so the same command
-works locally (`make repo-doctor`) and in CI (`make ci-check`).
+The legacy full `make ci-check` PR job was retired after the representative
+hosted observation window. It remains the canonical local and release-candidate
+validation command, but it is not a second PR merge authority or a PR job. This gate is
+separate from `repo-health.yml` and uses the single orchestrator script
+(`scripts/repo_doctor.py`) so the same command works locally
+(`make repo-doctor`) and in release validation (`make ci-check`).
 
 ## Production status routine
 

@@ -19,5 +19,7 @@
 # .env.example at HEAD (cf6a8c30), the new default-OFF sdk-universal-ingestion
 # flag blocks were assessed and found to belong to a separate /v1/batch-plane
 # outside these docs' scope, prose was confirmed accurate unchanged, and the
-# docs were re-stamped to cf6a8c30. The backlog is now empty.
+# docs were re-stamped to cf6a8c30. The CI/CD page was also re-reviewed
+# against the adaptive authority, runtime reporting, and impact-aware workflow
+# changes in this PR; its prose is accurate and its source hash is refreshed.
 docs: []

@@ -16,9 +16,9 @@ estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
   "AGENTS.md": "sha256:9c93d298d9048a47ebbc2bbebdfba02095972cef5b0bd8f1a16b56a41b816f0e"
-  "Makefile": "sha256:19ffbddf81596f1eb3841d28c2b9f2ccdbfba65a78aefbd3aef63699019d2ccb"
-  "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:88620327df8f66f95bb246548a484530a7fcc02388ce54fd167c6555f6157e37"
-  "scripts/repo_doctor.py": "sha256:412a7ea98b928adf4c56f679f922ade81558c2aa31239cfdbc8b4690b3cf1383"
+  "Makefile": "sha256:db03a26607229338b23f076237cdadc269c2fa68e9bee1645a6ae903532341f6"
+  "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:76d6a10a0126e0aefd4ac2caf069a422f7f38921581b5a5d53c1521eab090f1a"
+  "scripts/repo_doctor.py": "sha256:c41d77513a769d2d0f13eefaa27031ff6ce3456383eeb4d4b3006dfbe18aa896"
 ---
 
 # Contributing
@@ -30,12 +30,17 @@ AETHER PRs are not complete until the repository consistency contract passes loc
 Before opening or updating a PR:
 
 1. Run `make repo-doctor-fix`.
-2. Run `make ci-check`.
-3. Commit all generated docs and sync outputs.
-4. Do not hand-edit generated docs.
-5. Do not bypass TypeScript/package export failures.
-6. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
-7. PR is not complete until `make ci-check` exits 0.
+2. Run `make verification-disposition BASE=<ref> EXECUTE=1` for the affected PR authority.
+3. Run `make ci-check` as the broad local completion gate.
+4. Commit all generated docs and sync outputs.
+5. Do not hand-edit generated docs.
+6. Do not bypass TypeScript/package export failures.
+7. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
+8. PR is not complete until the affected disposition and broad `make ci-check` both exit 0.
+
+The hosted normal-PR merge check is the stable `verification / disposition`
+status. The broad gate remains required local/trusted-main/nightly evidence and
+is not a second blocking PR authority.
 
 Repository-doctor Python subprocesses inherit the interpreter running
 `scripts/repo_doctor.py` (normally `.venv/bin/python` through the Makefile), so

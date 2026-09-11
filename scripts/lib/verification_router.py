@@ -19,7 +19,7 @@ RISK_LEVELS = ("low", "medium", "high", "critical")
 
 _TOP_LEVEL_KEYS = {"schema_version", "default_lane", "lanes", "checks", "domains", "global_paths"}
 _CHECK_KEYS = {"owner", "risk", "command", "runtime_budget_seconds"}
-_DOMAIN_KEYS = {"owner", "paths", "checks", "minimum_lane"}
+_DOMAIN_KEYS = {"owner", "paths", "checks", "path_checks", "minimum_lane"}
 
 
 class VerificationRouterConfigError(ValueError):
@@ -41,6 +41,7 @@ class DomainDefinition:
     owner: str
     paths: tuple[str, ...]
     checks: tuple[str, ...]
+    path_checks: Mapping[str, tuple[str, ...]]
     minimum_lane: str
 
 
@@ -179,6 +180,28 @@ def validate_router_registry(
                 f"verification router.domains.{domain_id}.checks",
                 f"unknown check(s): {', '.join(unknown)}",
             )
+        raw_path_checks = item.get("path_checks", {})
+        if not isinstance(raw_path_checks, dict):
+            raise _error(
+                f"verification router.domains.{domain_id}.path_checks",
+                "must be a mapping of path patterns to check lists",
+            )
+        path_checks: dict[str, tuple[str, ...]] = {}
+        for pattern, raw_checks in raw_path_checks.items():
+            pattern = _require_nonempty_string(
+                pattern, f"verification router.domains.{domain_id}.path_checks key"
+            )
+            selected = _require_string_list(
+                raw_checks,
+                f"verification router.domains.{domain_id}.path_checks.{pattern}",
+            )
+            unknown = sorted(set(selected) - resolved_check_ids)
+            if unknown:
+                raise _error(
+                    f"verification router.domains.{domain_id}.path_checks.{pattern}",
+                    f"unknown check(s): {', '.join(unknown)}",
+                )
+            path_checks[pattern] = selected
         minimum_lane = _require_nonempty_string(
             item.get("minimum_lane"), f"verification router.domains.{domain_id}.minimum_lane"
         )
@@ -189,7 +212,9 @@ def validate_router_registry(
             )
         if domain_id in domains:
             raise _error("verification router.domains", f"duplicate domain id {domain_id!r}")
-        domains[domain_id] = DomainDefinition(domain_id, owner, paths, domain_checks, minimum_lane)
+        domains[domain_id] = DomainDefinition(
+            domain_id, owner, paths, domain_checks, path_checks, minimum_lane
+        )
 
     global_paths = _require_string_list(top.get("global_paths"), "verification router.global_paths")
     return VerificationRouterConfig(1, default_lane, lanes, checks, domains, global_paths)
@@ -269,7 +294,30 @@ def classify_impact(
             # conservative integration lane supplies the checks; it has no
             # registry-defined domain checks of its own.
             if domain_id in config.domains:
-                check_ids.update(config.domains[domain_id].checks)
+                definition = config.domains[domain_id]
+                domain_paths = {
+                    path
+                    for path in changed
+                    if any(matches(path, pattern) for pattern in definition.paths)
+                }
+                path_checks: set[str] = set()
+                for pattern, checks in definition.path_checks.items():
+                    if any(matches(path, pattern) for path in domain_paths):
+                        path_checks.update(checks)
+                # Specialized checks are additive. If the domain contains a
+                # changed path without a specialized mapping, retain the
+                # domain defaults for that path instead of letting a sibling
+                # specialized match narrow the whole domain selection.
+                unmatched_domain_paths = {
+                    path
+                    for path in domain_paths
+                    if not any(
+                        matches(path, pattern) for pattern in definition.path_checks
+                    )
+                }
+                check_ids.update(path_checks)
+                if unmatched_domain_paths or not path_checks:
+                    check_ids.update(definition.checks)
     check_ids.update(config.lanes[selected_lane])
     return VerificationImpact(
         changed_files=changed,

@@ -53,6 +53,22 @@ def test_unresolved_paths_are_visible_and_escalate_router_lane():
     assert result["router"]["selected_lane"] == "integration"
 
 
+def test_branch_protection_authority_script_is_registered():
+    result = build_impact_index(["scripts/apply_branch_protection.py"])
+    assert result["unresolved_paths"] == []
+    assert "component:verification-router" in result["direct_nodes"]
+
+
+def test_shared_contract_change_selects_registered_transitive_consumers():
+    result = build_impact_index(["packages/shared/contracts/event-registry.json"])
+    assert "shared-runtime-contracts" in result["impacted_contracts"]
+    assert set(result["router"]["selected_checks"]) >= {
+        "sdk-shared",
+        "frontend-aether",
+        "frontend-kyber",
+    }
+
+
 def test_shadow_comparison_distinguishes_targeted_miss_and_legacy_broad_result():
     expected = {"component:a", "contract:a", "deployable:a"}
     assert (

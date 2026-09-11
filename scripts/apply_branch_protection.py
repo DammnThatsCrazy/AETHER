@@ -37,8 +37,7 @@ def main() -> None:
     args = parser.parse_args()
 
     required_status_checks = [
-        "validate",           # aggregate gate in repo-health.yml
-        "repo-consistency",   # repo-consistency.yml
+        "verification / disposition",  # publish-evidence in repo-consistency.yml
     ]
 
     payload = {
