@@ -37,6 +37,25 @@
 /packages/                                      @DammnThatsCrazy
 /apps/                                          @DammnThatsCrazy
 
+# ── Documentation (source-of-truth) ──────────────────────────────────────────
+/docs/source-of-truth/                          @DammnThatsCrazy
+/docs/architecture/                             @DammnThatsCrazy
+/docs/releases/                                 @DammnThatsCrazy
+/docs/security/                                 @DammnThatsCrazy
+
+# ── Root entry points ────────────────────────────────────────────────────────
+/README.md                                      @DammnThatsCrazy
+/ARCHITECTURE.md                                @DammnThatsCrazy
+/VERSION                                        @DammnThatsCrazy
+/CHANGELOG.md                                   @DammnThatsCrazy
+/RELEASES.md                                    @DammnThatsCrazy
+
+# ── Contracts ────────────────────────────────────────────────────────────────
+/contracts/                                     @DammnThatsCrazy
+
+# ── Connectors ───────────────────────────────────────────────────────────────
+/connectors/                                    @DammnThatsCrazy
+
 # ── Generated artifacts ───────────────────────────────────────────────────────
 # docs/_generated/, docs/REPO-INDEX.md, and docs/AUTOMATION.md are written
 # by CI. They are covered by the global * rule above. To exempt them from

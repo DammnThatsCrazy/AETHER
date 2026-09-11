@@ -3365,6 +3365,19 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/START_HERE.md",
+      "title": "Start Here",
+      "slug": "start-here",
+      "section": "home",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/STRESS-TEST-SCENARIOS.md",
       "title": "Stress-Test Scenarios",
       "slug": "operations/stress-test-scenarios",
@@ -4048,6 +4061,292 @@
       "since_version": "9.1.0",
       "estimated_read_minutes": 8,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/architecture/current/connector-architecture.md",
+      "title": "Connector Architecture",
+      "slug": "architecture/current/connector-architecture",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/current/graph-architecture.md",
+      "title": "Graph Architecture",
+      "slug": "architecture/current/graph-architecture",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/current/ingestion-architecture.md",
+      "title": "Ingestion Architecture",
+      "slug": "architecture/current/ingestion-architecture",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/current/runtime-architecture.md",
+      "title": "Runtime Architecture",
+      "slug": "architecture/current/runtime-architecture",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/current/sdk-architecture.md",
+      "title": "SDK Architecture",
+      "slug": "architecture/current/sdk-architecture",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/current/system-overview.md",
+      "title": "System Overview",
+      "slug": "architecture/current/system-overview",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/current/tenant-runtime.md",
+      "title": "Tenant Runtime",
+      "slug": "architecture/current/tenant-runtime",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/decisions/ADR-0001-contract-spine.md",
+      "title": "ADR-0001: Contract Spine",
+      "slug": "architecture/decisions/adr-0001-contract-spine",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/decisions/ADR-0002-thin-sdk-batch-ingestion.md",
+      "title": "ADR-0002: Thin SDK and Batch Ingestion",
+      "slug": "architecture/decisions/adr-0002-thin-sdk-batch-ingestion",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/decisions/ADR-0003-provider-vs-connector-boundary.md",
+      "title": "ADR-0003: Provider vs Connector Boundary",
+      "slug": "architecture/decisions/adr-0003-provider-vs-connector-boundary",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/decisions/ADR-0004-pre-1-0-versioning.md",
+      "title": "ADR-0004: Pre-1.0 Versioning",
+      "slug": "architecture/decisions/adr-0004-pre-1-0-versioning",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/decisions/ADR-0005-docs-source-of-truth-policy.md",
+      "title": "ADR-0005: Documentation Source-of-Truth Policy",
+      "slug": "architecture/decisions/adr-0005-docs-source-of-truth-policy",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/decisions/ADR-0006-tenant-scoped-graph-projections.md",
+      "title": "ADR-0006: Tenant-Scoped Graph Projections",
+      "slug": "architecture/decisions/adr-0006-tenant-scoped-graph-projections",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/decisions/ADR-0007-360s-as-productized-graph-surfaces.md",
+      "title": "ADR-0007: 360s as Productized Graph Surfaces",
+      "slug": "architecture/decisions/adr-0007-360s-as-productized-graph-surfaces",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/decisions/ADR-0008-no-direct-graph-writes.md",
+      "title": "ADR-0008: No Direct Graph Writes",
+      "slug": "architecture/decisions/adr-0008-no-direct-graph-writes",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/decisions/ADR-0009-release-tags-and-internal-milestones.md",
+      "title": "ADR-0009: Release Tags and Internal Milestones",
+      "slug": "architecture/decisions/adr-0009-release-tags-and-internal-milestones",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/target/360-system-blueprint.md",
+      "title": "360 System Blueprint",
+      "slug": "architecture/target/360-system-blueprint",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/target/contract-governance-spine.md",
+      "title": "Contract Governance Spine",
+      "slug": "architecture/target/contract-governance-spine",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/target/design-partner-readiness.md",
+      "title": "Design Partner Readiness",
+      "slug": "architecture/target/design-partner-readiness",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/target/production-readiness.md",
+      "title": "Production Readiness",
+      "slug": "architecture/target/production-readiness",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/target/staging-readiness.md",
+      "title": "Staging Readiness",
+      "slug": "architecture/target/staging-readiness",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/architecture/target/tenant-activation-readiness-spine.md",
+      "title": "Tenant Activation Readiness Spine",
+      "slug": "architecture/target/tenant-activation-readiness-spine",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/audits/AGENTIC_OBSERVABILITY_AUDIT.md",
@@ -5017,6 +5316,114 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/connectors/auth-and-credentials.md",
+      "title": "Connector Auth and Credentials",
+      "slug": "connectors/auth-and-credentials",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/connectors/connector-lifecycle.md",
+      "title": "Connector Lifecycle",
+      "slug": "connectors/connector-lifecycle",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/connectors/cursors-and-retries.md",
+      "title": "Cursors and Retries",
+      "slug": "connectors/cursors-and-retries",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/connectors/graph-projection.md",
+      "title": "Connector Graph Projection",
+      "slug": "connectors/graph-projection",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/connectors/normalization.md",
+      "title": "Normalization",
+      "slug": "connectors/normalization",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/connectors/overview.md",
+      "title": "Aether Connectors",
+      "slug": "connectors/overview",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/connectors/provider-vs-connector.md",
+      "title": "Provider vs Connector",
+      "slug": "connectors/provider-vs-connector",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/connectors/sync-jobs.md",
+      "title": "Sync Jobs",
+      "slug": "connectors/sync-jobs",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/connectors/webhook-handling.md",
+      "title": "Webhook Handling",
+      "slug": "connectors/webhook-handling",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/decisions/ADR-001-docs-stamp-system.md",
       "title": "ADR-001: Documentation Sync Stamp System",
       "slug": "decisions/adr-001-docs-stamp-system",
@@ -5366,6 +5773,19 @@
       ],
       "status": "experimental",
       "since_version": "8.11.0"
+    },
+    {
+      "path": "docs/developer/quickstart.md",
+      "title": "Developer Quickstart",
+      "slug": "developer/quickstart",
+      "section": "quickstart",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/examples/reward-demo-web2.md",
@@ -5788,6 +6208,305 @@
       ],
       "status": "stable",
       "canonical_owner": "privacy@aether"
+    },
+    {
+      "path": "docs/product/360s/agent-360.md",
+      "title": "Agent 360",
+      "slug": "product/360s/agent-360",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/360s/campaign-360.md",
+      "title": "Campaign 360",
+      "slug": "product/360s/campaign-360",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/360s/communications-360.md",
+      "title": "Communications 360",
+      "slug": "product/360s/communications-360",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/360s/episode-360.md",
+      "title": "Episode 360",
+      "slug": "product/360s/episode-360",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/360s/journey-360.md",
+      "title": "Journey 360",
+      "slug": "product/360s/journey-360",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/360s/profile-360.md",
+      "title": "Profile 360",
+      "slug": "product/360s/profile-360",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/360s/risk-360.md",
+      "title": "Risk 360",
+      "slug": "product/360s/risk-360",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/360s/value-360.md",
+      "title": "Value 360",
+      "slug": "product/360s/value-360",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/language-system/canonical-language.md",
+      "title": "Canonical Language",
+      "slug": "product/language-system/canonical-language",
+      "section": "glossary",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/language-system/deprecated-language.md",
+      "title": "Deprecated Language",
+      "slug": "product/language-system/deprecated-language",
+      "section": "glossary",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/lenses/journeys.md",
+      "title": "Journeys Lens",
+      "slug": "product/lenses/journeys",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/lenses/risk.md",
+      "title": "Risk Lens",
+      "slug": "product/lenses/risk",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/lenses/signals.md",
+      "title": "Signals Lens",
+      "slug": "product/lenses/signals",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/lenses/syndicates.md",
+      "title": "Syndicates Lens",
+      "slug": "product/lenses/syndicates",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/lenses/value.md",
+      "title": "Value Lens",
+      "slug": "product/lenses/value",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/positioning/aether-positioning.md",
+      "title": "Aether Positioning",
+      "slug": "product/positioning/aether-positioning",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/positioning/olympus-positioning.md",
+      "title": "Olympus Positioning",
+      "slug": "product/positioning/olympus-positioning",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/positioning/platform-narrative.md",
+      "title": "Platform Narrative",
+      "slug": "product/positioning/platform-narrative",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/surfaces/aether-console.md",
+      "title": "Aether Console",
+      "slug": "product/surfaces/aether-console",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/surfaces/developer-portal.md",
+      "title": "Developer Portal",
+      "slug": "product/surfaces/developer-portal",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/surfaces/kyber-operator-console.md",
+      "title": "Kyber Operator Console",
+      "slug": "product/surfaces/kyber-operator-console",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/surfaces/marketing-sites.md",
+      "title": "Marketing Sites",
+      "slug": "product/surfaces/marketing-sites",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/product/surfaces/noesis.md",
+      "title": "Noesis",
+      "slug": "product/surfaces/noesis",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/productization/aether_productization_audit.md",
@@ -6618,6 +7337,71 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/releases/release-policy.md",
+      "title": "Release Policy",
+      "slug": "releases/release-policy",
+      "section": "changelog",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/releases/retrospective-milestones.md",
+      "title": "Retrospective Milestones",
+      "slug": "releases/retrospective-milestones",
+      "section": "changelog",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/releases/tag-policy.md",
+      "title": "Tag Policy",
+      "slug": "releases/tag-policy",
+      "section": "changelog",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/releases/unreleased.md",
+      "title": "Unreleased",
+      "slug": "releases/unreleased",
+      "section": "changelog",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/releases/v0.1.0-alpha.0.md",
+      "title": "v0.1.0-alpha.0",
+      "slug": "releases/v0-1-0-alpha-0",
+      "section": "changelog",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/reports/ML-FULL-PRODUCTIONIZATION-REPORT.md",
       "title": "ML Full Productionization Report",
       "slug": "ai/ml-full-productionization-report",
@@ -7229,6 +8013,149 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/sdks/android.md",
+      "title": "Aether Android SDK",
+      "slug": "sdks/android",
+      "section": "sdks",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/sdks/batching-and-retries.md",
+      "title": "Batching and Retries",
+      "slug": "sdks/batching-and-retries",
+      "section": "sdks",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/sdks/event-contracts.md",
+      "title": "SDK Event Contracts",
+      "slug": "sdks/event-contracts",
+      "section": "sdks",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/sdks/heartbeat.md",
+      "title": "SDK Heartbeat",
+      "slug": "sdks/heartbeat",
+      "section": "sdks",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/sdks/ios.md",
+      "title": "Aether iOS SDK",
+      "slug": "sdks/ios",
+      "section": "sdks",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/sdks/overview.md",
+      "title": "Aether SDKs",
+      "slug": "sdks/overview",
+      "section": "sdks",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/sdks/parity-matrix.md",
+      "title": "SDK Parity Matrix",
+      "slug": "sdks/parity-matrix",
+      "section": "sdks",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/sdks/privacy-and-redaction.md",
+      "title": "Privacy and Redaction",
+      "slug": "sdks/privacy-and-redaction",
+      "section": "sdks",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/sdks/react-native.md",
+      "title": "Aether React Native SDK",
+      "slug": "sdks/react-native",
+      "section": "sdks",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/sdks/react.md",
+      "title": "Aether React SDK",
+      "slug": "sdks/react",
+      "section": "sdks",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/sdks/web.md",
+      "title": "Aether Web SDK",
+      "slug": "sdks/web",
+      "section": "sdks",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/security/UNIVERSAL_GRAPH_SECURITY_MODEL.md",
       "title": "Universal Intelligence Graph Security Model",
       "slug": "security/universal-graph-security-model",
@@ -7243,6 +8170,71 @@
       "status": "stable",
       "since_version": "8.10.0",
       "canonical_owner": "security@aether"
+    },
+    {
+      "path": "docs/security/compliance-roadmap.md",
+      "title": "Compliance Roadmap",
+      "slug": "security/compliance-roadmap",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/security/credential-handling.md",
+      "title": "Credential Handling",
+      "slug": "security/credential-handling",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/security/data-retention.md",
+      "title": "Data Retention",
+      "slug": "security/data-retention",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/security/privacy.md",
+      "title": "Privacy",
+      "slug": "security/privacy",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/security/tenant-isolation.md",
+      "title": "Tenant Isolation",
+      "slug": "security/tenant-isolation",
+      "section": "security",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/security/traffic-intelligence-threat-model.md",

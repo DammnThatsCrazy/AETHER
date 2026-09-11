@@ -1,3 +1,34 @@
+## Summary
+
+Describe the change.
+
+## Product Area
+
+- [ ] SDK
+- [ ] Connector / Provider
+- [ ] Ingestion
+- [ ] Contracts
+- [ ] Graph
+- [ ] Identity
+- [ ] Campaigns
+- [ ] Communications
+- [ ] Agents
+- [ ] Value
+- [ ] Risk
+- [ ] 360/Lens
+- [ ] UI / Frontend
+- [ ] Docs
+- [ ] Release
+- [ ] Security
+- [ ] Infra / Operations
+
+## Source-of-Truth Updates
+
+- [ ] `docs/source-of-truth/` updated where applicable
+- [ ] Not applicable — explained below
+
+Explanation:
+
 ## Automated Repo Consistency
 
 This PR must pass the required **Repo Consistency** workflow. The canonical local/cloud-agent commands are:
@@ -22,6 +53,39 @@ _Describe only what changed:_
 - Generated docs regenerated:
 - Source-linked docs reviewed:
 - Docs intentionally unchanged because:
+
+## Contract Impact
+
+- [ ] No contract changes
+- [ ] Contract changes included
+- [ ] Validator updated
+- [ ] Generated docs updated
+
+## SDK Impact
+
+- [ ] No SDK impact
+- [ ] SDK behavior changed
+- [ ] SDK docs updated
+- [ ] `/v1/batch` contract preserved
+
+## Connector Impact
+
+- [ ] No connector impact
+- [ ] Connector behavior changed
+- [ ] Provider manifest updated
+
+## Graph Impact
+
+- [ ] No graph impact
+- [ ] Projection changed
+- [ ] Explainability metadata preserved
+
+## Release Impact
+
+- [ ] No release note needed
+- [ ] Added to `CHANGELOG.md`
+- [ ] Version unchanged
+- [ ] Version bump included
 
 ## Repo consistency
 
