@@ -18,7 +18,7 @@
   ],
   "contracts": [
     {"id": "verification-router", "paths": ["config/verification_router.yaml"], "registry_ref": "config/verification_router.yaml", "suite_ids": []},
-    {"id": "test-suite-registry", "paths": ["config/test_suites.yaml"], "registry_ref": "config/test_suites.yaml", "suite_ids": ["root", "backend", "ml", "compliance", "agent-layer", "journey-service", "backend-observability", "smart-contracts", "datalake-backend", "sdk-shared", "sdk-web", "sdk-server", "sdk-react-native", "frontend-aether", "frontend-kyber", "frontend-kyber-component", "frontend-kyber-integration", "frontend-shared", "frontend-docs", "frontend-demo", "frontend-olympus-marketing", "frontend-aether-marketing"]},
+    {"id": "test-suite-registry", "paths": ["config/test_suites.yaml", "scripts/lib/test_suites.py"], "registry_ref": "config/test_suites.yaml", "suite_ids": ["root", "backend", "ml", "compliance", "agent-layer", "journey-service", "backend-observability", "smart-contracts", "datalake-backend", "sdk-shared", "sdk-web", "sdk-server", "sdk-react-native", "frontend-aether", "frontend-kyber", "frontend-kyber-component", "frontend-kyber-integration", "frontend-shared", "frontend-docs", "frontend-demo", "frontend-olympus-marketing", "frontend-aether-marketing"]},
     {"id": "impact-graph-index", "paths": ["config/impact_graph.json"], "registry_ref": "config/impact_graph.json", "suite_ids": []},
     {"id": "telemetry-contract", "paths": ["config/telemetry_contracts.json"], "registry_ref": "config/telemetry_contracts.json", "suite_ids": []},
     {"id": "release-candidate", "paths": ["contracts/delivery/release-candidate.schema.json"], "registry_ref": "contracts/delivery/release-candidate.schema.json", "suite_ids": []},
