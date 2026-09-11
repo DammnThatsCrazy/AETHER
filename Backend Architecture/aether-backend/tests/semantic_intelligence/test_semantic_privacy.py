@@ -106,7 +106,7 @@ async def test_restriction_marks_consent_restricted():
 
 # ── graph projection revocation ──────────────────────────────────────────────
 #
-# Codex P1: deleting/removing the durable Gold relationship rows is not enough
+# Deleting/removing the durable Gold relationship rows is not enough
 # — a previously projected SEMANTIC_RELATES_TO edge (written by the semantic
 # graph projector through the mutation gateway) stays LIVE in the graph until
 # the projector's next reconciliation sweep (a default six-hour interval).

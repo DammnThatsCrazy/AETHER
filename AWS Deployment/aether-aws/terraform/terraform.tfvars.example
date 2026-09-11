@@ -27,11 +27,11 @@ amplify_domain_name = "olympuslabsml.com"
 # Squarespace & DNS
 # The marketing site (apex/www) is hosted on Squarespace.
 # Product subdomains (app, docs, aether, kyber) stay on Amplify/AWS.
+# api.olympuslabsml.com is wired to the ALB automatically.
 squarespace_hosted_zone_enabled = true
-# squarespace_verification_code = ""  # From Squarespace Domains > DNS settings
-# api_alb_dns_name    = ""            # ALB DNS for api.olympuslabsml.com
-# kyber_cname_target  = ""            # CNAME target for kyber.olympuslabsml.com
-# status_cname_target = ""            # CNAME target for status.olympuslabsml.com
+# squarespace_verification_code = ""  # From Squarespace > Settings > Domains > DNS settings
+# kyber_cname_target  = ""            # Where kyber.olympuslabsml.com points (e.g. another Amplify app or external host)
+# status_cname_target = ""            # Where status.olympuslabsml.com points (e.g. statuspage.io CNAME)
 
 # Monitoring
 alert_email = "ops@yourcompany.com"

@@ -111,7 +111,7 @@ def test_secret_scan_patterns_detect_and_skip():
 
 
 def test_secret_scan_reports_real_key_despite_inline_comment():
-    # Codex P2: an inline comment must NOT suppress a real key on the same line.
+    # An inline comment must NOT suppress a real key on the same line.
     # The secret-shaped value is assembled at runtime (no scannable vendor-key
     # literal lives in the source tree, so this test never trips push-protection).
     mod = _load_secret_scan()

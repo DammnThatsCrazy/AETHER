@@ -323,7 +323,7 @@ class TestHealth:
 
 class TestQualityGateNumberType:
     async def test_number_schema_accepts_integer_values(self, feeder):
-        """'number' type in schema must accept integer JSON values (Codex P2 fix)."""
+        """'number' type in schema must accept integer JSON values."""
         svc, models_mod = feeder
         rows = [{"count": 42, "volume": 1000}]
         req = models_mod.FeederIngestRequest(
@@ -366,7 +366,7 @@ class TestGoldMaterialization:
         assert second == 0
 
     async def test_materialize_gold_cross_tenant_isolation(self, feeder):
-        """Gold grouping key must include tenant_scope (Codex P1 fix)."""
+        """Gold grouping key must include tenant_scope."""
         svc, models_mod = feeder
         for tenant in ("tenant_a", "tenant_b"):
             req = models_mod.FeederIngestRequest(

@@ -498,11 +498,6 @@ variable "squarespace_verification_code" {
   default     = ""
 }
 
-variable "api_alb_dns_name" {
-  type        = string
-  description = "ALB DNS name for the api subdomain CNAME. Leave empty to skip."
-  default     = ""
-}
 
 variable "kyber_cname_target" {
   type        = string

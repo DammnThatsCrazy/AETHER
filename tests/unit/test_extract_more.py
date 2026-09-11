@@ -165,7 +165,7 @@ def test_capabilities_handles_digit_in_layer_name(cap):
 
 
 def test_capabilities_preserves_inline_object_types(cap):
-    """Regression for codex review on PR #70: the old `[^;]+` regex
+    """Regression for PR #70: the old `[^;]+` regex
     stopped at the first `;` inside an inline object type, truncating
     ``featureFlags?: { key: string; enabled: boolean; value?: unknown }[]``
     to ``{ key: string``. The brace-aware parser must capture the full

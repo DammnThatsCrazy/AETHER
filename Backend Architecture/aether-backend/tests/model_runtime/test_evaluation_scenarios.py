@@ -90,7 +90,7 @@ def test_default_case_ids_unique():
 
 
 def test_default_ground_truths_carry_generated_reference_marker():
-    # Regression (Codex): every default ground truth must carry the runner's
+    # Every default ground truth must carry the runner's
     # generated inline ``[ref:eval:<case_id>]`` marker (the default evidence
     # builder in evaluation/runner.py seeds reference id ``eval:<case_id>``).
     # A plain, uncited ground truth can never pass the default regression
@@ -106,7 +106,7 @@ def test_default_ground_truths_carry_generated_reference_marker():
 
 
 async def test_default_scenarios_pass_the_real_default_regression_suite():
-    # End-to-end regression (Codex): run EVERY default case through the real
+    # End-to-end regression: run EVERY default case through the real
     # default runner (real grounded-synthesis engine + the four default scorers)
     # with a compliant synthesizer that mirrors the expected ground truth. If
     # any default ground truth is not citation-compatible (missing or stale

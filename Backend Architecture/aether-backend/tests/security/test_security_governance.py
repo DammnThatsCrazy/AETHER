@@ -156,7 +156,7 @@ async def test_audit_chain_is_verifiable():
 
 
 async def test_global_chain_verifies_per_tenant():
-    # Codex P2: a global (tenant_id omitted) verification must track a separate
+    # A global (tenant_id omitted) verification must track a separate
     # previous hash per tenant; otherwise the second tenant's first event is
     # falsely flagged as broken.
     ledger = AuditLedger()
@@ -172,7 +172,7 @@ async def test_global_chain_verifies_per_tenant():
 
 
 async def test_audit_metadata_tampering_is_detected():
-    # Codex P2: metadata/ip/user_agent are part of the tamper-evident record.
+    # metadata/ip/user_agent are part of the tamper-evident record.
     ledger = AuditLedger()
     ev = await ledger.record(
         actor_id="u1", actor_type='tenant_user', event_type="t", resource_type="r",
@@ -203,7 +203,7 @@ async def test_break_glass_request_approve_revoke():
 
 
 async def test_break_glass_requires_different_approver():
-    # Codex P1: the requester may not approve their own break-glass grant.
+    # The requester may not approve their own break-glass grant.
     svc = BreakGlassService()
     req = await svc.request(tenant_id='t1', requested_by='op1', reason='incident', requested_scope='read')
     with pytest.raises(Exception):
@@ -372,7 +372,7 @@ async def test_integration_repeated_failures_detected():
 # ── SSRF: hostnames resolving to private targets ──────────────────────────────
 
 async def test_webhook_blocks_hostname_resolving_to_private(monkeypatch):
-    # Codex P2: a hostname that resolves to a private/metadata IP must be blocked,
+    # A hostname that resolves to a private/metadata IP must be blocked,
     # not just literal private IPs.
     from services.security import policy_engine as pe_mod
     monkeypatch.setattr(pe_mod, "_resolve_host", lambda host: ["169.254.169.254"])

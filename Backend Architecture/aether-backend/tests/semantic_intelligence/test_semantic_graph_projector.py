@@ -172,9 +172,9 @@ async def test_degenerate_pairs_are_never_projected():
 
 
 async def test_projected_edge_is_canonical_and_passes_strict_validation():
-    # Codex P1 (line 100): the edge must be canonical BEFORE the gateway, because
-    # off-mode passes it straight to GraphClient.add_edge whose Neptune path
-    # rejects a write missing any REQUIRED_EDGE_PROPERTIES member.
+    # The edge must be canonical BEFORE the gateway, because off-mode passes it
+    # straight to GraphClient.add_edge whose Neptune path rejects a write missing
+    # any REQUIRED_EDGE_PROPERTIES member.
     await _seed_relationship(TENANT, SOURCE, TARGET)
     client = await _graph()
 
@@ -227,8 +227,8 @@ async def test_projected_edge_is_canonical_and_passes_strict_validation():
 async def test_malformed_confidence_is_clamped_not_persisted_raw(
     bad_confidence: Any, target: str
 ):
-    # Codex P2 (graph_projector.py edge_from_relationship): build_edge_properties
-    # received the safe ``_bounded_confidence(...)`` result, but the semantic
+    # build_edge_properties received the safe ``_bounded_confidence(...)`` result,
+    # but the semantic
     # dict's RAW ``confidence`` (from the Gold row) overwrote that canonical
     # property during ``props.update``. Enforce mode then rejected the edge under
     # the validator's [0.0, 1.0] rule; off mode persisted invalid confidence
@@ -253,7 +253,7 @@ async def test_malformed_confidence_is_clamped_not_persisted_raw(
 
 
 async def test_projects_full_gold_set_beyond_default_limit():
-    # Codex P1 (line 146): list_by_tenant defaults to a 500-row limit; a tenant
+    # list_by_tenant defaults to a 500-row limit; a tenant
     # with more relationships must not be truncated at the first page forever.
     row_count = 510
     for i in range(row_count):
@@ -289,7 +289,7 @@ async def test_overlay_service_returns_full_gold_set_beyond_default_limit():
 
 
 async def test_concurrent_sweeps_produce_single_edge():
-    # Codex P1 (line 156): two projector passes racing must not both observe "no
+    # Two projector passes racing must not both observe "no
     # edge" and append one. The per-tenant lock serialises sweeps in-process.
     await _seed_relationship(TENANT, SOURCE, TARGET)
     client = await _graph()
@@ -326,8 +326,7 @@ async def test_sweep_collapses_duplicate_projections():
 
 
 async def test_nonmemory_scan_retains_replica_raced_duplicate_edges():
-    # Codex P1 (graph_projector.py _list_projected_edges_for_tenant): the
-    # Neptune/non-memory scan collapsed two live replica-raced edges with the
+    # The Neptune/non-memory scan collapsed two live replica-raced edges with the
     # same (type, source, target) into a single entry in the ``seen`` dict
     # BEFORE ``_reconcile_projections`` grouped and counted them. Reconciliation
     # then saw one canonical edge and took its ``len(edges) == 1`` keep path,
@@ -376,7 +375,7 @@ async def test_nonmemory_scan_retains_replica_raced_duplicate_edges():
 
 
 async def test_revokes_projection_when_gold_relationship_removed():
-    # Codex P1 (line 160): when a Gold relationship disappears (retention /
+    # When a Gold relationship disappears (retention /
     # erasure / recomputation), its projection must be revoked, not left alive.
     await _seed_relationship(TENANT, SOURCE, TARGET)
     await _seed_relationship(TENANT, SOURCE, "prod_other")
@@ -426,9 +425,9 @@ async def test_sweep_replaces_legacy_noncanonical_edge():
 
 
 async def test_project_once_continues_past_tenant_sweep_failure():
-    # Codex P1 (graph_projector.py project_once): a tenant whose sweep RAISES
-    # during its unguarded reconciliation phase (e.g. listing/revoking one
-    # tenant's stale graph edges fails) must not abort the whole pass and starve
+    # A tenant whose sweep RAISES during its unguarded reconciliation phase
+    # (e.g. listing/revoking one tenant's stale graph edges fails) must not
+    # abort the whole pass and starve
     # later tenants until the next interval. project_once isolates the failure
     # into a per-tenant failed report and keeps processing the rest. If the bug
     # returns, the RuntimeError escapes project_once and this test fails.

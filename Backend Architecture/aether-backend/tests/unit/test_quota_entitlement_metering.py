@@ -371,7 +371,7 @@ async def test_enforce_dimension_counts_period_to_date_usage():
 
 @pytest.mark.asyncio
 async def test_enforce_dimension_repeated_single_units_cannot_remain_included():
-    # Codex scenario: repeated quantity=1 calls must not stay `included`
+    # Repeated quantity=1 calls must not stay `included`
     # forever — once the cumulative period-to-date usage reaches the included
     # allowance, the next unit is denied (overage not allowed).
     await _seed_entitlement("t1", "event_ingested", included_quantity=3)
