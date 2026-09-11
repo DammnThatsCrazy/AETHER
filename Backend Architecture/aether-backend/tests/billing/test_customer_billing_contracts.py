@@ -42,7 +42,6 @@ def test_enabled_incomplete_stripe_capability_is_degraded(monkeypatch):
     assert status["status"] == "degraded"
     assert status["missing"] == [
         "secret_key", "webhook_secret", "price_alpha", "price_beta", "price_gamma", "price_delta",
-        "price_epsilon", "price_omicron", "price_omega"
     ]
     assert "secret" not in status
 

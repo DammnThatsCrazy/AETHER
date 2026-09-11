@@ -1,11 +1,11 @@
 """Migrate persisted P1-P4 plan tier values to Greek names.
 
 Revision ID: 20260911_plan_tier_greek
-Revises: 20260906_rcp_schema_mapping, 20260906_rcp_fleet_update
+Revises: 20260906_rcp_fleet_update
 Create Date: 2026-09-11
 
-This is a merge migration that unifies the two alembic head branches
-(schema_mapping and fleet_update) and migrates plan tier values.
+Follows the RCP chain tail and migrates plan tier values from P1-P4
+to their Greek equivalents (alpha, beta, gamma, delta).
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20260911_plan_tier_greek"
-down_revision = ("20260906_rcp_schema_mapping", "20260906_rcp_fleet_update")
+down_revision = "20260906_rcp_fleet_update"
 branch_labels = None
 depends_on = None
 

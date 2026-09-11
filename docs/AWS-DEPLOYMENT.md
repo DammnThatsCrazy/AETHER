@@ -31,7 +31,7 @@ source_hashes:
   "AWS Deployment/aether-aws/README.md": "sha256:03270a4543e2c843d8d485cc60b31e8f44768187709db312f88f6487c2ccd6e2"
   "AWS Deployment/aether-aws/config/": "sha256:c22916c8942b6defa9a3cc28d1eca0e68f3d8419decb8defdc2ceebf79de2050"
   "AWS Deployment/aether-aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "AWS Deployment/aether-aws/terraform/": "sha256:21d2647932e6a5594fdd3c29d58a5e500225d654124093294836d577c90415ff"
+  "AWS Deployment/aether-aws/terraform/": "sha256:e8fd7ba7b78db21316428a90e954dd2660a95e2bef7a2aeb994b3ba1afb8ba21"
   "config/staging_apply_iam_policy.yaml": "sha256:acc34d81c456090d4569faac727b6688604fc07c3bb36764f38c422f23d5004a"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:84cc2d5a0cdb621f0dc2ba271fd9e66228e36a80cabf52133cf51d410a85f21e"
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:20998a03fdd484635cc80667220794fb1970be3f2e198ac067ec7c7bda12f2f1"
@@ -348,6 +348,32 @@ creates no frontend ECS service at any profile.
 their SSM pointers are the Terraform-owned half of the contract, as
 `config/terraform_resource_contracts.yaml` states explicitly. There is no
 CloudFront resource in the live tree.
+
+### AWS Amplify hosting
+
+Three product frontends are provisioned as Amplify apps: `aether-marketing`
+(`aether.*`), `docs` (`docs.*`), and `aether-app` (`app.*`). Each app builds
+from the monorepo root with an app-specific `appRoot` in `amplify.yml` and
+targets the main branch. Custom domain associations map each app to its
+canonical subdomain under `var.amplify_domain_name`. SSM parameters export
+Amplify app IDs and default domains for downstream consumption.
+
+The apex/www domain is **not** served by Amplify — it is served by Squarespace
+(see below). Gated by the same `enable_static_frontends` toggle used for S3
+origins.
+
+### Route 53 and Squarespace DNS
+
+When `var.squarespace_hosted_zone_enabled` is `true`, the root creates a
+Route 53 hosted zone for `var.amplify_domain_name` and populates it with:
+
+- **Apex A records** — four Squarespace IPs for the marketing site
+- **www CNAME** — `ext-cust.squarespace.com`
+- **Verification CNAME** — optional, gated by `var.squarespace_verification_code`
+- **Product subdomain CNAMEs** — point each Amplify app's subdomain to its
+  default domain
+- **Optional CNAMEs** — `api` (ALB), `kyber`, and `status` subdomains, each
+  gated by a non-empty variable
 
 ### Terraform modules
 
