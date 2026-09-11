@@ -676,3 +676,154 @@ resource "aws_ssm_parameter" "static_frontend_bucket" {
     Purpose = "Static SPA origin bucket name consumed by the deploy workflow"
   }
 }
+
+# ---------------------------------------------------------------------------
+# 11. AWS Amplify Hosting — 4 frontend surfaces
+# Each app builds from the monorepo root with an app-specific appRoot in
+# amplify.yml. Custom domains use the canonical olympuslabsml.com family.
+# Gated by the same enable_static_frontends toggle used for S3 origins.
+# ---------------------------------------------------------------------------
+
+locals {
+  amplify_apps = local.enable_static_frontends ? {
+    olympus-marketing = {
+      name        = "${var.project}-${var.environment}-olympus-marketing"
+      app_root    = "frontend/olympus-marketing"
+      description = "Olympus Labs marketing site"
+      subdomain   = ""
+    }
+    aether-marketing = {
+      name        = "${var.project}-${var.environment}-aether-marketing"
+      app_root    = "frontend/aether-marketing"
+      description = "Aether product marketing site"
+      subdomain   = "aether"
+    }
+    docs = {
+      name        = "${var.project}-${var.environment}-docs"
+      app_root    = "frontend/docs"
+      description = "Aether developer documentation portal"
+      subdomain   = "docs"
+    }
+    aether-app = {
+      name        = "${var.project}-${var.environment}-aether-app"
+      app_root    = "frontend/aether"
+      description = "Aether customer application dashboard"
+      subdomain   = "app"
+    }
+  } : {}
+}
+
+resource "aws_amplify_app" "frontend" {
+  for_each = local.amplify_apps
+
+  name       = each.value.name
+  repository = var.amplify_github_repository
+
+  access_token = var.amplify_github_access_token != "" ? var.amplify_github_access_token : null
+
+  build_spec = <<-YAML
+    version: 1
+    applications:
+      - appRoot: ${each.value.app_root}
+        frontend:
+          phases:
+            preBuild:
+              commands:
+                - npm ci
+            build:
+              commands:
+                - npm run build --workspace=${each.value.app_root}
+          artifacts:
+            baseDirectory: ${each.value.app_root}/dist
+            files:
+              - '**/*'
+          cache:
+            paths:
+              - node_modules/**/*
+  YAML
+
+  environment_variables = {
+    AETHER_ENV = var.environment
+    _LIVE_UPDATES = jsonencode([
+      { pkg = "node", type = "nvm", version = "20" }
+    ])
+  }
+
+  platform = "WEB"
+
+  custom_rule {
+    source = "/<*>"
+    target = "/index.html"
+    status = "200"
+  }
+
+  tags = {
+    Name        = each.value.name
+    Purpose     = each.value.description
+    Environment = var.environment
+  }
+}
+
+resource "aws_amplify_branch" "main" {
+  for_each = local.amplify_apps
+
+  app_id      = aws_amplify_app.frontend[each.key].id
+  branch_name = var.amplify_branch
+
+  framework = "React"
+  stage     = var.environment == "production" ? "PRODUCTION" : "DEVELOPMENT"
+
+  environment_variables = {
+    AETHER_ENV = var.environment
+  }
+
+  tags = {
+    Name        = "${each.value.name}-${var.amplify_branch}"
+    Environment = var.environment
+  }
+}
+
+resource "aws_amplify_domain_association" "frontend" {
+  for_each = {
+    for k, v in local.amplify_apps : k => v
+    if var.amplify_domain_name != ""
+  }
+
+  app_id      = aws_amplify_app.frontend[each.key].id
+  domain_name = each.value.subdomain != "" ? "${each.value.subdomain}.${var.amplify_domain_name}" : var.amplify_domain_name
+
+  sub_domain {
+    branch_name = aws_amplify_branch.main[each.key].branch_name
+    prefix      = ""
+  }
+
+  dynamic "sub_domain" {
+    for_each = each.value.subdomain == "" ? ["www"] : []
+    content {
+      branch_name = aws_amplify_branch.main[each.key].branch_name
+      prefix      = "www"
+    }
+  }
+}
+
+resource "aws_ssm_parameter" "amplify_app_id" {
+  for_each = local.amplify_apps
+  name     = "/aether/${var.environment}/amplify/${each.key}/app-id"
+  type     = "String"
+  value    = aws_amplify_app.frontend[each.key].id
+
+  tags = {
+    Purpose = "Amplify app ID for ${each.value.description}"
+  }
+}
+
+resource "aws_ssm_parameter" "amplify_default_domain" {
+  for_each = local.amplify_apps
+  name     = "/aether/${var.environment}/amplify/${each.key}/default-domain"
+  type     = "String"
+  value    = aws_amplify_app.frontend[each.key].default_domain
+
+  tags = {
+    Purpose = "Amplify default domain for ${each.value.description}"
+  }
+}
