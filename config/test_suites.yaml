@@ -60,10 +60,11 @@ suites:
     isolation: process
     lane: pr
     profiles: [local, ci, release]
-    # The global authority run is intentionally conservative: hosted runners
-    # need more headroom than the local 4-process baseline for all 541 files.
-    expected_runtime_seconds: 300
-    hard_runtime_budget_seconds: 420
+    # The global authority run is intentionally conservative: the latest
+    # hosted run exhausted 420 seconds for all 541 isolated files, while the
+    # local 4-process baseline completes materially sooner.
+    expected_runtime_seconds: 420
+    hard_runtime_budget_seconds: 600
     paths: ["tests"]
     # Kyber and capability tests use process-global repositories. Execute each
     # file in its own process and parallelize files, preventing state leakage
