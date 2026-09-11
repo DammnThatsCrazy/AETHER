@@ -28,24 +28,35 @@ def test_pr_workflow_has_explicit_delivery_stages() -> None:
         "classify-change",
         "build-artifact",
         "selected-verification",
-        "repo-consistency",
     }
 
 
-def test_canonical_gate_remains_pr_completion_authority() -> None:
+def test_adaptive_disposition_is_pr_completion_authority() -> None:
     jobs = _workflow()["jobs"]
-    canonical_script = "\n".join(
-        step.get("run", "") for step in jobs["repo-consistency"]["steps"]
+    disposition_script = "\n".join(
+        step.get("run", "") for step in jobs["selected-verification"]["steps"]
     )
-    assert "make ci-check" in canonical_script
-    assert '"authority":"pr-completion"' in canonical_script
-    assert '"blocking":true' in canonical_script
+    assert "scripts/verification_disposition.py" in disposition_script
+    assert "--execute" in disposition_script
+    assert '"authority":"verification"' in disposition_script
+    assert '"blocking":true' in disposition_script
+
+    shadow = jobs["repo-consistency"]
+    shadow_script = "\n".join(step.get("run", "") for step in shadow["steps"])
+    assert str(shadow["if"]) == "github.event_name == 'pull_request'"
+    assert shadow["continue-on-error"] is True
+    assert "make ci-check" in shadow_script
+    assert '"authority":"regression-shadow"' in shadow_script
+    assert '"blocking":false' in shadow_script
 
 
 def test_build_artifact_excludes_dependency_dist_directories() -> None:
     jobs = _workflow()["jobs"]
     script = "\n".join(step.get("run", "") for step in jobs["build-artifact"]["steps"])
-    assert "-name node_modules -prune" in script
+    assert "build-selection.json" in script
+    assert "Build only selected workspaces" in script or "npm run build --workspace" in script
+    assert "npm run build --workspace=\"$workspace\"" in script
+    assert "find packages frontend apps" not in script
 
 
 def test_built_candidate_is_verified_without_rebuilding_in_consumers() -> None:

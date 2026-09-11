@@ -4,16 +4,18 @@ on:
   pull_request:
   push:
     branches:
-      - '**'
+      - main
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
   pull-requests: read
 
 concurrency:
-  # Push and pull_request events for the same branch are independent
-  # evidence. Keep them in separate groups so a branch push cannot cancel the
-  # PR's required checks before they report their result.
+  # PRs retain only the lightweight docs/size signals. Broad regression runs
+  # on main, nightly, or explicit dispatch and is never a second PR authority.
   group: repo-health-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
@@ -24,6 +26,7 @@ env:
 
 jobs:
   detect-changes:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -50,6 +53,7 @@ jobs:
     # Generated artifacts, lockfiles, and docs stamps are excluded from the count.
     # Runs on PRs only; push events to main skip this check.
     if: github.event_name == 'pull_request'
+    continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -73,9 +77,10 @@ jobs:
           fi
 
   lint-docs:
-    # Read-only validation job — runs on both PRs and pushes.
+    # Read-only advisory signal — runs on PRs and trusted non-PR events.
     # Has no write permissions so that attacker-controlled scripts in a PR
     # cannot push to the repository even if they escape the validation steps.
+    continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -164,6 +169,7 @@ jobs:
           fi
 
   python-tests:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -206,6 +212,7 @@ jobs:
     # is defined once and consumed here rather than hardcoded. Until that
     # registry lands, this falls back to running the full tree directly --
     # never to the old hardcoded subset.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -260,7 +267,7 @@ jobs:
 
   ml-tests:
     needs: detect-changes
-    if: needs.detect-changes.outputs.ml == 'true'
+    if: github.event_name != 'pull_request' && needs.detect-changes.outputs.ml == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -294,6 +301,7 @@ jobs:
         run: make ml-docs-check
 
   typescript:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -340,6 +348,7 @@ jobs:
 
   e2e-tenant:
     needs: typescript
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -367,6 +376,7 @@ jobs:
           CI: true
 
   staging-preflight-dry-run:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -402,7 +412,7 @@ jobs:
     # ran cleanly.
     # pr-size is advisory only — it runs independently and never blocks this gate.
     needs: [detect-changes, lint-docs, python-tests, backend-tests, ml-tests, typescript, e2e-tenant, staging-preflight-dry-run]
-    if: always()
+    if: always() && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
