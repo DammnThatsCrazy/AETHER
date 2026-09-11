@@ -250,10 +250,12 @@ def _run_parallel(checks: Sequence[PlannedCheck], *, execute: bool) -> list[Comm
     if not checks:
         return []
     # Several registry commands already parallelize internally (the root and
-    # backend suites in particular). Four outer workers preserve overlap while
-    # preventing a global integration selection from exhausting a hosted
-    # runner and turning otherwise healthy suites into budget timeouts.
-    workers = min(4, len(checks))
+    # backend suites in particular). Keep the outer scheduler single-file on
+    # hosted runners so those suites do not compete with one another for the
+    # same CPU and turn otherwise healthy suites into budget timeouts. Normal
+    # PRs remain latency-aware because the impact router selects only the
+    # affected suites; the global path is deliberately the conservative case.
+    workers = min(1, len(checks))
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
         futures = [pool.submit(_run_one, check, execute=execute) for check in checks]
         results = [future.result() for future in futures]

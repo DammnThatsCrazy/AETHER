@@ -289,8 +289,10 @@ suites:
     hard_runtime_budget_seconds: 180
     paths: ["Smart Contracts/test"]
     # Mirrors .github/workflows/smart-contract-analysis.yml's contract-tests
-    # job (npm ci already run there before this executes).
-    runner: ["bash", "-lc", "cd 'Smart Contracts' && npx hardhat test"]
+    # job. This suite is outside the root npm workspaces, so install its
+    # lockfile before invoking the local Hardhat binary; relying on npx would
+    # silently download an unrelated version in the adaptive PR job.
+    runner: ["bash", "-lc", "npm ci --prefix 'Smart Contracts' --ignore-scripts && npm test --prefix 'Smart Contracts'"]
     requires:
       python_packages: []
       services: []
