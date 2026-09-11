@@ -678,20 +678,15 @@ resource "aws_ssm_parameter" "static_frontend_bucket" {
 }
 
 # ---------------------------------------------------------------------------
-# 11. AWS Amplify Hosting — 4 frontend surfaces
+# 11. AWS Amplify Hosting — product frontend surfaces
 # Each app builds from the monorepo root with an app-specific appRoot in
 # amplify.yml. Custom domains use the canonical olympuslabsml.com family.
+# The apex/www domain is served by Squarespace (section 12), not Amplify.
 # Gated by the same enable_static_frontends toggle used for S3 origins.
 # ---------------------------------------------------------------------------
 
 locals {
   amplify_apps = local.enable_static_frontends ? {
-    olympus-marketing = {
-      name        = "${var.project}-${var.environment}-olympus-marketing"
-      app_root    = "frontend/olympus-marketing"
-      description = "Olympus Labs marketing site"
-      subdomain   = ""
-    }
     aether-marketing = {
       name        = "${var.project}-${var.environment}-aether-marketing"
       app_root    = "frontend/aether-marketing"
@@ -790,19 +785,11 @@ resource "aws_amplify_domain_association" "frontend" {
   }
 
   app_id      = aws_amplify_app.frontend[each.key].id
-  domain_name = each.value.subdomain != "" ? "${each.value.subdomain}.${var.amplify_domain_name}" : var.amplify_domain_name
+  domain_name = "${each.value.subdomain}.${var.amplify_domain_name}"
 
   sub_domain {
     branch_name = aws_amplify_branch.main[each.key].branch_name
     prefix      = ""
-  }
-
-  dynamic "sub_domain" {
-    for_each = each.value.subdomain == "" ? ["www"] : []
-    content {
-      branch_name = aws_amplify_branch.main[each.key].branch_name
-      prefix      = "www"
-    }
   }
 }
 
@@ -826,4 +813,108 @@ resource "aws_ssm_parameter" "amplify_default_domain" {
   tags = {
     Purpose = "Amplify default domain for ${each.value.description}"
   }
+}
+
+# ---------------------------------------------------------------------------
+# 12. Squarespace Marketing Site — DNS for apex/www domain
+# The Olympus Labs corporate marketing site is hosted on Squarespace.
+# Product subdomains (app, docs, aether, kyber) stay on Amplify/AWS.
+# Requires a Route 53 hosted zone for the production domain.
+# ---------------------------------------------------------------------------
+
+resource "aws_route53_zone" "production" {
+  count = var.squarespace_hosted_zone_enabled ? 1 : 0
+  name  = var.amplify_domain_name
+
+  tags = {
+    Name        = "${var.project}-${var.environment}-production-zone"
+    Purpose     = "Production DNS for ${var.amplify_domain_name}"
+    Environment = var.environment
+  }
+}
+
+locals {
+  hosted_zone_id = var.squarespace_hosted_zone_enabled ? aws_route53_zone.production[0].zone_id : ""
+
+  # Squarespace requires four A records for apex domain hosting.
+  squarespace_ips = [
+    "198.185.159.144",
+    "198.185.159.145",
+    "198.49.23.144",
+    "198.49.23.145",
+  ]
+}
+
+# Apex domain → Squarespace (A records)
+resource "aws_route53_record" "squarespace_apex" {
+  count   = var.squarespace_hosted_zone_enabled ? 1 : 0
+  zone_id = local.hosted_zone_id
+  name    = var.amplify_domain_name
+  type    = "A"
+  ttl     = 3600
+  records = local.squarespace_ips
+}
+
+# www → Squarespace (CNAME)
+resource "aws_route53_record" "squarespace_www" {
+  count   = var.squarespace_hosted_zone_enabled ? 1 : 0
+  zone_id = local.hosted_zone_id
+  name    = "www.${var.amplify_domain_name}"
+  type    = "CNAME"
+  ttl     = 3600
+  records = ["ext-cust.squarespace.com"]
+}
+
+# Squarespace domain verification (CNAME)
+resource "aws_route53_record" "squarespace_verify" {
+  count   = var.squarespace_hosted_zone_enabled && var.squarespace_verification_code != "" ? 1 : 0
+  zone_id = local.hosted_zone_id
+  name    = var.squarespace_verification_code
+  type    = "CNAME"
+  ttl     = 3600
+  records = ["verify.squarespace.com"]
+}
+
+# ---------------------------------------------------------------------------
+# 13. Product subdomain DNS records
+# Point product subdomains to their Amplify default domains.
+# ---------------------------------------------------------------------------
+
+resource "aws_route53_record" "amplify_subdomain" {
+  for_each = var.squarespace_hosted_zone_enabled ? local.amplify_apps : {}
+  zone_id  = local.hosted_zone_id
+  name     = "${each.value.subdomain}.${var.amplify_domain_name}"
+  type     = "CNAME"
+  ttl      = 3600
+  records  = [aws_amplify_app.frontend[each.key].default_domain]
+}
+
+# API subdomain → ALB (passed as variable since ALB is in the root module)
+resource "aws_route53_record" "api" {
+  count   = var.squarespace_hosted_zone_enabled && var.api_alb_dns_name != "" ? 1 : 0
+  zone_id = local.hosted_zone_id
+  name    = "api.${var.amplify_domain_name}"
+  type    = "CNAME"
+  ttl     = 300
+  records = [var.api_alb_dns_name]
+}
+
+# Kyber operator console subdomain
+resource "aws_route53_record" "kyber" {
+  count   = var.squarespace_hosted_zone_enabled && var.kyber_cname_target != "" ? 1 : 0
+  zone_id = local.hosted_zone_id
+  name    = "kyber.${var.amplify_domain_name}"
+  type    = "CNAME"
+  ttl     = 3600
+  records = [var.kyber_cname_target]
+}
+
+# Status page subdomain
+resource "aws_route53_record" "status" {
+  count   = var.squarespace_hosted_zone_enabled && var.status_cname_target != "" ? 1 : 0
+  zone_id = local.hosted_zone_id
+  name    = "status.${var.amplify_domain_name}"
+  type    = "CNAME"
+  ttl     = 3600
+  records = [var.status_cname_target]
 }

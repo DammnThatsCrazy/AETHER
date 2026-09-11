@@ -478,6 +478,40 @@ variable "amplify_branch" {
 
 variable "amplify_domain_name" {
   type        = string
-  description = "Root domain for Amplify custom domains (e.g. olympuslabsml.com)."
+  description = "Root domain for Amplify custom domains and Route 53 zone (e.g. olympuslabsml.com)."
   default     = "olympuslabsml.com"
+}
+
+# --------------------------------------------------------------------------
+# Squarespace & DNS
+# --------------------------------------------------------------------------
+
+variable "squarespace_hosted_zone_enabled" {
+  type        = bool
+  description = "Create a Route 53 hosted zone and Squarespace DNS records for the apex/www domain. Product subdomains are pointed at Amplify."
+  default     = false
+}
+
+variable "squarespace_verification_code" {
+  type        = string
+  description = "Squarespace domain verification CNAME record name (e.g. a1b2c3d4e5f6). Leave empty to skip the verification record."
+  default     = ""
+}
+
+variable "api_alb_dns_name" {
+  type        = string
+  description = "ALB DNS name for the api subdomain CNAME. Leave empty to skip."
+  default     = ""
+}
+
+variable "kyber_cname_target" {
+  type        = string
+  description = "CNAME target for the kyber operator console subdomain. Leave empty to skip."
+  default     = ""
+}
+
+variable "status_cname_target" {
+  type        = string
+  description = "CNAME target for the status page subdomain. Leave empty to skip."
+  default     = ""
 }

@@ -24,6 +24,15 @@ kyber_app_url  = "https://kyber.olympuslabsml.com"
 # amplify_github_access_token = ""  # Set via TF_VAR or Secrets Manager
 amplify_domain_name = "olympuslabsml.com"
 
+# Squarespace & DNS
+# The marketing site (apex/www) is hosted on Squarespace.
+# Product subdomains (app, docs, aether, kyber) stay on Amplify/AWS.
+squarespace_hosted_zone_enabled = true
+# squarespace_verification_code = ""  # From Squarespace Domains > DNS settings
+# api_alb_dns_name    = ""            # ALB DNS for api.olympuslabsml.com
+# kyber_cname_target  = ""            # CNAME target for kyber.olympuslabsml.com
+# status_cname_target = ""            # CNAME target for status.olympuslabsml.com
+
 # Monitoring
 alert_email = "ops@yourcompany.com"
 
