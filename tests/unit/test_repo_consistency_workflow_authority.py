@@ -7,10 +7,15 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "repo-consistency.yml"
+REPO_HEALTH_WORKFLOW = ROOT / ".github" / "workflows" / "repo-health.yml"
 
 
 def _workflow() -> dict:
     return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+
+
+def _repo_health_workflow() -> dict:
+    return yaml.safe_load(REPO_HEALTH_WORKFLOW.read_text(encoding="utf-8"))
 
 
 def test_pr_workflow_has_explicit_delivery_stages() -> None:
@@ -82,3 +87,53 @@ def test_publication_fails_when_any_required_stage_did_not_pass() -> None:
         if str(step.get("uses", "")).startswith("actions/upload-artifact")
     ]
     assert uploads and uploads[0]["if"] == "always()"
+
+
+def test_repo_health_reserves_broad_regression_for_schedule_or_dispatch() -> None:
+    jobs = _repo_health_workflow()["jobs"]
+    regression_condition = "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
+    for job_name in (
+        "detect-changes",
+        "python-tests",
+        "backend-tests",
+        "typescript",
+        "e2e-tenant",
+        "staging-preflight-dry-run",
+    ):
+        assert str(jobs[job_name]["if"]) == regression_condition
+    assert "github.event_name == 'schedule'" in str(jobs["ml-tests"]["if"])
+    assert "github.event_name == 'workflow_dispatch'" in str(jobs["ml-tests"]["if"])
+    assert "needs.detect-changes.outputs.ml" not in str(jobs["ml-tests"]["if"])
+    assert "github.event_name == 'pull_request'" in str(jobs["pr-size"]["if"])
+    assert jobs["pr-size"]["continue-on-error"] in {
+        True,
+        "${{ github.event_name == 'pull_request' }}",
+    }
+    assert "github.event_name == 'pull_request'" not in str(jobs["lint-docs"].get("if", ""))
+    assert jobs["lint-docs"]["continue-on-error"] in {
+        True,
+        "${{ github.event_name == 'pull_request' }}",
+    }
+
+    validate = jobs["validate"]
+    assert "main-integration" not in validate["needs"]
+    assert "github.event_name == 'schedule'" in str(validate["if"])
+    assert "github.event_name == 'workflow_dispatch'" in str(validate["if"])
+
+
+def test_repo_health_main_integration_is_bounded_and_fail_closed() -> None:
+    jobs = _repo_health_workflow()["jobs"]
+    main = jobs["main-integration"]
+    assert str(main["if"]) == "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    script = "\n".join(step.get("run", "") for step in main["steps"])
+    assert "scripts/validate_contracts.py" in script
+    assert "make generate-contracts-check" in script
+    assert "make validate-impact-graph" in script
+    assert "make integration-durable" in script
+    assert "Backend Architecture/aether-backend/Dockerfile" in script
+    assert '"SELECTED"' in script
+    assert '"NOT_APPLICABLE"' in script
+    assert "Impact Graph did not select backend_image" in script
+    assert "docker build" in script
+    assert "docker push" not in script
+    assert "deploy" not in script.lower()
