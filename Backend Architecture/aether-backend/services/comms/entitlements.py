@@ -42,22 +42,37 @@ class CommsPlanLimits:
 # Comms is a paid capability: P1 (hobbyist) has no comms; P2+ unlock it with
 # progressively higher limits. Values are packaging levers, not prices.
 COMMS_PLAN_LIMITS: dict[PlanTier, CommsPlanLimits] = {
-    PlanTier.P1_HOBBYIST: CommsPlanLimits(
+    PlanTier.ALPHA: CommsPlanLimits(
         provider_available=False, allowed_provider_families=frozenset(),
         max_connections=0, max_provider_accounts=0, max_backfill_days=0,
         monthly_event_limit=0, premium_providers_allowed=False,
     ),
-    PlanTier.P2_PROFESSIONAL: CommsPlanLimits(
+    PlanTier.BETA: CommsPlanLimits(
         provider_available=True, allowed_provider_families=frozenset({"lifecycle"}),
         max_connections=2, max_provider_accounts=2, max_backfill_days=30,
         monthly_event_limit=100_000, premium_providers_allowed=False,
     ),
-    PlanTier.P3_GROWTH_INTELLIGENCE: CommsPlanLimits(
+    PlanTier.GAMMA: CommsPlanLimits(
         provider_available=True, allowed_provider_families=_ALL_FAMILIES,
         max_connections=10, max_provider_accounts=25, max_backfill_days=180,
         monthly_event_limit=2_000_000, premium_providers_allowed=True,
     ),
-    PlanTier.P4_PROTOCOL_MASTER: CommsPlanLimits(
+    PlanTier.DELTA: CommsPlanLimits(
+        provider_available=True, allowed_provider_families=_ALL_FAMILIES,
+        max_connections=None, max_provider_accounts=None, max_backfill_days=None,
+        monthly_event_limit=None, premium_providers_allowed=True,
+    ),
+    PlanTier.EPSILON: CommsPlanLimits(
+        provider_available=True, allowed_provider_families=_ALL_FAMILIES,
+        max_connections=None, max_provider_accounts=None, max_backfill_days=None,
+        monthly_event_limit=None, premium_providers_allowed=True,
+    ),
+    PlanTier.OMICRON: CommsPlanLimits(
+        provider_available=True, allowed_provider_families=_ALL_FAMILIES,
+        max_connections=None, max_provider_accounts=None, max_backfill_days=None,
+        monthly_event_limit=None, premium_providers_allowed=True,
+    ),
+    PlanTier.OMEGA: CommsPlanLimits(
         provider_available=True, allowed_provider_families=_ALL_FAMILIES,
         max_connections=None, max_provider_accounts=None, max_backfill_days=None,
         monthly_event_limit=None, premium_providers_allowed=True,
@@ -81,7 +96,7 @@ class CommsEntitlementPolicy:
     """Evaluates comms requests against per-plan limits (pure, no I/O)."""
 
     def limits_for(self, plan: PlanTier) -> CommsPlanLimits:
-        return COMMS_PLAN_LIMITS.get(plan, COMMS_PLAN_LIMITS[PlanTier.P1_HOBBYIST])
+        return COMMS_PLAN_LIMITS.get(plan, COMMS_PLAN_LIMITS[PlanTier.ALPHA])
 
     def evaluate_connection(
         self, plan: PlanTier, *, provider_family: str = "lifecycle",

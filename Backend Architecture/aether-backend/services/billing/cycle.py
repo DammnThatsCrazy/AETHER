@@ -101,11 +101,11 @@ async def run_overage_cycle(billing_period: Optional[str] = None) -> dict:
                 skipped += 1
                 continue
 
-            plan_tier_value = account.get("plan_tier", "P1")
+            plan_tier_value = account.get("plan_tier", "alpha")
             try:
                 plan_tier = PlanTier(plan_tier_value)
             except ValueError:
-                plan_tier = PlanTier.P1_HOBBYIST
+                plan_tier = PlanTier.ALPHA
 
             invoice = await calculator.calculate(tenant_id, plan_tier, period)
             if invoice.overage_request_count == 0:

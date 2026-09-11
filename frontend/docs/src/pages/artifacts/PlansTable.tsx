@@ -1,19 +1,22 @@
 import plansJson from '../../../../../docs/_generated/plans.json';
 
 interface PlanPricing {
-  option_a: string;
-  option_b: string;
-  option_c: string;
+  monthly: string;
+  annual: string;
 }
 
 interface Plan {
   plan_id: string;
   display_name: string;
+  stripe_product_id: string;
   target_user: string;
   monthly_quota: number;
   member_cap: number;
   burst_rpm: number;
-  blended_overage_per_1k: string;
+  event_overage_per_1k: string;
+  acu_overage_per_1k: string;
+  managed_per_acu: string;
+  byok_per_acu: string;
   service_count: number;
   pricing: PlanPricing;
 }
@@ -24,27 +27,27 @@ function fmtNum(n: number): string {
 
 function fmtMoney(s: string): string {
   const n = Number(s);
-  if (!Number.isFinite(n)) return s;
+  if (!Number.isFinite(n) || n === 0) return s === '0' ? 'Free' : s;
   return `$${n.toLocaleString('en-US')}`;
 }
 
 export default function PlansTable() {
-  const plans = (plansJson as { plans: Plan[] }).plans;
+  const plans = (plansJson as unknown as { plans: Plan[] }).plans;
 
   return (
-    <div style={{ maxWidth: 1040, margin: '2rem auto', padding: '0 1.5rem', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ maxWidth: 1100, margin: '2rem auto', padding: '0 1.5rem', fontFamily: 'system-ui, sans-serif' }}>
       <header style={{ marginBottom: '2rem', borderBottom: '1px solid #e5e7eb', paddingBottom: '1rem' }}>
         <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
           Generated · {plansJson.generated_from}
         </div>
         <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 700 }}>Plans &amp; Pricing</h1>
         <p style={{ color: '#6b7280', marginTop: '0.5rem', marginBottom: 0 }}>
-          {plans.length} subscription plans · option_a / option_b / option_c reflect annual / quarterly / monthly cadences
+          {plans.length} plan tiers · monthly / annual pricing
         </p>
       </header>
 
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', minWidth: 880 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', minWidth: 960 }}>
           <thead>
             <tr style={{ background: '#f9fafb' }}>
               <th style={th}>Plan</th>
@@ -52,11 +55,11 @@ export default function PlansTable() {
               <th style={thNum}>Quota / mo</th>
               <th style={thNum}>Members</th>
               <th style={thNum}>Burst RPM</th>
-              <th style={thNum}>Overage / 1k</th>
+              <th style={thNum}>Event / 1k</th>
+              <th style={thNum}>ACU / 1k</th>
               <th style={thNum}>Services</th>
-              <th style={thNum}>Annual</th>
-              <th style={thNum}>Quarterly</th>
               <th style={thNum}>Monthly</th>
+              <th style={thNum}>Annual</th>
             </tr>
           </thead>
           <tbody>
@@ -67,14 +70,14 @@ export default function PlansTable() {
                   <div style={{ fontSize: '0.7rem', color: '#9ca3af', fontFamily: 'monospace' }}>{p.plan_id}</div>
                 </td>
                 <td style={td}>{p.target_user}</td>
-                <td style={tdNum}>{fmtNum(p.monthly_quota)}</td>
-                <td style={tdNum}>{p.member_cap}</td>
-                <td style={tdNum}>{fmtNum(p.burst_rpm)}</td>
-                <td style={tdNum}>${p.blended_overage_per_1k}</td>
+                <td style={tdNum}>{p.monthly_quota > 0 ? fmtNum(p.monthly_quota) : 'Custom'}</td>
+                <td style={tdNum}>{p.member_cap > 0 ? p.member_cap : 'Contract'}</td>
+                <td style={tdNum}>{p.burst_rpm > 0 ? fmtNum(p.burst_rpm) : 'Custom'}</td>
+                <td style={tdNum}>{Number(p.event_overage_per_1k) > 0 ? `$${p.event_overage_per_1k}` : 'Custom'}</td>
+                <td style={tdNum}>{Number(p.acu_overage_per_1k) > 0 ? `$${p.acu_overage_per_1k}` : 'Custom'}</td>
                 <td style={tdNum}>{p.service_count}</td>
-                <td style={tdNum}>{fmtMoney(p.pricing.option_a)}</td>
-                <td style={tdNum}>{fmtMoney(p.pricing.option_b)}</td>
-                <td style={tdNum}>{fmtMoney(p.pricing.option_c)}</td>
+                <td style={tdNum}>{fmtMoney(p.pricing.monthly)}</td>
+                <td style={tdNum}>{fmtMoney(p.pricing.annual)}</td>
               </tr>
             ))}
           </tbody>

@@ -3381,7 +3381,7 @@
     },
     {
       "path": "docs/STRIPE-BILLING.md",
-      "title": "Stripe Billing — P1–P4 Integration",
+      "title": "Stripe Billing — Alpha–Omega Integration",
       "slug": "concepts/stripe-billing",
       "section": "concepts",
       "visibility": "P",

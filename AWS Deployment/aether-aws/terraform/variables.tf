@@ -353,7 +353,7 @@ variable "acm_certificate_arn" {
 
 variable "domain_name" {
   type        = string
-  description = "Primary domain name for the API (e.g. api.aether.io)"
+  description = "Primary domain name for the API (e.g. api.olympuslabsml.com)"
 }
 
 # --------------------------------------------------------------------------
@@ -439,16 +439,79 @@ variable "auth0_api_audience" {
 
 variable "aether_app_url" {
   type        = string
-  description = "Public URL of the Aether customer app (e.g. https://app.aether.io)"
+  description = "Public URL of the Aether customer app (e.g. https://app.olympuslabsml.com)"
 }
 
 variable "kyber_app_url" {
   type        = string
-  description = "Public URL of the Kyber operator console (e.g. https://kyber.aether.io)"
+  description = "Public URL of the Kyber operator console (e.g. https://kyber.olympuslabsml.com)"
 }
 
 variable "enable_social_connections" {
   type        = bool
   description = "Enable optional social identity-provider connections. Keep false until provider credentials and Auth0 management scopes are approved."
   default     = true
+}
+
+# --------------------------------------------------------------------------
+# Amplify Hosting
+# --------------------------------------------------------------------------
+
+variable "amplify_github_access_token" {
+  type        = string
+  sensitive   = true
+  description = "GitHub personal access token for Amplify to access the repository. Must have `repo` scope."
+  default     = ""
+}
+
+variable "amplify_github_repository" {
+  type        = string
+  description = "GitHub repository URL for Amplify apps (e.g. https://github.com/DammnThatsCrazy/AETHER)."
+  default     = "https://github.com/DammnThatsCrazy/AETHER"
+}
+
+variable "amplify_branch" {
+  type        = string
+  description = "Git branch Amplify builds from."
+  default     = "main"
+}
+
+variable "amplify_domain_name" {
+  type        = string
+  description = "Root domain for Amplify custom domains and Route 53 zone (e.g. olympuslabsml.com)."
+  default     = "olympuslabsml.com"
+}
+
+# --------------------------------------------------------------------------
+# Squarespace & DNS
+# --------------------------------------------------------------------------
+
+variable "squarespace_hosted_zone_enabled" {
+  type        = bool
+  description = "Create a Route 53 hosted zone and Squarespace DNS records for the apex/www domain. Product subdomains are pointed at Amplify."
+  default     = false
+}
+
+variable "squarespace_verification_code" {
+  type        = string
+  description = "Squarespace domain verification CNAME record name (e.g. a1b2c3d4e5f6). Leave empty to skip the verification record."
+  default     = ""
+}
+
+variable "api_alb_dns_name" {
+  type        = string
+  description = "ALB DNS name for the api subdomain CNAME. Leave empty to skip."
+  default     = ""
+}
+
+variable "kyber_cname_target" {
+  type        = string
+  description = "CNAME target for the kyber operator console subdomain. Leave empty to skip."
+  default     = ""
+}
+
+variable "status_cname_target" {
+  type        = string
+  description = "CNAME target for the status page subdomain. Leave empty to skip."
+  default     = ""
 }

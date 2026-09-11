@@ -296,7 +296,7 @@ def _resolve_plan_tier(context: TenantContext) -> PlanTier:
     legacy = getattr(context, "api_key_tier", None)
     if isinstance(legacy, APIKeyTier):
         return legacy_tier_to_plan(legacy)
-    return PlanTier.P1_HOBBYIST
+    return PlanTier.ALPHA
 
 
 # ---------------------------------------------------------------------------
@@ -545,7 +545,7 @@ def register_middleware(app: FastAPI) -> None:
                         },
                     )
                     min_plan_tier = (
-                        gate_result.minimum_plan or PlanTier.P4_PROTOCOL_MASTER
+                        gate_result.minimum_plan or PlanTier.DELTA
                     )
                     min_plan = PLAN_CATALOG[min_plan_tier]
                     current_plan = PLAN_CATALOG[plan_tier]

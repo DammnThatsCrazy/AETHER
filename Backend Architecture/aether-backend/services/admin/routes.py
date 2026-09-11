@@ -50,13 +50,13 @@ def _check_api_key_rate_limit(tenant_id: str) -> None:
     _rate_limit_cache[tenant_id].append(now)
 
 
-def _resolve_plan_tier(request: Request, fallback: str = "P1") -> PlanTier:
+def _resolve_plan_tier(request: Request, fallback: str = "alpha") -> PlanTier:
     """Determine the plan tier for a billing query.
 
     Preference order:
       1. request.state.tenant.plan_tier (set by AuthMiddleware)
       2. legacy api_key_tier mapped to a PlanTier
-      3. default to P1
+      3. default to Alpha
     """
     tenant = getattr(request.state, "tenant", None)
     if tenant is not None:
@@ -69,7 +69,7 @@ def _resolve_plan_tier(request: Request, fallback: str = "P1") -> PlanTier:
     try:
         return PlanTier(fallback)
     except ValueError:
-        return PlanTier.P1_HOBBYIST
+        return PlanTier.ALPHA
 
 
 def _current_period() -> str:
@@ -100,7 +100,7 @@ async def _resolve_plan_tier_for_tenant(
             return PlanTier(account["plan_tier"])
         except ValueError:
             pass
-    return PlanTier.P1_HOBBYIST
+    return PlanTier.ALPHA
 
 
 class TenantCreate(BaseModel):
@@ -357,7 +357,7 @@ async def _resolve_contact_email(
 
 
 class CheckoutSessionCreate(BaseModel):
-    plan_tier: str = Field(pattern="^P[1-4]$")
+    plan_tier: str = Field(pattern="^(alpha|beta|gamma|delta)$")
     contact_email: Optional[str] = None
 
 
@@ -797,9 +797,9 @@ async def _handle_subscription_event(
 
     if deleted or status in _DOWNGRADE_SUBSCRIPTION_STATUSES:
         await stripe_repository.update_plan_tier(
-            tenant_id, PlanTier.P1_HOBBYIST.value,
+            tenant_id, PlanTier.ALPHA.value,
         )
-        await _refresh_api_key_plan_tier(tenant_id, PlanTier.P1_HOBBYIST)
+        await _refresh_api_key_plan_tier(tenant_id, PlanTier.ALPHA)
         return
 
     if status in _ACTIVE_SUBSCRIPTION_STATUSES:

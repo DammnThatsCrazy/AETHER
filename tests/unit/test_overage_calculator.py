@@ -61,7 +61,8 @@ def _make_calculator(redis=None, db=None, pricing_option="B"):
     )
 
 
-def _make_service_mock(name: str, endpoint: str, price_a, price_b, price_c):
+def _make_service_mock(name: str, endpoint: str, price_a, price_b, price_c,
+                       pillar: str = "Ingestion"):
     """Build a minimal ServiceDefinition-like mock."""
     pricing = MagicMock()
     pricing.option_a_per_1k = Decimal(str(price_a))
@@ -70,6 +71,7 @@ def _make_service_mock(name: str, endpoint: str, price_a, price_b, price_c):
     svc = MagicMock()
     svc.endpoint_pattern = endpoint
     svc.pricing = pricing
+    svc.pillar = pillar
     return svc
 
 
@@ -94,68 +96,73 @@ def test_pricing_option_stored():
 
 @patch("shared.billing.overage.find_service_by_name")
 def test_build_line_items_skips_zero_counts(mock_find):
+    from shared.auth.auth import PlanTier
     calc = _make_calculator()
-    items = calc._build_line_items({"svc_a": 0, "svc_b": 0})
+    items = calc._build_line_items({"svc_a": 0, "svc_b": 0}, PlanTier.ALPHA)
     assert items == []
     mock_find.assert_not_called()
 
 
 @patch("shared.billing.overage.find_service_by_name")
 def test_build_line_items_skips_unknown_service(mock_find):
+    from shared.auth.auth import PlanTier
     mock_find.return_value = None
     calc = _make_calculator()
-    items = calc._build_line_items({"unknown_svc": 500})
+    items = calc._build_line_items({"unknown_svc": 500}, PlanTier.ALPHA)
     assert items == []
 
 
 @patch("shared.billing.overage.find_service_by_name")
-def test_build_line_items_single_service_option_b(mock_find):
+def test_build_line_items_uses_plan_rate(mock_find):
+    from shared.auth.auth import PlanTier
     svc = _make_service_mock("svc_a", "/v1/svc/*", "2.00", "1.50", "1.00")
     mock_find.return_value = svc
 
-    calc = _make_calculator(pricing_option="B")
-    items = calc._build_line_items({"svc_a": 2000})
+    calc = _make_calculator()
+    items = calc._build_line_items({"svc_a": 2000}, PlanTier.ALPHA)
 
     assert len(items) == 1
     item = items[0]
     assert item.service_name == "svc_a"
     assert item.overage_requests == 2000
-    # 2000 / 1000 * 1.50 = 3.00
-    assert item.line_total == Decimal("3.00")
-    assert item.pricing_option == "B"
+    # Alpha event_overage_per_1k = 0.060; 2000 / 1000 * 0.060 = 0.12
+    assert item.line_total == Decimal("0.12")
+    assert item.pricing_option == "alpha"
 
 
 @patch("shared.billing.overage.find_service_by_name")
 def test_build_line_items_sorted_descending(mock_find):
-    svc_cheap = _make_service_mock("cheap", "/v1/cheap/*", "0.10", "0.10", "0.10")
-    svc_expensive = _make_service_mock("expensive", "/v1/exp/*", "5.00", "5.00", "5.00")
+    from shared.auth.auth import PlanTier
+    svc_event = _make_service_mock("event_svc", "/v1/cheap/*", "0.10", "0.10", "0.10",
+                                   pillar="Ingestion")
+    svc_acu = _make_service_mock("acu_svc", "/v1/exp/*", "5.00", "5.00", "5.00",
+                                 pillar="Agentic")
 
     def _find(name):
-        return svc_cheap if name == "cheap" else svc_expensive
+        return svc_event if name == "event_svc" else svc_acu
 
     mock_find.side_effect = _find
     calc = _make_calculator()
-    items = calc._build_line_items({"cheap": 1000, "expensive": 1000})
-    # expensive should be first
-    assert items[0].service_name == "expensive"
-    assert items[1].service_name == "cheap"
+    items = calc._build_line_items({"event_svc": 1000, "acu_svc": 1000}, PlanTier.ALPHA)
+    # acu_svc (Alpha acu_overage_per_1k=7.00) should sort before event_svc (0.060)
+    assert items[0].service_name == "acu_svc"
+    assert items[1].service_name == "event_svc"
 
 
 @patch("shared.billing.overage.find_service_by_name")
-def test_build_line_items_option_a_vs_c(mock_find):
+def test_build_line_items_alpha_vs_delta_rates(mock_find):
+    from shared.auth.auth import PlanTier
     svc = _make_service_mock("svc", "/v1/*", "3.00", "2.00", "1.00")
     mock_find.return_value = svc
 
-    calc_a = _make_calculator(pricing_option="A")
-    calc_c = _make_calculator(pricing_option="C")
+    calc = _make_calculator()
+    items_alpha = calc._build_line_items({"svc": 1000}, PlanTier.ALPHA)
+    items_delta = calc._build_line_items({"svc": 1000}, PlanTier.DELTA)
 
-    items_a = calc_a._build_line_items({"svc": 1000})
-    items_c = calc_c._build_line_items({"svc": 1000})
-
-    # Option A is more expensive
-    assert items_a[0].line_total > items_c[0].line_total
-    assert items_a[0].line_total == Decimal("3.00")
-    assert items_c[0].line_total == Decimal("1.00")
+    # Alpha event rate ($0.060) > Delta event rate ($0.030)
+    assert items_alpha[0].line_total > items_delta[0].line_total
+    assert items_alpha[0].line_total == Decimal("0.06")
+    assert items_delta[0].line_total == Decimal("0.03")
 
 
 # ---------------------------------------------------------------------------
@@ -228,20 +235,20 @@ async def test_calculate_returns_invoice(mock_metric, mock_find):
     redis.get = AsyncMock(return_value="5500")
 
     from shared.auth.auth import PlanTier
-    calc = _make_calculator(redis=redis, pricing_option="B")
+    calc = _make_calculator(redis=redis)
 
-    invoice = await calc.calculate("tenant1", PlanTier.P1_HOBBYIST, "2026-05")
+    invoice = await calc.calculate("tenant1", PlanTier.ALPHA, "2026-05")
 
     assert invoice.tenant_id == "tenant1"
     assert invoice.billing_period == "2026-05"
     assert invoice.overage_request_count == 500
     assert invoice.total_requests == 5500
     assert len(invoice.line_items) == 1
-    # 500 / 1000 * 1.50 = 0.75
-    assert invoice.line_items[0].line_total == Decimal("0.75")
-    assert invoice.total_overage == Decimal("0.75")
-    # period_total = plan_fee + 0.75
-    assert invoice.period_total == invoice.plan_fee + Decimal("0.75")
+    # Alpha event_overage_per_1k = 0.060; 500 / 1000 * 0.060 = 0.03
+    assert invoice.line_items[0].line_total == Decimal("0.03")
+    assert invoice.total_overage == Decimal("0.03")
+    # period_total = plan_fee + 0.03
+    assert invoice.period_total == invoice.plan_fee + Decimal("0.03")
 
 
 @pytest.mark.asyncio
@@ -257,7 +264,7 @@ async def test_calculate_no_overage_invoice(mock_metric, mock_find):
 
     from shared.auth.auth import PlanTier
     calc = _make_calculator(redis=redis)
-    invoice = await calc.calculate("tenant1", PlanTier.P1_HOBBYIST, "2026-05")
+    invoice = await calc.calculate("tenant1", PlanTier.ALPHA, "2026-05")
 
     assert invoice.line_items == []
     assert invoice.total_overage == Decimal("0")

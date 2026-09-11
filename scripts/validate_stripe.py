@@ -7,10 +7,13 @@ in your Stripe account, and confirms the webhook signing secret format.
 Usage:
     # Full validation against live Stripe API
     export STRIPE_SECRET_KEY=sk_live_...
-    export STRIPE_PRICE_P1=price_...
-    export STRIPE_PRICE_P2=price_...
-    export STRIPE_PRICE_P3=price_...
-    export STRIPE_PRICE_P4=price_...
+    export STRIPE_PRICE_ALPHA=price_...
+    export STRIPE_PRICE_BETA=price_...
+    export STRIPE_PRICE_GAMMA=price_...
+    export STRIPE_PRICE_DELTA=price_...
+    export STRIPE_PRICE_EPSILON=price_...
+    export STRIPE_PRICE_OMICRON=price_...
+    export STRIPE_PRICE_OMEGA=price_...
     export STRIPE_WEBHOOK_SECRET=whsec_...
     python scripts/validate_stripe.py
 
@@ -24,7 +27,7 @@ Checks performed:
     1. SDK installed (stripe>=10)
     2. API key format (sk_live_ or sk_test_)
     3. Stripe API connection (stripe.Account.retrieve())
-    4. All four plan Price IDs exist in your Stripe account
+    4. All seven plan Price IDs exist in your Stripe account
     5. Webhook secret format (whsec_ prefix and minimum length)
     6. Overage Price ID (STRIPE_OVERAGE_PRICE_ID) if configured
 """
@@ -113,10 +116,13 @@ def run(skip_webhook: bool) -> bool:
 
     # 4. Price IDs
     price_vars = {
-        "P1 (Hobbyist)": "STRIPE_PRICE_P1",
-        "P2 (Professional)": "STRIPE_PRICE_P2",
-        "P3 (Growth Intelligence)": "STRIPE_PRICE_P3",
-        "P4 (Protocol Master)": "STRIPE_PRICE_P4",
+        "Alpha": "STRIPE_PRICE_ALPHA",
+        "Beta": "STRIPE_PRICE_BETA",
+        "Gamma": "STRIPE_PRICE_GAMMA",
+        "Delta": "STRIPE_PRICE_DELTA",
+        "Epsilon": "STRIPE_PRICE_EPSILON",
+        "Omicron": "STRIPE_PRICE_OMICRON",
+        "Omega": "STRIPE_PRICE_OMEGA",
     }
     for label, env_var in price_vars.items():
         price_id = os.getenv(env_var, "")

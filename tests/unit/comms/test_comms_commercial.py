@@ -28,7 +28,7 @@ def _clean():
 def test_hobbyist_has_no_comms():
     from services.comms.entitlements import CommsEntitlementPolicy
     from shared.auth.auth import PlanTier
-    d = CommsEntitlementPolicy().evaluate_connection(PlanTier.P1_HOBBYIST)
+    d = CommsEntitlementPolicy().evaluate_connection(PlanTier.ALPHA)
     assert not d.allowed and d.state == "upgrade_required"
 
 
@@ -37,9 +37,9 @@ def test_professional_allows_lifecycle_up_to_cap():
     from shared.auth.auth import PlanTier
     policy = CommsEntitlementPolicy()
     assert policy.evaluate_connection(
-        PlanTier.P2_PROFESSIONAL, current_connections=0).state == "allowed"
+        PlanTier.BETA, current_connections=0).state == "allowed"
     # cap is 2 → at 2 it's reached (explicit, not silent)
-    d = policy.evaluate_connection(PlanTier.P2_PROFESSIONAL, current_connections=2)
+    d = policy.evaluate_connection(PlanTier.BETA, current_connections=2)
     assert not d.allowed and d.state == "quota_reached"
     assert d.limit == 2 and d.current == 2
 
@@ -48,7 +48,7 @@ def test_premium_family_requires_upgrade_on_professional():
     from services.comms.entitlements import CommsEntitlementPolicy
     from shared.auth.auth import PlanTier
     d = CommsEntitlementPolicy().evaluate_connection(
-        PlanTier.P2_PROFESSIONAL, provider_family="mailbox")
+        PlanTier.BETA, provider_family="mailbox")
     assert not d.allowed and d.state == "upgrade_required"
 
 
@@ -56,9 +56,9 @@ def test_backfill_window_clamped_never_exceeds_plan():
     from services.comms.entitlements import CommsEntitlementPolicy
     from shared.auth.auth import PlanTier
     policy = CommsEntitlementPolicy()
-    days, clamped = policy.clamp_backfill_days(PlanTier.P2_PROFESSIONAL, 365)
+    days, clamped = policy.clamp_backfill_days(PlanTier.BETA, 365)
     assert days == 30 and clamped is True
-    days, clamped = policy.clamp_backfill_days(PlanTier.P4_PROTOCOL_MASTER, 365)
+    days, clamped = policy.clamp_backfill_days(PlanTier.DELTA, 365)
     assert days == 365 and clamped is False
 
 
@@ -68,11 +68,11 @@ def test_event_volume_states():
     policy = CommsEntitlementPolicy()
     # P2 cap 100k → 85k is approaching, 100k reached
     assert policy.evaluate_event_volume(
-        PlanTier.P2_PROFESSIONAL, monthly_events=85_000).state == "quota_approaching"
+        PlanTier.BETA, monthly_events=85_000).state == "quota_approaching"
     assert policy.evaluate_event_volume(
-        PlanTier.P2_PROFESSIONAL, monthly_events=100_000).state == "quota_reached"
+        PlanTier.BETA, monthly_events=100_000).state == "quota_reached"
     assert policy.evaluate_event_volume(
-        PlanTier.P4_PROTOCOL_MASTER, monthly_events=10_000_000).state == "allowed"
+        PlanTier.DELTA, monthly_events=10_000_000).state == "allowed"
 
 
 def test_is_comms_connector():

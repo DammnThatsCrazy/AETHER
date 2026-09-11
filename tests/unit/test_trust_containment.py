@@ -95,7 +95,7 @@ def _run(coro):
 async def _seed_password_user(repos, tenant_id, email, password, status="active"):
     from shared.auth.password import hash_password
     await repos.AdminRepository().insert(tenant_id, {
-        "name": "Test", "contact_email": email, "plan_tier": "P1", "status": status,
+        "name": "Test", "contact_email": email, "plan_tier": "alpha", "status": status,
     })
     await repos.UserRepository().insert(f"user-{tenant_id}", {
         "user_id": f"user-{tenant_id}", "tenant_id": tenant_id, "email": email,
@@ -176,7 +176,7 @@ class TestLegacyContainment:
         with trust_flags(**_ON):
             reg = importlib.import_module("services.registration.routes")
             resp = _run(reg.register_tenant(
-                reg.TenantRegistration(name="Acme", contact_email="a@x.io", plan_tier="P1"),
+                reg.TenantRegistration(name="Acme", contact_email="a@x.io", plan_tier="alpha"),
                 FakeRequest(),
             ))
             data = resp["data"]
@@ -189,7 +189,7 @@ class TestLegacyContainment:
             reg = importlib.import_module("services.registration.routes")
             repos = importlib.import_module("repositories.repos")
             _run(repos.AdminRepository().insert("t-rec", {
-                "name": "Rec", "contact_email": "r@x.io", "plan_tier": "P1", "status": "active",
+                "name": "Rec", "contact_email": "r@x.io", "plan_tier": "alpha", "status": "active",
             }))
             resp = _run(reg.recover_api_key(reg.RecoverRequest(contact_email="r@x.io"), FakeRequest()))
             assert "api_key" not in resp["data"]
@@ -290,7 +290,7 @@ class TestLegacyPreserved:
         with trust_flags(**_OFF):
             reg = importlib.import_module("services.registration.routes")
             resp = _run(reg.register_tenant(
-                reg.TenantRegistration(name="Acme", contact_email="lg2@x.io", plan_tier="P1"),
+                reg.TenantRegistration(name="Acme", contact_email="lg2@x.io", plan_tier="alpha"),
                 FakeRequest(),
             ))
             assert "api_key" in resp["data"]
@@ -327,7 +327,7 @@ class TestTenantStatusRehydration:
                 "t-deact", {
                     "name": "T",
                     "contact_email": "d@x.io",
-                    "plan_tier": "P1",
+                    "plan_tier": "alpha",
                     "status": "active",
                 }
             ))

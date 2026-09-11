@@ -115,10 +115,10 @@ async def _seed_entitlement(
 @pytest.mark.asyncio
 async def test_quota_engine_increments_and_flags_included():
     engine = QuotaEngine()  # no redis -> in-memory mode
-    res = await engine.check_and_increment("t1", PlanTier.P1_HOBBYIST, "/v1/ingest/events")
+    res = await engine.check_and_increment("t1", PlanTier.ALPHA, "/v1/ingest/events")
     assert res.allowed is True
     assert res.included is True
-    assert res.quota_limit == PLAN_CATALOG[PlanTier.P1_HOBBYIST].monthly_quota
+    assert res.quota_limit == PLAN_CATALOG[PlanTier.ALPHA].monthly_quota
     assert res.quota_used == 1
     assert res.remaining == res.quota_limit - 1
     assert res.overage_service is None
@@ -130,10 +130,10 @@ async def test_quota_engine_overage_after_quota_exhausted():
     engine = QuotaEngine()
     period = _current_period()
     qkey = QuotaEngine.quota_key("t1", period)
-    plan = PLAN_CATALOG[PlanTier.P1_HOBBYIST]
+    plan = PLAN_CATALOG[PlanTier.ALPHA]
     engine._memory_quota[qkey] = plan.monthly_quota  # simulate exhaustion
 
-    res = await engine.check_and_increment("t1", PlanTier.P1_HOBBYIST, "/v1/ingest/events")
+    res = await engine.check_and_increment("t1", PlanTier.ALPHA, "/v1/ingest/events")
     assert res.allowed is True  # engine never blocks — overage is metered
     assert res.included is False
     assert res.remaining == 0
@@ -173,7 +173,7 @@ async def test_quota_engine_keys_are_per_tenant_per_period():
 
 def test_feature_gate_public_path_allowed():
     gate = FeatureGate()
-    res = gate.check_access(PlanTier.P1_HOBBYIST, "/health")
+    res = gate.check_access(PlanTier.ALPHA, "/health")
     assert res.allowed is True
     assert res.service_name is None
 
@@ -181,7 +181,7 @@ def test_feature_gate_public_path_allowed():
 def test_feature_gate_allowed_service():
     gate = FeatureGate()
     # Omni-Capture is included for P1.
-    res = gate.check_access(PlanTier.P1_HOBBYIST, "/v1/ingest/events")
+    res = gate.check_access(PlanTier.ALPHA, "/v1/ingest/events")
     assert res.allowed is True
     assert res.service_name == "Omni-Capture"
     assert res.minimum_plan is None
@@ -190,15 +190,15 @@ def test_feature_gate_allowed_service():
 def test_feature_gate_blocked_service_reports_minimum_plan():
     gate = FeatureGate()
     # Unification (Identity) is not available on P1 — minimum is P2.
-    res = gate.check_access(PlanTier.P1_HOBBYIST, "/v1/identity/resolve")
+    res = gate.check_access(PlanTier.ALPHA, "/v1/identity/resolve")
     assert res.allowed is False
     assert res.service_name == "Unification"
-    assert res.minimum_plan is PlanTier.P2_PROFESSIONAL
+    assert res.minimum_plan is PlanTier.BETA
 
 
 def test_feature_gate_unrecognized_path_passes_through():
     gate = FeatureGate()
-    res = gate.check_access(PlanTier.P1_HOBBYIST, "/v1/does-not-exist")
+    res = gate.check_access(PlanTier.ALPHA, "/v1/does-not-exist")
     assert res.allowed is True
     assert res.service_name is None
 
@@ -228,19 +228,18 @@ class _FakeRedis:
 async def test_overage_calculator_prices_line_items_from_overage():
     calc = OverageCalculator(
         redis_client=_FakeRedis(overage={"Omni-Capture": 1000}, total=26000),
-        pricing_option="A",
     )
-    invoice = await calc.calculate("t1", PlanTier.P1_HOBBYIST, "2026-01")
+    invoice = await calc.calculate("t1", PlanTier.ALPHA, "2026-01")
     assert invoice.total_requests == 26000
     assert invoice.overage_request_count == 1000
     assert len(invoice.line_items) == 1
     item = invoice.line_items[0]
     assert item.service_name == "Omni-Capture"
     assert item.overage_requests == 1000
-    assert item.price_per_1k == Decimal("0.05")  # option A for Omni-Capture
-    assert item.line_total == Decimal("0.05")
-    assert invoice.total_overage == Decimal("0.05")
-    assert invoice.period_total == Decimal("99.05")  # P1 option A fee + overage
+    assert item.price_per_1k == Decimal("0.060")  # Alpha plan event_overage_per_1k
+    assert item.line_total == Decimal("0.06")
+    assert invoice.total_overage == Decimal("0.06")
+    assert invoice.period_total == Decimal("0.06")  # Alpha plan fee ($0) + overage
 
 
 @pytest.mark.asyncio
@@ -249,7 +248,7 @@ async def test_overage_calculator_skips_unknown_service():
         redis_client=_FakeRedis(overage={"Not-A-Service": 500}, total=100),
         pricing_option="B",
     )
-    invoice = await calc.calculate("t1", PlanTier.P1_HOBBYIST, "2026-01")
+    invoice = await calc.calculate("t1", PlanTier.ALPHA, "2026-01")
     assert invoice.overage_request_count == 500
     assert invoice.line_items == []
 

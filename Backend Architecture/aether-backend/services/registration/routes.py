@@ -117,7 +117,7 @@ async def _contained_registration(body: "TenantRegistration") -> dict:
 class TenantRegistration(BaseModel):
     name: str = Field(..., min_length=2, max_length=200)
     contact_email: str = Field(..., min_length=5, max_length=254)
-    plan_tier: str = Field(default="P1", pattern="^(P1|P2|P3|P4)$")
+    plan_tier: str = Field(default="alpha", pattern="^(alpha|beta|gamma|delta|epsilon|omicron|omega)$")
     settings: dict = Field(default_factory=dict)
 
 
@@ -257,7 +257,7 @@ async def recover_api_key(body: RecoverRequest, request: Request):
     # Find tenant by contact_email in billing accounts (most reliable source)
     tenant_id: Optional[str] = None
     tenant_name: str = ""
-    plan_tier_value: str = "P1"
+    plan_tier_value: str = "alpha"
     try:
         from repositories.repos import get_pool
         pool = await get_pool()
@@ -268,14 +268,14 @@ async def recover_api_key(body: RecoverRequest, request: Request):
             )
             if row:
                 tenant_id = row["tenant_id"]
-                plan_tier_value = row.get("plan_tier", "P1") or "P1"
+                plan_tier_value = row.get("plan_tier", "alpha") or "alpha"
         else:
             # In-memory fallback
             from shared.billing.stripe_repository import _mem_accounts
             for tid, acct in _mem_accounts.items():
                 if acct.get("contact_email") == body.contact_email:
                     tenant_id = tid
-                    plan_tier_value = acct.get("plan_tier", "P1") or "P1"
+                    plan_tier_value = acct.get("plan_tier", "alpha") or "alpha"
                     break
     except Exception as e:
         logger.debug(f"Recovery tenant lookup failed: {e}")
