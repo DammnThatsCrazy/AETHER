@@ -1,8 +1,8 @@
 """Aether Billing — Overage Calculator
 
-Converts per-service overage counts into dollar line items using the active
-pricing option (A/B/C). Reads counts from Redis hot-path first, falls back
-to the durable PostgreSQL snapshot.
+Converts per-service overage counts into dollar line items using the
+per-plan overage rates declared in PLAN_CATALOG. Reads counts from Redis
+hot-path first, falls back to the durable PostgreSQL snapshot.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from shared.billing.models import OverageInvoice, OverageLineItem
 from shared.logger.logger import get_logger
 from shared.plans.catalog import PLAN_CATALOG
 from shared.plans.service_catalog import find_service_by_name
-from shared.plans.models import ServiceDefinition
+from shared.plans.models import PlanDefinition, ServiceDefinition
 from shared.rate_limit.metrics import OVERAGE_COST
 
 logger = get_logger("aether.billing.overage")
@@ -34,6 +34,19 @@ def _price_per_1k(service: ServiceDefinition, option: str) -> Decimal:
     if option == "C":
         return service.pricing.option_c_per_1k
     raise ValueError(f"Unknown pricing option: {option!r}")
+
+
+# Agentic services charge per ACU; all others per event.
+_PILLAR_RATE_FIELD: dict[str, str] = {
+    "Agentic": "acu_overage_per_1k",
+}
+_DEFAULT_RATE_FIELD = "event_overage_per_1k"
+
+
+def _plan_rate_for_service(plan: PlanDefinition, service: ServiceDefinition) -> Decimal:
+    """Return the per-1k overage rate from *plan* that applies to *service*."""
+    field = _PILLAR_RATE_FIELD.get(service.pillar, _DEFAULT_RATE_FIELD)
+    return getattr(plan, field)
 
 
 class OverageCalculator:
@@ -112,8 +125,9 @@ class OverageCalculator:
         return 0
 
     def _build_line_items(
-        self, overage_by_service: dict[str, int],
+        self, overage_by_service: dict[str, int], plan_tier: PlanTier,
     ) -> list[OverageLineItem]:
+        plan = PLAN_CATALOG[plan_tier]
         items: list[OverageLineItem] = []
         for service_name, count in overage_by_service.items():
             if count <= 0:
@@ -124,7 +138,7 @@ class OverageCalculator:
                     f"Overage for unknown service {service_name!r} — skipping"
                 )
                 continue
-            price = _price_per_1k(service, self._pricing_option)
+            price = _plan_rate_for_service(plan, service)
             line_total = _quantize_dollars(
                 (Decimal(count) / Decimal(1000)) * price
             )
@@ -133,7 +147,7 @@ class OverageCalculator:
                 endpoint_pattern=service.endpoint_pattern,
                 overage_requests=count,
                 price_per_1k=price,
-                pricing_option=self._pricing_option,
+                pricing_option=plan.plan_id,
                 line_total=line_total,
             ))
         # Sort by largest line item first for nicer invoices.
@@ -153,7 +167,7 @@ class OverageCalculator:
             tenant_id, billing_period,
         )
 
-        line_items = self._build_line_items(overage_by_service)
+        line_items = self._build_line_items(overage_by_service, plan_tier)
         for li in line_items:
             try:
                 OVERAGE_COST.labels(

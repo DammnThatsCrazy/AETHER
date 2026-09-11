@@ -228,7 +228,6 @@ class _FakeRedis:
 async def test_overage_calculator_prices_line_items_from_overage():
     calc = OverageCalculator(
         redis_client=_FakeRedis(overage={"Omni-Capture": 1000}, total=26000),
-        pricing_option="A",
     )
     invoice = await calc.calculate("t1", PlanTier.ALPHA, "2026-01")
     assert invoice.total_requests == 26000
@@ -237,10 +236,10 @@ async def test_overage_calculator_prices_line_items_from_overage():
     item = invoice.line_items[0]
     assert item.service_name == "Omni-Capture"
     assert item.overage_requests == 1000
-    assert item.price_per_1k == Decimal("0.05")  # option A for Omni-Capture
-    assert item.line_total == Decimal("0.05")
-    assert invoice.total_overage == Decimal("0.05")
-    assert invoice.period_total == Decimal("0.05")  # Alpha plan fee ($0) + overage
+    assert item.price_per_1k == Decimal("0.060")  # Alpha plan event_overage_per_1k
+    assert item.line_total == Decimal("0.06")
+    assert invoice.total_overage == Decimal("0.06")
+    assert invoice.period_total == Decimal("0.06")  # Alpha plan fee ($0) + overage
 
 
 @pytest.mark.asyncio
