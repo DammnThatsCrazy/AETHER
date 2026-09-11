@@ -31,19 +31,19 @@ _TABLES_WITH_PLAN_TIER = [
 
 
 def upgrade() -> None:
+    # Widen plan_tier columns FIRST so the longer Greek names fit.
+    for table in _TABLES_WITH_PLAN_TIER:
+        op.execute(
+            f"ALTER TABLE {table} "
+            f"ALTER COLUMN plan_tier TYPE VARCHAR(16)"
+        )
+
     for old, new in _TIER_MAP.items():
         for table in _TABLES_WITH_PLAN_TIER:
             op.execute(
                 f"UPDATE {table} SET plan_tier = '{new}' "
                 f"WHERE plan_tier = '{old}'"
             )
-
-    # Widen plan_tier columns to accommodate longer Greek names.
-    for table in _TABLES_WITH_PLAN_TIER:
-        op.execute(
-            f"ALTER TABLE {table} "
-            f"ALTER COLUMN plan_tier TYPE VARCHAR(16)"
-        )
 
 
 def downgrade() -> None:
