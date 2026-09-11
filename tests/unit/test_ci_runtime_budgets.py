@@ -61,8 +61,8 @@ def test_runtime_budget_violation_is_reported() -> None:
     root_suite = next(suite for suite in load_suites(REGISTRY) if suite.id == "root")
     report = build_runtime_report(
         [
-            {"suite": "root", "runtime_seconds": 301, "selected_by": "impact-graph"},
-            {"suite": "root", "runtime_seconds": 302, "selected_by": "impact-graph"},
+                {"suite": "root", "runtime_seconds": 421, "selected_by": "impact-graph"},
+                {"suite": "root", "runtime_seconds": 422, "selected_by": "impact-graph"},
         ],
         [root_suite],
     )

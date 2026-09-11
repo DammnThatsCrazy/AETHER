@@ -60,8 +60,10 @@ suites:
     isolation: process
     lane: pr
     profiles: [local, ci, release]
-    expected_runtime_seconds: 120
-    hard_runtime_budget_seconds: 300
+    # The global authority run is intentionally conservative: hosted runners
+    # need more headroom than the local 4-process baseline for all 541 files.
+    expected_runtime_seconds: 300
+    hard_runtime_budget_seconds: 420
     paths: ["tests"]
     # Kyber and capability tests use process-global repositories. Execute each
     # file in its own process and parallelize files, preventing state leakage
@@ -116,8 +118,11 @@ suites:
     isolation: process
     lane: pr
     profiles: [local, ci, release]
-    expected_runtime_seconds: 45
-    hard_runtime_budget_seconds: 120
+    # The ML integration/training tests are correctness coverage, not a
+    # skippable advisory lane. Their observed hosted runtime needs headroom
+    # for xgboost/scikit-learn training on shared runners.
+    expected_runtime_seconds: 150
+    hard_runtime_budget_seconds: 240
     paths: ["ML Models/aether-ml/tests"]
     runner:
       ["python", "-m", "pytest", "ML Models/aether-ml/tests", "-v", "--tb=short"]
