@@ -26,8 +26,9 @@ The machine-readable owner map is `docs/source-of-truth/repo_consistency_ownersh
 Normal pull requests have one blocking authority: `.github/workflows/repo-consistency.yml`
 publishes the stable `verification / disposition` status. It runs the universal-fast
 lane, the checks selected by the Impact Graph, and the affected build selection from
-`scripts/verification_disposition.py`. The legacy `make ci-check` execution is retained
-only as a non-blocking shadow during the observation period; it is not part of the PR
+`scripts/verification_disposition.py`. The legacy `make ci-check` PR execution was
+retired after the representative observation window; the command remains available
+for local, trusted-main, nightly, and release evidence but is not part of the PR
 disposition or branch-protection decision.
 
 `.github/workflows/repo-health.yml` is not a second PR authority. Its PR docs and size

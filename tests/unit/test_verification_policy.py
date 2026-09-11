@@ -13,8 +13,12 @@ def test_policy_rejects_blocking_legacy_shadow(tmp_path: Path) -> None:
     source = Path("config/verification_policy.yaml").read_text(encoding="utf-8")
     bad = tmp_path / "policy.yaml"
     bad.write_text(
-        source.replace("blocking: false\n  exit_condition:", "blocking: true\n  exit_condition:"),
+        source.replace("blocking: false", "blocking: true", 1),
         encoding="utf-8",
     )
     errors = validate(bad)
     assert any("shadow.blocking" in error for error in errors)
+
+
+def test_policy_accepts_retired_shadow_after_observation_window() -> None:
+    assert validate() == []

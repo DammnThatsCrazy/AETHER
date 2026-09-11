@@ -19,13 +19,7 @@
 # .env.example at HEAD (cf6a8c30), the new default-OFF sdk-universal-ingestion
 # flag blocks were assessed and found to belong to a separate /v1/batch-plane
 # outside these docs' scope, prose was confirmed accurate unchanged, and the
-# docs were re-stamped to cf6a8c30.
-docs:
-  - path: docs/CICD.md
-    reason: >-
-      PR #621 changes the workflow directory for adaptive PR authority,
-      impact-filtered production-equivalent CI, and hosted runtime reporting.
-      The CI/CD page has been reviewed against the new authority model and its
-      existing prose remains accurate; its workflow-directory content hash
-      must be regenerated after the workflow set stabilizes.
-    owner: platform@aether
+# docs were re-stamped to cf6a8c30. The CI/CD page was also re-reviewed
+# against the adaptive authority, runtime reporting, and impact-aware workflow
+# changes in this PR; its prose is accurate and its source hash is refreshed.
+docs: []

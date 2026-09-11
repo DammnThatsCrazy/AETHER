@@ -47,8 +47,10 @@ def validate(path: Path = POLICY) -> list[str]:
         errors.append("normal_pr.allowed_escalations must contain only known lanes")
 
     shadow = _mapping(top.get("shadow"), "shadow", errors)
-    if shadow.get("enabled") is not True:
-        errors.append("shadow.enabled must be true during the observation period")
+    if shadow.get("enabled") not in (True, False):
+        errors.append("shadow.enabled must be a boolean")
+    if shadow.get("enabled") is False and shadow.get("retired") is not True:
+        errors.append("disabled shadow must declare retired: true")
     if shadow.get("command") != "make ci-check":
         errors.append("shadow.command must remain make ci-check")
     if shadow.get("blocking") is not False:

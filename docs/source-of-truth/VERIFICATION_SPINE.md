@@ -100,8 +100,8 @@ Aether uses a change-aware verification spine so ordinary work executes the
 smallest check set justified by its affected domains. Normal pull requests have
 one blocking authority, `verification / disposition`: the Impact Graph selects
 the affected checks and BuildSelection artifacts after the universal-fast lane.
-The legacy full `make ci-check` remains available for trusted-main, nightly,
-shadow, and release evidence, but it is not a second blocking PR authority.
+The legacy full `make ci-check` remains available for trusted-main, nightly, and
+release evidence, but it is not a second blocking PR authority or a PR job.
 Local or PR evidence proves only the selected lane; it never establishes
 staging or production readiness.
 
@@ -135,7 +135,8 @@ Pull-request automation separates the implementation stages of one authority:
 `classify-change` owns the deterministic impact decision, `build-artifact` owns
 the selected build outputs, `selected-verification` executes the routed checks,
 and `publish-evidence` publishes the single blocking disposition. The legacy
-`repo-consistency` job is a non-blocking shadow during the observation period.
+full-gate PR job was retired after representative hosted observation; the broad
+`make ci-check` command remains available outside ordinary PR mergeability.
 Publication runs even after an upstream failure so evidence is retained, but
 fails closed unless all blocking stages succeeded.
 
@@ -327,7 +328,7 @@ full release-spine blueprint. The following work remains explicitly open:
 | Strictly read-only doctor | `--check` runs generators in a temporary Git mirror | Extend mutation regression coverage as new generators are registered; keep fixes explicit. |
 | Per-test inventory | `config/test_inventory.yaml` and its validator establish ownership/dependency/quarantine metadata | Complete inventory coverage and collect measured runtime/flakiness/meaningful-failure history. |
 | Changed-test selection | Paths and directly changed contract nodes select registered suites; contract consumers are named in the Impact Graph | Extend the contract-consumer map as new providers and consumers are added; keep selection-completeness tests current. |
-| PR workflow authority | Enforced one-owner GitHub authority map validates workflow ownership and required command wiring; CI has explicit impact, affected-build, verification-disposition, shadow, and fail-closed publication stages | Update branch protection to the stable `verification / disposition` check after the shadow observation window; keep the legacy full gate out of the blocking PR path. |
+| PR workflow authority | Enforced one-owner GitHub authority map validates workflow ownership and required command wiring; CI has explicit impact, affected-build, verification-disposition, and fail-closed publication stages | Branch protection requires only the stable `verification / disposition` check; the legacy full gate is retired from the PR path. |
 | Immutable artifact | PR and hosted delivery paths share the adapter-backed candidate identity and verify exact files before staging/promotion | Add provenance/signing, durable registry upload, and external registry attestation. |
 | Profile compatibility | Repository gate validates required frontend identity/endpoint fields and rejects insecure/placeholders for deployable profiles | Generate the manifest from real builds and bind it to the candidate digest and staging preflight. |
 | Fallback governance | Audited profile-aware registry binds major fallback classes to implementation paths and blocks registered local fallbacks in staging/production | Resolve remaining candidate entrypoints with their owners, enforce selection at runtime across every deployable surface, and expose typed degradation in readiness. |
@@ -354,8 +355,8 @@ the full safety net exists:
 * Infrastructure changes require integration before merge. Regression remains
   broad and is intended for scheduled or explicitly requested execution.
 * `make ci-check` remains the repository's broad consistency/regression gate,
-  but it is no longer the normal PR disposition. During the observation period
-  it runs only as non-blocking shadow evidence on PRs; trusted-main and nightly
+  but it is no longer the normal PR disposition. The PR shadow was retired
+  after representative hosted observation; trusted-main, nightly, and release
   workflows retain broad coverage.
 * Release testing is not reduced: it adds profile preflight, exact-artifact
   deployment, migrations, activation, journeys, adversarial checks, and repair

@@ -29,7 +29,7 @@ source_hashes:
   "scripts/docs_extract/run_all.py": "sha256:404445eba05d12de88af585f79839b7496a1658411a110e606c46d5ed7e8c338"
   "scripts/docs_idempotency.py": "sha256:fe8628ef3a9b9d824645a5db062857754d2984b0f3f4d866b571df6232302f17"
   "scripts/docs_schema.json": "sha256:3193754ebab2af05e0985c72c3ab2cc6d7e7fc8118dff88235c93d5768f86226"
-  "scripts/sync_docs.py": "sha256:2857cb43b30d59445d97b3696407e146a6ff32f1d95344963068d20c3153f33f"
+  "scripts/sync_docs.py": "sha256:8103182e7a1b7d5683bd67b1d270bae627200eeefc84dc679220c5529b2103e5"
   "scripts/validate_contracts.py": "sha256:0ffda1a3b37627be929cd82b15c5e6e3c188faf8e190a98dc3727bba6b0d4816"
   "scripts/validate_docs.py": "sha256:a0831684326b8489fe7e2c65253bbb4dae1586d5ea4e8fcb367d59184e7b6031"
   "scripts/validate_frontmatter.py": "sha256:1b4ba24575565584f7fc5e01c01a245ee4702f5220c85aa701bc86af2bdaa0c4"
@@ -193,8 +193,8 @@ different authority scopes:
   restricted to pushes to `main`.
 - `.github/workflows/repo-consistency.yml` — the normal PR authority named
   `verification / disposition`; it runs the selected documentation check when
-  the Impact Graph requires it. Its full `make ci-check` execution is a
-  non-blocking observation shadow on PRs, while the same broad command remains
+  the Impact Graph requires it. Its full `make ci-check` execution is retired
+  from PRs after the observation window, while the same broad command remains
   available for trusted-main/nightly/release evidence.
 
 ## Routine: changing a documented system

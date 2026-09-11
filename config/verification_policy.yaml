@@ -9,9 +9,12 @@ normal_pr:
   allowed_escalations: [integration, regression, release]
 
 shadow:
-  enabled: true
+  # Retired after the representative hosted PR observation window completed
+  # with zero unexplained selection misses and an in-budget ordinary-PR p95.
+  enabled: false
   command: make ci-check
   blocking: false
+  retired: true
   exit_condition:
     representative_pr_window: true
     zero_unexplained_selection_misses: true

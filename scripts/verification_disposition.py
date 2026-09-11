@@ -55,6 +55,8 @@ class PlannedCheck:
     command: tuple[str, ...]
     timeout_seconds: int
     lane: str
+    blocking: bool = True
+    release_class: str = "pr_gate"
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,8 @@ class CommandResult:
     returncode: int | None
     duration_seconds: float
     output: str
+    blocking: bool = True
+    release_class: str = "pr_gate"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -75,6 +79,10 @@ class CommandResult:
             "status": self.status,
             "returncode": self.returncode,
             "duration_seconds": round(self.duration_seconds, 3),
+            "blocking": self.blocking,
+            "release_class": self.release_class,
+            # Keep GitHub artifacts useful without allowing an accidental
+            # command to produce an unbounded evidence file.
             "output_tail": self.output[-4000:],
         }
 
@@ -108,13 +116,36 @@ def _suite_budget(suite: TestSuite) -> int:
     return 3600
 
 
+_LANE_ORDER = {lane: rank for rank, lane in enumerate(("fast", "pr", "integration", "regression", "release"))}
+
+
+def _suite_skip_reason(suite: TestSuite, *, lane: str, profile: str) -> str | None:
+    """Return why a registry suite is out of scope for this execution lane."""
+    if suite.skip_policy == "documented_quarantine":
+        return "documented_quarantine"
+    if profile not in suite.profiles:
+        return f"profile_not_declared:{profile}"
+    environment = "release" if profile == "release" else "ci"
+    if environment not in suite.environments:
+        return f"environment_not_declared:{environment}"
+    if suite.lane == "release" and lane != "release":
+        return "release_lane_only"
+    if _LANE_ORDER[suite.lane] > _LANE_ORDER[lane]:
+        return f"suite_lane_exceeds_selected_lane:{suite.lane}"
+    return None
+
+
 def _planned_checks(
     router: VerificationRouterConfig,
     suites: dict[str, TestSuite],
     selected_ids: Iterable[str],
     lane: str,
-) -> list[PlannedCheck]:
+    *,
+    profile: str | None = None,
+) -> tuple[list[PlannedCheck], list[dict[str, str]]]:
     planned: list[PlannedCheck] = []
+    skipped: list[dict[str, str]] = []
+    profile = profile or ("release" if lane == "release" else "ci")
     for check_id in sorted(set(selected_ids)):
         definition: CheckDefinition | None = router.checks.get(check_id)
         if definition is not None:
@@ -130,15 +161,21 @@ def _planned_checks(
         suite = suites.get(check_id)
         if suite is None:
             raise DispositionError(f"selected check {check_id!r} has no command definition")
+        skip_reason = _suite_skip_reason(suite, lane=lane, profile=profile)
+        if skip_reason is not None:
+            skipped.append({"suite": suite.id, "reason": skip_reason, "lane": lane, "profile": profile})
+            continue
         planned.append(
             PlannedCheck(
                 check_id=check_id,
                 command=tuple(build_command(suite)),
                 timeout_seconds=_suite_budget(suite),
                 lane=lane,
+                blocking=suite.release_class != "advisory",
+                release_class=suite.release_class,
             )
         )
-    return planned
+    return planned, skipped
 
 
 def _run_one(check: PlannedCheck, *, execute: bool) -> CommandResult:
@@ -151,6 +188,8 @@ def _run_one(check: PlannedCheck, *, execute: bool) -> CommandResult:
             returncode=None,
             duration_seconds=0.0,
             output="",
+            blocking=check.blocking,
+            release_class=check.release_class,
         )
     started = time.monotonic()
     try:
@@ -173,6 +212,8 @@ def _run_one(check: PlannedCheck, *, execute: bool) -> CommandResult:
             returncode=proc.returncode,
             duration_seconds=time.monotonic() - started,
             output=output,
+            blocking=check.blocking,
+            release_class=check.release_class,
         )
     except subprocess.TimeoutExpired as exc:
         output = ((exc.stdout or "") if isinstance(exc.stdout, str) else "") + (
@@ -186,6 +227,8 @@ def _run_one(check: PlannedCheck, *, execute: bool) -> CommandResult:
             returncode=None,
             duration_seconds=time.monotonic() - started,
             output=output,
+            blocking=check.blocking,
+            release_class=check.release_class,
         )
     except OSError as exc:
         return CommandResult(
@@ -196,6 +239,8 @@ def _run_one(check: PlannedCheck, *, execute: bool) -> CommandResult:
             returncode=None,
             duration_seconds=time.monotonic() - started,
             output=str(exc),
+            blocking=check.blocking,
+            release_class=check.release_class,
         )
 
 
@@ -252,10 +297,19 @@ def build_disposition(
     universal_ids = set(router.lanes["fast"])
     selected_ids = set(index["router"]["selected_checks"])
     affected_ids = selected_ids - universal_ids
-    universal = _planned_checks(router, suites, universal_ids, "fast")
-    affected = _planned_checks(router, suites, affected_ids, index["router"]["selected_lane"])
+    universal, universal_skipped = _planned_checks(router, suites, universal_ids, "fast")
+    affected, affected_skipped = _planned_checks(
+        router, suites, affected_ids, index["router"]["selected_lane"]
+    )
     results = _run_parallel([*universal, *affected], execute=execute)
-    failed = [result for result in results if result.status not in {"PASS", "PLANNED"}]
+    failed = [
+        result for result in results
+        if result.blocking and result.status not in {"PASS", "PLANNED"}
+    ]
+    advisory_failures = [
+        result for result in results
+        if not result.blocking and result.status not in {"PASS", "PLANNED"}
+    ]
     selected_suites = sorted(set(index["router"]["selected_test_suites"]))
     disposition = "FAILED" if failed else ("PASS" if execute else "PLANNED")
     selected_by = index["router"]["selected_lane"]
@@ -290,12 +344,15 @@ def build_disposition(
         "suites": {
             "selected": len(selected_suites),
             "selected_ids": selected_suites,
+            "planned_ids": sorted(result.check_id for result in results if result.check_id in suites),
+            "skipped": [*universal_skipped, *affected_skipped],
             "registered": len(suites_list),
         },
         "build_selection": select_builds(
             changed_files, global_change=index["router"]["global_change"]
         ),
         "checks": [result.as_dict() for result in results],
+        "advisory_failures": [result.as_dict() for result in advisory_failures],
         "runs": runtime_runs,
         "unresolved_paths": index["unresolved_paths"],
         "timing": {

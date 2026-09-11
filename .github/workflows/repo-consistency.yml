@@ -73,6 +73,24 @@ jobs:
     needs: classify-change
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # Keep scoped workspace builds equivalent to the root production build
+      # command in package.json. These are intentionally invalid endpoints:
+      # they satisfy compile-time configuration without creating live access.
+      VITE_AETHER_ENV: production
+      VITE_KYBER_ENV: production
+      VITE_DEMO_ENV: production
+      VITE_API_BASE_URL: https://api.invalid
+      VITE_AETHER_ENDPOINT: https://api.invalid
+      VITE_WS_BASE_URL: wss://api.invalid
+      VITE_GRAPHQL_URL: https://api.invalid/v1/analytics/graphql
+      VITE_OIDC_AUTHORITY: https://identity.invalid
+      VITE_OIDC_CLIENT_ID: workspace-build
+      VITE_OIDC_REDIRECT_URI: https://app.invalid/callback
+      VITE_DEMO_TENANT_ID: certification-demo
+      VITE_DEMO_SEED_NAMESPACE: certification
+      VITE_AETHER_URL: https://app.invalid
+      VITE_KYBER_URL: https://operator.invalid
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -96,31 +114,18 @@ jobs:
 
           index = json.loads(Path("release-evidence/impact-graph.json").read_text())
           selection = index["build_selection"]
-          application_paths = {
-              "aether": "frontend/aether",
-              "kyber": "frontend/kyber",
-              "docs": "frontend/docs",
-              "demo": "frontend/demo",
-              "olympus-marketing": "frontend/olympus-marketing",
-              "aether-marketing": "frontend/aether-marketing",
-          }
-          workspaces = {
-              "packages/" + package for package in selection["packages"]
-          }
-          workspaces.update(
-              application_paths[application]
-              for application in selection["applications"]
-              if application in application_paths
-          )
-          selected = sorted(
-              workspace for workspace in workspaces
-              if (Path(workspace) / "package.json").is_file()
-          )
+          selected = selection.get("workspaces")
+          if not isinstance(selected, list) or not all(isinstance(path, str) for path in selected):
+              raise SystemExit("Impact Graph did not emit an ordered workspace build selection")
+          if any(not (Path(workspace) / "package.json").is_file() for workspace in selected):
+              raise SystemExit("Impact Graph selected a workspace without package.json")
           selection = {
               "schema_version": 1,
               "authority": "impact",
               "changed_files": index["changed_files"],
               "workspaces": selected,
+              "packages": selection["packages"],
+              "applications": selection["applications"],
               "backend_image": selection["backend_image"],
               "sdk": selection["sdk"],
           }
@@ -131,7 +136,7 @@ jobs:
               "\n".join(selected) + ("\n" if selected else "")
           )
           PY
-      - name: Build only selected workspaces
+      - name: Build only selected workspaces in dependency order
         run: |
           set -euo pipefail
           while IFS= read -r workspace; do
@@ -228,6 +233,10 @@ jobs:
             --output release-evidence/release-candidate.json
       - name: Materialize verified build outputs for consumers
         run: tar --extract --gzip --file release-evidence/repository-build.tar.gz
+      - name: Frontend data-truth source guardrail
+        run: npm run validate:frontend-data-truth
+      - name: Frontend brand migration guardrail
+        run: npm run validate:frontend-branding
       - name: Execute the single adaptive verification disposition
         id: disposition
         env:
@@ -253,50 +262,6 @@ jobs:
             release-evidence/pr-disposition.json
             release-evidence/ci-runtime-runs.json
             release-evidence/selected-verification.json
-          if-no-files-found: error
-
-  repo-consistency:
-    name: Legacy full gate shadow (non-blocking)
-    if: github.event_name == 'pull_request'
-    continue-on-error: true
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-      - run: make bootstrap
-      - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-      - run: npm ci --ignore-scripts
-      - name: Frontend data-truth source guardrail
-        run: npm run validate:frontend-data-truth
-      - name: Frontend brand migration guardrail
-        run: npm run validate:frontend-branding
-      - name: Run legacy full repository gate for shadow comparison
-        id: legacy-gate
-        run: make ci-check
-      - name: Record legacy shadow evidence
-        if: always()
-        env:
-          STAGE_RESULT: ${{ steps.legacy-gate.outcome }}
-        run: |
-          mkdir -p release-evidence
-          printf '{"schema_version":1,"stage":"legacy-full-gate-shadow","authority":"regression-shadow","blocking":false,"status":"%s","commit_sha":"%s"}\n' \
-            "$(test "$STAGE_RESULT" = success && echo PASS || echo FAILED)" "$GITHUB_SHA" > release-evidence/canonical-consistency.json
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: canonical-consistency-evidence
-          path: release-evidence/canonical-consistency.json
           if-no-files-found: error
 
   publish-evidence:

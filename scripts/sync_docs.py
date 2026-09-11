@@ -234,7 +234,7 @@ def write_automation() -> None:
         "- `make frontend-data-truth-bundles` — create explicit production builds "
         "and scan emitted bundles for prohibited synthetic literals.",
         "- `make verification-disposition EXECUTE=1` — the single blocking normal-PR authority; it runs universal-fast plus the Impact Graph's affected checks and emits one disposition artifact.",
-        "- `make ci-check` — broad repository consistency/regression validation used for trusted-main, nightly, shadow, and release evidence; it is not a second blocking normal-PR status.",
+        "- `make ci-check` — broad repository consistency/regression validation used for trusted-main, nightly, and release evidence; it is not a second blocking normal-PR status.",
         "- `make release-gate` — strict production status + ops readiness against a release candidate (release claims only).",
         "",
         "## Generated vs authored docs",
@@ -268,8 +268,9 @@ def write_automation() -> None:
         "## Workflow enforcement",
         "",
         "- `.github/workflows/repo-consistency.yml` owns the blocking `verification / "
-        "disposition` status for normal pull requests; any legacy full gate is a "
-        "non-blocking shadow during the observation period.",
+        "disposition` status for normal pull requests; the retired legacy full "
+        "gate remains available through local, trusted-main, nightly, and release "
+        "commands but is not a PR job.",
         "- `.github/workflows/repo-health.yml` keeps PR docs/size signals advisory "
         "and runs broad regression on trusted `main`, nightly, or explicit dispatch; "
         "PR-head jobs have no write permissions.",

@@ -22,7 +22,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:bab870f736d3e89ce35259ed1581fb4a8edfa2c6eb81fbf1fdbefe610f5caf48"
+  ".github/workflows/": "sha256:471ba6ab67c1a5f2b4b10e637045f31d9dac9c02900ddd357b3d1acbfd2adad5"
   "AWS Deployment/aether-aws/terraform/modules/aurora/main.tf": "sha256:16c4beb8ccab1af164ff62f8aa2d515a5efc3f093b7878411f40aa14ce39e094"
   "AWS Deployment/aether-aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "AWS Deployment/aether-aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
@@ -45,8 +45,10 @@ For an ordinary pull request, `.github/workflows/repo-consistency.yml` owns one
 blocking status: `verification / disposition`. The workflow classifies the
 changed paths with the Impact Graph, runs the universal-fast checks, selects
 the affected test suites and build workspaces, and publishes one machine-readable
-disposition. The old full `make ci-check` job is retained only as a non-blocking
-shadow while selection completeness is observed; it does not determine mergeability.
+disposition. The old full `make ci-check` PR job has been retired after the
+representative hosted observation window recorded zero unexplained selection
+misses and an in-budget ordinary-PR p95; it remains available for local,
+trusted-main, nightly, and release evidence but does not determine mergeability.
 
 `repo-health.yml` keeps documentation and PR-size signals advisory on pull requests
 and runs a bounded contract/impact/durable-integration authority after merges to
@@ -335,9 +337,9 @@ Two things get promoted, on two separate paths that must never be conflated: the
 | `staging-ttl-guard.yml` | hourly schedule; dispatch | Enforces the staging awake lease. Runs no Terraform at all; it can scale ECS to zero and lower the ECS autoscaling floor, which can only reduce running compute. **Not armed without `AWS_STAGING_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or enforce the TTL, reports it is a NO-OP and exits green — staging may still be running and will NOT be guarded; that is NOT a claim that staging is asleep. The moment the role is wired it enforces exactly as before, fail-closed in both directions. | no |
 | `ephemeral-ttl-guard.yml` | hourly schedule; dispatch | Fail-closed TTL guard for the demo/preview ephemeral profiles. Reads the SSM lease at `/aether/{profile}/{env}/lifecycle/expires-at` (written by `ephemeral_env.py provision`) and ends the run red when the lease is missing or expired; enforcement is the operator-run `ephemeral_env.py teardown` (scale-to-zero + floor-zeroing + lease removal). Runs no Terraform. **Not armed without `AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or trip the TTL, reports it is a NO-OP and exits green — demo/preview environments may still be running and will NOT be guarded; that is NOT a claim that demo/preview are asleep. The moment the role is wired it enforces exactly as before, fail-closed. | no |
 
-| `repo-consistency.yml` | PR / push to `main` | Classifies changed paths with the verification router, uploads the JSON selection as PR evidence, then runs `make ci-check`, including documentation consistency, contract checks, and the targeted frontend-brand guardrail. The selection is advisory until the remaining verification-spine dependency and evidence work is complete; it does not weaken the canonical gate. | no |
+| `repo-consistency.yml` | PR / push to `main` | Classifies changed paths with the verification router, builds the Impact Graph-selected workspaces in dependency order, executes the universal and affected verification checks, and publishes the single blocking `verification / disposition` evidence. The broad `make ci-check` job is intentionally absent from the PR path after the completed observation window. | no |
 | `production-status.yml` | 12-hourly schedule; dispatch | `scripts/production_status.py --strict` + readiness scorecard artifact. | no |
-| `production-equivalent-ci.yml` | PR / push / dispatch | Boots Postgres + Redis service containers, applies the full Alembic graph to a **fresh** database (`alembic upgrade head` → single head), and runs real-pool ingestion tests against the real stack: a round-trip smoke test (M1) plus idempotency/concurrency tests (M2) that prove concurrent `ingest_many` of the same key is exactly-once via the real UNIQUE index + `ON CONFLICT`, plus measurement/attribution repo tests (M4) exercising `conversion_repo`/`spend_repo`/`attribution_run_repo` real ON CONFLICT, tenant-scope, FX-provenance round-trip, and the single-active-run invariant — properties the in-memory (`AETHER_ENV=local`) dict fallback gets "right" for free without proving (that path never runs Alembic). **Non-blocking** (not a required check); real-stack tests skip without `DATABASE_URL`. | no |
+| `production-equivalent-ci.yml` | PR / push / schedule / dispatch | Runs a cheap Impact Graph classifier for every event. On PRs it provisions the Postgres + Redis real stack only for persistence-impacting backend/infrastructure changes, production-equivalent tests, or unresolved paths; pushes to `main`, nightly runs, and explicit dispatch retain full real-stack coverage. The lane remains non-blocking and is not a required merge check. | no |
 
 The reviewed-promotion credential boundary is intentional: a `plan` action
 requires only the plan role and read-only planning inputs. The apply role is
@@ -504,8 +506,8 @@ version in the manifest matches the git tag before publishing.
 1. Branch off `main`: `git checkout -b hotfix/description main`
 2. Apply the fix and increment the patch version.
 3. Open a PR targeting `main`. The adaptive `verification / disposition` gate
-   runs universal-fast checks plus the affected suites/builds; the full gate is
-   retained only as a non-blocking shadow.
+   runs universal-fast checks plus the affected suites/builds; the broad full
+   gate remains a local/trusted-main/nightly/release command, not a PR job.
 4. On merge, the bounded main-integration workflow runs; the CD pipeline
    executes the full canary rollout when its deployment conditions are met.
 5. Immediately after merge to `main`, open a second PR to merge the hotfix into
@@ -530,9 +532,9 @@ push to `main`. It enforces:
 - npm lockfile integrity + TypeScript build/test for selected workspaces
 - Python tests for selected suites
 
-The legacy full `make ci-check` job is retained as a non-blocking PR shadow for
-comparison during the cutover; it is the canonical local and release-candidate
-validation command, but it is not a second PR merge authority. This gate is
+The legacy full `make ci-check` PR job was retired after the representative
+hosted observation window. It remains the canonical local and release-candidate
+validation command, but it is not a second PR merge authority or a PR job. This gate is
 separate from `repo-health.yml` and uses the single orchestrator script
 (`scripts/repo_doctor.py`) so the same command works locally
 (`make repo-doctor`) and in release validation (`make ci-check`).
