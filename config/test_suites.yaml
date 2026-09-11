@@ -65,8 +65,10 @@ suites:
     paths: ["tests"]
     # Kyber and capability tests use process-global repositories. Execute each
     # file in its own process and parallelize files, preventing state leakage
-    # without serializing the entire root estate.
-    runner: ["python", "scripts/run_pytest_files.py", "tests", "--workers", "16"]
+    # without serializing the entire root estate. Keep the worker count below
+    # the hosted runner's CPU ceiling; the previous 16-process fan-out could
+    # make healthy isolated files miss the suite budget.
+    runner: ["python", "scripts/run_pytest_files.py", "tests", "--workers", "4"]
     requires:
       python_packages: []
       services: []
