@@ -270,8 +270,21 @@ jobs:
           name: sdk-js-release-evidence
 """
 
+_FAKE_RELEASE_ONLY_WORKFLOW = """name: Fake Release Validation
+on:
+  workflow_dispatch:
+jobs:
+  sdk-js:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdk-js-release-evidence
+"""
 
-def _fixture_root(tmp_path: Path, merge_flag: str, workflow_text: str) -> Path:
+
+def _fixture_root(tmp_path: Path, merge_flag: str, workflow_text: str,
+                  *, applicability: list[str] | None = None) -> Path:
     catalog = {
         "version": 1,
         "allowed_terminal_conclusions": ["success"],
@@ -284,7 +297,7 @@ def _fixture_root(tmp_path: Path, merge_flag: str, workflow_text: str) -> Path:
             "id": "sdk-js",
             "workflow": ".github/workflows/fake.yml",
             "job": "sdk-js",
-            "applicability": ["shared_contracts"],
+            "applicability": applicability or ["shared_contracts"],
             merge_flag: True,
             "blocks_sdk_release": True,
             "blocks_founding_tenant_release": True,
@@ -319,6 +332,16 @@ def test_catalog_merge_block_scope_matches_workflow_path_filtering():
         workflow = yaml.safe_load((ROOT / row["workflow"]).read_text())
         triggers = workflow.get("on") or workflow.get(True) or {}
         pr_trigger = triggers.get("pull_request")
+        if "pull_request" not in triggers:
+            assert row.get("blocks_pr_merge") is not True, (
+                f"{row['id']}: release-only workflow cannot claim a universal "
+                "PR merge block"
+            )
+            assert row.get("blocks_pr_merge_when_paths_touched") is not True, (
+                f"{row['id']}: release-only workflow cannot claim a path-scoped "
+                "PR merge block"
+            )
+            continue
         pr_paths = pr_trigger.get("paths") if isinstance(pr_trigger, dict) else None
         if pr_paths:
             assert row.get("blocks_pr_merge") is not True, (
@@ -348,6 +371,13 @@ def test_validator_rejects_universal_merge_block_on_path_filtered_workflow(tmp_p
 
 def test_validator_accepts_path_scoped_block_on_path_filtered_workflow(tmp_path):
     root = _fixture_root(tmp_path, "blocks_pr_merge_when_paths_touched", _FAKE_WORKFLOW)
+    assert check_required_checks.validate(root) == []
+
+
+def test_validator_accepts_release_only_workflow_without_pr_trigger(tmp_path):
+    root = _fixture_root(tmp_path, "blocks_founding_tenant_release",
+                         _FAKE_RELEASE_ONLY_WORKFLOW,
+                         applicability=["release_gate"])
     assert check_required_checks.validate(root) == []
 
 

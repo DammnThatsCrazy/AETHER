@@ -478,10 +478,11 @@ component usage are documented in [`docs/brand-system/`](brand-system/README.md)
 
 These thresholds live in `cicd/aether-cicd/quality_gates/`, which is part of the
 reference model — they are not enforced by any workflow in
-`.github/workflows/`. The gates that actually block a merge are
-`repo-consistency.yml` (`make ci-check`) and the required-check catalog in
-`config/required_release_checks.yaml`, validated by
-`make validate-required-release-checks`.
+`.github/workflows/`. The normal pull-request gate that actually blocks a merge
+is the `verification / disposition` status published by
+`repo-consistency.yml`; the required-check catalog in
+`config/required_release_checks.yaml` governs path-scoped SDK checks and
+release-only evidence, and is validated by `make validate-required-release-checks`.
 
 ## SDK release
 
@@ -502,8 +503,11 @@ version in the manifest matches the git tag before publishing.
 
 1. Branch off `main`: `git checkout -b hotfix/description main`
 2. Apply the fix and increment the patch version.
-3. Open a PR targeting `main`. CI runs the full 8-stage suite.
-4. On merge, the CD pipeline executes the full canary rollout.
+3. Open a PR targeting `main`. The adaptive `verification / disposition` gate
+   runs universal-fast checks plus the affected suites/builds; the full gate is
+   retained only as a non-blocking shadow.
+4. On merge, the bounded main-integration workflow runs; the CD pipeline
+   executes the full canary rollout when its deployment conditions are met.
 5. Immediately after merge to `main`, open a second PR to merge the hotfix into
    `develop` to keep branches in sync.
 
@@ -511,7 +515,8 @@ version in the manifest matches the git tag before publishing.
 
 In addition to the eight deploy-oriented stages above, a dedicated
 **Repo Consistency** workflow (`.github/workflows/repo-consistency.yml`)
-runs `make ci-check` on every PR and push to `main`. It enforces:
+publishes the blocking `verification / disposition` status on every PR and
+push to `main`. It enforces:
 
 - version alignment (`pyproject.toml` is canonical)
 - generated docs freshness (`docs/_generated/` diff check)
@@ -520,12 +525,17 @@ runs `make ci-check` on every PR and push to `main`. It enforces:
 - source-linked docs drift (`--strict` mode)
 - contract / event / consent alignment
 - SDK release alignment
-- npm lockfile integrity + TypeScript build/test
-- Python tests
+- Impact Graph selection, affected build artifacts, and Python/Node checks
+  justified by the changed paths
+- npm lockfile integrity + TypeScript build/test for selected workspaces
+- Python tests for selected suites
 
-This gate is separate from `repo-health.yml` and uses the single
-orchestrator script (`scripts/repo_doctor.py`) so the same command
-works locally (`make repo-doctor`) and in CI (`make ci-check`).
+The legacy full `make ci-check` job is retained as a non-blocking PR shadow for
+comparison during the cutover; it is the canonical local and release-candidate
+validation command, but it is not a second PR merge authority. This gate is
+separate from `repo-health.yml` and uses the single orchestrator script
+(`scripts/repo_doctor.py`) so the same command works locally
+(`make repo-doctor`) and in release validation (`make ci-check`).
 
 ## Production status routine
 

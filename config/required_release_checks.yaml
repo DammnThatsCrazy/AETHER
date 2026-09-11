@@ -48,7 +48,6 @@ checks:
     workflow: .github/workflows/hardening-release-gate.yml
     job: canonical-gates
     applicability: [release_gate, ci_check]
-    blocks_pr_merge: true
     blocks_founding_tenant_release: true
     runner_class: ubuntu
     evidence_artifact: hardening-release-gate-evidence
