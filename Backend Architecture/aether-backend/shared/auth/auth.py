@@ -451,7 +451,7 @@ async def _update_last_used_at(key_hash: str) -> None:
 
 def _build_context_from_key_data(key_data: dict) -> TenantContext:
     api_key_tier = APIKeyTier(key_data.get("tier", "free"))
-    # plan_tier is preferred (P1-P4). Fall back to legacy tier mapping.
+    # plan_tier is preferred (alpha-omega). Fall back to legacy tier mapping.
     plan_raw = key_data.get("plan_tier")
     if plan_raw:
         try:

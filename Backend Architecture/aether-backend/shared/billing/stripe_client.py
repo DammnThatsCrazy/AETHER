@@ -43,6 +43,7 @@ def capability_status() -> dict[str, Any]:
     missing: list[str] = []
     if not STRIPE_SDK_AVAILABLE:
         missing.append("stripe_sdk")
+    # Self-serve tier prices are required; contract tier prices are optional.
     for field, value in (
         ("secret_key", cfg.secret_key),
         ("webhook_secret", cfg.webhook_secret),
@@ -50,9 +51,6 @@ def capability_status() -> dict[str, Any]:
         ("price_beta", cfg.price_beta),
         ("price_gamma", cfg.price_gamma),
         ("price_delta", cfg.price_delta),
-        ("price_epsilon", cfg.price_epsilon),
-        ("price_omicron", cfg.price_omicron),
-        ("price_omega", cfg.price_omega),
         ("checkout_success_url", cfg.checkout_success_url),
         ("checkout_cancel_url", cfg.checkout_cancel_url),
         ("portal_return_url", cfg.portal_return_url),

@@ -57,10 +57,10 @@ function CodeBlock({ code, onCopy }: { code: string; onCopy: () => void }) {
 }
 
 const PLAN_OPTIONS = [
-  { value: "P1", label: "Hobbyist — $99/mo" },
-  { value: "P2", label: "Professional — $499/mo" },
-  { value: "P3", label: "Growth Intelligence — $1,499/mo" },
-  { value: "P4", label: "Protocol Master — $3,999/mo" },
+  { value: "alpha", label: "Alpha — Free" },
+  { value: "beta", label: "Beta — $299/mo" },
+  { value: "gamma", label: "Gamma — $599/mo" },
+  { value: "delta", label: "Delta — $1,999/mo" },
 ];
 
 export function SignupPage() {
@@ -74,7 +74,7 @@ export function SignupPage() {
   const [name, setName] = useState(searchParams.get("name") ?? "");
   const [email, setEmail] = useState(searchParams.get("email") ?? "");
   const [password, setPassword] = useState("");
-  const [planTier, setPlanTier] = useState("P1");
+  const [planTier, setPlanTier] = useState("alpha");
   const [registerError, setRegisterError] = useState<string | null>(null);
   // Step 2 OTP
   const [otp, setOtp] = useState("");

@@ -357,7 +357,7 @@ async def _resolve_contact_email(
 
 
 class CheckoutSessionCreate(BaseModel):
-    plan_tier: str = Field(pattern="^P[1-4]$")
+    plan_tier: str = Field(pattern="^(alpha|beta|gamma|delta)$")
     contact_email: Optional[str] = None
 
 

@@ -15,6 +15,7 @@ from fastapi import APIRouter, Request
 
 from shared.common.common import APIResponse, NotFoundError
 from shared.logger.logger import get_logger
+from services.security.anti_distillation import SCORE_BINS_BY_PLAN
 
 from services.provider_catalog.catalog import (
     DUNE_ACCESS_MODES,
@@ -603,10 +604,7 @@ async def get_anti_distillation_status(request: Request):
             "address_sweep_detection": True,
             "systematic_enumeration_detection": True,
             "score_bins_by_plan": {
-                "ALPHA": 0.1,
-                "BETA": 0.05,
-                "GAMMA": 0.01,
-                "DELTA": 0.001,
+                tier: step for tier, step in SCORE_BINS_BY_PLAN.items()
             },
         },
         "active_alerts": [],

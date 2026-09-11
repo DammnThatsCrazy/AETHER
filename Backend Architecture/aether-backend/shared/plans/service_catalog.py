@@ -388,8 +388,15 @@ ENDPOINT_MATCHERS: list[tuple[re.Pattern, ServiceDefinition]] = [
 ]
 
 
+# Contract tiers inherit Delta's access for every service.
+for _svc in SERVICE_CATALOG:
+    _delta_access = _svc.plan_access.get(_P4)
+    if _delta_access is not None:
+        for _contract_tier in (_P5, _P6, _P7):
+            _svc.plan_access.setdefault(_contract_tier, _delta_access)
+
 # Pre-compute the minimum (lowest) PlanTier that grants access to each service.
-_PLAN_ORDER = (_P1, _P2, _P3, _P4)
+_PLAN_ORDER = (_P1, _P2, _P3, _P4, _P5, _P6, _P7)
 MINIMUM_PLAN_FOR_SERVICE: dict[str, PlanTier] = {}
 for _svc in SERVICE_CATALOG:
     for _tier in _PLAN_ORDER:

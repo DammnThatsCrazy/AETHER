@@ -50,9 +50,5 @@ def test_honeypot_wallet_detection():
         honeypot_wallets=["0xDEADBEEF0000000000000000000000000000DEAD"]
     )
     svc = AntiDistillationService(config)
-    result = svc.is_honeypot_wallet("0xDEADBEEF0000000000000000000000000000DEAD")
-    assert result.is_honeypot is True
-    assert result.action == "flag"
-
-    result = svc.is_honeypot_wallet("0x1234567890123456789012345678901234567890")
-    assert result.is_honeypot is False
+    assert svc.is_honeypot_wallet("0xDEADBEEF0000000000000000000000000000DEAD") is True
+    assert svc.is_honeypot_wallet("0x1234567890123456789012345678901234567890") is False

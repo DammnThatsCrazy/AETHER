@@ -33,7 +33,7 @@ reviewed_source_commits:
   - commit: "0efa07cb"
     reason: "Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics."
 source_hashes:
-  "Backend Architecture/aether-backend/services/": "sha256:a3018b6a771e8dd3a34455ab6e1c47540310b3fd46b4961d2cd12c35672780a4"
+  "Backend Architecture/aether-backend/services/": "sha256:107a62416e9da8d06ca8ff2574ebbf39314ca0e62a4329bd0badb3b7a5f2ac56"
 ---
 # Aether Backend API v8.12.0 — Endpoint Specification
 
@@ -52,17 +52,20 @@ Public paths (`/`, `/health`, `/v1/health`, `/v1/metrics`, `/docs`,
 
 ## Plans, Rate Limits & Quotas
 
-Aether uses four self-serve plans (P1–P4). The legacy
-`FREE`/`PRO`/`ENTERPRISE` tiers are retained only for backward-compatible
-key validation and are mapped to plans automatically (FREE→P1, PRO→P2,
-ENTERPRISE→P4).
+Aether uses seven plan tiers: four self-serve (Alpha–Delta) and three
+contract (Epsilon, Omicron, Omega). The legacy `FREE`/`PRO`/`ENTERPRISE`
+tiers are retained only for backward-compatible key validation and are
+mapped to plans automatically (FREE→Alpha, PRO→Beta, ENTERPRISE→Delta).
 
-| Plan | Display Name        | Burst RPM | Monthly Quota | Member Cap | Services |
-|------|---------------------|-----------|---------------|------------|----------|
-| P1   | Hobbyist            | 100       | 25,000        | 1          | 10       |
-| P2   | Professional        | 500       | 100,000       | 3          | 19       |
-| P3   | Growth Intelligence | 1,200     | 250,000       | 5          | 29       |
-| P4   | Protocol Master     | 3,000     | 500,000       | 10         | 34       |
+| Plan     | Display Name | Burst RPM  | Monthly Quota  | Member Cap | Services |
+|----------|-------------|------------|----------------|------------|----------|
+| Alpha    | Alpha       | 100        | 3,000,000      | 2          | 11       |
+| Beta     | Beta        | 500        | 9,000,000      | 3          | 22       |
+| Gamma    | Gamma       | 2,000      | 18,000,000     | 5          | 33       |
+| Delta    | Delta       | 10,000     | 50,000,000     | 10         | 38       |
+| Epsilon  | Epsilon     | Unlimited  | Custom         | Custom     | 41       |
+| Omicron  | Omicron     | Unlimited  | Custom         | Custom     | 41       |
+| Omega    | Omega       | Unlimited  | Custom         | Custom     | 41       |
 
 **Burst RPM** is enforced per-tenant on a sliding minute window. All API
 keys belonging to one tenant share a single RPM pool.
@@ -126,9 +129,9 @@ Example 403:
 ```json
 {
   "error": "service_not_available",
-  "message": "The Autonomy service requires Growth Intelligence (P3) or higher.",
-  "current_plan": "P1: Hobbyist",
-  "required_plan": "P3: Growth Intelligence",
+  "message": "The Autonomy service requires Gamma or higher.",
+  "current_plan": "alpha",
+  "required_plan": "gamma",
   "upgrade_url": "/v1/admin/billing/upgrade",
   "service": "Autonomy",
   "endpoint": "/v1/agent/tasks"

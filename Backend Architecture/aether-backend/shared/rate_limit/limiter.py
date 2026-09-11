@@ -106,7 +106,9 @@ class BurstRateLimiter:
 
     @staticmethod
     def _limit_for(plan_tier: PlanTier) -> int:
-        return PLAN_CATALOG[plan_tier].burst_rpm
+        limit = PLAN_CATALOG[plan_tier].burst_rpm
+        # Contract tiers (burst_rpm=0) are unlimited — return a high sentinel.
+        return limit if limit > 0 else 999_999_999
 
     @staticmethod
     def _coerce_plan(tier: PlanTier | APIKeyTier | None) -> PlanTier:
