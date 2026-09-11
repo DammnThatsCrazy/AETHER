@@ -2,13 +2,13 @@
 """Run the single blocking PR verification authority.
 
 The impact graph and the test-suite registry are the inputs to this command;
-the command does not maintain a second selection list.  It always executes
-the universal-fast lane, then runs the checks and suites selected for the
-affected lane in parallel.  The resulting JSON is the one artifact consumed
-by the PR disposition workflow.
+the command does not maintain a second selection list. It always executes the
+universal-fast lane, then runs the checks and suites selected for the affected
+lane in parallel. The resulting JSON is the one artifact consumed by the PR
+disposition workflow.
 
 Execution is opt-in so local callers can inspect a deterministic plan without
-running tests.  Commands are executed from the repository root and Python
+running tests. Commands are executed from the repository root and Python
 commands are resolved to this process' interpreter, which keeps local and CI
 selection behavior identical.
 """
@@ -75,8 +75,6 @@ class CommandResult:
             "status": self.status,
             "returncode": self.returncode,
             "duration_seconds": round(self.duration_seconds, 3),
-            # Keep GitHub artifacts useful without allowing an accidental
-            # command to produce an unbounded evidence file.
             "output_tail": self.output[-4000:],
         }
 
@@ -104,9 +102,6 @@ def _resolve_command(command: Iterable[str]) -> list[str]:
 
 
 def _suite_budget(suite: TestSuite) -> int:
-    # Runtime-aware registry versions expose hard_runtime_budget_seconds.  The
-    # fallback keeps the runner compatible with the pre-cutover registry while
-    # the registry migration is being reviewed.
     budget = getattr(suite, "hard_runtime_budget_seconds", None)
     if isinstance(budget, (int, float)) and budget > 0:
         return int(budget)
@@ -207,8 +202,6 @@ def _run_one(check: PlannedCheck, *, execute: bool) -> CommandResult:
 def _run_parallel(checks: Sequence[PlannedCheck], *, execute: bool) -> list[CommandResult]:
     if not checks:
         return []
-    # Keep the runner bounded: a large cross-cutting change should parallelize
-    # the critical path, not exhaust the GitHub runner or local machine.
     workers = min(8, len(checks))
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
         futures = [pool.submit(_run_one, check, execute=execute) for check in checks]
@@ -235,8 +228,8 @@ def build_disposition(
     requested_lane: str | None = None,
     execute: bool = False,
 ) -> dict[str, Any]:
-    router = load_router_registry(ROOT / "config/verification_router.yaml")
-    suites_list = load_suites(ROOT / "config/test_suites.yaml")
+    router = load_router_registry(ROOT / "config" / "verification_router.yaml")
+    suites_list = load_suites(ROOT / "config" / "test_suites.yaml")
     suites = {suite.id: suite for suite in suites_list}
     graph = load_impact_graph(router=router, suites=suites_list)
     index = build_impact_index(changed_files, graph, requested_lane=requested_lane, router=router)
@@ -248,7 +241,11 @@ def build_disposition(
             "status": "BLOCKED",
             "reason": "unresolved executable or delivery paths",
             "sha": os.environ.get("GITHUB_SHA"),
-            "impact": {"risk": _risk(index), "components": index["impacted_components"], "contracts": index["impacted_contracts"]},
+            "impact": {
+                "risk": _risk(index),
+                "components": index["impacted_components"],
+                "contracts": index["impacted_contracts"],
+            },
             "unresolved_paths": index["unresolved_paths"],
         }
 
@@ -307,11 +304,33 @@ def build_disposition(
         },
         "disposition": disposition,
     }
-    # Stable event identity makes local artifacts comparable without implying
-    # that telemetry has been exported to a hosted service.
     identity = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     payload["event_id"] = "verification_" + hashlib.sha256(identity.encode()).hexdigest()[:24]
     return payload
+
+
+def _hosted_runtime_evidence(result: dict[str, Any], elapsed_seconds: float) -> dict[str, Any]:
+    """Produce one durable record per hosted verification execution.
+
+    These records are intentionally self-contained so artifacts from a
+    representative PR window can be aggregated into p50/p95 without scraping
+    logs or inferring selection from workflow names.
+    """
+    return {
+        "schema_version": 1,
+        "authority": "verification",
+        "run_id": os.environ.get("GITHUB_RUN_ID"),
+        "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
+        "repository": os.environ.get("GITHUB_REPOSITORY"),
+        "sha": os.environ.get("GITHUB_SHA"),
+        "pr_number": os.environ.get("GITHUB_EVENT_NUMBER"),
+        "status": result.get("status"),
+        "execution_elapsed_seconds": round(elapsed_seconds, 3),
+        "timing": result.get("timing", {}),
+        "impact": result.get("impact", {}),
+        "suites": result.get("suites", {}),
+        "runs": result.get("runs", []),
+    }
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -324,9 +343,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--runtime-output",
         type=Path,
-        help="write the selected suite runtime records as a local JSON artifact",
+        help="write self-contained hosted runtime evidence for p50/p95 aggregation",
     )
     args = parser.parse_args(argv)
+    started = time.monotonic()
     try:
         result = build_disposition(
             _changed_files(args.base, args.changed_file),
@@ -334,7 +354,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             execute=args.execute,
         )
     except (DispositionError, ImpactGraphConfigError, OSError, ValueError) as exc:
-        result = {"schema_version": 1, "authority": "verification", "blocking": True, "status": "BLOCKED", "reason": str(exc)}
+        result = {
+            "schema_version": 1,
+            "authority": "verification",
+            "blocking": True,
+            "status": "BLOCKED",
+            "reason": str(exc),
+        }
+    elapsed_seconds = time.monotonic() - started
     rendered = json.dumps(result, indent=2) + "\n"
     print(rendered, end="")
     if args.output:
@@ -343,7 +370,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.runtime_output:
         args.runtime_output.parent.mkdir(parents=True, exist_ok=True)
         args.runtime_output.write_text(
-            json.dumps({"runs": result.get("runs", [])}, indent=2) + "\n",
+            json.dumps(_hosted_runtime_evidence(result, elapsed_seconds), indent=2) + "\n",
             encoding="utf-8",
         )
     return 0 if result["status"] in {"PASS", "PLANNED"} else 1
