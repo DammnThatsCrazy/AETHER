@@ -204,7 +204,7 @@ def test_tenant_mismatch_raises_grounding_violation() -> None:
 
 
 def test_foreign_item_tenant_raises_grounding_violation() -> None:
-    # REGRESSION (Codex PRRT_kwDORdw-AM6bhAIV): EvidenceSet.tenant_id alone is
+    # EvidenceSet.tenant_id alone is
     # NOT authoritative. EvidenceSet does not enforce item/set tenant
     # homogeneity, so a caller can build a set labeled "tenant-a" that carries
     # an item from "tenant-b". The gate compared only EvidenceSet.tenant_id
@@ -229,7 +229,7 @@ def test_foreign_item_tenant_raises_grounding_violation() -> None:
 
 
 def test_foreign_item_rejected_before_freshness() -> None:
-    # REGRESSION (Codex PRRT_kwDORdw-AM6bhAIV): the per-item tenant check runs
+    # The per-item tenant check runs
     # BEFORE freshness. A foreign item that is also stale must be reported as a
     # tenant violation (GroundingViolation), not as StaleEvidence — the gate's
     # first failing condition wins so the failure mode is precise and the

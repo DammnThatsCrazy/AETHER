@@ -219,7 +219,7 @@ async def test_default_scorers_are_the_documented_four():
 
 
 async def test_default_runner_latency_budget_passes_measured_duration():
-    # Regression (Codex): the default EvaluationService builds this runner
+    # The default EvaluationService builds this runner
     # WITHOUT custom scorers, so the default LatencyScorer must carry a NONZERO
     # budget — run_case always measures a wall-clock elapsed time around the
     # engine call, and a zero-duration scorer would fail every otherwise-

@@ -889,14 +889,14 @@ resource "aws_route53_record" "amplify_subdomain" {
   records  = [aws_amplify_app.frontend[each.key].default_domain]
 }
 
-# API subdomain → ALB (passed as variable since ALB is in the root module)
+# API subdomain → ALB (wired directly — the ALB is in this root module)
 resource "aws_route53_record" "api" {
-  count   = var.squarespace_hosted_zone_enabled && var.api_alb_dns_name != "" ? 1 : 0
+  count   = var.squarespace_hosted_zone_enabled ? 1 : 0
   zone_id = local.hosted_zone_id
   name    = "api.${var.amplify_domain_name}"
   type    = "CNAME"
   ttl     = 300
-  records = [var.api_alb_dns_name]
+  records = [module.alb.alb_dns_name]
 }
 
 # Kyber operator console subdomain

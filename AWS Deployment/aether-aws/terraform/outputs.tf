@@ -172,3 +172,27 @@ output "drift_lambda_function_name" {
   description = "Function name of the nightly ML drift Lambda"
   value       = module.ml_drift_lambda.lambda_function_name
 }
+
+# --------------------------------------------------------------------------
+# DNS / Amplify / Squarespace
+# --------------------------------------------------------------------------
+
+output "route53_nameservers" {
+  description = "NS records for the production hosted zone — set these at your domain registrar"
+  value       = var.squarespace_hosted_zone_enabled ? aws_route53_zone.production[0].name_servers : []
+}
+
+output "route53_zone_id" {
+  description = "Route 53 hosted zone ID for the production domain"
+  value       = local.hosted_zone_id
+}
+
+output "amplify_app_ids" {
+  description = "Amplify app IDs keyed by frontend name"
+  value       = { for k, v in aws_amplify_app.frontend : k => v.id }
+}
+
+output "amplify_default_domains" {
+  description = "Amplify default domains keyed by frontend name — use for verification before custom domains"
+  value       = { for k, v in aws_amplify_app.frontend : k => v.default_domain }
+}

@@ -230,7 +230,7 @@ def test_faithfulness_threshold_wiring():
 
 
 def test_faithfulness_claim_cannot_pass_on_uncited_citation():
-    # Cite-aware regression (Codex): a claim citing ref:r1 is verified ONLY
+    # Cite-aware regression: a claim citing ref:r1 is verified ONLY
     # against r1's excerpt. ref:r2 would support it under full-citation
     # matching, but it is ignored because the claim never cited it — exactly
     # what VerificationEngine._check_cited rejects, so the eval plane cannot
@@ -370,7 +370,7 @@ def test_latency_default_call_passes_at_zero():
 
 
 def test_latency_default_budget_is_nonzero_and_accepts_real_duration():
-    # Regression (Codex): the default scorer must carry a NONZERO budget — a
+    # The default scorer must carry a NONZERO budget — a
     # real run always measures a positive wall-clock duration, and a
     # zero-duration default would fail every otherwise-faithful report (and
     # reject the default regression suite).

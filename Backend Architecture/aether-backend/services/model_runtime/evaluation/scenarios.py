@@ -65,7 +65,7 @@ class ScenarioDefinition:
 #: truth so the default regression suite (exact-match AND cite-aware
 #: faithfulness) is satisfiable: a synthesis that returns the ground truth
 #: verbatim matches exactly, and its claim cites a reference that exists.
-#: Regression (Codex): an uncited ground truth could never pass — faithfulness
+#: An uncited ground truth could never pass — faithfulness
 #: fails a claim that cites nothing. Queries vary so the evaluation plane
 #: exercises diverse input.
 _DEFAULT_SCENARIOS: tuple[ScenarioDefinition, ...] = (
