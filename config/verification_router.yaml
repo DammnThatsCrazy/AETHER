@@ -1,7 +1,7 @@
 schema_version: 1
 default_lane: pr
 lanes:
-  fast: [toolchain, repository_metadata, test_inventory, delivery_metadata]
+  fast: [toolchain, repository_metadata, test_inventory, delivery_metadata, verification_policy, impact_graph, telemetry_contracts, workflow_authority]
   pr: [toolchain, repository_metadata, test_inventory, delivery_metadata, contracts]
   integration: [toolchain, repository_metadata, contracts, integration]
   regression: [toolchain, repository_metadata, contracts, integration, regression]
@@ -28,6 +28,31 @@ checks:
     risk: critical
     command: [python, scripts/validate_delivery_profiles.py, --check-registry]
     runtime_budget_seconds: 5
+  verification_policy:
+    owner: platform
+    risk: critical
+    command: [python, scripts/validate_verification_policy.py]
+    runtime_budget_seconds: 5
+  impact_graph:
+    owner: platform
+    risk: critical
+    command: [python, scripts/validate_impact_graph.py]
+    runtime_budget_seconds: 15
+  telemetry_contracts:
+    owner: platform
+    risk: high
+    command: [python, scripts/validate_telemetry_contracts.py]
+    runtime_budget_seconds: 10
+  workflow_authority:
+    owner: platform
+    risk: critical
+    command: [python, scripts/release/check_delivery_workflow_authority.py]
+    runtime_budget_seconds: 15
+  docs:
+    owner: docs
+    risk: high
+    command: [make, docs-check]
+    runtime_budget_seconds: 60
   contracts:
     owner: platform
     risk: critical
@@ -54,21 +79,42 @@ domains:
     owner: platform
     paths: [Makefile, scripts/**, config/**, .github/workflows/**]
     checks: [toolchain, repository_metadata, delivery_metadata]
+    path_checks:
+      .github/workflows/**: [workflow_authority]
+      config/delivery_workflow_authority.yaml: [workflow_authority]
+      scripts/release/check_delivery_workflow_authority.py: [workflow_authority]
     minimum_lane: fast
   backend:
     owner: backend
     paths: [Backend Architecture/**, tests/**]
     checks: [root, backend]
+    path_checks:
+      Backend Architecture/aether-backend/**: [backend]
+      Backend Architecture/services/journey-service/**: [journey-service]
+      tests/**: [root]
     minimum_lane: pr
   frontend:
     owner: frontend
     paths: [frontend/**]
     checks: [frontend-aether, frontend-kyber, frontend-shared]
+    path_checks:
+      frontend/aether/**: [frontend-aether]
+      frontend/kyber/**: [frontend-kyber]
+      frontend/shared/**: [frontend-shared]
+      frontend/docs/**: [frontend-docs]
+      frontend/demo/**: [frontend-demo]
+      frontend/aether-marketing/**: [frontend-aether-marketing]
+      frontend/olympus-marketing/**: [frontend-olympus-marketing]
     minimum_lane: pr
   sdk:
     owner: sdk
     paths: [packages/**]
     checks: [sdk-shared, sdk-web, sdk-server, sdk-react-native, contracts]
+    path_checks:
+      packages/shared/**: [sdk-shared]
+      packages/web/**: [sdk-web]
+      packages/server/**: [sdk-server]
+      packages/react-native/**: [sdk-react-native]
     minimum_lane: pr
   machine_learning:
     owner: ml
@@ -83,7 +129,7 @@ domains:
   documentation:
     owner: docs
     paths: [docs/**, README.md, DEVELOPMENT.md, CONTRIBUTING.md]
-    checks: [repository_metadata]
+    checks: [docs]
     minimum_lane: fast
 
 global_paths:
@@ -91,3 +137,11 @@ global_paths:
   - package.json
   - package-lock.json
   - config/verification_router.yaml
+  - config/impact_graph.json
+  - config/test_suites.yaml
+  - config/ci_runtime_budgets.yaml
+  - .github/workflows/**
+  - scripts/lib/verification_router.py
+  - scripts/lib/impact_graph.py
+  - scripts/lib/build_selection.py
+  - scripts/verification_disposition.py

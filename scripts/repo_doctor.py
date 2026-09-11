@@ -473,6 +473,23 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     run(
+        [sys.executable, "scripts/validate_ci_runtime_budgets.py", "--check-registry"],
+        name="Runtime-aware test-suite budgets",
+        results=results,
+        stop_on_failure=stop,
+        remediation="repair config/test_suites.yaml runtime metadata or config/ci_runtime_budgets.yaml",
+    )
+
+    run(
+        [sys.executable, "scripts/validate_verification_policy.py"],
+        name="Single verification authority policy",
+        results=results,
+        stop_on_failure=stop,
+        remediation="repair config/verification_policy.yaml and keep verification / disposition as the only blocking PR status",
+    )
+
+
+    run(
         [sys.executable, "scripts/release/check_deployment_operator_surface.py"],
         name="GitHub-only deployment operator surface",
         results=results,

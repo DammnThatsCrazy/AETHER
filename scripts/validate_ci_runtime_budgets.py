@@ -324,12 +324,29 @@ def validate(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("evidence", type=Path, help="local .json or .jsonl runtime evidence")
+    parser.add_argument("evidence", type=Path, nargs="?", help="local .json or .jsonl runtime evidence")
     parser.add_argument("--registry", type=Path, default=DEFAULT_REGISTRY)
     parser.add_argument("--policy", type=Path, default=DEFAULT_POLICY)
     parser.add_argument("--json", action="store_true", dest="as_json", help="emit machine-readable JSON")
+    parser.add_argument(
+        "--check-registry",
+        action="store_true",
+        help="validate the runtime policy and suite metadata without runtime evidence",
+    )
     args = parser.parse_args(argv)
     try:
+        if args.check_registry:
+            _load_policy(args.policy)
+            from scripts.lib.test_suites import load_suites
+
+            registry = Path(args.registry)
+            if not registry.is_absolute():
+                registry = ROOT / registry
+            suites = load_suites(registry)
+            print(json.dumps({"schema_version": 1, "status": "PASS", "suite_count": len(suites)}))
+            return 0
+        if args.evidence is None:
+            parser.error("evidence is required unless --check-registry is supplied")
         report = validate(args.evidence, registry_path=args.registry, policy_path=args.policy)
     except (RuntimeBudgetError, OSError, ValueError) as exc:
         print(f"FAIL — CI runtime evidence: {exc}", file=sys.stderr)

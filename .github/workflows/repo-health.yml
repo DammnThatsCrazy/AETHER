@@ -14,8 +14,9 @@ permissions:
   pull-requests: read
 
 concurrency:
-  # PRs retain only the lightweight docs/size signals. Broad regression runs
-  # on main, nightly, or explicit dispatch and is never a second PR authority.
+  # PRs retain only the lightweight docs/size signals. Main gets bounded
+  # integration; broad regression runs nightly or on explicit dispatch and is
+  # never a second PR authority.
   group: repo-health-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
@@ -55,7 +56,7 @@ jobs:
     # Generated artifacts, lockfiles, and docs stamps are excluded from the count.
     # Runs on PRs only; push events to main skip this check.
     if: github.event_name == 'pull_request'
-    continue-on-error: true
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -82,7 +83,7 @@ jobs:
     # Read-only advisory signal — runs on PRs and trusted non-PR events.
     # Has no write permissions so that attacker-controlled scripts in a PR
     # cannot push to the repository even if they escape the validation steps.
-    continue-on-error: true
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

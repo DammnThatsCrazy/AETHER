@@ -51,6 +51,13 @@ def test_global_change_expands_to_registered_domains():
     assert "sdk" in result["affected_domains"]
 
 
+def test_ci_architecture_change_escalates_to_global_integration_selection():
+    result = route([".github/workflows/repo-consistency.yml"])
+    assert result["impact"]["global_change"] is True
+    assert result["minimum_lane"] == "integration"
+    assert result["selected_lane"] == "integration"
+
+
 def test_change_plan_validator_reports_required_fields():
     errors = validate({"schema_version": 1})
     assert any("missing fields" in error for error in errors)

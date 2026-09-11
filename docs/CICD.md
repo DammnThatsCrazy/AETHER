@@ -22,7 +22,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:61d269ee33dd8443c5877259e208d8637357cfc17b921027824f8212ec82266f"
+  ".github/workflows/": "sha256:bab870f736d3e89ce35259ed1581fb4a8edfa2c6eb81fbf1fdbefe610f5caf48"
   "AWS Deployment/aether-aws/terraform/modules/aurora/main.tf": "sha256:16c4beb8ccab1af164ff62f8aa2d515a5efc3f093b7878411f40aa14ce39e094"
   "AWS Deployment/aether-aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "AWS Deployment/aether-aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
@@ -38,6 +38,29 @@ source_hashes:
 # CI/CD Pipeline — Stages, Gates & SDK Release
 
 Internal reference for Aether's delivery pipeline.
+
+## Current verification authority
+
+For an ordinary pull request, `.github/workflows/repo-consistency.yml` owns one
+blocking status: `verification / disposition`. The workflow classifies the
+changed paths with the Impact Graph, runs the universal-fast checks, selects
+the affected test suites and build workspaces, and publishes one machine-readable
+disposition. The old full `make ci-check` job is retained only as a non-blocking
+shadow while selection completeness is observed; it does not determine mergeability.
+
+`repo-health.yml` keeps documentation and PR-size signals advisory on pull requests
+and runs a bounded contract/impact/durable-integration authority after merges to
+`main`. Its broad Python/backend/TypeScript/E2E/preflight coverage runs nightly or
+on explicit dispatch as regression assurance. The hardening
+release workflow is invoked manually, from a release event, or by a release-candidate
+caller; `make release-gate` is not an ordinary pull-request check. Release validation
+therefore evaluates an immutable candidate in the release lifecycle rather than PR
+source in the normal critical path.
+
+The suite registry (`config/test_suites.yaml`) carries ownership, component/contract
+relationships, lane, isolation, and runtime-budget metadata. Local runtime evidence
+can be summarized with `scripts/validate_ci_runtime_budgets.py`; that validator reads
+JSON/JSONL files only and makes no hosted telemetry claim.
 
 Repo Health scopes its concurrency group by event type as well as branch. A
 push run therefore cannot cancel the pull request run that supplies the

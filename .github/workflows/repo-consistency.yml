@@ -75,6 +75,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -139,6 +142,29 @@ jobs:
               echo "No build script for $workspace; recording it as typecheck/test-only scope."
             fi
           done < release-evidence/build-workspaces.txt
+      - name: Build selected backend image without publishing or deploying
+        run: |
+          set -euo pipefail
+          selected="$(python -c 'import json; print(json.load(open("release-evidence/build-selection.json"))["backend_image"])')"
+          case "$selected" in
+            True)
+              test -f "Backend Architecture/aether-backend/Dockerfile" || {
+                echo "Impact Graph selected backend_image but the canonical Dockerfile is missing" >&2
+                exit 1
+              }
+              docker build \
+                --file "Backend Architecture/aether-backend/Dockerfile" \
+                --tag "aether-backend:pr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+                .
+              ;;
+            False)
+              echo "backend_image is NOT_APPLICABLE for this Impact Graph selection"
+              ;;
+            *)
+              echo "::error::Impact Graph emitted a non-boolean backend_image selection: $selected" >&2
+              exit 1
+              ;;
+          esac
       - name: Package selected build outputs once and create immutable candidate
         run: |
           mkdir -p release-evidence
@@ -169,7 +195,7 @@ jobs:
           if-no-files-found: error
 
   selected-verification:
-    name: Verification / disposition (blocking PR authority)
+    name: Affected verification execution
     needs: [classify-change, build-artifact]
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -209,7 +235,8 @@ jobs:
         run: |
           .venv/bin/python scripts/verification_disposition.py \
             --base "$BASE_SHA" --execute \
-            --output release-evidence/pr-disposition.json
+            --output release-evidence/pr-disposition.json \
+            --runtime-output release-evidence/ci-runtime-runs.json
       - name: Record verification disposition evidence
         if: always()
         env:
@@ -224,6 +251,7 @@ jobs:
           name: selected-verification-evidence
           path: |
             release-evidence/pr-disposition.json
+            release-evidence/ci-runtime-runs.json
             release-evidence/selected-verification.json
           if-no-files-found: error
 
@@ -272,7 +300,7 @@ jobs:
           if-no-files-found: error
 
   publish-evidence:
-    name: Verification / disposition (blocking PR authority)
+    name: verification / disposition
     if: always()
     needs: [classify-change, build-artifact, selected-verification]
     runs-on: ubuntu-latest

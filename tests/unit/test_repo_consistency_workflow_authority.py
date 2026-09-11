@@ -38,6 +38,8 @@ def test_pr_workflow_has_explicit_delivery_stages() -> None:
 
 def test_adaptive_disposition_is_pr_completion_authority() -> None:
     jobs = _workflow()["jobs"]
+    assert jobs["publish-evidence"]["name"] == "verification / disposition"
+    assert jobs["selected-verification"]["name"] != jobs["publish-evidence"]["name"]
     disposition_script = "\n".join(
         step.get("run", "") for step in jobs["selected-verification"]["steps"]
     )
@@ -87,6 +89,13 @@ def test_publication_fails_when_any_required_stage_did_not_pass() -> None:
         if str(step.get("uses", "")).startswith("actions/upload-artifact")
     ]
     assert uploads and uploads[0]["if"] == "always()"
+
+
+def test_full_ci_is_not_a_blocking_pr_dependency() -> None:
+    jobs = _workflow()["jobs"]
+    assert "repo-consistency" not in jobs["publish-evidence"]["needs"]
+    assert jobs["repo-consistency"]["continue-on-error"] is True
+    assert str(jobs["repo-consistency"]["if"]) == "github.event_name == 'pull_request'"
 
 
 def test_repo_health_reserves_broad_regression_for_schedule_or_dispatch() -> None:

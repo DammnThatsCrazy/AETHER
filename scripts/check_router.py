@@ -22,6 +22,7 @@ from scripts.lib.verification_router import (
     load_router_registry,
     matches as _matches,
 )
+from scripts.lib.impact_graph import build_impact_index, load_impact_graph
 
 CONFIG = ROOT / "config" / "verification_router.yaml"
 
@@ -47,6 +48,10 @@ def load_config() -> dict:
                 "owner": domain.owner,
                 "paths": list(domain.paths),
                 "checks": list(domain.checks),
+                "path_checks": {
+                    pattern: list(checks)
+                    for pattern, checks in domain.path_checks.items()
+                },
                 "minimum_lane": domain.minimum_lane,
             }
             for domain_id, domain in registry.domains.items()
@@ -74,10 +79,12 @@ def matches(path: str, pattern: str) -> bool:
 
 def route(paths: list[str], requested_lane: str | None = None) -> dict:
     cfg = load_router_registry(CONFIG)
+    graph = load_impact_graph(router=cfg)
+    index = build_impact_index(paths, graph, requested_lane=requested_lane, router=cfg)
     impact = classify_impact(paths, cfg, requested_lane)
     registry = _suite_commands()
     selected = []
-    for check_id in impact.selected_checks:
+    for check_id in index["router"]["selected_checks"]:
         definition = cfg.checks.get(check_id)
         command = list(definition.command) if definition else registry.get(check_id)
         if not command:
@@ -95,8 +102,9 @@ def route(paths: list[str], requested_lane: str | None = None) -> dict:
         "impact": {
             "global_change": impact.global_change,
             "affected_tests": affected_tests,
-            "selected_checks": list(impact.selected_checks),
+            "selected_checks": index["router"]["selected_checks"],
         },
+        "build_selection": index["build_selection"],
         "checks": selected,
     }
 

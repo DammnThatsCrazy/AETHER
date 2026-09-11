@@ -184,6 +184,13 @@ def test_hardening_gate_is_read_only_and_never_rewrites_pr_history():
     assert "run: make release-gate" in workflow
 
 
+def test_hardening_release_gate_is_not_an_ordinary_pr_check():
+    doc = _workflow_yaml("hardening-release-gate.yml")
+    triggers = _triggers(doc)
+    assert "pull_request" not in triggers
+    assert {"workflow_dispatch", "release", "workflow_call"} <= triggers
+
+
 # ---------------------------------------------------------------------------
 # Immutable deploy workflow (deploy.yml) — PR #454 review-finding pins
 # ---------------------------------------------------------------------------
