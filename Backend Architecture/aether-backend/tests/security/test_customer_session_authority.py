@@ -14,7 +14,7 @@ def clean_stores():
     reset_in_memory_stores()
 
 
-async def _principal(*, plan: str = "P2", role: str = "admin", permissions=None):
+async def _principal(*, plan: str = "beta", role: str = "admin", permissions=None):
     await AdminRepository().insert("tenant-a", {
         "status": "active", "plan_tier": plan, "name": "Acme"
     })
@@ -35,17 +35,17 @@ async def test_session_context_rehydrates_mutable_plan_role_and_permissions():
 
     context = await _resolve_session_token(issued.token)
     assert context is not None
-    assert context.plan_tier is PlanTier.P2_PROFESSIONAL
+    assert context.plan_tier is PlanTier.BETA
     assert context.role is Role.ADMIN
     assert context.permissions == ["read", "write", "billing"]
 
-    await AdminRepository().update("tenant-a", {"plan_tier": "P1"})
+    await AdminRepository().update("tenant-a", {"plan_tier": "alpha"})
     await UserRepository().update("user-a", {
         "role": "viewer", "permissions": ["read"]
     })
     changed = await _resolve_session_token(issued.token)
     assert changed is not None
-    assert changed.plan_tier is PlanTier.P1_HOBBYIST
+    assert changed.plan_tier is PlanTier.ALPHA
     assert changed.role is Role.VIEWER
     assert changed.permissions == ["read"]
 

@@ -676,3 +676,245 @@ resource "aws_ssm_parameter" "static_frontend_bucket" {
     Purpose = "Static SPA origin bucket name consumed by the deploy workflow"
   }
 }
+
+# ---------------------------------------------------------------------------
+# 11. AWS Amplify Hosting — product frontend surfaces
+# Each app builds from the monorepo root with an app-specific appRoot in
+# amplify.yml. Custom domains use the canonical olympuslabsml.com family.
+# The apex/www domain is served by Squarespace (section 12), not Amplify.
+# Gated by the same enable_static_frontends toggle used for S3 origins.
+# ---------------------------------------------------------------------------
+
+locals {
+  amplify_apps = local.enable_static_frontends ? {
+    aether-marketing = {
+      name        = "${var.project}-${var.environment}-aether-marketing"
+      app_root    = "frontend/aether-marketing"
+      description = "Aether product marketing site"
+      subdomain   = "aether"
+    }
+    docs = {
+      name        = "${var.project}-${var.environment}-docs"
+      app_root    = "frontend/docs"
+      description = "Aether developer documentation portal"
+      subdomain   = "docs"
+    }
+    aether-app = {
+      name        = "${var.project}-${var.environment}-aether-app"
+      app_root    = "frontend/aether"
+      description = "Aether customer application dashboard"
+      subdomain   = "app"
+    }
+  } : {}
+}
+
+resource "aws_amplify_app" "frontend" {
+  for_each = local.amplify_apps
+
+  name       = each.value.name
+  repository = var.amplify_github_repository
+
+  access_token = var.amplify_github_access_token != "" ? var.amplify_github_access_token : null
+
+  build_spec = <<-YAML
+    version: 1
+    applications:
+      - appRoot: ${each.value.app_root}
+        frontend:
+          phases:
+            preBuild:
+              commands:
+                - npm ci
+            build:
+              commands:
+                - npm run build --workspace=${each.value.app_root}
+          artifacts:
+            baseDirectory: ${each.value.app_root}/dist
+            files:
+              - '**/*'
+          cache:
+            paths:
+              - node_modules/**/*
+  YAML
+
+  environment_variables = {
+    AETHER_ENV = var.environment
+    _LIVE_UPDATES = jsonencode([
+      { pkg = "node", type = "nvm", version = "20" }
+    ])
+  }
+
+  platform = "WEB"
+
+  custom_rule {
+    source = "/<*>"
+    target = "/index.html"
+    status = "200"
+  }
+
+  tags = {
+    Name        = each.value.name
+    Purpose     = each.value.description
+    Environment = var.environment
+  }
+}
+
+resource "aws_amplify_branch" "main" {
+  for_each = local.amplify_apps
+
+  app_id      = aws_amplify_app.frontend[each.key].id
+  branch_name = var.amplify_branch
+
+  framework = "React"
+  stage     = var.environment == "production" ? "PRODUCTION" : "DEVELOPMENT"
+
+  environment_variables = {
+    AETHER_ENV = var.environment
+  }
+
+  tags = {
+    Name        = "${each.value.name}-${var.amplify_branch}"
+    Environment = var.environment
+  }
+}
+
+resource "aws_amplify_domain_association" "frontend" {
+  for_each = {
+    for k, v in local.amplify_apps : k => v
+    if var.amplify_domain_name != ""
+  }
+
+  app_id      = aws_amplify_app.frontend[each.key].id
+  domain_name = "${each.value.subdomain}.${var.amplify_domain_name}"
+
+  sub_domain {
+    branch_name = aws_amplify_branch.main[each.key].branch_name
+    prefix      = ""
+  }
+}
+
+resource "aws_ssm_parameter" "amplify_app_id" {
+  for_each = local.amplify_apps
+  name     = "/aether/${var.environment}/amplify/${each.key}/app-id"
+  type     = "String"
+  value    = aws_amplify_app.frontend[each.key].id
+
+  tags = {
+    Purpose = "Amplify app ID for ${each.value.description}"
+  }
+}
+
+resource "aws_ssm_parameter" "amplify_default_domain" {
+  for_each = local.amplify_apps
+  name     = "/aether/${var.environment}/amplify/${each.key}/default-domain"
+  type     = "String"
+  value    = aws_amplify_app.frontend[each.key].default_domain
+
+  tags = {
+    Purpose = "Amplify default domain for ${each.value.description}"
+  }
+}
+
+# ---------------------------------------------------------------------------
+# 12. Squarespace Marketing Site — DNS for apex/www domain
+# The Olympus Labs corporate marketing site is hosted on Squarespace.
+# Product subdomains (app, docs, aether, kyber) stay on Amplify/AWS.
+# Requires a Route 53 hosted zone for the production domain.
+# ---------------------------------------------------------------------------
+
+resource "aws_route53_zone" "production" {
+  count = var.squarespace_hosted_zone_enabled ? 1 : 0
+  name  = var.amplify_domain_name
+
+  tags = {
+    Name        = "${var.project}-${var.environment}-production-zone"
+    Purpose     = "Production DNS for ${var.amplify_domain_name}"
+    Environment = var.environment
+  }
+}
+
+locals {
+  hosted_zone_id = var.squarespace_hosted_zone_enabled ? aws_route53_zone.production[0].zone_id : ""
+
+  # Squarespace requires four A records for apex domain hosting.
+  squarespace_ips = [
+    "198.185.159.144",
+    "198.185.159.145",
+    "198.49.23.144",
+    "198.49.23.145",
+  ]
+}
+
+# Apex domain → Squarespace (A records)
+resource "aws_route53_record" "squarespace_apex" {
+  count   = var.squarespace_hosted_zone_enabled ? 1 : 0
+  zone_id = local.hosted_zone_id
+  name    = var.amplify_domain_name
+  type    = "A"
+  ttl     = 3600
+  records = local.squarespace_ips
+}
+
+# www → Squarespace (CNAME)
+resource "aws_route53_record" "squarespace_www" {
+  count   = var.squarespace_hosted_zone_enabled ? 1 : 0
+  zone_id = local.hosted_zone_id
+  name    = "www.${var.amplify_domain_name}"
+  type    = "CNAME"
+  ttl     = 3600
+  records = ["ext-cust.squarespace.com"]
+}
+
+# Squarespace domain verification (CNAME)
+resource "aws_route53_record" "squarespace_verify" {
+  count   = var.squarespace_hosted_zone_enabled && var.squarespace_verification_code != "" ? 1 : 0
+  zone_id = local.hosted_zone_id
+  name    = var.squarespace_verification_code
+  type    = "CNAME"
+  ttl     = 3600
+  records = ["verify.squarespace.com"]
+}
+
+# ---------------------------------------------------------------------------
+# 13. Product subdomain DNS records
+# Point product subdomains to their Amplify default domains.
+# ---------------------------------------------------------------------------
+
+resource "aws_route53_record" "amplify_subdomain" {
+  for_each = var.squarespace_hosted_zone_enabled ? local.amplify_apps : {}
+  zone_id  = local.hosted_zone_id
+  name     = "${each.value.subdomain}.${var.amplify_domain_name}"
+  type     = "CNAME"
+  ttl      = 3600
+  records  = [aws_amplify_app.frontend[each.key].default_domain]
+}
+
+# API subdomain → ALB (wired directly — the ALB is in this root module)
+resource "aws_route53_record" "api" {
+  count   = var.squarespace_hosted_zone_enabled ? 1 : 0
+  zone_id = local.hosted_zone_id
+  name    = "api.${var.amplify_domain_name}"
+  type    = "CNAME"
+  ttl     = 300
+  records = [module.alb.alb_dns_name]
+}
+
+# Kyber operator console subdomain
+resource "aws_route53_record" "kyber" {
+  count   = var.squarespace_hosted_zone_enabled && var.kyber_cname_target != "" ? 1 : 0
+  zone_id = local.hosted_zone_id
+  name    = "kyber.${var.amplify_domain_name}"
+  type    = "CNAME"
+  ttl     = 3600
+  records = [var.kyber_cname_target]
+}
+
+# Status page subdomain
+resource "aws_route53_record" "status" {
+  count   = var.squarespace_hosted_zone_enabled && var.status_cname_target != "" ? 1 : 0
+  zone_id = local.hosted_zone_id
+  name    = "status.${var.amplify_domain_name}"
+  type    = "CNAME"
+  ttl     = 3600
+  records = [var.status_cname_target]
+}

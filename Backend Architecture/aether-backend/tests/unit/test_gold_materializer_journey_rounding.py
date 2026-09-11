@@ -139,7 +139,7 @@ async def _materialized_spend() -> dict[str, Decimal]:
 
 
 async def test_two_equal_journeys_conserve_10_01_exactly():
-    """The Codex repro: two equal journeys over $10.01 must persist $5.00 +
+    """Two equal journeys over $10.01 must persist $5.00 +
     $5.01, summing EXACTLY to the campaign spend — never two $5.01 = $10.02."""
     await _seed_journeys_equal_weights(["j-a", "j-b"])
     spend = await _materialized_spend()

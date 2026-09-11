@@ -23,7 +23,7 @@ def upgrade() -> None:
             stripe_customer_id     VARCHAR(255) UNIQUE,
             stripe_subscription_id VARCHAR(255) UNIQUE,
             stripe_price_id        VARCHAR(255),
-            plan_tier              VARCHAR(4)   NOT NULL DEFAULT 'P1',
+            plan_tier              VARCHAR(16)  NOT NULL DEFAULT 'alpha',
             subscription_status    VARCHAR(64),
             current_period_end     TIMESTAMPTZ,
             created_at             TIMESTAMPTZ  NOT NULL DEFAULT NOW(),

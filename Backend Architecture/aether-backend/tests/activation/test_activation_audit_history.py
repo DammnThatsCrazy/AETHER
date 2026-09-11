@@ -46,7 +46,7 @@ async def test_full_forward_chain_audit(svc):
     record = {"state": S.not_started.value, "tenant_id": "t-audit", "history": []}
     chain = [
         (S.account_verified, "tenant_authenticated"),
-        (S.plan_selected, "plan_tier=P2"),
+        (S.plan_selected, "plan_tier=beta"),
         (S.billing_pending, "billing_state_derived"),
         (S.sdk_selected, "platforms=['web','ios']"),
         (S.keys_created, "count=1"),
@@ -61,7 +61,7 @@ async def test_full_forward_chain_audit(svc):
 
 @pytest.mark.asyncio
 async def test_get_status_returns_full_history_for_tenant(svc):
-    await svc.select_plan("t-audit", "P2")
+    await svc.select_plan("t-audit", "beta")
     await svc.select_sdks("t-audit", ["web"])
     status = await svc.get_status("t-audit")
     # the driven tenant's history includes its own moves

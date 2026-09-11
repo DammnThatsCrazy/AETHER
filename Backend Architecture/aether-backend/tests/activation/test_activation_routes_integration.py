@@ -61,8 +61,8 @@ def test_full_self_serve_flow_over_http() -> None:
 
     # select-plan records the tier and derives billing state (pending without an
     # active Stripe subscription) — the tier is the durable outcome.
-    planned = _data(client.post("/v1/activation/select-plan", json={"plan_tier": "P2"}))
-    assert planned["selected_plan_tier"] == "P2"
+    planned = _data(client.post("/v1/activation/select-plan", json={"plan_tier": "beta"}))
+    assert planned["selected_plan_tier"] == "beta"
     assert planned["state"] in {"plan_selected", "billing_pending", "billing_active"}
 
     sdks = _data(client.post("/v1/activation/sdk-selection", json={"platforms": ["web"]}))
@@ -97,6 +97,6 @@ def test_status_reports_derived_billing_state_over_http() -> None:
 
 
 def test_select_plan_rejects_bad_tier_with_422() -> None:
-    """Pydantic validation on the mounted route rejects a non-P1..P4 tier."""
+    """Pydantic validation on the mounted route rejects a non-alpha..omega tier."""
     resp = _client().post("/v1/activation/select-plan", json={"plan_tier": "GOLD"})
     assert resp.status_code == 422, resp.text

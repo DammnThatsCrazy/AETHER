@@ -3,63 +3,129 @@
   "generated_from": "Backend Architecture/aether-backend/shared/plans/catalog.py",
   "plans": [
     {
-      "plan_id": "P1",
-      "display_name": "Hobbyist",
-      "target_user": "Solo Devs",
-      "monthly_quota": 25000,
-      "member_cap": 1,
+      "plan_id": "alpha",
+      "display_name": "Alpha",
+      "stripe_product_id": "prod_VBIVKHD2G1maZC",
+      "target_user": "Individuals",
+      "monthly_quota": 3000000,
+      "member_cap": 2,
       "burst_rpm": 100,
-      "blended_overage_per_1k": "12.50",
-      "service_count": 10,
+      "event_overage_per_1k": "0.060",
+      "acu_overage_per_1k": "7.00",
+      "managed_per_acu": "0",
+      "byok_per_acu": "0",
+      "service_count": 11,
       "pricing": {
-        "option_a": "99",
-        "option_b": "299",
-        "option_c": "449"
+        "monthly": "0",
+        "annual": "0"
       }
     },
     {
-      "plan_id": "P2",
-      "display_name": "Professional",
-      "target_user": "Small Teams",
-      "monthly_quota": 100000,
+      "plan_id": "beta",
+      "display_name": "Beta",
+      "stripe_product_id": "prod_V8G5BQNKwGiwJY",
+      "target_user": "Growing Teams",
+      "monthly_quota": 9000000,
       "member_cap": 3,
       "burst_rpm": 500,
-      "blended_overage_per_1k": "16.60",
-      "service_count": 19,
+      "event_overage_per_1k": "0.050",
+      "acu_overage_per_1k": "5.00",
+      "managed_per_acu": "3.50",
+      "byok_per_acu": "1.75",
+      "service_count": 22,
       "pricing": {
-        "option_a": "499",
-        "option_b": "829",
-        "option_c": "1219"
+        "monthly": "299",
+        "annual": "3050"
       }
     },
     {
-      "plan_id": "P3",
-      "display_name": "Growth Intelligence",
+      "plan_id": "gamma",
+      "display_name": "Gamma",
+      "stripe_product_id": "prod_V8G5BcUyK9FTN3",
       "target_user": "Scale-ups",
-      "monthly_quota": 250000,
+      "monthly_quota": 18000000,
       "member_cap": 5,
-      "burst_rpm": 1200,
-      "blended_overage_per_1k": "28.70",
-      "service_count": 29,
+      "burst_rpm": 2000,
+      "event_overage_per_1k": "0.040",
+      "acu_overage_per_1k": "4.00",
+      "managed_per_acu": "3.00",
+      "byok_per_acu": "1.50",
+      "service_count": 36,
       "pricing": {
-        "option_a": "1499",
-        "option_b": "2869",
-        "option_c": "4239"
+        "monthly": "899",
+        "annual": "9170"
       }
     },
     {
-      "plan_id": "P4",
-      "display_name": "Protocol Master",
-      "target_user": "Orgs",
-      "monthly_quota": 500000,
-      "member_cap": 10,
-      "burst_rpm": 3000,
-      "blended_overage_per_1k": "35.00",
-      "service_count": 34,
+      "plan_id": "delta",
+      "display_name": "Delta",
+      "stripe_product_id": "prod_V8G6eoKilEbNf0",
+      "target_user": "Enterprises",
+      "monthly_quota": 27000000,
+      "member_cap": 5,
+      "burst_rpm": 5000,
+      "event_overage_per_1k": "0.030",
+      "acu_overage_per_1k": "3.00",
+      "managed_per_acu": "1.25",
+      "byok_per_acu": "0.625",
+      "service_count": 41,
       "pricing": {
-        "option_a": "3999",
-        "option_b": "8519",
-        "option_c": "12499"
+        "monthly": "3449",
+        "annual": "35180"
+      }
+    },
+    {
+      "plan_id": "epsilon",
+      "display_name": "Epsilon",
+      "stripe_product_id": "prod_VBMTchryHXE8RJ",
+      "target_user": "High-Volume / Contact Sales",
+      "monthly_quota": 54000000,
+      "member_cap": 0,
+      "burst_rpm": 10000,
+      "event_overage_per_1k": "0",
+      "acu_overage_per_1k": "0",
+      "managed_per_acu": "0",
+      "byok_per_acu": "0",
+      "service_count": 41,
+      "pricing": {
+        "monthly": "0",
+        "annual": "0"
+      }
+    },
+    {
+      "plan_id": "omicron",
+      "display_name": "Omicron",
+      "stripe_product_id": "prod_VBMVO9hFtBnvd0",
+      "target_user": "Dedicated / Governed Deployment",
+      "monthly_quota": 0,
+      "member_cap": 0,
+      "burst_rpm": 0,
+      "event_overage_per_1k": "0",
+      "acu_overage_per_1k": "0",
+      "managed_per_acu": "0",
+      "byok_per_acu": "0",
+      "service_count": 41,
+      "pricing": {
+        "monthly": "0",
+        "annual": "0"
+      }
+    },
+    {
+      "plan_id": "omega",
+      "display_name": "Omega",
+      "stripe_product_id": "prod_VBMVpNS7m8fowq",
+      "target_user": "Private / Regulated",
+      "monthly_quota": 0,
+      "member_cap": 0,
+      "burst_rpm": 0,
+      "event_overage_per_1k": "0",
+      "acu_overage_per_1k": "0",
+      "managed_per_acu": "0",
+      "byok_per_acu": "0",
+      "service_count": 41,
+      "pricing": {
+        "monthly": "0",
+        "annual": "0"
       }
     }
   ]

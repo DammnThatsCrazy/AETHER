@@ -102,7 +102,7 @@ async def upsert_billing_account(
     plan_tier: Optional[str] = None,
 ) -> dict[str, Any]:
     pool = await get_pool()
-    plan_tier = plan_tier or PlanTier.P1_HOBBYIST.value
+    plan_tier = plan_tier or PlanTier.ALPHA.value
     now = _utcnow()
     if pool is None:
         existing = _mem_accounts.get(tenant_id)
@@ -150,7 +150,7 @@ async def update_customer_mapping(
     if pool is None:
         acct = _mem_accounts.setdefault(tenant_id, {
             "tenant_id": tenant_id,
-            "plan_tier": PlanTier.P1_HOBBYIST.value,
+            "plan_tier": PlanTier.ALPHA.value,
             "created_at": _utcnow(),
         })
         if stripe_customer_id is not None:
@@ -190,7 +190,7 @@ async def update_subscription_state(
     if pool is None:
         acct = _mem_accounts.setdefault(tenant_id, {
             "tenant_id": tenant_id,
-            "plan_tier": PlanTier.P1_HOBBYIST.value,
+            "plan_tier": PlanTier.ALPHA.value,
             "created_at": _utcnow(),
         })
         if stripe_subscription_id is not None:

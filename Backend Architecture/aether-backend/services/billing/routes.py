@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from config.settings import settings
 from shared.auth.auth import PlanTier
@@ -46,7 +46,7 @@ kyber_revops_router = APIRouter(
 # ---------------------------------------------------------------------------
 
 class CheckoutRequest(BaseModel):
-    plan_tier: str  # P1 | P2 | P3 | P4
+    plan_tier: str = Field(pattern="^(alpha|beta|gamma|delta)$")
 
 
 class PortalRequest(BaseModel):
@@ -73,13 +73,14 @@ def _require_tenant(request: Request):
 async def list_plans():
     """Return all available plan tiers. Public — no auth required."""
     from shared.plans.catalog import PLAN_CATALOG
+    _CONTRACT_TIERS = {PlanTier.EPSILON, PlanTier.OMICRON, PlanTier.OMEGA}
     plans = [
         {
             "plan_id": plan.plan_id,
             "display_name": plan.display_name,
-            "price_monthly": int(plan.pricing.option_a),
+            "price_monthly": int(plan.pricing.monthly),
             "currency": "USD",
-            "contact_sales": False,
+            "contact_sales": tier in _CONTRACT_TIERS,
             "included_usage": plan.monthly_quota,
             "rate_limit_rpm": plan.burst_rpm,
             "monthly_quota": plan.monthly_quota,
@@ -87,7 +88,7 @@ async def list_plans():
             "service_count": plan.service_count,
             "target_user": plan.target_user,
         }
-        for plan in PLAN_CATALOG.values()
+        for tier, plan in PLAN_CATALOG.items()
     ]
     return APIResponse(data={"plans": plans}).to_dict()
 
@@ -105,7 +106,7 @@ async def create_checkout_session(body: CheckoutRequest, request: Request):
     try:
         plan_tier = PlanTier(body.plan_tier)
     except ValueError:
-        raise BadRequestError(f"Invalid plan_tier: {body.plan_tier!r}. Valid: P1 P2 P3 P4")
+        raise BadRequestError(f"Invalid plan_tier: {body.plan_tier!r}. Valid: alpha beta gamma delta")
 
     # Fetch any existing Stripe customer ID for this tenant
     account = await stripe_repository.get_billing_account(tenant.tenant_id)

@@ -766,7 +766,7 @@ async def test_credential_rejection_records_runtime_metric(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Settings-backed factory wiring (Codex P1): adapters_dir / estimated_request_tokens
+# Settings-backed factory wiring: adapters_dir / estimated_request_tokens
 # / max_providers are CONSUMED by ModelRuntimeService.from_settings, with
 # explicit constructor kwargs winning over the settings.
 # ---------------------------------------------------------------------------

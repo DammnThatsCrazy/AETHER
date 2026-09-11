@@ -31,11 +31,11 @@ async def _land_bronze(tenant_id: str, event_id: str):
 
 @pytest.mark.asyncio
 async def test_tenant_b_cannot_read_tenant_a_activation(svc, onboard_with_keys):
-    await onboard_with_keys(svc, "tenant-A", count=2, plan_tier="P3")
+    await onboard_with_keys(svc, "tenant-A", count=2, plan_tier="gamma")
 
     a_status = await svc.get_status("tenant-A")
     assert a_status["state"] == S.waiting_for_event.value
-    assert a_status["selected_plan_tier"] == "P3"
+    assert a_status["selected_plan_tier"] == "gamma"
     assert len(a_status["created_key_ids"]) == 2
 
     # B has never onboarded: reading status mints B's OWN fresh record only.
@@ -50,19 +50,19 @@ async def test_tenant_b_cannot_read_tenant_a_activation(svc, onboard_with_keys):
 
 @pytest.mark.asyncio
 async def test_tenant_b_actions_do_not_mutate_tenant_a(svc, onboard_with_keys):
-    await onboard_with_keys(svc, "tenant-A", count=1, plan_tier="P2")
+    await onboard_with_keys(svc, "tenant-A", count=1, plan_tier="beta")
     a_before = await svc.get_status("tenant-A")
 
     # A full independent flow on B, including its own evaluation. (B's own legal
     # select_plan happens inside onboard_with_keys; re-selecting after
     # waiting_for_event is an illegal FSM move, so we don't force one here.)
-    await onboard_with_keys(svc, "tenant-B", count=1, plan_tier="P1")
+    await onboard_with_keys(svc, "tenant-B", count=1, plan_tier="alpha")
     await svc.evaluate_first_value("tenant-B")
 
     # A is entirely unchanged by anything B did.
     a_after = await svc.get_status("tenant-A")
     assert a_after["state"] == a_before["state"] == S.waiting_for_event.value
-    assert a_after["selected_plan_tier"] == "P2"
+    assert a_after["selected_plan_tier"] == "beta"
     assert a_after["created_key_ids"] == a_before["created_key_ids"]
 
 

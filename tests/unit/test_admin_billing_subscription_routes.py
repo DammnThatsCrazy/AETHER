@@ -67,7 +67,7 @@ async def seed_account(tenant_id: str = "t-001", **overrides):
     from shared.billing import stripe_repository
     await stripe_repository.upsert_billing_account(
         tenant_id=tenant_id,
-        plan_tier=overrides.get("plan_tier", "P1"),
+        plan_tier=overrides.get("plan_tier", "alpha"),
     )
     await stripe_repository.update_customer_mapping(
         tenant_id=tenant_id,
@@ -85,7 +85,7 @@ async def test_get_subscription_returns_state(billing_routes):
     await seed_account()
     res = await billing_routes.get_subscription("t-001", make_request())
     assert res["data"]["tenant_id"] == "t-001"
-    assert res["data"]["plan_tier"] == "P1"
+    assert res["data"]["plan_tier"] == "alpha"
     assert res["data"]["subscription_id"] == "sub_test"
     assert res["data"]["status"] == "active"
 
@@ -99,10 +99,10 @@ async def test_get_subscription_404(billing_routes):
 
 @pytest.mark.asyncio
 async def test_change_plan_to_valid_tier(billing_routes):
-    await seed_account(plan_tier="P1")
-    body = billing_routes.ChangePlanRequest(plan_tier="P2")
+    await seed_account(plan_tier="alpha")
+    body = billing_routes.ChangePlanRequest(plan_tier="beta")
     res = await billing_routes.change_plan("t-001", body, make_request())
-    assert res["data"]["plan_tier"] == "P2"
+    assert res["data"]["plan_tier"] == "beta"
 
 
 @pytest.mark.asyncio
@@ -116,7 +116,7 @@ async def test_change_plan_invalid_tier(billing_routes):
 
 @pytest.mark.asyncio
 async def test_change_plan_unknown_tenant_404(billing_routes):
-    body = billing_routes.ChangePlanRequest(plan_tier="P2")
+    body = billing_routes.ChangePlanRequest(plan_tier="beta")
     with pytest.raises(Exception) as exc:
         await billing_routes.change_plan("ghost", body, make_request())
     assert "not found" in str(exc.value).lower()
@@ -182,7 +182,7 @@ async def test_get_subscription_rejects_cross_tenant_call(billing_routes):
 async def test_change_plan_rejects_cross_tenant_call(billing_routes):
     await seed_account(tenant_id="t-001")
     cross_tenant_req = make_request(tenant_id="t-002", role="member")
-    body = billing_routes.ChangePlanRequest(plan_tier="P2")
+    body = billing_routes.ChangePlanRequest(plan_tier="beta")
     with pytest.raises(Exception) as exc:
         await billing_routes.change_plan("t-001", body, cross_tenant_req)
     assert "denied" in str(exc.value).lower()

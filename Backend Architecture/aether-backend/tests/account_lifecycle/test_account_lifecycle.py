@@ -48,7 +48,7 @@ def evidence(at: datetime | None = None) -> dict:
 
 async def principal(tenant_id: str = "tenant-a") -> None:
     await AdminRepository().insert(tenant_id, {
-        "status": "active", "plan_tier": "P2", "name": "Acme"
+        "status": "active", "plan_tier": "beta", "name": "Acme"
     })
 
 

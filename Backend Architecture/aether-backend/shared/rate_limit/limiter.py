@@ -1,17 +1,15 @@
 """
 Aether Shared — @aether/rate_limit
-Per-plan burst RPM enforcement (P1-P4) using a Redis sliding-minute window.
+Per-plan burst RPM enforcement using a Redis sliding-minute window.
 
 Plan limits (from PLAN_CATALOG):
-  P1 Hobbyist            -> 100 RPM
-  P2 Professional        -> 500 RPM
-  P3 Growth Intelligence -> 1,200 RPM
-  P4 Protocol Master     -> 3,000 RPM
+  Alpha -> 100 RPM
+  Beta  -> 500 RPM
+  Gamma -> 2,000 RPM
+  Delta -> 5,000 RPM
 
-Key change vs the legacy 3-tier limiter:
-  - Scoping is per-tenant (not per-API-key), so multiple keys under a
-    tenant share one RPM pool.
-  - Tier dimension is PlanTier instead of APIKeyTier.
+Scoping is per-tenant (not per-API-key), so multiple keys under a
+tenant share one RPM pool.
 
 Backend:
   AETHER_ENV=local -> in-memory sliding window (per-process)
@@ -108,17 +106,19 @@ class BurstRateLimiter:
 
     @staticmethod
     def _limit_for(plan_tier: PlanTier) -> int:
-        return PLAN_CATALOG[plan_tier].burst_rpm
+        limit = PLAN_CATALOG[plan_tier].burst_rpm
+        # Contract tiers (burst_rpm=0) are unlimited — return a high sentinel.
+        return limit if limit > 0 else 999_999_999
 
     @staticmethod
     def _coerce_plan(tier: PlanTier | APIKeyTier | None) -> PlanTier:
         if tier is None:
-            return PlanTier.P1_HOBBYIST
+            return PlanTier.ALPHA
         if isinstance(tier, PlanTier):
             return tier
         if isinstance(tier, APIKeyTier):
             return legacy_tier_to_plan(tier)
-        return PlanTier.P1_HOBBYIST
+        return PlanTier.ALPHA
 
     # Lua script: atomic INCR + EXPIRE that prevents TOCTOU races.
     # Returns [allowed (0/1), current_count].

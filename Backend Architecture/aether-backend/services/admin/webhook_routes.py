@@ -52,7 +52,7 @@ logger = get_logger("aether.service.admin.stripe_webhook")
 router = APIRouter(tags=["Admin — Stripe Webhook"])
 
 # Plan tier used when a subscription is deleted / payment lapses beyond recovery.
-_FALLBACK_TIER = PlanTier.P1_HOBBYIST
+_FALLBACK_TIER = PlanTier.ALPHA
 
 
 # ---------------------------------------------------------------------------

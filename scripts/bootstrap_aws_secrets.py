@@ -65,10 +65,13 @@ _ENV_VAR_TO_SECRET_PATH: dict[str, str] = {
     "GRAFANA_ADMIN_PASSWORD": "grafana-admin-password",
     "STRIPE_SECRET_KEY": "stripe-secret-key",
     "STRIPE_WEBHOOK_SECRET": "stripe-webhook-secret",
-    "STRIPE_PRICE_P1": "stripe-price-p1",
-    "STRIPE_PRICE_P2": "stripe-price-p2",
-    "STRIPE_PRICE_P3": "stripe-price-p3",
-    "STRIPE_PRICE_P4": "stripe-price-p4",
+    "STRIPE_PRICE_ALPHA": "stripe-price-alpha",
+    "STRIPE_PRICE_BETA": "stripe-price-beta",
+    "STRIPE_PRICE_GAMMA": "stripe-price-gamma",
+    "STRIPE_PRICE_DELTA": "stripe-price-delta",
+    "STRIPE_PRICE_EPSILON": "stripe-price-epsilon",
+    "STRIPE_PRICE_OMICRON": "stripe-price-omicron",
+    "STRIPE_PRICE_OMEGA": "stripe-price-omega",
 }
 
 # These are generated automatically; others must be supplied manually.

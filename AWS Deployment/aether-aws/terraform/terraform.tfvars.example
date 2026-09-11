@@ -13,8 +13,25 @@ aws_region         = "us-east-1"
 project            = "AETHER"
 
 # Domain & TLS  — fill in your ACM cert ARN
-domain_name         = "api.aether.io"
+domain_name         = "api.olympuslabsml.com"
 acm_certificate_arn = "arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/CERTIFICATE-ID"
+
+# Auth0 app URLs (canonical production domains)
+aether_app_url = "https://app.olympuslabsml.com"
+kyber_app_url  = "https://kyber.olympuslabsml.com"
+
+# Amplify Hosting (GitHub token stored in Secrets Manager / CI, not here)
+# amplify_github_access_token = ""  # Set via TF_VAR or Secrets Manager
+amplify_domain_name = "olympuslabsml.com"
+
+# Squarespace & DNS
+# The marketing site (apex/www) is hosted on Squarespace.
+# Product subdomains (app, docs, aether, kyber) stay on Amplify/AWS.
+# api.olympuslabsml.com is wired to the ALB automatically.
+squarespace_hosted_zone_enabled = true
+# squarespace_verification_code = ""  # From Squarespace > Settings > Domains > DNS settings
+# kyber_cname_target  = ""            # Where kyber.olympuslabsml.com points (e.g. another Amplify app or external host)
+# status_cname_target = ""            # Where status.olympuslabsml.com points (e.g. statuspage.io CNAME)
 
 # Monitoring
 alert_email = "ops@yourcompany.com"

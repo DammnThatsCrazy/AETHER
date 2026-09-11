@@ -120,7 +120,7 @@ def test_check_doc_not_stale_when_no_commits_after_sync(dd, tmp_path, monkeypatc
     must NOT be flagged stale, even if the stamp doesn't match the
     most-recent commit that ever touched the sources.
 
-    Regression for codex review of PR #70: the equality check
+    Regression for PR #70: the equality check
     ``latest == declared`` was incorrect.
     """
     monkeypatch.setattr(dd, "commits_touching_after", lambda declared, paths: [])

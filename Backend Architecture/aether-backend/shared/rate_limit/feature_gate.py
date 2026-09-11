@@ -123,7 +123,7 @@ class FeatureGate:
                     tenant_id="*",
                     plan_tier=plan_tier.value,
                     service=service.name,
-                    required_plan=min_plan.value if min_plan else "P4",
+                    required_plan=min_plan.value if min_plan else "delta",
                 ).inc()
             except Exception:
                 pass

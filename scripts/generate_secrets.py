@@ -122,11 +122,14 @@ def _print_generated(dry_run: bool = False) -> None:
     print("# 3. Copy the signing secret shown after creation:")
     print("# STRIPE_WEBHOOK_SECRET=whsec_<from_stripe_dashboard>")
     print("#")
-    print("# 4. Create Products + Prices in Stripe for P1-P4 plans, then set:")
-    print("# STRIPE_PRICE_P1=price_<hobbyist_price_id>")
-    print("# STRIPE_PRICE_P2=price_<professional_price_id>")
-    print("# STRIPE_PRICE_P3=price_<growth_intelligence_price_id>")
-    print("# STRIPE_PRICE_P4=price_<protocol_master_price_id>")
+    print("# 4. Create Products + Prices in Stripe for all plan tiers, then set:")
+    print("# STRIPE_PRICE_ALPHA=price_<alpha_price_id>")
+    print("# STRIPE_PRICE_BETA=price_<beta_price_id>")
+    print("# STRIPE_PRICE_GAMMA=price_<gamma_price_id>")
+    print("# STRIPE_PRICE_DELTA=price_<delta_price_id>")
+    print("# STRIPE_PRICE_EPSILON=price_<epsilon_price_id>")
+    print("# STRIPE_PRICE_OMICRON=price_<omicron_price_id>")
+    print("# STRIPE_PRICE_OMEGA=price_<omega_price_id>")
     print("#")
     print("# 5. Set your live secret key:")
     print("# STRIPE_SECRET_KEY=sk_live_<your_stripe_secret_key>")
@@ -167,10 +170,13 @@ def _validate(env_path: str) -> bool:
     stripe_required = [
         "STRIPE_SECRET_KEY",
         "STRIPE_WEBHOOK_SECRET",
-        "STRIPE_PRICE_P1",
-        "STRIPE_PRICE_P2",
-        "STRIPE_PRICE_P3",
-        "STRIPE_PRICE_P4",
+        "STRIPE_PRICE_ALPHA",
+        "STRIPE_PRICE_BETA",
+        "STRIPE_PRICE_GAMMA",
+        "STRIPE_PRICE_DELTA",
+        "STRIPE_PRICE_EPSILON",
+        "STRIPE_PRICE_OMICRON",
+        "STRIPE_PRICE_OMEGA",
     ]
 
     issues: list[str] = []

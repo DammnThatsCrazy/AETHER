@@ -337,8 +337,8 @@ def test_anti_distillation_score_binning(monkeypatch):
     monkeypatch.setenv("AETHER_ENV", "local")
     with backend_module_path():
         ad_mod = importlib.import_module("services.security.anti_distillation")
-        assert ad_mod.apply_output_precision(0.876, "P1_HOBBYIST") == 0.9
-        assert ad_mod.apply_output_precision(0.876, "P3_GROWTH") == 0.88
+        assert ad_mod.apply_output_precision(0.876, "ALPHA") == 0.9
+        assert ad_mod.apply_output_precision(0.876, "GAMMA") == 0.88
 
 
 def test_anti_distillation_honeypot_detection(monkeypatch):

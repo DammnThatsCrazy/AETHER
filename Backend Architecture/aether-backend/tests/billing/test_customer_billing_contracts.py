@@ -23,10 +23,13 @@ def test_enabled_incomplete_stripe_capability_is_degraded(monkeypatch):
             "enabled": True,
             "secret_key": "",
             "webhook_secret": "",
-            "price_p1": "",
-            "price_p2": "",
-            "price_p3": "",
-            "price_p4": "",
+            "price_alpha": "",
+            "price_beta": "",
+            "price_gamma": "",
+            "price_delta": "",
+            "price_epsilon": "",
+            "price_omicron": "",
+            "price_omega": "",
             "checkout_success_url": "https://app.example/success",
             "checkout_cancel_url": "https://app.example/cancel",
             "portal_return_url": "https://app.example/billing",
@@ -38,7 +41,7 @@ def test_enabled_incomplete_stripe_capability_is_degraded(monkeypatch):
     status = stripe_client.capability_status()
     assert status["status"] == "degraded"
     assert status["missing"] == [
-        "secret_key", "webhook_secret", "price_p1", "price_p2", "price_p3", "price_p4"
+        "secret_key", "webhook_secret", "price_alpha", "price_beta", "price_gamma", "price_delta",
     ]
     assert "secret" not in status
 
