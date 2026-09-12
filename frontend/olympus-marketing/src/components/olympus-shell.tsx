@@ -42,7 +42,7 @@ function MobileNav({ onNavigate }: { readonly onNavigate: () => void }) {
 /**
  * Olympus Labs Marketing Shell — the most spacious shell in the family.
  * Persistent header/nav/footer remain mounted; only the workspace route below
- * changes. Marketing never links into Kyber; KYBER_URL stays out of public UI.
+ * changes.
  */
 export function OlympusShell() {
   const location = useLocation();
@@ -152,7 +152,7 @@ export function OlympusShell() {
           <div className="mt-10 flex flex-col gap-2 border-t border-border-default pt-6 text-xs text-text-muted md:flex-row md:items-center md:justify-between">
             <p>© {new Date().getFullYear()} Olympus Labs. All rights reserved.</p>
             <p className="font-mono">
-              Aether by Olympus Labs · <span className="text-text-muted">Kyber is internal</span>
+              Aether by Olympus Labs
             </p>
           </div>
         </div>

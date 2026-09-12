@@ -64,10 +64,10 @@ export const SECTIONS: readonly SectionCopy[] = [
     paragraphs: [
       'Most organizations run dozens of systems that each answer one narrow question: a CRM for accounts, a warehouse for facts, a commerce backend for orders, a queue for support. The result is not a failure of any single system — it is the absence of a layer that relates them. Olympus Labs exists to build that layer, and to build it as governed infrastructure rather than as one more tool running on good intentions.',
       'We are deliberately a product company with a research practice, not a research lab with a demo. The distinction governs how we ship: every capability we name corresponds to an observable behavior in the platform, and everything we claim in public corresponds to what the platform can demonstrate today. Where a capability is configured but not yet verified, or verified but not yet live, we say exactly that.',
-      'Olympus Labs is a private, deliberately sized organization. Kyber is its internal operator application — how the company runs the platform day to day; Aether is the customer-facing product the public interacts with. The two share one design system, one status language, and one standard of accountability.',
+      'Olympus Labs is a private, deliberately sized organization. Aether is the customer-facing product the public interacts with. The platform shares one design system, one status language, and one standard of accountability across every surface.',
     ],
     bullets: [
-      { heading: 'Creator and operator', text: 'Olympus Labs owns and operates Aether and Kyber. Aether is its customer-facing relationship intelligence platform; Kyber is its private internal operator application.' },
+      { heading: 'Creator and operator', text: 'Olympus Labs owns and operates Aether, its customer-facing relationship intelligence platform.' },
       { heading: 'Research-informed', text: 'Our research and systems practice shapes the product roadmap and appears publicly as principles and written research.' },
       { heading: 'Accountable by design', text: 'We publish what we can prove, mark what remains uncertain, and keep operational claims behind internal surfaces.' },
     ],
@@ -78,15 +78,15 @@ export const SECTIONS: readonly SectionCopy[] = [
     eyebrow: 'Products',
     title: 'Infrastructure products built on one governed foundation',
     description: 'The Olympus Labs product family, led by Aether.',
-    lead: 'Aether is the flagship. Kyber is how Olympus Labs operates the platform. Everything we build shares one design system, one motion philosophy, and one set of truthful status semantics.',
+    lead: 'Aether is the flagship. Everything we build shares one design system, one motion philosophy, and one set of truthful status semantics.',
     paragraphs: [
       'Aether connects customer, entity, wallet, agent, campaign, communication, and commerce activity into a governed graph — so organizations can understand what happened, why it happened, and what to do next. It is the customer-facing product, and its full product, developer, integration, security, and pricing surfaces are documented on the Aether public site.',
-      'Kyber is the operating environment Olympus Labs uses to run Aether: the internal console, automation, and control surfaces that keep the platform honest. Kyber exists to operate rather than to sell, so it is not exposed through public marketing and is never linked from these pages.',
+      'The platform is operated by Olympus Labs through internal tooling that keeps it honest. Those operational surfaces exist to run the platform, not to sell it, so they are not exposed through public marketing.',
       'Everything in the family shares one design system and one motion philosophy, so a user who has read one Olympus Labs surface can read the next without relearning the alphabet. The family also shares one status semantics: configured is not verified, verified is not live, and every surface names the state it is actually in.',
     ],
     bullets: [
       { heading: 'Aether', text: 'Olympus Labs’ customer-facing relationship intelligence platform. Public explanation lives on the Aether site.' },
-      { heading: 'Kyber', text: 'Olympus Labs’ private internal operator application. It is not a customer product and is not linked from public marketing.' },
+      { heading: 'Operations', text: 'Olympus Labs operates the platform through internal tooling held to the same design and status standards as Aether itself.' },
       { heading: 'One foundation', text: 'A single design system, motion philosophy, and status language spans the family, so surfaces read as one system.' },
     ],
     cta: { label: 'Read about Aether', to: '/products/aether' },
@@ -174,7 +174,7 @@ export const SECTIONS: readonly SectionCopy[] = [
     paragraphs: [
       'Olympus Labs is a product company with a research practice, building relationship intelligence infrastructure that turns fragmented customer activity into governed, measurable outcomes. We are deliberately sized — small enough that every person carries real surface area, and structured enough that decisions are reviewed and recorded rather than improvised.',
       'We hire for judgment as much as for skill. People who thrive here care about the difference between a demo and an accountable system: they read the same public copy we publish, hold the company to the same standards it holds the platform, and expect their work to be observable, verifiable, and honestly described.',
-      'The company operates Aether, its customer-facing platform, and Kyber, its private internal operator environment. Work spans building, operating, writing, and verifying the systems the team ships — the same discipline that keeps marketing honest also shapes engineering. The work is calm and deliberate, and status is truthful or it is not status.',
+      'The company builds and operates Aether, its customer-facing platform. Work spans building, operating, writing, and verifying the systems the team ships — the same discipline that keeps marketing honest also shapes engineering. The work is calm and deliberate, and status is truthful or it is not status.',
       'Open roles are shared on this page when they are posted, with the requirements and the team behind each role described plainly — with the same specificity we expect from the surfaces we build.',
     ],
     bullets: [

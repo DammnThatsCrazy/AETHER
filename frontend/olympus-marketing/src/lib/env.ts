@@ -1,9 +1,9 @@
 /**
  * Build-time site topology for the Olympus Labs marketing site.
  *
- * The four product-family hosts are configurable per deploy. Marketing is a
- * separate deployable from the Aether tenant application and Kyber; public
- * shells only ever link outward to those origins, never into their sessions.
+ * The product-family hosts are configurable per deploy. Marketing is a
+ * separate deployable from the Aether tenant application; public shells only
+ * ever link outward to those origins, never into their sessions.
  */
 
 const meta = import.meta as unknown as { env?: Record<string, string | undefined> };
@@ -17,9 +17,6 @@ export const AETHER_MARKETING_URL = env.VITE_AETHER_MARKETING_URL ?? 'https://ae
 
 /** Protected Aether tenant application origin (app.olympuslabsml.com). */
 export const AETHER_APP_URL = env.VITE_AETHER_APP_URL ?? 'https://app.olympuslabsml.com';
-
-/** Olympus Labs internal Kyber origin (kyber.olympuslabsml.com). Never linked from public marketing. */
-export const KYBER_URL = env.VITE_KYBER_URL ?? 'https://kyber.olympuslabsml.com';
 
 /** Aether documentation origin (docs.olympuslabsml.com). */
 export const AETHER_DOCS_URL = env.VITE_AETHER_DOCS_URL ?? 'https://docs.olympuslabsml.com';

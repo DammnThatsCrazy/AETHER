@@ -149,7 +149,7 @@ jobs:
     if: needs.prepare.outputs.is_production == 'true'
     environment:
       name: production
-      url: https://api.aether.io
+      url: https://api.olympuslabsml.com
     steps:
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
@@ -356,7 +356,7 @@ jobs:
       - name: Health checks
         run: |
           DEMO_URL="${{ secrets.DEMO_URL }}"
-          DEMO_URL="${DEMO_URL:-https://demo.aether.io}"
+          DEMO_URL="${DEMO_URL:-https://demo.olympuslabsml.com}"
           for i in 1 2 3; do
             STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${DEMO_URL}/v1/health" || echo "000")
             if [ "$STATUS" = "200" ]; then
@@ -373,7 +373,7 @@ jobs:
       - name: Core API validation
         run: |
           DEMO_URL="${{ secrets.DEMO_URL }}"
-          DEMO_URL="${DEMO_URL:-https://demo.aether.io}"
+          DEMO_URL="${DEMO_URL:-https://demo.olympuslabsml.com}"
           API_KEY="${{ secrets.DEMO_API_KEY }}"
 
           # Verify ingest endpoint
@@ -408,14 +408,14 @@ jobs:
       - name: Seed demo data
         run: |
           python scripts/seed_demo_data.py \
-            --url "${{ secrets.DEMO_URL || 'https://demo.aether.io' }}" \
+            --url "${{ secrets.DEMO_URL || 'https://demo.olympuslabsml.com' }}" \
             --api-key "${{ secrets.DEMO_API_KEY }}" \
             --clear-existing
       - name: Notify demo ready
         run: |
           curl -sf -X POST "${{ secrets.SLACK_WEBHOOK }}" \
             -H 'Content-type: application/json' \
-            -d "{\"text\":\":sparkles: Aether *demo* environment is ready!\n:globe_with_meridians: API: https://demo.aether.io\n:video_game: Playground: https://playground.demo.aether.io\n:label: Version: \`${{ needs.prepare.outputs.version }}\`\"}" \
+            -d "{\"text\":\":sparkles: Aether *demo* environment is ready!\n:globe_with_meridians: API: https://demo.olympuslabsml.com\n:video_game: Playground: https://playground.demo.olympuslabsml.com\n:label: Version: \`${{ needs.prepare.outputs.version }}\`\"}" \
             2>/dev/null || true
 
   # ──────────────────────────────────────────────────────────────────────

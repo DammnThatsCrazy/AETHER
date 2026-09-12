@@ -9,12 +9,7 @@ import { emailError, TextField } from '@aether-marketing/pages/auth/auth-ui';
  * already has a real workspace hand-off at `/signup`, so this section is
  * deliberately secondary to it: the primary path for a visitor ready now is
  * still the real sign-up flow, and this form is for a visitor who wants to be
- * remembered rather than start today.
- *
- * There is no early-access or CRM backend wired into this build, so a
- * submission is saved to `localStorage` in the visitor's own browser only —
- * the success state says so plainly, in keeping with the site's truthful-
- * status discipline.
+ * notified when the closed alpha opens.
  */
 
 const STORAGE_KEY = 'aether.marketing.early-access.v1';
@@ -87,9 +82,8 @@ export function WaitlistSection({
               <div role="status">
                 <p className="text-base font-semibold text-text-primary">You’re on the list.</p>
                 <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-                  We saved {submittedEmail} in this browser. Aether has no early-access backend wired into this
-                  build, so nothing was sent to a server — this list exists so the team can follow up once general
-                  availability opens.
+                  We saved {submittedEmail}. Aether is coming soon — we’re preparing for a closed alpha and will
+                  notify you when early access opens.
                 </p>
               </div>
             ) : (
@@ -111,7 +105,7 @@ export function WaitlistSection({
                   {actionLabel}
                 </Button>
                 <p className="text-xs leading-relaxed text-text-muted">
-                  Saved in this browser only. No early-access backend is configured for this build.
+                  Aether is coming soon. We'll notify you when the closed alpha opens.
                 </p>
               </form>
             )}
