@@ -15,28 +15,28 @@ canonical_owner: platform@aether
 estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
-  "AGENTS.md": "sha256:9c93d298d9048a47ebbc2bbebdfba02095972cef5b0bd8f1a16b56a41b816f0e"
-  "Makefile": "sha256:db03a26607229338b23f076237cdadc269c2fa68e9bee1645a6ae903532341f6"
-  "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:76d6a10a0126e0aefd4ac2caf069a422f7f38921581b5a5d53c1521eab090f1a"
+  "AGENTS.md": "sha256:d2ad2e71bb5aae9de1ca85fe6a5347a8988fbad77ab2bdce39abd89456195285"
+  "Makefile": "sha256:8b0291c5f37011f721b7a45ef4319f9c0ec14afe7d4cd26c4b49b9a79e0ccbbb"
+  "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:da2da260f2339cab46e2186cb75761965df4579380254438ae4c3f92d9f7c716"
   "scripts/repo_doctor.py": "sha256:c41d77513a769d2d0f13eefaa27031ff6ce3456383eeb4d4b3006dfbe18aa896"
 ---
 
 # Contributing
 
-AETHER PRs are not complete until the repository consistency contract passes locally or in the cloud-agent workspace.
+AETHER PRs are not merge-ready until the repository consistency contract passes locally or in the cloud-agent workspace. Local edits, diagnosis, and focused validation may use narrower checks; report those as local evidence rather than as PR completion.
 
 ## Required preflight
 
-Before opening or updating a PR:
+When preparing or updating a PR:
 
-1. Run `make repo-doctor-fix`.
+1. If docs, generator inputs, or contract inputs changed, run `make docs-generate`.
 2. Run `make verification-disposition BASE=<ref> EXECUTE=1` for the affected PR authority.
-3. Run `make ci-check` as the broad local completion gate.
-4. Commit all generated docs and sync outputs.
-5. Do not hand-edit generated docs.
-6. Do not bypass TypeScript/package export failures.
-7. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
-8. PR is not complete until the affected disposition and broad `make ci-check` both exit 0.
+3. If strict docs drift reports source-linked pages, review each listed page against its declared `source_files`; update authored content where behavior changed, then run `make docs-generate-changed`.
+4. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
+5. Run `make ci-check` for broad local, trusted-main, nightly, or release evidence; it includes generator idempotency and is not a second blocking PR authority.
+6. Commit generated and synced outputs when preparing the PR or when a commit was requested.
+7. Do not hand-edit generated docs or bypass TypeScript/package export failures.
+8. Do not call a PR merge-ready until the affected disposition passes; report broad-gate results separately.
 
 The hosted normal-PR merge check is the stable `verification / disposition`
 status. The broad gate remains required local/trusted-main/nightly evidence and

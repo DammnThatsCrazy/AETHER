@@ -128,7 +128,7 @@ domains:
     minimum_lane: integration
   documentation:
     owner: docs
-    paths: [docs/**, README.md, DEVELOPMENT.md, CONTRIBUTING.md, ARCHITECTURE.md, RELEASES.md, SECURITY.md, VERSION, CHANGELOG.md, .github/CODEOWNERS, .github/pull_request_template.md]
+    paths: [docs/**, README.md, DEVELOPMENT.md, CONTRIBUTING.md, ARCHITECTURE.md, RELEASES.md, SECURITY.md, VERSION, CHANGELOG.md, .github/CODEOWNERS, .github/pull_request_template.md, AGENTS.md, CLAUDE.md, .codex/instructions.md]
     checks: [docs]
     minimum_lane: fast
 

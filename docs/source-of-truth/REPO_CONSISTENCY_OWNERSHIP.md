@@ -102,13 +102,14 @@ have in the absence of AWS credentials.
 
 Before opening or updating a PR:
 
-1. Run `make repo-doctor-fix`.
-2. Run `make ci-check`.
+1. If docs, generator inputs, or contract inputs changed, run `make docs-generate`.
+2. Run `make verification-disposition BASE=<ref> EXECUTE=1` as the normal PR authority.
 3. Commit all generated docs and sync outputs.
 4. Do not hand-edit generated docs.
 5. Do not bypass TypeScript/package export failures.
 6. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
-7. PR is not complete until `make ci-check` exits 0.
+7. Run `make ci-check` for broad local, trusted-main, nightly, or release evidence; it is not a second blocking normal-PR authority.
+8. PR is not complete until the verification disposition passes.
 
 The full repo-doctor path runs `python scripts/validate_frontend_data_truth.py`
 before frontend builds, then runs the validator with `--build-bundles` to build

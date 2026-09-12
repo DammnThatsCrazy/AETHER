@@ -2,25 +2,37 @@
 
 This repository uses `scripts/repo_doctor.py` and the root `Makefile` as the
 canonical consistency system. Agents must not use weaker commands as proof of
-PR completion.
+PR merge-readiness or production readiness.
 
-## Required PR Workflow
+## Required PR / Merge-Readiness Workflow
+
+This workflow applies when preparing a pull request or making a repository
+merge-readiness claim. For read-only analysis, diagnosis, planning, and narrow
+local edits, run only checks relevant to the affected surface and do not commit
+unless the user requests a commit.
 
 1. Inspect the changed source category.
-2. Check `docs/source-of-truth/repo_consistency_ownership.json` for the surfaces
-   that category requires you to update.
+2. For source changes that can affect derived surfaces, check
+   `docs/source-of-truth/repo_consistency_ownership.json` for the surfaces that
+   category requires you to update.
 3. Update all required derived surfaces for the changed category.
-4. Run `make docs-generate` for generated and sync-managed docs.
-5. If source-linked docs are reported stale by `python scripts/docs_drift.py --strict`,
-   review each listed doc against its declared `source_files` frontmatter.
+4. If docs, generator inputs, or contract inputs changed, run
+   `make docs-generate` for generated and sync-managed docs.
+5. If source-linked docs are reported stale by `make docs-check`, review each
+   listed doc against its declared `source_files` frontmatter.
 6. Update authored doc content where behavior changed.
 7. Run `make docs-generate-changed` **only after** review; it updates only the
    affected pages' deterministic `source_hashes`.
-8. Run `make docs-verify-idempotent`.
-9. Run `make ci-check`.
-10. Commit all generated docs, synced docs, source-linked docs, source hashes, contract
-   artifacts, package/version surfaces, and ownership-map-required surfaces.
-11. Do not claim completion while `make ci-check` fails.
+8. Run `make verification-disposition BASE=<base> EXECUTE=1` as the normal PR
+   authority. Run `make ci-check` for broad local, trusted-main, nightly, or
+   release evidence; it includes generated-artifact, sync, and
+   documentation-idempotency checks but is not a second blocking PR authority.
+9. When preparing a PR or requested commit, commit all generated docs, synced
+   docs, source-linked docs, source hashes, contract artifacts, package/version
+   surfaces, and ownership-map-required surfaces.
+10. Do not claim PR merge-readiness unless the verification disposition passes.
+    Report focused task evidence and the broad `make ci-check` result
+    separately.
 
 ## Canonical commands
 
@@ -30,8 +42,15 @@ PR completion.
 - `make docs-generate` — generate only generated/sync-managed docs.
 - `make docs-generate-changed` — update only source-linked docs with changed source bytes.
 - `make docs-verify-idempotent` — prove the second generation pass is byte-identical.
-- `make ci-check` — **canonical PR completion gate** (fails if generators produce a diff).
+- `make verification-disposition BASE=<base> EXECUTE=1` — normal PR authority.
+- `make ci-check` — broad consistency and repository evidence (fails if generators produce a diff).
 - `make release-gate` — `ci-check` + strict production status + ops readiness (release claims only).
+
+## Project Skill Discovery Boundary
+
+Project skills, if present, are only trusted from tracked project skill
+directories. Skill discovery must exclude `.venv/`, `node_modules/`, build
+outputs, and other vendored or generated dependency trees.
 
 ## Generated documentation ownership
 
@@ -58,9 +77,11 @@ PR completion.
 
 - Do not blindly update source-linked hashes.
 - Do not manually edit generated docs without changing the generator.
-- Do not use `npm run test`, `npm run test:docs`, partial pytest runs,
+- Do not present `npm run test`, `npm run test:docs`, partial pytest runs,
   TypeScript-only checks, docs-only checks, `make repo-doctor` alone, or manual
-  inspection as proof of full readiness.
+  inspection as proof of PR merge-readiness or production readiness. These
+  checks remain valid for local feedback, diagnosis, and affected-surface
+  validation.
 - Do not leave generated diffs uncommitted.
 - Do not bypass ownership-map-required surfaces.
 - Do not weaken validators to pass CI.
