@@ -10,7 +10,7 @@ since_version: 0.1.0
 
 # Aether iOS SDK
 
-The Aether iOS SDK captures observations from iOS applications.
+The Aether iOS SDK is a thin observation client that captures observations from iOS applications.
 
 ## Installation
 

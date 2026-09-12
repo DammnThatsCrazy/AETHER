@@ -805,3 +805,10 @@ mounted the connectors-gated **catalog read-model** router from
   layer this program steers new work into.
 - **Guardrail intact:** `scripts/validate_canonical_ingestion_trees.py` remains
   on disk and is still run by the ownership gate.
+
+## Truth reset — endpoint deprecation markers
+
+The repository truth reset (v0.1.0-alpha.0) marked legacy single-event endpoints
+(`/v1/track`, `/v1/page`, `/v1/identify`, `/v1/conversion`) as deprecated in
+`Data Lake Architecture/README.md`, consistent with the Phase 0 deprecation
+banners. The canonical ingestion endpoint is `/v1/batch`.

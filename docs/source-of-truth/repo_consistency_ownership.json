@@ -59,6 +59,7 @@
         "packages/shared/events.ts",
         "schemas/**",
         "contracts/**",
+        "!contracts/*.md",
         "Backend Architecture/**/events/**/*.py"
       ],
       "required_changed_globs": [

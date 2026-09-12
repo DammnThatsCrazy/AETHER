@@ -201,7 +201,7 @@ All event data flows through three progressively refined storage tiers:
 - Rate limiting is applied per API key with configurable thresholds
 
 ### Event Sourcing and Ingestion
-- HTTP batch and single-event ingestion endpoints (`/v1/batch`, `/v1/track`, `/v1/page`, `/v1/identify`, `/v1/conversion`)
+- HTTP batch ingestion via `/v1/batch` (canonical); legacy single-event endpoints (`/v1/track`, `/v1/page`, `/v1/identify`, `/v1/conversion`) are deprecated
 - Schema validation, deduplication (configurable window), geo/UA enrichment, IP anonymization
 - Multi-sink routing: events are simultaneously written to Kafka, ClickHouse, S3, and Redis
 - Dead letter queue for unprocessable messages
@@ -386,11 +386,11 @@ Configuration is managed through environment variables. See `.env.example` for t
 
 | Method | Path             | Auth     | Description                  |
 |--------|------------------|----------|------------------------------|
-| POST   | `/v1/batch`      | Required | Batch event ingestion        |
-| POST   | `/v1/track`      | Required | Single track event           |
-| POST   | `/v1/page`       | Required | Single page view event       |
-| POST   | `/v1/identify`   | Required | Single identify event        |
-| POST   | `/v1/conversion` | Required | Single conversion event      |
+| POST   | `/v1/batch`      | Required | Batch event ingestion (canonical) |
+| POST   | `/v1/track`      | Required | Single track event (deprecated — use `/v1/batch`) |
+| POST   | `/v1/page`       | Required | Single page view event (deprecated — use `/v1/batch`) |
+| POST   | `/v1/identify`   | Required | Single identify event (deprecated — use `/v1/batch`) |
+| POST   | `/v1/conversion` | Required | Single conversion event (deprecated — use `/v1/batch`) |
 | GET    | `/health`        | Public   | Health check                 |
 | GET    | `/metrics`       | Public   | Prometheus metrics           |
 | GET    | `/status`        | Public   | Service status               |

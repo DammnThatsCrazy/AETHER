@@ -10,7 +10,7 @@ since_version: 0.1.0
 
 # Aether React SDK
 
-The Aether React SDK wraps the Web SDK with React-specific hooks and components.
+The Aether React SDK is a thin observation client that wraps the Web SDK with React-specific hooks and components.
 
 ## Installation
 
