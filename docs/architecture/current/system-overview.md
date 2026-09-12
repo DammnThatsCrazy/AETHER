@@ -10,7 +10,7 @@ since_version: "0.1.0"
 
 # System Overview
 
-Aether is a contract-governed intelligence graph and product runtime.
+Aether is a contract-governed intelligence infrastructure platform.
 
 ## System Flow
 
@@ -34,7 +34,7 @@ SDKs / Providers / Connectors
 - **Connectors** — Manages provider integrations
 - **Tenant Runtime** — Activation, health, plan limits, entitlements
 - **API** — REST and GraphQL surfaces
-- **Noesis** — Intelligence and inference surfaces
+- **Noesis** — Analytical intelligence surface (productized graph view)
 
 ## Current State
 

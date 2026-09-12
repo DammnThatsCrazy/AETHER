@@ -14,11 +14,14 @@ since_version: "0.1.0"
 
 Python/FastAPI backend handling ingestion, identity resolution, graph mutations, orchestration, and API surfaces.
 
-## Frontend
+## Surfaces (Frontend)
 
-- Aether Console — Tenant-facing application
-- Kyber Operator Console — Operator-facing application
-- Demo App — Synthetic data demonstration
+All frontend surfaces are productized graph views — governed projections
+of the tenant-scoped intelligence graph rendered for a specific purpose.
+
+- **Aether Console** — Tenant-facing surface (Profile360, Campaign360, Journey360)
+- **Kyber Operator Console** — Operational graph view for real-time decisioning
+- **Demo App** — Synthetic data demonstration surface
 
 ## Data Plane
 

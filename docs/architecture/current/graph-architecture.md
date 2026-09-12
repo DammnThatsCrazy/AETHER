@@ -12,9 +12,20 @@ since_version: "0.1.0"
 
 ## Model
 
-Tenant-scoped property graph with typed nodes and edges.
+Tenant-scoped intelligence graph built from four primitives:
+**Entity**, **Observation**, **Edge**, and **Projection**.
 
-## Node Types
+## Graph Primitives
+
+- **Entity** — a resolved identity node (Profile, Account, Organization,
+  Agent, Campaign, Journey)
+- **Observation** — an immutable fact attached to an entity (event,
+  measurement, communication, value, risk)
+- **Edge** — a typed, directed relationship between entities
+- **Projection** — a governed, materialized view of graph state for a
+  specific surface or lens
+
+## Entity Types
 
 - Profile (human, account, organization)
 - Agent
@@ -22,12 +33,12 @@ Tenant-scoped property graph with typed nodes and edges.
 - Journey
 - Episode
 - Communication
-- Value event
-- Risk event
 
 ## Projection
 
-Graph state is populated through governed projections, not direct ad hoc writes. Every projection cites source events and attaches explainability metadata.
+Graph state is populated through governed projections, not direct ad hoc
+writes (see ADR-0008). Every projection cites source observations and
+attaches explainability metadata.
 
 ## Query
 

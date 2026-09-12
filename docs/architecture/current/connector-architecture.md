@@ -12,7 +12,10 @@ since_version: "0.1.0"
 
 ## Design
 
-Connectors are Aether-managed integrations to external provider systems. They handle auth, sync, webhooks, normalization, and graph projection.
+Connectors are Aether-managed integrations to external provider systems
+(providers are external platforms like Stripe, HubSpot, Shopify;
+connectors are Aether's managed integration layer to them). They handle
+auth, sync, webhooks, normalization, and graph projection.
 
 ## Components
 

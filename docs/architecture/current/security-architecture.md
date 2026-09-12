@@ -1,6 +1,6 @@
 ---
 title: Security Architecture
-slug: security-architecture
+slug: architecture/current/security-architecture
 section: architecture
 visibility: I
 audience: [architect, security]
