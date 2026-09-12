@@ -5,6 +5,7 @@ section: security
 visibility: I
 audience: [security, architect, dev-senior]
 status: stable
+since_version: "0.1.0"
 canonical_owner: security@aether
 ---
 # Traffic Intelligence Threat Model
