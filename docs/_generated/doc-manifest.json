@@ -5280,6 +5280,38 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/ci/architecture.md",
+      "title": "CI Architecture",
+      "slug": "ci/architecture",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/ci/gate-reference.md",
+      "title": "CI Gate Reference",
+      "slug": "ci/gate-reference",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/comms/ADR_COMMUNICATIONS_INTELLIGENCE.md",
       "title": "ADRs — Communications Intelligence",
       "slug": "comms/adr-communications-intelligence",
@@ -5607,6 +5639,30 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/connectors/provider-manifests.md",
+      "title": "Provider Manifests",
+      "slug": "connectors/provider-manifests",
+      "section": "reference",
+      "visibility": "P",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/connectors/provider-normalization.md",
+      "title": "Provider Normalization",
+      "slug": "connectors/provider-normalization",
+      "section": "reference",
+      "visibility": "P",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/connectors/provider-vs-connector.md",
       "title": "Provider vs Connector",
       "slug": "connectors/provider-vs-connector",
@@ -5674,6 +5730,45 @@
       "visibility": "P",
       "audience": [
         "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/contracts/compatibility-matrix.md",
+      "title": "Contract Compatibility Matrix",
+      "slug": "contracts/compatibility-matrix",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/contracts/coverage.md",
+      "title": "Contract Coverage",
+      "slug": "contracts/coverage",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/contracts/validation.md",
+      "title": "Contract Validation",
+      "slug": "contracts/validation",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
       ],
       "status": "stable",
       "since_version": "0.1.0"

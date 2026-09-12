@@ -70,3 +70,5 @@ Python backend subsystems above.
 - [Capability Coverage](./capability-coverage.md)
 - [Provider vs Connector](./provider-vs-connector.md)
 - [Normalization](./normalization.md)
+- [Provider Manifests](./provider-manifests.md)
+- [Provider Normalization](./provider-normalization.md)
