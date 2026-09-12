@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [buyer, ops, architect]
 status: beta
-since_version: 9.0.0
+since_version: "0.1.0"
 source_files: [Backend Architecture/aether-backend/services/reliability/models.py, Backend Architecture/aether-backend/services/reliability/service.py, Backend Architecture/aether-backend/services/reliability/routes.py, Backend Architecture/aether-backend/services/reliability/tenant_impact.py, frontend/kyber/src/pages/reliability/reliability-page.tsx, frontend/aether/src/pages/system-status/system-status-page.tsx]
 related: [reliability/sre-runbooks, reliability/incident-response, reliability/slo-tracking, reliability/tenant-status]
 canonical_owner: platform@aether

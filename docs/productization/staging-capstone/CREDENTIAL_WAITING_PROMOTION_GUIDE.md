@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [architect, ops, security]
 status: stable
-since_version: "8.12.0"
+since_version: "0.1.0"
 source_files:
   - Backend Architecture/aether-backend/shared/certification/readiness.py
   - Backend Architecture/aether-backend/shared/certification/checks.py

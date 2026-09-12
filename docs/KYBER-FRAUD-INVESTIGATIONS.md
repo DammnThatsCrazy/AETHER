@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [ops, security]
 status: stable
-since_version: 9.0.0
+since_version: "0.1.0"
 source_files: [frontend/kyber/src/pages/fraud/, frontend/kyber/src/components/fraud/]
 source_hashes:
   frontend/kyber/src/components/fraud/: sha256:6b488494d59bd459b96df8ec22a4ec3c99568526ea7bd2d04ceb60dc2b6d634b

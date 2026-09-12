@@ -5,7 +5,7 @@ section: architecture
 visibility: I
 audience: [dev-senior, architect]
 status: stable
-since_version: "8.12.0"
+since_version: "0.1.0"
 canonical_owner: frontend@aether
 ---
 

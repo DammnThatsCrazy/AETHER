@@ -14,7 +14,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -29,7 +29,7 @@
         "security"
       ],
       "status": "stable",
-      "since_version": "13.0.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/ACCOUNT-PLANS.md",
@@ -194,7 +194,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -226,7 +226,7 @@
         "security"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 20,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -242,7 +242,7 @@
         "security"
       ],
       "status": "stable",
-      "since_version": "13.0.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/AUDIT-EXPORTS.md",
@@ -268,7 +268,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 2,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -285,7 +285,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 18,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -303,7 +303,7 @@
         "security"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 20,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -337,7 +337,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -368,7 +368,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -384,7 +384,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -416,7 +416,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -435,7 +435,7 @@
         "security"
       ],
       "status": "stable",
-      "since_version": "13.0.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/BUYER-PERSONAS.md",
@@ -492,7 +492,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -524,7 +524,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 11,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -539,7 +539,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "toc_depth": 3,
       "canonical_owner": "commerce@aether"
@@ -588,7 +588,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "9.1.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -604,7 +604,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -711,7 +711,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -850,7 +850,7 @@
         "compliance"
       ],
       "status": "stable",
-      "since_version": "13.0.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/DECISION-OUTCOME-INTELLIGENCE.md",
@@ -889,7 +889,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "canonical_owner": "platform@aether"
     },
@@ -904,7 +904,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -919,7 +919,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -950,7 +950,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -995,7 +995,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 2,
       "canonical_owner": "platform@aether"
     },
@@ -1011,7 +1011,7 @@
         "dev-senior"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "canonical_owner": "platform@aether"
     },
@@ -1056,7 +1056,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "canonical_owner": "platform@aether"
     },
@@ -1073,7 +1073,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -1087,7 +1087,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -1138,7 +1138,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/ELASTIC-DATA-PLANE.md",
@@ -1208,7 +1208,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -1267,7 +1267,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -1305,7 +1305,7 @@
         "architect"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -1321,7 +1321,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "9.0.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/FOUNDING-TENANT-PRODUCTION.md",
@@ -1353,7 +1353,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "9.0.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/FRONTEND-ARCHITECTURE.md",
@@ -1366,7 +1366,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 35,
       "toc_depth": 4,
       "canonical_owner": "frontend@aether"
@@ -1383,7 +1383,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -1398,7 +1398,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 2,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -1432,7 +1432,7 @@
         "security"
       ],
       "status": "stable",
-      "since_version": "13.0.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/GOVERNMENT-GTM-PLANNING.md",
@@ -1524,7 +1524,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -1539,7 +1539,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -1577,7 +1577,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 12,
       "toc_depth": 3,
       "canonical_owner": "identity@aether"
@@ -1607,7 +1607,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -1623,7 +1623,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -1659,7 +1659,7 @@
         "security"
       ],
       "status": "stable",
-      "since_version": "13.0.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/INTELLIGENCE-GRAPH.md",
@@ -1723,7 +1723,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -1742,7 +1742,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -1757,7 +1757,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -1775,7 +1775,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.11.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -1807,7 +1807,7 @@
         "security"
       ],
       "status": "stable",
-      "since_version": "9.0.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/KYBER-REVENUE-INTELLIGENCE.md",
@@ -1874,7 +1874,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -1890,7 +1890,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -1909,7 +1909,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -1926,7 +1926,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -1943,7 +1943,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -1958,7 +1958,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "canonical_owner": "platform@aether"
     },
@@ -1973,7 +1973,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -1988,7 +1988,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -2006,7 +2006,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -2098,7 +2098,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -2126,7 +2126,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 12,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -2216,7 +2216,7 @@
         "dev-senior"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -2230,7 +2230,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -2245,7 +2245,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -2273,7 +2273,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -2329,7 +2329,7 @@
         "security"
       ],
       "status": "stable",
-      "since_version": "13.0.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/POSTHOG-CONNECTOR.md",
@@ -2342,7 +2342,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 2,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -2360,7 +2360,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -2380,7 +2380,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -2456,7 +2456,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -2537,7 +2537,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -2553,7 +2553,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 13,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -2569,7 +2569,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -2585,7 +2585,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -2601,7 +2601,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -2617,7 +2617,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -2690,7 +2690,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -2721,7 +2721,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 2,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -2762,7 +2762,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -2791,7 +2791,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -2809,7 +2809,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -3016,7 +3016,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 2,
       "toc_depth": 3,
       "canonical_owner": "security@aether"
@@ -3033,7 +3033,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 2,
       "canonical_owner": "platform@aether"
     },
@@ -3049,7 +3049,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -3067,7 +3067,7 @@
         "compliance"
       ],
       "status": "stable",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "canonical_owner": "platform@aether"
     },
@@ -3114,7 +3114,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 2,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -3148,7 +3148,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -3167,7 +3167,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -3185,7 +3185,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -3200,7 +3200,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -3219,7 +3219,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -3233,7 +3233,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -3293,7 +3293,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -3308,7 +3308,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 2,
       "toc_depth": 3,
       "canonical_owner": "commerce@aether"
@@ -3325,7 +3325,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 18,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -3354,7 +3354,7 @@
         "dev-senior"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -3370,7 +3370,7 @@
         "buyer"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "billing@aether"
@@ -3386,7 +3386,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -3474,7 +3474,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 15,
       "canonical_owner": "backend@aether"
     },
@@ -3509,7 +3509,7 @@
         "security"
       ],
       "status": "stable",
-      "since_version": "13.0.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/TENANT-STATUS.md",
@@ -3523,7 +3523,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -3539,7 +3539,7 @@
         "dev-senior"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -3554,7 +3554,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/UNIFIED-ECONOMIC-GRAPH.md",
@@ -3567,7 +3567,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/UNIVERSAL-PROVIDER-RUNTIME.md",
@@ -3580,7 +3580,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 14,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -3651,7 +3651,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -3667,7 +3667,7 @@
         "security"
       ],
       "status": "stable",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -3698,7 +3698,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -3717,7 +3717,7 @@
         "compliance"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 12,
       "toc_depth": 3,
       "canonical_owner": "security@aether"
@@ -3733,7 +3733,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -3831,7 +3831,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "9.0.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/api/FRAUD-NETWORKS.md",
@@ -3845,7 +3845,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "9.0.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/api/authentication.md",
@@ -3969,7 +3969,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "9.0.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/architecture/RECONCILED_CONTROL_PLANE.md",
@@ -3982,7 +3982,7 @@
         "dev-senior"
       ],
       "status": "experimental",
-      "since_version": "8.12.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/architecture/RELIABILITY-PHASE-2-PROGRAM.md",
@@ -4025,7 +4025,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "9.1.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "canonical_owner": "platform@aether"
     },
@@ -4519,7 +4519,7 @@
         "ops"
       ],
       "status": "experimental",
-      "since_version": "8.12.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/billing-attachment-runbook.md",
@@ -4726,7 +4726,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -4741,7 +4741,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -4756,7 +4756,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -4770,7 +4770,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -4785,7 +4785,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -4800,7 +4800,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -4815,7 +4815,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -4829,7 +4829,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -4844,7 +4844,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -4859,7 +4859,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -4874,7 +4874,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -4918,7 +4918,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -4933,7 +4933,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -4963,7 +4963,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -4978,7 +4978,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -4993,7 +4993,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -5008,7 +5008,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -5023,7 +5023,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -5038,7 +5038,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -5053,7 +5053,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -5429,7 +5429,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -5445,7 +5445,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -5461,7 +5461,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -5478,7 +5478,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -5495,7 +5495,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -5512,7 +5512,7 @@
         "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -5785,7 +5785,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -5801,7 +5801,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -5818,7 +5818,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -5834,7 +5834,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -5850,7 +5850,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -5864,7 +5864,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -5878,7 +5878,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -5892,7 +5892,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -5906,7 +5906,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -5920,7 +5920,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -5934,7 +5934,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -5948,7 +5948,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -5963,7 +5963,7 @@
         "ops"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "frontend@aether"
@@ -5980,7 +5980,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -5997,7 +5997,7 @@
         "ops"
       ],
       "status": "experimental",
-      "since_version": "8.11.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/derivatives/INGESTION.md",
@@ -6025,7 +6025,7 @@
         "ops"
       ],
       "status": "experimental",
-      "since_version": "8.11.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/derivatives/MARKET_RESOLUTION.md",
@@ -6053,7 +6053,7 @@
         "ops"
       ],
       "status": "experimental",
-      "since_version": "8.11.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/derivatives/POSITION_ACCOUNTING.md",
@@ -6081,7 +6081,7 @@
         "ops"
       ],
       "status": "experimental",
-      "since_version": "8.11.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/derivatives/RELEASE_READINESS.md",
@@ -6095,7 +6095,7 @@
         "ops"
       ],
       "status": "experimental",
-      "since_version": "8.11.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/derivatives/RUNBOOKS.md",
@@ -6108,7 +6108,7 @@
         "dev-senior"
       ],
       "status": "experimental",
-      "since_version": "8.11.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/derivatives/SECURITY.md",
@@ -6122,7 +6122,7 @@
         "ops"
       ],
       "status": "experimental",
-      "since_version": "8.11.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/developer/install-the-sdk.md",
@@ -6256,7 +6256,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "frontend@aether"
@@ -6718,7 +6718,7 @@
         "dev-senior"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "backend@aether"
     },
     {
@@ -7340,7 +7340,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7355,7 +7355,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7370,7 +7370,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7760,7 +7760,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7775,7 +7775,7 @@
         "security"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7807,7 +7807,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 7,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -7858,7 +7858,7 @@
         "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -7921,7 +7921,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -8306,7 +8306,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.11.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",
@@ -8319,7 +8319,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -8397,7 +8397,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -8411,7 +8411,7 @@
         "security"
       ],
       "status": "stable",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -8426,7 +8426,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "canonical_owner": "platform@aether"
     },
@@ -8441,7 +8441,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -8455,7 +8455,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -8470,7 +8470,7 @@
         "security"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -8500,7 +8500,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -8562,7 +8562,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -8576,7 +8576,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -8689,7 +8689,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -8703,7 +8703,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -8718,7 +8718,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -8732,7 +8732,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -8746,7 +8746,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -8777,7 +8777,7 @@
         "security"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -8791,7 +8791,7 @@
         "ops"
       ],
       "status": "experimental",
-      "since_version": "8.11.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "canonical_owner": "platform-intelligence@aether"
     },
@@ -9169,7 +9169,7 @@
         "ops"
       ],
       "status": "experimental",
-      "since_version": "8.11.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "canonical_owner": "platform-intelligence@aether"
     },
@@ -9202,7 +9202,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -9627,7 +9627,7 @@
         "ops"
       ],
       "status": "experimental",
-      "since_version": "8.11.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/DERIVATIVES_RUNTIME_MODEL.md",
@@ -9882,7 +9882,7 @@
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "9.0.0",
+      "since_version": "0.1.0",
       "canonical_owner": "identity@aether"
     },
     {
@@ -10462,7 +10462,7 @@
         "compliance"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -10964,7 +10964,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 15,
       "canonical_owner": "platform@aether"
     },
@@ -10980,7 +10980,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "9.1.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -10997,7 +10997,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "9.1.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"

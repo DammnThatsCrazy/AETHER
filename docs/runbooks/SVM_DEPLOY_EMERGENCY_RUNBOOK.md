@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [ops, dev-senior, security]
 status: stable
-since_version: "8.12.0"
+since_version: "0.1.0"
 source_files:
   - Smart Contracts/programs/solana/audit/08-deployment-procedure.md
   - Smart Contracts/programs/solana/audit/09-pause-rotation-procedure.md

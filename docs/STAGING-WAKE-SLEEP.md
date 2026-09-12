@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [ops, dev-senior, architect]
 status: stable
-since_version: "8.12.0"
+since_version: "0.1.0"
 source_files:
   - .github/workflows/staging-lifecycle.yml
   - .github/workflows/staging-ttl-guard.yml

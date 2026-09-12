@@ -5,7 +5,7 @@ section: concepts
 visibility: P
 audience: [dev-senior, architect]
 status: stable
-since_version: "8.8.0"
+since_version: "0.1.0"
 source_files:
   - Backend Architecture/aether-backend/services/identity/
   - packages/shared/identity.ts

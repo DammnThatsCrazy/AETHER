@@ -5,7 +5,7 @@ section: concepts
 visibility: I
 audience: [dev-senior, architect, ops]
 status: experimental
-since_version: "8.11.0"
+since_version: "0.1.0"
 source_files:
   - Backend Architecture/aether-backend/services/semantic_intelligence/models.py
   - Backend Architecture/aether-backend/services/semantic_intelligence/engine.py

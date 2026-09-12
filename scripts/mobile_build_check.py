@@ -7,7 +7,7 @@ Three jobs, all honest:
      without a native toolchain: both apps exist and are complete (package.json,
      app.json, entry, SDK wiring); the two apps have DISTINCT bundle ids, schemes,
      and product planes (an Aether token can never call Kyber, and no Kyber code
-     ships in the Aether binary); each app pins version 8.12.0. These are real
+     ships in the Aether binary); each app pins version 0.1.0-alpha.0. These are real
      failures if violated (exit 1).
 
   1b. Enforce the per-build DISTRIBUTION PROFILE declaration: each app must

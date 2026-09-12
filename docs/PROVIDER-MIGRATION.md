@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [dev-senior, ops]
 status: stable
-since_version: "8.12.0"
+since_version: "0.1.0"
 source_files:
   - Backend Architecture/aether-backend/services/integrations/connectors/base.py
   - Backend Architecture/aether-backend/services/integrations/connectors/registry.py

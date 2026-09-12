@@ -5,7 +5,7 @@ section: reference
 visibility: I
 audience: [dev-senior, security, architect]
 status: stable
-since_version: 9.0.0
+since_version: "0.1.0"
 source_files: [Backend Architecture/aether-backend/services/flow_trace/routes.py, Backend Architecture/aether-backend/services/flow_trace/traversal.py]
 source_hashes:
   Backend Architecture/aether-backend/services/flow_trace/routes.py: sha256:1cc8be381d28c682eb26e966c5b1bf02b936338b096e4d1734a9b95d5094143c

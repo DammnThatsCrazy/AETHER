@@ -5,7 +5,7 @@ section: security
 visibility: I
 audience: [buyer, ops, architect, security, compliance]
 status: stable
-since_version: 9.0.0
+since_version: "0.1.0"
 source_files: [Backend Architecture/aether-backend/services/security/policy_engine.py, Backend Architecture/aether-backend/services/security/access_control.py, Backend Architecture/aether-backend/services/governance/routes.py, Backend Architecture/aether-backend/services/reliability/service.py]
 related: [compliance, reliability/operations, reliability/incident-response]
 canonical_owner: platform@aether

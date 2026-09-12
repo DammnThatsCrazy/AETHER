@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [ops, dev-senior]
 status: stable
-since_version: "8.12.0"
+since_version: "0.1.0"
 source_files:
   - scripts/financial_credential_readiness.py
   - Backend Architecture/aether-backend/shared/certification/registry.py

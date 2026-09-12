@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [ops]
 status: stable
-since_version: "8.8.0"
+since_version: "0.1.0"
 source_files:
   - Backend Architecture/aether-backend/services/x402/
 canonical_owner: commerce@aether

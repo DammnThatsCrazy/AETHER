@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [ops, dev-senior]
 status: stable
-since_version: "8.12.0"
+since_version: "0.1.0"
 source_files:
   - scripts/staging_preflight.py
 canonical_owner: platform@aether

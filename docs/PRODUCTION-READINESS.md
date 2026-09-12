@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [ops, architect]
 status: stable
-since_version: "8.8.0"
+since_version: "0.1.0"
 source_files:
   - AWS Deployment/main.tf
 canonical_owner: platform@aether

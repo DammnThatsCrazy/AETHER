@@ -5,7 +5,7 @@ section: security
 visibility: I
 audience: [security, ops]
 status: stable
-since_version: "8.8.0"
+since_version: "0.1.0"
 source_files:
   - scripts/generate_secrets.py
 canonical_owner: security@aether

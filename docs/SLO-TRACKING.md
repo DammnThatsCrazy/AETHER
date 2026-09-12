@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [ops, buyer, architect]
 status: beta
-since_version: 9.0.0
+since_version: "0.1.0"
 source_files: [Backend Architecture/aether-backend/services/reliability/definitions.py, Backend Architecture/aether-backend/services/reliability/service.py]
 related: [reliability/operations]
 canonical_owner: platform@aether

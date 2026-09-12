@@ -5,7 +5,7 @@ section: architecture
 visibility: P
 audience: [architect, dev-senior, security]
 status: stable
-since_version: "8.8.0"
+since_version: "0.1.0"
 source_files:
   - Backend Architecture/aether-backend/main.py
   - Backend Architecture/aether-backend/middleware/middleware.py
@@ -19,7 +19,7 @@ reviewed_source_commits:
 source_hashes:
   "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
   "Backend Architecture/aether-backend/middleware/middleware.py": "sha256:8cd2cc774efd913fb94fda0bbb4f4336855f90301b7e8f48f1afe84b5c7fa12e"
-  "packages/shared/": "sha256:8c96802e4c808e30af082fff502d26e3d1fdfbdd4c1196ce9bd6065dcf5e4ddb"
+  "packages/shared/": "sha256:0465437d70518fb1cc4fe14b154f3210849312ea4d336c99d9429f0cb6d21d8d"
 ---
 # Aether vNext — Architecture Guide
 
