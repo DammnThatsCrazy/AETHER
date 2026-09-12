@@ -113,7 +113,7 @@ def explicit_aws_credentials(environ: Mapping[str, str] | None = None) -> bool:
     usable credentials exist.
     """
 
-    environ = environ or os.environ
+    environ = os.environ if environ is None else environ
     access_key = environ.get("AWS_ACCESS_KEY_ID") or environ.get("AWS_ACCESS_KEY")
     secret_key = environ.get("AWS_SECRET_ACCESS_KEY") or environ.get("AWS_SECRET_KEY")
     return bool((access_key and secret_key) or environ.get("AWS_PROFILE"))
