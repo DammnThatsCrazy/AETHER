@@ -13,18 +13,20 @@ git rebase origin/main
 
 ## Before claiming completion
 
-The canonical completion gate is `make ci-check`.
+The normal PR authority is `make verification-disposition BASE=<base> EXECUTE=1`.
+Use `make ci-check` for broad local, trusted-main, nightly, or release evidence;
+it is not a second blocking normal-PR authority.
 
 ```bash
-make docs-fix
-make ci-check
+make verification-disposition BASE=origin/main EXECUTE=1
 git status --short
 ```
 
-Do not open a PR until `make ci-check` exits 0. Claude must **not** claim a PR is
+Do not open a PR until the verification disposition passes. Claude must **not** claim a PR is
 complete based only on `npm test`, `npm run test`, `npm run test:docs`, partial
 pytest runs, TypeScript-only checks, docs-only checks, manual inspection, or
-`make repo-doctor` alone.
+`make repo-doctor` alone. Run `make ci-check` when broad repository evidence is
+needed and report it separately from the PR disposition.
 
 If source-linked docs are reported stale, update the actual docs against their
 declared `source_files`, then run `make docs-generate-changed` to refresh only
@@ -91,7 +93,8 @@ new metadata commit when the reviewed source bytes are unchanged.
 | `make repo-doctor` | Full consistency check (no mutations) |
 | `make repo-doctor-fix` | Regenerate generated docs + sync |
 | `make docs-check` | Docs-only fast gate |
-| `make ci-check` | CI-safe full path (**canonical completion gate**) |
+| `make verification-disposition BASE=<base> EXECUTE=1` | Normal PR authority |
+| `make ci-check` | Broad consistency and repository evidence |
 | `make production-status` | Readiness scorecard + blockers (advisory) |
 | `make release-gate` | ci-check + strict production status + ops readiness |
 | `python scripts/bump_version.py --check` | Version alignment |

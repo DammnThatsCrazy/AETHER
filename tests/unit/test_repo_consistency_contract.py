@@ -126,10 +126,11 @@ def test_agents_md_is_full_operating_contract() -> None:
     assert "source_hashes" in agents
 
 
-def test_claude_md_canonical_gate_is_ci_check() -> None:
+def test_claude_md_names_verification_disposition_as_pr_authority() -> None:
     claude = _read("CLAUDE.md")
-    assert "make ci-check" in claude
-    assert "canonical completion gate" in claude.lower()
+    assert "make verification-disposition BASE=<base> EXECUTE=1" in claude
+    assert "normal pr authority" in claude.lower()
+    assert "broad consistency and repository evidence" in claude.lower()
     # Must reference AGENTS.md as the operating contract.
     assert "AGENTS.md" in claude
 
