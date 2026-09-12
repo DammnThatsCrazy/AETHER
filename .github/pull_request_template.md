@@ -31,15 +31,20 @@ Explanation:
 
 ## Automated Repo Consistency
 
-This PR must pass the required **Repo Consistency** workflow. The canonical local/cloud-agent commands are:
+This PR must pass the required **Repo Consistency** workflow. When docs,
+generator inputs, or contract inputs changed, regenerate the affected derived
+surfaces before running the final canonical gate:
 
 ```bash
-make docs-fix
-make repo-doctor-fix
+make docs-generate
+make verification-disposition BASE=<base> EXECUTE=1
 make ci-check
 ```
 
-This PR is not complete until `make ci-check` passes. Partial test runs
+The normal PR authority is `make verification-disposition BASE=<base> EXECUTE=1`;
+`make ci-check` provides broad local, trusted-main, nightly, or release
+evidence and includes generator-idempotency checks. This PR is not complete
+until the verification disposition passes. Partial test runs
 (`npm run test:docs`, partial pytest, TypeScript-only, docs-only, or
 `make repo-doctor` alone) are useful during development but are **not** sufficient
 for merge readiness.
@@ -89,13 +94,13 @@ _Describe only what changed:_
 
 ## Repo consistency
 
-- [ ] I ran `make docs-generate`
+- [ ] I ran `make docs-generate` when docs, generator inputs, or contract inputs changed
 - [ ] I reviewed stale source-linked docs against their declared `source_files`, if any were reported
 - [ ] I ran `make docs-generate-changed` only after reviewing affected authored docs
-- [ ] I ran `make docs-verify-idempotent`
-- [ ] I ran `make repo-doctor-fix`
+- [ ] I ran `make verification-disposition BASE=<base> EXECUTE=1`
 - [ ] I ran `make ci-check`
-- [ ] `make ci-check` passes
+- [ ] The verification disposition passes
+- [ ] I recorded the broad `make ci-check` result separately
 - [ ] I committed regenerated `docs/_generated/` files
 - [ ] I committed synced docs: `docs/REPO-INDEX.md`, `docs/AUTOMATION.md`
 - [ ] I updated package/version surfaces if `pyproject.toml` changed

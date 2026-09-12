@@ -250,17 +250,19 @@ def write_automation() -> None:
         "`packages/shared/contracts/consent-registry.json` is canonical. Do not "
         "hardcode a consent-purpose count in any doc or validator.",
         "",
-        "## Required workflow",
+        "## Required PR / merge-readiness workflow",
         "",
-        "- Regenerate generated/sync-managed docs: `make docs-generate`.",
+        "- When docs, generator inputs, or contract inputs change, regenerate "
+        "generated/sync-managed docs with `make docs-generate`.",
         "- Review the exact source-linked docs reported by "
-        "`python scripts/docs_drift.py --strict`, then update only those source "
+        "`make docs-check`, then update only those source "
         "hashes with `make docs-generate-changed`.",
-        "- Confirm generator idempotency with `make docs-verify-idempotent`.",
         "- Normal PR authority: `make verification-disposition BASE=<base> EXECUTE=1`. "
-        "For repository completion and release evidence, also run `make ci-check`; "
-        "weaker commands (`npm run test:docs`, partial pytest runs, docs-only checks, "
-        "`make repo-doctor` alone) are not sufficient proof of repository completion.",
+        "For repository completion and release evidence, run `make ci-check`; it "
+        "includes the generator-idempotency check and is not a second blocking PR "
+        "authority. Weaker commands (`npm run test:docs`, partial pytest runs, "
+        "docs-only checks, `make repo-doctor` alone) remain useful for local "
+        "feedback but are not proof of PR merge-readiness or production readiness.",
         "- The canonical gate runs both frontend data-truth checks. "
         "`npm run validate:frontend-data-truth` is also a named read-only workflow "
         "step so source violations are directly visible in pull requests.",

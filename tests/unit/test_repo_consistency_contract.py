@@ -1,9 +1,9 @@
 """Command-contract tests: the repo-consistency spine cannot be silently bypassed.
 
 These assert that public npm scripts delegate to the canonical Makefile targets,
-that the agent-facing contract docs point at `make ci-check`, and that the
-trusted-main docs-sync workflow keeps its read-only/write split. Deterministic,
-no external services.
+that the agent-facing contract docs preserve the repository verification
+authority, and that the trusted-main docs-sync workflow keeps its
+read-only/write split. Deterministic, no external services.
 """
 from __future__ import annotations
 
@@ -138,7 +138,6 @@ def test_pr_template_mentions_canonical_workflow() -> None:
     template = _read(".github/pull_request_template.md")
     assert "make docs-generate" in template
     assert "make docs-generate-changed" in template
-    assert "make docs-verify-idempotent" in template
     assert "make ci-check" in template
 
 
