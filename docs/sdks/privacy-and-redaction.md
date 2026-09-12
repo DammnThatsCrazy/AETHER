@@ -1,11 +1,11 @@
 ---
-title: "Privacy and Redaction"
+title: Privacy and Redaction
 slug: sdks/privacy-and-redaction
-section: sdks
+section: reference
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # Privacy and Redaction

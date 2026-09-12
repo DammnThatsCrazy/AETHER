@@ -1,29 +1,24 @@
 ---
 title: Aether Web SDK — Integration Guide
 slug: sdks/web
-section: sdks
+section: reference
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "8.9.0"
-source_files:
-  - packages/web/src/index.ts
-  - packages/web/src/tracking/traffic-source-tracker.ts
-  - packages/shared/acquisition-evidence.ts
-  - packages/shared/events.ts
-  - packages/shared/consent.ts
+since_version: 0.1.0
+source_files: [packages/web/src/index.ts, packages/web/src/tracking/traffic-source-tracker.ts, packages/shared/acquisition-evidence.ts, packages/shared/events.ts, packages/shared/consent.ts]
 canonical_owner: sdk@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "packages/shared/acquisition-evidence.ts": "sha256:9f4b8011f9a596a08969cbf5ef1b14f8212715e00e8d6f920f23f48f09c5f855"
   "packages/shared/consent.ts": "sha256:e8cc43b2a64f70eca68d499d7a1fb7b85ceacb44bc94f77a70e105e0d05e8730"
-  "packages/shared/events.ts": "sha256:216fa41739a8613800f057f2937071bf40a28ac35ba47b4a77f438cfd2fd9477"
-  "packages/web/src/index.ts": "sha256:5bebe67525272c525ad9b68411df2323976b6372d04d4ccf81cf893b64fff749"
+  "packages/shared/events.ts": "sha256:96f08a92d2a10b3555264bd76dc1e59c78ae3de63fe99665c13189201ad5c120"
+  "packages/web/src/index.ts": "sha256:99dff7a812de9fbb77dd70ad3719d90989b8660ae3071154c213efc65e939ba0"
   "packages/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
 ---
 
-# Aether Web SDK v8.12.0 — Integration Guide
+# Aether Web SDK v0.1.0-alpha.0 — Integration Guide
 
 ## Installation
 

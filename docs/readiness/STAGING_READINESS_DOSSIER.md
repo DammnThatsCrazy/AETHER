@@ -1,17 +1,17 @@
 ---
-title: "Staging Readiness Dossier"
+title: Staging Readiness Dossier
 slug: readiness/staging-readiness-dossier
 section: operations
 visibility: I
-audience: [ops, architect, exec]
+audience: [ops, architect, buyer]
 status: stable
-source_files:
-  - scripts/staging_preflight.py
+since_version: 0.1.0
+source_files: [scripts/staging_preflight.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "scripts/staging_preflight.py": "sha256:beeb06bb27143f9dd5f27fab06357e201f8816f7933ae8afeb5e6a686c744a15"
+  scripts/staging_preflight.py: sha256:beeb06bb27143f9dd5f27fab06357e201f8816f7933ae8afeb5e6a686c744a15
 ---
 
 # Staging Readiness Dossier

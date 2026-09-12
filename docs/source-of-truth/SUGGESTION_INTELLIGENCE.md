@@ -1,16 +1,12 @@
 ---
-source_files:
-  - Backend Architecture/aether-backend/services/suggestions/models.py
-  - Backend Architecture/aether-backend/services/suggestions/lifecycle.py
-  - Backend Architecture/aether-backend/services/suggestions/scorer.py
-  - Backend Architecture/aether-backend/services/suggestions/policy.py
-  - Backend Architecture/aether-backend/services/suggestions/service.py
-  - Backend Architecture/aether-backend/services/suggestions/routes.py
-  - Backend Architecture/aether-backend/services/suggestions/events.py
-  - Backend Architecture/aether-backend/services/suggestions/dispatcher.py
-  - Backend Architecture/aether-backend/services/suggestions/outcome.py
-  - Backend Architecture/aether-backend/config/settings.py
-  - packages/shared/suggestions.ts
+title: Suggestion Intelligence
+slug: source-of-truth/suggestion_intelligence
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/suggestions/models.py, Backend Architecture/aether-backend/services/suggestions/lifecycle.py, Backend Architecture/aether-backend/services/suggestions/scorer.py, Backend Architecture/aether-backend/services/suggestions/policy.py, Backend Architecture/aether-backend/services/suggestions/service.py, Backend Architecture/aether-backend/services/suggestions/routes.py, Backend Architecture/aether-backend/services/suggestions/events.py, Backend Architecture/aether-backend/services/suggestions/dispatcher.py, Backend Architecture/aether-backend/services/suggestions/outcome.py, Backend Architecture/aether-backend/config/settings.py, packages/shared/suggestions.ts]
 last_synced_commit: HEAD
 ---
 

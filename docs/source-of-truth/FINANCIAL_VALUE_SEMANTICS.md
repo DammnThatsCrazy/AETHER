@@ -1,3 +1,12 @@
+---
+title: Financial Value Semantics
+slug: source-of-truth/financial_value_semantics
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Financial Value Semantics
 
 Canonical, USD-first value semantics for every financial/economic value Aether

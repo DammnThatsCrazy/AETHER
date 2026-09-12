@@ -5,21 +5,17 @@ section: operations
 visibility: I
 audience: [ops, dev-senior]
 status: stable
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 2
-source_files:
-  - Backend Architecture/aether-backend/repositories/measurement_results_repo.py
-  - Backend Architecture/aether-backend/shared/measurement/restatement.py
-  - Backend Architecture/aether-backend/shared/measurement/compute.py
-  - Backend Architecture/aether-backend/services/measurement/routes/integrity.py
-  - Backend Architecture/aether-backend/services/traffic/repair.py
+source_files: [Backend Architecture/aether-backend/repositories/measurement_results_repo.py, Backend Architecture/aether-backend/shared/measurement/restatement.py, Backend Architecture/aether-backend/shared/measurement/compute.py, Backend Architecture/aether-backend/services/measurement/routes/integrity.py, Backend Architecture/aether-backend/services/traffic/repair.py]
 source_hashes:
-  "Backend Architecture/aether-backend/repositories/measurement_results_repo.py": "sha256:35a40c028d487f0bbe1b1d19cf3f542c1e0212ff13d40693ad443cbb9ec3f906"
-  "Backend Architecture/aether-backend/services/measurement/routes/integrity.py": "sha256:a0b5704ca62eb3b7fd7bf9e066559c228ecbdc772c16967627713ab690cb6a47"
-  "Backend Architecture/aether-backend/services/traffic/repair.py": "sha256:b1f732c004b51f42e9b16635516bcd9ce92682a40d6f33d51e735d5f2f107df0"
-  "Backend Architecture/aether-backend/shared/measurement/compute.py": "sha256:b572af2401ba87547852aa1b44fc5687b66291274a92b1aace752d8e103a90cc"
-  "Backend Architecture/aether-backend/shared/measurement/restatement.py": "sha256:1217bf79afa2c8cb11bd36908aebf616953c382822098f493cc2d8b8a58b8428"
+  Backend Architecture/aether-backend/repositories/measurement_results_repo.py: sha256:35a40c028d487f0bbe1b1d19cf3f542c1e0212ff13d40693ad443cbb9ec3f906
+  Backend Architecture/aether-backend/services/measurement/routes/integrity.py: sha256:a0b5704ca62eb3b7fd7bf9e066559c228ecbdc772c16967627713ab690cb6a47
+  Backend Architecture/aether-backend/services/traffic/repair.py: sha256:b1f732c004b51f42e9b16635516bcd9ce92682a40d6f33d51e735d5f2f107df0
+  Backend Architecture/aether-backend/shared/measurement/compute.py: sha256:b572af2401ba87547852aa1b44fc5687b66291274a92b1aace752d8e103a90cc
+  Backend Architecture/aether-backend/shared/measurement/restatement.py: sha256:1217bf79afa2c8cb11bd36908aebf616953c382822098f493cc2d8b8a58b8428
 ---
 
 # Runbook — Measurement Restatement

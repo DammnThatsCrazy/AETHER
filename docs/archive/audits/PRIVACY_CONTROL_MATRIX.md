@@ -1,3 +1,12 @@
+---
+title: Privacy Control Matrix
+slug: archive/audits/privacy_control_matrix
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Aether Privacy Control Matrix
 
 This matrix maps every Aether data object to its complete set of privacy controls, as enforced by the `shared/privacy/` control plane.

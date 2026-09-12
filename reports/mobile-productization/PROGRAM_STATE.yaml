@@ -7,7 +7,7 @@ program:
   branch: claude/aether-turnkey-completion-m8-f8b2e
   base_commit: "ead4ba6c7b53783958bebc03bddcede1a2ea7429"   # == origin/main at completion-program start (feat: payment-rails financial-plane provider readiness (#509))
   observed_baseline_in_prompt: "13c377752755de91d42517f8eb74791f232e243e"  # informational; a real ancestor of the original C0 base
-  platform_version: "8.12.0"
+  platform_version: "0.1.0-alpha.0"
   last_landed_checkpoint: M8   # C0-C4 foundation + C8 slice landed via #500 + #503; completion program M0-M8 LANDED via PR #515 (C2-remainder M1, C5 M2/M3/M4, C6 M5, C7 M6, M7 design-partner demo + distribution/compliance docs, M8 C9 six-lens adversarial review + remediation + final gate); release-gate supply-chain red (node-tar via Expo, externally_blocked) + owner merge decision remaining
   status: active
   delivery_model: orchestrated-swarm            # one orchestrator, bounded specialist packets, serialized milestone commits

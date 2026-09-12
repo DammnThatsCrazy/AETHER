@@ -3,17 +3,11 @@ title: Billing Attachment Runbook
 slug: operations/billing-attachment-runbook
 section: operations
 visibility: I
-audience: [ops, dev-senior, architect, exec]
+audience: [ops, dev-senior, architect, buyer]
 status: beta
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
-related:
-  - docs/BILLING-PROVIDER-INTERFACE.md
-  - docs/BILLING-REVENUE-OPS.md
-  - docs/ACCOUNT-PLANS.md
-  - docs/ENTITLEMENTS.md
-  - docs/runbooks/RECONCILIATION.md
-  - docs/staging-activation-runbook.md
+related: [docs/BILLING-PROVIDER-INTERFACE.md, docs/BILLING-REVENUE-OPS.md, docs/ACCOUNT-PLANS.md, docs/ENTITLEMENTS.md, docs/runbooks/RECONCILIATION.md, docs/staging-activation-runbook.md]
 estimated_read_minutes: 12
 ---
 

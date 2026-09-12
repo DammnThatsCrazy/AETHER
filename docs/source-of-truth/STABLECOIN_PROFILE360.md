@@ -1,3 +1,12 @@
+---
+title: Stablecoin Profile360
+slug: source-of-truth/stablecoin_profile360
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Stablecoin Profile360, Identity, Graph, and Tenant APIs
 
 Stablecoin Profile360 composes tenant-scoped stablecoin observations into entity-level views without performing authoritative identity or financial joins in the frontend. The backend owns wallet resolution, graph projection records, aggregation, provenance, and tenant filtering.

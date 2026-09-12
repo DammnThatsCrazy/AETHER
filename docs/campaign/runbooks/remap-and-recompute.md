@@ -4,6 +4,8 @@ slug: campaign/runbooks/remap-and-recompute
 section: operations
 visibility: I
 audience: [ops]
+status: experimental
+since_version: 0.1.0
 ---
 
 # Runbook: Remap Campaign and Recompute Attribution

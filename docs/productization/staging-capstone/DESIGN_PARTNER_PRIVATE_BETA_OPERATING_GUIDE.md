@@ -1,11 +1,11 @@
 ---
-title: "Design-Partner / Private-Beta Operating Guide"
+title: Design-Partner / Private-Beta Operating Guide
 slug: productization/staging-capstone/design-partner-private-beta-operating-guide
 section: operations
 visibility: I
-audience: [exec, ops, architect]
+audience: [buyer, ops, architect]
 status: stable
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 2

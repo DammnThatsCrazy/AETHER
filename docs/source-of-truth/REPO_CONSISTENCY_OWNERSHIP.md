@@ -1,15 +1,12 @@
 ---
 title: Repo Consistency Ownership
 slug: source-of-truth/repo-consistency-ownership
-section: source-of-truth
+section: reference
 visibility: I
 audience: [dev-senior, ops, architect]
 status: stable
-since_version: "8.9.0"
-source_files:
-  - docs/source-of-truth/repo_consistency_ownership.json
-  - scripts/validate_consistency_ownership.py
-  - scripts/repo_doctor.py
+since_version: 0.1.0
+source_files: [docs/source-of-truth/repo_consistency_ownership.json, scripts/validate_consistency_ownership.py, scripts/repo_doctor.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3

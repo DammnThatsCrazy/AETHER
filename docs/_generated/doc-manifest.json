@@ -1,5 +1,5 @@
 {
-  "version": "8.12.0",
+  "version": "0.1.0-alpha.0",
   "generated_from": "docs/**/*.{md,mdx}",
   "docs": [
     {
@@ -22,7 +22,7 @@
       "path": "docs/ACCESS-CONTROL.md",
       "title": "Access Control",
       "slug": "enterprise/access-control",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops",
@@ -35,21 +35,21 @@
       "path": "docs/ACCOUNT-PLANS.md",
       "title": "Account Plans",
       "slug": "kyber/account-plans",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "ops",
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/ACTION-DISPATCH.md",
       "title": "Governed Action Dispatch",
       "slug": "ai/action-dispatch",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "architect",
@@ -57,7 +57,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -66,14 +66,13 @@
       "path": "docs/AGENT-CONTROLLER.md",
       "title": "Agent Controller — Multi-Controller Architecture",
       "slug": "ai/agent-controller",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "P",
       "audience": [
-        "architect",
-        "ai"
+        "architect"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 12,
       "toc_depth": 3,
       "canonical_owner": "agent@aether"
@@ -88,7 +87,8 @@
         "ops",
         "architect"
       ],
-      "status": "stable"
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/AGENTIC_COMMERCE_BUILD_SPEC.md",
@@ -98,11 +98,10 @@
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 45,
       "toc_depth": 3,
       "canonical_owner": "commerce@aether"
@@ -111,14 +110,14 @@
       "path": "docs/API-AUTH.md",
       "title": "API Authentication",
       "slug": "api/api-auth",
-      "section": "api",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -126,14 +125,14 @@
       "path": "docs/API-ERRORS.md",
       "title": "API Errors",
       "slug": "api/api-errors",
-      "section": "api",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 2,
       "canonical_owner": "platform@aether"
     },
@@ -141,14 +140,14 @@
       "path": "docs/API-PAGINATION-FILTERING.md",
       "title": "API Pagination & Filtering",
       "slug": "api/api-pagination-filtering",
-      "section": "api",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 2,
       "canonical_owner": "platform@aether"
     },
@@ -156,7 +155,7 @@
       "path": "docs/API-RATE-LIMITS.md",
       "title": "API Rate Limits",
       "slug": "api/api-rate-limits",
-      "section": "api",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-junior",
@@ -164,7 +163,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 2,
       "canonical_owner": "platform@aether"
     },
@@ -172,7 +171,7 @@
       "path": "docs/API-REFERENCE.md",
       "title": "API Reference",
       "slug": "api/api-reference",
-      "section": "api",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-junior",
@@ -180,7 +179,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -203,14 +202,14 @@
       "path": "docs/APPROVAL-MODEL.md",
       "title": "Agentic Commerce — Approval Model",
       "slug": "ai/approval-model",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "P",
       "audience": [
         "architect",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "commerce@aether"
@@ -236,7 +235,7 @@
       "path": "docs/AUDIT-EVENT-LEDGER.md",
       "title": "Security Audit Event Ledger",
       "slug": "enterprise/audit-event-ledger",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops",
@@ -249,15 +248,14 @@
       "path": "docs/AUDIT-EXPORTS.md",
       "title": "Audit Exports",
       "slug": "enterprise/audit-exports",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/AUTOMATION.md",
@@ -314,7 +312,7 @@
       "path": "docs/BACKEND-API.md",
       "title": "Aether Backend API — Endpoint Specification",
       "slug": "api/backend-reference",
-      "section": "api",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -322,7 +320,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 60,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
@@ -348,14 +346,14 @@
       "path": "docs/BACKFILL-JOBS.md",
       "title": "Backfill Jobs",
       "slug": "data/backfill-jobs",
-      "section": "data",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "dev-senior",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -398,15 +396,14 @@
       "path": "docs/BILLING-REVENUE-OPS.md",
       "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
       "slug": "enterprise/billing-revenue-ops",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/BRAZE-CONNECTOR.md",
@@ -431,7 +428,7 @@
       "path": "docs/BREAK-GLASS-ACCESS.md",
       "title": "Break-Glass Operator Access",
       "slug": "enterprise/break-glass-access",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops",
@@ -444,15 +441,14 @@
       "path": "docs/BUYER-PERSONAS.md",
       "title": "Buyer Personas",
       "slug": "enterprise/buyer-personas",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/CANONICAL-PATH-INTELLIGENCE.md",
@@ -462,9 +458,10 @@
       "visibility": "P",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
-      ]
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/CHANGELOG.md",
@@ -478,7 +475,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "release@aether"
@@ -504,14 +501,14 @@
       "path": "docs/COMMERCE-CONTROL-PLANE.md",
       "title": "Agentic Commerce — Control Plane",
       "slug": "api/commerce-control-plane",
-      "section": "api",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "architect",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "commerce@aether"
@@ -551,14 +548,14 @@
       "path": "docs/COMPLIANCE-EVIDENCE-INVENTORY.md",
       "title": "Compliance Evidence Inventory",
       "slug": "compliance/compliance-evidence-inventory",
-      "section": "compliance",
+      "section": "security",
       "visibility": "I",
       "audience": [
         "security",
         "compliance"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -566,16 +563,15 @@
       "path": "docs/COMPLIANCE.md",
       "title": "Compliance Framework — GDPR & SOC 2",
       "slug": "compliance/overview",
-      "section": "compliance",
+      "section": "security",
       "visibility": "C",
       "audience": [
         "compliance",
         "security",
-        "buyer",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 12,
       "toc_depth": 3,
       "canonical_owner": "compliance@aether"
@@ -620,15 +616,14 @@
       "path": "docs/CONTRACT-PROFILES.md",
       "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
       "slug": "enterprise/contract-profiles",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/CONTRIBUTING.md",
@@ -655,10 +650,10 @@
       "audience": [
         "ops",
         "architect",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 16,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -667,43 +662,43 @@
       "path": "docs/CUSTOMER-ONBOARDING.md",
       "title": "Customer Onboarding",
       "slug": "kyber/customer-onboarding",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "ops",
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/CUSTOMER-SUCCESS-AUTOMATION.md",
       "title": "Customer Success Automation",
       "slug": "kyber/customer-success-automation",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "ops",
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/CUSTOMER-SUCCESS-TRIGGERS.md",
       "title": "Customer Success Triggers",
       "slug": "kyber/customer-success-triggers",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "ops",
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/CUSTOMERIO-CONNECTOR.md",
@@ -728,7 +723,7 @@
       "path": "docs/DATA-DURABILITY.md",
       "title": "Data Durability",
       "slug": "data/data-durability",
-      "section": "data",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "architect",
@@ -736,7 +731,7 @@
         "dev-senior"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -747,13 +742,12 @@
       "section": "operations",
       "visibility": "P",
       "audience": [
-        "exec",
+        "buyer",
         "architect",
-        "ops",
-        "buyer"
+        "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -767,11 +761,10 @@
       "audience": [
         "architect",
         "dev-senior",
-        "ops",
-        "ai"
+        "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -779,7 +772,7 @@
       "path": "docs/DATA-INGESTION.md",
       "title": "Data Ingestion — Architecture & API Reference",
       "slug": "data/ingestion",
-      "section": "data",
+      "section": "architecture",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -788,7 +781,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "ingest@aether"
@@ -797,7 +790,7 @@
       "path": "docs/DATA-MIGRATIONS.md",
       "title": "Data Migrations",
       "slug": "data/data-migrations",
-      "section": "data",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "dev-senior",
@@ -805,7 +798,7 @@
         "architect"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -813,16 +806,15 @@
       "path": "docs/DATA-QUALITY.md",
       "title": "Data Quality & Intelligence Quality",
       "slug": "data/data-quality",
-      "section": "data",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
         "architect",
         "dev-senior",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -834,7 +826,7 @@
       "path": "docs/DATA-RETENTION-REVIEW.md",
       "title": "Data Retention Review",
       "slug": "compliance/data-retention-review",
-      "section": "compliance",
+      "section": "security",
       "visibility": "I",
       "audience": [
         "security",
@@ -842,7 +834,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -850,7 +842,7 @@
       "path": "docs/DATA-RETENTION.md",
       "title": "Data Retention & Data Requests",
       "slug": "enterprise/data-retention",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops",
@@ -864,16 +856,15 @@
       "path": "docs/DECISION-OUTCOME-INTELLIGENCE.md",
       "title": "Decision & Outcome Intelligence",
       "slug": "ai/decision-outcome-intelligence",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
         "architect",
         "dev-senior",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "platform@aether",
@@ -939,13 +930,12 @@
       "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "dev-senior",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -968,14 +958,13 @@
       "path": "docs/DEMO-SALES-SCRIPT.md",
       "title": "Demo Sales Script",
       "slug": "tutorials/demo-sales-script",
-      "section": "tutorials",
+      "section": "developer",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -983,15 +972,14 @@
       "path": "docs/DEMO-WALKTHROUGH.md",
       "title": "Demo Walkthrough",
       "slug": "tutorials/demo-walkthrough",
-      "section": "tutorials",
+      "section": "developer",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -1038,6 +1026,7 @@
         "architect"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 22,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -1046,15 +1035,14 @@
       "path": "docs/DEPLOYMENT-READINESS.md",
       "title": "Deployment Readiness",
       "slug": "enterprise/deployment-readiness",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/DEPLOYMENT-RUNBOOK.md",
@@ -1107,16 +1095,15 @@
       "path": "docs/DRIFT-DETECTION.md",
       "title": "Drift Detection",
       "slug": "data/drift-detection",
-      "section": "data",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
         "architect",
         "dev-senior",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -1132,11 +1119,10 @@
       "visibility": "P",
       "audience": [
         "dev-senior",
-        "architect",
-        "ai"
+        "architect"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -1158,7 +1144,7 @@
       "path": "docs/ELASTIC-DATA-PLANE.md",
       "title": "Elastic Data Plane",
       "slug": "data/elastic-data-plane",
-      "section": "data",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "dev-senior",
@@ -1166,7 +1152,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 7,
       "toc_depth": 3,
       "canonical_owner": "data@aether"
@@ -1175,43 +1161,40 @@
       "path": "docs/ENTERPRISE-PACKAGING.md",
       "title": "Enterprise Packaging",
       "slug": "enterprise/enterprise-packaging",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/ENTERPRISE-SALES-NARRATIVE.md",
       "title": "Enterprise Sales Narrative",
       "slug": "enterprise/enterprise-sales-narrative",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/ENTITLEMENTS.md",
       "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
       "slug": "enterprise/entitlements",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/ENVIRONMENT-VARIABLES.md",
@@ -1233,15 +1216,14 @@
       "path": "docs/EVENT-SCHEMA-REFERENCE.md",
       "title": "Event Schema Reference",
       "slug": "api/event-schema-reference",
-      "section": "api",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-senior",
-        "ai",
         "architect"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -1249,29 +1231,29 @@
       "path": "docs/EXECUTIVE-BUSINESS-REVIEWS.md",
       "title": "Executive Business Reviews",
       "slug": "kyber/executive-business-reviews",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "ops",
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/EXPANSION-OPPORTUNITY-ENGINE.md",
       "title": "Expansion Opportunity Engine",
       "slug": "kyber/expansion-opportunity-engine",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "ops",
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/EXTERNAL-BILLING-INTEGRATION.md",
@@ -1298,16 +1280,16 @@
       "path": "docs/FEDRAMP-PLANNING.md",
       "title": "FedRAMP Planning",
       "slug": "compliance/fedramp-planning",
-      "section": "compliance",
+      "section": "security",
       "visibility": "I",
       "audience": [
         "security",
         "compliance",
-        "exec",
+        "buyer",
         "architect"
       ],
       "status": "experimental",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -1353,6 +1335,7 @@
         "security"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 11,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -1426,15 +1409,15 @@
       "path": "docs/GDPR-READINESS.md",
       "title": "GDPR Readiness",
       "slug": "compliance/gdpr-readiness",
-      "section": "compliance",
+      "section": "security",
       "visibility": "I",
       "audience": [
         "security",
         "compliance",
-        "exec"
+        "buyer"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -1442,10 +1425,9 @@
       "path": "docs/GOVERNANCE-EVIDENCE-PACKS.md",
       "title": "Governance Evidence Packs",
       "slug": "enterprise/governance-evidence-packs",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "security"
       ],
@@ -1456,44 +1438,41 @@
       "path": "docs/GOVERNMENT-GTM-PLANNING.md",
       "title": "Government GTM Planning",
       "slug": "enterprise/government-gtm-planning",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/GOVERNMENT-READINESS-PLANNING.md",
       "title": "Government Readiness Planning",
       "slug": "enterprise/government-readiness-planning",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/GRAPH-INTELLIGENCE-RELIABILITY.md",
       "title": "Graph Intelligence Reliability",
       "slug": "data/graph-intelligence-reliability",
-      "section": "data",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
         "architect",
         "dev-senior",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -1505,15 +1484,15 @@
       "path": "docs/GRAPH-QUALITY.md",
       "title": "Graph Quality",
       "slug": "data/graph-quality",
-      "section": "data",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
+        "architect",
         "dev-senior",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -1524,15 +1503,14 @@
       "path": "docs/GTM-MATERIALS.md",
       "title": "GTM Materials",
       "slug": "enterprise/gtm-materials",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/HEALTHCHECKS.md",
@@ -1573,15 +1551,15 @@
       "path": "docs/IDENTITY-RESOLUTION-QUALITY.md",
       "title": "Identity Resolution Quality",
       "slug": "data/identity-resolution-quality",
-      "section": "data",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
+        "architect",
         "dev-senior",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -1608,15 +1586,15 @@
       "path": "docs/IMPLEMENTATION-LIFECYCLE.md",
       "title": "Implementation Lifecycle",
       "slug": "kyber/implementation-lifecycle",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "ops",
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/INCIDENT-RESPONSE-TABLETOP.md",
@@ -1641,7 +1619,7 @@
       "visibility": "I",
       "audience": [
         "ops",
-        "exec",
+        "buyer",
         "architect"
       ],
       "status": "beta",
@@ -1653,7 +1631,7 @@
       "path": "docs/INTEGRATION-ACTIONS.md",
       "title": "Integration Actions",
       "slug": "ai/integration-actions",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "architect",
@@ -1661,7 +1639,7 @@
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "platform@aether",
@@ -1674,7 +1652,7 @@
       "path": "docs/INTEGRATION-SECURITY.md",
       "title": "Integration Security",
       "slug": "enterprise/integration-security",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops",
@@ -1691,11 +1669,10 @@
       "visibility": "P",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "graph@aether"
@@ -1704,16 +1681,15 @@
       "path": "docs/INVESTIGATION-WORKSPACE.md",
       "title": "Investigation Workspace",
       "slug": "ai/investigation-workspace",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
         "architect",
         "dev-senior",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "platform@aether",
@@ -1727,15 +1703,14 @@
       "path": "docs/INVOICE-PREVIEWS.md",
       "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
       "slug": "enterprise/invoice-previews",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/ITERABLE-CONNECTOR.md",
@@ -1812,20 +1787,20 @@
       "path": "docs/KYBER-ECONOMIC-OBSERVABILITY.md",
       "title": "Kyber Economic Observability",
       "slug": "concepts/kyber-economic-observability",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "dev-senior",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/KYBER-FRAUD-INVESTIGATIONS.md",
       "title": "Kyber Fraud Investigations Workspace",
       "slug": "kyber-fraud-investigations",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops",
@@ -1838,17 +1813,16 @@
       "path": "docs/KYBER-REVENUE-INTELLIGENCE.md",
       "title": "Kyber Revenue Intelligence",
       "slug": "ai/kyber-revenue-intelligence",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
         "architect",
         "dev-senior",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "flags": [
         "KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED"
       ]
@@ -1857,15 +1831,15 @@
       "path": "docs/KYBER-STRATEGIC-OBSERVABILITY.md",
       "title": "Kyber Strategic Observability",
       "slug": "kyber/strategic-observability",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "ops",
         "architect"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "platform@aether",
@@ -1877,7 +1851,7 @@
       "path": "docs/Kyber-OPERATOR-GUIDE.md",
       "title": "Kyber Operator Guide",
       "slug": "kyber/operator-guide",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops",
@@ -1885,7 +1859,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 20,
       "canonical_owner": "kyber@aether"
     },
@@ -2041,14 +2015,14 @@
       "path": "docs/MIGRATION-v7.md",
       "title": "SDK Migration Guide — v6.x to v7.0",
       "slug": "sdks/migration-v7",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "deprecated",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "sdk@aether"
@@ -2057,14 +2031,14 @@
       "path": "docs/ML-TRAINING-GUIDE.md",
       "title": "ML Model Training Guide",
       "slug": "ai/ml-training",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "P",
       "audience": [
-        "ai",
+        "architect",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "ml@aether"
@@ -2073,15 +2047,14 @@
       "path": "docs/MODEL-EXTRACTION-DEFENSE.md",
       "title": "Model Extraction Defense",
       "slug": "ai/extraction-defense",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "P",
       "audience": [
         "security",
-        "ai",
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "security@aether"
@@ -2094,23 +2067,24 @@
       "visibility": "P",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
-      ]
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/ONBOARDING-TEMPLATES.md",
       "title": "Onboarding Templates",
       "slug": "kyber/onboarding-templates",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "ops",
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/OODA-USAGE-DIMENSIONS.md",
@@ -2139,7 +2113,8 @@
         "architect",
         "ops"
       ],
-      "status": "stable"
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/OPERATIONS-RUNBOOK.md",
@@ -2160,15 +2135,15 @@
       "path": "docs/OUTCOME-FEEDBACK-QUALITY.md",
       "title": "Outcome Feedback Quality",
       "slug": "data/outcome-feedback-quality",
-      "section": "data",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
+        "architect",
         "dev-senior",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -2180,17 +2155,16 @@
       "path": "docs/OUTCOME-LEDGER.md",
       "title": "Outcome Ledger",
       "slug": "ai/outcome-ledger",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
         "architect",
         "dev-senior",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "platform@aether",
@@ -2207,12 +2181,12 @@
       "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "architect",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -2224,10 +2198,10 @@
       "visibility": "I",
       "audience": [
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -2284,7 +2258,9 @@
       "audience": [
         "architect",
         "dev-senior"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/PIPELINE-HEALTH.md",
@@ -2305,15 +2281,15 @@
       "path": "docs/PLAYBOOK-DRIFT.md",
       "title": "Playbook Drift",
       "slug": "data/playbook-drift",
-      "section": "data",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
+        "architect",
         "dev-senior",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -2325,16 +2301,15 @@
       "path": "docs/PLAYBOOKS.md",
       "title": "Playbooks",
       "slug": "ai/playbooks",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
         "architect",
         "dev-senior",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "platform@aether",
@@ -2347,7 +2322,7 @@
       "path": "docs/POLICY-ENGINE.md",
       "title": "Policy Engine",
       "slug": "enterprise/policy-engine",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops",
@@ -2401,7 +2376,7 @@
       "visibility": "I",
       "audience": [
         "ops",
-        "exec",
+        "buyer",
         "architect"
       ],
       "status": "beta",
@@ -2416,12 +2391,12 @@
       "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "architect",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -2429,29 +2404,28 @@
       "path": "docs/PRICING-ARCHITECTURE.md",
       "title": "Pricing Architecture",
       "slug": "enterprise/pricing-architecture",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/PRIVACY-REVIEW.md",
       "title": "Privacy Review",
       "slug": "compliance/privacy-review",
-      "section": "compliance",
+      "section": "security",
       "visibility": "I",
       "audience": [
         "security",
         "compliance",
-        "exec"
+        "buyer"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -2459,7 +2433,7 @@
       "path": "docs/PRODUCTION-DEPLOYMENT.md",
       "title": "Production Deployment",
       "slug": "self-hosting/production-deployment",
-      "section": "self-hosting",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops",
@@ -2467,7 +2441,7 @@
         "dev-senior"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 9,
       "canonical_owner": "platform@aether"
     },
@@ -2494,12 +2468,12 @@
       "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "architect",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "canonical_owner": "platform@aether"
     },
@@ -2510,11 +2484,11 @@
       "section": "architecture",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "product@aether"
@@ -2523,14 +2497,14 @@
       "path": "docs/PROFILE-360-AGGREGATION.md",
       "title": "Profile 360 Aggregation Layer",
       "slug": "api/profile-360-aggregation",
-      "section": "api",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-senior",
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
@@ -2539,7 +2513,7 @@
       "path": "docs/PROTECTED-RESOURCES.md",
       "title": "Protected Resources — Registration Guide",
       "slug": "commerce/protected-resources",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "dev-senior",
@@ -2547,7 +2521,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "canonical_owner": "backend@aether"
     },
@@ -2651,15 +2625,14 @@
       "path": "docs/RECOMMENDATION-FAMILIES.md",
       "title": "Recommendation Families",
       "slug": "ai/recommendation-families",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
         "architect",
         "dev-senior"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "platform@aether",
@@ -2672,15 +2645,15 @@
       "path": "docs/RECOMMENDATION-QUALITY.md",
       "title": "Recommendation Quality",
       "slug": "data/recommendation-quality",
-      "section": "data",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
+        "architect",
         "dev-senior",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -2700,6 +2673,7 @@
         "security"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 9,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -2711,7 +2685,7 @@
       "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "ops",
         "architect"
       ],
@@ -2725,15 +2699,15 @@
       "path": "docs/RENEWAL-RISK-SCORING.md",
       "title": "Renewal Risk Scoring",
       "slug": "kyber/renewal-risk-scoring",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "ops",
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/REPO-INDEX.md",
@@ -2756,29 +2730,27 @@
       "path": "docs/REVENUE-LEAKAGE.md",
       "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
       "slug": "enterprise/revenue-leakage",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/ROI-CALCULATORS.md",
       "title": "ROI Calculators",
       "slug": "enterprise/roi-calculators",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/ROLLBACK-RUNBOOK.md",
@@ -2799,15 +2771,14 @@
       "path": "docs/SALES-READINESS.md",
       "title": "Sales Readiness",
       "slug": "enterprise/sales-readiness",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/SALESFORCE-CONNECTOR.md",
@@ -2846,15 +2817,15 @@
       "path": "docs/SCHEMA-DRIFT.md",
       "title": "Schema Drift",
       "slug": "data/schema-drift",
-      "section": "data",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
+        "architect",
         "dev-senior",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -2865,14 +2836,14 @@
       "path": "docs/SDK-ANDROID.md",
       "title": "Aether Android SDK — Integration Guide",
       "slug": "sdks/android",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "sdk@aether"
@@ -2881,14 +2852,14 @@
       "path": "docs/SDK-API-CONTRACTS.md",
       "title": "SDK API Contracts",
       "slug": "api/sdk-api-contracts",
-      "section": "api",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -2896,14 +2867,14 @@
       "path": "docs/SDK-COMMERCE-BRIDGES.md",
       "title": "SDK Commerce Bridges",
       "slug": "sdks/sdk-commerce-bridges",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -2912,14 +2883,14 @@
       "path": "docs/SDK-EVENT-SCHEMAS.md",
       "title": "SDK Event Schemas",
       "slug": "sdks/sdk-event-schemas",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-senior",
-        "ai"
+        "architect"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -2927,14 +2898,14 @@
       "path": "docs/SDK-IOS.md",
       "title": "Aether iOS SDK — Integration Guide",
       "slug": "sdks/ios",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "sdk@aether"
@@ -2943,14 +2914,14 @@
       "path": "docs/SDK-REACT-NATIVE.md",
       "title": "Aether React Native SDK — Integration Guide",
       "slug": "sdks/react-native",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 9,
       "toc_depth": 3,
       "canonical_owner": "sdk@aether"
@@ -2959,14 +2930,14 @@
       "path": "docs/SDK-RELEASE-CHECKLIST.md",
       "title": "SDK Release Checklist",
       "slug": "sdks/sdk-release-checklist",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-senior",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -2974,14 +2945,14 @@
       "path": "docs/SDK-RELEASE-READINESS-REPORT.md",
       "title": "SDK Release Readiness Report",
       "slug": "sdks/release-readiness-report",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "canonical_owner": "sdk@aether"
     },
@@ -2989,14 +2960,14 @@
       "path": "docs/SDK-WEB.md",
       "title": "Aether Web SDK — Integration Guide",
       "slug": "sdks/web",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 12,
       "toc_depth": 3,
       "canonical_owner": "sdk@aether"
@@ -3005,7 +2976,7 @@
       "path": "docs/SDK-WEB2-QUICKSTART.md",
       "title": "Aether SDK — Web2 Quickstart",
       "slug": "sdk-web2-quickstart",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -3013,7 +2984,7 @@
         "buyer"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "sdk@aether"
@@ -3022,7 +2993,7 @@
       "path": "docs/SDKS.md",
       "title": "SDKs",
       "slug": "sdks/sdks",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-junior",
@@ -3030,7 +3001,7 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -3089,7 +3060,6 @@
       "section": "security",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops",
         "architect",
@@ -3109,11 +3079,10 @@
       "visibility": "I",
       "audience": [
         "security",
-        "exec",
         "buyer"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -3127,10 +3096,10 @@
         "security",
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -3156,15 +3125,14 @@
       "path": "docs/SEMANTIC-CONTEXT-INTELLIGENCE.md",
       "title": "Semantic Context Intelligence Layer",
       "slug": "ai/semantic-context",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "P",
       "audience": [
         "architect",
-        "ai",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "ai@aether"
@@ -3247,7 +3215,7 @@
       "visibility": "I",
       "audience": [
         "ops",
-        "exec",
+        "buyer",
         "architect"
       ],
       "status": "beta",
@@ -3274,15 +3242,15 @@
       "path": "docs/SOC2-READINESS.md",
       "title": "SOC 2 Readiness",
       "slug": "compliance/soc2-readiness",
-      "section": "compliance",
+      "section": "security",
       "visibility": "I",
       "audience": [
         "security",
         "compliance",
-        "exec"
+        "buyer"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -3290,15 +3258,14 @@
       "path": "docs/SOLUTION-PACKAGES.md",
       "title": "Solution Packages",
       "slug": "enterprise/solution-packages",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/SQUARESPACE-WEBSITE-READINESS.md",
@@ -3308,11 +3275,10 @@
       "visibility": "I",
       "audience": [
         "ops",
-        "exec",
         "buyer"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -3368,7 +3334,7 @@
       "path": "docs/START_HERE.md",
       "title": "Start Here",
       "slug": "start-here",
-      "section": "home",
+      "section": "concepts",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -3436,10 +3402,10 @@
       "audience": [
         "ops",
         "architect",
-        "exec"
+        "buyer"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -3450,7 +3416,7 @@
       "path": "docs/SUBSYSTEM-CACHE.md",
       "title": "Cache / Redis Subsystem",
       "slug": "data/cache",
-      "section": "data",
+      "section": "architecture",
       "visibility": "P",
       "audience": [
         "dev-senior",
@@ -3458,7 +3424,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
@@ -3467,7 +3433,7 @@
       "path": "docs/SUBSYSTEM-DATABASE.md",
       "title": "PostgreSQL / Repository Subsystem",
       "slug": "data/postgres",
-      "section": "data",
+      "section": "architecture",
       "visibility": "P",
       "audience": [
         "dev-senior",
@@ -3475,7 +3441,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
@@ -3484,7 +3450,7 @@
       "path": "docs/SUBSYSTEM-EVENTS.md",
       "title": "Events / Kafka Subsystem",
       "slug": "data/kafka",
-      "section": "data",
+      "section": "architecture",
       "visibility": "P",
       "audience": [
         "dev-senior",
@@ -3492,7 +3458,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.8.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
@@ -3521,11 +3487,10 @@
       "audience": [
         "security",
         "architect",
-        "ops",
-        "ai"
+        "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether",
       "flags": [
@@ -3537,7 +3502,7 @@
       "path": "docs/TENANT-ISOLATION-VERIFICATION.md",
       "title": "Tenant Isolation Verification",
       "slug": "enterprise/tenant-isolation-verification",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops",
@@ -3624,15 +3589,14 @@
       "path": "docs/USAGE-METERING.md",
       "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
       "slug": "enterprise/usage-metering",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/UX-HANDOFF-NOTES.md",
@@ -3642,10 +3606,10 @@
       "visibility": "I",
       "audience": [
         "dev-senior",
-        "exec"
+        "buyer"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "canonical_owner": "platform@aether"
     },
@@ -3653,29 +3617,28 @@
       "path": "docs/VALUE-BASED-PRICING-SUPPORT.md",
       "title": "Billing, Usage Metering, Contracts, and Revenue Operations",
       "slug": "enterprise/value-based-pricing-support",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/VALUE-REVIEW.md",
       "title": "Value Review",
       "slug": "kyber/value-review",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "ops",
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/VULNERABILITY-MANAGEMENT.md",
@@ -3712,14 +3675,14 @@
       "path": "docs/WEBHOOK-EVENTS.md",
       "title": "Webhook Events",
       "slug": "api/webhook-events",
-      "section": "api",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-senior",
         "ops"
       ],
       "status": "beta",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 3,
       "canonical_owner": "platform@aether"
     },
@@ -3789,6 +3752,7 @@
         "buyer"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 13,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -3800,10 +3764,10 @@
       "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 9,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -3815,10 +3779,10 @@
       "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 13,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -3830,11 +3794,11 @@
       "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "ops"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 12,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -3843,13 +3807,14 @@
       "path": "docs/api/CAMPAIGN_360_API.md",
       "title": "Campaign 360 API Reference",
       "slug": "api/campaign-360",
-      "section": "api",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-senior",
         "dev-junior"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -3858,7 +3823,7 @@
       "path": "docs/api/FLOW-TRACE.md",
       "title": "Flow Trace API Reference",
       "slug": "api/flow-trace",
-      "section": "api",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-senior",
@@ -3872,7 +3837,7 @@
       "path": "docs/api/FRAUD-NETWORKS.md",
       "title": "Fraud Networks API Reference",
       "slug": "api/fraud-networks",
-      "section": "api",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-senior",
@@ -3886,14 +3851,14 @@
       "path": "docs/api/authentication.md",
       "title": "API Authentication",
       "slug": "api/authentication",
-      "section": "api",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -3902,14 +3867,14 @@
       "path": "docs/api/ingestion.md",
       "title": "Event Ingestion API",
       "slug": "api/ingestion",
-      "section": "api",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -3918,13 +3883,13 @@
       "path": "docs/api/profiles.md",
       "title": "Profiles API",
       "slug": "api/profiles",
-      "section": "api",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -3933,14 +3898,14 @@
       "path": "docs/api/webhooks.md",
       "title": "Webhooks",
       "slug": "api/webhooks",
-      "section": "api",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-senior",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -3956,6 +3921,7 @@
         "dev-senior"
       ],
       "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 30,
       "toc_depth": 4,
       "canonical_owner": "platform@aether"
@@ -3968,10 +3934,10 @@
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 20,
       "toc_depth": 4,
       "canonical_owner": "platform@aether"
@@ -3987,6 +3953,7 @@
         "dev-senior"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 20,
       "toc_depth": 4,
       "canonical_owner": "platform@aether"
@@ -4028,6 +3995,7 @@
         "dev-senior"
       ],
       "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 28,
       "toc_depth": 4,
       "canonical_owner": "platform@aether"
@@ -4040,11 +4008,10 @@
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.10.0",
+      "since_version": "0.1.0",
       "canonical_owner": "graph@aether"
     },
     {
@@ -4508,11 +4475,10 @@
       "visibility": "I",
       "audience": [
         "dev-senior",
-        "architect",
-        "ai"
+        "architect"
       ],
       "status": "experimental",
-      "since_version": "8.9.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/audits/DOCS_REVIEW_BACKLOG.md",
@@ -4524,7 +4490,8 @@
         "dev-senior",
         "architect"
       ],
-      "status": "stable"
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/audits/FRONTEND-DATA-TRUTH-INVENTORY.md",
@@ -4564,10 +4531,10 @@
         "ops",
         "dev-senior",
         "architect",
-        "exec"
+        "buyer"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 12,
       "canonical_owner": "platform@aether"
     },
@@ -4575,14 +4542,14 @@
       "path": "docs/blueprints/communication360.md",
       "title": "Communication360 Vertical Slice Blueprint",
       "slug": "blueprints/communication360",
-      "section": "blueprints",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -4591,14 +4558,14 @@
       "path": "docs/blueprints/economic360.md",
       "title": "Economic360 Vertical Slice Blueprint",
       "slug": "blueprints/economic360",
-      "section": "blueprints",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -4607,14 +4574,14 @@
       "path": "docs/blueprints/fraud360.md",
       "title": "Fraud360 Vertical Slice Blueprint",
       "slug": "blueprints/fraud360",
-      "section": "blueprints",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -4623,14 +4590,14 @@
       "path": "docs/blueprints/geographic360.md",
       "title": "Geographic360 Vertical Slice Blueprint",
       "slug": "blueprints/geographic360",
-      "section": "blueprints",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -4639,14 +4606,14 @@
       "path": "docs/blueprints/infrastructure360.md",
       "title": "Infrastructure360 Vertical Slice Blueprint",
       "slug": "blueprints/infrastructure360",
-      "section": "blueprints",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -4655,14 +4622,14 @@
       "path": "docs/blueprints/outcome360.md",
       "title": "Outcome360 Vertical Slice Blueprint",
       "slug": "blueprints/outcome360",
-      "section": "blueprints",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -4671,14 +4638,14 @@
       "path": "docs/blueprints/population360.md",
       "title": "Population360 Vertical Slice Blueprint",
       "slug": "blueprints/population360",
-      "section": "blueprints",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -4687,14 +4654,14 @@
       "path": "docs/blueprints/risk360.md",
       "title": "Risk360 Vertical Slice Blueprint",
       "slug": "blueprints/risk360",
-      "section": "blueprints",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -4703,14 +4670,14 @@
       "path": "docs/blueprints/sdk-universal-ingestion-alignment.md",
       "title": "Aether SDK + Universal Ingestion Alignment Blueprint",
       "slug": "blueprints/sdk-universal-ingestion-alignment",
-      "section": "blueprints",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 45,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -4719,14 +4686,14 @@
       "path": "docs/blueprints/social360.md",
       "title": "Social360 Blueprint — Relationship-Fidelity Extension to the Relational Intelligence Spine",
       "slug": "blueprints/social360",
-      "section": "blueprints",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -4735,14 +4702,14 @@
       "path": "docs/blueprints/temporal360.md",
       "title": "Temporal360 Vertical Slice Blueprint",
       "slug": "blueprints/temporal360",
-      "section": "blueprints",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -4914,7 +4881,7 @@
       "path": "docs/brand-system/kyber.md",
       "title": "Kyber identity",
       "slug": "kyber/brand-system",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "dev-senior",
@@ -4922,22 +4889,21 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
       "path": "docs/brand-system/marketing.md",
       "title": "Marketing guidance",
       "slug": "enterprise/brand-system-marketing",
-      "section": "enterprise",
+      "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
         "buyer",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -4978,11 +4944,11 @@
       "visibility": "I",
       "audience": [
         "architect",
-        "exec",
+        "buyer",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -5099,7 +5065,9 @@
       "audience": [
         "dev-senior",
         "architect"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/campaign/CAMPAIGN_CONNECTORS.md",
@@ -5110,7 +5078,9 @@
       "audience": [
         "dev-senior",
         "ops"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/campaign/CAMPAIGN_INTELLIGENCE_OVERVIEW.md",
@@ -5121,17 +5091,21 @@
       "audience": [
         "dev-senior",
         "architect"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/campaign/CAMPAIGN_KYBER_GUIDE.md",
       "title": "Campaign Intelligence — Kyber Operator Guide",
       "slug": "campaign/campaign-kyber-guide",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "ops"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/campaign/CAMPAIGN_MIGRATION.md",
@@ -5142,7 +5116,9 @@
       "audience": [
         "dev-senior",
         "ops"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/campaign/CAMPAIGN_REGISTRY_ARCHITECTURE.md",
@@ -5153,7 +5129,9 @@
       "audience": [
         "dev-senior",
         "architect"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/campaign/CAMPAIGN_RESOLUTION_CONTRACT.md",
@@ -5164,18 +5142,22 @@
       "audience": [
         "dev-senior",
         "architect"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/campaign/CAMPAIGN_SDK_ACQUISITION.md",
       "title": "Campaign SDK Acquisition Evidence",
       "slug": "campaign/campaign-sdk-acquisition",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/campaign/runbooks/connector-credential-rotation.md",
@@ -5185,7 +5167,9 @@
       "visibility": "I",
       "audience": [
         "ops"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/campaign/runbooks/duplicate-campaigns.md",
@@ -5195,7 +5179,9 @@
       "visibility": "I",
       "audience": [
         "ops"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/campaign/runbooks/mapping-review-resolution.md",
@@ -5205,7 +5191,9 @@
       "visibility": "I",
       "audience": [
         "ops"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/campaign/runbooks/missing-spend-attribution.md",
@@ -5215,7 +5203,9 @@
       "visibility": "I",
       "audience": [
         "ops"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/campaign/runbooks/remap-and-recompute.md",
@@ -5225,7 +5215,9 @@
       "visibility": "I",
       "audience": [
         "ops"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/campaign/runbooks/source-stale.md",
@@ -5235,7 +5227,9 @@
       "visibility": "I",
       "audience": [
         "ops"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/campaign/runbooks/source-sync-failure.md",
@@ -5245,7 +5239,9 @@
       "visibility": "I",
       "audience": [
         "ops"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/campaign/runbooks/stuck-backfill.md",
@@ -5255,7 +5251,9 @@
       "visibility": "I",
       "audience": [
         "ops"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/campaign/runbooks/unresolved-rate-spike.md",
@@ -5265,7 +5263,9 @@
       "visibility": "I",
       "audience": [
         "ops"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/campaign/runbooks/utm-ambiguity.md",
@@ -5275,7 +5275,9 @@
       "visibility": "I",
       "audience": [
         "ops"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/comms/ADR_COMMUNICATIONS_INTELLIGENCE.md",
@@ -5286,7 +5288,9 @@
       "audience": [
         "dev-senior",
         "architect"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/comms/COMMS_BACKFILL_RUNBOOK.md",
@@ -5297,7 +5301,9 @@
       "audience": [
         "ops",
         "dev-senior"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/comms/COMMS_FOLLOW_UP_ROADMAP.md",
@@ -5309,7 +5315,9 @@
         "architect",
         "dev-senior",
         "ops"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/comms/COMMS_GENERIC_WEBHOOK.md",
@@ -5320,7 +5328,9 @@
       "audience": [
         "dev-senior",
         "dev-junior"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/comms/COMMS_PROVIDER_HARDCODE_LEDGER.md",
@@ -5331,7 +5341,9 @@
       "audience": [
         "dev-senior",
         "architect"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/comms/COMMS_RELEASE_READINESS.md",
@@ -5342,7 +5354,9 @@
       "audience": [
         "ops",
         "dev-senior"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/comms/COMMS_TRUTH_MATRIX.md",
@@ -5353,7 +5367,9 @@
       "audience": [
         "dev-senior",
         "architect"
-      ]
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/comms/COMMUNICATIONS_INTELLIGENCE_OVERVIEW.md",
@@ -5364,8 +5380,10 @@
       "audience": [
         "dev-senior",
         "architect",
-        "exec"
-      ]
+        "buyer"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/concepts/journeys.md",
@@ -5866,7 +5884,7 @@
       "path": "docs/derivatives/INGESTION.md",
       "title": "Derivatives Ingestion",
       "slug": "derivatives/ingestion",
-      "section": "data",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "architect",
@@ -5874,7 +5892,7 @@
         "ops"
       ],
       "status": "experimental",
-      "since_version": "8.11.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/derivatives/INTELLIGENCE.md",
@@ -5894,7 +5912,7 @@
       "path": "docs/derivatives/MARKET_RESOLUTION.md",
       "title": "Derivatives Market Resolution",
       "slug": "derivatives/market-resolution",
-      "section": "data",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "architect",
@@ -5902,7 +5920,7 @@
         "ops"
       ],
       "status": "experimental",
-      "since_version": "8.11.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/derivatives/OVERVIEW.md",
@@ -5922,7 +5940,7 @@
       "path": "docs/derivatives/POSITION_ACCOUNTING.md",
       "title": "Derivatives Position Accounting",
       "slug": "derivatives/position-accounting",
-      "section": "data",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
         "architect",
@@ -5930,7 +5948,7 @@
         "ops"
       ],
       "status": "experimental",
-      "since_version": "8.11.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/derivatives/PRODUCT_OPERATIONS.md",
@@ -5991,7 +6009,7 @@
       "path": "docs/developer/install-the-sdk.md",
       "title": "Install the SDK",
       "slug": "install-the-sdk",
-      "section": "quickstart",
+      "section": "developer",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -6004,7 +6022,7 @@
       "path": "docs/developer/local-development.md",
       "title": "Local Development",
       "slug": "local-development",
-      "section": "quickstart",
+      "section": "developer",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -6017,7 +6035,7 @@
       "path": "docs/developer/query-the-graph.md",
       "title": "Query the Graph",
       "slug": "query-the-graph",
-      "section": "quickstart",
+      "section": "developer",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -6030,7 +6048,7 @@
       "path": "docs/developer/quickstart.md",
       "title": "Developer Quickstart",
       "slug": "developer/quickstart",
-      "section": "quickstart",
+      "section": "developer",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -6043,7 +6061,7 @@
       "path": "docs/developer/send-first-event.md",
       "title": "Send Your First Event",
       "slug": "send-first-event",
-      "section": "quickstart",
+      "section": "developer",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -6056,7 +6074,7 @@
       "path": "docs/developer/tenant-setup.md",
       "title": "Tenant Setup",
       "slug": "tenant-setup",
-      "section": "quickstart",
+      "section": "developer",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -6069,7 +6087,7 @@
       "path": "docs/developer/verify-heartbeat.md",
       "title": "Verify Heartbeat",
       "slug": "verify-heartbeat",
-      "section": "quickstart",
+      "section": "developer",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -6082,14 +6100,14 @@
       "path": "docs/examples/reward-demo-web2.md",
       "title": "Reward Enablement Demo — Web2 Rails (recommend_only + tenant_webhook)",
       "slug": "examples/reward-demo-web2",
-      "section": "examples",
+      "section": "developer",
       "visibility": "P",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.10.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "canonical_owner": "platform@aether"
     },
@@ -6097,14 +6115,14 @@
       "path": "docs/examples/reward-demo-web3.md",
       "title": "Reward Enablement Demo — Web3 / On-Chain Claim (onchain_claim rail)",
       "slug": "examples/reward-demo-web3",
-      "section": "examples",
+      "section": "developer",
       "visibility": "P",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.10.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "canonical_owner": "platform@aether"
     },
@@ -6133,9 +6151,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 14,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -6149,9 +6168,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -6168,6 +6188,7 @@
         "security"
       ],
       "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -6182,7 +6203,8 @@
         "dev-senior",
         "security"
       ],
-      "status": "stable"
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/internal/noesis.md",
@@ -6193,7 +6215,8 @@
       "audience": [
         "dev-senior"
       ],
-      "status": "stable"
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/internal/tooling/docs-pipeline.md",
@@ -6223,7 +6246,8 @@
         "architect",
         "security"
       ],
-      "status": "stable"
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/noesis-operator-guide.md",
@@ -6236,7 +6260,8 @@
         "architect",
         "ops"
       ],
-      "status": "stable"
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/noesis-operator-runbook.md",
@@ -6248,7 +6273,8 @@
         "ops",
         "dev-senior"
       ],
-      "status": "stable"
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/noesis-runbook.md",
@@ -6261,7 +6287,8 @@
         "architect",
         "ops"
       ],
-      "status": "stable"
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/noesis-tenant-guide.md",
@@ -6272,7 +6299,8 @@
       "audience": [
         "buyer"
       ],
-      "status": "stable"
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/operations/ENDUSER_LIFECYCLE_E2E.md",
@@ -6283,10 +6311,10 @@
       "audience": [
         "ops",
         "dev-senior",
-        "ai"
+        "architect"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -6300,10 +6328,10 @@
       "audience": [
         "ops",
         "dev-senior",
-        "ai"
+        "architect"
       ],
       "status": "stable",
-      "since_version": "8.10.0",
+      "since_version": "0.1.0",
       "canonical_owner": "sre@aether"
     },
     {
@@ -6420,10 +6448,10 @@
       "audience": [
         "architect",
         "dev-senior",
-        "exec"
+        "buyer"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "backend@aether"
     },
     {
@@ -6434,11 +6462,10 @@
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "backend@aether"
     },
     {
@@ -6450,10 +6477,10 @@
       "audience": [
         "architect",
         "dev-senior",
-        "exec"
+        "buyer"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "backend@aether"
     },
     {
@@ -6464,11 +6491,10 @@
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -6482,10 +6508,10 @@
       "audience": [
         "architect",
         "dev-senior",
-        "exec"
+        "buyer"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "backend@aether"
     },
     {
@@ -6497,10 +6523,10 @@
       "audience": [
         "architect",
         "dev-senior",
-        "exec"
+        "buyer"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "backend@aether"
     },
     {
@@ -6512,10 +6538,10 @@
       "audience": [
         "architect",
         "dev-senior",
-        "exec"
+        "buyer"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "backend@aether"
     },
     {
@@ -6527,10 +6553,10 @@
       "audience": [
         "architect",
         "dev-senior",
-        "exec"
+        "buyer"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -6541,11 +6567,10 @@
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "experimental",
-      "since_version": "8.10.0",
+      "since_version": "0.1.0",
       "canonical_owner": "graph@aether"
     },
     {
@@ -6557,10 +6582,10 @@
       "audience": [
         "architect",
         "dev-senior",
-        "exec"
+        "buyer"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "frontend@aether"
     },
     {
@@ -6581,7 +6606,7 @@
       "path": "docs/privacy/traffic-intelligence-data-retention.md",
       "title": "Traffic Intelligence Data Retention",
       "slug": "privacy/traffic-intelligence-data-retention",
-      "section": "compliance",
+      "section": "security",
       "visibility": "I",
       "audience": [
         "compliance",
@@ -6589,13 +6614,14 @@
         "security"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "canonical_owner": "privacy@aether"
     },
     {
       "path": "docs/privacy/traffic-intelligence-privacy-review.md",
       "title": "Traffic Intelligence Privacy Review",
       "slug": "privacy/traffic-intelligence-privacy-review",
-      "section": "compliance",
+      "section": "security",
       "visibility": "I",
       "audience": [
         "compliance",
@@ -6603,6 +6629,7 @@
         "architect"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "canonical_owner": "privacy@aether"
     },
     {
@@ -6824,7 +6851,7 @@
       "path": "docs/product/language-system/canonical-language.md",
       "title": "Canonical Language",
       "slug": "product/language-system/canonical-language",
-      "section": "glossary",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "buyer",
@@ -6837,7 +6864,7 @@
       "path": "docs/product/language-system/deprecated-language.md",
       "title": "Deprecated Language",
       "slug": "product/language-system/deprecated-language",
-      "section": "glossary",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "buyer",
@@ -6967,8 +6994,7 @@
       "section": "concepts",
       "visibility": "P",
       "audience": [
-        "buyer",
-        "exec"
+        "buyer"
       ],
       "status": "experimental",
       "since_version": "0.1.0"
@@ -7160,10 +7186,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 15,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -7177,10 +7203,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7237,10 +7263,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7252,10 +7278,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7267,10 +7293,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7282,10 +7308,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7297,10 +7323,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7312,10 +7338,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7327,10 +7353,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7342,10 +7368,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7357,10 +7383,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7372,10 +7398,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7387,10 +7413,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7402,10 +7428,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7417,10 +7443,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7432,10 +7458,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7447,10 +7473,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7462,10 +7488,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7477,10 +7503,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7492,10 +7518,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7507,10 +7533,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7522,10 +7548,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7537,10 +7563,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7552,10 +7578,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7567,10 +7593,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "beta",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7582,10 +7608,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7597,10 +7623,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7640,12 +7666,12 @@
       "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "ops",
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -7676,10 +7702,10 @@
       "audience": [
         "security",
         "architect",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -7691,13 +7717,12 @@
       "section": "operations",
       "visibility": "I",
       "audience": [
-        "exec",
+        "buyer",
         "architect",
-        "ops",
-        "buyer"
+        "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -7728,10 +7753,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7743,10 +7768,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -7758,10 +7783,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -7791,10 +7816,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "canonical_owner": "platform@aether"
     },
@@ -7807,10 +7832,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/productization/unified-canonical-journey/DEPLOYMENT_PROFILE_MATRIX.md",
@@ -7821,10 +7846,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/productization/unified-canonical-journey/EXECUTION_STATE.md",
@@ -7835,10 +7860,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "beta",
-      "since_version": "8.12.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/productization/unified-canonical-journey/RELEASE_READINESS.md",
@@ -7849,10 +7874,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/productization/unified-canonical-journey/REPO_TRUTH_AND_GAP_MATRIX.md",
@@ -7863,10 +7888,10 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/productization/unified-canonical-journey/TEST_EVIDENCE.md",
@@ -7877,23 +7902,23 @@
       "audience": [
         "architect",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
-      "since_version": "8.12.0"
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/quickstart/node-sdk.md",
       "title": "Getting Started with the Node SDK",
       "slug": "quickstart/node-sdk",
-      "section": "quickstart",
+      "section": "developer",
       "visibility": "P",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "sdk@aether"
@@ -7902,14 +7927,14 @@
       "path": "docs/quickstart/react-sdk.md",
       "title": "Getting Started with the React SDK",
       "slug": "quickstart/react-sdk",
-      "section": "quickstart",
+      "section": "developer",
       "visibility": "P",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "sdk@aether"
@@ -7918,14 +7943,14 @@
       "path": "docs/quickstart/web-sdk.md",
       "title": "Getting Started with the Web SDK",
       "slug": "quickstart/web-sdk",
-      "section": "quickstart",
+      "section": "developer",
       "visibility": "P",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "sdk@aether"
@@ -7939,9 +7964,10 @@
       "audience": [
         "ops",
         "architect",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 11,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -7955,10 +7981,11 @@
       "audience": [
         "ops",
         "architect",
-        "exec",
+        "buyer",
         "security"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 12,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -7972,9 +7999,10 @@
       "audience": [
         "ops",
         "architect",
-        "exec"
+        "buyer"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -8074,16 +8102,15 @@
       "path": "docs/reports/ML-FULL-PRODUCTIONIZATION-REPORT.md",
       "title": "ML Full Productionization Report",
       "slug": "ai/ml-full-productionization-report",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
-        "dev-senior",
         "architect",
+        "dev-senior",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 12,
       "toc_depth": 3,
       "canonical_owner": "ml@aether"
@@ -8092,15 +8119,14 @@
       "path": "docs/reports/ML-MODEL-READINESS-MATRIX.md",
       "title": "ML Model Readiness Matrix",
       "slug": "ai/ml-model-readiness-matrix",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
-        "dev-senior",
-        "architect"
+        "architect",
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 2,
       "canonical_owner": "ml@aether"
@@ -8109,30 +8135,29 @@
       "path": "docs/reports/ML-PRODUCTIZATION-READINESS.md",
       "title": "ML Productization Readiness Report",
       "slug": "ai/ml-productization-readiness",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
-        "dev-senior",
-        "architect"
+        "architect",
+        "dev-senior"
       ],
-      "since_version": "8.9.0",
+      "status": "experimental",
+      "since_version": "0.1.0",
       "canonical_owner": "ml@aether"
     },
     {
       "path": "docs/reports/ML-SECURITY-THREAT-MODEL.md",
       "title": "ML Security Threat Model",
       "slug": "ai/ml-security-threat-model",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
-        "dev-senior",
         "architect",
+        "dev-senior",
         "security"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "ml@aether"
@@ -8141,14 +8166,15 @@
       "path": "docs/reports/SDK_PRODUCTION_READINESS_AUDIT.md",
       "title": "SDK Production Readiness Audit",
       "slug": "sdk/production-readiness-audit",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-senior",
         "architect",
         "ops"
       ],
-      "since_version": "8.9.0",
+      "status": "experimental",
+      "since_version": "0.1.0",
       "canonical_owner": "sdk@aether"
     },
     {
@@ -8188,6 +8214,7 @@
         "dev-senior"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -8203,6 +8230,7 @@
         "dev-senior"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -8218,6 +8246,7 @@
         "dev-senior"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -8233,6 +8262,7 @@
         "dev-senior"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -8335,6 +8365,7 @@
         "dev-senior"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -8364,6 +8395,7 @@
         "dev-senior"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -8379,6 +8411,7 @@
         "dev-senior"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -8394,6 +8427,7 @@
         "dev-senior"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -8437,6 +8471,7 @@
         "security"
       ],
       "status": "beta",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -8452,6 +8487,7 @@
         "security"
       ],
       "status": "beta",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -8468,6 +8504,7 @@
         "compliance"
       ],
       "status": "beta",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 7,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -8484,6 +8521,7 @@
         "compliance"
       ],
       "status": "beta",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -8499,6 +8537,7 @@
         "dev-senior"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -8507,15 +8546,15 @@
       "path": "docs/runbooks/ML-INCIDENT-RUNBOOK.md",
       "title": "ML Incident Runbook",
       "slug": "ai/ml-incident-runbook",
-      "section": "ai",
+      "section": "architecture",
       "visibility": "I",
       "audience": [
-        "ai",
+        "architect",
         "dev-senior",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "ml@aether"
@@ -8602,6 +8641,7 @@
         "dev-senior"
       ],
       "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 7,
       "toc_depth": 2,
       "canonical_owner": "platform@aether"
@@ -8640,14 +8680,14 @@
       "path": "docs/sdk/android-attribution.md",
       "title": "Android Install & Deep-Link Attribution",
       "slug": "sdk/android-attribution",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "canonical_owner": "platform@aether"
     },
@@ -8655,14 +8695,14 @@
       "path": "docs/sdk/interaction-tracking.md",
       "title": "Native UI Interaction Tracking",
       "slug": "sdk/interaction-tracking",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 7,
       "canonical_owner": "platform@aether"
     },
@@ -8670,14 +8710,14 @@
       "path": "docs/sdk/qr-nfc-appclip.md",
       "title": "QR, NFC & App Clip Attribution",
       "slug": "sdk/qr-nfc-appclip",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "canonical_owner": "platform@aether"
     },
@@ -8685,7 +8725,7 @@
       "path": "docs/sdks/android.md",
       "title": "Aether Android SDK",
       "slug": "sdks/android",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -8698,7 +8738,7 @@
       "path": "docs/sdks/batching-and-retries.md",
       "title": "Batching and Retries",
       "slug": "sdks/batching-and-retries",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -8711,7 +8751,7 @@
       "path": "docs/sdks/event-contracts.md",
       "title": "SDK Event Contracts",
       "slug": "sdks/event-contracts",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -8724,7 +8764,7 @@
       "path": "docs/sdks/events-registry.md",
       "title": "SDK Events Registry",
       "slug": "events-registry",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-senior"
@@ -8736,7 +8776,7 @@
       "path": "docs/sdks/field-trust-parity.md",
       "title": "SDK Field Trust Parity",
       "slug": "field-trust-parity",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-senior",
@@ -8749,7 +8789,7 @@
       "path": "docs/sdks/heartbeat.md",
       "title": "SDK Heartbeat",
       "slug": "sdks/heartbeat",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -8762,7 +8802,7 @@
       "path": "docs/sdks/ingestion-contract.md",
       "title": "SDK Ingestion Contract",
       "slug": "ingestion-contract",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-senior",
@@ -8775,7 +8815,7 @@
       "path": "docs/sdks/ios.md",
       "title": "Aether iOS SDK",
       "slug": "sdks/ios",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -8788,7 +8828,7 @@
       "path": "docs/sdks/overview.md",
       "title": "Aether SDKs",
       "slug": "sdks/overview",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -8801,7 +8841,7 @@
       "path": "docs/sdks/parity-matrix.md",
       "title": "SDK Parity Matrix",
       "slug": "sdks/parity-matrix",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -8814,7 +8854,7 @@
       "path": "docs/sdks/privacy-and-redaction.md",
       "title": "Privacy and Redaction",
       "slug": "sdks/privacy-and-redaction",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -8827,7 +8867,7 @@
       "path": "docs/sdks/react-native.md",
       "title": "Aether React Native SDK",
       "slug": "sdks/react-native",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -8840,7 +8880,7 @@
       "path": "docs/sdks/react.md",
       "title": "Aether React SDK",
       "slug": "sdks/react",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -8853,7 +8893,7 @@
       "path": "docs/sdks/version-compatibility.md",
       "title": "SDK Version Compatibility",
       "slug": "version-compatibility",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-senior"
@@ -8865,7 +8905,7 @@
       "path": "docs/sdks/web.md",
       "title": "Aether Web SDK",
       "slug": "sdks/web",
-      "section": "sdks",
+      "section": "reference",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -8883,11 +8923,10 @@
       "audience": [
         "architect",
         "dev-senior",
-        "security",
-        "ai"
+        "security"
       ],
       "status": "stable",
-      "since_version": "8.10.0",
+      "since_version": "0.1.0",
       "canonical_owner": "security@aether"
     },
     {
@@ -9019,15 +9058,15 @@
       "path": "docs/source-of-truth/ACCOUNT_LIFECYCLE.md",
       "title": "Account Lifecycle and Erasure",
       "slug": "source-of-truth/account-lifecycle",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-senior",
         "ops",
         "architect"
       ],
-      "status": "draft",
-      "since_version": "8.9.0",
+      "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 4,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -9057,10 +9096,10 @@
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
-      "status": "draft",
+      "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 12,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -9069,22 +9108,75 @@
       "path": "docs/source-of-truth/AETHER_MOBILE.md",
       "title": "Aether Mobile — App Architecture",
       "slug": "mobile/aether-app",
-      "section": "mobile",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "mobile",
+        "dev-senior",
         "security"
       ],
-      "status": "alpha"
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md",
+      "title": "Agent Access Intelligence Pr1",
+      "slug": "source-of-truth/agent_access_intelligence_pr1",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR2.md",
+      "title": "Agent Access Intelligence Pr2",
+      "slug": "source-of-truth/agent_access_intelligence_pr2",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR3_PR4.md",
+      "title": "Agent Access Intelligence Pr3 Pr4",
+      "slug": "source-of-truth/agent_access_intelligence_pr3_pr4",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/AI_AGENT_REFERRAL_ATTRIBUTION.md",
       "title": "AI and Agent Referral Attribution Source of Truth",
-      "status": "stable"
+      "slug": "source-of-truth/ai_agent_referral_attribution",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
-      "path": "docs/source-of-truth/AI_OUTCOME_EFFICIENCY.md"
+      "path": "docs/source-of-truth/AI_OUTCOME_EFFICIENCY.md",
+      "title": "Ai Outcome Efficiency",
+      "slug": "source-of-truth/ai_outcome_efficiency",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/API_ANTI_DISTILLATION.md",
@@ -9097,9 +9189,22 @@
         "dev-senior",
         "ops"
       ],
-      "status": "draft",
+      "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "canonical_owner": "security@aether"
+    },
+    {
+      "path": "docs/source-of-truth/BACKEND_INTELLIGENCE_ARCHITECTURE.md",
+      "title": "Backend Intelligence Architecture",
+      "slug": "source-of-truth/backend_intelligence_architecture",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/BYOK_PROVIDER_GATEWAY.md",
@@ -9112,31 +9217,59 @@
         "dev-senior",
         "ops"
       ],
-      "status": "draft",
+      "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
     {
-      "path": "docs/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md",
-      "title": "Card-Linked Payment Rails Source of Truth",
-      "status": "stable"
+      "path": "docs/source-of-truth/CAPABILITY_MANIFEST.md",
+      "title": "Capability Manifest",
+      "slug": "source-of-truth/capability_manifest",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
-      "path": "docs/source-of-truth/CLUSTER_TARGETING_INTELLIGENCE.md"
+      "path": "docs/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md",
+      "title": "Card-Linked Payment Rails Source of Truth",
+      "slug": "source-of-truth/card_linked_payment_rails",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/CLUSTER_TARGETING_INTELLIGENCE.md",
+      "title": "Cluster Targeting Intelligence",
+      "slug": "source-of-truth/cluster_targeting_intelligence",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/COMMUNICATION_360.md",
       "title": "Communication360 — Day-1 Blueprint Source of Truth",
       "slug": "source-of-truth/communication-360",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 60,
       "toc_depth": 4,
       "canonical_owner": "backend@aether"
@@ -9144,21 +9277,27 @@
     {
       "path": "docs/source-of-truth/COMPARISON_INTELLIGENCE.md",
       "title": "Continuous Relationship Decision Intelligence Source of Truth",
-      "status": "stable"
+      "slug": "source-of-truth/comparison_intelligence",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/COMPUTATION_SUBSTRATE.md",
       "title": "Computation Substrate",
       "slug": "source-of-truth/computation-substrate",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -9172,7 +9311,8 @@
         "dev-senior",
         "ops"
       ],
-      "status": "draft",
+      "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -9188,41 +9328,63 @@
         "dev-senior",
         "ops"
       ],
-      "status": "draft",
+      "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/source-of-truth/CONSENT_MODEL.md",
+      "title": "Consent Model",
+      "slug": "source-of-truth/consent_model",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/source-of-truth/CONTEXT_INTELLIGENCE.md",
       "title": "Contextual Session Intelligence Source of Truth",
-      "status": "stable"
+      "slug": "source-of-truth/context_intelligence",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/CREDENTIAL_ACTIVATION.md",
       "title": "Credential Activation",
       "slug": "mobile/credential-activation",
-      "section": "mobile",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
         "security",
         "ops"
       ],
-      "status": "alpha"
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/CROSS_DEVICE_CONTINUITY.md",
       "title": "Cross-Device Continuity",
       "slug": "mobile/cross-device-continuity",
-      "section": "mobile",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
         "security",
         "ops"
       ],
-      "status": "alpha"
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/DATA_RIGHTS_LEDGER.md",
@@ -9235,89 +9397,104 @@
         "dev-senior",
         "ops"
       ],
-      "status": "draft",
+      "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 9,
       "canonical_owner": "compliance@aether"
+    },
+    {
+      "path": "docs/source-of-truth/DERIVATIVES_CONNECTOR_CONTRACT.md",
+      "title": "Derivatives Connector Contract",
+      "slug": "source-of-truth/derivatives_connector_contract",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/DERIVATIVES_CONSENT_MODEL.md",
       "title": "Derivatives Consent Model",
       "slug": "source-of-truth/derivatives-consent-model",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/DERIVATIVES_ENTITY_MODEL.md",
       "title": "Derivatives Entity Model",
       "slug": "source-of-truth/derivatives-entity-model",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/DERIVATIVES_EVENT_REGISTRY.md",
       "title": "Derivatives Event Registry",
       "slug": "source-of-truth/derivatives-event-registry",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/DERIVATIVES_GRAPH_ALIGNMENT.md",
       "title": "Derivatives Graph Alignment",
       "slug": "source-of-truth/derivatives-graph-alignment",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/DERIVATIVES_INGESTION_CONTRACT.md",
       "title": "Derivatives Ingestion Contract",
       "slug": "source-of-truth/derivatives-ingestion-contract",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/DERIVATIVES_INTELLIGENCE_ALIGNMENT.md",
       "title": "Derivatives Intelligence Alignment",
-      "status": "draft"
+      "slug": "source-of-truth/derivatives_intelligence_alignment",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/DERIVATIVES_RELEASE_READINESS.md",
@@ -9337,15 +9514,14 @@
       "path": "docs/source-of-truth/DERIVATIVES_RUNTIME_MODEL.md",
       "title": "Derivatives Runtime Model",
       "slug": "source-of-truth/derivatives-runtime-model",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -9359,7 +9535,8 @@
         "dev-senior",
         "ops"
       ],
-      "status": "draft",
+      "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "canonical_owner": "data@aether"
     },
@@ -9374,7 +9551,8 @@
         "dev-senior",
         "ops"
       ],
-      "status": "draft",
+      "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "canonical_owner": "data@aether"
     },
@@ -9389,7 +9567,8 @@
         "dev-senior",
         "ops"
       ],
-      "status": "draft",
+      "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "data@aether"
     },
@@ -9404,17 +9583,58 @@
         "dev-senior",
         "ops"
       ],
-      "status": "draft",
+      "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
     {
-      "path": "docs/source-of-truth/EXPLORATION_FABRIC.md",
-      "title": "Unified Exploration Fabric Source of Truth",
-      "status": "stable"
+      "path": "docs/source-of-truth/ENTITY_MODEL.md",
+      "title": "Entity Model",
+      "slug": "source-of-truth/entity_model",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
-      "path": "docs/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md"
+      "path": "docs/source-of-truth/EVENT_REGISTRY.md",
+      "title": "Event Registry",
+      "slug": "source-of-truth/event_registry",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/EXPLORATION_FABRIC.md",
+      "title": "Unified Exploration Fabric Source of Truth",
+      "slug": "source-of-truth/exploration_fabric",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md",
+      "title": "External Agent Telemetry Plane",
+      "slug": "source-of-truth/external_agent_telemetry_plane",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/FINANCIAL_DOMAIN_MIGRATION_STATUS.md",
@@ -9425,10 +9645,10 @@
       "audience": [
         "architect",
         "dev-senior",
-        "exec"
+        "buyer"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
@@ -9442,50 +9662,78 @@
       "audience": [
         "architect",
         "dev-senior",
-        "exec",
+        "buyer",
         "compliance"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
     },
     {
-      "path": "docs/source-of-truth/FIRST_RELEASE_INTELLIGENCE_TELEMETRY_OPERATIONS.md"
+      "path": "docs/source-of-truth/FINANCIAL_VALUE_SEMANTICS.md",
+      "title": "Financial Value Semantics",
+      "slug": "source-of-truth/financial_value_semantics",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/FIRST_RELEASE_INTELLIGENCE_TELEMETRY_OPERATIONS.md",
+      "title": "First Release Intelligence Telemetry Operations",
+      "slug": "source-of-truth/first_release_intelligence_telemetry_operations",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/GRAPH_ALIGNMENT.md",
+      "title": "Graph Alignment",
+      "slug": "source-of-truth/graph_alignment",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0",
       "canonical_owner": "graph@aether"
     },
     {
       "path": "docs/source-of-truth/GRAPH_CONTRACT.md",
       "title": "Intelligence Graph Contract",
       "slug": "source-of-truth/graph-contract",
-      "section": "source-of-truth",
-      "visibility": "internal",
+      "section": "reference",
+      "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "canonical_owner": "graph@aether"
     },
     {
       "path": "docs/source-of-truth/GRAPH_LAYER_PARITY.md",
       "title": "Graph Layer Parity Checklist",
       "slug": "source-of-truth/graph-layer-parity",
-      "section": "source-of-truth",
-      "visibility": "internal",
+      "section": "reference",
+      "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "canonical_owner": "graph@aether"
     },
     {
@@ -9499,7 +9747,8 @@
         "dev-senior",
         "ops"
       ],
-      "status": "draft",
+      "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "canonical_owner": "platform@aether"
     },
@@ -9507,12 +9756,11 @@
       "path": "docs/source-of-truth/IDENTITY_RESOLUTION.md",
       "title": "Identity Resolution",
       "slug": "source-of-truth/identity-resolution",
-      "section": "source-of-truth",
-      "visibility": "internal",
+      "section": "reference",
+      "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
       "since_version": "9.0.0",
@@ -9521,7 +9769,26 @@
     {
       "path": "docs/source-of-truth/IMPORTS.md",
       "title": "Tenant Import Engine Source of Truth",
-      "status": "stable"
+      "slug": "source-of-truth/imports",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/INGESTION_CONTRACT.md",
+      "title": "Ingestion Contract",
+      "slug": "source-of-truth/ingestion_contract",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/INGESTION_OPS.md",
@@ -9533,31 +9800,38 @@
         "architect",
         "dev-senior",
         "ops",
-        "exec"
+        "buyer"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 12,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
     },
     {
       "path": "docs/source-of-truth/INTEGRATION_CONSENT_REGISTRY.md",
-      "title": "Integration Consent Registry Source of Truth"
+      "title": "Integration Consent Registry Source of Truth",
+      "slug": "source-of-truth/integration_consent_registry",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md",
       "title": "Intelligence Projection Architecture",
       "slug": "source-of-truth/intelligence-projection-architecture",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -9566,14 +9840,14 @@
       "path": "docs/source-of-truth/INTELLIGENCE_PROJECTION_VERTICAL_SLICE_CHECKLIST.md",
       "title": "Intelligence Projection Vertical Slice Checklist",
       "slug": "source-of-truth/intelligence-projection-vertical-slice-checklist",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -9582,75 +9856,70 @@
       "path": "docs/source-of-truth/INTEROP_CONSENT_MODEL.md",
       "title": "Interoperability Consent Model",
       "slug": "source-of-truth/interop-consent-model",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/INTEROP_ENTITY_MODEL.md",
       "title": "Interoperability Entity Model",
       "slug": "source-of-truth/interop-entity-model",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/INTEROP_EVENT_REGISTRY.md",
       "title": "Interoperability Event Registry",
       "slug": "source-of-truth/interop-event-registry",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/INTEROP_GRAPH_ALIGNMENT.md",
       "title": "Interoperability Graph Alignment",
       "slug": "source-of-truth/interop-graph-alignment",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/INTEROP_INGESTION_CONTRACT.md",
       "title": "Interoperability Ingestion Contract",
       "slug": "source-of-truth/interop-ingestion-contract",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
@@ -9662,10 +9931,10 @@
       "audience": [
         "architect",
         "dev-senior",
-        "exec"
+        "buyer"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -9673,39 +9942,48 @@
     {
       "path": "docs/source-of-truth/JOBS_PLATFORM.md",
       "title": "Durable Jobs Platform Source of Truth",
-      "status": "stable"
+      "slug": "source-of-truth/jobs_platform",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/KYBER_ACCESS_CONTROL.md",
       "title": "Kyber Access Control",
       "slug": "kyber/access-control",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "architect",
         "security",
         "ops"
       ],
-      "status": "beta"
+      "status": "beta",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/KYBER_DEVICE_TRUST.md",
       "title": "Kyber Device Trust",
       "slug": "kyber/device-trust",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "architect",
         "security",
         "ops"
       ],
-      "status": "beta"
+      "status": "beta",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/KYBER_MISSIONS.md",
       "title": "Kyber Mission Aggregate & Monitoring",
       "slug": "kyber/missions",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "architect",
@@ -9713,7 +9991,7 @@
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 7,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -9722,117 +10000,152 @@
       "path": "docs/source-of-truth/KYBER_MOBILE.md",
       "title": "Kyber Mobile — App Architecture",
       "slug": "mobile/kyber-app",
-      "section": "mobile",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "mobile",
+        "dev-senior",
         "security"
       ],
-      "status": "alpha"
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/KYBER_MOBILE_COMMAND_SECURITY.md",
       "title": "Kyber Mobile — Command Security Model",
       "slug": "kyber/mobile-command-security",
-      "section": "kyber",
+      "section": "operations",
+      "visibility": "I",
       "audience": [
         "architect",
         "security",
-        "mobile",
-        "operator"
+        "dev-senior",
+        "ops"
       ],
-      "status": "stable"
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
-      "path": "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
+      "path": "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md",
+      "title": "Kyber One Person Operations",
+      "slug": "source-of-truth/kyber_one_person_operations",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/KYBER_SESSIONS_AND_SCOPES.md",
       "title": "Kyber Sessions and Tenant Access Scopes",
       "slug": "kyber/sessions-and-scopes",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "architect",
         "security",
         "ops"
       ],
-      "status": "beta"
+      "status": "beta",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/KYBER_WORKFORCE_IDENTITY.md",
       "title": "Kyber Workforce Identity",
       "slug": "kyber/workforce-identity",
-      "section": "kyber",
+      "section": "operations",
       "visibility": "I",
       "audience": [
         "architect",
         "security",
         "ops"
       ],
-      "status": "beta"
+      "status": "beta",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/MEASUREMENT_INTEGRITY.md",
       "title": "Measurement Integrity Plane Source of Truth",
-      "status": "stable"
+      "slug": "source-of-truth/measurement_integrity",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/MOBILE_COMPLIANCE.md",
       "title": "Mobile Compliance — DSR Erasure & Privacy Manifests",
       "slug": "mobile/compliance",
-      "section": "mobile",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
         "security",
         "compliance",
-        "mobile"
+        "dev-senior"
       ],
-      "status": "alpha"
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/MOBILE_DISTRIBUTION.md",
       "title": "Mobile Distribution — profiles, versions, and honest release posture",
       "slug": "mobile/distribution",
-      "section": "mobile",
+      "section": "reference",
+      "visibility": "I",
       "audience": [
         "architect",
-        "mobile",
-        "release",
+        "dev-senior",
+        "ops",
         "security"
       ],
-      "status": "stable"
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/MOBILE_PLATFORM.md",
       "title": "Mobile Platform & Productization Baseplate",
       "slug": "mobile/platform",
-      "section": "mobile",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
         "security",
         "ops"
       ],
-      "status": "alpha"
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
-      "path": "docs/source-of-truth/MODEL_GOVERNANCE.md"
+      "path": "docs/source-of-truth/MODEL_GOVERNANCE.md",
+      "title": "Model Governance",
+      "slug": "source-of-truth/model_governance",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/NOTIFICATION_CONTROL_PLANE.md",
       "title": "Notification Control Plane",
       "slug": "mobile/notification-control-plane",
-      "section": "mobile",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
         "security",
         "ops"
       ],
-      "status": "alpha"
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/OLYMPUS_PROVIDER_SOURCE_CATALOG.md",
@@ -9845,42 +10158,89 @@
         "dev-senior",
         "ops"
       ],
-      "status": "draft",
+      "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "canonical_owner": "data@aether"
     },
     {
       "path": "docs/source-of-truth/PAYMENTSCAN_CATALOG.md",
       "title": "PaymentScan Catalog Source of Truth",
-      "status": "stable"
+      "slug": "source-of-truth/paymentscan_catalog",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
-      "path": "docs/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md"
+      "path": "docs/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md",
+      "title": "Payment Rail Observability",
+      "slug": "source-of-truth/payment_rail_observability",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/PLATFORM_PARITY.md",
+      "title": "Platform Parity",
+      "slug": "source-of-truth/platform_parity",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/PRODUCT_INTELLIGENCE.md",
       "title": "Product & Experience Intelligence Source of Truth",
-      "status": "stable"
+      "slug": "source-of-truth/product_intelligence",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/PROJECTION_ENGINE_ARCHITECTURE.md",
       "title": "Projection Engine Architecture",
       "slug": "source-of-truth/projection-engine-architecture",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0"
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/README.md",
+      "title": "Readme",
+      "slug": "source-of-truth/readme",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",
       "title": "Repo Consistency Ownership",
       "slug": "source-of-truth/repo-consistency-ownership",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "dev-senior",
@@ -9888,10 +10248,70 @@
         "architect"
       ],
       "status": "stable",
-      "since_version": "8.9.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/REWARD_ENABLEMENT.md",
+      "title": "Reward Enablement",
+      "slug": "source-of-truth/reward_enablement",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/REWARD_NO_CUSTODY_MODEL.md",
+      "title": "Reward No Custody Model",
+      "slug": "source-of-truth/reward_no_custody_model",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/REWARD_POLICY_ENGINE.md",
+      "title": "Reward Policy Engine",
+      "slug": "source-of-truth/reward_policy_engine",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/REWARD_PROOFS.md",
+      "title": "Reward Proofs",
+      "slug": "source-of-truth/reward_proofs",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/REWARD_RAILS.md",
+      "title": "Reward Rails",
+      "slug": "source-of-truth/reward_rails",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md",
@@ -9902,11 +10322,11 @@
       "audience": [
         "architect",
         "dev-senior",
-        "exec",
+        "buyer",
         "compliance"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 25,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -9932,18 +10352,41 @@
       "path": "docs/source-of-truth/RISK_FRAUD_360.md",
       "title": "Risk360 and Fraud360 Architecture",
       "slug": "source-of-truth/risk-fraud-360",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 10,
       "toc_depth": 3,
       "canonical_owner": "backend@aether"
+    },
+    {
+      "path": "docs/source-of-truth/SDK_RUNTIME_PARITY.md",
+      "title": "Sdk Runtime Parity",
+      "slug": "source-of-truth/sdk_runtime_parity",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/SDK_SCOPE.md",
+      "title": "Sdk Scope",
+      "slug": "source-of-truth/sdk_scope",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/SOURCE_TO_MODEL_MATRIX.md",
@@ -9956,7 +10399,8 @@
         "dev-senior",
         "ops"
       ],
-      "status": "draft",
+      "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 6,
       "canonical_owner": "ml@aether"
     },
@@ -9969,10 +10413,10 @@
       "audience": [
         "architect",
         "dev-senior",
-        "exec"
+        "buyer"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 25,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -9986,10 +10430,10 @@
       "audience": [
         "architect",
         "dev-senior",
-        "exec"
+        "buyer"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 7,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -10003,10 +10447,10 @@
       "audience": [
         "architect",
         "dev-senior",
-        "exec"
+        "buyer"
       ],
       "status": "experimental",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 5,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -10015,94 +10459,215 @@
       "path": "docs/source-of-truth/STABLECOIN_CONSENT_MODEL.md",
       "title": "Stablecoin Consent Model",
       "slug": "source-of-truth/stablecoin-consent-model",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/source-of-truth/STABLECOIN_DOMAIN.md",
+      "title": "Stablecoin Domain",
+      "slug": "source-of-truth/stablecoin_domain",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/STABLECOIN_ENTITY_MODEL.md",
       "title": "Stablecoin Entity Model",
       "slug": "source-of-truth/stablecoin-entity-model",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/STABLECOIN_EVENT_REGISTRY.md",
       "title": "Stablecoin Event Registry",
       "slug": "source-of-truth/stablecoin-event-registry",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/STABLECOIN_GRAPH_ALIGNMENT.md",
       "title": "Stablecoin Graph Alignment",
       "slug": "source-of-truth/stablecoin-graph-alignment",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
       "path": "docs/source-of-truth/STABLECOIN_INGESTION_CONTRACT.md",
       "title": "Stablecoin Ingestion Contract",
       "slug": "source-of-truth/stablecoin-ingestion-contract",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "canonical_owner": "platform@aether"
     },
     {
-      "path": "docs/source-of-truth/SUGGESTION_INTELLIGENCE.md"
+      "path": "docs/source-of-truth/STABLECOIN_METRICS.md",
+      "title": "Stablecoin Metrics",
+      "slug": "source-of-truth/stablecoin_metrics",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/STABLECOIN_OPERATIONS.md",
+      "title": "Stablecoin Operations",
+      "slug": "source-of-truth/stablecoin_operations",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/STABLECOIN_PIPELINE.md",
+      "title": "Stablecoin Pipeline",
+      "slug": "source-of-truth/stablecoin_pipeline",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/STABLECOIN_PROFILE360.md",
+      "title": "Stablecoin Profile360",
+      "slug": "source-of-truth/stablecoin_profile360",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/STABLECOIN_PROVIDER_EXECUTION.md",
+      "title": "Stablecoin Provider Execution",
+      "slug": "source-of-truth/stablecoin_provider_execution",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/STABLECOIN_RECONCILIATION.md",
+      "title": "Stablecoin Reconciliation",
+      "slug": "source-of-truth/stablecoin_reconciliation",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/STABLECOIN_VERIFICATION_FINALITY.md",
+      "title": "Stablecoin Verification Finality",
+      "slug": "source-of-truth/stablecoin_verification_finality",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/SUGGESTION_INTELLIGENCE.md",
+      "title": "Suggestion Intelligence",
+      "slug": "source-of-truth/suggestion_intelligence",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/TEMPORAL_INTEGRITY.md",
       "title": "Temporal Integrity Plane Source of Truth",
-      "status": "stable"
+      "slug": "source-of-truth/temporal_integrity",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/TEMPORAL_OBSERVATORY.md",
       "title": "Temporal Observatory & Decision Memory Source of Truth",
-      "status": "stable"
+      "slug": "source-of-truth/temporal_observatory",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/UNIFIED_PLATFORM_BASELINE_AUDIT.md",
       "title": "Unified Intelligence Plane — Baseline Audit",
-      "status": "stable"
+      "slug": "source-of-truth/unified_platform_baseline_audit",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/source-of-truth/UNIQUE_SIGNAL_FEATURES.md",
@@ -10115,7 +10680,8 @@
         "dev-senior",
         "ops"
       ],
-      "status": "draft",
+      "status": "experimental",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 7,
       "canonical_owner": "ml@aether"
     },
@@ -10123,31 +10689,30 @@
       "path": "docs/source-of-truth/UNIVERSAL_GRAPH_CONTRACT.md",
       "title": "Universal Intelligence Graph Contract",
       "slug": "source-of-truth/universal-graph-contract",
-      "section": "source-of-truth",
-      "visibility": "internal",
+      "section": "reference",
+      "visibility": "I",
       "audience": [
         "architect",
-        "dev-senior",
-        "ai"
+        "dev-senior"
       ],
       "status": "stable",
-      "since_version": "8.10.0",
+      "since_version": "0.1.0",
       "canonical_owner": "graph@aether"
     },
     {
       "path": "docs/source-of-truth/VERIFICATION_SPINE.md",
       "title": "Verification and Release Spine",
       "slug": "source-of-truth/verification-spine",
-      "section": "source-of-truth",
+      "section": "reference",
       "visibility": "I",
       "audience": [
-        "dev",
+        "dev-junior",
         "dev-senior",
         "ops",
         "architect"
       ],
-      "status": "active",
-      "since_version": "8.9.0",
+      "status": "stable",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
@@ -10161,14 +10726,112 @@
       "audience": [
         "architect",
         "dev-senior",
-        "exec",
+        "buyer",
         "ops"
       ],
       "status": "stable",
-      "since_version": "8.12.0",
+      "since_version": "0.1.0",
       "estimated_read_minutes": 12,
       "toc_depth": 3,
       "canonical_owner": "frontend@aether"
+    },
+    {
+      "path": "docs/source-of-truth/architecture-truth.md",
+      "title": "Architecture truth",
+      "slug": "source-of-truth/architecture-truth",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/connector-truth.md",
+      "title": "Connector truth",
+      "slug": "source-of-truth/connector-truth",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/graph-truth.md",
+      "title": "Graph truth",
+      "slug": "source-of-truth/graph-truth",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/naming-truth.md",
+      "title": "Naming truth",
+      "slug": "source-of-truth/naming-truth",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/product-truth.md",
+      "title": "Product truth",
+      "slug": "source-of-truth/product-truth",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/release-truth.md",
+      "title": "Release truth",
+      "slug": "source-of-truth/release-truth",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/repo-truth.md",
+      "title": "Repo truth",
+      "slug": "source-of-truth/repo-truth",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/source-of-truth/sdk-truth.md",
+      "title": "Sdk truth",
+      "slug": "source-of-truth/sdk-truth",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/staging-activation-runbook.md",
@@ -10190,7 +10853,7 @@
       "path": "docs/tutorials/shopify-integration.md",
       "title": "Shopify Integration Guide",
       "slug": "tutorials/shopify-integration",
-      "section": "tutorials",
+      "section": "developer",
       "visibility": "P",
       "audience": [
         "dev-junior",
@@ -10207,7 +10870,7 @@
       "path": "docs/tutorials/stripe-integration.md",
       "title": "Stripe Integration Guide",
       "slug": "tutorials/stripe-integration",
-      "section": "tutorials",
+      "section": "developer",
       "visibility": "P",
       "audience": [
         "dev-junior",

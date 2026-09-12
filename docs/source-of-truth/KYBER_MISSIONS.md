@@ -1,21 +1,16 @@
 ---
 title: Kyber Mission Aggregate & Monitoring
 slug: kyber/missions
-section: kyber
+section: operations
 visibility: I
 audience: [architect, dev-senior, ops]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - Backend Architecture/aether-backend/services/kyber/ops/mission_contracts.py
-  - Backend Architecture/aether-backend/services/kyber/ops/mission_repository.py
-  - Backend Architecture/aether-backend/services/kyber/ops/missions.py
-  - Backend Architecture/aether-backend/services/kyber/ops/monitoring_service.py
-  - Backend Architecture/aether-backend/services/kyber/ops/mission_routes.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/kyber/ops/mission_contracts.py, Backend Architecture/aether-backend/services/kyber/ops/mission_repository.py, Backend Architecture/aether-backend/services/kyber/ops/missions.py, Backend Architecture/aether-backend/services/kyber/ops/monitoring_service.py, Backend Architecture/aether-backend/services/kyber/ops/mission_routes.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 7
 toc_depth: 3
-last_synced_commit: "fffcd7dc5f02"
+last_synced_commit: fffcd7dc5f02
 ---
 
 # Kyber Mission Aggregate & Monitoring

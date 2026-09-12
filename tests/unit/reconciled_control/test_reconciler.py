@@ -97,7 +97,7 @@ def _run(**kwargs):
 def test_identical_desired_and_observed_is_match() -> None:
     desired = _desired()
     observed = _observed(
-        runtime_version="8.1.3",
+        runtime_version="0.1.3",
         reported_source_identity="mi-sdk-1",
     )
     view = _run(desired=desired, observed=observed)
@@ -110,7 +110,7 @@ def test_identical_desired_and_observed_is_match() -> None:
 
 def test_match_can_tolerate_a_capability_met_at_requirement() -> None:
     desired = _desired(minimum_capabilities=[("batch_ingestion", "available")])
-    observed = _observed(runtime_version="8.1.3")
+    observed = _observed(runtime_version="0.1.3")
     view = _run(
         desired=desired,
         observed=observed,
@@ -122,22 +122,20 @@ def test_match_can_tolerate_a_capability_met_at_requirement() -> None:
 # ── acceptable_drift ────────────────────────────────────────────────────────
 
 
-def test_deprecated_but_at_floor_runtime_is_acceptable_drift() -> None:
-    # 7.9.0 is deprecated-but-served at the managed_stable floor: tracked, not
-    # actionable -> acceptable_drift with a release_support_drift record only.
+def test_supported_at_floor_runtime_is_match() -> None:
+    # 0.1.0 is supported at the managed_stable floor: no drift.
     desired = _desired()
-    observed = _observed(runtime_version="7.9.0")
+    observed = _observed(runtime_version="0.1.0")
     view = _run(desired=desired, observed=observed)
-    assert view.result == "acceptable_drift"
-    assert [d.drift_type for d in view.drift] == ["release_support_drift"]
+    assert view.result == "match"
 
 
 # ── actionable_drift ────────────────────────────────────────────────────────
 
 
 def test_runtime_below_floor_is_actionable_version_drift() -> None:
-    desired = _desired()  # managed_stable floor = 7.0.0 (deprecated band)
-    observed = _observed(runtime_version="6.4.2")  # read_compatible band
+    desired = _desired()  # managed_stable floor = 0.1.0 (supported band)
+    observed = _observed(runtime_version="0.0.9")  # unsupported band
     view = _run(desired=desired, observed=observed)
     assert view.result == "actionable_drift"
     assert [d.drift_type for d in view.drift] == ["version_drift"]
@@ -146,7 +144,7 @@ def test_runtime_below_floor_is_actionable_version_drift() -> None:
 
 def test_capability_mismatch_is_actionable_capability_drift() -> None:
     desired = _desired(minimum_capabilities=[("batch_ingestion", "available")])
-    observed = _observed(runtime_version="8.1.3")
+    observed = _observed(runtime_version="0.1.3")
     view = _run(
         desired=desired,
         observed=observed,
@@ -158,7 +156,7 @@ def test_capability_mismatch_is_actionable_capability_drift() -> None:
 
 def test_degraded_capability_is_actionable_when_available_required() -> None:
     desired = _desired(minimum_capabilities=[("replay", "available")])
-    observed = _observed(runtime_version="8.1.3")
+    observed = _observed(runtime_version="0.1.3")
     view = _run(
         desired=desired,
         observed=observed,
@@ -171,21 +169,21 @@ def test_degraded_capability_is_actionable_when_available_required() -> None:
 
 def test_schema_fingerprint_mismatch_is_actionable_schema_drift() -> None:
     desired = _desired(schema_fingerprint="fp-desired")
-    observed = _observed(runtime_version="8.1.3", schema_fingerprint="fp-observed")
+    observed = _observed(runtime_version="0.1.3", schema_fingerprint="fp-observed")
     view = _run(desired=desired, observed=observed)
     assert view.result == "actionable_drift"
     assert [d.drift_type for d in view.drift] == ["schema_drift"]
 
 
 def test_degraded_health_is_actionable_health_drift() -> None:
-    observed = _observed(runtime_version="8.1.3", health_status="degraded")
+    observed = _observed(runtime_version="0.1.3", health_status="degraded")
     view = _run(desired=_desired(), observed=observed)
     assert view.result == "actionable_drift"
     assert [d.drift_type for d in view.drift] == ["health_drift"]
 
 
 def test_unhealthy_health_is_actionable_health_drift() -> None:
-    observed = _observed(runtime_version="8.1.3", health_status="unhealthy")
+    observed = _observed(runtime_version="0.1.3", health_status="unhealthy")
     view = _run(desired=_desired(), observed=observed)
     assert view.result == "actionable_drift"
     assert [d.drift_type for d in view.drift] == ["health_drift"]
@@ -193,7 +191,7 @@ def test_unhealthy_health_is_actionable_health_drift() -> None:
 
 def test_mismatched_source_identity_is_actionable_fleet_identity_drift() -> None:
     observed = _observed(
-        runtime_version="8.1.3",
+        runtime_version="0.1.3",
         reported_source_identity="mi-sdk-999",
     )
     view = _run(
@@ -211,7 +209,7 @@ def test_combined_drift_records_all_actionable_types() -> None:
         minimum_capabilities=[("batch_ingestion", "available")],
     )
     observed = _observed(
-        runtime_version="6.4.2",
+        runtime_version="0.0.9",
         schema_fingerprint="fp-observed",
         health_status="degraded",
         reported_source_identity="mi-sdk-999",
@@ -273,7 +271,7 @@ def test_credential_waiting_is_also_fail_closed_blocked() -> None:
 def test_provider_state_sentinel_is_ignored_for_sdk_kind() -> None:
     # A provider_state is only meaningful for provider/connector integrations;
     # an SDK row with a stray provider_state does not get classified blocked.
-    observed = _observed(runtime_version="8.1.3", provider_state="credential_missing")
+    observed = _observed(runtime_version="0.1.3", provider_state="credential_missing")
     view = _run(desired=_desired(), observed=observed)
     assert view.result == "match"
 
@@ -315,7 +313,7 @@ def test_stale_observation_is_unknown() -> None:
 
 
 def test_future_observation_is_unknown() -> None:
-    observed = _observed(runtime_version="8.1.3", observed_at=_now(seconds=120))
+    observed = _observed(runtime_version="0.1.3", observed_at=_now(seconds=120))
     view = _run(desired=_desired(), observed=observed)
     assert view.result == "unknown"
     assert view.freshness_ok is False
@@ -324,7 +322,7 @@ def test_future_observation_is_unknown() -> None:
 
 def test_fresh_boundary_observation_is_fresh() -> None:
     observed = _observed(
-        runtime_version="8.1.3",
+        runtime_version="0.1.3",
         observed_at=_now(seconds=-DEFAULT_FRESHNESS_WINDOW_SECONDS),
     )
     view = _run(desired=_desired(), observed=observed)

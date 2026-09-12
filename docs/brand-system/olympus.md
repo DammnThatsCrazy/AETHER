@@ -3,9 +3,9 @@ title: Olympus Labs identity
 slug: architecture/brand-system/olympus
 section: architecture
 visibility: I
-audience: [architect, exec, dev-senior]
+audience: [architect, buyer, dev-senior]
 status: stable
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: frontend@aether
 ---
 

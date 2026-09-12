@@ -1,7 +1,7 @@
 <!-- DO NOT EDIT — generated from packages/shared/contracts/event-registry.json -->
 <!-- Run: python scripts/generate_contracts.py -->
 
-# Aether Event Registry (403 types, contract v8.12.0)
+# Aether Event Registry (403 types, contract v0.1.0-alpha.0)
 
 | Event Type | Family | Required Purposes | Privacy Class | Retention Class | Description |
 |---|---|---|---|---|---|

@@ -1,7 +1,7 @@
 {
   "name": "@aether/server",
-  "version": "8.12.0",
-  "description": "Aether Server SDK — Node.js server-side event observation client with consent, retry, and scrubbing.",
+  "version": "0.1.0-alpha.0",
+  "description": "Aether Server SDK \u2014 Node.js server-side event observation client with consent, retry, and scrubbing.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "source": "./src/index.ts",
@@ -29,7 +29,7 @@
     "@aether/shared": ">=8.11.0"
   },
   "devDependencies": {
-    "@aether/shared": "^8.11.0",
+    "@aether/shared": "^0.1.0-alpha.0",
     "@vitest/coverage-v8": "^1.6.0",
     "vitest": "^1.6.0",
     "typescript": "^5.4.0"

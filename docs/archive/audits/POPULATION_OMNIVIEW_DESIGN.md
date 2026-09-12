@@ -1,3 +1,12 @@
+---
+title: Population Omniview Design
+slug: archive/audits/population_omniview_design
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Population Omniview Design — Macro-to-Micro Intelligence
 
 ## Architecture

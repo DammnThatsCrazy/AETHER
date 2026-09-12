@@ -1,3 +1,12 @@
+---
+title: Extraction Defense Audit
+slug: archive/audits/extraction_defense_audit
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Model Extraction Defense Audit — Aether Platform v8.7.1
 
 **Date:** 2026-03-17

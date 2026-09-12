@@ -1,11 +1,11 @@
 ---
 title: Stripe Integration Guide
 slug: tutorials/stripe-integration
-section: tutorials
+section: developer
 visibility: P
 audience: [dev-junior, dev-senior, ops]
 status: stable
-since_version: "9.1.0"
+since_version: 9.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 toc_depth: 3

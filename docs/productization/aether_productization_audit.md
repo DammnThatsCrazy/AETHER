@@ -3,16 +3,15 @@ title: AETHER Productization Audit
 slug: operations/productization-audit
 section: operations
 visibility: I
-audience: [architect, ops, exec]
+audience: [architect, ops, buyer]
 status: stable
-since_version: "8.9.0"
-source_files:
-  - scripts/production_status.py
+since_version: 0.1.0
+source_files: [scripts/production_status.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "scripts/production_status.py": "sha256:15010d4caab7f6e82c6677778332da1de5457d0c7576e11922fd24521a77086d"
+  scripts/production_status.py: sha256:15010d4caab7f6e82c6677778332da1de5457d0c7576e11922fd24521a77086d
 ---
 
 # AETHER Productization Audit

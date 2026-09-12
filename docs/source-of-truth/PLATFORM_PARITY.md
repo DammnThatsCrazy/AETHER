@@ -1,3 +1,12 @@
+---
+title: Platform Parity
+slug: source-of-truth/platform_parity
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Platform Parity
 
 Parity is declared explicitly. Forced parity is not pursued; capabilities are

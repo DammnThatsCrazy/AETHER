@@ -24,7 +24,7 @@ import type {
 // ---------------------------------------------------------------------------
 describe('canonical envelope context v1', () => {
   it('a minimal EventContext (library only) still satisfies the type', () => {
-    const ctx: EventContext = { library: { name: '@aether/web', version: '8.12.0' } };
+    const ctx: EventContext = { library: { name: '@aether/web', version: '0.1.0-alpha.0' } };
     expect(ctx.library.name).toBe('@aether/web');
     // All envelope fields are optional — absent by default.
     expect(ctx.surface).toBeUndefined();
@@ -56,7 +56,7 @@ describe('canonical envelope context v1', () => {
     const sequence: SequenceContext = { event: 42, session: 7 };
 
     const ctx: EventContext = {
-      library: { name: '@aether/ios', version: '8.12.0' },
+      library: { name: '@aether/ios', version: '0.1.0-alpha.0' },
       schemaVersion: '1.0.0',
       application,
       surface: 'ios',

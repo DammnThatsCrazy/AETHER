@@ -11,7 +11,7 @@ export type { BatchHealth } from '../types';
 
 const QUEUE_STORAGE_KEY = 'event_queue';
 const MAX_STORED_EVENTS = 1000;
-const SDK_VERSION = '8.12.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
+const SDK_VERSION = '0.1.0-alpha.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
 
 /**
  * A non-retryable ingestion failure (a non-429 4xx): the batch is malformed or

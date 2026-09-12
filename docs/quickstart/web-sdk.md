@@ -1,11 +1,11 @@
 ---
 title: Getting Started with the Web SDK
 slug: quickstart/web-sdk
-section: quickstart
+section: developer
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: sdk@aether
 estimated_read_minutes: 5
 toc_depth: 3

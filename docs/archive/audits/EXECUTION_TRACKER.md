@@ -1,3 +1,12 @@
+---
+title: Execution Tracker
+slug: archive/audits/execution_tracker
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Aether Execution Tracker
 
 All remaining work tracked in one file. No workstream exists outside this tracker.

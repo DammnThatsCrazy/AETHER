@@ -69,7 +69,7 @@ def _observed() -> ObservedStateSnapshot:
         observed_at=NOW - timedelta(seconds=5),
         received_at=NOW,
         availability="available",
-        runtime_version="6.4.2",  # read_compatible: below the managed_stable floor
+        runtime_version="0.0.9",  # unsupported: below the managed_stable floor
         reported_source_identity="mi-sdk-1",
     )
 

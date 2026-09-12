@@ -1,14 +1,12 @@
 ---
 title: Interoperability Event Registry
 slug: source-of-truth/interop-event-registry
-section: source-of-truth
+section: reference
 visibility: I
-audience: [architect, dev-senior, ai]
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - packages/shared/contracts/event-registry.json
-  - Backend Architecture/aether-backend/services/silver/projectors/interop_projector.py
+since_version: 0.1.0
+source_files: [packages/shared/contracts/event-registry.json, Backend Architecture/aether-backend/services/silver/projectors/interop_projector.py]
 canonical_owner: platform@aether
 last_synced_commit: 1f19190
 ---

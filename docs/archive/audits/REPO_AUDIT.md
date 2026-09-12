@@ -1,3 +1,12 @@
+---
+title: Repo Audit
+slug: archive/audits/repo_audit
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Aether Repository Audit — Ground Truth
 
 **Date:** 2026-03-24

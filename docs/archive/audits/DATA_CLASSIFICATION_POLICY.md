@@ -1,3 +1,12 @@
+---
+title: Data Classification Policy
+slug: archive/audits/data_classification_policy
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Data Classification Policy
 
 **Repository:** Aether

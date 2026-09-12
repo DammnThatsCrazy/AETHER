@@ -1,3 +1,12 @@
+---
+title: Release Hardening Audit
+slug: archive/audits/release_hardening_audit
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Release Hardening Audit v8.7.0
 
 ## Issues Fixed

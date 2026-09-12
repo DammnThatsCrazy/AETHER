@@ -1,11 +1,11 @@
 ---
 title: Policy Engine
 slug: enterprise/policy-engine
-section: enterprise
+section: operations
 visibility: I
 audience: [ops, security]
 status: stable
-since_version: "13.0.0"
+since_version: 13.0.0
 ---
 
 # Policy Engine

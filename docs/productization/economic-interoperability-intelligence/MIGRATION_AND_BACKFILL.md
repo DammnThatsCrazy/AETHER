@@ -3,20 +3,16 @@ title: Migration and Backfill
 slug: productization/economic-interoperability-intelligence/migration-and-backfill
 section: operations
 visibility: I
-audience: [architect, ops, exec]
+audience: [architect, ops, buyer]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - Backend Architecture/aether-backend/alembic/versions/20260708_derivatives_foundation_adoption.py
-  - Backend Architecture/aether-backend/alembic/versions/20260708_derivatives_runtime.py
-  - Backend Architecture/aether-backend/alembic/versions/20260708_stablecoin_intelligence.py
-  - Backend Architecture/aether-backend/alembic/versions/20260708_interop_intelligence.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/alembic/versions/20260708_derivatives_foundation_adoption.py, Backend Architecture/aether-backend/alembic/versions/20260708_derivatives_runtime.py, Backend Architecture/aether-backend/alembic/versions/20260708_stablecoin_intelligence.py, Backend Architecture/aether-backend/alembic/versions/20260708_interop_intelligence.py]
 canonical_owner: platform@aether
 source_hashes:
-  "Backend Architecture/aether-backend/alembic/versions/20260708_derivatives_foundation_adoption.py": "sha256:f660817df625a2b5969161b2eff5c8f96a371a0bbae4d36b86d780473dcd46cd"
-  "Backend Architecture/aether-backend/alembic/versions/20260708_derivatives_runtime.py": "sha256:909c76fb22947018074331ad091b4a78aa4092747ff0b85236e095ad7dce63ba"
-  "Backend Architecture/aether-backend/alembic/versions/20260708_interop_intelligence.py": "sha256:6278d8461410b06351524afc09c9aa278f76f799832987c06ff24d6210b334e5"
-  "Backend Architecture/aether-backend/alembic/versions/20260708_stablecoin_intelligence.py": "sha256:411197411d327ae2f32ebfd9baf9cff0524cf9853c51e72a2bf4af3e5298d888"
+  Backend Architecture/aether-backend/alembic/versions/20260708_derivatives_foundation_adoption.py: sha256:f660817df625a2b5969161b2eff5c8f96a371a0bbae4d36b86d780473dcd46cd
+  Backend Architecture/aether-backend/alembic/versions/20260708_derivatives_runtime.py: sha256:909c76fb22947018074331ad091b4a78aa4092747ff0b85236e095ad7dce63ba
+  Backend Architecture/aether-backend/alembic/versions/20260708_interop_intelligence.py: sha256:6278d8461410b06351524afc09c9aa278f76f799832987c06ff24d6210b334e5
+  Backend Architecture/aether-backend/alembic/versions/20260708_stablecoin_intelligence.py: sha256:411197411d327ae2f32ebfd9baf9cff0524cf9853c51e72a2bf4af3e5298d888
 ---
 
 # Migration and Backfill

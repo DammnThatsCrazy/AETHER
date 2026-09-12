@@ -1,23 +1,14 @@
 ---
-title: "Aether Spine P0 — Spine Conformance Checklist (Phase 6)"
+title: Aether Spine P0 — Spine Conformance Checklist (Phase 6)
 slug: architecture/spine-p0-conformance-checklist
 section: architecture
 visibility: I
-audience: [architect, dev-senior, exec]
+audience: [architect, dev-senior, buyer]
 status: experimental
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
-source_files:
-  - packages/shared/contracts/spine-registry.json
-  - packages/shared/contracts/graph-mutation-registry.json
-  - packages/shared/contracts/consent-registry.json
-  - packages/shared/contracts/temporal-policy-registry.json
-  - packages/shared/contracts/readiness-vocabulary.json
-  - packages/shared/contracts/evidence-manifest.schema.json
-  - packages/shared/graph-contract.ts
-  - scripts/validate_contracts.py
-  - docs/source-of-truth/DATA_RIGHTS_LEDGER.md
-last_synced_commit: "pending"
+source_files: [packages/shared/contracts/spine-registry.json, packages/shared/contracts/graph-mutation-registry.json, packages/shared/contracts/consent-registry.json, packages/shared/contracts/temporal-policy-registry.json, packages/shared/contracts/readiness-vocabulary.json, packages/shared/contracts/evidence-manifest.schema.json, packages/shared/graph-contract.ts, scripts/validate_contracts.py, docs/source-of-truth/DATA_RIGHTS_LEDGER.md]
+last_synced_commit: pending
 estimated_read_minutes: 7
 toc_depth: 3
 ---

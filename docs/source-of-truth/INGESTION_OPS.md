@@ -3,9 +3,9 @@ title: Ingestion Operations — Control Plane + SDK Version-Compatibility Tiers
 slug: architecture/ingestion-ops
 section: architecture
 visibility: I
-audience: [architect, dev-senior, ops, exec]
+audience: [architect, dev-senior, ops, buyer]
 status: experimental
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: backend@aether
 estimated_read_minutes: 12
 toc_depth: 3

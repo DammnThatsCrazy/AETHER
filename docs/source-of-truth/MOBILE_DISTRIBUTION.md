@@ -1,9 +1,11 @@
 ---
 title: Mobile Distribution — profiles, versions, and honest release posture
 slug: mobile/distribution
-section: mobile
-audience: [architect, mobile, release, security]
+section: reference
+visibility: I
+audience: [architect, dev-senior, ops, security]
 status: stable
+since_version: 0.1.0
 ---
 
 # Mobile Distribution

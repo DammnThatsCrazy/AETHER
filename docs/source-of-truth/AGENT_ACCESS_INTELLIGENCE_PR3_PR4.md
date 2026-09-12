@@ -1,3 +1,12 @@
+---
+title: Agent Access Intelligence Pr3 Pr4
+slug: source-of-truth/agent_access_intelligence_pr3_pr4
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Agent Access Intelligence — PR 3 & PR 4: Providers, Reconciliation, Graph, Surfaces
 
 **Release train:** `AGENT_ACCESS_INTELLIGENCE`

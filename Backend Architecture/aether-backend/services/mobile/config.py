@@ -92,7 +92,7 @@ def validate_distribution_profile(profile: Optional[str]) -> Optional[str]:
 # platform version (pinned by scripts/check_version_consistency.py); `min` is
 # the declared support floor.
 MIN_SUPPORTED_MOBILE_VERSION = "8.10.0"
-LATEST_MOBILE_VERSION = "8.12.0"
+LATEST_MOBILE_VERSION = "0.1.0-alpha.0"
 
 UPGRADE_POLICIES: tuple[str, ...] = ("required", "suggested", "none")
 

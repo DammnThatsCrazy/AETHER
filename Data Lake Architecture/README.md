@@ -7,7 +7,7 @@
 > program (Phase 0) — see `docs/productization/sdk-universal-ingestion-alignment/`.
 > Physical removal is deferred to a later phase.
 
-# Aether Data Lake Architecture v8.12.0
+# Aether Data Lake Architecture v0.1.0-alpha.0
 
 A distributed data warehouse and lakehouse backend for the Aether behavioral analytics platform. The system ingests, processes, and serves high-volume event data through a medallion architecture (Bronze / Silver / Gold), providing real-time streaming, batch ETL, GDPR governance, and ML feature serving across multi-tenant workspaces.
 

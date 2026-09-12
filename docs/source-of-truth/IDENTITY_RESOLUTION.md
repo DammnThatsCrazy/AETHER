@@ -1,16 +1,12 @@
 ---
 title: Identity Resolution
 slug: source-of-truth/identity-resolution
-section: source-of-truth
-visibility: internal
-audience: [architect, dev-senior, ai]
+section: reference
+visibility: I
+audience: [architect, dev-senior]
 status: stable
-since_version: "9.0.0"
-source_files:
-  - Backend Architecture/aether-backend/services/identity/models.py
-  - Backend Architecture/aether-backend/services/identity/routes.py
-  - Backend Architecture/aether-backend/services/identity/resolver.py
-  - Backend Architecture/aether-backend/services/identity/repository.py
+since_version: 9.0.0
+source_files: [Backend Architecture/aether-backend/services/identity/models.py, Backend Architecture/aether-backend/services/identity/routes.py, Backend Architecture/aether-backend/services/identity/resolver.py, Backend Architecture/aether-backend/services/identity/repository.py]
 canonical_owner: identity@aether
 last_synced_commit: 4764707
 ---

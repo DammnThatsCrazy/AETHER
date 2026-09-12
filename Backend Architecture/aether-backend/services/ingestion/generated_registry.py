@@ -1,6 +1,6 @@
 # DO NOT EDIT — generated from packages/shared/contracts/event-registry.json
 # Run: python scripts/generate_contracts.py
-# Contract version: 8.12.0
+# Contract version: 0.1.0-alpha.0
 
 CANONICAL_EVENT_TYPES: frozenset[str] = frozenset({
     "track",

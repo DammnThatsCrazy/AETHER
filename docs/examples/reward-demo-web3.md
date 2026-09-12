@@ -1,11 +1,11 @@
 ---
 title: Reward Enablement Demo — Web3 / On-Chain Claim (onchain_claim rail)
 slug: examples/reward-demo-web3
-section: examples
+section: developer
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "8.10.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 ---

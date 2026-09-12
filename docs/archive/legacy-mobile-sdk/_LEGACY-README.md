@@ -1,3 +1,12 @@
+---
+title: " Legacy Readme"
+slug: archive/legacy-mobile-sdk/_legacy-readme
+section: reference
+visibility: I
+audience: [dev-junior, dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Aether Mobile SDK
 
 The Aether Mobile SDK provides native analytics, identity resolution, multi-chain Web3 wallet tracking, and event tracking for iOS, Android, and React Native applications. It is designed for high-throughput mobile environments with offline support, automatic batching, and GDPR-compliant consent management.

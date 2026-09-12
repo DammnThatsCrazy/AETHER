@@ -1,11 +1,11 @@
 ---
-title: "Population360 Vertical Slice Blueprint"
+title: Population360 Vertical Slice Blueprint
 slug: blueprints/population360
-section: blueprints
+section: architecture
 visibility: I
 audience: [architect, dev-senior]
 status: stable
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3

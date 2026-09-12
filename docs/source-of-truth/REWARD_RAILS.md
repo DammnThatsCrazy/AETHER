@@ -1,3 +1,12 @@
+---
+title: Reward Rails
+slug: source-of-truth/reward_rails
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Reward Rails
 
 A reward rail is the delivery mechanism through which a reward action payload reaches

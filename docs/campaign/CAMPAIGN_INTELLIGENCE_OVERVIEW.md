@@ -4,6 +4,8 @@ slug: campaign/campaign-intelligence-overview
 section: reference
 visibility: I
 audience: [dev-senior, architect]
+status: experimental
+since_version: 0.1.0
 ---
 
 # Campaign Intelligence Overview

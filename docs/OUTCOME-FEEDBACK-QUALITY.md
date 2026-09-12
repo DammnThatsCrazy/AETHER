@@ -1,14 +1,12 @@
 ---
 title: Outcome Feedback Quality
 slug: data/outcome-feedback-quality
-section: data
+section: architecture
 visibility: I
-audience: [ai, dev-senior, ops]
+audience: [architect, dev-senior, ops]
 status: beta
-since_version: "8.9.0"
-flags:
-  - AETHER_DATA_QUALITY_ENABLED
-  - AETHER_OUTCOME_FEEDBACK_ENABLED
+since_version: 0.1.0
+flags: [AETHER_DATA_QUALITY_ENABLED, AETHER_OUTCOME_FEEDBACK_ENABLED]
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 ---

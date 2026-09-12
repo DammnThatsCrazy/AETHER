@@ -1,13 +1,13 @@
 ---
-source_files:
-  - Backend Architecture/aether-backend/services/model_governance/consent_purposes.py
-  - Backend Architecture/aether-backend/services/model_governance/contracts.py
-  - Backend Architecture/aether-backend/services/model_governance/policy.py
-  - Backend Architecture/aether-backend/services/model_governance/training_gate.py
-  - Backend Architecture/aether-backend/services/model_governance/inference_gate.py
-  - Backend Architecture/aether-backend/services/model_governance/repositories.py
-  - Backend Architecture/aether-backend/services/ml_serving/routes.py
-last_synced_commit: "fabddb8"
+title: Model Governance
+slug: source-of-truth/model_governance
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/model_governance/consent_purposes.py, Backend Architecture/aether-backend/services/model_governance/contracts.py, Backend Architecture/aether-backend/services/model_governance/policy.py, Backend Architecture/aether-backend/services/model_governance/training_gate.py, Backend Architecture/aether-backend/services/model_governance/inference_gate.py, Backend Architecture/aether-backend/services/model_governance/repositories.py, Backend Architecture/aether-backend/services/ml_serving/routes.py]
+last_synced_commit: fabddb8
 ---
 
 # Model Governance — Source of Truth

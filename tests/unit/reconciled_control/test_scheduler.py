@@ -101,7 +101,7 @@ def _observed(
     *,
     tenant_id: str = TENANT,
     environment_id: str = ENV,
-    runtime_version: str = "8.1.3",
+    runtime_version: str = "0.1.3",
     health_status: Optional[str] = None,
     observed_at: datetime = NOW,
     reported_source_identity: Optional[str] = None,
@@ -267,12 +267,12 @@ async def test_match_and_acceptable_drift_reconcile_without_plans() -> None:
         {
             "mi-sdk-1": (
                 _desired("mi-sdk-1"),
-                _observed("mi-sdk-1", runtime_version="8.1.3"),
+                _observed("mi-sdk-1", runtime_version="0.1.3"),
             ),
-            # 7.9.0 is deprecated-but-served at the managed_stable floor.
+            # 0.1.3 is supported (>=0.1.0) — at or above every channel floor.
             "mi-sdk-2": (
                 _desired("mi-sdk-2"),
-                _observed("mi-sdk-2", runtime_version="7.9.0"),
+                _observed("mi-sdk-2", runtime_version="0.1.3"),
             ),
         }
     )
@@ -287,9 +287,9 @@ async def test_match_and_acceptable_drift_reconcile_without_plans() -> None:
     assert summary["plans_created"] == []
     assert summary["execution_outcomes"] == []
     assert summary["reconcile_results"]["mi-sdk-1"]["result"] == "match"
-    assert summary["reconcile_results"]["mi-sdk-2"]["result"] == "acceptable_drift"
+    assert summary["reconcile_results"]["mi-sdk-2"]["result"] == "match"
     assert summary["reconcile_results"]["mi-sdk-1"]["drift_count"] == 0
-    assert summary["reconcile_results"]["mi-sdk-2"]["drift_count"] == 1
+    assert summary["reconcile_results"]["mi-sdk-2"]["drift_count"] == 0
     # Runs persisted; registration rows stamped with the reconcile result.
     run_1 = await get_reconcile_run_repository().latest_for_integration(
         tenant_id=TENANT, environment_id=ENV, managed_integration_id="mi-sdk-1"
@@ -298,9 +298,9 @@ async def test_match_and_acceptable_drift_reconcile_without_plans() -> None:
         tenant_id=TENANT, environment_id=ENV, managed_integration_id="mi-sdk-2"
     )
     assert run_1 is not None and run_1.get("result") == "match"
-    assert run_2 is not None and run_2.get("result") == "acceptable_drift"
+    assert run_2 is not None and run_2.get("result") == "match"
     assert (await _row("mi-sdk-1")).get("last_reconcile_result") == "match"
-    assert (await _row("mi-sdk-2")).get("last_reconcile_result") == "acceptable_drift"
+    assert (await _row("mi-sdk-2")).get("last_reconcile_result") == "match"
     # No ChangeSet exists for either integration.
     assert (
         await get_change_set_repository().list(tenant_id=TENANT, environment_id=ENV)
@@ -536,7 +536,7 @@ async def test_r1_plan_defers_to_waiting_approval_even_with_admitted_authority()
         observed_state_ref="rcobs_mi-sdk-r1",
     )
     loader = _evidence_loader(
-        {mi: (_desired(mi), _observed(mi, runtime_version="6.4.2"))}
+        {mi: (_desired(mi), _observed(mi, runtime_version="0.0.9"))}
     )
     authority = RecordingAuthority()
     registry = registry_with_authorities({"repository_upgrade": authority})

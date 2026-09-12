@@ -3,18 +3,15 @@ title: Graph Projection Model
 slug: productization/economic-interoperability-intelligence/graph-projection-model
 section: operations
 visibility: I
-audience: [architect, ops, exec]
+audience: [architect, ops, buyer]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - Backend Architecture/aether-backend/shared/graph/graph.py
-  - Backend Architecture/aether-backend/shared/graph/relationship_layers.py
-  - packages/shared/graph-contract.ts
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/shared/graph/graph.py, Backend Architecture/aether-backend/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts]
 canonical_owner: platform@aether
 source_hashes:
-  "Backend Architecture/aether-backend/shared/graph/graph.py": "sha256:689f7581a371f6f4f48ca17745a2fb31f88d45f5614da95d69e9d805c4212428"
-  "Backend Architecture/aether-backend/shared/graph/relationship_layers.py": "sha256:0136d18ace82541dbb684d486ad12e93be47f0b726de9b9ba0120bcff753c48e"
-  "packages/shared/graph-contract.ts": "sha256:e8344420da6181b78831c95bc132fdbdfac8ebb92235524ab2191bb4ab74004a"
+  Backend Architecture/aether-backend/shared/graph/graph.py: sha256:689f7581a371f6f4f48ca17745a2fb31f88d45f5614da95d69e9d805c4212428
+  Backend Architecture/aether-backend/shared/graph/relationship_layers.py: sha256:0136d18ace82541dbb684d486ad12e93be47f0b726de9b9ba0120bcff753c48e
+  packages/shared/graph-contract.ts: sha256:e8344420da6181b78831c95bc132fdbdfac8ebb92235524ab2191bb4ab74004a
 ---
 
 # Graph Projection Model

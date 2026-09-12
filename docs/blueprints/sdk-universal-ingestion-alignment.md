@@ -1,11 +1,11 @@
 ---
-title: "Aether SDK + Universal Ingestion Alignment Blueprint"
+title: Aether SDK + Universal Ingestion Alignment Blueprint
 slug: blueprints/sdk-universal-ingestion-alignment
-section: blueprints
+section: architecture
 visibility: I
 audience: [architect, dev-senior]
 status: stable
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 45
 toc_depth: 3

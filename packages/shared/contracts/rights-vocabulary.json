@@ -1,6 +1,6 @@
 {
   "schemaVersion": "2.0.0",
-  "contractVersion": "8.12.0",
+  "contractVersion": "0.1.0-alpha.0",
   "description": "Aether canonical Rights vocabulary (Rights Authority blueprint / IRRL naming overlay). Owns the enumerated vocabularies of the structured rights contract (rights-derivation classes, learning classes, ownership classes, intelligence-rights profiles, disclosure boundaries, Olympus purposes, lifecycle actions, model revocation states, rights decision dispositions) plus the profile-default, migration, generalization and termination tables. It is a plain canonical JSON contract, not a generator registry: the Python enums in Backend Architecture/aether-backend/services/integrations/data_rights/models.py and the TS twin packages/shared/data-rights.ts are hand-authored to these EXACT snake_case values and cross-checked by scripts/validate_rights_vocabulary.py. rights-vocabulary.json adds no data-authority rows: every term below stays owned by the consent/data-rights/retention/evidence machinery; it resolves and records rights over those authorities (blueprint §13, §14).",
   "rightsDerivationClasses": [
     "source_representation",

@@ -1,11 +1,11 @@
 ---
-title: "Canonical Language"
+title: Canonical Language
 slug: product/language-system/canonical-language
-section: glossary
+section: reference
 visibility: P
 audience: [buyer, dev-senior]
 status: stable
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # Canonical Language

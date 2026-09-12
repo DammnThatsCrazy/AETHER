@@ -55,7 +55,7 @@ def _reg(**over):
         platform="ios",
         bundle_id="com.aether.app",
         environment="production",
-        app_version="8.12.0",
+        app_version="0.1.0-alpha.0",
         distribution_profile="app_store",
     )
     base.update(over)
@@ -111,13 +111,13 @@ def test_app_version_registration_feeds_upgrade_policy():
     assert cfg["upgrade_policy"] == "required"
 
     # At latest -> none.
-    _register(installation_id="curr-dev", app_version="8.12.0", distribution_profile="app_store")
+    _register(installation_id="curr-dev", app_version="0.1.0-alpha.0", distribution_profile="app_store")
     cfg = _run(mobile_routes.get_mobile_config(_req(), installation_id="curr-dev")).data
     assert cfg["upgrade_policy"] == "none"
 
     # Registration persists the values on the installation row.
     row = _run(mobile_routes.get_installation(_req(), installation_id="curr-dev")).data
-    assert row["app_version"] == "8.12.0"
+    assert row["app_version"] == "0.1.0-alpha.0"
     assert row["distribution_profile"] == "app_store"
 
     # Unknown app version is fail-safe (required), profile defaults to dev.

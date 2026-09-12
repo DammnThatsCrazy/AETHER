@@ -1,20 +1,16 @@
 ---
 title: Kyber Economic Observability
 slug: concepts/kyber-economic-observability
-section: kyber
+section: operations
 visibility: I
 audience: [dev-senior, ops]
 status: stable
-since_version: "8.9.0"
-source_files:
-  - Backend Architecture/aether-backend/services/economic/routes.py
-  - packages/shared/economic-metrics.ts
-related:
-  - concepts/economic-value-framing
-  - concepts/unified-economic-graph
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/economic/routes.py, packages/shared/economic-metrics.ts]
+related: [concepts/economic-value-framing, concepts/unified-economic-graph]
 source_hashes:
-  "Backend Architecture/aether-backend/services/economic/routes.py": "sha256:e01e6487d9825b57736b4d523483523698fa47fbd8fc3fd28be5b09c96a58cbc"
-  "packages/shared/economic-metrics.ts": "sha256:2c9c5b55a5131d1aec2625fcb910a36458363affe11bf0de2b660c6270a499d0"
+  Backend Architecture/aether-backend/services/economic/routes.py: sha256:e01e6487d9825b57736b4d523483523698fa47fbd8fc3fd28be5b09c96a58cbc
+  packages/shared/economic-metrics.ts: sha256:2c9c5b55a5131d1aec2625fcb910a36458363affe11bf0de2b660c6270a499d0
 ---
 
 # Aether — Kyber Economic Observability

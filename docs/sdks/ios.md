@@ -1,11 +1,11 @@
 ---
-title: "Aether iOS SDK"
+title: Aether iOS SDK
 slug: sdks/ios
-section: sdks
+section: reference
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # Aether iOS SDK

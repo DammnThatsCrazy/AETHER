@@ -3,16 +3,14 @@ title: Target Architecture — Economic & Interoperability Intelligence
 slug: productization/economic-interoperability-intelligence/target-architecture
 section: operations
 visibility: I
-audience: [architect, ops, exec]
+audience: [architect, ops, buyer]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - Backend Architecture/aether-backend/main.py
-  - Backend Architecture/aether-backend/config/settings.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/main.py, Backend Architecture/aether-backend/config/settings.py]
 canonical_owner: platform@aether
 source_hashes:
-  "Backend Architecture/aether-backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
-  "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
+  Backend Architecture/aether-backend/config/settings.py: sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3
+  Backend Architecture/aether-backend/main.py: sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e
 ---
 
 # Target Architecture

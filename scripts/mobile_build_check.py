@@ -39,7 +39,7 @@ EXPECTED = {
     "aether-mobile": {"app_kind": "aether", "bundle": "com.aether.mobile", "scheme": "aether"},
     "kyber-mobile": {"app_kind": "kyber", "bundle": "com.aether.kyber", "scheme": "kyber"},
 }
-PLATFORM_VERSION = "8.12.0"
+PLATFORM_VERSION = "0.1.0-alpha.0"
 
 # Distribution profiles per platform family (snake_case). Must agree with
 # services/mobile/config.py DISTRIBUTION_PROFILES — drift-guarded by

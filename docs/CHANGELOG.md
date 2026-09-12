@@ -5,7 +5,7 @@ section: changelog
 visibility: P
 audience: [dev-junior, dev-senior, ops]
 status: stable
-since_version: "8.9.0"
+since_version: 0.1.0
 source_files:
   - CHANGELOG.md
 canonical_owner: release@aether
@@ -15,6 +15,55 @@ source_hashes:
   "CHANGELOG.md": "sha256:c7b0afde19f1ddfdd95bb60f05e3ad6decd09165f7e1371c09252c2b38f0dd38"
 ---
 # Changelog
+
+## [Unreleased]
+
+### Added
+
+- Pending changes not yet assigned to a pre-release version.
+
+## [0.1.0-alpha.0] - 2026-09-09
+
+### Added
+
+- Canonical repository structure.
+- Version policy.
+- Release policy.
+- Documentation source-of-truth model.
+- SDK parity documentation.
+- Connector lifecycle documentation.
+- Contract coverage documentation.
+- Root architecture gateway.
+- Product language source of truth.
+- PR alignment template.
+- Architecture decision records (ADR-0001 through ADR-0009).
+- Developer quickstart guide.
+- Operations documentation.
+- Security documentation structure.
+
+### Changed
+
+- Reset public product versioning to pre-production SemVer.
+- Reorganized legacy root architecture folders under `docs/archive/`.
+- Updated architecture docs to reflect contract-governed ingestion and graph projection.
+- Normalized SDK language around thin clients and `/v1/batch`.
+- Normalized provider/connector language.
+
+### Removed
+
+- Deprecated root-level architecture folders.
+- Stale SDK endpoint references.
+- Misleading production-release language.
+
+---
+
+## Internal Development History
+
+The entries below record internal development milestones under the legacy
+numbering scheme (v8.x, v7.x, etc.). These versions were never published
+externally. The first public pre-release is `0.1.0-alpha.0` above.
+
+---
 
 ## Unreleased — Hosted Agent Control Plane
 

@@ -1,3 +1,12 @@
+---
+title: Readme
+slug: archive/legacy-architecture/readme
+section: reference
+visibility: I
+audience: [dev-senior, architect]
+status: experimental
+since_version: 0.1.0
+---
 # Archived Material
 
 This folder contains legacy or superseded documentation.

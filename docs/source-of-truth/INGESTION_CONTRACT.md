@@ -1,3 +1,12 @@
+---
+title: Ingestion Contract
+slug: source-of-truth/ingestion_contract
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Ingestion Contract
 
 One public SDK ingestion path. All four SDKs use it.

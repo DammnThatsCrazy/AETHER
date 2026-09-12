@@ -1,14 +1,12 @@
 ---
 title: Durable Jobs Platform Source of Truth
+slug: source-of-truth/jobs_platform
+section: reference
+visibility: I
+audience: [dev-senior]
 status: stable
-source_files:
-  - Backend Architecture/aether-backend/services/jobs/handlers.py
-  - Backend Architecture/aether-backend/services/jobs/service.py
-  - Backend Architecture/aether-backend/services/jobs/worker.py
-  - Backend Architecture/aether-backend/services/jobs/scheduler.py
-  - Backend Architecture/aether-backend/services/jobs/routes.py
-  - Backend Architecture/aether-backend/services/jobs/kyber_routes.py
-  - Backend Architecture/aether-backend/repositories/jobs_repo.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/jobs/handlers.py, Backend Architecture/aether-backend/services/jobs/service.py, Backend Architecture/aether-backend/services/jobs/worker.py, Backend Architecture/aether-backend/services/jobs/scheduler.py, Backend Architecture/aether-backend/services/jobs/routes.py, Backend Architecture/aether-backend/services/jobs/kyber_routes.py, Backend Architecture/aether-backend/repositories/jobs_repo.py]
 last_synced_commit: pending
 ---
 

@@ -1,25 +1,22 @@
 ---
 title: Aether iOS SDK — Integration Guide
 slug: sdks/ios
-section: sdks
+section: reference
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "8.9.0"
-source_files:
-  - packages/ios/Sources/AetherSDK/Aether.swift
-  - packages/shared/events.ts
-  - packages/shared/consent.ts
+since_version: 0.1.0
+source_files: [packages/ios/Sources/AetherSDK/Aether.swift, packages/shared/events.ts, packages/shared/consent.ts]
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "packages/ios/Sources/AetherSDK/Aether.swift": "sha256:02d7acf01b54710f24d3085e2168d861ff69db3bf8b5a088741240c76d865e2d"
+  "packages/ios/Sources/AetherSDK/Aether.swift": "sha256:8db64e6f0e6b339b3d9727896e24553e4f82f633f51117a22209627db5a72ec0"
   "packages/shared/consent.ts": "sha256:e8cc43b2a64f70eca68d499d7a1fb7b85ceacb44bc94f77a70e105e0d05e8730"
-  "packages/shared/events.ts": "sha256:216fa41739a8613800f057f2937071bf40a28ac35ba47b4a77f438cfd2fd9477"
+  "packages/shared/events.ts": "sha256:96f08a92d2a10b3555264bd76dc1e59c78ae3de63fe99665c13189201ad5c120"
 ---
 
-# Aether iOS SDK v8.12.0 — Integration Guide
+# Aether iOS SDK v0.1.0-alpha.0 — Integration Guide
 
 ## Installation
 

@@ -1,16 +1,12 @@
 ---
 title: Interoperability Ingestion Contract
 slug: source-of-truth/interop-ingestion-contract
-section: source-of-truth
+section: reference
 visibility: I
-audience: [architect, dev-senior, ai]
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - Backend Architecture/aether-backend/services/interop/correlation.py
-  - Backend Architecture/aether-backend/services/interop/providers/base.py
-  - Backend Architecture/aether-backend/services/interop/providers/layerzero_v2.py
-  - Backend Architecture/aether-backend/services/interop/providers/layerzero_abi.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/interop/correlation.py, Backend Architecture/aether-backend/services/interop/providers/base.py, Backend Architecture/aether-backend/services/interop/providers/layerzero_v2.py, Backend Architecture/aether-backend/services/interop/providers/layerzero_abi.py]
 canonical_owner: platform@aether
 last_synced_commit: 1f19190
 ---

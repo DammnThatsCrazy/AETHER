@@ -1,15 +1,12 @@
 ---
 title: Stablecoin Ingestion Contract
 slug: source-of-truth/stablecoin-ingestion-contract
-section: source-of-truth
+section: reference
 visibility: I
-audience: [architect, dev-senior, ai]
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - Backend Architecture/aether-backend/services/stablecoin/service.py
-  - Backend Architecture/aether-backend/services/stablecoin/finality.py
-  - Backend Architecture/aether-backend/services/stablecoin/routes.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/stablecoin/service.py, Backend Architecture/aether-backend/services/stablecoin/finality.py, Backend Architecture/aether-backend/services/stablecoin/routes.py]
 canonical_owner: platform@aether
 last_synced_commit: 1f19190
 ---

@@ -1,17 +1,12 @@
 ---
 title: Tenant Import Engine Source of Truth
+slug: source-of-truth/imports
+section: reference
+visibility: I
+audience: [dev-senior]
 status: stable
-source_files:
-  - Backend Architecture/aether-backend/services/imports/contracts.py
-  - Backend Architecture/aether-backend/services/imports/analyzer.py
-  - Backend Architecture/aether-backend/services/imports/mapping.py
-  - Backend Architecture/aether-backend/services/imports/validation.py
-  - Backend Architecture/aether-backend/services/imports/service.py
-  - Backend Architecture/aether-backend/services/imports/routes.py
-  - Backend Architecture/aether-backend/services/imports/storage.py
-  - Backend Architecture/aether-backend/services/imports/commit.py
-  - Backend Architecture/aether-backend/repositories/import_files.py
-  - Backend Architecture/aether-backend/repositories/imports_repo.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/imports/contracts.py, Backend Architecture/aether-backend/services/imports/analyzer.py, Backend Architecture/aether-backend/services/imports/mapping.py, Backend Architecture/aether-backend/services/imports/validation.py, Backend Architecture/aether-backend/services/imports/service.py, Backend Architecture/aether-backend/services/imports/routes.py, Backend Architecture/aether-backend/services/imports/storage.py, Backend Architecture/aether-backend/services/imports/commit.py, Backend Architecture/aether-backend/repositories/import_files.py, Backend Architecture/aether-backend/repositories/imports_repo.py]
 last_synced_commit: pending
 ---
 

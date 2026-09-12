@@ -1,11 +1,11 @@
 ---
 title: Verify Heartbeat
 slug: verify-heartbeat
-section: quickstart
+section: developer
 visibility: P
 audience: [dev-junior, dev-senior]
 status: experimental
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # Verify Heartbeat

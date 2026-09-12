@@ -1,11 +1,11 @@
 ---
 title: Integration Security
 slug: enterprise/integration-security
-section: enterprise
+section: operations
 visibility: I
 audience: [ops, security]
 status: stable
-since_version: "13.0.0"
+since_version: 13.0.0
 ---
 
 # Integration Security

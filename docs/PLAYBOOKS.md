@@ -1,26 +1,20 @@
 ---
 title: Playbooks
 slug: ai/playbooks
-section: ai
+section: architecture
 visibility: I
-audience: [ai, architect, dev-senior, ops]
+audience: [architect, dev-senior, ops]
 status: beta
-since_version: "8.9.0"
-source_files:
-  - Backend Architecture/aether-backend/services/intelligence/routes.py
-  - Backend Architecture/aether-backend/services/intelligence/decision_models.py
-flags:
-  - AETHER_PLAYBOOKS_ENABLED
-  - AETHER_RECOMMENDATIONS_ENABLED
-related:
-  - ai/decision-outcome-intelligence
-  - ai/outcome-ledger
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/intelligence/routes.py, Backend Architecture/aether-backend/services/intelligence/decision_models.py]
+flags: [AETHER_PLAYBOOKS_ENABLED, AETHER_RECOMMENDATIONS_ENABLED]
+related: [ai/decision-outcome-intelligence, ai/outcome-ledger]
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/services/intelligence/decision_models.py": "sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:8a705ad12ff7176d486afa586ba3f794da14017b9f9c108a3f9b6313da94884b"
+  Backend Architecture/aether-backend/services/intelligence/decision_models.py: sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25
+  Backend Architecture/aether-backend/services/intelligence/routes.py: sha256:8a705ad12ff7176d486afa586ba3f794da14017b9f9c108a3f9b6313da94884b
 ---
 # Playbooks
 

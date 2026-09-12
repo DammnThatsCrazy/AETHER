@@ -31,16 +31,16 @@ from services.managed_integrations.contracts import (
 # `pinned` pins the version (no auto floor → the version dimension is not
 # reconciled). Every other managed channel keeps the runtime inside a *served*
 # band:
-#   managed_stable  -> deprecated floor (supported 8.x + deprecated 7.x served)
-#   security_auto   -> deprecated floor (security patches still delivered to 7.x)
-#   compatible_auto -> deprecated floor (auto-apply compatible upgrades within 7.x+)
-#   patch_auto      -> supported floor (auto-apply patch releases within 8.x)
+#   managed_stable  -> supported floor (>=0.1.0 is the only active band)
+#   security_auto   -> supported floor
+#   compatible_auto -> supported floor
+#   patch_auto      -> supported floor
 # These floors are advisory Phase-0 policy data; the *only* contracted default is
 # managed_stable, which does NOT equate to following the newest published build.
 _FLOOR_BAND_BY_CHANNEL: dict[str, Optional[str]] = {
-    "managed_stable": "deprecated",
-    "security_auto": "deprecated",
-    "compatible_auto": "deprecated",
+    "managed_stable": "supported",
+    "security_auto": "supported",
+    "compatible_auto": "supported",
     "patch_auto": "supported",
     "pinned": None,
 }

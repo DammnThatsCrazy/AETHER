@@ -51,7 +51,7 @@ describe('events-registry', () => {
   });
 
   it('SDK_VERSION is 8.12.0', () => {
-    expect(SDK_VERSION).toBe('8.12.0');
+    expect(SDK_VERSION).toBe('0.1.0-alpha.0');
   });
 
   // ---------------------------------------------------------------------------

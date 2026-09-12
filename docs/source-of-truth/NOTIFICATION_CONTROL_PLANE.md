@@ -1,10 +1,11 @@
 ---
 title: Notification Control Plane
 slug: mobile/notification-control-plane
-section: mobile
+section: reference
 visibility: I
 audience: [architect, security, ops]
-status: alpha
+status: experimental
+since_version: 0.1.0
 ---
 
 # Notification Control Plane

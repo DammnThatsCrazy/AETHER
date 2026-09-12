@@ -3,16 +3,15 @@ title: Multi-Hop Traversal Algorithms
 slug: concepts/multi-hop-traversal
 section: concepts
 visibility: P
-audience: [architect, dev-senior, ai]
-source_files:
-  - Backend Architecture/aether-backend/shared/graph/traversal.py
-  - Backend Architecture/aether-backend/shared/graph/path_scoring.py
+audience: [architect, dev-senior]
+status: experimental
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/shared/graph/traversal.py, Backend Architecture/aether-backend/shared/graph/path_scoring.py]
 reviewed_source_commits:
-  - commit: "0efa07cb"
-    reason: "Reviewed the target-aware temporal shortest-path helper, total-depth guards for shortest/Yen searches, and deterministic equal-cost candidate ordering; the algorithm reference below was updated to match the implementation."
+  - {'commit': '0efa07cb', 'reason': 'Reviewed the target-aware temporal shortest-path helper, total-depth guards for shortest/Yen searches, and deterministic equal-cost candidate ordering; the algorithm reference below was updated to match the implementation.'}
 source_hashes:
-  "Backend Architecture/aether-backend/shared/graph/path_scoring.py": "sha256:4bff43191e835d86308a2668dea5ee891ff6768da3d5fe332e32a7be2f592b07"
-  "Backend Architecture/aether-backend/shared/graph/traversal.py": "sha256:d21ebdfd876838189023a32db93a1e08aa7c2e125f66a8125b3c797d94c05719"
+  Backend Architecture/aether-backend/shared/graph/path_scoring.py: sha256:4bff43191e835d86308a2668dea5ee891ff6768da3d5fe332e32a7be2f592b07
+  Backend Architecture/aether-backend/shared/graph/traversal.py: sha256:d21ebdfd876838189023a32db93a1e08aa7c2e125f66a8125b3c797d94c05719
 ---
 
 # Multi-Hop Traversal Algorithms

@@ -1,11 +1,11 @@
 ---
 title: Kyber Operator Guide
 slug: kyber/operator-guide
-section: kyber
+section: operations
 visibility: I
 audience: [ops, dev-senior, architect]
 status: stable
-since_version: "8.9.0"
+since_version: 0.1.0
 canonical_owner: kyber@aether
 estimated_read_minutes: 20
 ---

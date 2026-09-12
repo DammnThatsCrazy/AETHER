@@ -1,25 +1,22 @@
 ---
 title: Aether Android SDK — Integration Guide
 slug: sdks/android
-section: sdks
+section: reference
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "8.9.0"
-source_files:
-  - packages/android/src/main/java/com/aether/sdk/Aether.kt
-  - packages/shared/events.ts
-  - packages/shared/consent.ts
+since_version: 0.1.0
+source_files: [packages/android/src/main/java/com/aether/sdk/Aether.kt, packages/shared/events.ts, packages/shared/consent.ts]
 canonical_owner: sdk@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "packages/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:222537f4ef002ae72203e44322be9546ecfb93c2b8dd4e9075ba33fe9b09c93c"
+  "packages/android/src/main/java/com/aether/sdk/Aether.kt": "sha256:ce5b66a90f2ba15f604498e6dad00047d5fd8625a18def6e00cf89d92c2af47f"
   "packages/shared/consent.ts": "sha256:e8cc43b2a64f70eca68d499d7a1fb7b85ceacb44bc94f77a70e105e0d05e8730"
-  "packages/shared/events.ts": "sha256:216fa41739a8613800f057f2937071bf40a28ac35ba47b4a77f438cfd2fd9477"
+  "packages/shared/events.ts": "sha256:96f08a92d2a10b3555264bd76dc1e59c78ae3de63fe99665c13189201ad5c120"
 ---
 
-# Aether Android SDK v8.12.0 — Integration Guide
+# Aether Android SDK v0.1.0-alpha.0 — Integration Guide
 
 ## Installation
 

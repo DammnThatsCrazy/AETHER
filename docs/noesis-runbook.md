@@ -5,6 +5,7 @@ section: operations
 visibility: I
 audience: [dev-senior, architect, ops]
 status: stable
+since_version: 0.1.0
 ---
 
 # Noesis — Operations Runbook

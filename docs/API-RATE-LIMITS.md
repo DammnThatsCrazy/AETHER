@@ -1,11 +1,11 @@
 ---
 title: API Rate Limits
 slug: api/api-rate-limits
-section: api
+section: reference
 visibility: I
 audience: [dev-junior, dev-senior, ops]
 status: stable
-since_version: "8.9.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 2
 ---

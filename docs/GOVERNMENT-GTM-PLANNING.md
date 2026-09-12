@@ -1,11 +1,11 @@
 ---
 title: Government GTM Planning
 slug: enterprise/government-gtm-planning
-section: enterprise
+section: operations
 visibility: I
-audience: [exec, buyer, ops]
+audience: [buyer, ops]
 status: stable
-since_version: "8.9.0"
+since_version: 0.1.0
 ---
 
 # Government GTM Planning

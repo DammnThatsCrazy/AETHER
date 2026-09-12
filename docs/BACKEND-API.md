@@ -1,41 +1,30 @@
 ---
 title: Aether Backend API — Endpoint Specification
 slug: api/backend-reference
-section: api
+section: reference
 visibility: P
 audience: [dev-junior, dev-senior, architect]
 status: stable
-since_version: "8.8.0"
-source_files:
-  - Backend Architecture/aether-backend/services/
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/]
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
 reviewed_source_commits:
-  - commit: "c607780c"
-    reason: "Reviewed c607780c (new services/measurement/connectors/ad_accounts.py account-identity/credential-probe module + its tests). It adds no HTTP surface — the doc's /v1/* endpoint tables are unaffected — so no body change was required."
-  - commit: "41e8356b"
-    reason: "Reviewed 41e8356b (additive /v1/campaign-sources overview/ad-options/connect/test/account/disable/enable endpoints in services/campaign/routes.py, orchestrated by new ad_source_links.py). This spec's Campaign Management Service section documents the /v1/campaigns CRUD surface and does not enumerate the /v1/campaign-sources registry router (covered in docs/api/CAMPAIGN_360_API.md), so the additions are additive to routes this doc does not describe; no body change was required."
-  - commit: "cef18ae4"
-    reason: "Reviewed cef18ae4 (new services/rights_authority canonical package: rights resolver/decision core, generalization gateway, revocation & impact pipeline, durable rights repositories). It adds no HTTP surface on this lane — all seams are library/package-level, fail-closed, and tenant-scoped — so the doc's /v1/* endpoint tables are unaffected; no body change was required."
-  - commit: "1f98cb83"
-    reason: "Reviewed 1f98cb83 (rights_authority __init__ surface + additive /v1/rights router for decisions/effective, decisions/{id}, revocations). The router is deliberately NOT wired into main.py (mounting is a later integration phase, matching the unmounted services/dsr_propagation precedent), so no live endpoint documented by this spec changed; no body change was required."
-  - commit: "2697ddda"
-    reason: "Reviewed 2697ddda (security hardening of the unmounted rights router: actor derived from the authenticated principal instead of client input, /revocations moved from 'read' to the established 'write' scope, ownership-guard documented). All changes are internal to the not-yet-mounted router; no live endpoint documented by this spec changed; no body change was required."
-  - commit: "d8a88e2b"
-    reason: "Reviewed d8a88e2b (docstring-only dispositions on the unmounted rights router: why the durable decision store is a tenant-scoped ledger with tenant (not actor) as the ownership boundary for GET /decisions/{id}, and why read-scoped POST /decisions/effective durably records its section-17 audit outcome while /revocations requires write). No behavior change and no live endpoint documented by this spec changed; no body change was required."
-  - commit: "4cbc67eb"
-    reason: "Reviewed 4cbc67eb (services/rights_authority production seams: server consent evaluator + resolver seam, spine-envelope rights-ref producers, rollout modes, retention + training-manifest adapters). All are library/package-level and additive, and no endpoint was live yet at this commit, so the doc's /v1/* tables were unaffected; no body change was required at this commit."
-  - commit: "33dfedb4"
-    reason: "Reviewed 33dfedb4 — the /v1/rights surface is now MOUNTED in main.py (always mounted beside /v1/dsr); the routes carry the rollout-OFF 503 gate and require scalar source/purpose/destination matching RightsDecisionRequest; the durable repositories accept dict-or-model rows. This commit makes /v1/rights live and supersedes the earlier not-wired-into-main.py review notes. Body change: the Rights Authority section below documents the three endpoints and their rollout-gated 503 posture."
-  - commit: "69185729"
-    reason: "Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate."
-  - commit: "0efa07cb"
-    reason: "Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics."
+  - {'commit': 'c607780c', 'reason': "Reviewed c607780c (new services/measurement/connectors/ad_accounts.py account-identity/credential-probe module + its tests). It adds no HTTP surface — the doc's /v1/* endpoint tables are unaffected — so no body change was required."}
+  - {'commit': '41e8356b', 'reason': "Reviewed 41e8356b (additive /v1/campaign-sources overview/ad-options/connect/test/account/disable/enable endpoints in services/campaign/routes.py, orchestrated by new ad_source_links.py). This spec's Campaign Management Service section documents the /v1/campaigns CRUD surface and does not enumerate the /v1/campaign-sources registry router (covered in docs/api/CAMPAIGN_360_API.md), so the additions are additive to routes this doc does not describe; no body change was required."}
+  - {'commit': 'cef18ae4', 'reason': "Reviewed cef18ae4 (new services/rights_authority canonical package: rights resolver/decision core, generalization gateway, revocation & impact pipeline, durable rights repositories). It adds no HTTP surface on this lane — all seams are library/package-level, fail-closed, and tenant-scoped — so the doc's /v1/* endpoint tables are unaffected; no body change was required."}
+  - {'commit': '1f98cb83', 'reason': 'Reviewed 1f98cb83 (rights_authority __init__ surface + additive /v1/rights router for decisions/effective, decisions/{id}, revocations). The router is deliberately NOT wired into main.py (mounting is a later integration phase, matching the unmounted services/dsr_propagation precedent), so no live endpoint documented by this spec changed; no body change was required.'}
+  - {'commit': '2697ddda', 'reason': "Reviewed 2697ddda (security hardening of the unmounted rights router: actor derived from the authenticated principal instead of client input, /revocations moved from 'read' to the established 'write' scope, ownership-guard documented). All changes are internal to the not-yet-mounted router; no live endpoint documented by this spec changed; no body change was required."}
+  - {'commit': 'd8a88e2b', 'reason': 'Reviewed d8a88e2b (docstring-only dispositions on the unmounted rights router: why the durable decision store is a tenant-scoped ledger with tenant (not actor) as the ownership boundary for GET /decisions/{id}, and why read-scoped POST /decisions/effective durably records its section-17 audit outcome while /revocations requires write). No behavior change and no live endpoint documented by this spec changed; no body change was required.'}
+  - {'commit': '4cbc67eb', 'reason': "Reviewed 4cbc67eb (services/rights_authority production seams: server consent evaluator + resolver seam, spine-envelope rights-ref producers, rollout modes, retention + training-manifest adapters). All are library/package-level and additive, and no endpoint was live yet at this commit, so the doc's /v1/* tables were unaffected; no body change was required at this commit."}
+  - {'commit': '33dfedb4', 'reason': 'Reviewed 33dfedb4 — the /v1/rights surface is now MOUNTED in main.py (always mounted beside /v1/dsr); the routes carry the rollout-OFF 503 gate and require scalar source/purpose/destination matching RightsDecisionRequest; the durable repositories accept dict-or-model rows. This commit makes /v1/rights live and supersedes the earlier not-wired-into-main.py review notes. Body change: the Rights Authority section below documents the three endpoints and their rollout-gated 503 posture.'}
+  - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
+  - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "Backend Architecture/aether-backend/services/": "sha256:8739adb716421dcbedefcf4ea70025f6f312efcddd94cd1199250327f5ea4cd5"
+  "Backend Architecture/aether-backend/services/": "sha256:fc6f8a3184ecb5045e1831e62fc809772770eb655c1cc5bbe71e15a1f3f67acf"
 ---
-# Aether Backend API v8.12.0 — Endpoint Specification
+# Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
 ## Overview
 

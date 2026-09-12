@@ -4,6 +4,8 @@ slug: campaign/runbooks/mapping-review-resolution
 section: operations
 visibility: I
 audience: [ops]
+status: experimental
+since_version: 0.1.0
 ---
 
 # Runbook: Clearing the Mapping Review Queue

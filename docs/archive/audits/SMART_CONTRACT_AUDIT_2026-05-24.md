@@ -1,3 +1,12 @@
+---
+title: Smart Contract Audit 2026 05 24
+slug: archive/audits/smart_contract_audit_2026-05-24
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Aether Smart Contract Security Audit (May 24, 2026)
 
 ## 1) Executive Summary

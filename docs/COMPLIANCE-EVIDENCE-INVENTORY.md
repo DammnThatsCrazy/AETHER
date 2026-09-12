@@ -1,11 +1,11 @@
 ---
 title: Compliance Evidence Inventory
 slug: compliance/compliance-evidence-inventory
-section: compliance
+section: security
 visibility: I
 audience: [security, compliance]
 status: beta
-since_version: "8.9.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 ---

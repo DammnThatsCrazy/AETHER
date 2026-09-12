@@ -1,11 +1,11 @@
 ---
 title: Governance Evidence Packs
 slug: enterprise/governance-evidence-packs
-section: enterprise
+section: operations
 visibility: I
-audience: [exec, buyer, security]
+audience: [buyer, security]
 status: stable
-since_version: "13.0.0"
+since_version: 13.0.0
 ---
 
 # Governance Evidence Packs

@@ -1,11 +1,11 @@
 ---
 title: Derivatives Market Resolution
 slug: derivatives/market-resolution
-section: data
+section: architecture
 visibility: I
 audience: [architect, dev-senior, ops]
 status: experimental
-since_version: "8.11.0"
+since_version: 0.1.0
 ---
 
 # Derivatives MARKET RESOLUTION

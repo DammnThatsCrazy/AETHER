@@ -5,15 +5,14 @@ section: operations
 visibility: I
 audience: [ops, dev-senior]
 status: stable
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 2
-source_files:
-  - Backend Architecture/aether-backend/services/campaign/exploration.py
-  - Backend Architecture/aether-backend/services/measurement/repositories/conversion_repo.py
+source_files: [Backend Architecture/aether-backend/services/campaign/exploration.py, Backend Architecture/aether-backend/services/measurement/repositories/conversion_repo.py]
 source_hashes:
-  "Backend Architecture/aether-backend/services/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
-  "Backend Architecture/aether-backend/services/measurement/repositories/conversion_repo.py": "sha256:70be3473d422ac0fc495b579755289d2c0d2e5ea78224f217b8ec4c2981192f5"
+  Backend Architecture/aether-backend/services/campaign/exploration.py: sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13
+  Backend Architecture/aether-backend/services/measurement/repositories/conversion_repo.py: sha256:70be3473d422ac0fc495b579755289d2c0d2e5ea78224f217b8ec4c2981192f5
 ---
 
 # Runbook — Missing Conversions (Campaign 360)

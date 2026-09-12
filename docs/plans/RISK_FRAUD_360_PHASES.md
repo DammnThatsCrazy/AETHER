@@ -3,9 +3,9 @@ title: Risk360 + Fraud360 — Phased Convergence Program
 slug: plans/risk-fraud-360-phases
 section: architecture
 visibility: I
-audience: [architect, dev-senior, exec]
+audience: [architect, dev-senior, buyer]
 status: experimental
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: backend@aether
 ---
 # Risk360 + Fraud360 — Phased Convergence Program

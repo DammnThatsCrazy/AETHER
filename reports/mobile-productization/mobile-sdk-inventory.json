@@ -1,7 +1,7 @@
 {
   "schema": "aether.mobile-sdk-inventory/v1",
   "note": "Machine-readable inventory of the mobile SDK packages, apps, and their permission/capability posture. Seed for `make mobile-security-check`. Hand-maintained per landing; not generated.",
-  "platform_version": "8.12.0",
+  "platform_version": "0.1.0-alpha.0",
   "packages": [
     {
       "name": "@aether/mobile-core",
