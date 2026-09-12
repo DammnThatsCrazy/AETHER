@@ -217,8 +217,8 @@ export function HomePage() {
             <div>
               <Eyebrow>Company</Eyebrow>
               <p className="mkt-body mt-4 max-w-md">
-                Olympus Labs is the parent company behind Aether. Aether is the customer product; Kyber is
-                the private internal operator environment Olympus Labs uses to run the platform.
+                Olympus Labs is the parent company behind Aether. Aether is the customer product. Olympus Labs
+                builds, owns, and operates the platform.
               </p>
             </div>
             <div className="flex flex-wrap content-end items-center gap-3 md:justify-end">

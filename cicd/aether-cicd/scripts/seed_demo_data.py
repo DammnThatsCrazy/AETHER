@@ -7,8 +7,8 @@ sales, BD, and growth teams can demonstrate Aether's capabilities
 to prospects.
 
 Usage:
-    python seed_demo_data.py --url https://demo.aether.io --api-key <key>
-    python seed_demo_data.py --url https://demo.aether.io --api-key <key> --clear-existing
+    python seed_demo_data.py --url https://demo.olympuslabsml.com --api-key <key>
+    python seed_demo_data.py --url https://demo.olympuslabsml.com --api-key <key> --clear-existing
 
 Data categories seeded:
   - Identity profiles (50 synthetic users with traits, segments)
@@ -42,7 +42,7 @@ except ImportError:
 # CONFIG
 # ---------------------------------------------------------------------------
 
-BASE_URL = os.environ.get("DEMO_URL", "https://demo.aether.io")
+BASE_URL = os.environ.get("DEMO_URL", "https://demo.olympuslabsml.com")
 API_KEY = os.environ.get("DEMO_API_KEY", "demo_api_key_placeholder")
 
 HEADERS: Dict[str, str] = {}

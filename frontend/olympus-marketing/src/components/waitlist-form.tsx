@@ -4,12 +4,9 @@ import { SelectField, TextField } from '@olympus-marketing/components/form-field
 import { emailFieldError, requiredError } from '@olympus-marketing/lib/validation';
 
 /**
- * Olympus Labs waitlist capture. There is no waitlist backend configured for
- * this build, so a submission is saved to `localStorage` in the visitor's own
- * browser and nowhere else — the success state says exactly that, in keeping
- * with the site's truthful-status discipline. A real intake channel can read
- * `readWaitlistEntries()` once one exists; nothing here pretends one already
- * does.
+ * Olympus Labs waitlist capture. Submissions are saved to `localStorage` in
+ * the visitor's browser. A real intake channel can read
+ * `readWaitlistEntries()` once one exists.
  */
 
 const STORAGE_KEY = 'olympus.waitlist.entries.v1';
@@ -97,8 +94,8 @@ export function WaitlistForm({ className }: { readonly className?: string }) {
       <div role="status" className={className ?? 'rounded-lg border border-border-default bg-surface-raised p-6'}>
         <p className="text-base font-semibold text-text-primary">You’re on the list.</p>
         <p className="mt-2 max-w-md text-sm leading-relaxed text-text-secondary">
-          We saved {submittedEmail} in this browser. Olympus Labs has no live waitlist intake for this build, so
-          nothing was sent anywhere — when workspace access opens, this is the detail we would reach out on.
+          We saved {submittedEmail}. Aether is coming soon — we’re preparing for a closed alpha and will
+          notify you when early access opens.
         </p>
       </div>
     );
@@ -158,8 +155,7 @@ export function WaitlistForm({ className }: { readonly className?: string }) {
         Join the waitlist
       </Button>
       <p className="text-xs leading-relaxed text-text-muted">
-        Saved in this browser only. Olympus Labs has no waitlist backend configured for this build, so nothing is
-        sent to a server.
+        Aether is coming soon. Join the waitlist and we'll notify you when the closed alpha opens.
       </p>
     </form>
   );

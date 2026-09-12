@@ -16,7 +16,7 @@ const baseEnvSchema = z.object({
   VITE_AUTH0_LOGOUT_URI: z.string().url().optional(),
   VITE_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
   VITE_ENTERPRISE_EMAIL_VERIFIED: z.string().default('false'),
-  VITE_ENTERPRISE_EMAIL: z.string().default('sales@aether.dev'),
+  VITE_ENTERPRISE_EMAIL: z.string().default('sales@olympuslabsml.com'),
   VITE_PAYMENT_CANONICAL_REPAIR_ENABLED: z.string().default('false'),
   // Build identity (injected by vite define at build; 'dev' locally).
   VITE_APP_VERSION: z.string().default('dev'),
