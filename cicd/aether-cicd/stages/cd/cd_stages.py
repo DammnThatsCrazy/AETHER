@@ -139,7 +139,7 @@ def stage_staging_smoke(ctx: DeploymentContext, gate: QualityGate) -> bool:
     Automated smoke tests against staging.
     """
     print("\n-- CD Stage 2: Staging Smoke Test " + "-" * 27)
-    staging_url = os.environ.get("STAGING_URL", "https://staging.aether.io")
+    staging_url = os.environ.get("STAGING_URL", "https://staging.olympuslabsml.com")
 
     # 1. Health checks
     log(f"Health check: {staging_url}/v1/health", stage="CD2")
@@ -352,7 +352,7 @@ def stage_post_deploy_verify(ctx: DeploymentContext, gate: QualityGate) -> bool:
     Full production smoke test + 30-minute alert monitoring window.
     """
     print("\n-- CD Stage 6: Post-Deploy Verify " + "-" * 27)
-    prod_url = os.environ.get("PRODUCTION_URL", "https://api.aether.io")
+    prod_url = os.environ.get("PRODUCTION_URL", "https://api.olympuslabsml.com")
 
     # 1. Production smoke tests
     log("Running production smoke tests...", stage="CD6")
@@ -559,7 +559,7 @@ def stage_demo_smoke(ctx: DeploymentContext, gate: QualityGate) -> bool:
     Lighter than staging smoke -- health checks + core API validation.
     """
     print("\n-- Demo Stage 2: Demo Smoke Test " + "-" * 28)
-    demo_url = os.environ.get("DEMO_URL", "https://demo.aether.io")
+    demo_url = os.environ.get("DEMO_URL", "https://demo.olympuslabsml.com")
 
     # 1. Health checks
     log(f"Health check: {demo_url}/v1/health", stage="DEMO2")
@@ -612,7 +612,7 @@ def stage_demo_seed(ctx: DeploymentContext) -> bool:
     wallet data, events, DeFi positions, and analytics.
     """
     print("\n-- Demo Stage 3: Demo Data Seed " + "-" * 29)
-    demo_url = os.environ.get("DEMO_URL", "https://demo.aether.io")
+    demo_url = os.environ.get("DEMO_URL", "https://demo.olympuslabsml.com")
     demo_api_key = os.environ.get("DEMO_API_KEY", "demo_api_key_placeholder")
 
     log("Seeding demo environment with sample data...", stage="DEMO3")
@@ -700,7 +700,7 @@ def run_demo_cd(
     print(f"  Version:     {version}")
     print(f"  Commit:      {commit_sha[:8]}")
     print("  Environment: demo")
-    print("  URL:         https://demo.aether.io")
+    print("  URL:         https://demo.olympuslabsml.com")
     print(f"{'=' * 60}\n")
 
     notifier.cd_success(version, "demo")

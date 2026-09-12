@@ -62,10 +62,10 @@ export function DataRetentionPage() {
             <p className="text-xs text-text-secondary">
               For data privacy inquiries:{' '}
               <a
-                href="mailto:privacy@aether.dev"
+                href="mailto:privacy@olympuslabsml.com"
                 className="text-accent underline"
               >
-                privacy@aether.dev
+                privacy@olympuslabsml.com
               </a>
             </p>
           </section>

@@ -3,19 +3,23 @@
 Documentation is part of the repository contract surface, but source-linked
 documentation is content-addressed rather than commit-addressed.
 
-Before finalizing a change:
+For pull requests and merge-readiness claims, follow the single canonical
+workflow in `AGENTS.md`. Apply the documentation steps below only when docs,
+generator inputs, contract inputs, or source-linked documentation are affected:
 
-1. Run `make docs-check`.
-2. If the drift report lists a page, inspect that page against every path in
-   its `source_files:` frontmatter.
-3. Update authored prose when the documented behavior changed.
-4. Run `make docs-generate-changed` only after review. It updates only the
+1. Inspect the exact source-linked pages reported by `make docs-check` against
+   every path in their `source_files:` frontmatter.
+2. Update authored prose when the documented behavior changed.
+3. Run `make docs-generate-changed` only after review. It updates only the
    affected `source_hashes:` markers.
-5. Run `make docs-generate` when a canonical generator input or generator
+4. Run `make docs-generate` when a canonical generator input or generator
    implementation changed.
-6. Run `make docs-verify-idempotent` and confirm the second pass is byte-identical.
-7. Run `make ci-check` before claiming completion.
-8. In the PR description, explain which pages were reviewed or regenerated and
+5. Run `make verification-disposition BASE=<base> EXECUTE=1` as the normal PR
+   authority. Run `make ci-check` for broad local, trusted-main, nightly, or
+   release evidence; it includes the final generator-idempotency check, so the
+   standalone idempotency target is an optional diagnostic rather than a
+   required duplicate.
+6. In a PR description, explain which pages were reviewed or regenerated and
    why.
 
 Do not solve a docs failure by blindly running a global stamp command or by

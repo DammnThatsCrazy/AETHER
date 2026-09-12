@@ -144,7 +144,8 @@ See:
 ## Development
 
 ```bash
-make ci-check              # canonical PR completion gate
+make verification-disposition BASE=origin/main EXECUTE=1  # normal PR authority
+make ci-check              # broad consistency and repository evidence
 npm run test:all           # alias for make ci-check
 npm run security:audit     # secret scan + dependency audit
 ```
@@ -161,7 +162,8 @@ See:
 > [`packages/shared/contracts/`](packages/shared/contracts/) owns canonical
 > SDK / event / consent contracts. Generated docs must be regenerated
 > (`make docs-fix`) and committed; source-linked docs must be reviewed before
-> stamping. No PR is merge-ready unless `make ci-check` passes.
+> stamping. No PR is merge-ready unless the verification disposition passes;
+> `make ci-check` remains broad repository evidence.
 
 ## Security
 

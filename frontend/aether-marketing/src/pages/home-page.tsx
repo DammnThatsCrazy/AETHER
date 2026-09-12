@@ -62,8 +62,8 @@ export function HomePage() {
             </Button>
           </div>
           <p className="mt-6 max-w-2xl text-sm leading-relaxed text-text-secondary">
-            Aether is not yet generally available — when it opens to customers, starting here takes
-            you through sign-up and into the application.
+            Aether is coming soon. Join the waitlist to be notified when the closed alpha opens, or
+            explore the platform to learn what Aether can do for your organization.
           </p>
           <p className="mt-6 font-mono text-xs uppercase tracking-widest text-text-muted">
             Connect · Resolve · Understand · Act · Measure
@@ -200,12 +200,12 @@ export function HomePage() {
         variant="waitlist"
         eyebrow="Not ready to build yet?"
         title="Join the waitlist"
-        body="Leave your email and Olympus Labs will follow up when Aether opens to more customers — or start building now with the real sign-up flow."
+        body="Aether is coming soon. Leave your email and we'll notify you when the closed alpha opens — or start building now with the sign-up flow."
       />
 
       <CtaBand
         title="Start building on Aether"
-        body="Aether is not yet generally available. When it opens to customers, this is the front door — create your workspace here and the Aether application takes over from there."
+        body="Aether is coming soon. When the closed alpha opens, this is the front door — create your workspace here and the Aether application takes over from there."
         primary={{ label: 'Start building', to: '/signup' }}
         secondary={{ label: 'See pricing', to: '/pricing' }}
       />

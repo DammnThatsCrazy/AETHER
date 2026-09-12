@@ -69,7 +69,7 @@ variable "ecr_registry" {
 variable "alert_email" {
   type        = string
   description = "Email for CloudWatch alarm notifications"
-  default     = "ops@aether.io"
+  default     = "ops@olympuslabsml.com"
 }
 
 

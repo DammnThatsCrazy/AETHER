@@ -405,7 +405,7 @@ test-release: ## Execute the selected release lane
 repo-doctor-fix: ## Regenerate generated docs + sync, then validate
 	$(GATE_PY) scripts/repo_doctor.py --fix
 
-docs-check: ## Docs/version/frontmatter/drift checks only (fast gate)
+docs-check: ## Docs-focused validation with shared consistency preflight
 	$(GATE_PY) scripts/repo_doctor.py --check --docs-only
 
 docs-generate: docs-fix ## Regenerate generated and sync-managed docs (never authored source-linked docs)

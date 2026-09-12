@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [ops, dev-senior, architect]
 status: stable
-since_version: "8.8.0"
+since_version: "0.1.0"
 source_files:
   - scripts/validate_docs.py
   - scripts/validate_frontmatter.py
@@ -24,12 +24,12 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/repo-health.yml": "sha256:8e187ae831d16de47d075ae6b5e6ff07e7b1cdcfe3738124570c11bde94f25dd"
   ".pre-commit-config.yaml": "sha256:aabbf5350833f4d28448c5ef9f85bd5e516815458c6e76c1ac9f906b37947616"
-  "Makefile": "sha256:db03a26607229338b23f076237cdadc269c2fa68e9bee1645a6ae903532341f6"
+  "Makefile": "sha256:8b0291c5f37011f721b7a45ef4319f9c0ec14afe7d4cd26c4b49b9a79e0ccbbb"
   "scripts/docs_drift.py": "sha256:b6c0cd0a27f72b8c0d207d799f6daabdf0ed02e8bea17feaf6ccbfff43c1016a"
   "scripts/docs_extract/run_all.py": "sha256:404445eba05d12de88af585f79839b7496a1658411a110e606c46d5ed7e8c338"
   "scripts/docs_idempotency.py": "sha256:fe8628ef3a9b9d824645a5db062857754d2984b0f3f4d866b571df6232302f17"
   "scripts/docs_schema.json": "sha256:1a062b35ae5b18e85a10efedaa56708de3d9a332808cac699456ce6bb112fc74"
-  "scripts/sync_docs.py": "sha256:8103182e7a1b7d5683bd67b1d270bae627200eeefc84dc679220c5529b2103e5"
+  "scripts/sync_docs.py": "sha256:70c30ae3579955dce5bc7a202690347810f6e2a53cf018cf96ddff244fd6ce67"
   "scripts/validate_contracts.py": "sha256:0ffda1a3b37627be929cd82b15c5e6e3c188faf8e190a98dc3727bba6b0d4816"
   "scripts/validate_docs.py": "sha256:0eaece6116cb30303252f69323a519790825e8715ab7844be452402a52eabbb1"
   "scripts/validate_frontmatter.py": "sha256:1b4ba24575565584f7fc5e01c01a245ee4702f5220c85aa701bc86af2bdaa0c4"
@@ -130,7 +130,7 @@ make docs                 # run the whole pipeline end-to-end
 # Repo-enforced consistency suite (runs all checks incl. docs)
 make repo-doctor          # full consistency check — no mutations
 make repo-doctor-fix      # regenerate generated docs + sync
-make docs-check           # docs/version/frontmatter/drift only (fast gate)
+make docs-check           # docs-focused validation with shared consistency preflight
 make ci-check             # CI-safe full path — fails on any generated diff
 make docs-fix             # regenerate and sync docs only
 make test-fast BASE=<ref> # bounded local evidence; reports stronger follow-up lane

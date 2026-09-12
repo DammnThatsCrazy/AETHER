@@ -25,14 +25,15 @@ given change, based on the files modified and the lane selected.
 | regression | Full regression | integration + full test suite |
 | release | Release gate | regression + release checks |
 
-## Canonical Completion Gate
+## Verification Authority
 
 ```bash
-make ci-check
+make verification-disposition BASE=<ref> EXECUTE=1
 ```
 
-This is the canonical gate. A PR must not be opened until `ci-check`
-exits 0.
+This is the single blocking authority for a normal PR. The broad `make
+ci-check` command remains available for local, trusted-main, nightly, and
+release evidence; it is not a second blocking normal-PR status.
 
 ## Check Ownership
 

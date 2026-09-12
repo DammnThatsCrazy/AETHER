@@ -43,7 +43,7 @@ jobs:
         run: npm ci
       - name: Install supply-chain scan tools
         run: python -m pip install --disable-pip-version-check 'pip-audit>=2.7' 'cyclonedx-bom>=4.0'
-      - name: Canonical PR completion gate
+      - name: Broad repository consistency gate
         run: make ci-check
       - name: Release readiness gate
         run: make release-gate

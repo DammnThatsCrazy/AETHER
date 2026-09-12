@@ -38,8 +38,9 @@ Set `AETHER_ENV=local` in `.env` for development. This enables in-memory fallbac
 ## Testing
 
 ```bash
-make test              # All tests
-make ci-check          # Canonical PR completion gate
+make test                                      # All tests
+make verification-disposition BASE=origin/main EXECUTE=1  # Normal PR authority
+make ci-check                                  # Broad repository consistency evidence
 ```
 
 Tests must pass locally and in CI before merge.
@@ -76,13 +77,13 @@ A PR is incomplete if it changes runtime behavior but does not update the docs/c
 
 Before opening or updating a PR:
 
-1. Run `make docs-fix`.
-2. Run `make ci-check`.
+1. If docs or generator inputs changed, run `make docs-generate` and review any source-linked drift.
+2. Run `make verification-disposition BASE=<base> EXECUTE=1`.
 3. Commit all generated docs and sync outputs.
 4. Do not hand-edit generated docs.
 5. Do not bypass TypeScript/package export failures.
 6. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
-7. PR is not complete until `make ci-check` exits 0.
+7. Use `make ci-check` for broad local or release evidence when needed; PR merge-readiness is determined by the verification disposition.
 
 See `docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md` for the enforced source-to-derived ownership map.
 

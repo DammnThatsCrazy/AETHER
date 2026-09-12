@@ -101,14 +101,14 @@ jobs:
         run: |
           pip install requests
           python scripts/seed_demo_data.py \
-            --url "${{ secrets.DEMO_URL || 'https://demo.aether.io' }}" \
+            --url "${{ secrets.DEMO_URL || 'https://demo.olympuslabsml.com' }}" \
             --api-key "${{ secrets.DEMO_API_KEY }}" \
             --clear-existing
       - name: Notify demo ready
         run: |
           curl -sf -X POST "${{ secrets.SLACK_WEBHOOK }}" \
             -H 'Content-type: application/json' \
-            -d '{"text":":sparkles: Aether *demo* environment deployed and seeded!\n:globe_with_meridians: API: https://demo.aether.io\n:video_game: Playground: https://playground.demo.aether.io"}' \
+            -d '{"text":":sparkles: Aether *demo* environment deployed and seeded!\n:globe_with_meridians: API: https://demo.olympuslabsml.com\n:video_game: Playground: https://playground.demo.olympuslabsml.com"}' \
             2>/dev/null || true
 
   # ──────────────────────────────────────────────────────────────────────
@@ -168,7 +168,7 @@ jobs:
       - name: Clear and re-seed demo data
         run: |
           python scripts/seed_demo_data.py \
-            --url "${{ secrets.DEMO_URL || 'https://demo.aether.io' }}" \
+            --url "${{ secrets.DEMO_URL || 'https://demo.olympuslabsml.com' }}" \
             --api-key "${{ secrets.DEMO_API_KEY }}" \
             --clear-existing
       - name: Notify data reset
@@ -207,7 +207,7 @@ jobs:
       - name: Check API health
         run: |
           DEMO_URL="${{ secrets.DEMO_URL }}"
-          DEMO_URL="${DEMO_URL:-https://demo.aether.io}"
+          DEMO_URL="${DEMO_URL:-https://demo.olympuslabsml.com}"
           STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${DEMO_URL}/v1/health" 2>/dev/null || echo "000")
           echo "API Health: HTTP ${STATUS}"
           if [ "$STATUS" = "200" ]; then

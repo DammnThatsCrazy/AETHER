@@ -3,14 +3,16 @@ title: Deployment Profile Matrix
 slug: productization/economic-interoperability-intelligence/deployment-profile-matrix
 section: operations
 visibility: I
-audience: [architect, ops, buyer]
+audience: [architect, ops, exec]
 status: stable
-since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/config/settings.py, .env.example]
+since_version: "0.1.0"
+source_files:
+  - Backend Architecture/aether-backend/config/settings.py
+  - .env.example
 canonical_owner: platform@aether
 source_hashes:
-  .env.example: sha256:807e0bb301f0cd26a9749aafeb1ab2bf42d5f5cc99eb9577192e793169d823aa
-  Backend Architecture/aether-backend/config/settings.py: sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3
+  ".env.example": "sha256:cd3a99ef1ec9bc8ca4336b841299334af82c66ea17ac4cd9ddf042651d304e8d"
+  "Backend Architecture/aether-backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
 ---
 
 # Deployment Profile Matrix

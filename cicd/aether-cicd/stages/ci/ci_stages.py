@@ -433,7 +433,7 @@ def stage_e2e_test(gate: QualityGate, workdir: str = ".") -> StageResult:
     Tools: Playwright (web), Detox (mobile), k6 (load smoke)
     """
     print("\n-- Stage 7: E2E Test " + "-" * 40)
-    staging_url = os.environ.get("STAGING_URL", "https://staging.aether.io")
+    staging_url = os.environ.get("STAGING_URL", "https://staging.olympuslabsml.com")
 
     outputs: List[str] = []
 
@@ -476,7 +476,7 @@ def stage_performance_test(gate: QualityGate, workdir: str = ".") -> StageResult
     Quality gate: P99 < 200ms, no memory leaks.
     """
     print("\n-- Stage 8: Performance Test " + "-" * 32)
-    staging_url = os.environ.get("STAGING_URL", "https://staging.aether.io")
+    staging_url = os.environ.get("STAGING_URL", "https://staging.olympuslabsml.com")
 
     outputs: List[str] = []
 
