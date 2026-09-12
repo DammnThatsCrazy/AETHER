@@ -5498,6 +5498,18 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/connectors/capability-coverage.md",
+      "title": "Connector Capability Coverage",
+      "slug": "connectors/capability-coverage",
+      "section": "reference",
+      "visibility": "P",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/connectors/connector-lifecycle.md",
       "title": "Connector Lifecycle",
       "slug": "connectors/connector-lifecycle",
@@ -5628,6 +5640,18 @@
         "dev-senior"
       ],
       "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/connectors/subsystem-registry.md",
+      "title": "Connector Subsystem Registry",
+      "slug": "connectors/subsystem-registry",
+      "section": "reference",
+      "visibility": "P",
+      "audience": [
+        "dev-senior"
+      ],
+      "status": "stable",
       "since_version": "0.1.0"
     },
     {
