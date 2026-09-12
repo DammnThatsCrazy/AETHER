@@ -505,7 +505,7 @@ the source-of-truth is
 
 ### Graph operating contracts
 
-The graph-first product runtime adds shared contracts without creating a
+The graph-first intelligence infrastructure adds shared contracts without creating a
 second truth system. `packages/shared/graph-context-contract.ts` defines the
 authoritative `GraphScope` tuple (tenant, workspace, and environment), scoped
 object references, one selection vocabulary, immutable snapshots and diffs,

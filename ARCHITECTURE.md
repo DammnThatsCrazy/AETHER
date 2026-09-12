@@ -1,6 +1,6 @@
 # Aether Architecture
 
-Aether is a contract-governed intelligence graph and product runtime.
+Aether is a contract-governed intelligence infrastructure platform.
 
 The system captures observations from SDKs, providers, and connectors; normalizes them through canonical contracts; projects them into a tenant-scoped graph; and surfaces the result through Aether, Kyber, Noesis, SDKs, APIs, MCP, and future CLI access surfaces.
 

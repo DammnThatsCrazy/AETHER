@@ -10,21 +10,38 @@ since_version: "0.1.0"
 
 # Aether Surface
 
-Aether is the intelligence platform surface — the unified view
-across all 360 surfaces, lenses, and entity graphs. It is the
-top-level product identity.
+Aether is a contract-governed intelligence infrastructure platform.
+The platform surface is the unified view across all productized
+graph views (360 surfaces), interpretive lenses, and the underlying
+tenant-scoped intelligence graph.
 
-## Relationship to Other Surfaces
+## Productized Graph Views
 
-Aether aggregates and orchestrates:
+Every named surface in Aether is a **productized graph view** — a
+governed projection of the intelligence graph rendered for a specific
+operational or analytical purpose. Surfaces are not independent
+applications; they are facets of the same graph, scoped to the
+requesting tenant.
 
-- **Kyber** — the operational intelligence layer
-- **Noesis** — the analytical intelligence layer
-- **360 Surfaces** — entity-centric views (Profile, Campaign, Journey, etc.)
-- **Lenses** — interpretive graph views (Value, Risk, Signals, etc.)
+- **Kyber** — operational graph view for real-time decisioning,
+  campaign orchestration, and agent execution
+- **Noesis** — analytical graph view for retrospective analysis,
+  cohort insights, and predictive modeling
+- **360 Surfaces** — entity-centric graph views (Profile360,
+  Campaign360, Journey360, etc.)
+- **Lenses** — interpretive graph views that compose multiple
+  projections (Value, Risk, Signals, etc.)
+
+## Architectural Boundary
+
+Surfaces read from governed graph projections; they never write to
+the graph directly (see ADR-0008). New evidence re-enters the
+platform through the canonical `/v1/batch` ingestion path.
 
 ## See Also
 
 - `docs/product/kyber-surface.md` — Kyber operational surface
 - `docs/product/noesis-surface.md` — Noesis analytical surface
-- `docs/product/overview.md` — Product overview
+- `docs/product/graph-model.md` — Graph primitives
+- `docs/architecture/decisions/ADR-0007-360s-as-productized-graph-surfaces.md`
+- `docs/architecture/decisions/ADR-0008-no-direct-graph-writes.md`

@@ -30,9 +30,12 @@ are treated as distinct states.
 value observation (transaction, conversion, revenue event)
 → Bronze normalization (currency, amount, basis)
 → Silver projection (entity value, campaign value)
-→ Gold rollup (LTV, cohort value, campaign ROI)
 → 360 surface display via canonical ValueDisplay
 ```
+
+Rollup aggregations (LTV, cohort value, campaign ROI) are computed
+from Silver projections at query time or via scheduled materialization;
+they do not constitute a separate normalization tier.
 
 ## Frontend Guardrail
 
