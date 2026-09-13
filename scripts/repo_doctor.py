@@ -403,8 +403,117 @@ def _print_summary(results: list[CheckResult]) -> None:
     print("=" * 70)
 
 
+def _run_docs_only(args: argparse.Namespace) -> int:
+    """Run the docs-only scope without application-runtime dependencies.
+
+    ``make docs-check`` is a pooled ``ci-control`` suite in the adaptive
+    execution plan. Keeping this path limited to documentation-owned
+    generators and validators prevents a docs worker from requiring backend,
+    ML, or security runtime packages.
+    """
+    stop = not args.continue_on_error
+    results: list[CheckResult] = []
+
+    with readonly_generation_workspace(args.check or args.ci) as generation_root:
+        run(
+            [sys.executable, "scripts/docs_extract/run_all.py"],
+            name="Regenerate docs/_generated artifacts",
+            results=results,
+            stop_on_failure=stop,
+            remediation="fix the generator failure, then rerun make repo-doctor-fix",
+            cwd=generation_root,
+        )
+        run(
+            [sys.executable, "scripts/generate_ml_manifest.py"],
+            name="Regenerate ML implementation manifest (docs/_generated/ml-implementation-manifest.json)",
+            results=results,
+            stop_on_failure=stop,
+            remediation="fix common/model_registry.py or common/feature_contracts.py, then rerun make repo-doctor-fix",
+            cwd=generation_root,
+        )
+        if args.ci or args.check:
+            _check_clean(
+                ["docs/_generated"],
+                name="Generated docs — no uncommitted diff",
+                results=results,
+                stop_on_failure=stop,
+                cwd=generation_root,
+            )
+        run(
+            [sys.executable, "scripts/sync_docs.py"],
+            name="Sync generated docs (REPO-INDEX, AUTOMATION)",
+            results=results,
+            stop_on_failure=stop,
+            remediation="fix scripts/sync_docs.py or stale inputs, then rerun make docs-fix",
+            cwd=generation_root,
+        )
+        run(
+            [sys.executable, "scripts/docs_idempotency.py"],
+            name="Documentation generators are idempotent",
+            results=results,
+            stop_on_failure=stop,
+            remediation="fix the documentation generator that changes output on its second run",
+            cwd=generation_root,
+        )
+        if args.ci or args.check:
+            _check_clean(
+                ["docs/REPO-INDEX.md", "docs/AUTOMATION.md"],
+                name="Synced docs (REPO-INDEX, AUTOMATION) — no uncommitted diff",
+                results=results,
+                stop_on_failure=stop,
+                cwd=generation_root,
+            )
+
+    docs_gates = [
+        (
+            [sys.executable, "scripts/validate_docs.py"],
+            "Docs version drift validation",
+            "python scripts/bump_version.py <canonical-version>",
+        ),
+        (
+            [sys.executable, "scripts/validate_frontmatter.py"],
+            "Docs frontmatter validity",
+            "fix the reported frontmatter errors",
+        ),
+        (
+            [sys.executable, "scripts/validate_consent_registry_docs.py"],
+            "Consent-purpose docs are registry-derived (no hardcoded count)",
+            "use registry-derived language; canonical source is packages/shared/contracts/consent-registry.json",
+        ),
+    ]
+    for cmd, name, remediation in docs_gates:
+        run(cmd, name=name, results=results, stop_on_failure=stop, remediation=remediation)
+
+    if args.fix:
+        clean = _report_stale_docs()
+        results.append(
+            CheckResult(
+                name="Source-linked docs drift (strict review report)",
+                passed=clean,
+                command="python scripts/docs_drift.py --strict",
+                remediation="review the listed docs, update content if needed, then run make docs-generate-changed",
+            )
+        )
+        if not clean and stop:
+            _print_summary(results)
+            return 1
+    else:
+        run(
+            [sys.executable, "scripts/docs_drift.py", "--strict"],
+            name="Source-linked docs drift (strict)",
+            results=results,
+            stop_on_failure=stop,
+            remediation="review the listed docs against source_files, update content if needed, then run make docs-generate-changed",
+        )
+
+    _print_summary(results)
+    return 0 if all(result.passed for result in results) else 1
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
+    if args.docs_only:
+        raise SystemExit(_run_docs_only(args))
     stop = not args.continue_on_error
     results: list[CheckResult] = []
 

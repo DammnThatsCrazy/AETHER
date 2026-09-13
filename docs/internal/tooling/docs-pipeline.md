@@ -56,6 +56,11 @@ Aether's docs used to drift: a service would change behaviour and the
 matching `docs/` page would silently fall out of date. The pipeline
 below makes drift a build failure instead of a surprise.
 
+`make docs-check` executes this documentation-owned scope only: generated
+artifacts, synchronized docs, frontmatter, version, consent, idempotency, and
+source-linked drift. Its adaptive worker still provisions the backend/dev
+imports required by the source-backed certification and reward-rail generators.
+
 Every authored page carries **YAML frontmatter** (schema:
 `scripts/docs_schema.json`). Frontmatter declares the page's tier
 (`visibility: P|C|I`), audience, section, and — critically — the

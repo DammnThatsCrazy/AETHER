@@ -29,6 +29,17 @@ def test_docs_only_requires_execution_mode() -> None:
         repo_doctor.parse_args(["--docs-only"])
 
 
+def test_docs_only_dispatches_without_full_toolchain(monkeypatch) -> None:
+    calls: list[bool] = []
+    monkeypatch.setattr(repo_doctor, "_run_docs_only", lambda args: calls.append(args.docs_only) or 0)
+
+    with pytest.raises(SystemExit) as exc_info:
+        repo_doctor.main(["--check", "--docs-only"])
+
+    assert exc_info.value.code == 0
+    assert calls == [True]
+
+
 def test_readonly_generation_workspace_preserves_source_checkout(tmp_path, monkeypatch) -> None:
     source = tmp_path / "source"
     source.mkdir()

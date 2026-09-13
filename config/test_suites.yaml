@@ -87,8 +87,12 @@ suites:
     components: [documentation-governance]
     contracts: [repository-consistency]
     dependencies: []
-    dependency_profile: ci-control
-    runtime_class: small
+    # Documentation generators read backend certification and reward registries
+    # at runtime. Keep the execution scope docs-only, but provision the actual
+    # backend/dev import boundary rather than pretending those generators are
+    # pure stdlib control-plane checks.
+    dependency_profile: python-backend
+    runtime_class: heavy
     isolation: process
     lane: fast
     profiles: [local, ci, release]
