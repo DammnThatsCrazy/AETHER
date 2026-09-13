@@ -66,6 +66,7 @@ TF_DIR      := deploy/aws/terraform
 # by pip. Gates must run against this isolated interpreter, not the system one.
 VENV        := .venv
 VENV_PY     := $(VENV)/bin/python
+CI_CONTROL_DEPS := PyYAML>=6.0 jsonschema>=4.0
 
 # ---------------------------------------------------------------------------
 # Setup
@@ -80,7 +81,8 @@ bootstrap: ## Create an isolated .venv and install all extras (reproducible tool
 bootstrap-ci-control: ## Create the minimal dependency environment for CI planning and routing
 	python3 -m venv $(VENV)
 	$(VENV_PY) -m pip install --upgrade pip setuptools wheel
-	$(VENV_PY) -m pip install --no-deps -e ".[ci-control]"
+	$(VENV_PY) -m pip install --no-deps -e .
+	$(VENV_PY) -m pip install $(CI_CONTROL_DEPS)
 	$(VENV_PY) scripts/validate_ci_control_toolchain.py
 
 toolchain-check: ## Assert every release-critical dependency imports (fails, never skips)
