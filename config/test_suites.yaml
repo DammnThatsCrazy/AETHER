@@ -703,7 +703,7 @@ suites:
     components: [verification-control-plane]
     contracts: [verification-router]
     dependencies: []
-    dependency_profile: python-root
+    dependency_profile: python-backend
     runtime_class: medium
     isolation: process
     lane: pr
@@ -786,7 +786,7 @@ suites:
     components: [identity-profile]
     contracts: [identity]
     dependencies: []
-    dependency_profile: python-root
+    dependency_profile: python-backend
     runtime_class: medium
     isolation: process
     lane: pr
@@ -842,7 +842,7 @@ suites:
     components: [ingestion]
     contracts: [ingestion]
     dependencies: []
-    dependency_profile: python-root
+    dependency_profile: python-backend
     runtime_class: medium
     isolation: process
     lane: pr
@@ -917,7 +917,7 @@ suites:
     components: [graph]
     contracts: [graph]
     dependencies: []
-    dependency_profile: python-root
+    dependency_profile: python-backend
     runtime_class: medium
     isolation: process
     lane: pr
@@ -970,7 +970,7 @@ suites:
     components: [frontend-sdk]
     contracts: [frontend-sdk]
     dependencies: []
-    dependency_profile: python-root
+    dependency_profile: python-backend
     runtime_class: medium
     isolation: process
     lane: pr
@@ -1023,7 +1023,7 @@ suites:
     components: [commerce-value]
     contracts: [commerce-value]
     dependencies: []
-    dependency_profile: python-root
+    dependency_profile: python-backend
     runtime_class: medium
     isolation: process
     lane: pr
@@ -1072,7 +1072,7 @@ suites:
     components: [security]
     contracts: [security]
     dependencies: []
-    dependency_profile: python-root
+    dependency_profile: python-backend
     runtime_class: medium
     isolation: process
     lane: pr
@@ -1108,7 +1108,7 @@ suites:
     components: [operations]
     contracts: [operations]
     dependencies: []
-    dependency_profile: python-root
+    dependency_profile: python-backend
     runtime_class: medium
     isolation: process
     lane: pr
@@ -1149,7 +1149,7 @@ suites:
     components: [platform]
     contracts: [repository-consistency]
     dependencies: []
-    dependency_profile: python-root
+    dependency_profile: python-backend
     runtime_class: medium
     isolation: process
     lane: pr

@@ -197,6 +197,9 @@ jobs:
       - name: Install Node dependencies only for Node workers
         if: matrix.worker.node_required
         run: npm ci --ignore-scripts
+      - name: Build shared package for Node workers
+        if: matrix.worker.node_required
+        run: npm run build --workspace=packages/shared
       - name: Execute selected suite batch
         run: |
           mkdir -p release-evidence
