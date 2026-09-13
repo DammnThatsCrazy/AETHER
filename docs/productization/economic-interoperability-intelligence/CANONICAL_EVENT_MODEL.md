@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [packages/shared/contracts/event-registry.json]
 canonical_owner: platform@aether
 source_hashes:
-  "packages/shared/contracts/event-registry.json": "sha256:95f3b66f97a2e57e4466d18da534084a91b411a629c5b7a752788813701242e8"
+  "packages/shared/contracts/event-registry.json": "sha256:7ae978eb7fb11c55e324fc61365baa83e63a976d2b458d101019a1fa2cf431ba"
 ---
 
 # Canonical Event Model
@@ -27,7 +27,7 @@ economic-interoperability families:
 
 Rules:
 
-- `introducedVersion: "8.12.0"` on every new event.
+- `introducedVersion: "0.1.0-alpha.0"` on every new event.
 - `privacyClass`: `financial` for facts, `sensitive_financial` for
   positions/P&L, `governance` for registry/ops events.
 - `retentionClass`: `financial_7y` for facts; standard classes for ops.
