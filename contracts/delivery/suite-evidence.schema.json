@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.internal/contracts/suite-evidence.schema.json",
+  "title": "Aether suite worker evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "worker_id", "worker_class", "status", "suites"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "worker_id": {"type": "string", "minLength": 1},
+    "worker_class": {"enum": ["pooled", "isolated"]},
+    "status": {"enum": ["PASS", "FAILED", "BLOCKED"]},
+    "suites": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["suite", "status", "blocking", "dependency_profile", "runtime_class", "queue_seconds", "checkout_seconds", "dependency_setup_seconds", "cache_restore_seconds", "test_seconds", "build_seconds", "artifact_upload_seconds", "candidate_verification_seconds", "disposition_seconds", "execution_seconds", "total_seconds", "total_job_seconds", "runner", "commit_sha"],
+        "properties": {
+          "suite": {"type": "string", "minLength": 1},
+          "status": {"enum": ["PASS", "FAILED", "BLOCKED"]},
+          "blocking": {"type": "boolean"},
+          "dependency_profile": {"type": "string", "minLength": 1},
+          "runtime_class": {"enum": ["tiny", "small", "medium", "heavy"]},
+          "queue_seconds": {"type": "number", "minimum": 0},
+          "checkout_seconds": {"type": "number", "minimum": 0},
+          "dependency_setup_seconds": {"type": "number", "minimum": 0},
+          "cache_restore_seconds": {"type": "number", "minimum": 0},
+          "test_seconds": {"type": "number", "minimum": 0},
+          "build_seconds": {"type": "number", "minimum": 0},
+          "artifact_upload_seconds": {"type": "number", "minimum": 0},
+          "candidate_verification_seconds": {"type": "number", "minimum": 0},
+          "disposition_seconds": {"type": "number", "minimum": 0},
+          "execution_seconds": {"type": "number", "minimum": 0},
+          "total_seconds": {"type": "number", "minimum": 0},
+          "total_job_seconds": {"type": "number", "minimum": 0},
+          "runner": {"type": "string", "minLength": 1},
+          "commit_sha": {"type": "string", "minLength": 1},
+          "output_tail": {"type": "string"}
+        }
+      }
+    }
+  }
+}

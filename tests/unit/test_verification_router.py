@@ -45,9 +45,10 @@ def test_pr_lane_cannot_replace_required_integration_lane():
         route(["deploy/integration/docker-compose.durable.yml"], "pr")
 
 
-def test_global_change_expands_to_registered_domains():
+def test_typed_node_dependency_scope_targets_node_consumers_only():
     result = route(["package-lock.json"])
-    assert "backend" in result["affected_domains"]
+    assert "backend" not in result["affected_domains"]
+    assert "frontend" in result["affected_domains"]
     assert "sdk" in result["affected_domains"]
 
 
@@ -82,6 +83,7 @@ def test_router_registry_loads_into_typed_definitions():
     registry = load_router_registry("config/verification_router.yaml")
     assert registry.default_lane == "pr"
     assert registry.checks["toolchain"].runtime_budget_seconds == 15
+    assert registry.checks["ci_control_toolchain"].runtime_budget_seconds == 15
     assert registry.domains["infrastructure"].minimum_lane == "integration"
 
 
@@ -135,8 +137,8 @@ def test_classify_impact_is_deterministic_and_preserves_fast_followup():
 
 def test_route_exposes_inventory_impact_without_narrowing_suite_commands():
     result = route(["scripts/check_router.py"])
-    assert result["impact"]["global_change"] is False
-    assert result["impact"]["affected_tests"]
+    assert result["impact"]["global_change"] is True
+    assert result["selected_lane"] == "integration"
     assert {item["check_id"] for item in result["checks"]} >= {"toolchain", "test_inventory"}
 
 
@@ -146,4 +148,6 @@ def test_mixed_domain_paths_keep_defaults_for_unmatched_paths():
         "docs/archive/legacy-architecture/backend/services/web3/routes.py",
     ])
     ids = {item["check_id"] for item in result["checks"]}
-    assert {"root", "backend"} <= ids
+    assert "backend-profile360" in ids
+    assert "backend" not in ids
+    assert "root" not in ids

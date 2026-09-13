@@ -149,6 +149,27 @@ def _planned_checks(
     skipped: list[dict[str, str]] = []
     profile = profile or ("release" if lane == "release" else "ci")
     for check_id in sorted(set(selected_ids)):
+        suite = suites.get(check_id)
+        # A suite registry entry is the scheduling/dependency authority even
+        # when the router keeps a legacy command definition for compatibility.
+        # This prevents local disposition from silently bypassing suite
+        # profile, lane, advisory, and quarantine metadata.
+        if suite is not None:
+            skip_reason = _suite_skip_reason(suite, lane=lane, profile=profile)
+            if skip_reason is not None:
+                skipped.append({"suite": suite.id, "reason": skip_reason, "lane": lane, "profile": profile})
+                continue
+            planned.append(
+                PlannedCheck(
+                    check_id=check_id,
+                    command=tuple(build_command(suite)),
+                    timeout_seconds=_suite_budget(suite),
+                    lane=lane,
+                    blocking=suite.release_class != "advisory",
+                    release_class=suite.release_class,
+                )
+            )
+            continue
         definition: CheckDefinition | None = router.checks.get(check_id)
         if definition is not None:
             planned.append(
@@ -160,23 +181,7 @@ def _planned_checks(
                 )
             )
             continue
-        suite = suites.get(check_id)
-        if suite is None:
-            raise DispositionError(f"selected check {check_id!r} has no command definition")
-        skip_reason = _suite_skip_reason(suite, lane=lane, profile=profile)
-        if skip_reason is not None:
-            skipped.append({"suite": suite.id, "reason": skip_reason, "lane": lane, "profile": profile})
-            continue
-        planned.append(
-            PlannedCheck(
-                check_id=check_id,
-                command=tuple(build_command(suite)),
-                timeout_seconds=_suite_budget(suite),
-                lane=lane,
-                blocking=suite.release_class != "advisory",
-                release_class=suite.release_class,
-            )
-        )
+        raise DispositionError(f"selected check {check_id!r} has no command definition")
     return planned, skipped
 
 
@@ -389,7 +394,9 @@ def build_disposition(
             "registered": len(suites_list),
         },
         "build_selection": select_builds(
-            changed_files, global_change=index["router"]["global_change"]
+            changed_files,
+            global_change=index["router"]["global_change"],
+            global_scopes=index["router"].get("global_scopes", []),
         ),
         "checks": [result.as_dict() for result in results],
         "advisory_failures": [result.as_dict() for result in advisory_failures],
@@ -427,7 +434,70 @@ def _hosted_runtime_evidence(result: dict[str, Any], elapsed_seconds: float) -> 
         "impact": result.get("impact", {}),
         "suites": result.get("suites", {}),
         "runs": result.get("runs", []),
+        "performance": result.get("performance", {}),
     }
+
+
+def _apply_evidence(
+    result: dict[str, Any],
+    evidence_path: Path,
+    plan_path: Path,
+    candidate_path: Path | None,
+) -> dict[str, Any]:
+    """Close the existing authority from distributed evidence.
+
+    The Impact Graph/disposition still produced ``result`` and remains the
+    selection authority.  This adapter only replaces local command execution
+    with the standardized worker artifacts emitted by the topology workflow.
+    """
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    authority_ids = {item["check_id"] for item in result.get("checks", [])}
+    plan_ids = set(plan.get("selected_checks", []))
+    skipped_ids = {item["suite"] for item in plan.get("skipped", [])}
+    if authority_ids | skipped_ids != plan_ids:
+        raise DispositionError("distributed execution plan does not match Impact Graph selection")
+
+    runnable_ids = authority_ids - skipped_ids
+    check_status: dict[str, str] = {}
+    universal = evidence.get("universal_fast", {})
+    if isinstance(universal, dict):
+        for job in universal.values():
+            for check in job.get("checks", []):
+                check_status[str(check.get("check"))] = str(check.get("status"))
+    for suite in evidence.get("suite_results", []):
+        check_status[str(suite.get("suite"))] = str(suite.get("status"))
+    missing = sorted(check_id for check_id in runnable_ids if check_id not in check_status)
+    failures = sorted(check_id for check_id, status in check_status.items() if status != "PASS" and check_id in runnable_ids)
+    if missing:
+        failures.extend(missing)
+    candidate_status = "PASS"
+    candidate: dict[str, Any] = {}
+    if candidate_path:
+        candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+        candidate_status = str(candidate.get("status", "BLOCKED"))
+    aggregation_status = str(evidence.get("status", "BLOCKED"))
+    if aggregation_status == "BLOCKED" or missing or candidate_status == "BLOCKED":
+        status = "BLOCKED"
+    elif failures or aggregation_status == "FAILED" or candidate_status != "PASS":
+        status = "FAILED"
+    elif aggregation_status == "PASS_WITH_DEGRADATION" or evidence.get("performance", {}).get("performance_status") == "CI_PERFORMANCE_DEGRADED":
+        status = "PASS_WITH_DEGRADATION"
+    else:
+        status = "PASS"
+    result["status"] = status
+    result["disposition"] = status
+    result["distributed_evidence"] = {
+        "aggregation_status": aggregation_status,
+        "missing_checks": missing,
+        "failed_checks": failures,
+        "candidate_status": candidate_status,
+        "performance": evidence.get("performance", {}),
+    }
+    result["performance"] = evidence.get("performance", {})
+    result["timing"]["critical_path_seconds"] = evidence.get("performance", {}).get("critical_path_seconds", 0.0)
+    result["timing"]["sum_seconds"] = evidence.get("performance", {}).get("total_authority_seconds", 0.0)
+    return result
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -436,6 +506,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--changed-file", action="append", default=[])
     parser.add_argument("--lane", choices=("fast", "pr", "integration", "regression", "release"))
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--evidence", type=Path, help="distributed verification aggregation evidence")
+    parser.add_argument("--execution-plan", type=Path, help="the plan consumed by hosted workers")
+    parser.add_argument("--candidate-evidence", type=Path, help="candidate-verification evidence")
     parser.add_argument("--output", type=Path)
     parser.add_argument(
         "--runtime-output",
@@ -448,8 +521,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = build_disposition(
             _changed_files(args.base, args.changed_file),
             requested_lane=args.lane,
-            execute=args.execute,
+            execute=args.execute and not args.evidence,
         )
+        if args.evidence:
+            if not args.execution_plan:
+                raise DispositionError("--execution-plan is required with --evidence")
+            result = _apply_evidence(result, args.evidence, args.execution_plan, args.candidate_evidence)
     except (DispositionError, ImpactGraphConfigError, OSError, ValueError) as exc:
         result = {
             "schema_version": 1,
@@ -459,6 +536,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             "reason": str(exc),
         }
     elapsed_seconds = time.monotonic() - started
+    if args.evidence and isinstance(result.get("performance"), dict):
+        performance = result["performance"]
+        performance["disposition_seconds"] = round(elapsed_seconds, 3)
+        performance["critical_path_seconds"] = round(
+            float(performance.get("critical_path_seconds", 0.0)) + elapsed_seconds,
+            3,
+        )
+        performance["total_authority_seconds"] = round(
+            float(performance.get("total_authority_seconds", 0.0)) + elapsed_seconds,
+            3,
+        )
     rendered = json.dumps(result, indent=2) + "\n"
     print(rendered, end="")
     if args.output:
@@ -470,7 +558,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             json.dumps(_hosted_runtime_evidence(result, elapsed_seconds), indent=2) + "\n",
             encoding="utf-8",
         )
-    return 0 if result["status"] in {"PASS", "PLANNED"} else 1
+    return 0 if result["status"] in {"PASS", "PASS_WITH_DEGRADATION", "PLANNED"} else 1
 
 
 if __name__ == "__main__":

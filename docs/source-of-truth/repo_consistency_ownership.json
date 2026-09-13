@@ -759,6 +759,49 @@
         "python scripts/docs_drift.py --strict"
       ],
       "remediation": "The Rights Authority vocabulary is a tri-surface contract: packages/shared/contracts/rights-vocabulary.json (canonical snake_case values), the python (str, Enum) members in services/backend/services/integrations/data_rights/models.py, and the as-const arrays in packages/shared/data-rights.ts must stay in exact sync (scripts/validate_rights_vocabulary.py enforces it; bindings under registeredCanonicalVocabularies in the JSON name the implementing class/array). No irrl-registry.json / ownership-registry.json / learning-rights-registry.json / retention-rights-registry.json / generalization-rights-registry.json duplicate ledger may exist (ADR-011 D4 / RIGHTS_AUTHORITY_BLUEPRINT.md §13). When the spine-registry.json rights_irrl row moves, regenerate the spine twins/docs (python scripts/generate_platform_contracts.py), and keep the source-linked rights docs (RIGHTS_AUTHORITY_BLUEPRINT.md / RIGHTS_TAXONOMY.md / IRRL_NAMING_OVERLAY.md) reviewed against their declared sources."
+    },
+    {
+      "id": "adaptive_ci_execution",
+      "name": "adaptive CI execution, suite registry, or performance policy changed",
+      "source_globs": [
+        ".github/workflows/repo-consistency.yml",
+        "config/ci_performance_policy.yaml",
+        "config/dependency_profiles.yaml",
+        "config/test_suites.yaml",
+        "config/test_suites.schema.json",
+        "config/verification_router.yaml",
+        "contracts/delivery/*verification*.schema.json",
+        "contracts/delivery/*performance*.schema.json",
+        "scripts/aggregate_verification_evidence.py",
+        "scripts/lib/ci_performance.py",
+        "scripts/suite_worker.py",
+        "scripts/universal_fast.py",
+        "scripts/validate_ci_execution_contracts.py",
+        "scripts/validate_ci_performance_policy.py",
+        "scripts/validate_execution_plan.py",
+        "scripts/verification_execution_plan.py"
+      ],
+      "required_changed_globs": [
+        ".github/workflows/repo-consistency.yml",
+        "config/impact_graph.json",
+        "config/telemetry_contracts.json",
+        "docs/CICD.md",
+        "docs/CONTRIBUTING.md",
+        "docs/AUTOMATION.md",
+        "docs/REPO-INDEX.md",
+        "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",
+        "tests/**"
+      ],
+      "required_commands": [
+        "python scripts/validate_ci_control_toolchain.py",
+        "python scripts/validate_ci_execution_contracts.py",
+        "python scripts/validate_ci_performance_policy.py",
+        "python scripts/validate_execution_plan.py --plan <generated-plan>",
+        "python scripts/validate_impact_graph.py",
+        "python scripts/validate_telemetry_contracts.py",
+        "python -m pytest tests/unit/test_adaptive_ci_execution.py -q"
+      ],
+      "remediation": "Keep Impact Graph selection, dependency profiles, suite role/lane metadata, typed execution-plan and evidence schemas, timing telemetry, and the repo-consistency DAG synchronized. Ordinary PRs must use component workers; root/backend aggregates remain regression/release-only. Review source-linked CI docs before updating hashes, and do not claim latency SLO attainment until 20 representative samples exist."
     }
   ]
 }

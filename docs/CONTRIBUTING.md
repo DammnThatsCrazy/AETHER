@@ -16,9 +16,9 @@ estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
   "AGENTS.md": "sha256:d2ad2e71bb5aae9de1ca85fe6a5347a8988fbad77ab2bdce39abd89456195285"
-  "Makefile": "sha256:f347154b52c68a25acdc58602b8fee852dc4e398f2242fdc507f0bb495c208c6"
-  "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:5156c9da96f61a5894ae07f97e95202f52c4aa3f3223058dbe279637ba2475a9"
-  "scripts/repo_doctor.py": "sha256:a56a7966ec0f96af13b68e091a98d9b43c067b2482087ac28571e166b5d3c891"
+  "Makefile": "sha256:8bb27fa838d9ceb8daa321d9dcb0069ab209528693bd2e0ff63770865b780b45"
+  "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:2e803b0ec0a914c399154c6027b75e95a3d87868b62d4b3808e191e9394b509c"
+  "scripts/repo_doctor.py": "sha256:c41d77513a769d2d0f13eefaa27031ff6ce3456383eeb4d4b3006dfbe18aa896"
 ---
 
 # Contributing
@@ -31,12 +31,16 @@ When preparing or updating a PR:
 
 1. If docs, generator inputs, or contract inputs changed, run `make docs-generate`.
 2. Run `make verification-disposition BASE=<ref> EXECUTE=1` for the affected PR authority.
-3. If strict docs drift reports source-linked pages, review each listed page against its declared `source_files`; update authored content where behavior changed, then run `make docs-generate-changed`.
-4. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
-5. Run `make ci-check` for broad local, trusted-main, nightly, or release evidence; it includes generator idempotency and is not a second blocking PR authority.
-6. Commit generated and synced outputs when preparing the PR or when a commit was requested.
-7. Do not hand-edit generated docs or bypass TypeScript/package export failures.
-8. Do not call a PR merge-ready until the affected disposition passes; report broad-gate results separately.
+3. For routing-only or workflow work, use `make bootstrap-ci-control` and
+   `make verification-execution-plan BASE=<ref> OUTPUT=<plan.json>` to inspect
+   the dependency-aware plan without installing the application runtime.
+4. Run `make validate-ci-execution-contracts` and `make validate-ci-performance-policy` when changing the adaptive CI plan, suite registry, evidence schemas, or latency policy.
+5. If strict docs drift reports source-linked pages, review each listed page against its declared `source_files`; update authored content where behavior changed, then run `make docs-generate-changed`.
+6. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
+7. Run `make ci-check` for broad local, trusted-main, nightly, or release evidence; it includes generator idempotency and is not a second blocking PR authority.
+8. Commit generated and synced outputs when preparing the PR or when a commit was requested.
+9. Do not hand-edit generated docs or bypass TypeScript/package export failures.
+10. Do not call a PR merge-ready until the affected disposition passes; report broad-gate results separately.
 
 The hosted normal-PR merge check is the stable `verification / disposition`
 status. The broad gate remains required local/trusted-main/nightly evidence and

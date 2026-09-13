@@ -48,18 +48,162 @@ canonical_source: config/test_suites.yaml
 suites:
 
   # ---------------------------------------------------------------------------
+  # Execution-control checks that are selected by the verification router.
+  # They are suites so scheduling can provision the exact profile they need;
+  # they must not be smuggled through a generic ci-control worker.
+  # ---------------------------------------------------------------------------
+
+  - id: contracts
+    suite_role: component
+    subsystem: verification
+    owner: platform
+    components: [delivery-contracts]
+    contracts: [release-candidate, verification-execution-plan]
+    dependencies: []
+    dependency_profile: ci-control
+    runtime_class: small
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 20
+    hard_runtime_budget_seconds: 60
+    paths: [contracts]
+    runner: [python, scripts/validate_contracts.py]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/contracts.json"
+    quarantine: null
+
+  - id: docs
+    suite_role: component
+    subsystem: verification
+    owner: docs
+    components: [documentation-governance]
+    contracts: [repository-consistency]
+    dependencies: []
+    dependency_profile: ci-control
+    runtime_class: small
+    isolation: process
+    lane: fast
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 45
+    hard_runtime_budget_seconds: 120
+    paths: [docs]
+    runner: [make, docs-check]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/docs.json"
+    quarantine: null
+
+  - id: toolchain
+    suite_role: component
+    subsystem: verification
+    owner: platform
+    components: [python-dependency-graph]
+    contracts: [test-suite-registry]
+    dependencies: []
+    dependency_profile: python-all
+    runtime_class: heavy
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 45
+    hard_runtime_budget_seconds: 180
+    paths: [pyproject.toml]
+    runner: [python, scripts/validate_toolchain.py]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/toolchain.json"
+    quarantine: null
+
+  - id: integration
+    suite_role: component
+    subsystem: verification
+    owner: platform
+    components: [durable-integration]
+    contracts: [staging-orchestration-state]
+    dependencies: []
+    dependency_profile: docker-backend
+    runtime_class: heavy
+    isolation: serial
+    lane: integration
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 180
+    hard_runtime_budget_seconds: 900
+    paths: [deploy/integration]
+    runner: [make, integration-durable]
+    requires:
+      python_packages: []
+      services: [docker]
+      docker: true
+      credentials: []
+    environments: [local, ci, release]
+    skip_policy: local_only
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/integration.json"
+    quarantine: null
+
+  - id: regression
+    suite_role: aggregate
+    subsystem: verification
+    owner: quality
+    components: [repository]
+    contracts: [test-suite-registry]
+    dependencies: []
+    dependency_profile: python-all
+    runtime_class: heavy
+    isolation: process
+    lane: regression
+    profiles: [local, release]
+    expected_runtime_seconds: 900
+    hard_runtime_budget_seconds: 3600
+    paths: [tests]
+    runner: [make, test]
+    requires:
+      python_packages: []
+      services: []
+      docker: false
+      credentials: []
+    environments: [local, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/regression.json"
+    quarantine: null
+
+  # ---------------------------------------------------------------------------
   # Python / pytest suites — driven by scripts/repo_doctor.py
   # ---------------------------------------------------------------------------
 
   - id: root
+    suite_role: aggregate
     subsystem: root
     owner: platform
     components: [repository]
     contracts: [repository-consistency]
     dependencies: []
+    dependency_profile: python-root
+    runtime_class: heavy
     isolation: process
-    lane: pr
-    profiles: [local, ci, release]
+    lane: regression
+    profiles: [local, release]
     # The global authority run is intentionally conservative: the latest
     # hosted run exhausted 420 seconds for all 541 isolated files, while the
     # local 4-process baseline completes materially sooner.
@@ -77,21 +221,24 @@ suites:
       services: []
       docker: false
       credentials: []
-    environments: [local, ci, release]
+    environments: [local, release]
     skip_policy: never
     release_class: pr_gate
-    evidence_artifact: null
+    evidence_artifact: "ci-evidence/suites/root.json"
     quarantine: null
 
   - id: backend
+    suite_role: aggregate
     subsystem: backend
     owner: backend
     components: [backend]
     contracts: [backend]
     dependencies: []
+    dependency_profile: python-backend
+    runtime_class: heavy
     isolation: process
-    lane: pr
-    profiles: [local, ci, release]
+    lane: regression
+    profiles: [local, release]
     expected_runtime_seconds: 120
     hard_runtime_budget_seconds: 300
     paths: ["services/backend/tests"]
@@ -104,18 +251,273 @@ suites:
       services: []
       docker: false
       credentials: []
+    environments: [local, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/backend.json"
+    quarantine: null
+
+  # ---------------------------------------------------------------------------
+  # Backend component suites — source/service ownership keeps an ordinary PR
+  # below the aggregate backend regression budget. The aggregate `backend`
+  # suite above remains available only to regression/release authorities.
+  # ---------------------------------------------------------------------------
+
+  - id: backend-identity
+    suite_role: component
+    subsystem: backend
+    owner: identity
+    components: [backend-identity]
+    contracts: [identity]
+    dependencies: []
+    dependency_profile: python-backend
+    runtime_class: medium
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 120
+    hard_runtime_budget_seconds: 420
+    paths:
+      [
+        "services/backend/services/identity",
+        "services/backend/tests/identity",
+      ]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "services/backend/tests/identity",
+        "-v",
+        "--tb=short",
+      ]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
     environments: [local, ci, release]
     skip_policy: never
     release_class: pr_gate
-    evidence_artifact: null
+    evidence_artifact: "ci-evidence/suites/backend-identity.json"
+    quarantine: null
+
+  - id: backend-ingestion
+    suite_role: component
+    subsystem: backend
+    owner: ingestion
+    components: [backend-ingestion]
+    contracts: [ingestion]
+    dependencies: []
+    dependency_profile: python-backend
+    runtime_class: medium
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 120
+    hard_runtime_budget_seconds: 420
+    paths:
+      [
+        "services/backend/services/ingestion",
+        "services/backend/tests/ingestion",
+      ]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "services/backend/tests/ingestion",
+        "-v",
+        "--tb=short",
+      ]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/backend-ingestion.json"
+    quarantine: null
+
+  - id: backend-campaigns
+    suite_role: component
+    subsystem: backend
+    owner: growth
+    components: [backend-campaigns]
+    contracts: [campaigns]
+    dependencies: []
+    dependency_profile: python-backend
+    runtime_class: medium
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 120
+    hard_runtime_budget_seconds: 420
+    paths:
+      [
+        "services/backend/services/campaign",
+        "services/backend/tests/campaign",
+      ]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "services/backend/tests/campaign",
+        "-v",
+        "--tb=short",
+      ]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/backend-campaigns.json"
+    quarantine: null
+
+  - id: backend-profile360
+    suite_role: component
+    subsystem: backend
+    owner: profile
+    components: [backend-profile360]
+    contracts: [profile360]
+    dependencies: []
+    dependency_profile: python-backend
+    runtime_class: medium
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 150
+    hard_runtime_budget_seconds: 420
+    paths:
+      [
+        "services/backend/services/profile",
+        "services/backend/services/profile360_workers",
+        "services/backend/tests/profile360",
+      ]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "services/backend/tests/profile360",
+        "-v",
+        "--tb=short",
+      ]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/backend-profile360.json"
+    quarantine: null
+
+  - id: backend-agent
+    suite_role: component
+    subsystem: backend
+    owner: agent
+    components: [backend-agent]
+    contracts: [agent]
+    dependencies: []
+    dependency_profile: python-backend
+    runtime_class: medium
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 120
+    hard_runtime_budget_seconds: 420
+    paths:
+      [
+        "services/backend/services/agent",
+        "services/backend/tests/agent",
+      ]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "services/backend/tests/agent",
+        "-v",
+        "--tb=short",
+      ]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/backend-agent.json"
+    quarantine: null
+
+  - id: backend-computation
+    suite_role: component
+    subsystem: backend
+    owner: value
+    components: [backend-computation]
+    contracts: [computation]
+    dependencies: []
+    dependency_profile: python-backend
+    runtime_class: medium
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 150
+    hard_runtime_budget_seconds: 420
+    paths:
+      [
+        "services/backend/services/computation",
+        "services/backend/tests/computation",
+      ]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "services/backend/tests/computation",
+        "-v",
+        "--tb=short",
+      ]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/backend-computation.json"
+    quarantine: null
+
+  - id: backend-value
+    suite_role: component
+    subsystem: backend
+    owner: value
+    components: [backend-value]
+    contracts: [value]
+    dependencies: []
+    dependency_profile: python-backend
+    runtime_class: medium
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 120
+    hard_runtime_budget_seconds: 420
+    paths:
+      [
+        "services/backend/services/value",
+        "services/backend/tests/valuation",
+      ]
+    runner:
+      [
+        "python",
+        "-m",
+        "pytest",
+        "services/backend/tests/valuation",
+        "-v",
+        "--tb=short",
+      ]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/backend-value.json"
     quarantine: null
 
   - id: ml
+    suite_role: component
     subsystem: ml
     owner: ml
     components: [machine-learning]
     contracts: [machine-learning]
     dependencies: [python:joblib, python:sklearn]
+    dependency_profile: python-ml
+    runtime_class: heavy
     isolation: process
     lane: pr
     profiles: [local, ci, release]
@@ -141,15 +543,18 @@ suites:
     environments: [local, ci, release]
     skip_policy: never
     release_class: pr_gate
-    evidence_artifact: null
+    evidence_artifact: "ci-evidence/suites/ml.json"
     quarantine: null
 
   - id: compliance
+    suite_role: component
     subsystem: compliance
     owner: security
     components: [compliance]
     contracts: [compliance]
     dependencies: []
+    dependency_profile: python-security
+    runtime_class: medium
     isolation: process
     lane: pr
     profiles: [local, ci, release]
@@ -173,15 +578,18 @@ suites:
     environments: [local, ci, release]
     skip_policy: never
     release_class: pr_gate
-    evidence_artifact: null
+    evidence_artifact: "ci-evidence/suites/compliance.json"
     quarantine: null
 
   - id: agent-layer
+    suite_role: component
     subsystem: agent
     owner: agent
     components: [agent]
     contracts: [agent]
     dependencies: []
+    dependency_profile: python-agent
+    runtime_class: medium
     isolation: process
     lane: pr
     profiles: [local, ci, release]
@@ -197,15 +605,18 @@ suites:
     environments: [local, ci, release]
     skip_policy: never
     release_class: pr_gate
-    evidence_artifact: null
+    evidence_artifact: "ci-evidence/suites/agent-layer.json"
     quarantine: null
 
   - id: journey-service
+    suite_role: component
     subsystem: journey-service
     owner: backend
     components: [journey-service]
     contracts: [journey-service]
     dependencies: []
+    dependency_profile: python-backend
+    runtime_class: medium
     isolation: process
     lane: pr
     profiles: [local, ci, release]
@@ -229,15 +640,18 @@ suites:
     environments: [local, ci, release]
     skip_policy: never
     release_class: pr_gate
-    evidence_artifact: null
+    evidence_artifact: "ci-evidence/suites/journey-service.json"
     quarantine: null
 
   - id: backend-observability
+    suite_role: component
     subsystem: observability
     owner: observability
     components: [backend-observability]
     contracts: [observability]
     dependencies: []
+    dependency_profile: python-backend
+    runtime_class: medium
     isolation: process
     lane: pr
     profiles: [local, ci, release]
@@ -274,10 +688,536 @@ suites:
     environments: [local, ci, release]
     skip_policy: never
     release_class: pr_gate
-    evidence_artifact: null
+    evidence_artifact: "ci-evidence/suites/backend-observability.json"
     quarantine: null
 
   # ---------------------------------------------------------------------------
+  - id: root-unit-control
+    suite_role: component
+    subsystem: root
+    owner: platform
+    components: [verification-control-plane]
+    contracts: [verification-router]
+    dependencies: []
+    dependency_profile: python-root
+    runtime_class: medium
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 90
+    hard_runtime_budget_seconds: 360
+    paths: ["tests/unit"]
+    runner: [
+      "python",
+      "scripts/run_pytest_files.py",
+      "tests/unit/test_api_contracts.py",
+      "tests/unit/test_capability_contract.py",
+      "tests/unit/test_ci_runtime_budgets.py",
+      "tests/unit/test_customer_settings_contract.py",
+      "tests/unit/test_data_rights_contract_parity.py",
+      "tests/unit/test_delivery_artifacts.py",
+      "tests/unit/test_delivery_authority_modules.py",
+      "tests/unit/test_delivery_compose_parity.py",
+      "tests/unit/test_delivery_contracts.py",
+      "tests/unit/test_delivery_evidence_bundle.py",
+      "tests/unit/test_delivery_orchestrator.py",
+      "tests/unit/test_delivery_registries.py",
+      "tests/unit/test_delivery_safety_validator.py",
+      "tests/unit/test_delivery_workflow_authority.py",
+      "tests/unit/test_derivatives_release.py",
+      "tests/unit/test_docs_drift.py",
+      "tests/unit/test_graph_contract_parity.py",
+      "tests/unit/test_hosted_delivery_contracts.py",
+      "tests/unit/test_impact_graph.py",
+      "tests/unit/test_measurement_contracts.py",
+      "tests/unit/test_metric_registry_contract.py",
+      "tests/unit/test_release_delivery.py",
+      "tests/unit/test_release_evidence.py",
+      "tests/unit/test_release_profile_enforcement.py",
+      "tests/unit/test_release_workflow_controls.py",
+      "tests/unit/test_repo_consistency_contract.py",
+      "tests/unit/test_repo_consistency_workflow_authority.py",
+      "tests/unit/test_required_release_checks.py",
+      "tests/unit/test_reward_docs_drift.py",
+      "tests/unit/test_runtime_execution_groups.py",
+      "tests/unit/test_sdk_contract_validation.py",
+      "tests/unit/test_stablecoin_intelligence_rpc_verification.py",
+      "tests/unit/test_stablecoin_intelligence_solana_verification.py",
+      "tests/unit/test_staging_apply_contracts.py",
+      "tests/unit/test_staging_lifecycle_controls.py",
+      "tests/unit/test_staging_lifecycle_iam_contract.py",
+      "tests/unit/test_staging_preflight.py",
+      "tests/unit/test_staging_state_machine.py",
+      "tests/unit/test_sync_docs.py",
+      "tests/unit/test_telemetry_contracts.py",
+      "tests/unit/test_terraform_resource_contracts.py",
+      "tests/unit/test_test_inventory.py",
+      "tests/unit/test_test_suite_registry.py",
+      "tests/unit/test_validate_canonical_ingestion_trees.py",
+      "tests/unit/test_validate_contracts.py",
+      "tests/unit/test_validate_field_trust_parity.py",
+      "tests/unit/test_validate_frontend_branding.py",
+      "tests/unit/test_validate_frontend_data_truth.py",
+      "tests/unit/test_validate_frontmatter.py",
+      "tests/unit/test_validate_sdk_import_boundary.py",
+      "tests/unit/test_verification_disposition.py",
+      "tests/unit/test_verification_execution_plan.py",
+      "tests/unit/test_verification_policy.py",
+      "tests/unit/test_verification_router.py",
+      "--workers",
+      "4"
+    ]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/root-unit-control.json"
+    quarantine: null
+
+  - id: root-unit-identity-profile
+    suite_role: component
+    subsystem: root
+    owner: identity
+    components: [identity-profile]
+    contracts: [identity]
+    dependencies: []
+    dependency_profile: python-root
+    runtime_class: medium
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 90
+    hard_runtime_budget_seconds: 360
+    paths: ["tests/unit", "tests/unit/profile360"]
+    runner: [
+      "python",
+      "scripts/run_pytest_files.py",
+      "tests/unit/profile360",
+      "tests/unit/test_attribution_tenant_isolation.py",
+      "tests/unit/test_auth_middleware.py",
+      "tests/unit/test_consent_authority.py",
+      "tests/unit/test_consent_enforcement_registry_sync.py",
+      "tests/unit/test_consent_policy_decisions.py",
+      "tests/unit/test_credential_kms_wiring.py",
+      "tests/unit/test_credential_turnkey_gate.py",
+      "tests/unit/test_credentials_status.py",
+      "tests/unit/test_financial_credential_readiness.py",
+      "tests/unit/test_founding_tenant_exclusions.py",
+      "tests/unit/test_founding_tenant_surface.py",
+      "tests/unit/test_identity_autolink_env.py",
+      "tests/unit/test_identity_fragment_repair.py",
+      "tests/unit/test_identity_graph_reconciliation.py",
+      "tests/unit/test_identity_graph_repair.py",
+      "tests/unit/test_identity_merge_correctness.py",
+      "tests/unit/test_identity_routes.py",
+      "tests/unit/test_identity_split_recompute.py",
+      "tests/unit/test_journey_route_authority.py",
+      "tests/unit/test_profile_360.py",
+      "tests/unit/test_profile_360_truth.py",
+      "tests/unit/test_profile_doctor.py",
+      "tests/unit/test_profile_parity.py",
+      "tests/unit/test_profile_read_results.py",
+      "tests/unit/test_sdk_identity_resolve.py",
+      "tests/unit/test_stablecoin_intelligence_pr3_profile_graph.py",
+      "tests/unit/test_tenant_isolation.py",
+      "--workers",
+      "4"
+    ]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/root-unit-identity-profile.json"
+    quarantine: null
+
+  - id: root-unit-ingestion
+    suite_role: component
+    subsystem: root
+    owner: ingestion
+    components: [ingestion]
+    contracts: [ingestion]
+    dependencies: []
+    dependency_profile: python-root
+    runtime_class: medium
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 90
+    hard_runtime_budget_seconds: 360
+    paths: ["tests/unit", "tests/unit/derivatives", "tests/unit/ingestion_alias", "tests/unit/interop", "tests/unit/reconciled_control", "tests/unit/social360", "tests/unit/social360_m9", "tests/unit/comms"]
+    runner: [
+      "python",
+      "scripts/run_pytest_files.py",
+      "tests/unit/derivatives",
+      "tests/unit/ingestion_alias",
+      "tests/unit/interop",
+      "tests/unit/reconciled_control",
+      "tests/unit/social360",
+      "tests/unit/social360_m9",
+      "tests/unit/comms",
+      "tests/unit/test_batch_ingest.py",
+      "tests/unit/test_billing_provider.py",
+      "tests/unit/test_derivatives_ingestion.py",
+      "tests/unit/test_event_broker_sns_fanout.py",
+      "tests/unit/test_event_registry_agentic_x402.py",
+      "tests/unit/test_event_registry_economic_domains.py",
+      "tests/unit/test_event_registry_table_md.py",
+      "tests/unit/test_event_to_graph_mutation_parity.py",
+      "tests/unit/test_events_replay_routes.py",
+      "tests/unit/test_extract_env.py",
+      "tests/unit/test_extract_events.py",
+      "tests/unit/test_extract_more.py",
+      "tests/unit/test_extract_plans.py",
+      "tests/unit/test_extract_providers.py",
+      "tests/unit/test_extract_topics.py",
+      "tests/unit/test_generic_outbox.py",
+      "tests/unit/test_import_analyzer.py",
+      "tests/unit/test_import_commit.py",
+      "tests/unit/test_import_engine.py",
+      "tests/unit/test_import_files_repo.py",
+      "tests/unit/test_import_kyber_ops.py",
+      "tests/unit/test_import_mapping.py",
+      "tests/unit/test_import_silver_projector.py",
+      "tests/unit/test_import_validation.py",
+      "tests/unit/test_ingestion_batch.py",
+      "tests/unit/test_ingestion_roundtrip.py",
+      "tests/unit/test_ingestion_v2.py",
+      "tests/unit/test_ingestion_validation_parity.py",
+      "tests/unit/test_intelligence_projection_imports.py",
+      "tests/unit/test_mobile_event_parity.py",
+      "tests/unit/test_native_event_codegen.py",
+      "tests/unit/test_object_backed_bronze.py",
+      "tests/unit/test_outbox_relay.py",
+      "tests/unit/test_provider_apply_inputs.py",
+      "tests/unit/test_provider_corpus.py",
+      "tests/unit/test_public_ingest_revocation.py",
+      "tests/unit/test_silver_adapters.py",
+      "tests/unit/test_silver_reconciliation.py",
+      "tests/unit/test_social_provider_capability_honesty.py",
+      "tests/unit/test_stablecoin_intelligence_provider_execution.py",
+      "--workers",
+      "4"
+    ]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/root-unit-ingestion.json"
+    quarantine: null
+
+  - id: root-unit-graph
+    suite_role: component
+    subsystem: root
+    owner: graph
+    components: [graph]
+    contracts: [graph]
+    dependencies: []
+    dependency_profile: python-root
+    runtime_class: medium
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 90
+    hard_runtime_budget_seconds: 360
+    paths: ["tests/unit", "tests/unit/context", "tests/unit/exploration", "tests/unit/graph_gateway", "tests/unit/observation", "tests/unit/temporal"]
+    runner: [
+      "python",
+      "scripts/run_pytest_files.py",
+      "tests/unit/context",
+      "tests/unit/exploration",
+      "tests/unit/graph_gateway",
+      "tests/unit/observation",
+      "tests/unit/temporal",
+      "tests/unit/test_flow_trace_traversal.py",
+      "tests/unit/test_graph_filter_language.py",
+      "tests/unit/test_graph_layer_docs_parity.py",
+      "tests/unit/test_graph_paths_routes.py",
+      "tests/unit/test_graph_revoke_edge.py",
+      "tests/unit/test_intelligence_projection_cross_registry.py",
+      "tests/unit/test_intelligence_projection_dag.py",
+      "tests/unit/test_intelligence_projection_degradation_vocab.py",
+      "tests/unit/test_intelligence_projection_generation.py",
+      "tests/unit/test_intelligence_projection_honesty.py",
+      "tests/unit/test_intelligence_projection_inventory.py",
+      "tests/unit/test_intelligence_projection_order_resilience.py",
+      "tests/unit/test_intelligence_projection_registry_schema.py",
+      "tests/unit/test_projection_engine_generation.py",
+      "tests/unit/test_semantic_boundary.py",
+      "tests/unit/test_semantic_observability_assets.py",
+      "tests/unit/test_signal_use_matrix.py",
+      "tests/unit/test_spine_envelope_parity.py",
+      "tests/unit/test_spine_registry_validation.py",
+      "tests/unit/test_value_semantics.py",
+      "--workers",
+      "4"
+    ]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/root-unit-graph.json"
+    quarantine: null
+
+  - id: root-unit-frontend-sdk
+    suite_role: component
+    subsystem: root
+    owner: frontend
+    components: [frontend-sdk]
+    contracts: [frontend-sdk]
+    dependencies: []
+    dependency_profile: python-root
+    runtime_class: medium
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 90
+    hard_runtime_budget_seconds: 360
+    paths: ["tests/unit"]
+    runner: [
+      "python",
+      "scripts/run_pytest_files.py",
+      "tests/unit/test_admin_billing_subscription_routes.py",
+      "tests/unit/test_agent_feedback_routes.py",
+      "tests/unit/test_agent_scoring_routes.py",
+      "tests/unit/test_agent_teams_routes.py",
+      "tests/unit/test_audit_routes.py",
+      "tests/unit/test_cluster360_routes.py",
+      "tests/unit/test_data_quality_routes.py",
+      "tests/unit/test_diagnostics_observability_routes.py",
+      "tests/unit/test_diagnostics_queue_routes.py",
+      "tests/unit/test_export_artifacts.py",
+      "tests/unit/test_frontend_data_truth.py",
+      "tests/unit/test_frontend_route_state_matrix.py",
+      "tests/unit/test_governance_routes.py",
+      "tests/unit/test_guardrails_routes.py",
+      "tests/unit/test_investigation_routes.py",
+      "tests/unit/test_mobile_build_check.py",
+      "tests/unit/test_native_queue_durability.py",
+      "tests/unit/test_oracle_routes_config.py",
+      "tests/unit/test_route_conflicts.py",
+      "tests/unit/test_route_registry_coverage.py",
+      "tests/unit/test_sdk_config.py",
+      "tests/unit/test_sdk_coverage.py",
+      "tests/unit/test_sdk_drift.py",
+      "tests/unit/test_sdk_health.py",
+      "tests/unit/test_ts_public_exports.py",
+      "--workers",
+      "4"
+    ]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/root-unit-frontend-sdk.json"
+    quarantine: null
+
+  - id: root-unit-commerce-value
+    suite_role: component
+    subsystem: root
+    owner: growth
+    components: [commerce-value]
+    contracts: [commerce-value]
+    dependencies: []
+    dependency_profile: python-root
+    runtime_class: medium
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 90
+    hard_runtime_budget_seconds: 360
+    paths: ["tests/unit", "tests/unit/card_linked", "tests/unit/commerce", "tests/unit/comparison", "tests/unit/product_catalog", "tests/unit/stablecoin"]
+    runner: [
+      "python",
+      "scripts/run_pytest_files.py",
+      "tests/unit/card_linked",
+      "tests/unit/commerce",
+      "tests/unit/comparison",
+      "tests/unit/product_catalog",
+      "tests/unit/stablecoin",
+      "tests/unit/test_ai_referral_attribution_migration.py",
+      "tests/unit/test_attribution_engine.py",
+      "tests/unit/test_attribution_models.py",
+      "tests/unit/test_campaign_measurement_integrity.py",
+      "tests/unit/test_campaign_population_explorer.py",
+      "tests/unit/test_conversion_deduplication.py",
+      "tests/unit/test_economic_noesis_ooda_wiring.py",
+      "tests/unit/test_measurement_compute.py",
+      "tests/unit/test_measurement_integrity.py",
+      "tests/unit/test_measurement_results_repo.py",
+      "tests/unit/test_p4_security_billing.py",
+      "tests/unit/test_reward_x402_worker_registration.py",
+      "tests/unit/test_stripe_billing.py",
+      "tests/unit/test_value_price_sources.py",
+      "tests/unit/test_value_repositories.py",
+      "tests/unit/test_value_rules.py",
+      "--workers",
+      "4"
+    ]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/root-unit-commerce-value.json"
+    quarantine: null
+
+  - id: root-unit-security
+    suite_role: component
+    subsystem: root
+    owner: security
+    components: [security]
+    contracts: [security]
+    dependencies: []
+    dependency_profile: python-root
+    runtime_class: medium
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 90
+    hard_runtime_budget_seconds: 360
+    paths: ["tests/unit"]
+    runner: [
+      "python",
+      "scripts/run_pytest_files.py",
+      "tests/unit/test_cors_preflight_bypass.py",
+      "tests/unit/test_ml_security_fixes.py",
+      "tests/unit/test_model_governance.py",
+      "tests/unit/test_privacy_manifests.py",
+      "tests/unit/test_security_governance_domain_twin.py",
+      "tests/unit/test_social360_guardrails.py",
+      "tests/unit/test_trust_containment.py",
+      "tests/unit/test_web3_crossdomain_privacy.py",
+      "--workers",
+      "4"
+    ]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/root-unit-security.json"
+    quarantine: null
+
+  - id: root-unit-operations
+    suite_role: component
+    subsystem: root
+    owner: platform
+    components: [operations]
+    contracts: [operations]
+    dependencies: []
+    dependency_profile: python-root
+    runtime_class: medium
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 90
+    hard_runtime_budget_seconds: 360
+    paths: ["tests/unit"]
+    runner: [
+      "python",
+      "scripts/run_pytest_files.py",
+      "tests/unit/test_aws_deployment_runtime.py",
+      "tests/unit/test_aws_operational_fail_closed.py",
+      "tests/unit/test_cache_layer.py",
+      "tests/unit/test_deployment_operator_surface.py",
+      "tests/unit/test_deployment_readiness.py",
+      "tests/unit/test_environment_resolution.py",
+      "tests/unit/test_job_scheduler.py",
+      "tests/unit/test_jobs_ddl_parity.py",
+      "tests/unit/test_jobs_platform.py",
+      "tests/unit/test_quota_flusher.py",
+      "tests/unit/test_storage_descriptors.py",
+      "tests/unit/test_terraform_plan_policy.py",
+      "tests/unit/test_worker_supervisor.py",
+      "--workers",
+      "4"
+    ]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/root-unit-operations.json"
+    quarantine: null
+
+  - id: root-unit-platform
+    suite_role: component
+    subsystem: root
+    owner: platform
+    components: [platform]
+    contracts: [repository-consistency]
+    dependencies: []
+    dependency_profile: python-root
+    runtime_class: medium
+    isolation: process
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 90
+    hard_runtime_budget_seconds: 360
+    paths: ["tests/unit", "tests/unit/backend_interpretation", "tests/unit/capability_catalog"]
+    runner: [
+      "python",
+      "scripts/run_pytest_files.py",
+      "tests/unit/backend_interpretation",
+      "tests/unit/capability_catalog",
+      "tests/unit/test_agent_entity_resolver_wrapper.py",
+      "tests/unit/test_agent_web_crawler_wrapper.py",
+      "tests/unit/test_artifact_builder_defaults.py",
+      "tests/unit/test_backend_inmemory_guards.py",
+      "tests/unit/test_canonical_activity.py",
+      "tests/unit/test_capability_matrix_join.py",
+      "tests/unit/test_card_linked_payments.py",
+      "tests/unit/test_connectors.py",
+      "tests/unit/test_consistency_ownership.py",
+      "tests/unit/test_cost_model.py",
+      "tests/unit/test_decision_outcome_intelligence.py",
+      "tests/unit/test_derivatives_intelligence.py",
+      "tests/unit/test_derivatives_product.py",
+      "tests/unit/test_dimension_status.py",
+      "tests/unit/test_dsr_coverage.py",
+      "tests/unit/test_dune_feeder.py",
+      "tests/unit/test_dune_promotion.py",
+      "tests/unit/test_dune_scheduler.py",
+      "tests/unit/test_ephemeral_ttl_guard.py",
+      "tests/unit/test_fraud_cluster_detectors.py",
+      "tests/unit/test_fraud_network_scoring.py",
+      "tests/unit/test_fraud_overlay.py",
+      "tests/unit/test_graceful_degradation.py",
+      "tests/unit/test_implementation_ledger.py",
+      "tests/unit/test_journey_compiler.py",
+      "tests/unit/test_journey_compiler_v2.py",
+      "tests/unit/test_journey_step_repo.py",
+      "tests/unit/test_journey_stitching.py",
+      "tests/unit/test_load_synthetic.py",
+      "tests/unit/test_migration_chain.py",
+      "tests/unit/test_migrations_smoke.py",
+      "tests/unit/test_ml_manifest.py",
+      "tests/unit/test_notification_inbox.py",
+      "tests/unit/test_onchain_rpc_gateway.py",
+      "tests/unit/test_ooda_pricing_dimensions.py",
+      "tests/unit/test_overage_calculator.py",
+      "tests/unit/test_pilot_manifests.py",
+      "tests/unit/test_problem_details.py",
+      "tests/unit/test_publish_ml_artifacts.py",
+      "tests/unit/test_reconciliation_expectation_overrides.py",
+      "tests/unit/test_reconciliation_expectations.py",
+      "tests/unit/test_repo_doctor_cli.py",
+      "tests/unit/test_repository_filter_bindings.py",
+      "tests/unit/test_request_context.py",
+      "tests/unit/test_runtime_readiness_gate.py",
+      "tests/unit/test_runtime_roles.py",
+      "tests/unit/test_runtime_topology.py",
+      "tests/unit/test_stablecoin_intelligence_foundation.py",
+      "tests/unit/test_stablecoin_intelligence_polling_scheduler.py",
+      "tests/unit/test_stablecoin_intelligence_pr2_pipeline.py",
+      "tests/unit/test_stablecoin_intelligence_pr4_operations.py",
+      "--workers",
+      "4"
+    ]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: pr_gate
+    evidence_artifact: "ci-evidence/suites/root-unit-platform.json"
+    quarantine: null
+
   # Non-pytest suites — NOT invoked by scripts/repo_doctor.py (its registry
   # wiring is pytest-only by design; see is_pytest_suite in
   # scripts/lib/test_suites.py). Each is exercised today by its own dedicated
@@ -286,11 +1226,14 @@ suites:
   # ---------------------------------------------------------------------------
 
   - id: smart-contracts
+    suite_role: component
     subsystem: smart-contracts
     owner: protocols
     components: [smart-contracts]
     contracts: [smart-contracts]
     dependencies: [node]
+    dependency_profile: node-contracts
+    runtime_class: medium
     isolation: workspace
     lane: pr
     profiles: [local, ci, release]
@@ -314,11 +1257,14 @@ suites:
     quarantine: null
 
   - id: datalake-backend
+    suite_role: component
     subsystem: datalake
     owner: platform
     components: [datalake]
     contracts: [datalake]
     dependencies: [node]
+    dependency_profile: node-contracts
+    runtime_class: medium
     isolation: workspace
     lane: release
     profiles: [local, release]
@@ -344,7 +1290,7 @@ suites:
     environments: [local, release]
     skip_policy: documented_quarantine
     release_class: pr_gate
-    evidence_artifact: null
+    evidence_artifact: "ci-evidence/suites/datalake-backend.json"
     quarantine:
       reason: >-
         Standalone npm project outside the root package.json workspaces; no
@@ -363,11 +1309,14 @@ suites:
   # ---------------------------------------------------------------------------
 
   - id: sdk-shared
+    suite_role: component
     subsystem: sdk-shared
     owner: sdk
     components: [sdk-shared]
     contracts: [shared-sdk]
     dependencies: [node]
+    dependency_profile: node-sdk
+    runtime_class: small
     isolation: workspace
     lane: pr
     profiles: [local, ci, release]
@@ -379,15 +1328,18 @@ suites:
     environments: [local, ci, release]
     skip_policy: never
     release_class: pr_gate
-    evidence_artifact: null
+    evidence_artifact: "ci-evidence/suites/sdk-shared.json"
     quarantine: null
 
   - id: sdk-web
+    suite_role: component
     subsystem: sdk-web
     owner: sdk
     components: [sdk-web]
     contracts: [web-sdk]
     dependencies: [node]
+    dependency_profile: node-sdk
+    runtime_class: small
     isolation: workspace
     lane: pr
     profiles: [local, ci, release]
@@ -399,15 +1351,18 @@ suites:
     environments: [local, ci, release]
     skip_policy: never
     release_class: pr_gate
-    evidence_artifact: null
+    evidence_artifact: "ci-evidence/suites/sdk-web.json"
     quarantine: null
 
   - id: sdk-server
+    suite_role: component
     subsystem: sdk-server
     owner: sdk
     components: [sdk-server]
     contracts: [server-sdk]
     dependencies: [node]
+    dependency_profile: node-sdk
+    runtime_class: small
     isolation: workspace
     lane: pr
     profiles: [local, ci, release]
@@ -419,15 +1374,18 @@ suites:
     environments: [local, ci, release]
     skip_policy: never
     release_class: pr_gate
-    evidence_artifact: null
+    evidence_artifact: "ci-evidence/suites/sdk-server.json"
     quarantine: null
 
   - id: sdk-react-native
+    suite_role: component
     subsystem: sdk-react-native
     owner: sdk
     components: [sdk-react-native]
     contracts: [react-native-sdk]
     dependencies: [node]
+    dependency_profile: node-sdk
+    runtime_class: small
     isolation: workspace
     lane: pr
     profiles: [local, ci, release]
@@ -439,15 +1397,18 @@ suites:
     environments: [local, ci, release]
     skip_policy: never
     release_class: pr_gate
-    evidence_artifact: null
+    evidence_artifact: "ci-evidence/suites/sdk-react-native.json"
     quarantine: null
 
   - id: frontend-aether
+    suite_role: component
     subsystem: frontend-aether
     owner: frontend
     components: [frontend-aether]
     contracts: [aether-ui]
     dependencies: [node]
+    dependency_profile: node-frontend
+    runtime_class: medium
     isolation: workspace
     lane: pr
     profiles: [local, ci, release]
@@ -459,15 +1420,18 @@ suites:
     environments: [local, ci, release]
     skip_policy: never
     release_class: pr_gate
-    evidence_artifact: null
+    evidence_artifact: "ci-evidence/suites/frontend-aether.json"
     quarantine: null
 
   - id: frontend-kyber
+    suite_role: component
     subsystem: frontend-kyber
     owner: frontend
     components: [frontend-kyber]
     contracts: [kyber-ui]
     dependencies: [node]
+    dependency_profile: node-frontend
+    runtime_class: medium
     isolation: workspace
     lane: pr
     profiles: [local, ci, release]
@@ -479,15 +1443,18 @@ suites:
     environments: [local, ci, release]
     skip_policy: never
     release_class: pr_gate
-    evidence_artifact: null
+    evidence_artifact: "ci-evidence/suites/frontend-kyber.json"
     quarantine: null
 
   - id: frontend-kyber-component
+    suite_role: component
     subsystem: frontend-kyber
     owner: frontend
     components: [frontend-kyber]
     contracts: [kyber-ui]
     dependencies: [node]
+    dependency_profile: node-frontend
+    runtime_class: medium
     isolation: workspace
     lane: pr
     profiles: [local, ci, release]
@@ -500,15 +1467,18 @@ suites:
     environments: [local, ci, release]
     skip_policy: never
     release_class: pr_gate
-    evidence_artifact: null
+    evidence_artifact: "ci-evidence/suites/frontend-kyber-component.json"
     quarantine: null
 
   - id: frontend-kyber-integration
+    suite_role: component
     subsystem: frontend-kyber
     owner: frontend
     components: [frontend-kyber]
     contracts: [kyber-ui-integration]
     dependencies: [node]
+    dependency_profile: node-frontend
+    runtime_class: heavy
     isolation: workspace
     lane: integration
     profiles: [local, ci, release]
@@ -521,15 +1491,18 @@ suites:
     environments: [local, ci, release]
     skip_policy: never
     release_class: pr_gate
-    evidence_artifact: null
+    evidence_artifact: "ci-evidence/suites/frontend-kyber-integration.json"
     quarantine: null
 
   - id: frontend-shared
+    suite_role: component
     subsystem: frontend-shared
     owner: frontend
     components: [frontend-shared]
     contracts: [shared-ui]
     dependencies: [node]
+    dependency_profile: node-frontend
+    runtime_class: medium
     isolation: workspace
     lane: pr
     profiles: [local, ci, release]
@@ -541,15 +1514,18 @@ suites:
     environments: [local, ci, release]
     skip_policy: never
     release_class: pr_gate
-    evidence_artifact: null
+    evidence_artifact: "ci-evidence/suites/frontend-shared.json"
     quarantine: null
 
   - id: frontend-docs
+    suite_role: component
     subsystem: frontend-docs
     owner: frontend
     components: [frontend-docs]
     contracts: [docs-ui]
     dependencies: [node]
+    dependency_profile: node-frontend
+    runtime_class: small
     isolation: workspace
     lane: pr
     profiles: [local, ci, release]
@@ -565,11 +1541,14 @@ suites:
     quarantine: null
 
   - id: frontend-demo
+    suite_role: component
     subsystem: frontend-demo
     owner: frontend
     components: [frontend-demo]
     contracts: [demo-ui]
     dependencies: [node]
+    dependency_profile: node-frontend
+    runtime_class: small
     isolation: workspace
     lane: pr
     profiles: [local, ci, release]
@@ -585,11 +1564,14 @@ suites:
     quarantine: null
 
   - id: frontend-olympus-marketing
+    suite_role: component
     subsystem: frontend-olympus-marketing
     owner: frontend
     components: [olympus-marketing]
     contracts: [marketing-ui]
     dependencies: [node]
+    dependency_profile: node-frontend
+    runtime_class: small
     isolation: workspace
     lane: pr
     profiles: [local, ci, release]
@@ -606,11 +1588,14 @@ suites:
     quarantine: null
 
   - id: frontend-aether-marketing
+    suite_role: component
     subsystem: frontend-aether-marketing
     owner: frontend
     components: [aether-marketing]
     contracts: [marketing-ui]
     dependencies: [node]
+    dependency_profile: node-frontend
+    runtime_class: small
     isolation: workspace
     lane: pr
     profiles: [local, ci, release]

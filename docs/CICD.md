@@ -22,16 +22,16 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:e882072d49783a127c94a6a9796078721c9b9f083196f1a484b2686d81bb428a"
-  "cicd/aether-cicd/README.md": "sha256:07bc236b744bd0c54bae8b6fa661beba9d3767a3300470814f071a119f8244ee"
-  "cicd/aether-cicd/main.py": "sha256:8027fb1fcb5e4a1aeb6428224fe0ca9f7756df0aaca5f39e7e84bb6c9c85feb9"
-  "cicd/aether-cicd/quality_gates/": "sha256:2cc72d40cd7c324e686271c5ea2c90c2ccb15c4ebe0435b0589844663dd2e436"
-  "cicd/aether-cicd/stages/": "sha256:961dd8ecca17f67988397b1f33515de8a88180ed70a7545fe05b324eb1bf555f"
-  "config/staging_apply_iam_policy.yaml": "sha256:acc34d81c456090d4569faac727b6688604fc07c3bb36764f38c422f23d5004a"
+  ".github/workflows/": "sha256:ba77c821cf702682986ddc30d1c2a09787f632c1a8f2d1a455fa43d9fb4046d6"
   "deploy/aws/terraform/modules/aurora/main.tf": "sha256:16c4beb8ccab1af164ff62f8aa2d515a5efc3f093b7878411f40aa14ce39e094"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "deploy/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
   "deploy/aws/terraform/modules/secrets/main.tf": "sha256:998303bfe6e5a0a24477933beeb650c02e5e43469d9cba6d0af84e27e50d8032"
+  "cicd/aether-cicd/README.md": "sha256:7518eff46d2847a3686bfaa5712e6d64de63764dfc65da0954b7fb5902f145de"
+  "cicd/aether-cicd/main.py": "sha256:a20ae99a95de475ad442e9eb72504cf2d613fb549c1e6121350ac07564d75301"
+  "cicd/aether-cicd/quality_gates/": "sha256:2cc72d40cd7c324e686271c5ea2c90c2ccb15c4ebe0435b0589844663dd2e436"
+  "cicd/aether-cicd/stages/": "sha256:b3470b88b347932bd98a452e143e9b2cb984f4b786f7c2412448ca8bec098fe9"
+  "config/staging_apply_iam_policy.yaml": "sha256:acc34d81c456090d4569faac727b6688604fc07c3bb36764f38c422f23d5004a"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:08dff05b2a886af751d7e0b1c7886951b240b6a31f18ef14d26f73085ae59145"
 ---
 
@@ -50,7 +50,7 @@ representative selection observation window recorded zero unexplained misses;
 it remains available for local, trusted-main, nightly, and release evidence but
 does not determine mergeability. Hosted p50/p95 timing is measured separately
 by `ci-runtime-report.yml`; its report remains `INSUFFICIENT_SAMPLES` until at
-least five completed adaptive PR authority runs are available, so local timing
+least 20 completed adaptive PR authority runs are available, so local timing
 must not be presented as hosted timing evidence.
 
 `repo-health.yml` keeps documentation and PR-size signals advisory on pull requests
@@ -62,16 +62,35 @@ caller; `make release-gate` is not an ordinary pull-request check. Release valid
 therefore evaluates an immutable candidate in the release lifecycle rather than PR
 source in the normal critical path.
 
-The immutable delivery workflow applies the same event-specific distinction before
-building a release: a push to `main` must first produce a successful `Main
-integration authority` check, while an explicit staging dispatch waits for the
-nightly/dispatch aggregate `validate` check. An intentionally skipped check is not
-accepted as evidence that code was tested.
-
 The suite registry (`config/test_suites.yaml`) carries ownership, component/contract
 relationships, lane, isolation, and runtime-budget metadata. Local runtime evidence
 can be summarized with `scripts/validate_ci_runtime_budgets.py`; that validator reads
 JSON/JSONL files only and makes no hosted telemetry claim.
+
+The classifier now uses the minimal `ci-control` dependency boundary through
+`make bootstrap-ci-control`; it does not install the application runtime merely
+to resolve changed paths. It emits the typed
+`contracts/delivery/verification-execution-plan.schema.json` plan consumed by
+the workflow's `universal-fast`, dependency-aware suite matrix, build,
+candidate-verification, and `publish-evidence` jobs. Every selected non-universal
+check is represented by a registry-owned suite with one dependency profile and
+runtime class; an unmapped check blocks plan creation rather than falling back
+to an oversized control worker. Root and backend aggregate suites are retained
+for regression/release lanes, while ordinary PR impact maps to component suites
+and pooled/isolated workers. Node setup, Python extras, and backend image builds
+are selected from that same plan; they are not repeated by individual jobs.
+
+The canonical CI performance policy targets classifier p95 <= 30 seconds,
+universal-fast p95 <= 60 seconds, ordinary PR p50 <= 300 seconds and p95 <=
+600 seconds, isolated frontend p95 <= 360 seconds, isolated backend p95 <= 420
+seconds, moderate cross-component p95 <= 600 seconds, and architecture/control
+plane p95 <= 900 seconds. The workflow records classifier, dependency setup,
+critical-path, build, candidate, and disposition timing. A breach is surfaced
+as `CI_PERFORMANCE_DEGRADED` without initially blocking merge; p50/p95 claims
+remain disallowed until at least 20 representative samples exist. Unresolved
+paths, unknown profiles/suites, inconsistent build selection, and missing
+blocking evidence remain fail-closed, and the existing verification disposition
+is still the single ordinary-PR mergeability authority.
 
 Repo Health scopes its concurrency group by event type as well as branch. A
 push run therefore cannot cancel the pull request run that supplies the
@@ -247,7 +266,7 @@ enforced by any workflow in `.github/workflows/`.
 ### 3. Unit tests
 
 - Vitest via `npm test` for TypeScript SDKs and frontends.
-- Pytest via `python -m pytest tests/ -n auto --tb=short` for core Python tests; ML coverage uses `scripts/run_ml_tests.py` so the package-root `services/ml` helpers cannot be shadowed by the repository-level `tests` package. The adaptive PR authority selects that suite when `services/ml/**` changes, and the scheduled/manual ML job uses the same runner.
+- Pytest via `python -m pytest tests/ -n auto --tb=short` for core Python tests; ML coverage uses the registered `services/ml` suite when `services/ml/**` changes.
 - Gate: **all tests pass**.
 
 ### 4. Integration tests
@@ -339,7 +358,7 @@ Two things get promoted, on two separate paths that must never be conflated: the
 | Workflow | Trigger | What it does | Applies Terraform |
 |---|---|---|---|
 | `deploy.yml` | push to `main`; `workflow_dispatch` for production | Builds the release once, deploys to staging on push; production promotion is manual and takes the staged run ID plus the approved `release.json` checksum. Registers one task-definition revision per declared service; no rebuild on promotion. **Not armed without `AWS_DEPLOY_ROLE_ARN`:** when the role is absent the build/deploy jobs skip and a `delivery-not-armed` job reports that nothing was built or deployed — that is NOT a claim that a release exists. The moment the role is wired, delivery runs exactly as before. | no |
-| `infrastructure.yml` | PR / push to `main` / dispatch on `docs/archive/legacy-architecture/aws-deployment/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the full credential set exists (ephemeral-class is deliberately excluded from remote-plan); plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
+| `infrastructure.yml` | PR / push to `main` / dispatch on `deploy/aws/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the full credential set exists (ephemeral-class is deliberately excluded from remote-plan); plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
 | `terraform-promote.yml` | `workflow_dispatch` only | Produces a reviewed, checksum-bound binary plan, and applies exactly that plan. Backend digests are always required; ML digests are required only for production-scale and enterprise-isolated, and are optional for staging, production-lean, demo, and preview when remote ML is disabled. | **yes — the only path** |
 | `staging-lifecycle.yml` | `workflow_dispatch` | Wake / validate / sleep / full rehearsal. Dispatches `terraform-promote.yml` for every mutation and independently re-verifies the reviewed plan first. Dispatching jobs retain `actions: write` and check out the workspace before invoking `gh`; read-only jobs cannot perform the handoff. `plan-wake` is plan-only and requires only the Terraform plan credentials; lifecycle credentials are required for inspection, wake, or sleep actions. A full rehearsal binds the delivery run and `release.json` to the intended merged-main SHA, arms the bounded lease before apply, re-assumes the lifecycle role after the protected promotion wait, preserves the original lease anchor and extension count when refreshing after readiness, revalidates the lease before every mutating phase, publishes and verifies the exact AETHER/Kyber SPA archives, and cleans only a secret-free, run-scoped registration tenant marker. | no (delegates) |
 | `staging-state-reconcile.yml` | `workflow_dispatch` with explicit staging import confirmation | Import-only reconciliation for an existing staging target group and/or the four reviewed Terraform ECR repositories. Requires an approved immutable backend digest, `IMPORT-STAGING`, exact target/repository validation, the reviewed staging ECR KMS key for KMS-encrypted repositories, all required root-module URL/certificate/alert inputs, and the Auth0 provider environment used by ordinary remote plans; those credentials remain runner environment variables and never enter Terraform state or plan variables. If a repository exists at one unambiguous legacy staging address, the workflow validates all import prerequisites and every candidate status before adopting it with a state-only move to the canonical module address; it records the complete adoption set before moving anything, rejects tainted or otherwise non-managed legacy instances, treats an already-canonical healthy entry as a verified retry no-op, and fails closed on ambiguous duplicate ownership or demo/preview ownership. It also has a separate, confirmation-gated `untaint_ecr_repository_names` path for repositories already at the canonical staging address whose reviewed before/after attributes are identical but were left tainted by an interrupted replacement; that path verifies the live repository against the Terraform-managed KMS key in staging state, uses Terraform's top-level `untaint` command, and always requires a fresh reviewed plan. Aurora and DynamoDB monitoring are enabled with static profile decisions, so an unrelated state import never derives Terraform resource cardinality from unresolved resource IDs. Temporary local state snapshots are removed in one exit cleanup path. A fresh reviewed plan is required after any state change. The pre-existing `aether-backend` repository is intentionally immutable AES-256 because ECR encryption cannot be changed after creation; the other staging repositories remain KMS-encrypted. It never deletes or applies infrastructure. | no (state import/taint repair only) |

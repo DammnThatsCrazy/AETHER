@@ -57,6 +57,16 @@ def load_config() -> dict:
             for domain_id, domain in registry.domains.items()
         },
         "global_paths": list(registry.global_paths),
+        "global_scopes": {
+            scope_id: {
+                "owner": scope.owner,
+                "paths": list(scope.paths),
+                "checks": list(scope.checks),
+                "minimum_lane": scope.minimum_lane,
+                "domains": list(scope.domains),
+            }
+            for scope_id, scope in registry.global_scopes.items()
+        },
     }
 
 
@@ -91,6 +101,8 @@ def route(paths: list[str], requested_lane: str | None = None) -> dict:
             raise ValueError(f"selected check {check_id!r} has no command definition")
         selected.append({"check_id": check_id, "command": command})
     affected_tests = _affected_tests(impact.changed_files)
+    from scripts.verification_execution_plan import build_execution_plan
+
     return {
         "schema_version": cfg.schema_version,
         "status": "SELECTED",
@@ -105,6 +117,7 @@ def route(paths: list[str], requested_lane: str | None = None) -> dict:
             "selected_checks": index["router"]["selected_checks"],
         },
         "build_selection": index["build_selection"],
+        "execution_plan": build_execution_plan(paths, requested_lane),
         "checks": selected,
     }
 

@@ -41,11 +41,27 @@ SKIP_POLICIES = ("never", "local_only", "documented_quarantine")
 RELEASE_CLASSES = ("pr_gate", "live_certification", "advisory")
 ISOLATION_MODES = ("process", "workspace", "serial", "parallel")
 LANES = ("fast", "pr", "integration", "regression", "release")
+RUNTIME_CLASSES = ("tiny", "small", "medium", "heavy")
+SUITE_ROLES = ("component", "aggregate")
+DEPENDENCY_PROFILES = (
+    "ci-control",
+    "python-root",
+    "python-all",
+    "python-backend",
+    "python-agent",
+    "python-ml",
+    "python-security",
+    "node-frontend",
+    "node-sdk",
+    "node-contracts",
+    "docker-backend",
+)
 
 _REQUIRES_KEYS = {"python_packages", "services", "docker", "credentials"}
 _QUARANTINE_KEYS = {"reason", "owner", "expires"}
 _SUITE_KEYS = {
     "id",
+    "suite_role",
     "paths",
     "runner",
     "subsystem",
@@ -53,6 +69,8 @@ _SUITE_KEYS = {
     "components",
     "contracts",
     "dependencies",
+    "dependency_profile",
+    "runtime_class",
     "isolation",
     "lane",
     "profiles",
@@ -102,6 +120,7 @@ class Quarantine:
 @dataclass(frozen=True)
 class TestSuite:
     id: str
+    suite_role: str
     paths: tuple[str, ...]
     runner: tuple[str, ...]
     subsystem: str
@@ -109,6 +128,8 @@ class TestSuite:
     components: tuple[str, ...]
     contracts: tuple[str, ...]
     dependencies: tuple[str, ...]
+    dependency_profile: str
+    runtime_class: str
     isolation: str
     lane: str
     profiles: tuple[str, ...]
@@ -168,6 +189,45 @@ def _require_positive_number(data: dict, key: str, where: str) -> float:
     return float(value)
 
 
+def _declared_dependency_profiles(root: Path) -> dict[str, dict[str, Any]]:
+    """Load the execution profile registry when present.
+
+    Focused loader tests construct temporary registries without the repository
+    config tree, so the enum remains the local fallback for those fixtures.
+    The real registry is always checked against config/dependency_profiles.yaml.
+    """
+    path = root / "config" / "dependency_profiles.yaml"
+    if not path.exists():
+        return {name: {} for name in DEPENDENCY_PROFILES}
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise _err(str(path), f"invalid dependency profile YAML: {exc}") from exc
+    if not isinstance(raw, dict) or raw.get("schema_version") != 1:
+        raise _err(str(path), "dependency profile registry must declare schema_version: 1")
+    profiles = raw.get("profiles")
+    if not isinstance(profiles, dict) or set(profiles) != set(DEPENDENCY_PROFILES):
+        raise _err(str(path), f"profiles must define exactly {DEPENDENCY_PROFILES}")
+    for profile_id, profile in profiles.items():
+        if not isinstance(profile, dict):
+            raise _err(str(path), f"profile {profile_id!r} must be a mapping")
+        if profile.get("runtime_class") not in RUNTIME_CLASSES:
+            raise _err(str(path), f"profile {profile_id!r} has an invalid runtime_class")
+        if not isinstance(profile.get("node"), bool) or not isinstance(profile.get("docker"), bool):
+            raise _err(str(path), f"profile {profile_id!r} node/docker flags must be booleans")
+    return profiles
+
+
+def load_dependency_profiles(root: str | Path = ROOT) -> dict[str, dict[str, Any]]:
+    """Load the canonical dependency-profile registry for execution planners.
+
+    Dependency profiles describe setup inputs only; they never select suites.
+    Keeping this accessor beside the suite loader ensures planners and workers
+    validate the same profile contract as the canonical registry.
+    """
+    return _declared_dependency_profiles(Path(root))
+
+
 def _parse_requires(data: Any, where: str) -> Requires:
     if data is None:
         raise _err(where, "missing required key 'requires'")
@@ -203,6 +263,10 @@ def _parse_suite(data: Any, index: int, root: Path) -> TestSuite:
     suite_id = _require_str(data, "id", where)
     where = f"suite '{suite_id}'"
 
+    suite_role = _require_str(data, "suite_role", where)
+    if suite_role not in SUITE_ROLES:
+        raise _err(where, f"invalid suite_role {suite_role!r} (allowed: {SUITE_ROLES})")
+
     paths = _require_str_list(data, "paths", where)
     for p in paths:
         if not (root / p).exists():
@@ -214,6 +278,19 @@ def _parse_suite(data: Any, index: int, root: Path) -> TestSuite:
     components = _require_str_list(data, "components", where)
     contracts = _require_str_list(data, "contracts", where, allow_empty=True)
     dependencies = _require_str_list(data, "dependencies", where, allow_empty=True)
+    dependency_profile = _require_str(data, "dependency_profile", where)
+    if dependency_profile not in DEPENDENCY_PROFILES:
+        raise _err(
+            where,
+            f"'dependency_profile' must be one of {DEPENDENCY_PROFILES}, got {dependency_profile!r}",
+        )
+    runtime_class = _require_str(data, "runtime_class", where)
+    if runtime_class not in RUNTIME_CLASSES:
+        raise _err(
+            where,
+            f"'runtime_class' must be one of {RUNTIME_CLASSES}, got {runtime_class!r}",
+        )
+    _declared_dependency_profiles(root)
     isolation = _require_str(data, "isolation", where)
     if isolation not in ISOLATION_MODES:
         raise _err(where, f"invalid isolation {isolation!r} (allowed: {ISOLATION_MODES})")
@@ -236,6 +313,10 @@ def _parse_suite(data: Any, index: int, root: Path) -> TestSuite:
         raise _err(where, f"invalid environment(s): {bad_envs} (allowed: {ENVIRONMENTS})")
     if len(set(environments)) != len(environments):
         raise _err(where, "'environments' contains duplicates")
+    if suite_role == "aggregate" and lane in {"fast", "pr", "integration"}:
+        raise _err(where, "aggregate suites must remain regression/release-only")
+    if suite_role == "aggregate" and "ci" in environments:
+        raise _err(where, "aggregate suites must not be part of the ordinary ci environment")
 
     skip_policy = _require_str(data, "skip_policy", where)
     if skip_policy not in SKIP_POLICIES:
@@ -250,6 +331,21 @@ def _parse_suite(data: Any, index: int, root: Path) -> TestSuite:
     evidence_artifact = data["evidence_artifact"]
     if evidence_artifact is not None and not isinstance(evidence_artifact, str):
         raise _err(where, "'evidence_artifact' must be a string or null")
+    if isinstance(evidence_artifact, str):
+        if (
+            not evidence_artifact.strip()
+            or evidence_artifact.startswith(("/", "\\"))
+            or "://" in evidence_artifact
+        ):
+            raise _err(where, "'evidence_artifact' must be a non-empty repository-relative path")
+        if ".." in Path(evidence_artifact).parts:
+            raise _err(where, "'evidence_artifact' must not escape the repository")
+    if release_class == "pr_gate" and evidence_artifact is None:
+        raise _err(
+            where,
+            "blocking pr_gate suites must declare an evidence_artifact; use an explicit "
+            "repository-relative JSON/JSONL destination",
+        )
 
     if "quarantine" not in data:
         raise _err(where, "missing required key 'quarantine' (use null if not quarantined)")
@@ -277,6 +373,7 @@ def _parse_suite(data: Any, index: int, root: Path) -> TestSuite:
 
     return TestSuite(
         id=suite_id,
+        suite_role=suite_role,
         paths=paths,
         runner=runner,
         subsystem=subsystem,
@@ -284,6 +381,8 @@ def _parse_suite(data: Any, index: int, root: Path) -> TestSuite:
         components=components,
         contracts=contracts,
         dependencies=dependencies,
+        dependency_profile=dependency_profile,
+        runtime_class=runtime_class,
         isolation=isolation,
         lane=lane,
         profiles=profiles,

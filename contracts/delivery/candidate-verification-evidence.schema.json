@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.internal/contracts/candidate-verification-evidence.schema.json",
+  "title": "Aether candidate verification evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "stage", "status", "candidate_path", "commit_sha", "artifact_digest", "candidate_verification_seconds"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "stage": {"const": "candidate-verification"},
+    "status": {"enum": ["PASS", "FAILED", "BLOCKED"]},
+    "candidate_path": {"type": "string", "minLength": 1},
+    "commit_sha": {"type": "string", "minLength": 1},
+    "artifact_digest": {"type": "string", "minLength": 1},
+    "candidate_verification_seconds": {"type": "number", "minimum": 0},
+    "errors": {"type": "array", "items": {"type": "string"}}
+  }
+}

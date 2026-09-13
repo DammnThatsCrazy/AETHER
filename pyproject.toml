@@ -28,6 +28,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Change classification and execution planning are intentionally isolated from
+# application runtime dependencies.  The CI-control bootstrap installs this
+# extra without resolving the project runtime dependencies, then installs the
+# editable package with --no-deps so scripts remain importable.
+ci-control = [
+    "PyYAML>=6.0",
+    "jsonschema>=4.0",
+]
+
 # Security module (extraction defense)
 security = [
     "numpy>=1.26.0",

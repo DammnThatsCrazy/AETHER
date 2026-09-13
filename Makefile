@@ -29,6 +29,7 @@
         design-partner-demo-up design-partner-demo-seed design-partner-demo-check design-partner-demo-down \
         temporal-integrity temporal-contract-parity mutation-gateway-check exploration-readiness \
         production-status release-gate ops-readiness help \
+        validate-ci-control-toolchain validate-ci-performance-policy validate-ci-execution-contracts validate-execution-plan verification-execution-plan \
         validate-profile-config validate-profile-parity validate-cost-policy validate-cost-policy-terraform validate-delivery-topology \
         validate-route-registry validate-implementation-ledger validate-reference-packs \
         validate-storage-policies audit-readiness-check founding-tenant-release-gate validate-founding-tenant-surface runtime-readiness-gate integration-durable integration-faults \
@@ -75,6 +76,12 @@ bootstrap: ## Create an isolated .venv and install all extras (reproducible tool
 	$(VENV_PY) -m pip install --upgrade pip setuptools wheel
 	$(VENV_PY) -m pip install -e ".[all]"
 	$(VENV_PY) scripts/validate_toolchain.py
+
+bootstrap-ci-control: ## Create the minimal dependency environment for CI planning and routing
+	python3 -m venv $(VENV)
+	$(VENV_PY) -m pip install --upgrade pip setuptools wheel
+	$(VENV_PY) -m pip install --no-deps -e ".[ci-control]"
+	$(VENV_PY) scripts/validate_ci_control_toolchain.py
 
 toolchain-check: ## Assert every release-critical dependency imports (fails, never skips)
 	$(VENV_PY) scripts/validate_toolchain.py
@@ -392,6 +399,22 @@ validate-verification-policy: ## Validate the single normal PR verification auth
 
 validate-ci-runtime-budgets: ## Validate suite runtime metadata, or evidence when RUNTIME_EVIDENCE is supplied
 	$(GATE_PY) scripts/validate_ci_runtime_budgets.py $(if $(RUNTIME_EVIDENCE),"$(RUNTIME_EVIDENCE)",--check-registry)
+
+validate-ci-control-toolchain: ## Validate the minimal CI control-plane dependency boundary
+	$(GATE_PY) scripts/validate_ci_control_toolchain.py
+
+validate-ci-performance-policy: ## Validate CI latency targets and measurement policy
+	$(GATE_PY) scripts/validate_ci_performance_policy.py
+
+validate-ci-execution-contracts: ## Validate adaptive CI plan/evidence schemas and suite registry schema
+	$(GATE_PY) scripts/validate_ci_execution_contracts.py
+
+validate-execution-plan: ## Validate a generated distributed execution plan (requires PLAN)
+	@test -n "$(PLAN)" || (echo "PLAN is required"; exit 2)
+	$(GATE_PY) scripts/validate_execution_plan.py --plan "$(PLAN)"
+
+verification-execution-plan: ## Emit a deterministic dependency-aware execution plan
+	$(GATE_PY) scripts/verification_execution_plan.py --base "$(or $(BASE),HEAD)" $(if $(OUTPUT),--output "$(OUTPUT)")
 
 test-integration: ## Execute the selected integration lane
 	$(GATE_PY) scripts/check_router.py --base "$(or $(BASE),HEAD)" --lane integration --execute

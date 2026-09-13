@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.internal/contracts/verification-aggregation.schema.json",
+  "title": "Aether verification evidence aggregation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "authority", "status", "blocking_failures", "missing_blocking_suites", "suite_results", "universal_fast", "performance"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "authority": {"const": "verification"},
+    "status": {"enum": ["PASS", "PASS_WITH_DEGRADATION", "FAILED", "BLOCKED"]},
+    "blocking_failures": {"type": "array", "items": {"type": "string"}},
+    "missing_blocking_suites": {"type": "array", "items": {"type": "string"}},
+    "suite_results": {"type": "array", "items": {"type": "object"}},
+    "universal_fast": {"type": "object"},
+    "performance": {"type": "object"}
+  }
+}

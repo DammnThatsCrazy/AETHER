@@ -1,0 +1,62 @@
+schema_version: 1
+canonical_source: config/dependency_profiles.yaml
+
+# Dependency profiles are execution inputs, not a second test-selection
+# authority.  Suites reference one of these names; the Impact Graph decides
+# which suites run.
+profiles:
+  ci-control:
+    python_extra: ci-control
+    node: false
+    docker: false
+    runtime_class: tiny
+  python-root:
+    python_extra: dev
+    node: false
+    docker: false
+    runtime_class: heavy
+  python-all:
+    python_extra: all
+    node: false
+    docker: false
+    runtime_class: heavy
+  python-backend:
+    python_extra: backend,dev
+    node: false
+    docker: false
+    runtime_class: heavy
+  python-agent:
+    python_extra: agent,dev
+    node: false
+    docker: false
+    runtime_class: medium
+  python-ml:
+    python_extra: ml,dev
+    node: false
+    docker: false
+    runtime_class: heavy
+  python-security:
+    python_extra: security,dev
+    node: false
+    docker: false
+    runtime_class: medium
+  node-frontend:
+    python_extra: null
+    node: true
+    docker: false
+    runtime_class: medium
+  node-sdk:
+    python_extra: null
+    node: true
+    docker: false
+    runtime_class: small
+  node-contracts:
+    python_extra: null
+    node: true
+    docker: false
+    runtime_class: medium
+  docker-backend:
+    python_extra: backend,dev
+    node: false
+    docker: true
+    runtime_class: heavy

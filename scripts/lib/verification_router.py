@@ -17,9 +17,18 @@ ROOT = Path(__file__).resolve().parents[2]
 LANE_ORDER = ("fast", "pr", "integration", "regression", "release")
 RISK_LEVELS = ("low", "medium", "high", "critical")
 
-_TOP_LEVEL_KEYS = {"schema_version", "default_lane", "lanes", "checks", "domains", "global_paths"}
+_TOP_LEVEL_KEYS = {
+    "schema_version",
+    "default_lane",
+    "lanes",
+    "checks",
+    "domains",
+    "global_paths",  # legacy compatibility for focused callers
+    "global_scopes",
+}
 _CHECK_KEYS = {"owner", "risk", "command", "runtime_budget_seconds"}
 _DOMAIN_KEYS = {"owner", "paths", "checks", "path_checks", "minimum_lane"}
+_GLOBAL_SCOPE_KEYS = {"owner", "paths", "checks", "minimum_lane", "domains"}
 
 
 class VerificationRouterConfigError(ValueError):
@@ -46,6 +55,16 @@ class DomainDefinition:
 
 
 @dataclass(frozen=True)
+class GlobalScopeDefinition:
+    id: str
+    owner: str
+    paths: tuple[str, ...]
+    checks: tuple[str, ...]
+    minimum_lane: str
+    domains: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class VerificationRouterConfig:
     schema_version: int
     default_lane: str
@@ -53,6 +72,7 @@ class VerificationRouterConfig:
     checks: Mapping[str, CheckDefinition]
     domains: Mapping[str, DomainDefinition]
     global_paths: tuple[str, ...]
+    global_scopes: Mapping[str, GlobalScopeDefinition]
 
 
 @dataclass(frozen=True)
@@ -66,6 +86,7 @@ class VerificationImpact:
     selected_lane: str
     followup_required: bool
     selected_checks: tuple[str, ...]
+    global_scopes: tuple[str, ...] = ()
 
 
 def _error(where: str, message: str) -> VerificationRouterConfigError:
@@ -216,8 +237,56 @@ def validate_router_registry(
             domain_id, owner, paths, domain_checks, path_checks, minimum_lane
         )
 
-    global_paths = _require_string_list(top.get("global_paths"), "verification router.global_paths")
-    return VerificationRouterConfig(1, default_lane, lanes, checks, domains, global_paths)
+    raw_scopes = top.get("global_scopes", {})
+    if not isinstance(raw_scopes, dict):
+        raise _error("verification router.global_scopes", "must be a mapping")
+    global_scopes: dict[str, GlobalScopeDefinition] = {}
+    for scope_id, raw_scope in raw_scopes.items():
+        scope_id = _require_nonempty_string(scope_id, "verification router.global_scopes key")
+        item = _require_mapping(raw_scope, f"verification router.global_scopes.{scope_id}")
+        _require_keys(item, _GLOBAL_SCOPE_KEYS, f"verification router.global_scopes.{scope_id}")
+        owner = _require_nonempty_string(item.get("owner"), f"verification router.global_scopes.{scope_id}.owner")
+        paths = _require_string_list(item.get("paths"), f"verification router.global_scopes.{scope_id}.paths")
+        scope_checks = _require_string_list(item.get("checks"), f"verification router.global_scopes.{scope_id}.checks")
+        unknown = sorted(set(scope_checks) - resolved_check_ids)
+        if unknown:
+            raise _error(
+                f"verification router.global_scopes.{scope_id}.checks",
+                f"unknown check(s): {', '.join(unknown)}",
+            )
+        minimum_lane = _require_nonempty_string(
+            item.get("minimum_lane"), f"verification router.global_scopes.{scope_id}.minimum_lane"
+        )
+        if minimum_lane not in LANE_ORDER:
+            raise _error(
+                f"verification router.global_scopes.{scope_id}.minimum_lane",
+                f"invalid lane {minimum_lane!r}",
+            )
+        scope_domains = item.get("domains", [])
+        if not isinstance(scope_domains, list) or not all(isinstance(domain, str) and domain for domain in scope_domains):
+            raise _error(
+                f"verification router.global_scopes.{scope_id}.domains",
+                "must be a list of non-empty strings",
+            )
+        unknown_domains = sorted(set(scope_domains) - set(domains))
+        if unknown_domains:  # kept explicit for future domain registry binding
+            raise _error(
+                f"verification router.global_scopes.{scope_id}.domains",
+                f"unknown domain(s): {', '.join(unknown_domains)}",
+            )
+        global_scopes[scope_id] = GlobalScopeDefinition(
+            scope_id, owner, paths, scope_checks, minimum_lane, tuple(scope_domains)
+        )
+    legacy_paths = top.get("global_paths", [])
+    if legacy_paths:
+        global_paths = _require_string_list(legacy_paths, "verification router.global_paths")
+    else:
+        global_paths = tuple(
+            path for scope in global_scopes.values() for path in scope.paths
+        )
+    return VerificationRouterConfig(
+        1, default_lane, lanes, checks, domains, global_paths, global_scopes
+    )
 
 
 def load_router_registry(path: str | Path, *, known_check_ids: set[str] | None = None) -> VerificationRouterConfig:
@@ -251,10 +320,22 @@ def classify_impact(
     """Classify changed paths and select checks without executing anything."""
     changed = tuple(sorted(set(paths)))
     affected: set[str] = set()
-    global_change = any(
-        any(matches(path, pattern) for pattern in config.global_paths) for path in changed
+    matched_scopes = tuple(
+        sorted(
+            scope_id
+            for scope_id, scope in config.global_scopes.items()
+            if any(matches(path, pattern) for path in changed for pattern in scope.paths)
+        )
     )
+    legacy_global_change = any(
+        any(matches(path, pattern) for pattern in config.global_paths) for path in changed
+    ) and not config.global_scopes
+    global_change = bool(matched_scopes) or legacy_global_change
     minimum_lane = "fast"
+    for scope_id in matched_scopes:
+        scope = config.global_scopes[scope_id]
+        if LANE_ORDER.index(scope.minimum_lane) > LANE_ORDER.index(minimum_lane):
+            minimum_lane = scope.minimum_lane
     # A path that is not owned by any registered domain is a new executable
     # or delivery surface until somebody registers it.  Treating that case as
     # a fast, low-risk change is precisely the silent-omission failure this
@@ -267,13 +348,27 @@ def classify_impact(
             for path in changed
             if any(matches(path, pattern) for pattern in definition.paths)
         }
-        if global_change or domain_matches:
+        scope_domains = {
+            domain_id
+            for scope_id in matched_scopes
+            for domain_id in config.global_scopes[scope_id].domains
+        }
+        if legacy_global_change or domain_matches or domain_id in scope_domains:
             affected.add(domain_id)
             matched_paths.update(domain_matches)
             if LANE_ORDER.index(definition.minimum_lane) > LANE_ORDER.index(minimum_lane):
                 minimum_lane = definition.minimum_lane
 
-    unknown_paths = set(changed) - matched_paths
+    scope_matched_paths = {
+        path
+        for path in changed
+        if any(
+            matches(path, pattern)
+            for scope_id in matched_scopes
+            for pattern in config.global_scopes[scope_id].paths
+        )
+    }
+    unknown_paths = set(changed) - matched_paths - scope_matched_paths
     if unknown_paths and not global_change:
         affected.add("unknown_component")
         minimum_lane = "integration"
@@ -288,6 +383,8 @@ def classify_impact(
         raise ValueError(f"requested lane {selected_lane!r} is below required minimum {minimum_lane!r}")
 
     check_ids: set[str] = set(config.lanes[selected_lane][:2])
+    for scope_id in matched_scopes:
+        check_ids.update(config.global_scopes[scope_id].checks)
     if LANE_ORDER.index(selected_lane) >= LANE_ORDER.index(minimum_lane):
         for domain_id in affected:
             # ``unknown_component`` is a deliberate synthetic owner.  Its
@@ -327,4 +424,5 @@ def classify_impact(
         selected_lane=selected_lane,
         followup_required=LANE_ORDER.index(selected_lane) < LANE_ORDER.index(minimum_lane),
         selected_checks=tuple(sorted(check_ids)),
+        global_scopes=matched_scopes,
     )

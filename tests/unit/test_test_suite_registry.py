@@ -31,6 +31,7 @@ def _suite_yaml(**overrides) -> str:
     """A minimal valid suite entry, overridable per test."""
     base = {
         "id": "sample",
+        "suite_role": "component",
         "paths": ["tests"],
         "runner": '["python", "-m", "pytest"]',
         "subsystem": "core",
@@ -38,18 +39,23 @@ def _suite_yaml(**overrides) -> str:
         "components": '["core"]',
         "contracts": "[]",
         "dependencies": "[]",
+        "dependency_profile": "python-root",
+        "runtime_class": "medium",
         "isolation": "process",
         "lane": "pr",
         "profiles": '["local", "ci"]',
         "expected_runtime_seconds": 10,
         "hard_runtime_budget_seconds": 30,
+        "requires": "{python_packages: [], services: [], docker: false, credentials: []}",
         "environments": '["local", "ci"]',
         "skip_policy": "never",
         "release_class": "pr_gate",
+        "evidence_artifact": "ci-evidence/suites/sample.json",
     }
     base.update(overrides)
     lines = ["suites:"]
     lines.append(f"  - id: {base['id']}")
+    lines.append(f"    suite_role: {base['suite_role']}")
     lines.append(f"    paths: {base['paths']}")
     lines.append(f"    runner: {base['runner']}")
     lines.append(f"    subsystem: {base['subsystem']}")
@@ -57,14 +63,19 @@ def _suite_yaml(**overrides) -> str:
     lines.append(f"    components: {base['components']}")
     lines.append(f"    contracts: {base['contracts']}")
     lines.append(f"    dependencies: {base['dependencies']}")
+    lines.append(f"    dependency_profile: {base['dependency_profile']}")
+    lines.append(f"    runtime_class: {base['runtime_class']}")
     lines.append(f"    isolation: {base['isolation']}")
     lines.append(f"    lane: {base['lane']}")
     lines.append(f"    profiles: {base['profiles']}")
     lines.append(f"    expected_runtime_seconds: {base['expected_runtime_seconds']}")
     lines.append(f"    hard_runtime_budget_seconds: {base['hard_runtime_budget_seconds']}")
+    lines.append(f"    requires: {base['requires']}")
     lines.append(f"    environments: {base['environments']}")
     lines.append(f"    skip_policy: {base['skip_policy']}")
     lines.append(f"    release_class: {base['release_class']}")
+    lines.append(f"    evidence_artifact: {base['evidence_artifact']}")
+    lines.append("    quarantine: null")
     for extra in base.get("extra_lines", []):
         lines.append(f"    {extra}")
     return "\n".join(lines) + "\n"
@@ -111,6 +122,24 @@ def test_unknown_keys_are_rejected(tmp_path: Path) -> None:
         load_suites(str(bad))
 
 
+@pytest.mark.parametrize("field", ["suite_role", "dependency_profile"])
+def test_selection_authority_fields_are_required(tmp_path: Path, field: str) -> None:
+    bad = tmp_path / "suites.yaml"
+    entry = "\n".join(
+        line for line in _suite_yaml().splitlines() if not line.startswith(f"    {field}: ")
+    ) + "\n"
+    bad.write_text(entry, encoding="utf-8")
+    with pytest.raises(TestSuiteConfigError, match=f"missing required key '{field}'"):
+        load_suites(str(bad))
+
+
+def test_blocking_suite_without_evidence_is_rejected(tmp_path: Path) -> None:
+    bad = tmp_path / "suites.yaml"
+    bad.write_text(_suite_yaml(evidence_artifact="null"), encoding="utf-8")
+    with pytest.raises(TestSuiteConfigError, match="blocking pr_gate suites"):
+        load_suites(str(bad))
+
+
 @pytest.mark.parametrize(
     "field",
     [
@@ -118,6 +147,7 @@ def test_unknown_keys_are_rejected(tmp_path: Path) -> None:
         "components",
         "contracts",
         "dependencies",
+        "runtime_class",
         "isolation",
         "lane",
         "profiles",

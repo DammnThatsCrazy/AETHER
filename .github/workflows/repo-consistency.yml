@@ -3,8 +3,7 @@ name: Repo Consistency
 on:
   pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -15,6 +14,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The classifier is deliberately limited to the ci-control dependency
+  # profile. It emits the same Impact Graph-backed plan consumed by every
+  # downstream worker; no job below maintains a second selection list.
   classify-change:
     name: Classify change (impact authority)
     runs-on: ubuntu-latest
@@ -30,27 +32,34 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: pyproject.toml
-      - name: Bootstrap router dependencies
-        run: make bootstrap
+      - name: Bootstrap minimal CI control plane
+        run: make bootstrap-ci-control
       - name: Select affected verification
         id: selection
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
         run: |
+          echo "CLASSIFIER_STARTED=$(date +%s.%N)" >> "$GITHUB_ENV"
           mkdir -p release-evidence
-          .venv/bin/python scripts/check_router.py --base "$BASE_SHA" --output release-evidence/verification-selection.json
+          .venv/bin/python scripts/check_router.py --base "$BASE_SHA" \
+            --output release-evidence/verification-selection.json
           .venv/bin/python - <<'PY' >> "$GITHUB_OUTPUT"
           import json
-          with open("release-evidence/verification-selection.json") as source:
-              print("minimum_lane=" + json.load(source)["minimum_lane"])
+          from pathlib import Path
+          selection = json.loads(Path("release-evidence/verification-selection.json").read_text())
+          print("minimum_lane=" + selection["minimum_lane"])
           PY
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: verification-selection-evidence
-          path: release-evidence/verification-selection.json
-          if-no-files-found: error
-      - name: Index complete impact graph and emit telemetry evidence
+      - name: Build canonical execution plan
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
+        run: |
+          .venv/bin/python scripts/verification_execution_plan.py \
+            --base "$BASE_SHA" \
+            --output release-evidence/verification-execution-plan.json
+          .venv/bin/python scripts/validate_execution_plan.py \
+            --plan release-evidence/verification-execution-plan.json
+          .venv/bin/python scripts/validate_ci_performance_policy.py
+      - name: Index impact and emit classification telemetry
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
         run: |
@@ -60,23 +69,186 @@ jobs:
             --telemetry-output release-evidence/telemetry.json \
             > release-evidence/impact-graph.json
           .venv/bin/python scripts/validate_telemetry_contracts.py
+          .venv/bin/python - <<'PY'
+          import json
+          import os
+          import time
+          from pathlib import Path
+          Path("release-evidence/classifier-timing.json").write_text(json.dumps({
+              "schema_version": 1,
+              "stage": "classifier",
+              "classifier_seconds": time.time() - float(os.environ["CLASSIFIER_STARTED"]),
+              "runner": os.environ.get("RUNNER_OS", "unknown"),
+          }, indent=2) + "\n")
+          PY
       - uses: actions/upload-artifact@v4
         with:
-          name: impact-telemetry-evidence
+          name: classification-evidence
           path: |
+            release-evidence/verification-selection.json
+            release-evidence/verification-execution-plan.json
             release-evidence/impact-graph.json
             release-evidence/telemetry.json
+            release-evidence/classifier-timing.json
           if-no-files-found: error
 
-  build-artifact:
-    name: Build affected artifact (build authority)
+  universal-fast:
+    name: Universal fast control checks
     needs: classify-change
+    if: needs.classify-change.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: make bootstrap-ci-control
+      - uses: actions/download-artifact@v4
+        with:
+          name: classification-evidence
+          path: release-evidence
+      - name: Run universal-fast checks in the control profile
+        run: |
+          .venv/bin/python scripts/universal_fast.py \
+            --plan release-evidence/verification-execution-plan.json \
+            --output release-evidence/universal-fast-evidence.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: universal-fast-evidence
+          path: release-evidence/universal-fast-evidence.json
+          if-no-files-found: error
+
+  plan-verification:
+    name: Plan distributed suite workers
+    needs: classify-change
+    if: needs.classify-change.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      has-workers: ${{ steps.matrix.outputs.has_workers }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: make bootstrap-ci-control
+      - uses: actions/download-artifact@v4
+        with:
+          name: classification-evidence
+          path: release-evidence
+      - name: Validate and expose the canonical worker matrix
+        id: matrix
+        run: |
+          .venv/bin/python scripts/validate_execution_plan.py \
+            --plan release-evidence/verification-execution-plan.json \
+            --matrix-output release-evidence/suite-matrix.json
+          .venv/bin/python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+          matrix = json.loads(Path("release-evidence/suite-matrix.json").read_text())
+          print("matrix=" + json.dumps(matrix, separators=(",", ":")))
+          print("has_workers=" + ("true" if matrix else "false"))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plan-evidence
+          path: |
+            release-evidence/verification-execution-plan.json
+            release-evidence/suite-matrix.json
+          if-no-files-found: error
+
+  suite-matrix:
+    name: Suite worker (${{ matrix.worker.id }})
+    needs: [classify-change, plan-verification]
+    if: needs.plan-verification.outputs.has-workers == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        worker: ${{ fromJson(needs.plan-verification.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Bootstrap the minimal worker control plane
+        run: make bootstrap-ci-control
+      - name: Extend only Python workers with their selected profile
+        if: matrix.worker.python_required
+        run: |
+          .venv/bin/python -m pip install -e ".[${{ matrix.worker.python_extra }}]"
+      - uses: actions/setup-node@v4
+        if: matrix.worker.node_required
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install Node dependencies only for Node workers
+        if: matrix.worker.node_required
+        run: npm ci --ignore-scripts
+      - name: Execute selected suite batch
+        run: |
+          mkdir -p release-evidence
+          .venv/bin/python scripts/suite_worker.py \
+            --worker-id "${{ matrix.worker.id }}" \
+            --worker-class "${{ matrix.worker.worker_class }}" \
+            --suite-ids '${{ toJson(matrix.worker.suite_ids) }}' \
+            --dependency-profile "${{ matrix.worker.dependency_profile }}" \
+            --runtime-class "${{ matrix.worker.runtime_class }}" \
+            --output release-evidence/suite-evidence.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: suite-evidence-${{ matrix.worker.id }}
+          path: release-evidence/suite-evidence.json
+          if-no-files-found: error
+
+  plan-build:
+    name: Emit affected build manifest
+    needs: classify-change
+    if: needs.classify-change.result == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      node-required: ${{ steps.select.outputs.node_required }}
+      backend-image: ${{ steps.select.outputs.backend_image }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: classification-evidence
+          path: release-evidence
+      - name: Validate and expose Build Selection v2
+        id: select
+        run: |
+          jq '.build' release-evidence/verification-execution-plan.json > release-evidence/build-selection.json
+          test "$(jq -r '.node_required | type' release-evidence/build-selection.json)" = boolean
+          test "$(jq -r '.backend_image | type' release-evidence/build-selection.json)" = boolean
+          echo "node_required=$(jq -r '.node_required' release-evidence/build-selection.json)" >> "$GITHUB_OUTPUT"
+          echo "backend_image=$(jq -r '.backend_image' release-evidence/build-selection.json)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-selection-evidence
+          path: release-evidence/build-selection.json
+          if-no-files-found: error
+
+  build-node:
+    name: Build selected Node workspaces
+    needs: [classify-change, plan-build]
+    if: needs.plan-build.outputs.node-required == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      # Keep scoped workspace builds equivalent to the root production build
-      # command in package.json. These are intentionally invalid endpoints:
-      # they satisfy compile-time configuration without creating live access.
       VITE_AETHER_ENV: production
       VITE_KYBER_ENV: production
       VITE_DEMO_ENV: production
@@ -93,127 +265,237 @@ jobs:
       VITE_KYBER_URL: https://operator.invalid
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts
       - uses: actions/download-artifact@v4
         with:
-          name: impact-telemetry-evidence
+          name: build-selection-evidence
           path: release-evidence
-      - name: Select affected build workspaces from the impact graph
+      - name: Build only selected workspaces
         run: |
-          python - <<'PY'
-          import json
-          from pathlib import Path
-
-          index = json.loads(Path("release-evidence/impact-graph.json").read_text())
-          selection = index["build_selection"]
-          selected = selection.get("workspaces")
-          if not isinstance(selected, list) or not all(isinstance(path, str) for path in selected):
-              raise SystemExit("Impact Graph did not emit an ordered workspace build selection")
-          if any(not (Path(workspace) / "package.json").is_file() for workspace in selected):
-              raise SystemExit("Impact Graph selected a workspace without package.json")
-          selection = {
-              "schema_version": 1,
-              "authority": "impact",
-              "changed_files": index["changed_files"],
-              "workspaces": selected,
-              "packages": selection["packages"],
-              "applications": selection["applications"],
-              "backend_image": selection["backend_image"],
-              "sdk": selection["sdk"],
-          }
-          Path("release-evidence/build-selection.json").write_text(
-              json.dumps(selection, indent=2) + "\n"
-          )
-          Path("release-evidence/build-workspaces.txt").write_text(
-              "\n".join(selected) + ("\n" if selected else "")
-          )
-          PY
-      - name: Build only selected workspaces in dependency order
-        run: |
+          echo "BUILD_STARTED=$(date +%s.%N)" >> "$GITHUB_ENV"
           set -euo pipefail
           while IFS= read -r workspace; do
             [ -n "$workspace" ] || continue
             if node -e 'const p=require("./" + process.argv[1] + "/package.json"); process.exit(p.scripts?.build ? 0 : 1)' "$workspace"; then
               npm run build --workspace="$workspace"
-            else
-              echo "No build script for $workspace; recording it as typecheck/test-only scope."
             fi
-          done < release-evidence/build-workspaces.txt
-      - name: Build selected backend image without publishing or deploying
+          done < <(jq -r '.workspaces[]?' release-evidence/build-selection.json)
+      - name: Package the immutable Node candidate component
         run: |
-          set -euo pipefail
-          selected="$(python -c 'import json; print(json.load(open("release-evidence/build-selection.json"))["backend_image"])')"
-          case "$selected" in
-            True)
-              test -f "services/backend/Dockerfile" || {
-                echo "Impact Graph selected backend_image but the canonical Dockerfile is missing" >&2
-                exit 1
-              }
-              docker build \
-                --file "services/backend/Dockerfile" \
-                --tag "aether-backend:pr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
-                .
-              ;;
-            False)
-              echo "backend_image is NOT_APPLICABLE for this Impact Graph selection"
-              ;;
-            *)
-              echo "::error::Impact Graph emitted a non-boolean backend_image selection: $selected" >&2
-              exit 1
-              ;;
-          esac
-      - name: Package selected build outputs once and create immutable candidate
-        run: |
-          set -euo pipefail
           mkdir -p release-evidence
-          selected="$(python -c 'import json; print(json.load(open("release-evidence/build-selection.json"))["backend_image"])')"
           outputs=(release-evidence/build-selection.json)
           while IFS= read -r workspace; do
             [ -n "$workspace" ] || continue
-            if [ -d "$workspace/dist" ]; then
-              outputs+=("$workspace/dist")
-            fi
-          done < release-evidence/build-workspaces.txt
+            [ -d "$workspace/dist" ] && outputs+=("$workspace/dist")
+          done < <(jq -r '.workspaces[]?' release-evidence/build-selection.json)
           tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
             -czf release-evidence/repository-build.tar.gz "${outputs[@]}"
-          components=(--component repository-build=release-evidence/repository-build.tar.gz)
-          if [ "$selected" = "True" ]; then
-            docker save "aether-backend:pr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
-              | gzip -n > release-evidence/backend-image.tar.gz
-            components+=(--component backend-image=release-evidence/backend-image.tar.gz)
-          fi
-          python scripts/artifact_builder.py \
-            --candidate-id "pr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
-            --profile bundle-certification \
-            "${components[@]}" \
-            --lockfile package-lock.json --lockfile pyproject.toml \
-            --required-check verification/disposition \
-            --output release-evidence/release-candidate.json
-          cp release-evidence/release-candidate.json release-evidence/build.json
+          python3 - <<'PY'
+          import json
+          import os
+          import time
+          from pathlib import Path
+          Path("release-evidence/build-timing.json").write_text(json.dumps({
+              "schema_version": 1,
+              "stage": "build",
+              "job": "build-node",
+              "build_seconds": time.time() - float(os.environ["BUILD_STARTED"]),
+          }, indent=2) + "\n")
+          PY
       - uses: actions/upload-artifact@v4
         with:
-          name: pr-build-evidence
+          name: node-build-evidence
           path: |
-            release-evidence/build.json
             release-evidence/build-selection.json
-            release-evidence/release-candidate.json
             release-evidence/repository-build.tar.gz
-            release-evidence/backend-image.tar.gz
-          if-no-files-found: warn
+            release-evidence/build-timing.json
+          if-no-files-found: error
 
-  selected-verification:
-    name: Affected verification execution
-    needs: [classify-change, build-artifact]
+  build-backend-image:
+    name: Build selected backend image
+    needs: [classify-change, plan-build]
+    if: needs.plan-build.outputs.backend-image == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-selection-evidence
+          path: release-evidence
+      - name: Build and archive the deployment-sensitive image
+        run: |
+          build_started=$(date +%s.%N)
+          test -f "services/backend/Dockerfile"
+          docker build --file "services/backend/Dockerfile" \
+            --tag "aether-backend:pr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" .
+          docker save "aether-backend:pr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            | gzip -n > release-evidence/backend-image.tar.gz
+          python3 - <<PY
+          import json
+          import time
+          from pathlib import Path
+          Path("release-evidence/build-timing.json").write_text(json.dumps({
+              "schema_version": 1,
+              "stage": "build",
+              "job": "build-backend-image",
+              "build_seconds": time.time() - float("${build_started}"),
+          }, indent=2) + "\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-image-evidence
+          path: |
+            release-evidence/backend-image.tar.gz
+            release-evidence/build-timing.json
+          if-no-files-found: error
+
+  candidate-verification:
+    name: Candidate verification
+    needs: [classify-change, universal-fast, plan-verification, suite-matrix, plan-build, build-node, build-backend-image]
+    if: always() && needs.classify-change.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*evidence*'
+          path: release-evidence
+          merge-multiple: true
+      - name: Verify the immutable candidate closure
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p release-evidence
+          if [ -f release-evidence/repository-build.tar.gz ] || [ -f release-evidence/backend-image.tar.gz ]; then
+            components=()
+            if [ -f release-evidence/repository-build.tar.gz ]; then
+              components+=(--component repository-build=release-evidence/repository-build.tar.gz)
+            fi
+            if [ -f release-evidence/backend-image.tar.gz ]; then
+              components+=(--component backend-image=release-evidence/backend-image.tar.gz)
+            fi
+            python3 scripts/artifact_builder.py \
+              --candidate-id "pr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+              --profile bundle-certification \
+              "${components[@]}" \
+              --lockfile package-lock.json --lockfile pyproject.toml \
+              --required-check verification/disposition \
+              --output release-evidence/release-candidate.json
+            repository_args=()
+            if [ -f release-evidence/repository-build.tar.gz ]; then
+              repository_args=(--repository-build release-evidence/repository-build.tar.gz)
+            fi
+            backend_args=()
+            if [ -f release-evidence/backend-image.tar.gz ]; then
+              backend_args=(--backend-image release-evidence/backend-image.tar.gz)
+            fi
+            python3 scripts/verify_candidate_evidence.py \
+              --candidate release-evidence/release-candidate.json \
+              "${repository_args[@]}" \
+              --build-selection release-evidence/build-selection.json \
+              --expected-commit "$EXPECTED_SHA" \
+              "${backend_args[@]}" \
+              --output release-evidence/candidate-verification.json
+          else
+            python3 - <<'PY'
+            import json
+            from pathlib import Path
+            import os
+            Path("release-evidence/candidate-verification.json").write_text(json.dumps({
+                "schema_version": 1,
+                "stage": "candidate-verification",
+                "status": "PASS",
+                "candidate_path": "not-applicable",
+                "commit_sha": os.environ["EXPECTED_SHA"],
+                "artifact_digest": "not-applicable",
+                "candidate_verification_seconds": 0.0,
+                "errors": [],
+            }, indent=2) + "\n")
+            PY
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: candidate-verification-evidence
+          path: release-evidence/candidate-verification.json
+          if-no-files-found: error
+
+  publish-evidence:
+    name: verification / disposition
+    needs: [classify-change, universal-fast, plan-verification, suite-matrix, plan-build, build-node, build-backend-image, candidate-verification]
+    if: always() && needs.classify-change.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*evidence*'
+          path: release-evidence
+          merge-multiple: true
+      - name: Aggregate distributed evidence and close the single authority
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
+        run: |
+          python3 scripts/aggregate_verification_evidence.py \
+            --plan release-evidence/verification-execution-plan.json \
+            --evidence-dir release-evidence \
+            --output release-evidence/verification-aggregation.json
+          python3 scripts/verification_disposition.py \
+            --base "$BASE_SHA" \
+            --evidence release-evidence/verification-aggregation.json \
+            --execution-plan release-evidence/verification-execution-plan.json \
+            --candidate-evidence release-evidence/candidate-verification.json \
+            --output release-evidence/pr-disposition.json \
+            --runtime-output release-evidence/ci-runtime-runs.json
+      - name: Publish blocking decision
+        if: always()
+        env:
+          UPSTREAM_RESULTS: >-
+            ${{ needs.classify-change.result }}:${{ needs.universal-fast.result }}:${{ needs.plan-verification.result }}:${{ needs.suite-matrix.result }}:${{ needs.plan-build.result }}:${{ needs.build-node.result }}:${{ needs.build-backend-image.result }}:${{ needs.candidate-verification.result }}
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          disposition = Path("release-evidence/pr-disposition.json")
+          status = "BLOCKED"
+          if disposition.exists():
+              status = json.loads(disposition.read_text()).get("status", "BLOCKED")
+          Path("release-evidence/verification-decision.json").write_text(json.dumps({
+              "schema_version": 1,
+              "authority": "verification",
+              "blocking": True,
+              "status": status,
+              "upstream_results": "${UPSTREAM_RESULTS}",
+          }, indent=2) + "\n")
+          if status not in {"PASS", "PASS_WITH_DEGRADATION"}:
+              raise SystemExit(f"blocking verification disposition: {status}")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: repo-consistency-evidence
+          path: release-evidence/*.json
+          if-no-files-found: error
+
+  release-gate:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -225,137 +507,13 @@ jobs:
           cache-dependency-path: pyproject.toml
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "20"
           cache: npm
-      - run: make bootstrap
+      - name: Bootstrap full release toolchain
+        run: make bootstrap
       - run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - run: npm ci --ignore-scripts
-      - uses: actions/download-artifact@v4
-        with:
-          name: pr-build-evidence
-          path: release-evidence
-      - name: Verify exact build candidate before testing
-        run: |
-          set -euo pipefail
-          components=(--component repository-build=release-evidence/repository-build.tar.gz)
-          selected="$(python -c 'import json; print(json.load(open("release-evidence/build-selection.json"))["backend_image"])')"
-          if [ "$selected" = "True" ]; then
-            test -f release-evidence/backend-image.tar.gz
-            gzip -dc release-evidence/backend-image.tar.gz | docker load
-            components+=(--component backend-image=release-evidence/backend-image.tar.gz)
-          fi
-          python scripts/artifact_builder.py --verify \
-            --expected-commit "$GITHUB_SHA" \
-            "${components[@]}" \
-            --lockfile package-lock.json --lockfile pyproject.toml \
-            --output release-evidence/release-candidate.json
-      - name: Materialize verified build outputs for consumers
-        run: tar --extract --gzip --file release-evidence/repository-build.tar.gz
-      - name: Frontend data-truth source guardrail
-        run: npm run validate:frontend-data-truth
-      - name: Frontend brand migration guardrail
-        run: npm run validate:frontend-branding
-      - name: Execute the single adaptive verification disposition
-        id: disposition
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
-        run: |
-          .venv/bin/python scripts/verification_disposition.py \
-            --base "$BASE_SHA" --execute \
-            --output release-evidence/pr-disposition.json \
-            --runtime-output release-evidence/ci-runtime-runs.json
-      - name: Record verification disposition evidence
-        if: always()
-        env:
-          STAGE_RESULT: ${{ steps.disposition.outcome }}
-        run: |
-          mkdir -p release-evidence
-          printf '{"schema_version":1,"stage":"verification-disposition","authority":"verification","blocking":true,"status":"%s","commit_sha":"%s"}\n' \
-            "$(test "$STAGE_RESULT" = success && echo PASS || echo FAILED)" "$GITHUB_SHA" > release-evidence/selected-verification.json
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: selected-verification-evidence
-          path: |
-            release-evidence/pr-disposition.json
-            release-evidence/ci-runtime-runs.json
-            release-evidence/selected-verification.json
-          if-no-files-found: error
-
-  publish-evidence:
-    name: verification / disposition
-    if: always()
-    needs: [classify-change, build-artifact, selected-verification]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: '*evidence*'
-          path: release-evidence
-          merge-multiple: true
-      - name: Enforce blocking stage disposition
-        env:
-          IMPACT_RESULT: ${{ needs.classify-change.result }}
-          AFFECTED_BUILD_RESULT: ${{ needs.build-artifact.result }}
-          VERIFICATION_DISPOSITION_RESULT: ${{ needs.selected-verification.result }}
-        run: |
-          python - <<'PY'
-          import json, os
-          results = {
-              "impact": os.environ["IMPACT_RESULT"],
-              "affected_build": os.environ["AFFECTED_BUILD_RESULT"],
-              "verification_disposition": os.environ["VERIFICATION_DISPOSITION_RESULT"],
-          }
-          failed = {name: value for name, value in results.items() if value != "success"}
-          with open("release-evidence/verification-decision.json", "w") as fh:
-              json.dump({"schema_version": 1, "stage": "verification-disposition", "authority": "verification",
-                         "blocking": True, "status": "FAILED" if failed else "PASS",
-                         "results": results}, fh, indent=2)
-              fh.write("\n")
-          if failed:
-              raise SystemExit("blocking PR stages did not pass: " + repr(failed))
-          PY
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: repo-consistency-evidence
-          path: release-evidence/*.json
-          if-no-files-found: error
-
-  # Full release gate (ci-check + strict production status + ops readiness +
-  # staging preflight self-test). Manual dispatch only — this is the
-  # pre-release ratchet, not a per-PR gate.
-  release-gate:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: "pyproject.toml"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Bootstrap toolchain (.venv + fail-closed dependency gate)
-        run: make bootstrap
-
-      - name: Add project virtualenv to PATH
-        run: echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-
-      - name: Install Node dependencies
-        run: npm ci --ignore-scripts
-
       - name: Release gate
         run: make release-gate
-
       - name: Staging preflight (dry-run self-test)
         run: python scripts/staging_preflight.py --dry-run

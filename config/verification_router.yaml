@@ -1,13 +1,18 @@
 schema_version: 1
 default_lane: pr
 lanes:
-  fast: [toolchain, repository_metadata, test_inventory, delivery_metadata, verification_policy, impact_graph, telemetry_contracts, workflow_authority]
-  pr: [toolchain, repository_metadata, test_inventory, delivery_metadata, contracts]
+  fast: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, verification_policy, impact_graph, telemetry_contracts, workflow_authority, ci_execution_contracts]
+  pr: [ci_control_toolchain, repository_metadata, test_inventory, delivery_metadata, contracts]
   integration: [toolchain, repository_metadata, contracts, integration]
   regression: [toolchain, repository_metadata, contracts, integration, regression]
   release: [toolchain, repository_metadata, contracts, integration, regression, release]
 
 checks:
+  ci_control_toolchain:
+    owner: platform
+    risk: critical
+    command: [python, scripts/validate_ci_control_toolchain.py]
+    runtime_budget_seconds: 15
   toolchain:
     owner: platform
     risk: critical
@@ -48,6 +53,11 @@ checks:
     risk: critical
     command: [python, scripts/release/check_delivery_workflow_authority.py]
     runtime_budget_seconds: 15
+  ci_execution_contracts:
+    owner: platform
+    risk: critical
+    command: [python, scripts/validate_ci_execution_contracts.py]
+    runtime_budget_seconds: 15
   docs:
     owner: docs
     risk: high
@@ -87,13 +97,27 @@ domains:
   backend:
     owner: backend
     paths: [services/backend/**, services/agents/**, services/compliance/**, docs/archive/legacy-architecture/backend/**, tests/**]
-    checks: [root, backend]
+    # Component suites are the ordinary-PR authority. The aggregate backend
+    # suite remains registered for regression/release lanes only.
+    checks: [backend-identity, backend-ingestion, backend-campaigns, backend-profile360, backend-agent, backend-computation, backend-value, agent-layer, compliance, journey-service, backend-observability, root-unit-control, root-unit-identity-profile, root-unit-ingestion, root-unit-graph, root-unit-frontend-sdk, root-unit-commerce-value, root-unit-security, root-unit-operations, root-unit-platform]
     path_checks:
-      services/backend/**: [backend]
+      services/backend/services/identity/**: [backend-identity]
+      services/backend/services/ingestion/**: [backend-ingestion]
+      services/backend/services/campaign/**: [backend-campaigns]
+      services/backend/services/profile/**: [backend-profile360]
+      services/backend/services/profile360_workers/**: [backend-profile360]
+      services/backend/services/agent/**: [backend-agent]
+      services/backend/services/computation/**: [backend-computation]
+      services/backend/services/value/**: [backend-value]
+      services/backend/tests/valuation/**: [backend-value]
+      services/backend/services/agent_comm_observability/**: [backend-observability]
+      services/backend/services/external_account_observability/**: [backend-observability]
+      services/backend/services/agentic_observability/**: [backend-observability]
+      services/backend/services/protocol_observability/**: [backend-observability]
       services/agents/**: [agent-layer]
       services/compliance/**: [compliance]
       docs/archive/legacy-architecture/backend/services/journey-service/**: [journey-service]
-      tests/**: [root]
+      tests/**: [root-unit-control, root-unit-identity-profile, root-unit-ingestion, root-unit-graph, root-unit-frontend-sdk, root-unit-commerce-value, root-unit-security, root-unit-operations, root-unit-platform]
     minimum_lane: pr
   frontend:
     owner: frontend
@@ -134,16 +158,63 @@ domains:
     checks: [docs]
     minimum_lane: fast
 
-global_paths:
-  - pyproject.toml
-  - package.json
-  - package-lock.json
-  - config/verification_router.yaml
-  - config/impact_graph.json
-  - config/test_suites.yaml
-  - config/ci_runtime_budgets.yaml
-  - .github/workflows/**
-  - scripts/lib/verification_router.py
-  - scripts/lib/impact_graph.py
-  - scripts/lib/build_selection.py
-  - scripts/verification_disposition.py
+global_scopes:
+  verification_control_plane:
+    owner: platform
+    paths:
+      - .github/workflows/**
+      - config/verification_router.yaml
+      - config/impact_graph.json
+      - config/test_suites.yaml
+      - config/test_suites.schema.json
+      - config/ci_runtime_budgets.yaml
+      - config/dependency_profiles.yaml
+      - config/ci_performance_policy.yaml
+      - config/telemetry_contracts.json
+      - contracts/delivery/**
+      - scripts/check_router.py
+      - scripts/impact_graph.py
+      - scripts/verification_disposition.py
+      - scripts/verification_execution_plan.py
+      - scripts/aggregate_verification_evidence.py
+      - scripts/lib/ci_performance.py
+      - scripts/suite_worker.py
+      - scripts/universal_fast.py
+      - scripts/validate_ci_performance_policy.py
+      - scripts/validate_execution_plan.py
+      - scripts/verify_candidate_evidence.py
+      - scripts/validate_ci_execution_contracts.py
+      - scripts/lib/verification_router.py
+      - scripts/lib/impact_graph.py
+      - scripts/lib/build_selection.py
+      - scripts/lib/test_suites.py
+      - scripts/validate_ci_control_toolchain.py
+    checks:
+      - repository_metadata
+      - test_inventory
+      - delivery_metadata
+      - verification_policy
+      - impact_graph
+      - telemetry_contracts
+      - workflow_authority
+      - ci_execution_contracts
+    minimum_lane: integration
+    domains: [delivery]
+  python_dependency_graph:
+    owner: platform
+    paths: [pyproject.toml]
+    checks: [toolchain, repository_metadata, test_inventory, delivery_metadata, contracts]
+    minimum_lane: pr
+    domains: [delivery, backend, machine_learning]
+  node_dependency_graph:
+    owner: platform
+    paths: [package.json, package-lock.json]
+    checks: [toolchain, repository_metadata, test_inventory, delivery_metadata, contracts]
+    minimum_lane: pr
+    domains: [delivery, frontend, sdk]
+  shared_runtime_contract:
+    owner: platform
+    paths: [packages/shared/contracts/**]
+    checks: [contracts]
+    minimum_lane: pr
+    domains: [backend, frontend, sdk]

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.internal/contracts/verification-execution-plan.schema.json",
+  "title": "Aether verification execution plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status", "risk", "lane", "domains", "jobs", "suite_matrix", "build", "global_scopes", "skipped", "performance_policy"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "status": {"enum": ["READY", "BLOCKED"]},
+    "risk": {"enum": ["R0", "R1", "R2", "R3", "R4", "R5"]},
+    "reason": {"type": "string"},
+    "lane": {"enum": ["fast", "pr", "integration", "regression", "release"]},
+    "domains": {"type": "array", "items": {"type": "string"}},
+    "global_scopes": {"type": "array", "items": {"type": "string"}},
+    "performance_policy": {"type": "string", "minLength": 1},
+    "suite_matrix": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "suite_ids", "dependency_profile", "runtime_class", "worker_class", "blocking", "node_required", "python_required", "python_extra", "docker_required"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "suite_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "dependency_profile": {"type": "string", "minLength": 1},
+          "runtime_class": {"enum": ["tiny", "small", "medium", "heavy"]},
+          "worker_class": {"enum": ["pooled", "isolated"]},
+          "blocking": {"type": "boolean"},
+          "node_required": {"type": "boolean"},
+          "python_required": {"type": "boolean"},
+          "python_extra": {"type": ["string", "null"]},
+          "docker_required": {"type": "boolean"}
+        }
+      }
+    },
+    "jobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "worker_class", "dependency_profile", "runtime_class", "checks", "blocking"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "worker_class": {"enum": ["pooled", "isolated"]},
+          "dependency_profile": {"type": "string", "minLength": 1},
+          "runtime_class": {"enum": ["tiny", "small", "medium", "heavy"]},
+          "checks": {"type": "array", "items": {"type": "string"}},
+          "suite_ids": {"type": "array", "items": {"type": "string"}},
+          "blocking": {"type": "boolean"}
+        }
+      }
+    },
+    "build": {"type": "object"},
+    "selected_suite_count": {"type": "integer", "minimum": 0},
+    "runnable_suite_count": {"type": "integer", "minimum": 0},
+    "selected_component_count": {"type": "integer", "minimum": 0},
+    "selected_components": {"type": "array", "items": {"type": "string"}},
+    "skipped": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["suite", "reason"],
+        "properties": {
+          "suite": {"type": "string"},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "selected_checks": {"type": "array", "items": {"type": "string"}},
+    "changed_files": {"type": "array", "items": {"type": "string"}},
+    "unresolved_paths": {"type": "array", "items": {"type": "string"}}
+  }
+}
