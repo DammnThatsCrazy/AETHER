@@ -1149,7 +1149,10 @@ suites:
     components: [platform]
     contracts: [repository-consistency]
     dependencies: []
-    dependency_profile: python-backend
+    # This cross-surface platform slice includes backend, agent, and ML
+    # wrappers; provision the canonical aggregate profile instead of silently
+    # relying on whichever local extras happen to be installed.
+    dependency_profile: python-all
     runtime_class: medium
     isolation: process
     lane: pr
