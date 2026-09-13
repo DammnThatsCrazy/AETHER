@@ -95,13 +95,13 @@ setup-minimal: ## Install minimal dependencies (security module only)
 test: ## Run every Python test subsystem: root tests/, full backend tree, and ML tests/ (suites run separately to avoid conftest collision; TypeScript and Smart Contracts have their own gates -- see ci-check)
 	python -m pytest tests/ -v
 	python -m pytest "$(BACKEND_DIR)/tests/" -v
-	python -m pytest "$(ML_DIR)/tests/" -v
+	python scripts/run_ml_tests.py
 
 test-security: ## Run extraction defense tests only
 	python -m pytest tests/security/ -v
 
 test-ml: ## Run ML model tests only
-	python -m pytest "$(ML_DIR)/tests/" -v
+	python scripts/run_ml_tests.py
 
 validate-ml-registry: ## Validate ML model registry consistency (CI gate)
 	python scripts/validate_ml_registry.py
@@ -114,10 +114,10 @@ ml-validate: ## Registry + contract consistency gate
 	python scripts/validate_ml_registry.py
 
 ml-test-unit: ## ML unit tests only
-	python -m pytest "$(ML_DIR)/tests/unit/" -v
+	python scripts/run_ml_tests.py tests/unit
 
 ml-test-integration: ## ML integration tests
-	python -m pytest "$(ML_DIR)/tests/integration/" -v
+	python scripts/run_ml_tests.py tests/integration
 
 ml-test-security: ## ML security tests (extraction defense)
 	python -m pytest tests/security/ -v
@@ -125,10 +125,10 @@ ml-test-security: ## ML security tests (extraction defense)
 ml-test: ml-test-unit ml-test-integration ## All ML tests
 
 ml-train-smoke: ## Smoke-train all 9 models using synthetic deterministic fixtures
-	python -m pytest "$(ML_DIR)/tests/unit/test_training_pipeline.py::TestTrainingPipelineSynthetic" -v
+	python scripts/run_ml_tests.py tests/unit/test_training_pipeline.py::TestTrainingPipelineSynthetic
 
 ml-artifact-verify: ## Verify artifact loadability and metadata for all trained models
-	python -m pytest "$(ML_DIR)/tests/unit/test_training_pipeline.py::TestArtifactLoadability" -v
+	python scripts/run_ml_tests.py tests/unit/test_training_pipeline.py::TestArtifactLoadability
 
 ml-docs-check: ## Check ML documentation consistency (blocking — all checks must pass)
 	python scripts/validate_ml_registry.py
@@ -161,7 +161,7 @@ ml-container-smoke: ## Health/ready/predict smoke against built serving containe
 
 ml-staging-smoke: ## Staging-like integration run (AETHER_ENV=staging, no stubs, expects local services)
 	AETHER_ENV=staging \
-	python -m pytest "$(ML_DIR)/tests/integration/" -v -m "not requires_cloud" --tb=short
+	python scripts/run_ml_tests.py tests/integration -m "not requires_cloud"
 
 ml-load-test: ## Basic latency load test for ML serving edge models (requires locust)
 	@which locust > /dev/null 2>&1 || (echo "Install locust: pip install locust" && exit 1)
@@ -175,7 +175,7 @@ test-coverage: ## Run tests with coverage report (all subsystems)
 		--cov=security \
 		--cov="$(BACKEND_DIR)" \
 		--cov-report=term-missing -v
-	python -m pytest "$(ML_DIR)/tests/" --cov-report=term-missing -v
+	python scripts/run_ml_tests.py tests --cov=. --cov-report=term-missing
 
 # ---------------------------------------------------------------------------
 # Code Quality

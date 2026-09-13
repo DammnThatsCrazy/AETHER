@@ -21,7 +21,8 @@ ML_ROOT = ROOT / "services" / "ml"
 
 
 def main() -> int:
-    command = [sys.executable, "-m", "pytest", "tests", "-v", "--tb=short"]
+    pytest_args = sys.argv[1:] or ["tests", "-v", "--tb=short"]
+    command = [sys.executable, "-m", "pytest", *pytest_args]
     print("+", " ".join(command), flush=True)
     env = os.environ.copy()
     ml_root = str(ML_ROOT)

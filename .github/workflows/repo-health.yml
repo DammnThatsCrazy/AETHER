@@ -406,7 +406,7 @@ jobs:
         run: make ml-validate
 
       - name: ML tests (unit + integration + training smoke)
-        run: python -m pytest "$ML_DIR/tests/" -v --tb=short
+        run: python scripts/run_ml_tests.py
 
       - name: ML docs consistency check
         run: make ml-docs-check

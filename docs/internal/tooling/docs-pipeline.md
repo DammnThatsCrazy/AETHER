@@ -22,9 +22,9 @@ canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  ".github/workflows/repo-health.yml": "sha256:a55e5a0fd19cd1360347e1746d5287fcdd1cb769c3619820dbb6d0fa10d930a1"
+  ".github/workflows/repo-health.yml": "sha256:ef98cf4b425f4971ffecc72b641376366e61b09c9ffbdef74250bda231d165f3"
   ".pre-commit-config.yaml": "sha256:e1c5169ee1d1f2923709f37a21c664cf898cb4c3b40ab908be2f9068dd7a0aca"
-  "Makefile": "sha256:ed30c7d685ab1e760543d939638828970df366461f325f9d78775c4f4981838a"
+  "Makefile": "sha256:f347154b52c68a25acdc58602b8fee852dc4e398f2242fdc507f0bb495c208c6"
   "scripts/docs_drift.py": "sha256:b6c0cd0a27f72b8c0d207d799f6daabdf0ed02e8bea17feaf6ccbfff43c1016a"
   "scripts/docs_extract/run_all.py": "sha256:404445eba05d12de88af585f79839b7496a1658411a110e606c46d5ed7e8c338"
   "scripts/docs_idempotency.py": "sha256:fe8628ef3a9b9d824645a5db062857754d2984b0f3f4d866b571df6232302f17"
@@ -190,7 +190,8 @@ different authority scopes:
 
 - `.github/workflows/repo-health.yml` — advisory docs/size signals on PRs and
   the trusted-main/nightly documentation runners. Its `docs-sync` write path is
-  restricted to pushes to `main`.
+  restricted to pushes to `main`; the scheduled/manual ML job delegates to
+  `scripts/run_ml_tests.py` so ML-local test helpers resolve from `services/ml`.
 - `.github/workflows/repo-consistency.yml` — the normal PR authority named
   `verification / disposition`; it runs the selected documentation check when
   the Impact Graph requires it. Its full `make ci-check` execution is retired

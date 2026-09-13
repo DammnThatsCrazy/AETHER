@@ -22,9 +22,9 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:4192c78941e2e6b2682cc1af0727c5dbac6e0bf255ef73ef7bd00c318a511dc8"
-  "cicd/aether-cicd/README.md": "sha256:c9f5748676ad6390df53ad07c2584029a27803a989c754eefea4a8d19a08819a"
-  "cicd/aether-cicd/main.py": "sha256:a20ae99a95de475ad442e9eb72504cf2d613fb549c1e6121350ac07564d75301"
+  ".github/workflows/": "sha256:e882072d49783a127c94a6a9796078721c9b9f083196f1a484b2686d81bb428a"
+  "cicd/aether-cicd/README.md": "sha256:07bc236b744bd0c54bae8b6fa661beba9d3767a3300470814f071a119f8244ee"
+  "cicd/aether-cicd/main.py": "sha256:8027fb1fcb5e4a1aeb6428224fe0ca9f7756df0aaca5f39e7e84bb6c9c85feb9"
   "cicd/aether-cicd/quality_gates/": "sha256:2cc72d40cd7c324e686271c5ea2c90c2ccb15c4ebe0435b0589844663dd2e436"
   "cicd/aether-cicd/stages/": "sha256:961dd8ecca17f67988397b1f33515de8a88180ed70a7545fe05b324eb1bf555f"
   "config/staging_apply_iam_policy.yaml": "sha256:acc34d81c456090d4569faac727b6688604fc07c3bb36764f38c422f23d5004a"
@@ -247,7 +247,7 @@ enforced by any workflow in `.github/workflows/`.
 ### 3. Unit tests
 
 - Vitest via `npm test` for TypeScript SDKs and frontends.
-- Pytest via `python -m pytest tests/ -n auto --tb=short` for core Python tests; ML tests run when `services/ml/**` changes.
+- Pytest via `python -m pytest tests/ -n auto --tb=short` for core Python tests; ML coverage uses `scripts/run_ml_tests.py` so the package-root `services/ml` helpers cannot be shadowed by the repository-level `tests` package. The adaptive PR authority selects that suite when `services/ml/**` changes, and the scheduled/manual ML job uses the same runner.
 - Gate: **all tests pass**.
 
 ### 4. Integration tests

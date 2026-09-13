@@ -259,6 +259,8 @@ def test_deploy_polls_the_authority_that_exists_for_each_trigger():
     # A main push intentionally skips Repo Health's nightly/dispatch aggregate
     # `validate` job, so polling it would fail closed before delivery can run.
     assert "intentionally skipped job as a failed verification" in workflow
+    assert "timeout-minutes: 35" in workflow
+    assert "deadline=$((SECONDS + 2040))" in workflow
 
 
 def test_deploy_never_interpolates_inputs_into_run_scripts():

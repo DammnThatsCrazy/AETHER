@@ -283,15 +283,15 @@ The pipeline manages the following Aether monorepo layout:
 
 | Path                       | Language   | Runtime |
 | -------------------------- | ---------- | ------- |
-| `services/ingestion`       | TypeScript | Node    |
+| `services/backend/services/ingestion`       | Python | Python  |
 | `services/backend/services/identity`        | Python | Python  |
 | `services/backend/services/analytics`       | Python | Python  |
 | `services/backend/services/ml_serving`      | Python | Python  |
 | `services/backend/services/agent`            | Python | Python  |
 | `services/backend/services/campaign`        | Python | Python  |
 | `services/backend/services/consent`         | Python | Python  |
-| `services/notification`    | TypeScript | Node    |
-| `services/admin`           | TypeScript | Node    |
+| `services/backend/services/notification`    | Python | Python  |
+| `services/backend/services/admin`           | Python | Python  |
 
 ---
 

@@ -11,7 +11,7 @@ source_files: [services/ml/common/model_registry.py, services/ml/common/artifact
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  ".github/workflows/repo-health.yml": "sha256:a55e5a0fd19cd1360347e1746d5287fcdd1cb769c3619820dbb6d0fa10d930a1"
+  ".github/workflows/repo-health.yml": "sha256:ef98cf4b425f4971ffecc72b641376366e61b09c9ffbdef74250bda231d165f3"
   "deploy/aws/terraform/modules/s3/main.tf": "sha256:dcb227e3134ef55fc01757c85c28fd0ca5a33b58f915f27c5a58f13c83bd4de4"
   "docker-compose.yml": "sha256:b17b579dd422ed31de2d16145c58bd1183ff9faafab35683ce7e02770d2cf6e1"
   "services/ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
@@ -181,7 +181,10 @@ ML registry validation (`make ml-validate`), full test suite, and docs
 consistency check (`make ml-docs-check`). The job carries
 `timeout-minutes: 60` — the highest bound in `repo-health.yml`, because the
 ML extras install (`[dev,security,backend,agent,ml]`) plus the training smoke
-is the heaviest job in the workflow.
+is the heaviest job in the workflow. Its full test step uses
+`scripts/run_ml_tests.py`, which runs from the `services/ml` package root so
+the ML-local `tests` helpers cannot be shadowed by the repository-level test
+package.
 
 The docs-consistency step uses a full-history checkout and strict source-link
 validation. A final pull-request merge is treated as the review boundary only

@@ -77,7 +77,10 @@ jobs:
     name: Verify tests are green for this commit before building
     if: github.event_name == 'push' || inputs.environment == 'staging'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Main integration authority has the same 30-minute execution budget as
+    # repo-health.yml. Leave a bounded margin for the Checks API to observe its
+    # terminal conclusion before this guard reaches its own timeout.
+    timeout-minutes: 35
     permissions:
       contents: read
       checks: read
@@ -94,7 +97,10 @@ jobs:
           else
             required_checks=(validate)
           fi
-          deadline=$((SECONDS + 1500))
+          # The selected authority may use its full 30-minute budget. This
+          # guard waits 34 minutes, leaving one minute for the enclosing
+          # 35-minute job to fail closed if GitHub never reports completion.
+          deadline=$((SECONDS + 2040))
           while true; do
             all_done=true
             runs_json=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?per_page=100")

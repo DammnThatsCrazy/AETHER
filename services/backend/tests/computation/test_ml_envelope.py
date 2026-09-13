@@ -19,13 +19,17 @@ import sys
 
 # Make the ML feature-contract package importable so the envelope's
 # feature_schema_hash resolves to a real value here, mirroring how GET /features
-# computes it at runtime. Best-effort: absence is tolerated by the test below.
+# computes it at runtime. This is a required integration seam, not an optional
+# fallback: a missing package must fail the test instead of weakening coverage.
 _HERE = os.path.dirname(__file__)
 _ML_ROOT = os.path.abspath(
-    os.path.join(_HERE, "..", "..", "..", "..", "services/ml", "aether-ml")
+    os.path.join(_HERE, "..", "..", "..", "..", "services/ml")
 )
-if os.path.isdir(_ML_ROOT) and _ML_ROOT not in sys.path:
+assert os.path.isdir(_ML_ROOT), f"canonical ML package root is missing: {_ML_ROOT}"
+if _ML_ROOT not in sys.path:
     sys.path.insert(0, _ML_ROOT)
+
+from common.feature_contracts import compute_schema_hash  # noqa: E402
 
 from services.ml_serving.routes import (  # noqa: E402
     _build_payload,
@@ -105,16 +109,11 @@ def test_envelope_carries_schema_hash_and_feature_digest():
     assert "calibration_segment" in env and env["calibration_segment"] is None
     assert "drift_status" in env and env["drift_status"] is None
 
-    # feature_schema_hash is always present; real when the contract registry is
-    # importable, honest None otherwise — never fabricated.
+    # feature_schema_hash is always present and must be the real contract hash,
+    # never a fabricated value or an import-error fallback.
     assert "feature_schema_hash" in env
-    try:
-        from common.feature_contracts import compute_schema_hash
-    except ImportError:
-        assert env["feature_schema_hash"] is None
-    else:
-        assert env["feature_schema_hash"] == compute_schema_hash("churn_prediction")
-        assert env["feature_schema_hash"]  # non-empty real hash
+    assert env["feature_schema_hash"] == compute_schema_hash("churn_prediction")
+    assert env["feature_schema_hash"]  # non-empty real hash
 
 
 def test_envelope_feature_digest_changes_with_features():

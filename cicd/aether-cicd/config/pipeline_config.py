@@ -367,15 +367,15 @@ class ChangeDetectionConfig:
     ])
     # Map from path prefix to affected service names
     service_path_map: Dict[str, str] = field(default_factory=lambda: {
-        "services/ingestion":    "ingestion",
+        "services/backend/services/ingestion": "ingestion",
         "services/backend/services/identity":     "identity",
         "services/backend/services/analytics":    "analytics",
         "services/backend/services/ml_serving":   "ml-serving",
         "services/backend/services/agent":        "agent",
         "services/backend/services/campaign":     "campaign",
         "services/backend/services/consent":      "consent",
-        "services/notification": "notification",
-        "services/admin":        "admin",
+        "services/backend/services/notification": "notification",
+        "services/backend/services/admin":        "admin",
     })
 
 
