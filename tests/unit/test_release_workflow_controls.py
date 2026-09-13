@@ -251,6 +251,16 @@ def test_deploy_verifies_source_run_identity_before_trusting_artifacts():
     assert verify < download
 
 
+def test_deploy_polls_the_authority_that_exists_for_each_trigger():
+    workflow = _workflow("deploy.yml")
+    assert 'if [ "${GITHUB_EVENT_NAME}" = "push" ]; then' in workflow
+    assert 'required_checks=("Main integration authority")' in workflow
+    assert "required_checks=(validate)" in workflow
+    # A main push intentionally skips Repo Health's nightly/dispatch aggregate
+    # `validate` job, so polling it would fail closed before delivery can run.
+    assert "intentionally skipped job as a failed verification" in workflow
+
+
 def test_deploy_never_interpolates_inputs_into_run_scripts():
     for name in ("deploy.yml", "terraform-promote.yml"):
         workflow = _workflow(name)

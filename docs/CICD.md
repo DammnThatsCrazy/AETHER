@@ -22,7 +22,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:8c68a392ee2dc9ad066a689cebf9563898c9197db955f79b5ec01f710f9ab049"
+  ".github/workflows/": "sha256:bcd5d5910e327d58be5b42c8469005340ef5ec4b44824b438dd42442d4daee7f"
   "AWS Deployment/aether-aws/terraform/modules/aurora/main.tf": "sha256:16c4beb8ccab1af164ff62f8aa2d515a5efc3f093b7878411f40aa14ce39e094"
   "AWS Deployment/aether-aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "AWS Deployment/aether-aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
@@ -61,6 +61,12 @@ release workflow is invoked manually, from a release event, or by a release-cand
 caller; `make release-gate` is not an ordinary pull-request check. Release validation
 therefore evaluates an immutable candidate in the release lifecycle rather than PR
 source in the normal critical path.
+
+The immutable delivery workflow applies the same event-specific distinction before
+building a release: a push to `main` must first produce a successful `Main
+integration authority` check, while an explicit staging dispatch waits for the
+nightly/dispatch aggregate `validate` check. An intentionally skipped check is not
+accepted as evidence that code was tested.
 
 The suite registry (`config/test_suites.yaml`) carries ownership, component/contract
 relationships, lane, isolation, and runtime-budget metadata. Local runtime evidence
