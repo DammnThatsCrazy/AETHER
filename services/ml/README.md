@@ -186,6 +186,7 @@ docker compose -f docker/docker-compose.yml up -d
 | xgboost | >= 2.0.0 | Churn prediction, LTV ensemble |
 | mlflow | >= 2.11.0 | Experiment tracking, model registry |
 | fastapi | >= 0.110.0 | Inference server |
+| httpx2 | >= 2.0.0 | FastAPI/Starlette test client |
 | onnx / onnxruntime | >= 1.15.0 / >= 1.17.0 | Edge model export and runtime |
 | redis | >= 5.0.0 | Prediction caching, feature store |
 | boto3 | >= 1.34.0 | SageMaker, S3 integration |

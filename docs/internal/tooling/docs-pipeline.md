@@ -24,7 +24,7 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/repo-health.yml": "sha256:ef98cf4b425f4971ffecc72b641376366e61b09c9ffbdef74250bda231d165f3"
   ".pre-commit-config.yaml": "sha256:e1c5169ee1d1f2923709f37a21c664cf898cb4c3b40ab908be2f9068dd7a0aca"
-  "Makefile": "sha256:f347154b52c68a25acdc58602b8fee852dc4e398f2242fdc507f0bb495c208c6"
+  "Makefile": "sha256:17ca662ded4b105b7f8ac2de6d3aef9814409a36e5a051d0bc9de489bfe93a7e"
   "scripts/docs_drift.py": "sha256:b6c0cd0a27f72b8c0d207d799f6daabdf0ed02e8bea17feaf6ccbfff43c1016a"
   "scripts/docs_extract/run_all.py": "sha256:404445eba05d12de88af585f79839b7496a1658411a110e606c46d5ed7e8c338"
   "scripts/docs_idempotency.py": "sha256:fe8628ef3a9b9d824645a5db062857754d2984b0f3f4d866b571df6232302f17"
@@ -55,6 +55,11 @@ one another before the required PR gate reports its result.
 Aether's docs used to drift: a service would change behaviour and the
 matching `docs/` page would silently fall out of date. The pipeline
 below makes drift a build failure instead of a surprise.
+
+`make docs-check` executes this documentation-owned scope only: generated
+artifacts, synchronized docs, frontmatter, version, consent, idempotency, and
+source-linked drift. Its adaptive worker still provisions the backend/dev
+imports required by the source-backed certification and reward-rail generators.
 
 Every authored page carries **YAML frontmatter** (schema:
 `scripts/docs_schema.json`). Frontmatter declares the page's tier
@@ -135,6 +140,10 @@ make ci-check             # CI-safe full path — fails on any generated diff
 make docs-fix             # regenerate and sync docs only
 make test-fast BASE=<ref> # bounded local evidence; reports stronger follow-up lane
 make test-pr BASE=<ref>   # affected-domain PR verification selection
+make bootstrap-ci-control # minimal dependency boundary for routing/planning
+make verification-execution-plan BASE=<ref> OUTPUT=<plan.json> # dependency-aware plan
+make validate-ci-execution-contracts # plan/evidence schema and suite-schema gate
+make validate-ci-performance-policy # latency budgets and 20-sample claim rule
 make resolve-environment PROFILE=staging CAPABILITIES='vpc=PASS ...' # capability-aware pre-mutation resolution
 make validate-environment-requirements # validate capability/profile policy without cloud access
 make validate-delivery-workflow-authority # validate GitHub-only authority ownership map
@@ -190,8 +199,7 @@ different authority scopes:
 
 - `.github/workflows/repo-health.yml` — advisory docs/size signals on PRs and
   the trusted-main/nightly documentation runners. Its `docs-sync` write path is
-  restricted to pushes to `main`; the scheduled/manual ML job delegates to
-  `scripts/run_ml_tests.py` so ML-local test helpers resolve from `services/ml`.
+  restricted to pushes to `main`.
 - `.github/workflows/repo-consistency.yml` — the normal PR authority named
   `verification / disposition`; it runs the selected documentation check when
   the Impact Graph requires it. Its full `make ci-check` execution is retired

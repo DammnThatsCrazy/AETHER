@@ -12,6 +12,23 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def discover_test_files(paths: list[Path]) -> list[Path]:
+    """Expand directory roots and preserve explicitly selected test files."""
+    files: set[Path] = set()
+    for path in paths:
+        if path.is_file():
+            if path.name.startswith("test_") and path.suffix == ".py":
+                files.add(path)
+            continue
+        if path.is_dir():
+            files.update(
+                candidate
+                for candidate in path.rglob("test_*.py")
+                if "__pycache__" not in candidate.parts
+            )
+    return sorted(files)
+
+
 def run_file(path: Path) -> tuple[Path, int, str]:
     env = os.environ.copy()
     backend = str(ROOT / "services" / "backend")
@@ -28,12 +45,7 @@ def main() -> int:
     parser.add_argument("paths", nargs="+", type=Path)
     parser.add_argument("--workers", type=int, default=min(16, os.cpu_count() or 1))
     args = parser.parse_args()
-    files = sorted({
-        path
-        for root in args.paths
-        for path in root.rglob("test_*.py")
-        if "__pycache__" not in path.parts
-    })
+    files = discover_test_files(args.paths)
     if not files:
         print(f"no test files found below {', '.join(map(str, args.paths))}", file=sys.stderr)
         return 2

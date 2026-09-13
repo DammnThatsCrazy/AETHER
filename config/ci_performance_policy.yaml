@@ -1,0 +1,33 @@
+schema_version: 1
+canonical_source: config/ci_performance_policy.yaml
+sample_threshold: 20
+runtime_unit: seconds
+
+# These are acceptance targets, not measured claims.  A measured p50/p95 is
+# only published after sample_threshold representative authority runs exist.
+stages:
+  classifier:
+    target_p95_seconds: 30
+  universal_fast:
+    target_p95_seconds: 60
+  dependency_setup:
+    target_p95_seconds: 60
+
+pr_classes:
+  ordinary_pr:
+    target_p50_seconds: 300
+    target_p95_seconds: 600
+  isolated_frontend:
+    target_p95_seconds: 360
+  isolated_backend:
+    target_p95_seconds: 420
+  moderate_cross_component:
+    target_p95_seconds: 600
+  architecture:
+    target_p95_seconds: 900
+
+disposition:
+  initial_breach_status: CI_PERFORMANCE_DEGRADED
+  block_on_breach: false
+  insufficient_samples_status: INSUFFICIENT_SAMPLES
+  measured_status: MEASURED

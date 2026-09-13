@@ -446,7 +446,9 @@ def build_impact_index(
         "impacted_deployables": list(by_kind["deployable"]),
         "unresolved_paths": list(unresolved),
         "build_selection": select_builds(
-            changed, global_change=router_impact.global_change
+            changed,
+            global_change=router_impact.global_change,
+            global_scopes=router_impact.global_scopes,
         ),
         "router": {
             "affected_domains": list(router_impact.affected_domains),
@@ -454,6 +456,7 @@ def build_impact_index(
             "minimum_lane": router_impact.minimum_lane,
             "selected_lane": router_impact.selected_lane,
             "followup_required": router_impact.followup_required,
+            "global_scopes": list(router_impact.global_scopes),
             "selected_checks": sorted(selected_check_ids),
             "selected_test_suites": list(selected_suites),
         },

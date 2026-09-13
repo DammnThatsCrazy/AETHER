@@ -14,7 +14,7 @@ def test_frontend_change_has_one_planned_disposition_and_scoped_builds() -> None
     assert result["authority"] == "verification"
     assert result["blocking"] is True
     assert result["status"] == "PLANNED"
-    assert {"toolchain", "repository_metadata", "test_inventory", "delivery_metadata"} <= _ids(result)
+    assert {"ci_control_toolchain", "repository_metadata", "test_inventory", "delivery_metadata"} <= _ids(result)
     assert "frontend-aether" in _ids(result)
     assert "backend" not in _ids(result)
     assert result["build_selection"]["packages"] == ["shared"]
@@ -106,7 +106,8 @@ def test_backend_change_selects_backend_build_without_unrelated_apps() -> None:
     result = build_disposition(["services/backend/services/profile/routes.py"])
 
     assert result["impact"]["selected_lane"] == "pr"
-    assert "backend" in _ids(result)
+    assert "backend-profile360" in _ids(result)
+    assert "backend" not in _ids(result)
     assert result["build_selection"]["backend_image"] is True
     assert result["build_selection"]["applications"] == []
     assert result["build_selection"]["sdk"] == {

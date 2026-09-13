@@ -52,6 +52,47 @@
       }
     },
     {
+      "id": "verification.execution.timed",
+      "description": "A verification worker emitted stage timing and dependency setup telemetry.",
+      "producer": "scripts/suite_worker.py",
+      "data_classification": "operational_metadata",
+      "fields": {
+        "stage": {"type": "string", "enum": ["universal_fast", "control_prerequisites", "suite_worker", "build", "candidate_verification", "disposition"], "required": true},
+        "queue_seconds": {"type": "number", "required": true},
+        "checkout_seconds": {"type": "number", "required": true},
+        "dependency_setup_seconds": {"type": "number", "required": true},
+        "cache_restore_seconds": {"type": "number", "required": true},
+        "test_seconds": {"type": "number", "required": true},
+        "build_seconds": {"type": "number", "required": true},
+        "artifact_upload_seconds": {"type": "number", "required": true},
+        "candidate_verification_seconds": {"type": "number", "required": true},
+        "disposition_seconds": {"type": "number", "required": true},
+        "total_job_seconds": {"type": "number", "required": true},
+        "runner": {"type": "string", "required": true},
+        "commit_sha": {"type": "string", "required": true}
+      }
+    },
+    {
+      "id": "verification.performance.evaluated",
+      "description": "The verification authority evaluated critical-path timing against explicit CI performance targets.",
+      "producer": "scripts/aggregate_verification_evidence.py",
+      "data_classification": "operational_metadata",
+      "fields": {
+        "performance_status": {"type": "string", "enum": ["INSUFFICIENT_SAMPLES", "MEASURED", "CI_PERFORMANCE_DEGRADED"], "required": true},
+        "sample_count": {"type": "integer", "required": true},
+        "critical_path_seconds": {"type": "number", "required": true},
+        "total_authority_seconds": {"type": "number", "required": true},
+        "slowest_job": {"type": "string", "required": true},
+        "selected_suite_count": {"type": "integer", "required": true},
+        "selected_component_count": {"type": "integer", "required": true},
+        "runner_count": {"type": "integer", "required": true},
+        "backend_image_selected": {"type": "boolean", "required": true},
+        "risk_class": {"type": "string", "required": true},
+        "lane": {"type": "string", "required": true},
+        "global_scope": {"type": "string", "required": true}
+      }
+    },
+    {
       "id": "delivery.operation.completed",
       "description": "A profile-aware hosted delivery operation emitted typed outcome and timing metadata.",
       "producer": "scripts/release/profile_delivery_contracts.py",

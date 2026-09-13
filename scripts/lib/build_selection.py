@@ -92,6 +92,7 @@ def _selected_workspaces(
     changed: set[str],
     *,
     global_change: bool,
+    global_scopes: set[str],
     applications: set[str],
     packages: set[str],
 ) -> list[str]:
@@ -99,7 +100,7 @@ def _selected_workspaces(
     buildable = _buildable_workspaces(manifests)
     dependencies = _workspace_dependencies(manifests)
 
-    if global_change:
+    if global_change and not global_scopes:
         # Root package metadata and delivery/verification inputs are global
         # graph inputs. Rebuild every workspace that declares a build script;
         # do not silently fall back to a backend-only image and skip Node
@@ -132,6 +133,12 @@ def _selected_workspaces(
             for package, path in package_paths.items()
             if package in packages and path in buildable
         )
+        if "node_dependency_graph" in global_scopes:
+            selected.update(buildable)
+        elif "shared_runtime_contract" in global_scopes:
+            selected.update(
+                path for path in buildable if path.startswith(("packages/", "frontend/"))
+            )
 
     return _topological_build_order(selected, dependencies)
 
@@ -140,6 +147,7 @@ def select_builds(
     changed_files: Sequence[str],
     *,
     global_change: bool = False,
+    global_scopes: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Return the stable BuildSelection contract for one changed-path set.
 
@@ -149,6 +157,7 @@ def select_builds(
     deploy anything.
     """
     changed = set(changed_files)
+    scopes = set(global_scopes)
     applications: set[str] = set()
     packages: set[str] = set()
     sdk = {"ios": False, "android": False, "js": False}
@@ -183,8 +192,47 @@ def select_builds(
     sdk["ios"] = _under(changed, "packages/ios")
     sdk["android"] = _under(changed, "packages/android")
 
-    if global_change:
+    if global_change and not scopes:
         backend_image = True
+
+    if "python_dependency_graph" in scopes:
+        backend_image = True
+    if "verification_control_plane" in scopes:
+        backend_image = False
+
+    node_required = bool(
+        applications
+        or packages
+        or sdk["js"]
+        or "node_dependency_graph" in scopes
+        or "shared_runtime_contract" in scopes
+    )
+    python_profiles = ["ci-control"]
+    if backend_image or any(
+        _under(changed, prefix)
+        for prefix in (
+            "services/backend",
+            "services/agents",
+            "services/compliance",
+            "docs/archive/legacy-architecture/backend",
+        )
+    ):
+        python_profiles.append("python-backend")
+    if _under(changed, "services/ml") or "python_dependency_graph" in scopes:
+        python_profiles.append("python-ml")
+    if _under(changed, "services/agents"):
+        python_profiles.append("python-agent")
+    if _under(changed, "services/compliance"):
+        python_profiles.append("python-security")
+    if _under(changed, "tests"):
+        python_profiles.append("python-root")
+    artifact_groups = []
+    if node_required:
+        artifact_groups.append("node-workspaces")
+    if backend_image:
+        artifact_groups.append("backend-source")
+    if not artifact_groups:
+        artifact_groups.append("control-plane")
 
     return {
         "packages": sorted(packages),
@@ -192,11 +240,16 @@ def select_builds(
         "workspaces": _selected_workspaces(
             changed,
             global_change=global_change,
+            global_scopes=scopes,
             applications=applications,
             packages=packages,
         ),
         "backend_image": backend_image,
         "sdk": sdk,
+        "node_required": node_required,
+        "python_profiles": sorted(set(python_profiles)),
+        "artifact_groups": artifact_groups,
+        "global_scopes": sorted(scopes),
     }
 
 

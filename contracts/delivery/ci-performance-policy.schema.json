@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aether.internal/contracts/ci-performance-policy.schema.json",
+  "title": "Aether CI performance policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "canonical_source", "sample_threshold", "runtime_unit", "stages", "pr_classes", "disposition"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "canonical_source": {"const": "config/ci_performance_policy.yaml"},
+    "sample_threshold": {"type": "integer", "minimum": 20},
+    "runtime_unit": {"const": "seconds"},
+    "stages": {"type": "object", "minProperties": 1},
+    "pr_classes": {"type": "object", "minProperties": 1},
+    "disposition": {"type": "object", "additionalProperties": false, "required": ["initial_breach_status", "block_on_breach", "insufficient_samples_status", "measured_status"]}
+  }
+}
