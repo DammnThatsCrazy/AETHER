@@ -86,7 +86,7 @@ CANONICAL_YAML = "config/deployment_profiles.yaml"
 RUNTIME_YAML = "config/runtime_deployment.yaml"
 CONTRACTS_YAML = "config/terraform_resource_contracts.yaml"
 READINESS_YAML = "config/deployment_readiness.yaml"
-TF_DIR = "AWS Deployment/aether-aws/terraform"
+TF_DIR = "deploy/aws/terraform"
 VARIABLES_TF = f"{TF_DIR}/variables.tf"
 BUNDLE_ROOT = "release-evidence"
 

@@ -10,7 +10,7 @@ since_version: 0.1.0
 # Aether Smart Contract Security Audit (May 24, 2026)
 
 ## 1) Executive Summary
-This review covered all Solidity contracts in `Smart Contracts/contracts`:
+This review covered all Solidity contracts in `contracts/smart-contracts/contracts`:
 - `AnalyticsRewards.sol`
 - `RewardRegistry.sol`
 - `interfaces/IAnalyticsRewards.sol`
@@ -67,7 +67,7 @@ No direct on-chain unauthorized-withdrawal primitive was found under the assumed
 
 ### Finding 1: `getOracleAddress()` always returns zero and violates security/operational assumptions
 **Severity:** High  
-**Affected Contracts:** `Smart Contracts/contracts/AnalyticsRewards.sol` (`getOracleAddress`)  
+**Affected Contracts:** `contracts/smart-contracts/contracts/AnalyticsRewards.sol` (`getOracleAddress`)
 **Confidence:** High
 
 #### Vulnerability Description
@@ -95,7 +95,7 @@ Because signature verification is authoritative in `claimReward`, this mismatch 
 
 ### Finding 2: Oracle rotation/event surface is incomplete and inconsistent with interface
 **Severity:** Medium  
-**Affected Contracts:** `Smart Contracts/contracts/interfaces/IAnalyticsRewards.sol`, `Smart Contracts/contracts/AnalyticsRewards.sol`  
+**Affected Contracts:** `contracts/smart-contracts/contracts/interfaces/IAnalyticsRewards.sol`, `contracts/smart-contracts/contracts/AnalyticsRewards.sol`
 **Confidence:** High
 
 #### Vulnerability Description
@@ -112,7 +112,7 @@ Add explicit admin-only rotation methods with event emission (grant new oracle, 
 
 ### Finding 3: Reward amount is oracle-controlled and ignores campaign `rewardAmount` metadata
 **Severity:** Medium  
-**Affected Contracts:** `Smart Contracts/contracts/AnalyticsRewards.sol` (`claimReward`)  
+**Affected Contracts:** `contracts/smart-contracts/contracts/AnalyticsRewards.sol` (`claimReward`)
 **Confidence:** High
 
 #### Vulnerability Description

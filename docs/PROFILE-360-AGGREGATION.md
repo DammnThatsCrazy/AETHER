@@ -6,18 +6,18 @@ visibility: P
 audience: [dev-senior, architect]
 status: stable
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/profile/aggregator.py, Backend Architecture/aether-backend/services/profile/routes.py, Backend Architecture/aether-backend/services/profile/intelligence.py, Backend Architecture/aether-backend/services/profile/read_result.py, Backend Architecture/aether-backend/services/reconciliation/expectations.py, Backend Architecture/aether-backend/services/reconciliation/coverage.py, Backend Architecture/aether-backend/services/card_linked_payments/profile_summary.py]
+source_files: [services/backend/services/profile/aggregator.py, services/backend/services/profile/routes.py, services/backend/services/profile/intelligence.py, services/backend/services/profile/read_result.py, services/backend/services/reconciliation/expectations.py, services/backend/services/reconciliation/coverage.py, services/backend/services/card_linked_payments/profile_summary.py]
 canonical_owner: backend@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  Backend Architecture/aether-backend/services/card_linked_payments/profile_summary.py: sha256:4d72d0bb14569a0a77b4cd75113cf96831204fbbadf831eaf153eb380f029a7f
-  Backend Architecture/aether-backend/services/profile/aggregator.py: sha256:cb9e6fad68f0827cd037458b7306d4c13b0b26fbfc7b8708c926d11784503e83
-  Backend Architecture/aether-backend/services/profile/intelligence.py: sha256:c11ffbb5a409e612e7aa40958526b9e9f22c41b5ec9d03c9576c4328646b6d14
-  Backend Architecture/aether-backend/services/profile/read_result.py: sha256:be38b15f1b60afa0743471e48ac1e9dfddfddd42880b4f78e6e848761b72d056
-  Backend Architecture/aether-backend/services/profile/routes.py: sha256:f51979fa82968ca97bdac3520fd411b20e578c1734547077c594be2c42a6ed4f
-  Backend Architecture/aether-backend/services/reconciliation/coverage.py: sha256:118ba12380fe87fc788ae747f190e0438d3a8be5e7a610021dab50447a67298f
-  Backend Architecture/aether-backend/services/reconciliation/expectations.py: sha256:d672b8522cfb95c5a89cf58039107802c641e6434fe4715757f7f7d7df91b828
+  services/backend/services/card_linked_payments/profile_summary.py: sha256:4d72d0bb14569a0a77b4cd75113cf96831204fbbadf831eaf153eb380f029a7f
+  services/backend/services/profile/aggregator.py: sha256:cb9e6fad68f0827cd037458b7306d4c13b0b26fbfc7b8708c926d11784503e83
+  services/backend/services/profile/intelligence.py: sha256:c11ffbb5a409e612e7aa40958526b9e9f22c41b5ec9d03c9576c4328646b6d14
+  services/backend/services/profile/read_result.py: sha256:be38b15f1b60afa0743471e48ac1e9dfddfddd42880b4f78e6e848761b72d056
+  services/backend/services/profile/routes.py: sha256:f51979fa82968ca97bdac3520fd411b20e578c1734547077c594be2c42a6ed4f
+  services/backend/services/reconciliation/coverage.py: sha256:118ba12380fe87fc788ae747f190e0438d3a8be5e7a610021dab50447a67298f
+  services/backend/services/reconciliation/expectations.py: sha256:d672b8522cfb95c5a89cf58039107802c641e6434fe4715757f7f7d7df91b828
 ---
 
 # Profile 360 Aggregation Layer
@@ -125,7 +125,7 @@ is what is documented below.
 
 ### Identity cluster and quality endpoints
 
-Added after v8.8.0 (`services/profile/routes.py`):
+Added after v8.8.0 (`services/backend/services/profile/routes.py`):
 
 | Method | Path                                                | Returns                                                   |
 |--------|-----------------------------------------------------|-----------------------------------------------------------|
@@ -176,7 +176,7 @@ All economic sub-routes accept `?window=30d|60d|90d|lifetime`:
 
 Sensitive economic surfaces are consent-gated. The web2/credit surface
 (`economic/web2`) evaluates a central consent `PolicyDecision`
-(`services/policy`): its envelope summary carries a `policy_decision_id`, and on
+(`services/backend/services/policy`): its envelope summary carries a `policy_decision_id`, and on
 missing `credit` consent it returns `{consent_required: true, granted: false,
 policy_decision_id, redacted_fields}` rather than the data.
 
@@ -211,7 +211,7 @@ without an additional round-trip.
 
 ### Intelligence extension endpoints
 
-These endpoints are powered by `IntelligenceAggregator` (`services/profile/intelligence.py`)
+These endpoints are powered by `IntelligenceAggregator` (`services/backend/services/profile/intelligence.py`)
 and query the Gold-tier intelligence repositories.  All support `?window=30d|60d|90d|lifetime`.
 When no Gold data exists for an entity they return an empty `items` list — never an error.
 
@@ -289,7 +289,7 @@ schema changes do not propagate to the client.
 returns a single `snapshot` object with:
 
 - `entity` — the normalized canonical entity record
-- `canonical_entity_id` — stable backend-assigned UUID from `services/identity/resolver.py`; falls back to `entity_id` if the identity system has not yet resolved this entity
+- `canonical_entity_id` — stable backend-assigned UUID from `services/backend/services/identity/resolver.py`; falls back to `entity_id` if the identity system has not yet resolved this entity
 - `counts` — pre-computed counts for every Profile 360 dimension
 - `financials` — currency-safe inflow / outflow / net values. USD-first fields
   (`inflow_usd`, `outflow_usd`, `net_usd`, `settled_usd`, `rollup_status`,
@@ -351,10 +351,10 @@ parity-tested): each dimension is a `DimensionEnvelope`
 `not_applicable`, `pending`, or `error`, and the surface rolls them into a
 worst-wins `overall_state`. A dimension that fails to compute degrades to an
 `error` envelope rather than 500-ing or silently reading empty
-(`services/reconciliation/dimension_status.py`).
+(`services/backend/services/reconciliation/dimension_status.py`).
 
 Staleness and sufficiency are judged **per dimension** from an expectation
-registry (`services/reconciliation/expectations.py`): each dimension declares
+registry (`services/backend/services/reconciliation/expectations.py`): each dimension declares
 its minimum volume and freshness SLA (sessions go stale in a day, a wallet link
 stays fresh a week, campaign attribution a month). `/reconciliation` reports
 that expectation against the actual reading per dimension — `met` /
@@ -468,7 +468,7 @@ To add a new dimension:
 1. Add a method to `Profile360Aggregator` that returns the standard
    envelope from `_envelope(...)`. Use `_safe()` for every repository
    read.
-2. Register the route under `services/profile/routes.py` following the
+2. Register the route under `services/backend/services/profile/routes.py` following the
    pattern of the existing drill endpoints (tenant guard → aggregator
    call → `APIResponse`).
 3. Add a row to the endpoints table above and a test in
@@ -518,10 +518,10 @@ return `{entity_id, items, summary, count, computed_at, provenance}`.
 | GET    | `/v1/profile/{id}/interoperability`    | interop intents + asset legs          | initiator refs and from/to addresses           |
 
 Silver fact tables are populated asynchronously by the `SilverDispatcher` projector chain
-(`services/silver/dispatcher.py`), attached to `SDK_EVENTS_VALIDATED` via the
+(`services/backend/services/silver/dispatcher.py`), attached to `SDK_EVENTS_VALIDATED` via the
 `silver_fact_projector` ingestion worker. One event may fan out to several projectors
 (communications lifecycle first — ADR-C3); rows are persisted by
-`services/silver/writer.py`. Until a projector has written records for a given entity the
+`services/backend/services/silver/writer.py`. Until a projector has written records for a given entity the
 endpoint returns `source_status: "empty"` — this is correct behavior, not an
 error. A failed Silver read is reported as `source_status: "missing"` instead,
 so consumers can tell "no data yet" from "could not check".
@@ -536,7 +536,7 @@ Card-linked (crypto-card) economic observability surfaces under
 `Profile360 → Economic Activity → Payment Rails → Card-linked Activity`.
 Gated by **both** `AETHER_CARD_LINKED_PAYMENT_RAILS_ENABLED` and
 `AETHER_CARD_LINKED_PROFILE360_ENABLED` (`404` when either is off);
-backed by `services/card_linked_payments/profile_summary.py`.
+backed by `services/backend/services/card_linked_payments/profile_summary.py`.
 
 | Method | Path                                              | Purpose                                                            |
 |--------|---------------------------------------------------|--------------------------------------------------------------------|

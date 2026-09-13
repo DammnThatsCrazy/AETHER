@@ -38,7 +38,7 @@ from types import SimpleNamespace
 from shared.auth.auth import Permissions
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = ROOT / "services" / "backend"
 
 _BACKEND_PREFIXES = (
     "config", "services", "shared", "middleware", "dependencies", "repositories",

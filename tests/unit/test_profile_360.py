@@ -22,7 +22,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = ROOT / "services" / "backend"
 _PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
 
 

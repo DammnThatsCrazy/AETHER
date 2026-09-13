@@ -3,7 +3,7 @@
 
 Background
 ----------
-``GoldRepository.materialize()`` (Backend Architecture/aether-backend/
+``GoldRepository.materialize()`` (services/backend/
 repositories/lake.py) computes::
 
     record_id = sha256(f"{tenant_id}:{metric_name}:{entity_id}:{entity_type}")[:24]
@@ -94,7 +94,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = ROOT / "services" / "backend"
 for _path in (str(BACKEND), str(ROOT)):
     if _path not in sys.path:
         sys.path.insert(0, _path)

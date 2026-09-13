@@ -6,15 +6,15 @@ visibility: I
 audience: [buyer, ops, architect, security, compliance]
 status: stable
 since_version: "0.1.0"
-source_files: [Backend Architecture/aether-backend/services/security/policy_engine.py, Backend Architecture/aether-backend/services/security/access_control.py, Backend Architecture/aether-backend/services/governance/routes.py, Backend Architecture/aether-backend/services/reliability/service.py]
+source_files: [services/backend/services/security/policy_engine.py, services/backend/services/security/access_control.py, services/backend/services/governance/routes.py, services/backend/services/reliability/service.py]
 related: [compliance, reliability/operations, reliability/incident-response]
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 source_hashes:
-  Backend Architecture/aether-backend/services/governance/routes.py: sha256:ba2ab1b509221205ffba6b31cb346cde1dc4d24b6395f6397a95e677b0c5c24b
-  Backend Architecture/aether-backend/services/reliability/service.py: sha256:04c7f243fe9140a842de8d89997097e1e9e4ebf16c294b56040e06bd246a27bb
-  Backend Architecture/aether-backend/services/security/access_control.py: sha256:cc0456da6c2de55fd6d09ae2e3a9b9abd20c99e507e398163ddd2f030853e6e2
-  Backend Architecture/aether-backend/services/security/policy_engine.py: sha256:a0ec68cf5e7fb524e02ca0c6fef0332462282b01c9db2161e1eed7eedb70c713
+  services/backend/services/governance/routes.py: sha256:ba2ab1b509221205ffba6b31cb346cde1dc4d24b6395f6397a95e677b0c5c24b
+  services/backend/services/reliability/service.py: sha256:04c7f243fe9140a842de8d89997097e1e9e4ebf16c294b56040e06bd246a27bb
+  services/backend/services/security/access_control.py: sha256:cc0456da6c2de55fd6d09ae2e3a9b9abd20c99e507e398163ddd2f030853e6e2
+  services/backend/services/security/policy_engine.py: sha256:a0ec68cf5e7fb524e02ca0c6fef0332462282b01c9db2161e1eed7eedb70c713
 ---
 
 # Security, Compliance & Governance Controls
@@ -51,10 +51,10 @@ government buyers run a security review against demonstrable controls. It answer
 
 ## Architecture
 
-The control plane lives in `services/security/` (backend) and is additive: it
+The control plane lives in `services/backend/services/security/` (backend) and is additive: it
 **wraps**, never removes, existing `require_permission(...)` checks and OODA
 approval flows. Shared contracts are in `packages/shared/security-governance.ts`
-and `services/security/contracts.py`.
+and `services/backend/services/security/contracts.py`.
 
 ```
 Request → existing auth/tenant context

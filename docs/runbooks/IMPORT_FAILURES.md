@@ -9,13 +9,13 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 2
-source_files: [Backend Architecture/aether-backend/services/imports/service.py, Backend Architecture/aether-backend/services/imports/commit.py, Backend Architecture/aether-backend/services/imports/kyber_routes.py, Backend Architecture/aether-backend/repositories/imports_repo.py, Backend Architecture/aether-backend/shared/graph/graph.py]
+source_files: [services/backend/services/imports/service.py, services/backend/services/imports/commit.py, services/backend/services/imports/kyber_routes.py, services/backend/repositories/imports_repo.py, services/backend/shared/graph/graph.py]
 source_hashes:
-  Backend Architecture/aether-backend/repositories/imports_repo.py: sha256:d483f6e353ed70f170ff3738f4b3ac5eed1086722b2fc1c58e48df6315490b37
-  Backend Architecture/aether-backend/services/imports/commit.py: sha256:f0932350e4d6d214d67b02488ddd4d64dce83df571c6c39365095719f6375c5d
-  Backend Architecture/aether-backend/services/imports/kyber_routes.py: sha256:5dda769c5213f881a57bb19c87078cd45cfcb62c9f54192c9216e70928074dff
-  Backend Architecture/aether-backend/services/imports/service.py: sha256:f687a509ed815ba121efb5d806a65b76a2cee6d5384ffdf6564b76979e0f8d3d
-  Backend Architecture/aether-backend/shared/graph/graph.py: sha256:689f7581a371f6f4f48ca17745a2fb31f88d45f5614da95d69e9d805c4212428
+  services/backend/repositories/imports_repo.py: sha256:d483f6e353ed70f170ff3738f4b3ac5eed1086722b2fc1c58e48df6315490b37
+  services/backend/services/imports/commit.py: sha256:f0932350e4d6d214d67b02488ddd4d64dce83df571c6c39365095719f6375c5d
+  services/backend/services/imports/kyber_routes.py: sha256:5dda769c5213f881a57bb19c87078cd45cfcb62c9f54192c9216e70928074dff
+  services/backend/services/imports/service.py: sha256:f687a509ed815ba121efb5d806a65b76a2cee6d5384ffdf6564b76979e0f8d3d
+  services/backend/shared/graph/graph.py: sha256:689f7581a371f6f4f48ca17745a2fb31f88d45f5614da95d69e9d805c4212428
 ---
 
 # Runbook — Tenant Import Failures
@@ -46,7 +46,7 @@ The **authoritative** lifecycle is the import-session FSM (`lifecycle_state`:
 `CREATED → UPLOADED → VALIDATING → VALIDATED → NORMALIZING → COMMITTING →
 PROJECTING → RECONCILING → COMPLETED`, plus `REJECTED`, `FAILED`, and the
 terminals `DEAD_LETTERED` / `ROLLED_BACK`). The lowercase `status` above is a
-**parity-locked legacy projection** (`services/card_linked_payments/import_session.py`),
+**parity-locked legacy projection** (`services/backend/services/card_linked_payments/import_session.py`),
 kept so the frontend and existing commit/approve surfaces keep parsing. When the
 two could disagree, trust `lifecycle_state`.
 

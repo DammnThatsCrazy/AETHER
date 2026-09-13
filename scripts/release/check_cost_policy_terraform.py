@@ -3,7 +3,7 @@
 
 Where check_cost_policy.py validates the canonical policy DATA
 (config/deployment_profiles.yaml), this validator asserts the Terraform in
-`AWS Deployment/aether-aws/terraform/` actually encodes it:
+`deploy/aws/terraform/` actually encodes it:
 
   1. The `deployment_profile` variable exists with the six valid profiles
      (four cloud-class + demo/preview ephemeral-class).
@@ -29,7 +29,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import Reporter, load_yaml, main_guard, repo_root  # noqa: E402
 
-TF_DIR = "AWS Deployment/aether-aws/terraform"
+TF_DIR = "deploy/aws/terraform"
 PROFILES_TF = f"{TF_DIR}/profiles.tf"
 VARIABLES_TF = f"{TF_DIR}/variables.tf"
 

@@ -10,9 +10,9 @@ flags: [AETHER_CONNECTORS_ENABLED, AETHER_COMMS_INGESTION_ENABLED]
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 source_files:
-  - Backend Architecture/aether-backend/services/integrations/connectors/braze.py
+  - services/backend/services/integrations/connectors/braze.py
 source_hashes:
-  "Backend Architecture/aether-backend/services/integrations/connectors/braze.py": "sha256:c0d8f3013953e2166d4151f09714ddad50db767a40cf8bb231115fcd0d987c0d"
+  "services/backend/services/integrations/connectors/braze.py": "sha256:c0d8f3013953e2166d4151f09714ddad50db767a40cf8bb231115fcd0d987c0d"
 ---
 
 # Braze Connector

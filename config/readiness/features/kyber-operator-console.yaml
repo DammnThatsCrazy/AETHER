@@ -28,7 +28,7 @@ repository_ceiling:
   evidence:
   - frontend/kyber/
   - .github/workflows/kyber-e2e.yml
-  - Backend Architecture/aether-backend/services/intelligence/routes.py
+  - services/backend/services/intelligence/routes.py
 implementation:
   state: VERIFIED
   denominator: in-scope repository controls (migration-derived)

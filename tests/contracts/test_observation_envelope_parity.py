@@ -6,7 +6,7 @@ code (matching the repo-root parity-test convention):
   * ``packages/shared/contracts/observation-envelope-registry.json`` — the
     canonical field registry (blocks, requiredness, vocabularies).
   * ``packages/shared/observation-envelope.ts`` — the passive TS contract twin.
-  * ``Backend Architecture/aether-backend/shared/observation/envelope.py`` —
+  * ``services/backend/shared/observation/envelope.py`` —
     the pydantic runtime model.
 
 Behavioral checks (pydantic construction, extra=forbid, curated-vocabulary
@@ -24,8 +24,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 REGISTRY_PATH = REPO_ROOT / "packages/shared/contracts/observation-envelope-registry.json"
 TS_PATH = REPO_ROOT / "packages/shared/observation-envelope.ts"
-PY_PATH = REPO_ROOT / "Backend Architecture/aether-backend/shared/observation/envelope.py"
-GEN_REGISTRY_PATH = REPO_ROOT / "Backend Architecture/aether-backend/services/ingestion/generated_registry.py"
+PY_PATH = REPO_ROOT / "services/backend/shared/observation/envelope.py"
+GEN_REGISTRY_PATH = REPO_ROOT / "services/backend/services/ingestion/generated_registry.py"
 INDEX_PATH = REPO_ROOT / "packages/shared/index.ts"
 
 
@@ -219,7 +219,7 @@ def test_every_pydantic_model_is_extra_forbid() -> None:
 
 def test_model_classes_imported_from_barrel() -> None:
     """shared/observation/__init__.py must re-export the envelope surface."""
-    init_text = (REPO_ROOT / "Backend Architecture/aether-backend/shared/observation/__init__.py").read_text(encoding="utf-8")
+    init_text = (REPO_ROOT / "services/backend/shared/observation/__init__.py").read_text(encoding="utf-8")
     for name in ("UniversalObservationEnvelope", "ObservationBlock", "TenancyBlock", "SourceBlock",
                  "SubjectRef", "TemporalBlock", "CorrelationBlock", "PrivacyBlock", "ProvenanceBlock",
                  "QualityBlock", "LineageBlock", "SOURCE_TYPES", "IDENTIFIER_TYPES", "CREDENTIAL_CLASSES",

@@ -6,10 +6,10 @@ visibility: I
 audience: [architect, ops, buyer]
 status: beta
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/noesis/capability_registry.py]
+source_files: [services/backend/services/noesis/capability_registry.py]
 canonical_owner: platform@aether
 source_hashes:
-  Backend Architecture/aether-backend/services/noesis/capability_registry.py: sha256:546ffefe30f3b64e96603a101345d7bb7cbf533a37375f4d8e0b9e480d4e4170
+  services/backend/services/noesis/capability_registry.py: sha256:546ffefe30f3b64e96603a101345d7bb7cbf533a37375f4d8e0b9e480d4e4170
 ---
 
 # Olympus Intelligence Surfaces

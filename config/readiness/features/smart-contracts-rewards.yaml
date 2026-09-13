@@ -26,8 +26,8 @@ repository_ceiling:
   - Complete the external security audit / certification.
   remaining_is_repository_controlled: false
   evidence:
-  - Smart Contracts/contracts/AnalyticsRewards.sol
-  - Smart Contracts/test/AnalyticsRewards.test.js
+  - contracts/smart-contracts/contracts/AnalyticsRewards.sol
+  - contracts/smart-contracts/test/AnalyticsRewards.test.js
   - .github/workflows/smart-contract-analysis.yml
 implementation:
   state: TURNKEY
@@ -122,7 +122,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: Smart Contracts/contracts/AnalyticsRewards.sol'
+  - 'repository evidence: contracts/smart-contracts/contracts/AnalyticsRewards.sol'
   evidence_gaps:
   - credentialed environment execution not yet performed
 release_profiles:

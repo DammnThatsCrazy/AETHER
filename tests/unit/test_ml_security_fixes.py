@@ -107,7 +107,7 @@ class TestBackendRoutesFileIntegrity:
     def _read_routes(self):
         import pathlib
         p = pathlib.Path(
-            "Backend Architecture/aether-backend/services/ml_serving/routes.py"
+            "services/backend/services/ml_serving/routes.py"
         )
         if not p.exists():
             pytest.skip("Backend routes file not found")

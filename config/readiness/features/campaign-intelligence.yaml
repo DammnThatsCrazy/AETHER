@@ -25,9 +25,9 @@ repository_ceiling:
   - None — repository-controlled work complete
   remaining_is_repository_controlled: false
   evidence:
-  - Backend Architecture/aether-backend/services/campaign/registry.py
-  - Backend Architecture/aether-backend/services/campaign/resolver.py
-  - Backend Architecture/aether-backend/services/campaign/normalization.py
+  - services/backend/services/campaign/registry.py
+  - services/backend/services/campaign/resolver.py
+  - services/backend/services/campaign/normalization.py
 implementation:
   state: TURNKEY
   denominator: in-scope repository controls (migration-derived)
@@ -118,7 +118,7 @@ business_readiness:
 confidence:
   level: HIGH
   reasons:
-  - 'repository evidence: Backend Architecture/aether-backend/services/campaign/registry.py'
+  - 'repository evidence: services/backend/services/campaign/registry.py'
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:

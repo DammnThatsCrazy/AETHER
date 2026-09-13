@@ -6,20 +6,20 @@ visibility: P
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/x402/commerce_routes.py, Backend Architecture/aether-backend/services/x402/approvals.py, Backend Architecture/aether-backend/services/x402/control_plane.py]
+source_files: [services/backend/services/x402/commerce_routes.py, services/backend/services/x402/approvals.py, services/backend/services/x402/control_plane.py]
 canonical_owner: commerce@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  Backend Architecture/aether-backend/services/x402/approvals.py: sha256:abc0603d95c56fcb56004bf7d7aee5b627add843e73a98c06fe4638a04c5ce24
-  Backend Architecture/aether-backend/services/x402/commerce_routes.py: sha256:7709c0d869867366a90b8aa336e38f2b76ba6204e471371bc41b8848502e7e6f
-  Backend Architecture/aether-backend/services/x402/control_plane.py: sha256:df8956842b85a3bbac67a711dfda005a80858a51fa71973c3a8106e9bb16b8df
+  services/backend/services/x402/approvals.py: sha256:abc0603d95c56fcb56004bf7d7aee5b627add843e73a98c06fe4638a04c5ce24
+  services/backend/services/x402/commerce_routes.py: sha256:7709c0d869867366a90b8aa336e38f2b76ba6204e471371bc41b8848502e7e6f
+  services/backend/services/x402/control_plane.py: sha256:df8956842b85a3bbac67a711dfda005a80858a51fa71973c3a8106e9bb16b8df
 ---
 # Aether Agentic Commerce — Control Plane
 
 **Status:** Day-1 GA (feature-flagged via `COMMERCE_CONTROL_PLANE_ENABLED=true`)
 **Layer:** L3b+ (extends existing x402 capture L3b)
-**Surface:** Backend (`services/x402/`), Kyber (`features/approvals`, `components/commerce`)
+**Surface:** Backend (`services/backend/services/x402/`), Kyber (`features/approvals`, `components/commerce`)
 
 ---
 
@@ -96,20 +96,20 @@ one or more graph vertices/edges, and is traceable via `GET /v1/x402/explain/{ch
 
 | Module | Purpose |
 |---|---|
-| `services/x402/commerce_models.py` | Canonical Pydantic domain models (shared) |
-| `services/x402/commerce_store.py` | Tenant-isolated in-memory store |
-| `services/x402/control_plane.py` | Lifecycle orchestrator (`X402ControlPlane`) |
-| `services/x402/resources.py` | `ProtectedResourceRegistry` + Day-1 seeds |
-| `services/x402/facilitators.py` | Facilitator + asset registries (USDC Base/Solana) |
-| `services/x402/policies.py` | `PolicyEngine` — enforces mandatory approval |
-| `services/x402/approvals.py` | `ApprovalService` — full workflow FSM |
-| `services/x402/verification.py` | Facilitator + local payment verification |
-| `services/x402/settlement.py` | Settlement FSM (pending→verifying→settled/failed) |
-| `services/x402/entitlements.py` | Entitlement mint/lookup/reuse/revoke |
-| `services/x402/pricing.py` | Price resolution with plan discounts |
-| `services/x402/idempotency.py` | Payment-Identifier dedupe — in-memory (local) or Redis-backed (staging/prod), async API |
-| `services/x402/economic_mutations.py` | Deterministic graph writers |
-| `services/x402/commerce_routes.py` | FastAPI routes (control plane, approvals, entitlements, diagnostics) |
+| `services/backend/services/x402/commerce_models.py` | Canonical Pydantic domain models (shared) |
+| `services/backend/services/x402/commerce_store.py` | Tenant-isolated in-memory store |
+| `services/backend/services/x402/control_plane.py` | Lifecycle orchestrator (`X402ControlPlane`) |
+| `services/backend/services/x402/resources.py` | `ProtectedResourceRegistry` + Day-1 seeds |
+| `services/backend/services/x402/facilitators.py` | Facilitator + asset registries (USDC Base/Solana) |
+| `services/backend/services/x402/policies.py` | `PolicyEngine` — enforces mandatory approval |
+| `services/backend/services/x402/approvals.py` | `ApprovalService` — full workflow FSM |
+| `services/backend/services/x402/verification.py` | Facilitator + local payment verification |
+| `services/backend/services/x402/settlement.py` | Settlement FSM (pending→verifying→settled/failed) |
+| `services/backend/services/x402/entitlements.py` | Entitlement mint/lookup/reuse/revoke |
+| `services/backend/services/x402/pricing.py` | Price resolution with plan discounts |
+| `services/backend/services/x402/idempotency.py` | Payment-Identifier dedupe — in-memory (local) or Redis-backed (staging/prod), async API |
+| `services/backend/services/x402/economic_mutations.py` | Deterministic graph writers |
+| `services/backend/services/x402/commerce_routes.py` | FastAPI routes (control plane, approvals, entitlements, diagnostics) |
 
 ## 6. Graph schema
 
@@ -200,7 +200,7 @@ them.
 Run:
 ```bash
 # Backend
-cd "Backend Architecture/aether-backend" && python -m pytest tests/commerce/ -v --asyncio-mode=auto
+cd "services/backend" && python -m pytest tests/commerce/ -v --asyncio-mode=auto
 
 # Kyber
 cd apps/kyber && npx vitest run
@@ -213,7 +213,7 @@ cd apps/kyber && npx vitest run
   activation state (`control_plane._resolve_environment`) — never trusted from
   the client.
 - On-chain verification resolves the tenant's **own** RPC endpoint+key pair from
-  the credential authority (`services/x402/rpc_resolver.py`, domain `rpc`), an
+  the credential authority (`services/backend/services/x402/rpc_resolver.py`, domain `rpc`), an
   atomic `{url, api_key, auth_mode}` document. Local/test use a platform default;
   deployed environments with no configured pair return the semantic verdict
   `verification_unavailable` (fail-closed) — never an auto-pass, never a global

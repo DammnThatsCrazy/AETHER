@@ -26,7 +26,7 @@ from types import SimpleNamespace
 # Force the WORKTREE backend onto sys.path ahead of any editable install so the
 # `shared` / `services` imports below resolve to THIS checkout.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_BACKEND = _REPO_ROOT / "Backend Architecture" / "aether-backend"
+_BACKEND = _REPO_ROOT / "services" / "backend"
 if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 

@@ -6,13 +6,13 @@ visibility: I
 audience: [ops, buyer, architect]
 status: beta
 since_version: "0.1.0"
-source_files: [Backend Architecture/aether-backend/services/reliability/service.py, Backend Architecture/aether-backend/services/reliability/routes.py]
+source_files: [services/backend/services/reliability/service.py, services/backend/services/reliability/routes.py]
 related: [reliability/incident-response, reliability/operations]
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 source_hashes:
-  Backend Architecture/aether-backend/services/reliability/routes.py: sha256:a28140054a4ffc46654adbf78bec26bca2934ff4d6fdde75c63cfc31adbed2b0
-  Backend Architecture/aether-backend/services/reliability/service.py: sha256:04c7f243fe9140a842de8d89997097e1e9e4ebf16c294b56040e06bd246a27bb
+  services/backend/services/reliability/routes.py: sha256:a28140054a4ffc46654adbf78bec26bca2934ff4d6fdde75c63cfc31adbed2b0
+  services/backend/services/reliability/service.py: sha256:04c7f243fe9140a842de8d89997097e1e9e4ebf16c294b56040e06bd246a27bb
 ---
 # Incident Postmortems
 

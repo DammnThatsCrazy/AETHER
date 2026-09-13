@@ -18,7 +18,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-BACKEND_TESTS = Path("Backend Architecture/aether-backend/tests")
+BACKEND_TESTS = Path("services/backend/tests")
 PERFORMANCE_TESTS = BACKEND_TESTS / "performance"
 
 

@@ -4,7 +4,7 @@
 // WS-C row 28 (SDK thinness): this module is NOT part of the @aether/shared
 // public barrel (removed in packages/shared/index.ts). It is a legacy SDK-side
 // mirror of backend economic aggregation whose canonical home is
-// `Backend Architecture/aether-backend/services/economic/economic360_contracts.py`.
+// `services/backend/services/economic/economic360_contracts.py`.
 // The passive UnifiedEconomicBreakdown contract type is still consumed by
 // packages/shared/profile360-contract.ts via the explicit relative subpath;
 // SDK client surfaces must not add NEW aggregation logic here.

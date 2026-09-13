@@ -26,9 +26,9 @@ repository_ceiling:
   - None — repository-controlled work complete
   remaining_is_repository_controlled: false
   evidence:
-  - Backend Architecture/aether-backend/shared/graph/graph.py
-  - Backend Architecture/aether-backend/shared/graph/relationship_layers.py
-  - Backend Architecture/aether-backend/shared/graph/write_validator.py
+  - services/backend/shared/graph/graph.py
+  - services/backend/shared/graph/relationship_layers.py
+  - services/backend/shared/graph/write_validator.py
 implementation:
   state: VERIFIED
   denominator: in-scope repository controls (migration-derived)
@@ -115,7 +115,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: Backend Architecture/aether-backend/shared/graph/graph.py'
+  - 'repository evidence: services/backend/shared/graph/graph.py'
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:

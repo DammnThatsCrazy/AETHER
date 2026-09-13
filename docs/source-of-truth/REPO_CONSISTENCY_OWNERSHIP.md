@@ -59,8 +59,8 @@ until they are registered.
 | intelligence projection architecture changed | generated projection artifacts (TS/Py/doc mirrors), SOT docs, `REPO-INDEX.md`/`AUTOMATION.md`, `packages/shared/index.ts`, projection tests |
 | relationship spine registry changed | generated relationship predicate/motif twins (TS/Py/doc mirrors), barrel exports, parity tests |
 | observation envelope (Envelope B) model/registry/twin/adoption changed | Envelope-B field registry ↔ pydantic runtime model ↔ passive TS twin lock-step (parity test), observation-envelope unit tests, SOT + alignment docs |
-| universal ingress adapter registry / gateway (WS-B1) changed | `services/ingestion/adapters/**` registry ↔ `services/ingestion/gateway.py` ↔ Envelope-B vocabulary/registry ↔ Contract Spine canonical types/families consistent; ingress-adapter-registry + gateway unit tests, SOT + alignment docs |
-| ingestion replay + consumption normalization-spine convergence (WS-B4/B5) changed | replay runner + Kyber replay operator routes + `services/ingestion/spine.py` ↔ `IngestReplayConfig`/`NormalizationSpineConfig` flag blocks and env examples ↔ the consumers that read through the spine (`workers.py` Bronze-writer replay-skip/original-time logic, semantic_intelligence + resolution consumers); `tests/unit/observation` (ingest-replay / replay-adapter / normalization-spine / replay-route-mount), SOT + alignment docs |
+| universal ingress adapter registry / gateway (WS-B1) changed | `services/backend/services/ingestion/adapters/**` registry ↔ `services/backend/services/ingestion/gateway.py` ↔ Envelope-B vocabulary/registry ↔ Contract Spine canonical types/families consistent; ingress-adapter-registry + gateway unit tests, SOT + alignment docs |
+| ingestion replay + consumption normalization-spine convergence (WS-B4/B5) changed | replay runner + Kyber replay operator routes + `services/backend/services/ingestion/spine.py` ↔ `IngestReplayConfig`/`NormalizationSpineConfig` flag blocks and env examples ↔ the consumers that read through the spine (`workers.py` Bronze-writer replay-skip/original-time logic, semantic_intelligence + resolution consumers); `tests/unit/observation` (ingest-replay / replay-adapter / normalization-spine / replay-route-mount), SOT + alignment docs |
 | native iOS/Android event-type + consent-purpose regions changed (generator emitter, parity gate, or the region files) | regenerated `Aether.swift` / `Aether.kt` marker regions, `generate_contracts.py --check`, mobile-event key + purpose-value parity gate, `test_mobile_event_parity.py` + `test_native_event_codegen.py`, SOT docs |
 | workflow/check command changed | Makefile, workflows, docs, repo_doctor tests |
 | deprecated legacy ingestion/data-lake tree mutated (do-not-extend) | program acknowledgment docs (`docs/productization/sdk-universal-ingestion-alignment/**`), this md, canonical-ingestion-trees gate (`scripts/validate_canonical_ingestion_trees.py`) |
@@ -69,7 +69,7 @@ until they are registered.
 
 ## Deployment profile ownership
 
-A change under `AWS Deployment/aether-aws/terraform/**`, or to
+A change under `deploy/aws/terraform/**`, or to
 `config/deployment_profiles.yaml`, `config/runtime_deployment.yaml`,
 `config/terraform_resource_contracts.yaml` or `config/aws_price_book.yaml`, is a
 change to the **shape of the plan that would be applied**. The profile selector

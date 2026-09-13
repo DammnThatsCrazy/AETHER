@@ -7,12 +7,12 @@ audience: [ops]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/migrations/
+  - docs/archive/legacy-architecture/backend/migrations/
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/migrations/": "sha256:0d9b426e6c5b1c3275d73db82af71d68ec2978638aaab2b777053676ebbe8d3e"
+  "docs/archive/legacy-architecture/backend/migrations/": "sha256:a4c25771cb430738a7210227061ce4ac9f8f478dbde1008dc88f39b0469a31fd"
 ---
 # Migration Runbook — Aether Platform v0.1.0-alpha.0
 
@@ -167,7 +167,7 @@ docker compose -f docker-compose.blue.yml down
 For AWS ECS deployments managed via Terraform:
 
 ```bash
-cd "AWS Deployment/aether-aws"
+cd "deploy/aws"
 
 # Plan changes
 terraform plan -var="image_tag=${VERSION}"

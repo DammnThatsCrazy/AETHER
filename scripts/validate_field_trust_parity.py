@@ -14,7 +14,7 @@ field-trust and semantic-level/boundary metadata:
     trust classes inside the public-SDK assertable set);
   * packages/shared/events.ts (the generated TS section) exactly matches a
     fresh regeneration from event-registry.json;
-  * Backend Architecture/aether-backend/services/ingestion/generated_registry.py
+  * services/backend/services/ingestion/generated_registry.py
     exactly matches a fresh regeneration.
 
 This is a regenerate-and-diff gate (like `generate_contracts.py --check`, which
@@ -32,7 +32,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 EVENTS_TS = ROOT / "packages" / "shared" / "events.ts"
 GENERATED_REGISTRY_PY = (
-    ROOT / "Backend Architecture" / "aether-backend" / "services" / "ingestion" / "generated_registry.py"
+    ROOT / "services" / "backend" / "services" / "ingestion" / "generated_registry.py"
 )
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -68,7 +68,7 @@ def drift_messages(
     expected_py = gen.gen_python_registry(event_reg, consent_reg)
     if expected_py != generated_py_text:
         msgs.append(
-            "Backend Architecture/aether-backend/services/ingestion/generated_registry.py "
+            "services/backend/services/ingestion/generated_registry.py "
             "drifted from event-registry.json (field-trust / family / consent metadata). "
             "Run: python scripts/generate_contracts.py"
         )

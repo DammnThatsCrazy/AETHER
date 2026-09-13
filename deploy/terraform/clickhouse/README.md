@@ -2,7 +2,7 @@
 
 The production-scale and enterprise-isolated deployment profiles declare
 `analytics: clickhouse` (see `config/deployment_profiles.yaml` and
-`AWS Deployment/aether-aws/terraform/profiles.tf`). This file is the contract
+`deploy/aws/terraform/profiles.tf`). This file is the contract
 for turning that declaration into a running analytics backend.
 
 AWS has no managed ClickHouse service, so the appliance is **self-managed on
@@ -10,7 +10,7 @@ EC2 + a dedicated EBS volume**. There is deliberately no separate Terraform
 module directory under `deploy/terraform/clickhouse/`: the provisioning module
 lives with the rest of the infrastructure at:
 
-    AWS Deployment/aether-aws/terraform/modules/clickhouse/
+    deploy/aws/terraform/modules/clickhouse/
 
 and is wired into the root `main.tf` (count-gated on
 `local.enable_clickhouse`, which is true for exactly production-scale and

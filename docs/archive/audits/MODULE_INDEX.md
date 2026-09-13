@@ -75,15 +75,15 @@ Complete inventory of all modules, services, packages, and system layers.
 
 | Module | Location | Purpose |
 |--------|----------|---------|
-| Data Lake | `Data Lake Architecture/` | Medallion architecture (Bronze/Silver/Gold) |
-| Data Ingestion | `Data Ingestion Layer/` | TypeScript SDK event processing |
-| ML Models | `ML Models/aether-ml/` | 9 model configs, 2 scorers, feature pipeline |
+| Data Lake | `docs/archive/legacy-architecture/data-lake-architecture/` | Medallion architecture (Bronze/Silver/Gold) |
+| Data Ingestion | `docs/archive/legacy-architecture/data-ingestion-layer/` | TypeScript SDK event processing |
+| ML Models | `services/ml/` | 9 model configs, 2 scorers, feature pipeline |
 
 ## Infrastructure / Deployment
 
 | Module | Location | Purpose |
 |--------|----------|---------|
-| AWS Deployment | `AWS Deployment/aether-aws/` | Terraform, CloudFormation, Lambda |
+| AWS Deployment | `deploy/aws/` | Terraform, CloudFormation, Lambda |
 | CI/CD | `cicd/aether-cicd/` | GitHub Actions stages, SDK publishing |
 | Docker Compose | `docker-compose.yml` | Local development stack |
 | Staging Deploy | `deploy/staging/` | Docker Compose staging + bootstrap |
@@ -93,10 +93,10 @@ Complete inventory of all modules, services, packages, and system layers.
 
 | Module | Location | Purpose |
 |--------|----------|---------|
-| GDPR & SOC2 | `GDPR & SOC2/aether-compliance/` | Consent manager, DSR engine, audit |
+| GDPR & SOC2 | `services/compliance/` | Consent manager, DSR engine, audit |
 | Privacy Control Plane | `shared/privacy/` | Classification, access control, retention |
 | Extraction Defense | `security/model_extraction_defense/` | 6-component ML protection |
-| Smart Contracts | `Smart Contracts/` | Solidity contracts, ABIs |
+| Smart Contracts | `contracts/smart-contracts/` | Solidity contracts, ABIs |
 
 ## Graph Vertex Types (52)
 

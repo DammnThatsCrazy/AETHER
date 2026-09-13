@@ -19,9 +19,9 @@ canonical_owner: platform@aether
 | Native SDK constants | canonical platform version | `python scripts/validate_sdk_release_alignment.py` |
 | Event names / schemas | `packages/shared/events/events.py` | `python scripts/validate_contracts.py` + generated diff check |
 | Consent purposes | `packages/shared/` consent source | `python scripts/validate_contracts.py` + generated diff check |
-| Environment variables | `Backend Architecture/aether-backend/config/settings.py` | `python scripts/docs_extract/extract_env.py` + generated diff check |
+| Environment variables | `services/backend/config/settings.py` | `python scripts/docs_extract/extract_env.py` + generated diff check |
 | Provider metadata | provider registry / source files | `python scripts/docs_extract/extract_providers.py` + generated diff check |
-| Billing plans | `Backend Architecture/aether-backend/shared/plans/catalog.py` | `python scripts/docs_extract/extract_plans.py` + generated diff check |
+| Billing plans | `services/backend/shared/plans/catalog.py` | `python scripts/docs_extract/extract_plans.py` + generated diff check |
 | Capabilities | SDK source files | `python scripts/docs_extract/extract_capabilities.py` + generated diff check |
 | Repo structure | tracked git files | `python scripts/sync_docs.py` + generated diff check |
 | Architecture claims | authored docs with `source_files:` + `source_hashes:` | `python scripts/docs_drift.py --strict` |

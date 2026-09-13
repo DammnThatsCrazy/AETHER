@@ -24,8 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 IDENTITY_ROUTES = (
     ROOT
-    / "Backend Architecture"
-    / "aether-backend"
+    / "services" / "backend"
     / "services"
     / "identity"
     / "routes.py"

@@ -41,4 +41,4 @@ aggregate, and surface evidence with provenance.
 - **Derivatives ↔ Web3**: venue registries are derivatives-domain;
   chain/token identity reuses the web3 registries.
 - **Interop providers**: provider-native vocabulary (GUID/EID/nonce)
-  never leaks past `services/interop/providers/`.
+  never leaks past `services/backend/services/interop/providers/`.

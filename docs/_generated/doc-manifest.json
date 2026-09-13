@@ -10928,6 +10928,21 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/source-of-truth/repo-migration.md",
+      "title": "Repository migration map",
+      "slug": "source-of-truth/repo-migration",
+      "section": "reference",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "ops"
+      ],
+      "status": "stable",
+      "since_version": "0.1.0",
+      "canonical_owner": "platform@aether"
+    },
+    {
       "path": "docs/source-of-truth/repo-truth.md",
       "title": "Repo truth",
       "slug": "source-of-truth/repo-truth",

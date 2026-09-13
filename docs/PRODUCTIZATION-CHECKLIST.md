@@ -113,7 +113,7 @@ A running checklist of the productization surfaces and their readiness. See
 ## Reward Enablement (A6)
 
 - [x] Oracle signer key guarded — `ORACLE_SIGNER_KEY` blocks Hardhat/Anvil default in non-local
-      (`_require_env()` in `services/oracle/routes.py` and `services/rewards/routes.py`)
+      (`_require_env()` in `services/backend/services/oracle/routes.py` and `services/backend/services/rewards/routes.py`)
 - [x] Durable storage enforced — `REWARD_REQUIRE_DURABLE_STORE=true` causes startup failure
       without PostgreSQL in non-local environments
 - [x] Tenant isolation — every reward table has `tenant_id`; all queries tenant-scoped;

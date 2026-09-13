@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "policyVersion": "1.0.0",
-  "description": "Canonical temporal enforcement policy. Owns the reason-code dispositions, enforcement-mode ladder, and per-event-family skew/lateness bounds applied by ingestion temporal enforcement. Generated artifacts: packages/shared/temporal-policy.ts, Backend Architecture/aether-backend/shared/temporal/generated_policy.py, docs/_generated/temporal-policy-table.md (via scripts/generate_platform_contracts.py).",
+  "description": "Canonical temporal enforcement policy. Owns the reason-code dispositions, enforcement-mode ladder, and per-event-family skew/lateness bounds applied by ingestion temporal enforcement. Generated artifacts: packages/shared/temporal-policy.ts, services/backend/shared/temporal/generated_policy.py, docs/_generated/temporal-policy-table.md (via scripts/generate_platform_contracts.py).",
   "enforcementModes": ["off", "shadow", "warn", "enforce"],
   "dispositions": ["accept", "accept_with_warning", "quarantine", "reject"],
   "reasonCodes": [

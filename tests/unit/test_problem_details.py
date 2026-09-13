@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-BACKEND = Path(__file__).resolve().parents[2] / "Backend Architecture" / "aether-backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
 sys.path.insert(0, str(BACKEND))
 
 from shared.common.common import (  # noqa: E402

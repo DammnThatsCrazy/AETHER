@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = ROOT / "services" / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 

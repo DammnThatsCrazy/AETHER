@@ -7,18 +7,18 @@ audience: [ops]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/main.py
-  - Backend Architecture/aether-backend/config/settings.py
-  - Backend Architecture/aether-backend/services/provider_runtime/
+  - services/backend/main.py
+  - services/backend/config/settings.py
+  - services/backend/services/provider_runtime/
   - deploy/legacy-staging/bootstrap.sh
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
-  "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
-  "Backend Architecture/aether-backend/services/provider_runtime/": "sha256:222fdaf7349cf2f190d5a512550b7f0f45b2d26473ecbbe87d20476f4f4d2ad9"
   "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
+  "services/backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
+  "services/backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
+  "services/backend/services/provider_runtime/": "sha256:81502394ca09ea802ea90662dc6f23c1918a0ece952a2bfdac68187007f2c8fa"
 ---
 # Operations Runbook v0.1.0-alpha.0
 
@@ -213,7 +213,7 @@ in-memory only and is **not durable** until Redis returns.
 
 ## Model Runtime Operations (v8.12.0)
 
-The multi-model intelligence harness (`services/model_runtime/`) is
+The multi-model intelligence harness (`services/backend/services/model_runtime/`) is
 feature-gated OFF by default (`MODEL_RUNTIME_ENABLED=false`, ADR-008 D9).
 While OFF the `/v1/model-runtime/*` routes are inert — every request returns
 HTTP 503 `model_runtime_disabled` and no data is served.
@@ -227,7 +227,7 @@ at startup and the process refuses to serve rather than falling back to an
 insecure default. With `credential_backend=aws_secrets`,
 `MODEL_RUNTIME_CREDENTIAL_AWS_REGION` is also required. All `MODEL_RUNTIME_*`
 variables are declared in `.env.example` and
-`deploy/model-runtime/.env.example`; `services/model_runtime/config.py` is the
+`deploy/model-runtime/.env.example`; `services/backend/services/model_runtime/config.py` is the
 single source for defaults and the fail-closed rules.
 
 **Tenant scoping.** Tenant scope is server-authoritative: the tenant is derived
@@ -341,7 +341,7 @@ at the HTTP layer but verifies a Stripe-signed payload — failures should alert
 
 | Task | Module | Cadence |
 |---|---|---|
-| Monthly overage invoice cron | `services/billing/cron.run_monthly_overage_cron` | end-of-month billing cycle |
+| Monthly overage invoice cron | `services/backend/services/billing/cron.run_monthly_overage_cron` | end-of-month billing cycle |
 | SLA expiry worker | `services/notification_intelligence.lifecycle.start_sla_worker` | continuous (event-driven) |
 | Dune polling worker | `services/dune_feeder.scheduler.start_dune_polling_worker` | 60 s tick; per-schedule cadence ≥ 300 s |
 
@@ -497,7 +497,7 @@ stripe events resend <evt_xxxxxxxx> --webhook-endpoint=<we_xxxxxxxx>
 
 ### Escalation
 
-If an event type is consistently failing after 3 Stripe retry cycles (Stripe retries over 72 hours with exponential backoff), investigate the specific handler (`_handle_<event_type>` in `services/admin/webhook_routes.py`) and consider adding the event to a dead-letter queue for manual reprocessing.
+If an event type is consistently failing after 3 Stripe retry cycles (Stripe retries over 72 hours with exponential backoff), investigate the specific handler (`_handle_<event_type>` in `services/backend/services/admin/webhook_routes.py`) and consider adding the event to a dead-letter queue for manual reprocessing.
 
 ---
 
@@ -506,9 +506,9 @@ If an event type is consistently failing after 3 Stripe retry cycles (Stripe ret
 Three services mount conditionally in `main.py` based on feature flags:
 
 ```
-FEATURE_FRAUD_NETWORKS=true    → mounts services/fraud_networks router at /v1/fraud/networks
-FEATURE_FLOW_TRACE=true        → mounts services/flow_trace router at /v1/flow-trace
-FEATURE_RISK_OVERLAYS=true     → mounts services/risk_overlay router at /v1/risk-overlay
+FEATURE_FRAUD_NETWORKS=true    → mounts services/backend/services/fraud_networks router at /v1/fraud/networks
+FEATURE_FLOW_TRACE=true        → mounts services/backend/services/flow_trace router at /v1/flow-trace
+FEATURE_RISK_OVERLAYS=true     → mounts services/backend/services/risk_overlay router at /v1/risk-overlay
 ```
 
 ### Enabling
@@ -530,7 +530,7 @@ Set the flag to `false` and restart. Existing stored artifacts are preserved in 
 Two additional routers mount conditionally in `main.py` (all default OFF):
 
 ```
-AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED=true  → mounts services/agent/deployment_routes at /v1/agent/deployments
+AETHER_AGENT_DEPLOYMENT_REGISTRY_ENABLED=true  → mounts services/backend/services/agent/deployment_routes at /v1/agent/deployments
 KYBER_EXTERNAL_AGENT_TELEMETRY_ENABLED=true    → mounts Kyber diagnostics at /v1/admin/kyber/agent-telemetry
 ```
 
@@ -698,7 +698,7 @@ parquet export); the envelope routers mount as soon as
 `DATA_EXCHANGE_ENABLED` is on. Routes enforce the `data_exchange` RBAC domain —
 auto-granted to tenant owner / admin / viewer — with each dotted
 `data_exchange.*` grant resolved to the legacy read/write/admin permission by
-`services/data_exchange/authz.py`, so existing tenant tokens keep working.
+`services/backend/services/data_exchange/authz.py`, so existing tenant tokens keep working.
 
 **Migration required in hosted modes:** run Alembic before enabling — the
 `20260905_data_exchange` migration creates `data_artifacts`,

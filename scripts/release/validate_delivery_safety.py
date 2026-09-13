@@ -58,7 +58,7 @@ from typing import Any, Optional
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import Reporter, main_guard, repo_root  # noqa: E402
 
-_BACKEND_REL = Path("Backend Architecture") / "aether-backend"
+_BACKEND_REL = Path("services") / "backend"
 
 # Scan scope: the delivery path and the notification intelligence delivery path.
 SCAN_SUBTREES = ("services/delivery", "services/notification_intelligence")

@@ -29,15 +29,15 @@ backend target state and compatibility rules for phased implementation.
 
 | Area | Existing implementation | Preservation rule |
 |---|---|---|
-| Unified API | Python/FastAPI application in `Backend Architecture/aether-backend/main.py` mounts ingestion, lake, intelligence, identity, profile, population, behavioral, RWA, Web3, cross-domain, fraud, attribution, agent, diagnostics, provider, admin, and realtime routers. | Keep `/v1/*` compatibility. Add intelligence APIs as new routers or additive paths, not destructive rewrites. |
+| Unified API | Python/FastAPI application in `services/backend/main.py` mounts ingestion, lake, intelligence, identity, profile, population, behavioral, RWA, Web3, cross-domain, fraud, attribution, agent, diagnostics, provider, admin, and realtime routers. | Keep `/v1/*` compatibility. Add intelligence APIs as new routers or additive paths, not destructive rewrites. |
 | SDK contracts | `packages/shared` exports canonical events, entities, consent, wallets, provenance, graph relationships, economic, and Profile 360 contracts. | Treat as frontend/backend source of truth. Extend with additive exported contracts only. |
 | Event ingestion | Source-of-truth docs define `POST /v1/batch`, event registry, consent gating, and event-to-graph alignment. | Preserve event names and payload shape. New intelligence events must wrap or derive from existing events. |
 | Graph layer | `shared/graph/graph.py` already models users, sessions, devices, identity clusters, wallets, agents, contracts, protocols, Profile 360 entities, Web3 coverage, cross-domain financial objects, and commerce control-plane vertices. | Keep vertex and edge names stable. Add new labels only when existing labels cannot represent the concept. |
 | Data lake | Lake services provide raw/bronze-style ingestion, features, drift monitoring, model registry, and graph mutations. | Preserve bronze immutability and use silver/gold projections for intelligence products. |
-| Journey service | `Backend Architecture/services/journey-service` contains journey FSM, causality, processor, and snapshot writer with Postgres, Redis, Kafka, and ClickHouse integration. | Promote as the bounded service for temporal replay and journey reconstruction. |
-| Infrastructure | Root Docker Compose already includes PostgreSQL, Redis, Kafka/Zookeeper, ClickHouse, backend, ML serving, journey service, Kyber, and Prometheus. | Extend compose with optional graph/search/vector/object services behind profiles; do not break default local path. |
-| Compliance and governance | GDPR/SOC2 package, consent routers, audit routes, admin routes, feature gates, JWT/API-key dependencies, and billing/quota logic exist. | Centralize policy enforcement but keep existing middleware and admin APIs. |
-| ML/agent systems | ML model server, agent layer, agent routers, scoring routes, guardrail diagnostics, and provider gateway exist. | Use these as engines behind typed intelligence APIs. |
+| Journey capabilities | Journey compilation, persistence, attribution, and journey routes live in `services/backend/services/measurement/`; the former standalone FSM service is retained only under `docs/archive/legacy-architecture/backend/services/journey-service/` for historical tests. | Keep journey APIs in the canonical backend measurement boundary; do not revive the archived standalone service or add it to Compose. |
+| Infrastructure | Root Docker Compose includes PostgreSQL, Redis, Kafka/Zookeeper, ClickHouse, backend, ML serving, Kyber, and Prometheus. | Extend compose with optional graph/search/vector/object services behind profiles; do not break the default local path. |
+| Compliance and governance | `services/compliance/`, consent routers, audit routes, admin routes, feature gates, JWT/API-key dependencies, and billing/quota logic exist. | Centralize policy enforcement but keep existing middleware and admin APIs. |
+| ML/agent systems | `services/ml/` provides model training/serving; `services/agents/` provides internal broker-coupled workers; backend agent routes and provider gateway remain under `services/backend/`. | Use these as engines behind typed intelligence APIs while preserving the Kyber internal boundary. |
 
 ### Architectural gaps
 
@@ -109,7 +109,7 @@ SDKs + Kyber
 | Entity Resolution Engine | Identity stitching, profiles, dedupe, trust/confidence. | Postgres canonical table, graph identity edges, Redis cache. | `entity.updated`, `entity.relationship.changed`. | `/v1/entities/*`, `/v1/identity/*`, `/v1/profile/*`. |
 | Graph Engine | Traversal, shortest paths, neighborhoods, temporal reconstruction, overlays. | Neptune now; optional Memgraph/Neo4j profile; ClickHouse snapshots. | `graph.mutated`. | `/v1/graph/traverse`, `/v1/graph/path`, `/v1/graph/temporal`. |
 | Relationship Engine | Relationship scoring, continuity, relationship evidence. | Graph edges, Postgres relationship facts, ClickHouse features. | `entity.relationship.changed`, `score.updated`. | `/v1/entities/{id}/relationships`. |
-| Journey Engine | Multi-actor journeys, FSM, causality, replay, snapshots. | Existing journey service Postgres/Redis/Kafka/ClickHouse. | `journey.updated`. | `/v1/entities/{id}/journeys`, `/v1/journeys/*`. |
+| Journey Engine | Multi-actor journeys, persistence, attribution, and replay. | Backend measurement services over Postgres/Redis/ClickHouse and the shared event backbone. | `journey.updated`. | `/v1/entities/{id}/journeys`, `/v1/journeys/*`. |
 | Cluster Engine | Deterministic groups, emergent clusters, wallet/fraud/geo/economic clusters. | ClickHouse features, graph cluster nodes, Postgres metadata. | `cluster.updated`, `score.updated`. | `/v1/groups/*`, `/v1/clusters/*`. |
 | Attribution Engine | Lineage, touchpoints, causal paths, campaign and operational attribution. | ClickHouse paths, Postgres model runs, graph attribution edges. | attribution events and scores. | `/v1/attribution/*`. |
 | Realtime Intelligence Engine | WebSocket subscriptions, cursor resume, fanout, replay. | Redis pub/sub/streams, Kafka, ClickHouse cursors. | WebSocket messages. | `/v1/realtime/ws`, existing realtime router. |
@@ -194,7 +194,7 @@ entity types as follows:
 | Events | `Event`, `ActionRecord`, `BusinessEvent`. |
 | Relationships | Existing edge labels plus scored relationship facts. |
 | Clusters | `IdentityCluster` and additive cluster projection nodes. |
-| Journeys | Journey service IDs linked to `ActionRecord`/`Event` nodes. |
+| Journeys | Backend measurement journey IDs linked to `ActionRecord`/`Event` nodes. |
 | Locations | `Location`. |
 | Economic profiles | `Payment`, `PaymentIntent`, `SettlementEvent`, `EconomicResource`, `StablecoinAsset`. |
 | Behavioral profiles | `ActionRecord`, `Event`, Profile 360 behavior projections. |
@@ -378,7 +378,7 @@ Keep the current root compose as the default runnable stack:
 - Kafka/Zookeeper for event backbone.
 - ClickHouse for analytical event queries.
 - FastAPI backend.
-- Journey service.
+- Backend measurement journey capabilities.
 - ML serving.
 - Kyber.
 - Prometheus.
@@ -438,11 +438,11 @@ Every service and engine should emit:
 Pipeline stages:
 
 1. Format/lint/typecheck Python and TypeScript.
-2. Unit tests for shared packages, backend routers, journey service, ML and agent
+2. Unit tests for shared packages, backend routers, backend measurement journeys, ML and agent
    modules.
 3. Generate and diff OpenAPI.
 4. Run contract compatibility checks for shared TS contracts and OpenAPI.
-5. Build Docker images for backend, journey service, ML serving, Kyber.
+5. Build Docker images for backend, ML serving, and Kyber.
 6. Run migration dry-runs and schema-version checks.
 7. Run integration smoke stack with compose.
 8. Produce SBOM, vulnerability scan, and signed images.
@@ -470,7 +470,7 @@ Pipeline stages:
 
 - Standardize `EventPipelineEnvelope` in backend models.
 - Add replay APIs and ClickHouse cursor checkpoints.
-- Promote journey service replay/snapshot outputs into entity journey APIs.
+- Promote backend measurement replay/snapshot outputs into entity journey APIs.
 
 ### Phase 3 — investigations and governance
 

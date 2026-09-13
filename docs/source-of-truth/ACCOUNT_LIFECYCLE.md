@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior, ops, architect]
 status: experimental
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/account_lifecycle/models.py, Backend Architecture/aether-backend/services/account_lifecycle/storage_registry.py, Backend Architecture/aether-backend/services/account_lifecycle/service.py, Backend Architecture/aether-backend/services/account_lifecycle/routes.py, Backend Architecture/aether-backend/alembic/versions/20260813_account_deletion_workflow.py]
+source_files: [services/backend/services/account_lifecycle/models.py, services/backend/services/account_lifecycle/storage_registry.py, services/backend/services/account_lifecycle/service.py, services/backend/services/account_lifecycle/routes.py, services/backend/alembic/versions/20260813_account_deletion_workflow.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 toc_depth: 3

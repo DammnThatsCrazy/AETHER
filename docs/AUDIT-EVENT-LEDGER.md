@@ -10,7 +10,7 @@ since_version: "0.1.0"
 
 # Security Audit Event Ledger
 
-`AuditLedger` (`services/security/audit_ledger.py`) is a tamper-evident trail of
+`AuditLedger` (`services/backend/services/security/audit_ledger.py`) is a tamper-evident trail of
 sensitive governance actions, persisted via `SecurityAuditEventRepository`.
 
 ## Implemented controls

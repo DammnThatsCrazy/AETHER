@@ -21,12 +21,12 @@ precise seam (D-04, D-05) rather than executed speculatively.
 
 | Artifact | Disposition | Milestone | Evidence |
 |---|---|---|---|
-| `services/social/social_aggregator.py` | **Deleted** (legacy fixed-overlap + fabricated-default source) | M4 | file absent; M4 tests 14/0; legacy-scan validator (M12) finds no idioms |
+| `services/backend/services/social/social_aggregator.py` | **Deleted** (legacy fixed-overlap + fabricated-default source) | M4 | file absent; M4 tests 14/0; legacy-scan validator (M12) finds no idioms |
 | `gold_social_intelligence` DDL | **Deleted** (dead/redundant social-gold DDL) | M4 | file absent |
 | Fixed cross-platform audience overlap `0.20 / 0.15 / 0.25` in the authority path | **Removed** | M4 | routes.py re-written as legacy wrapper over canonical aggregator; `audience_summary` no longer synthesized from fixed constants |
 | `/v1/profile/{id}/social-intelligence` empty stub shadowing real handler | **Resolved** — reclassified as a legacy wrapper delegating to `IntelligenceAggregator.social_intelligence` | M4 | routes.py; defect `social_stub_shadows_real_handler` closed |
 | kyber `influence = "low"` + `verified: False` fabrication on unknown data | **Fixed** — unknown remains unknown | M4/M10 | kyber social-intelligence-panel honesty fix; M10 tests 35/0 |
-| `services/social/` legacy surface | **Retained as compatibility wrapper** (decommission continues only under social360-surface activation; §150 requires no *active* customer path change off-flag) | M11 | this report, D-05 |
+| `services/backend/services/social/` legacy surface | **Retained as compatibility wrapper** (decommission continues only under social360-surface activation; §150 requires no *active* customer path change off-flag) | M11 | this report, D-05 |
 
 ## 3. Classification outcome (G061 / §116-§120)
 
@@ -85,7 +85,7 @@ validator and the M2-M10 test suites are the standing sentinels until then.
 
 ## 7. Compatibility contracts (legacy → canonical)
 
-`services/social/routes.py` is the single compatibility surface: it preserves
+`services/backend/services/social/routes.py` is the single compatibility surface: it preserves
 the legacy `/v1/.../social-intelligence` read shape while delegating computation
 to `IntelligenceAggregator.social_intelligence` (the canonical aggregator).
 `IntelligenceAggregator` enforces read permission; the consent model
@@ -99,7 +99,7 @@ gated on this route (D-05).
 
 - Manual scan of governed social sources: only honest documentation strings
   remain (e.g. `routes.py` documents "never `followers = 0` …", and
-  `services/exploration/adapters/social360.py` returns `provider_unavailable`
+  `services/backend/services/exploration/adapters/social360.py` returns `provider_unavailable`
   rather than synthesized metrics).
 - Machine scan (M12 validator, token-stripped so documentation cannot
   self-trigger): **42 governed files, 0 idioms** — `make ci-check` gate #64.

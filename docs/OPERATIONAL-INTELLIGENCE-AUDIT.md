@@ -6,20 +6,20 @@ visibility: I
 audience: [dev-senior, architect, ops]
 status: stable
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/investigation/routes.py, Backend Architecture/aether-backend/services/governance/routes.py, Backend Architecture/aether-backend/services/events/routes.py, Backend Architecture/aether-backend/services/events/worker.py, Backend Architecture/aether-backend/services/realtime/channel_hub.py, Backend Architecture/aether-backend/repositories/repos.py, Backend Architecture/aether-backend/shared/events/events.py, frontend/kyber/src/features/investigation/use-investigations.ts, frontend/kyber/src/features/governance/use-governance.ts, frontend/kyber/src/features/graph/use-graph-intelligence.ts]
+source_files: [services/backend/services/investigation/routes.py, services/backend/services/governance/routes.py, services/backend/services/events/routes.py, services/backend/services/events/worker.py, services/backend/services/realtime/channel_hub.py, services/backend/repositories/repos.py, services/backend/shared/events/events.py, frontend/kyber/src/features/investigation/use-investigations.ts, frontend/kyber/src/features/governance/use-governance.ts, frontend/kyber/src/features/graph/use-graph-intelligence.ts]
 reviewed_source_commits:
   - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; operational-intelligence findings remain unchanged.'}
 source_hashes:
-  Backend Architecture/aether-backend/repositories/repos.py: sha256:17bda309a520403afe5ea14ec5a647d8aeea03839d644e3ce4c0086f1218f70f
-  Backend Architecture/aether-backend/services/events/routes.py: sha256:1ede3d12a54845f33a149b13106b001a899c4b77c168c6d990023e836b59101f
-  Backend Architecture/aether-backend/services/events/worker.py: sha256:9cf0acc4c999875f0496e7665058fb80f4cd09fffa74b434a00ef9c9adfb7363
-  Backend Architecture/aether-backend/services/governance/routes.py: sha256:ba2ab1b509221205ffba6b31cb346cde1dc4d24b6395f6397a95e677b0c5c24b
-  Backend Architecture/aether-backend/services/investigation/routes.py: sha256:885be3f6f0b9592dab4ab7ac2603568a06d6ed7406554202da046ee7facd339a
-  Backend Architecture/aether-backend/services/realtime/channel_hub.py: sha256:c53cb1a1270ba4d2f19dac8b3db0ebc09ab60118fa7f176afd3e5e45363399c9
-  Backend Architecture/aether-backend/shared/events/events.py: sha256:c8bd9450991073d2dc7387cb621fd18e992a9f37e5b4ab1aea775f5bb2d0b17e
-  frontend/kyber/src/features/governance/use-governance.ts: sha256:95866e0a4d641818054dea1a9c955de75e5c21449bba8687f97a7989b7b17474
-  frontend/kyber/src/features/graph/use-graph-intelligence.ts: sha256:9e9e9e76a87c02158860fc6ffa12d542be09d888de3dad5b43ce6c5b8232c57b
-  frontend/kyber/src/features/investigation/use-investigations.ts: sha256:70977dbe926bbf5a45ebb1ed1c5b115c7c4241fdb044e4c9341ce3ed37850207
+  "frontend/kyber/src/features/governance/use-governance.ts": "sha256:95866e0a4d641818054dea1a9c955de75e5c21449bba8687f97a7989b7b17474"
+  "frontend/kyber/src/features/graph/use-graph-intelligence.ts": "sha256:9e9e9e76a87c02158860fc6ffa12d542be09d888de3dad5b43ce6c5b8232c57b"
+  "frontend/kyber/src/features/investigation/use-investigations.ts": "sha256:70977dbe926bbf5a45ebb1ed1c5b115c7c4241fdb044e4c9341ce3ed37850207"
+  "services/backend/repositories/repos.py": "sha256:96341101e3ef8db15a80a953aa9d86e0d7a1804a02fe58e0a3e8fe53ffbbc4b8"
+  "services/backend/services/events/routes.py": "sha256:1ede3d12a54845f33a149b13106b001a899c4b77c168c6d990023e836b59101f"
+  "services/backend/services/events/worker.py": "sha256:9cf0acc4c999875f0496e7665058fb80f4cd09fffa74b434a00ef9c9adfb7363"
+  "services/backend/services/governance/routes.py": "sha256:ba2ab1b509221205ffba6b31cb346cde1dc4d24b6395f6397a95e677b0c5c24b"
+  "services/backend/services/investigation/routes.py": "sha256:885be3f6f0b9592dab4ab7ac2603568a06d6ed7406554202da046ee7facd339a"
+  "services/backend/services/realtime/channel_hub.py": "sha256:c53cb1a1270ba4d2f19dac8b3db0ebc09ab60118fa7f176afd3e5e45363399c9"
+  "services/backend/shared/events/events.py": "sha256:c8bd9450991073d2dc7387cb621fd18e992a9f37e5b4ab1aea775f5bb2d0b17e"
 ---
 
 # Operational Intelligence — Stub vs. Production Audit
@@ -40,7 +40,7 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 
 | Field | Detail |
 |---|---|
-| **File** | `Backend Architecture/aether-backend/services/events/worker.py` |
+| **File** | `services/backend/services/events/worker.py` |
 | **Symptom** | `_process_job` incremented a counter for each matching envelope but never called `producer.publish()` |
 | **Impact** | Replay jobs completed with `totalReplayed: N` but zero events reached the event bus; WebSocket clients on `tenant.events` received nothing |
 | **Fix applied** | Worker now calls `await producer.publish(Event(topic=..., tenant_id=..., payload=...))` for each matching envelope. Dry-run jobs count but skip publish. Unknown Topic values are skipped with a warning. |
@@ -49,7 +49,7 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 
 | Field | Detail |
 |---|---|
-| **File** | `Backend Architecture/aether-backend/services/events/routes.py` |
+| **File** | `services/backend/services/events/routes.py` |
 | **Symptom** | `POST /v1/events/ingest` stored envelopes in `_EVENTS: dict[str, dict]` only; server restart lost all data; worker could only replay events ingested in the current process lifetime |
 | **Fix applied** | `ingest_event` now calls `await _envelope_repo.create(envelope_dict)` before updating the hot cache. `EventEnvelopeRepository` added to `repos.py`, backed by PostgreSQL in staging/production and by the shared `_IN_MEMORY_STORES` dict in local/test. |
 
@@ -57,7 +57,7 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 
 | Field | Detail |
 |---|---|
-| **File** | `Backend Architecture/aether-backend/services/investigation/routes.py` |
+| **File** | `services/backend/services/investigation/routes.py` |
 | **Symptom** | `PATCH /v1/investigations/{id}/status` accepted any `→ any` transition with comment `# any → any for MVP` |
 | **Impact** | Closed cases could be re-opened; escalated cases could regress to open; compliance audit trail would be unreliable |
 | **Fix applied** | `_VALID_TRANSITIONS` dict added; `transition_status` raises `HTTP 422` on invalid transitions. Valid graph: `open → {triage, active, escalated, closed}`, `triage → {active, escalated, closed}`, `active → {escalated, closed}`, `escalated → {closed}`, `closed → {}` (terminal). |
@@ -66,7 +66,7 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 
 | Field | Detail |
 |---|---|
-| **File** | `Backend Architecture/aether-backend/services/governance/routes.py:86` |
+| **File** | `services/backend/services/governance/routes.py:86` |
 | **Symptom** | `allowed = not bool(body.context.get("deny", False))` — always allows unless caller passes `{"deny": true}` in context |
 | **Impact** | Frontend `useEvaluateGovernance()` returns decisions that appear authoritative but apply no real policies |
 | **Status** | Deferred — requires a `PolicyRepository`, policy DSL, and an evaluation engine. Tracked as Phase 2. |
@@ -76,7 +76,7 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 
 | Field | Detail |
 |---|---|
-| **File** | `Backend Architecture/aether-backend/services/realtime/routes.py` |
+| **File** | `services/backend/services/realtime/routes.py` |
 | **Symptom** | WebSocket `subscribe` action accepts any channel name without checking whether the authenticated entity holds a delegation that grants access |
 | **Impact** | Tenant-scoped isolation is partially enforced (events are only fanned out to queues keyed by `(tenant_id, channel)`), but any authenticated user in that tenant can subscribe to any channel |
 | **Status** | Deferred — requires delegation scope lookup at subscription time. Tracked as Phase 2. |
@@ -85,7 +85,7 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 
 | Field | Detail |
 |---|---|
-| **File** | `Backend Architecture/aether-backend/services/realtime/routes.py` |
+| **File** | `services/backend/services/realtime/routes.py` |
 | **Symptom** | Cursors are generated and sent to clients but the server does not store a rolling event window; reconnecting clients receive no missed events |
 | **Status** | Deferred — requires a short-TTL event buffer (e.g., Redis sorted-set keyed by `(tenant_id, channel)`). Tracked as Phase 3. |
 
@@ -102,11 +102,11 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 | **EventEnvelopeRepository** | `repos.py:1519` | PostgreSQL-backed durable envelope storage with replayable filter |
 | **EventProducer** | `shared/events/events.py:328` | AIOKafka with acks=all, retries=3, exponential backoff, DLQ; batch overflow falls back to individual publish; DLQ events include `original_payload` for replay |
 | **EventConsumer** | `shared/events/events.py:438` | Concurrency-limited (semaphore=10), per-handler retry, dead-letter on exhaustion |
-| **ChannelHub** | `services/realtime/channel_hub.py` | 54 topics → 9 named channels; monotonic cursor; lock-protected fanout; QueueFull logged |
-| **Investigation Routes** | `services/investigation/routes.py` | Full CRUD + state machine + evidence + annotations; EventProducer wired |
-| **Governance Routes** | `services/governance/routes.py` | Decision persistence + audit trail; EventProducer wired; principal_id filter fixed |
-| **Event Replay Routes** | `services/events/routes.py` | Job CRUD; envelope durable ingest; EventProducer wired for submit/cancel |
-| **Replay Worker** | `services/events/worker.py` | Polls queued jobs; filters envelopes from durable repo; republishes via producer; dry-run support |
+| **ChannelHub** | `services/backend/services/realtime/channel_hub.py` | 54 topics → 9 named channels; monotonic cursor; lock-protected fanout; QueueFull logged |
+| **Investigation Routes** | `services/backend/services/investigation/routes.py` | Full CRUD + state machine + evidence + annotations; EventProducer wired |
+| **Governance Routes** | `services/backend/services/governance/routes.py` | Decision persistence + audit trail; EventProducer wired; principal_id filter fixed |
+| **Event Replay Routes** | `services/backend/services/events/routes.py` | Job CRUD; envelope durable ingest; EventProducer wired for submit/cancel |
+| **Replay Worker** | `services/backend/services/events/worker.py` | Polls queued jobs; filters envelopes from durable repo; republishes via producer; dry-run support |
 | **Kyber investigation hooks** | `apps/kyber/src/features/investigation/` | useInvestigations, useInvestigation, useCreateInvestigation, useTransitionInvestigationStatus, useAddInvestigationEvidence, useAddInvestigationAnnotation — all wired to live endpoints |
 | **Kyber governance hooks** | `apps/kyber/src/features/governance/` | useGovernanceDecisions, useGovernanceAudit, useEvaluateGovernance — all wired |
 | **Kyber graph intelligence hooks** | `apps/kyber/src/features/graph/` | use-graph-intelligence.ts + use-entity-intelligence.ts — wired to /v1/graph/* |
@@ -117,8 +117,8 @@ Items marked **FIXED** have been addressed in the commit that accompanies this d
 | **AgentEconomicIdentityRepository** | `repos.py` | `upsert_identity`, `find_for_agent(agent_id, tenant_id)` — tenant-scoped key: `{tenant_id}:{agent_id}:economic_identity` |
 | **EconomicResourceRepository** | `repos.py` | `upsert_resource`, `list_for_tenant(tenant_id)` — tenant-isolated purchasable capabilities |
 | **FacilitatorRepository** | `repos.py` | `upsert_facilitator`, `list_active(tenant_id)` — x402 facilitator/trust-broker registry |
-| **X402LifecycleMapper** | `services/x402/lifecycle_mapper.py` | Routes 14 canonical x402 events to repositories; idempotent via event_id; full tenant isolation |
-| **AgentLifecycleMapper** | `services/agent/lifecycle_mapper.py` | Routes 19 canonical agent lifecycle events to graph mutations + repos; all vertex IDs use `{tenant_id}:agent:{id}` format |
+| **X402LifecycleMapper** | `services/backend/services/x402/lifecycle_mapper.py` | Routes 14 canonical x402 events to repositories; idempotent via event_id; full tenant isolation |
+| **AgentLifecycleMapper** | `services/backend/services/agent/lifecycle_mapper.py` | Routes 19 canonical agent lifecycle events to graph mutations + repos; all vertex IDs use `{tenant_id}:agent:{id}` format |
 | **Four-layer graph coverage** | `/v1/graph/*` + `shared/graph-contract.ts` | All four interaction layers implemented: H2H (human↔human), H2A (human→agent), A2H (agent→human), A2A (agent↔agent). `classifyEdgeType` routes each edge type to its layer; `countEdgesByLayer` aggregates per-layer stats exposed via `/v1/graph/health`. |
 
 ---
@@ -241,7 +241,7 @@ Add to `docker-compose.yml` and ECS task definitions:
 ```yaml
 # docker-compose.yml addition
 aether-replay-worker:
-  build: ./Backend Architecture/aether-backend
+  build: ./services/backend
   command: python -m services.events.worker_entrypoint
   environment:
     - AETHER_ENV=${AETHER_ENV}
@@ -281,7 +281,7 @@ PR #344 added the following operational artifacts that affect this audit scope:
 
 **New Event Topics** (`shared/events/events.py`): `FRAUD_NETWORK_CREATED`, `FRAUD_NETWORK_UPDATED`, `FRAUD_NETWORK_REFRESHED`, `FRAUD_NETWORK_ESCALATED`, `FRAUD_NETWORK_SUPPRESSED`, `FLOW_TRACE_CREATED`, `FLOW_TRACE_COMPLETED`, `RISK_OVERLAY_GENERATED`.
 
-**New Investigation Endpoints** (`services/investigation/routes.py`): Six new endpoints for attaching fraud networks and flow traces to investigation cases, retrieving fraud summaries, generating investigation reports, and exporting case bundles — all tenant-scoped, permission-gated, and using the existing state machine.
+**New Investigation Endpoints** (`services/backend/services/investigation/routes.py`): Six new endpoints for attaching fraud networks and flow traces to investigation cases, retrieving fraud summaries, generating investigation reports, and exporting case bundles — all tenant-scoped, permission-gated, and using the existing state machine.
 
 ### Data Exchange Plane event-surface additions (commit 5b974b02, `data-exchange-plane` lane)
 

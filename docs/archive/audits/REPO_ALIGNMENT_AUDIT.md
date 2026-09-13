@@ -39,8 +39,8 @@ Full-repo alignment audit across every file, folder, module, language surface, c
 | `package.json` (root) | Node | 8.7.0 | Aligned |
 | `packages/web/package.json` | Node | 8.7.0 | Aligned |
 | `packages/react-native/package.json` | Node | 8.7.0 | Aligned |
-| `Data Ingestion Layer/package.json` | Node | 8.7.0 | Aligned |
-| `Data Lake Architecture/.../package.json` | Node | 8.7.0 | Aligned |
+| `docs/archive/legacy-architecture/data-ingestion-layer/package.json` | Node | 8.7.0 | Aligned |
+| `docs/archive/legacy-architecture/data-lake-architecture/.../package.json` | Node | 8.7.0 | Aligned |
 | `packages/ios/Package.swift` | Swift | 8.7.0 | Aligned |
 | `packages/android/build.gradle.kts` (Maven) | Kotlin | 8.7.0 | Aligned |
 | `packages/android/build.gradle.kts` (buildConfigField) | Kotlin | 8.7.0 | Aligned |
@@ -56,12 +56,12 @@ Full-repo alignment audit across every file, folder, module, language surface, c
 | `docs/AGENT-CONTROLLER.md` | Doc | v8.7.1 | Aligned |
 | `docs/OPERATIONS-RUNBOOK.md` | Doc | v8.7.1 | Aligned |
 | `docs/PRODUCTION-READINESS.md` | Doc | v8.7.1 | Aligned |
-| `Agent Layer/README.md` | Doc | v8.7.1 | Aligned |
-| `Data Ingestion Layer/README.md` | Doc | v8.7.1 | Aligned |
-| `Data Lake Architecture/README.md` | Doc | v8.7.1 | Aligned |
-| `AWS Deployment/aether-aws/README.md` | Doc | v8.7.1 | Aligned |
+| `services/agents/README.md` | Doc | v8.7.1 | Aligned |
+| `docs/archive/legacy-architecture/data-ingestion-layer/README.md` | Doc | v8.7.1 | Aligned |
+| `docs/archive/legacy-architecture/data-lake-architecture/README.md` | Doc | v8.7.1 | Aligned |
+| `deploy/aws/README.md` | Doc | v8.7.1 | Aligned |
 | `cicd/aether-cicd/README.md` | Doc | v8.7.1 | Aligned |
-| `GDPR & SOC2/aether-compliance/README.md` | Doc | v8.7.1 | Aligned |
+| `services/compliance/README.md` | Doc | v8.7.1 | Aligned |
 | `CHANGELOG.md` (root) | Doc | v8.7.1 | Aligned |
 | `docs/CHANGELOG.md` | Doc | v8.7.1 | Aligned |
 
@@ -69,12 +69,12 @@ Full-repo alignment audit across every file, folder, module, language surface, c
 
 | Subsystem | Version | Reason |
 |-----------|---------|--------|
-| `Backend Architecture/aether-backend/pyproject.toml` | 0.1.0 | Internal Python package, not published |
-| `Agent Layer/pyproject.toml` | 0.1.0 | Internal Python package, not published |
-| `ML Models/aether-ml/pyproject.toml` | 4.0.0 | Independently versioned ML package |
+| `services/backend/pyproject.toml` | 0.1.0 | Internal Python package, not published |
+| `services/agents/pyproject.toml` | 0.1.0 | Internal Python package, not published |
+| `services/ml/pyproject.toml` | 4.0.0 | Independently versioned ML package |
 | `cicd/aether-cicd/pyproject.toml` | 1.0.0 | Internal CI/CD tooling |
-| `AWS Deployment/aether-aws/pyproject.toml` | 1.0.0 | Internal AWS automation |
-| `GDPR & SOC2/aether-compliance/pyproject.toml` | 1.0.0 | Internal compliance module |
+| `deploy/aws/pyproject.toml` | 1.0.0 | Internal AWS automation |
+| `services/compliance/pyproject.toml` | 1.0.0 | Internal compliance module |
 
 ### Version Drift Root Cause (Fixed)
 
@@ -127,7 +127,7 @@ Full-repo alignment audit across every file, folder, module, language surface, c
 | Document | Was | Now |
 |----------|-----|-----|
 | `docs/ARCHITECTURE.md` | "24 service routers" | "31 service routers" |
-| `Backend Architecture/README.md` | "21 microservices", "95+ endpoints" | "31 microservices", "246 endpoints" |
+| `docs/archive/legacy-architecture/backend/README.md` | "21 microservices", "95+ endpoints" | "31 microservices", "246 endpoints" |
 | `docs/PRODUCTION-READINESS.md` | "All 22 backend services" | "All 31 backend services" |
 
 ---
@@ -200,11 +200,11 @@ All 24 providers exist as classes in `shared/providers/categories.py` with real 
 
 All remaining "stub" references in documentation are legitimate and describe correct behavior:
 - `deploy/staging/README.md` — ML serving uses stub models unless trained artifacts provided
-- `Backend Architecture/README.md` — Example using stub API key for development
+- `docs/archive/legacy-architecture/backend/README.md` — Example using stub API key for development
 - `docs/ML-TRAINING-GUIDE.md` — Describes fallback to stub models in dev
 - `docs/CHANGELOG.md` — Historical entries describing what was replaced
 - `docs/INTELLIGENCE-GRAPH.md` — Stub API keys restricted to LOCAL env only
-- `AWS Deployment/aether-aws/README.md` — AWS stub mode for CI/demo environments
+- `deploy/aws/README.md` — AWS stub mode for CI/demo environments
 
 ### No Stale "simulated", "placeholder", "TODO", "coming soon"
 
@@ -226,15 +226,15 @@ All instances of these keywords in active documentation have been verified as hi
 
 ## 7. Legacy / Archive Files
 
-### `Backend Architecture/mnt/user-data/outputs/`
+### `docs/archive/legacy-architecture/backend/mnt/user-data/outputs/`
 
-Contains archived copies of service route files from earlier development iterations. These are **NOT** the active code — the active code is in `Backend Architecture/aether-backend/services/`. These files contain old stub implementations that have since been replaced.
+Contains archived copies of service route files from earlier development iterations. These are **NOT** the active code — the active code is in `services/backend/services/`. These files contain old stub implementations that have since been replaced.
 
 **Decision:** These are archive/output artifacts. No action needed — they do not affect runtime behavior.
 
-### Root-level `Backend Architecture/*.py` files
+### Root-level `docs/archive/legacy-architecture/backend/*.py` files
 
-Files like `cache.py`, `repos.py`, `graph.py`, `auth.py`, `events.py` exist at the top of `Backend Architecture/` alongside the `aether-backend/` directory. These are **earlier versions** of what is now in `aether-backend/shared/`. The active code is inside `aether-backend/`.
+Files like `cache.py`, `repos.py`, `graph.py`, `auth.py`, `events.py` exist at the top of `docs/archive/legacy-architecture/backend/` alongside the `aether-backend/` directory. These are **earlier versions** of what is now in `aether-backend/shared/`. The active code is inside `aether-backend/`.
 
 **Decision:** These are legacy files from before the `aether-backend/` reorganization. They do not affect imports or runtime (Python only imports from `aether-backend/`).
 
@@ -249,8 +249,8 @@ Files like `cache.py`, `repos.py`, `graph.py`, `auth.py`, `events.py` exist at t
 | `tests/unit/` | 9 files | Backend guards, oracle config, RPC gateway, agent wrappers, AWS |
 | `tests/integration/` | 1 file | Backend E2E |
 | `tests/security/` | 1 file | Model extraction defense |
-| `ML Models/aether-ml/tests/unit/` | 5 files | Common, features, models, serving |
-| `ML Models/aether-ml/tests/integration/` | 2 files | API, serving |
+| `services/ml/tests/unit/` | 5 files | Common, features, models, serving |
+| `services/ml/tests/integration/` | 2 files | API, serving |
 | **Total** | **16 files** | **106+ core + 153 ML = 259+ assertions** |
 
 ### Coverage Gaps (Known)
@@ -291,7 +291,7 @@ Both `CHANGELOG.md` (root) and `docs/CHANGELOG.md` contain matching v8.7.1 entri
 |---|------|-------|-----|
 | 1 | `packages/android/build.gradle.kts` | buildConfigField version 4.0.0 | Changed to 8.7.0 |
 | 2 | `docs/ARCHITECTURE.md` | "24 service routers" | Changed to "31 service routers" |
-| 3 | `Backend Architecture/README.md` | "21 microservices", "95+ endpoints" | Changed to "31 microservices", "246 endpoints" |
+| 3 | `docs/archive/legacy-architecture/backend/README.md` | "21 microservices", "95+ endpoints" | Changed to "31 microservices", "246 endpoints" |
 | 4 | `docs/PRODUCTION-READINESS.md` | "All 22 backend services" | Changed to "All 31 backend services" |
 | 5 | `docs/OPERATIONS-RUNBOOK.md` | Claimed infrastructure uses in-memory stubs | Updated to reflect real backends |
 | 6 | `docs/OPERATIONS-RUNBOOK.md` | Concurrency section referenced threading locks | Updated to reflect asyncpg/Redis concurrency |
@@ -309,7 +309,7 @@ Both `CHANGELOG.md` (root) and `docs/CHANGELOG.md` contain matching v8.7.1 entri
 | `mnt/user-data/outputs/` archive | P3 | Old stub copies — could be gitignored or documented |
 | ML Models README version | Info | aether-ml stays at 4.0.0 by design (independent package) |
 | Test coverage for v8.7.1 services | P2 | Profile, Population, Expectations, Behavioral, RWA need dedicated unit tests |
-| `Data Ingestion Layer/` TypeScript sink implementations | Info | Production sink implementations (Kafka, ClickHouse, S3, Redis) using Node.js built-in modules |
+| `docs/archive/legacy-architecture/data-ingestion-layer/` TypeScript sink implementations | Info | Production sink implementations (Kafka, ClickHouse, S3, Redis) using Node.js built-in modules |
 
 ---
 

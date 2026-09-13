@@ -12,7 +12,7 @@ import pytest
 
 
 def _add_backend() -> None:
-    backend = str(Path(__file__).parents[2] / "Backend Architecture" / "aether-backend")
+    backend = str(Path(__file__).parents[2] / "services" / "backend")
     if backend not in sys.path:
         sys.path.insert(0, backend)
 

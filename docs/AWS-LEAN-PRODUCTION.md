@@ -7,13 +7,13 @@ audience: [ops, architect, dev-senior, security]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - AWS Deployment/aether-aws/terraform/profiles.tf
-  - AWS Deployment/aether-aws/terraform/main.tf
-  - AWS Deployment/aether-aws/terraform/variables.tf
-  - AWS Deployment/aether-aws/terraform/moved.tf
-  - AWS Deployment/aether-aws/terraform/profiles/production-lean.tfvars
-  - AWS Deployment/aether-aws/terraform/tests/profile_plan.tftest.hcl
-  - AWS Deployment/aether-aws/terraform/DECOMMISSION.md
+  - deploy/aws/terraform/profiles.tf
+  - deploy/aws/terraform/main.tf
+  - deploy/aws/terraform/variables.tf
+  - deploy/aws/terraform/moved.tf
+  - deploy/aws/terraform/profiles/production-lean.tfvars
+  - deploy/aws/terraform/tests/profile_plan.tftest.hcl
+  - deploy/aws/terraform/DECOMMISSION.md
   - config/runtime_deployment.yaml
   - config/deployment_profiles.yaml
   - config/terraform_resource_contracts.yaml
@@ -23,18 +23,18 @@ canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
 source_hashes:
-  ".github/workflows/infrastructure.yml": "sha256:be39b6afcb64364e92c4101bd691fae3e6a84a829fa127b78894fb79dc99a85e"
-  ".github/workflows/terraform-promote.yml": "sha256:c6ba216364e25afee22be4b62c0e2b3629bc5e68e0f47389fba8cfc4c17f7ef4"
-  "AWS Deployment/aether-aws/terraform/DECOMMISSION.md": "sha256:886ea3a326facc058225bb155e298c64db74094d36b4492264cc68ad57de32a6"
-  "AWS Deployment/aether-aws/terraform/main.tf": "sha256:d49a3a87a2641c8cdd9390f1f0637572ba5961146b30eff37892aeee66c8131e"
-  "AWS Deployment/aether-aws/terraform/moved.tf": "sha256:aec15de07e356364018e3bdf09fdb6196d252bdb4e0451212f5b6a27a7b26816"
-  "AWS Deployment/aether-aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
-  "AWS Deployment/aether-aws/terraform/profiles/production-lean.tfvars": "sha256:d2a43c01989cfbbec8081b85356487df5d421cba5f2369671b6d67551a574e39"
-  "AWS Deployment/aether-aws/terraform/tests/profile_plan.tftest.hcl": "sha256:49de40c8e1b25e70be10484d3297f3056939cf40403caee11b51eb237a9110f7"
-  "AWS Deployment/aether-aws/terraform/variables.tf": "sha256:7dfc485a37776610062b703a91e594b49e2d04c5d932592fca67adbda1076961"
+  ".github/workflows/infrastructure.yml": "sha256:d3f365dc9d77933d491109d50a0bf45b3a42b450ef576e74f028a6a6ea41cdb0"
+  ".github/workflows/terraform-promote.yml": "sha256:4fe31c78b7d0621cc5db6f35eaa239d30f11ce12e518e5dbee6d343110ed5197"
   "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
-  "config/terraform_resource_contracts.yaml": "sha256:f915daf101aab4b46b216ade95355eae2e119ab469e98de0c653ac81d92dbdf9"
+  "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
+  "deploy/aws/terraform/DECOMMISSION.md": "sha256:a37cb94abdcbc9472eb4881722289412f4adcc79fa75755946bbef0fc93b8dec"
+  "deploy/aws/terraform/main.tf": "sha256:d49a3a87a2641c8cdd9390f1f0637572ba5961146b30eff37892aeee66c8131e"
+  "deploy/aws/terraform/moved.tf": "sha256:aec15de07e356364018e3bdf09fdb6196d252bdb4e0451212f5b6a27a7b26816"
+  "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
+  "deploy/aws/terraform/profiles/production-lean.tfvars": "sha256:d2a43c01989cfbbec8081b85356487df5d421cba5f2369671b6d67551a574e39"
+  "deploy/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:49de40c8e1b25e70be10484d3297f3056939cf40403caee11b51eb237a9110f7"
+  "deploy/aws/terraform/variables.tf": "sha256:7dfc485a37776610062b703a91e594b49e2d04c5d932592fca67adbda1076961"
 ---
 
 # AWS Lean Production
@@ -56,7 +56,7 @@ into and out of it.
 ## Selecting the profile
 
 ```bash
-cd "AWS Deployment/aether-aws/terraform"
+cd "deploy/aws/terraform"
 terraform plan -var-file=profiles/production-lean.tfvars -out=tfplan
 ```
 
@@ -148,7 +148,7 @@ the at-least-once delivery path buys a two-minute interruption for a few cents.
 Consolidation moves the **process boundary** and nothing else. Inside the
 `lean-worker` task every member role keeps its own SQS queue, consumer group,
 DLQ, retry policy, metrics label and restart behaviour — resolved in-process by
-`services/runtime/roles.py::roles_in` from the `AETHER_ROLE` token.
+`services/backend/services/runtime/roles.py::roles_in` from the `AETHER_ROLE` token.
 
 Terraform carries the role list for exactly one reason: a consolidated task
 must bind one SQS queue per hosted role, which a single `SQS_QUEUE_URL` cannot
@@ -442,7 +442,7 @@ plan** from the previous commit:
 
 If the rollback plan would destroy a **stateful** resource — Aurora, DynamoDB,
 SQS holding messages, S3, KMS keys, Secrets Manager secrets — stop. Follow
-`AWS Deployment/aether-aws/terraform/DECOMMISSION.md` instead. A profile flip
+`deploy/aws/terraform/DECOMMISSION.md` instead. A profile flip
 showing `Plan: … 1 to destroy` on a data store is a stop-the-line event.
 
 ### Migration rollback
@@ -628,5 +628,5 @@ recorded as blocked rather than counted as done:
 - [Deployment Profiles](DEPLOYMENT-PROFILES.md)
 - [AWS Deployment — Infrastructure Reference](AWS-DEPLOYMENT.md)
 - [Backend Execution Model](BACKEND-EXECUTION-MODEL.md)
-- `AWS Deployment/aether-aws/terraform/README.md`
-- `AWS Deployment/aether-aws/terraform/DECOMMISSION.md`
+- `deploy/aws/terraform/README.md`
+- `deploy/aws/terraform/DECOMMISSION.md`

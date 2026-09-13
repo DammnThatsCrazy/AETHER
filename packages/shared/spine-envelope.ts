@@ -2,7 +2,7 @@
 // Aether SDK — Common Spine Envelope (ADR-011 D3)
 // HAND-MAINTAINED contract — NOT generated (do not run generate_platform_contracts.py
 // against this file). Python twin:
-//   Backend Architecture/aether-backend/shared/spine/spine_envelope.py
+//   services/backend/shared/spine/spine_envelope.py
 // Parity is enforced by tests/unit/test_spine_envelope_parity.py.
 //
 // ADR-011 D3: "The common spine envelope composes the canonical primitives —

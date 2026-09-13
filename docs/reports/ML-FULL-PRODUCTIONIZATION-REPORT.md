@@ -7,18 +7,18 @@ audience: [architect, dev-senior, ops]
 status: stable
 since_version: 0.1.0
 canonical_owner: ml@aether
-source_files: [ML Models/aether-ml/common/model_registry.py, ML Models/aether-ml/common/artifact_registry.py, ML Models/aether-ml/common/feature_contracts.py, ML Models/aether-ml/serving/src/api.py, ML Models/aether-ml/docker/Dockerfile, .github/workflows/repo-health.yml, docker-compose.yml, AWS Deployment/aether-aws/terraform/modules/s3/main.tf]
+source_files: [services/ml/common/model_registry.py, services/ml/common/artifact_registry.py, services/ml/common/feature_contracts.py, services/ml/serving/src/api.py, services/ml/docker/Dockerfile, .github/workflows/repo-health.yml, docker-compose.yml, deploy/aws/terraform/modules/s3/main.tf]
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  .github/workflows/repo-health.yml: sha256:8e187ae831d16de47d075ae6b5e6ff07e7b1cdcfe3738124570c11bde94f25dd
-  AWS Deployment/aether-aws/terraform/modules/s3/main.tf: sha256:dcb227e3134ef55fc01757c85c28fd0ca5a33b58f915f27c5a58f13c83bd4de4
-  ML Models/aether-ml/common/artifact_registry.py: sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83
-  ML Models/aether-ml/common/feature_contracts.py: sha256:42b763eaa9d0cd71191a3ab3b7b58f03c5176deff6c550979272449cc671bd99
-  ML Models/aether-ml/common/model_registry.py: sha256:6b27000fbdabb8c3c614157cddd68e1ee45da6c1d729a41287c644c5e4d1b113
-  ML Models/aether-ml/docker/Dockerfile: sha256:dd379b3e4129fbe375350003b2061ce0db3f96c50b7c4cea8b9b1714d3923355
-  ML Models/aether-ml/serving/src/api.py: sha256:d9d1d8dd0cafaa6351737c1a7140a5abe5cb49d4265ccdf694e6361640a2ba4c
-  docker-compose.yml: sha256:f80c61f36de4e15018ac4e008b97734883b6789b79707b99954866fb0c9b00e4
+  ".github/workflows/repo-health.yml": "sha256:ef98cf4b425f4971ffecc72b641376366e61b09c9ffbdef74250bda231d165f3"
+  "deploy/aws/terraform/modules/s3/main.tf": "sha256:dcb227e3134ef55fc01757c85c28fd0ca5a33b58f915f27c5a58f13c83bd4de4"
+  "docker-compose.yml": "sha256:b17b579dd422ed31de2d16145c58bd1183ff9faafab35683ce7e02770d2cf6e1"
+  "services/ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
+  "services/ml/common/feature_contracts.py": "sha256:42b763eaa9d0cd71191a3ab3b7b58f03c5176deff6c550979272449cc671bd99"
+  "services/ml/common/model_registry.py": "sha256:6b27000fbdabb8c3c614157cddd68e1ee45da6c1d729a41287c644c5e4d1b113"
+  "services/ml/docker/Dockerfile": "sha256:dd379b3e4129fbe375350003b2061ce0db3f96c50b7c4cea8b9b1714d3923355"
+  "services/ml/serving/src/api.py": "sha256:d9d1d8dd0cafaa6351737c1a7140a5abe5cb49d4265ccdf694e6361640a2ba4c"
 ---
 
 # Aether ML Full Productionization Report
@@ -52,7 +52,7 @@ and CI/CD maturity.
 
 ### Phase 1 — Registry Canonicalization
 
-`ML Models/aether-ml/common/model_registry.py` is the single source of truth
+`services/ml/common/model_registry.py` is the single source of truth
 for all 11 models (9 trainable + bytecode risk + trust score). Added fields:
 `runtime_class`, `artifact_loader`, `artifact_exporter`, `target_contract_id`,
 `shadow_canary_policy`, `drift_policy`, `metric_direction`.
@@ -171,7 +171,7 @@ attack, and rollback events. Rules in
 ### Phase 8/9 — CI, Compose, Infrastructure
 
 **CI (G26):** ML path coverage in the verification registries includes
-`ml_serving/`, `model_extraction_defense/`, `deploy/`, `AWS Deployment/`,
+`ml_serving/`, `model_extraction_defense/`, `deploy/`, `docs/archive/legacy-architecture/aws-deployment/`,
 and Kyber ML frontend paths. Normal PR verification selects the registered ML
 suite only when the Impact Graph identifies ML impact; the broad ML runner is
 reserved for scheduled or explicitly dispatched regression.
@@ -181,7 +181,10 @@ ML registry validation (`make ml-validate`), full test suite, and docs
 consistency check (`make ml-docs-check`). The job carries
 `timeout-minutes: 60` — the highest bound in `repo-health.yml`, because the
 ML extras install (`[dev,security,backend,agent,ml]`) plus the training smoke
-is the heaviest job in the workflow.
+is the heaviest job in the workflow. Its full test step uses
+`scripts/run_ml_tests.py`, which runs from the `services/ml` package root so
+the ML-local `tests` helpers cannot be shadowed by the repository-level test
+package.
 
 The docs-consistency step uses a full-history checkout and strict source-link
 validation. A final pull-request merge is treated as the review boundary only

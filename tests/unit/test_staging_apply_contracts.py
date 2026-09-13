@@ -17,7 +17,7 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[2]
-TF = ROOT / "AWS Deployment/aether-aws/terraform"
+TF = ROOT / "deploy/aws/terraform"
 ALB = TF / "modules/alb/main.tf"
 MONITORING = TF / "modules/monitoring/main.tf"
 PROMOTE = ROOT / ".github/workflows/terraform-promote.yml"

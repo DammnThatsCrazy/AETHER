@@ -67,7 +67,7 @@ def test_sot_reward_docs_no_forbidden_language():
 
 def test_reward_routes_no_forbidden_language():
     routes_path = (
-        ROOT / "Backend Architecture" / "aether-backend" / "services" / "rewards" / "routes.py"
+        ROOT / "services" / "backend" / "services" / "rewards" / "routes.py"
     )
     if not routes_path.exists():
         return

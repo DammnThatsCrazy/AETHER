@@ -157,7 +157,7 @@ contract.
 | Property | Detail |
 |----------|--------|
 | Type | UUID v4 (string) |
-| Owner | `services/identity/resolver.py` — never set by SDK |
+| Owner | `services/backend/services/identity/resolver.py` — never set by SDK |
 | Scope | Tenant-scoped; two tenants never share a `canonical_entity_id` |
 | Stability | Stable under merge (surviving entity keeps its ID) |
 | Recoverability | Operator split creates a new ID for the separated fragment |

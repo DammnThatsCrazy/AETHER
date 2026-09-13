@@ -10,7 +10,7 @@ since_version: "0.1.0"
 
 # Policy Engine
 
-`PolicyEngine` (`services/security/policy_engine.py`) evaluates governance
+`PolicyEngine` (`services/backend/services/security/policy_engine.py`) evaluates governance
 policies, returns `PolicyDecision` records, and writes `SecurityAuditEvent`
 records for sensitive decisions. It is a guardrail layered on top of existing
 OODA approval flows — it never bypasses them.

@@ -69,12 +69,12 @@ Paths relative to repo root.
    is a row in `measurement_connectors`; `connect_campaign_source` is a thin,
    non-idempotent write with no credential handling, no platform allow-list, no
    account discovery/selection, no sync trigger. The 7 ad connectors
-   (`services/measurement/connectors/{google,meta,tiktok,linkedin,x,reddit,microsoft}_ads.py`)
+   (`services/backend/services/measurement/connectors/{google,meta,tiktok,linkedin,x,reddit,microsoft}_ads.py`)
    are implemented but never executed by any worker.
 3. **No single catalog — 10+ provider id-spaces.** 21 registered connectors
-   (`services/integrations/connectors/{registry,adapters}.py`), 7 measurement ad
+   (`services/backend/services/integrations/connectors/{registry,adapters}.py`), 7 measurement ad
    connectors, 51 shared/provider categories, 40 Olympus corpus
-   (`services/provider_catalog`), payment rails, brand registry, social unions —
+   (`services/backend/services/provider_catalog`), payment rails, brand registry, social unions —
    plus ~7 hand-synced ad-platform lists. `shared/integration_contracts/catalog.py`
    derives a 29-entry manifest surface (pure projection). `experience_category`
    does not exist anywhere.
@@ -237,7 +237,7 @@ recorded GREEN 72/0 at the R1 head this lane is cut from (`a32f63a0`).
 1. **Connector-taxonomy TS mirror generated (R1/WS-0 handoff honored).**
    `scripts/generate_connector_taxonomy.py` derives
    `packages/shared/connector-taxonomy.ts` from
-   `Backend Architecture/aether-backend/shared/integration_contracts/catalog.py`
+   `services/backend/shared/integration_contracts/catalog.py`
    (`ALL_MANIFESTS` four-group union) + `experience.py` — pure mirror, never
    hand-edited; the six-layer descriptor enums from `base.py` are preserved
    verbatim by the generator. Regenerate with

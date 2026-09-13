@@ -35,7 +35,7 @@ the big missing pieces. This page + `TARGET_ARCHITECTURE.md` +
 |---|---|---|
 | A — Canonical governed docs | `docs/productization/sdk-universal-ingestion-alignment/{TARGET_ARCHITECTURE,REPO_TRUTH_AND_GAP_MATRIX,EXECUTION_STATE}.md` (this directory) | ✅ implemented (this slice) |
 | B — Resolve ADR-007 collision | Renumber `ADR-007-observation-only-execution-invariant.md` → `ADR-011-observation-only-execution-invariant.md`; fix ADR-008 + `DOCS_REVIEW_BACKLOG` links | ✅ implemented (this slice) |
-| C — Deprecate legacy trees + orphans | Do-not-extend banners on `Data Ingestion Layer/README.md` + `Data Lake Architecture/README.md`; deprecated-orphans subsection in `Backend Architecture/README.md` | ✅ implemented (this slice) |
+| C — Deprecate legacy trees + orphans | Do-not-extend banners on `docs/archive/legacy-architecture/data-ingestion-layer/README.md` + `docs/archive/legacy-architecture/data-lake-architecture/README.md`; deprecated-orphans subsection in `docs/archive/legacy-architecture/backend/README.md` | ✅ implemented (this slice) |
 | D — First two CI gates | `scripts/validate_canonical_ingestion_trees.py` (canonical-tree ownership) + `scripts/validate_sdk_import_boundary.py` (SDK thinness), allowlists, ownership category `legacy_ingestion_tree_mutation`, unit tests | ✅ implemented (this slice) |
 | Integration + final gate | `make repo-doctor-fix` (regenerate `docs/_generated/**` once), four commits in A→B→C→D order, `make ci-check` = 0, `git status --short` empty, `docs_drift.py --strict` clean | ⏳ integrator-owned |
 
@@ -162,7 +162,7 @@ user chose **"add a conservative grounded set."** Resolution per vocabulary:
 |---|---|---|
 | `enrichment` | **NO family.** Inline field-stamping only — no emitter, no run lifecycle, no SDK surface; `context_enricher.py` augments an event already owned by its source family. Recorded here, not invented as a family | blueprint §4 treats enrichment as a *registry* (pre-observation field stamps), not an event family |
 | `economic` | **NO new events.** Already governed across `derivatives` (41) / `stablecoin` (30) / `interop` (39) / commerce / x402 / agent-trade; a parallel "economic" family would duplicate silver vocabulary | family census + `test_event_registry_economic_domains.py` subset pin |
-| `privacy` | **5-event DSR lifecycle family ADDED** (below) — grounded in real mounted compliance code | `services/consent/routes.py`, `erasure_jobs.py`, `dsr_propagation/models.py`, `security/retention.py` |
+| `privacy` | **5-event DSR lifecycle family ADDED** (below) — grounded in real mounted compliance code | `services/backend/services/consent/routes.py`, `erasure_jobs.py`, `dsr_propagation/models.py`, `security/retention.py` |
 
 Added to `event-registry.json` (schemaVersion stays **2.2.0** — additive events
 only, no new top-level key; contractVersion stays 8.12.0): **403 events / 25
@@ -173,11 +173,11 @@ families**, A = 17, **B = 371**, C = 15, sdkEmitable = 153.
   family `privacy`, `semanticLevel` B, `sdkEmitable` false, `privacyClass`
   governance, `retentionClass` permanent, `requiredPurposes` [],
   `introducedVersion` 8.12.0. Grounded in the consent DSR service
-  (`services/consent/routes.py:307-369`, status `pending→queued`,
+  (`services/backend/services/consent/routes.py:307-369`, status `pending→queued`,
   publishes `aether.consent.dsr`), the durable-erasure propagator
-  (`services/consent/erasure_jobs.py:280-586`, statuses `completed`/`failed`),
-  `services/dsr_propagation/models.py` (DSR_TYPES + per-step statuses), and the
-  retention/data-request denied path (`services/security/retention.py:138`).
+  (`services/backend/services/consent/erasure_jobs.py:280-586`, statuses `completed`/`failed`),
+  `services/backend/services/dsr_propagation/models.py` (DSR_TYPES + per-step statuses), and the
+  retention/data-request denied path (`services/backend/services/security/retention.py:138`).
 - `projector-ownership-registry.json` `noProjection`: `privacy` =
   `no_projection` ("Privacy DSR/compliance lifecycle events are control-plane
   state owned by the consent/DSR authority, not Silver analytics facts") —
@@ -226,15 +226,15 @@ build time, source-trust/consent/idempotency/lineage stay the WS-B gateway's job
 | Surface | File | Role |
 |---|---|---|
 | Canonical field registry | `packages/shared/contracts/observation-envelope-registry.json` (schemaVersion 1.0.0) | §3 block tree → machine-readable: blocks + field requiredness + vocabularies + `naming_resolutions` (source_native_id/subjects[]/signature_status/adapter/occurred_at-vs-source_time/trust-vocab) + `passthrough_blocks` note |
-| Runtime model | `Backend Architecture/aether-backend/shared/observation/envelope.py` (+ `__init__.py` barrel) | pydantic v2, every class `extra="forbid"`; 11 model classes; curated vocab tuples (source/identifier/credential) + `TRUST_CLASSES` frozenset asserted == `generated_registry.TRUST_CLASS_ORDER`; `to_bronze_additive()` JSON-safe dump |
+| Runtime model | `services/backend/shared/observation/envelope.py` (+ `__init__.py` barrel) | pydantic v2, every class `extra="forbid"`; 11 model classes; curated vocab tuples (source/identifier/credential) + `TRUST_CLASSES` frozenset asserted == `generated_registry.TRUST_CLASS_ORDER`; `to_bronze_additive()` JSON-safe dump |
 | Passive TS twin | `packages/shared/observation-envelope.ts` (+ `index.ts` barrel export) | Contract mirror; explicitly NOT a client emitter (no builder/emit) — adapters build Envelope B inside Aether |
 
 **Flag-gated adoption (default OFF, `AETHER_OBSERVATION_ENVELOPE_ENABLED`):**
 
 - `ObservationEnvelopeConfig` frozen dataclass + `settings.observation_envelope` root field
-  (`Backend Architecture/aether-backend/config/settings.py`); operator-facing flag block in
+  (`services/backend/config/settings.py`); operator-facing flag block in
   `.env.production.example` next to the Ingestion V2 flags.
-- SDK mapping `Backend Architecture/aether-backend/services/ingestion/observation_envelope.py`:
+- SDK mapping `services/backend/services/ingestion/observation_envelope.py`:
   normalized SDK dict → envelope; subject `trust_class` derived from `EVENT_FIELD_TRUST`
   (WS-A2) — `user_id` → CLIENT_HINT (fallback), `anonymous_id` → OBSERVED — never above the
   WS-A3 public-SDK boundary; temporal enforcement stamp (sequence coerced to the envelope's
@@ -453,7 +453,7 @@ in WS-B2..WS-B5 — nothing is dropped (the reserved WS-B row below tracks the
 remainder).
 
 **Registry-bound credential authority (commit `add87dad`).**
-`services/ingestion/adapters/` now owns the universal ingress adapter registry:
+`services/backend/services/ingestion/adapters/` now owns the universal ingress adapter registry:
 `base.py` defines `UniversalIngressAdapter(ABC)` (ClassVar `adapter_id`/`family`/
 `credential_class`/`adapter_version`/`description`; `__init_subclass__` rejects a
 concrete subclass whose family ∉ the seven `SOURCE_TYPES` or credential ∉ the seven
@@ -467,7 +467,7 @@ module-end asserts binding the registry to the Envelope-B vocabulary. The SDK
 provenance block in `observation_envelope.py` now stamps `adapter="sdk"` /
 `adapter_version="1.0.0"`.
 
-**One validated gateway (commit `a1002211`).** `services/ingestion/gateway.py`
+**One validated gateway (commit `a1002211`).** `services/backend/services/ingestion/gateway.py`
 implements `validate_and_stamp(envelope_dict, *, adapter, tenant_id) -> GatewayResult`:
 rebuilds the `UniversalObservationEnvelope` (field-exact `extra="forbid"`), rejects
 unknown-observation-type / event-family-mismatch / tenancy-mismatch / schema-invalid
@@ -488,9 +488,9 @@ a warning + metric, preserving the existing V1 contract.
 
 | Workstream item | Deliverable | Status |
 |---|---|---|
-| Ingress adapter registry | `services/ingestion/adapters/` — base ABC + `SdkIngressAdapter` + family registry (7 families in `SOURCE_TYPES` order, 6 `declared`), module-end binds to Envelope-B tuples | ✅ implemented (this slice) |
+| Ingress adapter registry | `services/backend/services/ingestion/adapters/` — base ABC + `SdkIngressAdapter` + family registry (7 families in `SOURCE_TYPES` order, 6 `declared`), module-end binds to Envelope-B tuples | ✅ implemented (this slice) |
 | SDK adapter | `SdkIngressAdapter` (PUBLIC_CLIENT, blueprint §11) delegating to `build_sdk_observation_envelope`; provenance block stamps `adapter="sdk"` | ✅ implemented (this slice) |
-| Validated gateway | `services/ingestion/gateway.py` `validate_and_stamp` — schema/type/family/tenant rejects + provenance/quality stamping + additive result | ✅ implemented (this slice) |
+| Validated gateway | `services/backend/services/ingestion/gateway.py` `validate_and_stamp` — schema/type/family/tenant rejects + provenance/quality stamping + additive result | ✅ implemented (this slice) |
 | Flag + operator block | `AETHER_UNIVERSAL_INGRESS_GATEWAY_ENABLED=false` (Settings `ingress_gateway` + `.env.production.example`) | ✅ implemented (this slice) |
 | Batch adoption | flag-gated adapter+gateway adoption under the WS-A5 envelope block; degrade-safe (reject leaves no envelope key, no 500) | ✅ implemented (this slice) |
 | Suites | `tests/unit/observation/test_ingress_adapter_registry.py` (8) + `test_ingress_gateway.py` (7) + updated envelope grep guard | ✅ implemented (this slice) |
@@ -559,7 +559,7 @@ non-batch ingress seam through the same facade as the batch path.
   T-class tenant data-policy) runs UNCONDITIONALLY on every path; ONLY the
   per-subject (S) server-receipt rejection is a per-path toggle.
 - **Seams.** `/feed` T-class gate with optional S escalation (`a3e13d7f`, `routes.py`);
-  comms connector durable seam C-class gate (`c22a1c15`, `services/comms/ingest.py`);
+  comms connector durable seam C-class gate (`c22a1c15`, `services/backend/services/comms/ingest.py`);
   provider-runtime bridge per-event gate (`364f4011`, `bridge.py`); tenant-import
   commit data-policy gate + Bronze scrub (`6cde296c`, `imports/commit.py`);
   payment-rails webhook ingress scrub (`175718e3`). Config: `IngressConsentConfig`
@@ -594,7 +594,7 @@ preserved.
   and replay provenance (`adapter="replay"`,
   `lineage.raw_record_ref=bronze_ref`) are fresh. Registered in the ingress registry
   as the 2nd implemented family.
-- **Runner + operator surface (`6992654f`).** `services/ingestion/replay.py`
+- **Runner + operator surface (`6992654f`).** `services/backend/services/ingestion/replay.py`
   (`REPLAY_SOURCE_SERVICE="ingestion.replay"`, `replay_events`, dry-run counts, run-
   journal idempotency) + `replay_routes.py` (`/v1/kyber/ingest/replay` POST /events +
   GET /status, Kyber-operator-only; dry_run defaults True, real run refused with 403
@@ -613,7 +613,7 @@ Merged onto `feat/sdk-universal-ingestion` at `7a1b73f5` (commits `0ffd30d0`→
 `1692755d`). Retires the heterogeneous-envelope branching on the consumption side with
 one Envelope-B-projection spine (Invariant #1).
 
-- **Spine (`0ffd30d0`, `services/ingestion/spine.py`).** `ObservationView`/
+- **Spine (`0ffd30d0`, `services/backend/services/ingestion/spine.py`).** `ObservationView`/
   `SubjectView` (all-Optional) + `to_observation_view(payload)`: envelope-first (the
   additive `observation_envelope` key wins), else AetherEvent `model_dump()`, else the
   legacy flat SDK/comms dict, else all-None; `normalization_spine_enabled()`.
@@ -697,7 +697,7 @@ Stacked on `feat/sdk-universal-ingestion` for the consolidated PR at `08e46a1b`
 
 - **Ingestion funnel telemetry (`AETHER_INGESTION_OBSERVABILITY_ENABLED`, default OFF).** `ingestion_observability.py` in-process ledger + per-observation trace ladder; monitored stages RECEIVED/VALIDATED/BRONZE (API process) + NORMALIZED/PROJECTIONS (workers); the remainder honestly `declared-unmonitored`. Recording seams never change dispositions.
 - **Kyber ingestion control plane + Observation Inspector (`enableIngestionOps`, default OFF).** `/ingestion-ops` route (`router.tsx`), sidebar gated by the same flag; funnel table + rollup, trace inspector, recent traces, SDK fleet, tier manifest, replay status; honest disabled note when the backend reports `enabled:false`.
-- **Real `GET /v1/health/pipeline`** (replaces the phantom endpoint lane-0 Gate G needle found); mounted in `services/gateway/routes.py`.
+- **Real `GET /v1/health/pipeline`** (replaces the phantom endpoint lane-0 Gate G needle found); mounted in `services/backend/services/gateway/routes.py`.
 - **SDK-fleet view mounted** (pre-built `SdkFleetMonitor` — not rebuilt) + **golden cross-path fixture** asserted across batch/replay paths.
 - **SDK version-compatibility tiers (`AETHER_SDK_VERSION_COMPAT_ENABLED` default OFF; `AETHER_SDK_VERSION_COMPAT_MODE` default `off`).** `sdk_version_tiers.py` + `GET /v1/config/sdk/versions`; `/v1/batch` `sdk_tier` advisory label gated by the enable flag; fail-closed date enforcement only in mode `enforce`.
 - **Gate G (`validate_kyber_ops_surface.py`) + Gate H (`validate_sdk_compat_tiers.py`) dispatched in `repo_doctor`** (both PASS in the 78-gate run); fail-closed.
@@ -740,7 +740,7 @@ lane is above; each row records its slice commit(s) and content.
 | Workstream | Scope (delivered) | Status |
 |---|---|---|
 | WS-A — Contract foundation | **WS-A1 + WS-A2 + WS-A3 + WS-A4 + WS-A5 + WS-A6 + WS-A7 done** (WS-A1 merged to main via #600; A2–A7 stacked on `feat/sdk-universal-ingestion` for the consolidated PR). WS-A complete: field-trust + semantic-level spine, privacy family, Envelope-B, native event-type codegen, and registry-re-pointed metric/privacy/retention docs | — (complete) |
-| WS-B — Adapter convergence | **WS-B1..B5 done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR): universal ingress adapter registry (7 families declared; `SdkIngressAdapter` + `ReplayIngressAdapter` implemented) + one validated gateway (`services/ingestion/gateway.py`) + flag-gated `/v1/batch` adoption; deprecated `/v1/ingest` aliases converged onto the canonical spine (kill flag `AETHER_KILL_DEPRECATED_INGEST_ALIASES`); consent-on-every-path across feed/comm/provider/import/payment seams (B3, mandatory scrub/policy default-ON, S server-receipt fail-closed toggle); ingestion-level replay with original-time preservation (`AETHER_INGESTION_REPLAY_ENABLED`, operator surface mounted); consumption-side normalization spine (`AETHER_NORMALIZATION_SPINE_ENABLED`) retiring heterogeneous-envelope branching (Invariants #1/#5/#8/#9/#15) | Phase 0 merged |
+| WS-B — Adapter convergence | **WS-B1..B5 done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR): universal ingress adapter registry (7 families declared; `SdkIngressAdapter` + `ReplayIngressAdapter` implemented) + one validated gateway (`services/backend/services/ingestion/gateway.py`) + flag-gated `/v1/batch` adoption; deprecated `/v1/ingest` aliases converged onto the canonical spine (kill flag `AETHER_KILL_DEPRECATED_INGEST_ALIASES`); consent-on-every-path across feed/comm/provider/import/payment seams (B3, mandatory scrub/policy default-ON, S server-receipt fail-closed toggle); ingestion-level replay with original-time preservation (`AETHER_INGESTION_REPLAY_ENABLED`, operator surface mounted); consumption-side normalization spine (`AETHER_NORMALIZATION_SPINE_ENABLED`) retiring heterogeneous-envelope branching (Invariants #1/#5/#8/#9/#15) | Phase 0 merged |
 | WS-C — SDK hardening | **done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR, `99717978`): native identity → subject hints (`AETHER_SUBJECT_HINTS_ONLY_ENABLED`, default OFF); native encrypted durable ack queues (`AetherConfig.encryptedDurableQueue`, default OFF); `@aether/shared` barrel delist of `commerce-bridge.ts`/`economic-metrics.ts` + import-boundary regression lock; `web/src/types.ts` EventType re-point to the Contract Spine + generator guard; native correlation fields end-to-end, never overwritten (Invariants #3/#4/#12/#16). Close-out + evidence above | — (complete) |
 | WS-D — Backend interpretation | **done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR, `5f2f0272`): typed `RelationshipFact` + `evidence_refs`; episode engine + episode360 read surface; durable outcome truth store; Section-25 evidence dedupe; server temporal envelope reaches Silver; correlation first-class; Silver exact-decimal money — all seven behind `BackendInterpretationConfig` flags default OFF; derived-truth governance rides `AETHER_MUTATION_GATEWAY_MODE` (no new knob); coordinated with `feat/financial-normalization` (never built twice) (Invariants #7/#11/#12/#13/#14). Close-out + evidence above | — (complete) |
 | WS-E — Operations | **done** (stacked on `feat/sdk-universal-ingestion` for the consolidated PR, `08e46a1b` + `df323de7`): ingestion funnel telemetry (`AETHER_INGESTION_OBSERVABILITY_ENABLED`, default OFF); Kyber ingestion control plane + Observation Inspector (`enableIngestionOps`, default OFF); real `GET /v1/health/pipeline` (was phantom); SDK-fleet view mounted; golden cross-path fixture; SDK version-compatibility tiers (`AETHER_SDK_VERSION_COMPAT_ENABLED`/`_MODE`, default OFF); Gate G/H validators in `repo_doctor` (Invariant #17). Close-out + evidence above | — (complete) |
@@ -752,7 +752,7 @@ lane is above; each row records its slice commit(s) and content.
 
 | Item | Why | Where tracked |
 |---|---|---|
-| Physical removal of the two legacy TS trees + orphaned backend modules | Kept alive by version-sync/fallback/test-suite/temporal coupling; removal is a clean dedicated later slice | `REPO_TRUTH_AND_GAP_MATRIX.md` — Deferred constraints |
+| Physical root-tree realignment of the two legacy TS trees + orphaned backend modules | **Completed after PR #627**: active trees moved to `services/`, `deploy/aws/`, and `contracts/smart-contracts/`; historical material retained under `docs/archive/legacy-architecture/` and guarded by ownership/impact gates | `docs/source-of-truth/repo-truth.md`, `scripts/allowlists/repo_tree_ownership.json` |
 | Envelope B + field-trust implementation | Deliberately out of Phase 0 | WS-A |
 | Consent/privacy on every ingress path | Server-authoritative on `/v1/batch` only today | WS-B |
 | Single observation model / normalization spine | ≥5 Bronze/Silver pipelines at baseline | WS-B |
@@ -784,8 +784,8 @@ acknowledgment here, in the governed home the category designates.
 
 Branch `feat/enduser-lifecycle-integration` (R1 contract spine, commit `64877fca`)
 mounted the connectors-gated **catalog read-model** router from
-`Backend Architecture/aether-backend/main.py` and added
-`services/integrations/connectors/catalog_endpoints.py`.
+`services/backend/main.py` and added
+`services/backend/services/integrations/connectors/catalog_endpoints.py`.
 
 - **Why the deprecated surface was touched:** the four `/v1` catalog endpoints
   (`/v1/integration-catalog`, `/v1/tenant-integrations[/{id}]`,
@@ -796,9 +796,9 @@ mounted the connectors-gated **catalog read-model** router from
   exported by `connectors/__init__`, so a readiness-first import cannot break).
   The change is additive, read-only projection wiring; no ingestion or data-lake
   behavior is altered.
-- **What was NOT extended:** no files were added under `Data Ingestion Layer/**`,
-  `Data Lake Architecture/**`, `Backend Architecture/migrations/**`,
-  `Backend Architecture/mnt/**`, or the deprecated
+- **What was NOT extended:** no files were added under `docs/archive/legacy-architecture/data-ingestion-layer/**`,
+  `docs/archive/legacy-architecture/data-lake-architecture/**`, `docs/archive/legacy-architecture/backend/migrations/**`,
+  `docs/archive/legacy-architecture/backend/mnt/**`, or the deprecated
   `services/{delegation,journey-service,web3}/**` trees. All new catalog
   vocabulary lives in `shared/integration_contracts/` (`catalog.py`,
   `experience.py`, `aliases.py`), which is the canonical UPR-aligned contract
@@ -810,5 +810,5 @@ mounted the connectors-gated **catalog read-model** router from
 
 The repository truth reset (v0.1.0-alpha.0) marked legacy single-event endpoints
 (`/v1/track`, `/v1/page`, `/v1/identify`, `/v1/conversion`) as deprecated in
-`Data Lake Architecture/README.md`, consistent with the Phase 0 deprecation
+`docs/archive/legacy-architecture/data-lake-architecture/README.md`, consistent with the Phase 0 deprecation
 banners. The canonical ingestion endpoint is `/v1/batch`.

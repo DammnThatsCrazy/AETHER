@@ -33,12 +33,12 @@ cross-store lifecycle propagation (retention / deletion / DSR / legal holds).
 | Manager + reconciler | `shared/storage/manager.py`, `shared/storage/reconciler.py` | Policy-enforced externalize/hydrate; descriptor-vs-object drift detection |
 | Bronze compaction (FT-8) | `shared/storage/compaction.py` | Packs cold Bronze payloads into objects; hot searchable metadata stays; hydration routing |
 | Cross-store lifecycle (FT-8) | `shared/storage/lifecycle.py` | Retention / deletion / DSR / legal holds across row store + object store + descriptor index |
-| Runtime worker (FT-8) | `services/storage_lifecycle/worker.py` | Supervised compaction sweep + scheduled reconciler |
+| Runtime worker (FT-8) | `services/backend/services/storage_lifecycle/worker.py` | Supervised compaction sweep + scheduled reconciler |
 
 ## Storage policy registry
 
 Every persistent resource type — every BaseRepository-backed store declared
-in `Backend Architecture/aether-backend/repositories/repos.py` and every
+in `services/backend/repositories/repos.py` and every
 table created by an Alembic migration — has exactly one policy entry in
 `config/storage_policies.yaml` declaring:
 
@@ -171,8 +171,8 @@ write path that turns the FT-7 foundation on for the Bronze tier
   or the row is absent from the packed object).
 
 The sweep runs as the supervised `bronze_object_compaction` WorkerSpec
-(`services/runtime/specs.py`, owned by the `materializer` role in
-`services/runtime/roles.py`), which also schedules the FT-7 reconciler when
+(`services/backend/services/runtime/specs.py`, owned by the `materializer` role in
+`services/backend/services/runtime/roles.py`), which also schedules the FT-7 reconciler when
 `STORAGE_RECONCILER_ENABLED` is on.
 
 ## Lifecycle: retention, deletion, DSR, legal holds (FT-8)
@@ -187,7 +187,7 @@ externalized resource spans — row store, object store, and descriptor index.
   never-externalized Bronze rows by `received_at`); `legal` resources are
   never swept by this lifecycle (compliance-owned); `preserve` behavior is
   never swept. The pass rides the existing maintenance retention worker
-  (`services/security/retention_worker.py`) behind
+  (`services/backend/services/security/retention_worker.py`) behind
   `STORAGE_LIFECYCLE_RETENTION_ENABLED`.
 - **Deletion** (`delete_behavior`) — `hard_delete` removes rows, object
   bytes, and descriptor rows entirely; `tombstone` removes the payload bytes

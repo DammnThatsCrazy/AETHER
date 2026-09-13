@@ -12,17 +12,17 @@ build/
 packages/web/dist/**/*.js
 packages/web/dist/**/*.js.map
 .gradle/
-Smart Contracts/artifacts/
-Smart Contracts/cache/
+contracts/smart-contracts/artifacts/
+contracts/smart-contracts/cache/
 *.tsbuildinfo
 
-# In-place TypeScript compilation artifacts (Data Ingestion Layer, Data Lake Architecture)
-Data Ingestion Layer/**/*.js
-Data Ingestion Layer/**/*.js.map
-Data Ingestion Layer/**/*.d.ts
-Data Lake Architecture/**/*.js
-Data Lake Architecture/**/*.js.map
-Data Lake Architecture/**/*.d.ts
+# In-place TypeScript compilation artifacts from the archived ingestion/lake duplicates
+docs/archive/legacy-architecture/data-ingestion-layer/**/*.js
+docs/archive/legacy-architecture/data-ingestion-layer/**/*.js.map
+docs/archive/legacy-architecture/data-ingestion-layer/**/*.d.ts
+docs/archive/legacy-architecture/data-lake-architecture/**/*.js
+docs/archive/legacy-architecture/data-lake-architecture/**/*.js.map
+docs/archive/legacy-architecture/data-lake-architecture/**/*.d.ts
 
 # In-place TypeScript compilation artifacts (docs, frontend, packages)
 docs/**/*.js
@@ -93,7 +93,6 @@ tfplan
 *.pkl
 mlruns/
 mlflow.db
-ML%20Models/
 .claude/worktrees/
 # Claude Code session-specific tool permissions (environment-specific, not shared)
 .claude/settings.local.json

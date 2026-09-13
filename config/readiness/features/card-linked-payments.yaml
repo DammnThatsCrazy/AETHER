@@ -26,7 +26,7 @@ repository_ceiling:
   - Insert provider credentials into the credential platform; run credentials-preflight.
   remaining_is_repository_controlled: true
   evidence:
-  - Backend Architecture/aether-backend/services/card_linked_payments/
+  - services/backend/services/card_linked_payments/
   - docs/source-of-truth/CARD_LINKED_PAYMENT_RAILS.md
   - docs/runbooks/CARD_LINKED_RUNBOOK.md
 implementation:
@@ -127,7 +127,7 @@ business_readiness:
 confidence:
   level: LOW
   reasons:
-  - 'repository evidence: Backend Architecture/aether-backend/services/card_linked_payments/'
+  - 'repository evidence: services/backend/services/card_linked_payments/'
   evidence_gaps:
   - credentialed environment execution not yet performed
 release_profiles:

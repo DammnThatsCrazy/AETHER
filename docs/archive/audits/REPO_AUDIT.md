@@ -15,14 +15,14 @@ since_version: 0.1.0
 ## A. Runtime Surfaces
 
 ### Python/FastAPI Backend: FULLY IMPLEMENTED
-- **Entry:** `Backend Architecture/aether-backend/main.py`
+- **Entry:** `services/backend/main.py`
 - **Services:** 31 routers (including core, Intelligence Graph, and Intelligence Layer services)
 - **Endpoints:** 246 with real implementations
 - **Status:** Production-grade with real backends (PostgreSQL, Redis, Kafka, Neptune)
 
 ### Node/TypeScript Data Layer: IMPLEMENTED
-- **Data Ingestion Layer** (`Data Ingestion Layer/`): Production sink implementations (Kafka via REST Proxy, ClickHouse via HTTP, S3 via HTTP PUT, Redis via RESP protocol) using Node.js built-in modules (node:http, node:net, node:zlib)
-- **Data Lake Architecture** (`Data Lake Architecture/aether-datalake-backend/`): Real ETL implementation — scheduler, Bronze→Silver→Gold pipelines, S3 integration
+- **Data Ingestion Layer** (`docs/archive/legacy-architecture/data-ingestion-layer/`): Production sink implementations (Kafka via REST Proxy, ClickHouse via HTTP, S3 via HTTP PUT, Redis via RESP protocol) using Node.js built-in modules (node:http, node:net, node:zlib)
+- **Data Lake Architecture** (`docs/archive/legacy-architecture/data-lake-architecture/aether-datalake-backend/`): Real ETL implementation — scheduler, Bronze→Silver→Gold pipelines, S3 integration
 
 ## B. Storage Reality
 

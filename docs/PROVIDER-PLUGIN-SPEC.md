@@ -7,33 +7,33 @@ audience: [dev-senior, architect]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/shared/integration_contracts/plugin.py
-  - Backend Architecture/aether-backend/shared/integration_contracts/capabilities.py
-  - Backend Architecture/aether-backend/shared/integration_contracts/results.py
-  - Backend Architecture/aether-backend/shared/integration_contracts/normalization.py
-  - Backend Architecture/aether-backend/shared/integration_contracts/events.py
-  - Backend Architecture/aether-backend/shared/integration_contracts/identity.py
-  - Backend Architecture/aether-backend/services/provider_runtime/
-  - Backend Architecture/aether-backend/services/providers/shopify/
+  - services/backend/shared/integration_contracts/plugin.py
+  - services/backend/shared/integration_contracts/capabilities.py
+  - services/backend/shared/integration_contracts/results.py
+  - services/backend/shared/integration_contracts/normalization.py
+  - services/backend/shared/integration_contracts/events.py
+  - services/backend/shared/integration_contracts/identity.py
+  - services/backend/services/provider_runtime/
+  - services/backend/services/providers/shopify/
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/services/provider_runtime/": "sha256:222fdaf7349cf2f190d5a512550b7f0f45b2d26473ecbbe87d20476f4f4d2ad9"
-  "Backend Architecture/aether-backend/services/providers/shopify/": "sha256:54bfbfbaba9b159859cbb085b9b1cd771ac3a334089081d2cf05fe62742dc20f"
-  "Backend Architecture/aether-backend/shared/integration_contracts/capabilities.py": "sha256:0549328cc36de3ad566dcc2bbdf2792cab4eafbf3a6785141485d5cdf0058b6f"
-  "Backend Architecture/aether-backend/shared/integration_contracts/events.py": "sha256:ba687017a65b1395e00077fd778c43fc394637bc50e95de91a1fb69ed4500ce2"
-  "Backend Architecture/aether-backend/shared/integration_contracts/identity.py": "sha256:8264880ababfa1eb2c6be6cbc099478d3e140e7caf1afcb52b664921b6b2871b"
-  "Backend Architecture/aether-backend/shared/integration_contracts/normalization.py": "sha256:65fe57419a11f1a4c6a14225a024af6d74425261a7b27296798142abca9d3aeb"
-  "Backend Architecture/aether-backend/shared/integration_contracts/plugin.py": "sha256:b4cfa2d84da2a47a43f96564d55d4ad63fdad3027feb08e1747cc0788030988c"
-  "Backend Architecture/aether-backend/shared/integration_contracts/results.py": "sha256:cf30d4dbed85c68e809a87b0f256f93665d11844b5a983a0b83177d62800e51a"
+  "services/backend/services/provider_runtime/": "sha256:81502394ca09ea802ea90662dc6f23c1918a0ece952a2bfdac68187007f2c8fa"
+  "services/backend/services/providers/shopify/": "sha256:c0a12ddb85d4fd9590fe6559c1921a494ef73cf74575a876a56445d13dbd61b9"
+  "services/backend/shared/integration_contracts/capabilities.py": "sha256:0549328cc36de3ad566dcc2bbdf2792cab4eafbf3a6785141485d5cdf0058b6f"
+  "services/backend/shared/integration_contracts/events.py": "sha256:ba687017a65b1395e00077fd778c43fc394637bc50e95de91a1fb69ed4500ce2"
+  "services/backend/shared/integration_contracts/identity.py": "sha256:8264880ababfa1eb2c6be6cbc099478d3e140e7caf1afcb52b664921b6b2871b"
+  "services/backend/shared/integration_contracts/normalization.py": "sha256:65fe57419a11f1a4c6a14225a024af6d74425261a7b27296798142abca9d3aeb"
+  "services/backend/shared/integration_contracts/plugin.py": "sha256:b4cfa2d84da2a47a43f96564d55d4ad63fdad3027feb08e1747cc0788030988c"
+  "services/backend/shared/integration_contracts/results.py": "sha256:cf30d4dbed85c68e809a87b0f256f93665d11844b5a983a0b83177d62800e51a"
 ---
 
 # Provider Plugin Spec
 
 A **provider plugin** is the self-contained unit the Universal Provider
 Runtime (UPR) executes. This spec is the contract for writing one. Reference
-implementation: `services/providers/shopify/`.
+implementation: `services/backend/services/providers/shopify/`.
 
 ## 1. The plugin contract
 
@@ -50,7 +50,7 @@ A plugin satisfies the structural `ProviderPlugin` protocol
 - `normalizer() -> EventNormalizer` — always present (the plugin may return a
   no-op normalizer, but the accessor must exist).
 
-`BaseProviderPlugin` (in `services/provider_runtime/plugin.py`) provides the
+`BaseProviderPlugin` (in `services/backend/services/provider_runtime/plugin.py`) provides the
 **honest defaults**: every capability accessor returns `None`, so a plugin
 claims a capability only by overriding the accessor to return an adapter.
 `normalizer()` — like `identity()` and `manifest()` — is left abstract: a
@@ -151,7 +151,7 @@ A `WebhookAdapter` has two methods:
 
 The `/v1/provider-webhooks/` route is in `PUBLIC_PATH_PREFIXES` — it is
 unauthenticated by API key by design, so **the plugin's `verify()` is the only
-barrier** and the gateway is **fail-closed** (`services/provider_runtime/webhook.py`):
+barrier** and the gateway is **fail-closed** (`services/backend/services/provider_runtime/webhook.py`):
 
 - A signature scheme (e.g. `shopify_hmac`) requires a configured webhook
   secret to verify the delivery. A missing secret is a misconfiguration: the
@@ -168,7 +168,7 @@ Never process an unverified delivery.
 
 Even after a delivery is verified and parsed, its normalized events are not
 immediately durable. The provider-runtime event bridge
-(`services/provider_runtime/bridge.py`) runs each event through the platform's
+(`services/backend/services/provider_runtime/bridge.py`) runs each event through the platform's
 **unconditional sensitive-value scrub** on `data`/`context` (server-authoritative
 minimization; redaction never rejects) plus a per-event **ingress
 consent/data-policy gate** (WS-B3) before the Bronze write and publish. A
@@ -219,7 +219,7 @@ Registration is additive and does not touch central type unions:
 
 ## 7. Worked example — the Shopify plugin
 
-`services/providers/shopify/` is the reference native plugin. Walk its files:
+`services/backend/services/providers/shopify/` is the reference native plugin. Walk its files:
 
 - `auth.py` — `AuthAdapter`: credential validation + live connectivity test;
   no secret material ever appears in an error message or result `detail`.

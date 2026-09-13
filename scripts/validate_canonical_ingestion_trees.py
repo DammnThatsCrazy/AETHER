@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """Canonical ingestion-tree ownership gate (single-owner registration).
 
-The repo currently holds duplicate ingestion stacks: a deployed, authoritative
-Python monolith at ``Backend Architecture/aether-backend/`` and two un-deployed
-TypeScript duplicates (``Data Ingestion Layer/`` — whose root package.json is
-literally named ``aether-backend`` — and ``Data Lake Architecture/``) plus a set
-of orphaned dead legacy modules directly under ``Backend Architecture/``. The
-canonical architecture is enforced by giving every tree unit exactly one owner
-role and freezing that ownership map.
+The repo holds one deployed, authoritative Python monolith at
+``services/backend/`` and two un-deployed TypeScript duplicates under
+``docs/archive/legacy-architecture/`` (the ingestion package is literally
+named ``aether-backend``), plus a set of orphaned dead legacy modules in the
+same archive. The canonical architecture is enforced by giving every tree unit
+exactly one owner role and freezing that ownership map.
 
 This gate is shrink-only: the committed registry
 (``scripts/allowlists/repo_tree_ownership.json``) enumerates every git-tracked
-top-level directory and every ``Backend Architecture`` legacy/canonical unit.
+top-level directory, canonical service unit, and archived backend orphan unit.
 A NEW top-level directory or NEW backend orphan unit fails CI until it is routed
 into the canonical tree or explicitly registered (with architect review); a
 registry entry whose path is no longer in the tree fails CI (remove it only when
@@ -19,13 +18,15 @@ the tree unit is genuinely gone). Deprecation edits to the legacy trees are
 acknowledged by the repo-consistency ownership map, not by widening this gate.
 
 Roles:
-  canonical                 Backend Architecture/aether-backend, packages/*
-  deprecated                Data Ingestion Layer, Data Lake Architecture, each
-                            orphaned Backend Architecture legacy module (they
+  canonical                 services/backend, services/ml, services/compliance,
+                            packages/*
+  deprecated                archived ingestion/lake trees, each orphaned
+                            backend module (they
                             carry ``deprecated_at`` + ``disposition``)
   house                     every other top-level source directory
-  registered-not-deployable Agent Layer (live broker-coupled workers — never
-                            canonical, never deprecated)
+  registered-not-deployable services/agents (canonical active broker-coupled
+                            workers, registered as an internal service rather
+                            than an independent deployment unit)
 
 Usage:
   python scripts/validate_canonical_ingestion_trees.py        # validate (CI gate)
@@ -45,28 +46,53 @@ REGISTRY = ROOT / "scripts" / "allowlists" / "repo_tree_ownership.json"
 
 # Canonical SDK container (packages/*) + the nested canonical backend unit.
 _CANONICAL_CONTAINER = "packages"
-_CANONICAL_BACKEND = "Backend Architecture/aether-backend"
+_CANONICAL_BACKEND = "services/backend"
 
 # The deprecated duplicate stacks + the live-but-not-deployable workers.
-_DEPRECATED_ROOT_TREES = ("Data Ingestion Layer", "Data Lake Architecture")
-_AGENT_LAYER = "Agent Layer"
+_DEPRECATED_ROOT_TREES = ("docs/archive/legacy-architecture/data-ingestion-layer", "docs/archive/legacy-architecture/data-lake-architecture")
+_CANONICAL_SERVICE_UNITS = {
+    "services/backend": "canonical",
+    "services/ml": "canonical",
+    "services/compliance": "canonical",
+    "services/agents": "registered-not-deployable",
+}
+_AGENT_LAYER = "services/agents"
 
-# Backend Architecture README carries the deprecation/orphan banner (Ticket C)
-# and is a doc, not a code unit; aether-backend is the canonical unit. Hidden
+_ROOT_NOTES = {
+    "apps": "product application shells and mobile clients; route runtime services into services/ and shared contracts into packages/.",
+    "artifacts": "generated validation, readiness, and release evidence; never a source-of-truth implementation tree.",
+    "cicd": "legacy local pipeline fixtures; root Makefile and GitHub Actions are the canonical CI/CD control plane.",
+    "config": "canonical runtime, impact-graph, readiness, and verification configuration.",
+    "contracts": "canonical contract schemas and smart-contract project container; shared runtime contracts remain under packages/shared/contracts/.",
+    "data-modules": "data-module metadata and fixtures consumed by the canonical services; not an independent runtime.",
+    "deploy": "canonical deployment configuration and infrastructure promotion assets.",
+    "docs": "human-authored, generated, and source-linked documentation; implementation code does not belong here.",
+    "frontend": "frontend application and shared UI implementation; backend runtime remains under services/backend/.",
+    "lambda": "serverless entrypoint fixtures and handlers governed by deployment configuration.",
+    "packages": "canonical shared packages, SDKs, UI primitives, and runtime contract twins.",
+    "playground": "non-production experiments and reproducible investigations; no runtime dependency may originate here.",
+    "reports": "authored audit and implementation reports; claims must be evidence-backed and do not define runtime behavior.",
+    "scripts": "repository validation, generation, release, docs, and contract tooling.",
+    "security": "security policy, threat-model, and review assets; enforcement code remains in canonical runtime services.",
+    "tests": "cross-package, integration, security, and system tests; service-local tests remain with their owning service.",
+}
+
+# Archived backend README carries the deprecation/orphan banner (Ticket C) and
+# is a doc, not a code unit; services/backend is the canonical unit. Hidden
 # tooling/config top-level dirs (.github, .claude, ...) are governed by other
 # gates and are never candidate ingestion trees, so they are excluded too.
-_BACKEND_LEGACY_SKIP = {"Backend Architecture/README.md"}
+_BACKEND_LEGACY_SKIP = {"docs/archive/legacy-architecture/backend/README.md"}
 _VALID_ROLES = {"canonical", "deprecated", "house", "registered-not-deployable"}
 _DEPRECATED_FIELDS = ("deprecated_at", "disposition")
 # The orphaned modules named by the deprecation program (must match Ticket C).
 _DEPRECATED_ORPHAN_DISP = (
-    "orphaned dead legacy module under Backend Architecture/. No new code may be "
+    "orphaned dead legacy module under docs/archive/legacy-architecture/backend/. No new code may be "
     "added here; route work into the canonical tree. Physical removal deferred "
     "to a later phase."
 )
 _DEPRECATED_ROOT_DISP = (
     "un-deployed TypeScript duplicate of the canonical Python monolith "
-    "(Backend Architecture/aether-backend). Kept only by version-sync, "
+    "(services/backend). Kept only by version-sync, "
     "runtime-fallback, and temporal-integrity coupling; physical removal "
     "deferred to a later phase. Do not extend."
 )
@@ -103,12 +129,12 @@ def _backend_orphan_units(files: set[str]) -> set[str]:
     """Map every tracked backend file outside the canonical unit to its orphan.
 
     Returns the exact orphaned modules the deprecation program names: the direct
-    root-level ``Backend Architecture/*.py`` modules, ``migrations``, ``mnt``,
+    root-level ``docs/archive/legacy-architecture/backend/*.py`` modules, ``migrations``, ``mnt``,
     and each ``services/{delegation,journey-service,web3}`` subtree. A NEW
     orphaned module appearing here is reported as tracked-but-unregistered.
     """
     units: set[str] = set()
-    prefix = "Backend Architecture/"
+    prefix = "docs/archive/legacy-architecture/backend/"
     for path in files:
         if not path.startswith(prefix):
             continue
@@ -134,6 +160,8 @@ def expected_units(files: set[str]) -> set[str]:
     units = _top_level_dirs(files)
     units.update(_backend_orphan_units(files))
     units.add(_CANONICAL_BACKEND)
+    units.update(_CANONICAL_SERVICE_UNITS)
+    units.update(_DEPRECATED_ROOT_TREES)
     return units
 
 
@@ -147,6 +175,8 @@ def _present(path: str, files: set[str]) -> bool:
 def _role_for(path: str, orphan_units: set[str]) -> str:
     if path == _CANONICAL_CONTAINER or path == _CANONICAL_BACKEND:
         return "canonical"
+    if path in _CANONICAL_SERVICE_UNITS:
+        return _CANONICAL_SERVICE_UNITS[path]
     if path == _AGENT_LAYER:
         return "registered-not-deployable"
     if path in _DEPRECATED_ROOT_TREES or path in orphan_units:
@@ -161,24 +191,30 @@ def _disposition_for(path: str) -> str:
 
 
 def _note_for(path: str, role: str) -> str:
+    if path in _ROOT_NOTES:
+        return _ROOT_NOTES[path]
     if role == "canonical":
         if path == _CANONICAL_BACKEND:
             return (
                 "deployed authoritative ingestion/lake/silver monolith; build + "
                 "ingress evidence references only this tree."
             )
+        if path == "services/compliance":
+            return "canonical compliance service for consent, privacy, governance, and regulatory controls."
+        if path == "services/ml":
+            return "canonical ML training and serving service; shared SDK and contract surfaces remain under packages/."
         return "canonical SDK + shared monorepo container (packages/*)."
     if role == "registered-not-deployable":
         return (
-            "live broker-coupled Celery workers (Agent Layer); never canonical, "
-            "never deprecated."
+            "canonical active internal broker-coupled Celery worker service; "
+            "registered-not-deployable means it is not an independent deployment unit."
         )
     if role == "deprecated":
         return _disposition_for(path)
-    if path == "Backend Architecture":
+    if path == "services":
         return (
-            "umbrella container of the canonical Backend Architecture/aether-backend "
-            "and the deprecated orphaned modules (each registered individually)."
+            "canonical runtime-service container; each deployable or internal "
+            "service unit is registered individually."
         )
     return "monorepo house directory; route new work into canonical trees."
 
@@ -245,8 +281,8 @@ def main() -> int:
             )
         if path == _AGENT_LAYER and role != "registered-not-deployable":
             errors.append(
-                f"{path}: Agent Layer must stay registered-not-deployable "
-                "(live broker-coupled workers — never canonical, never deprecated)"
+                f"{path}: services/agents must stay registered-not-deployable "
+                "(canonical internal broker-coupled workers; not independently deployable)"
             )
         if role == "deprecated":
             for field in _DEPRECATED_FIELDS:
@@ -259,7 +295,7 @@ def main() -> int:
             errors.append(
                 f"tracked tree unit has no single-owner registration: {path}. "
                 "Route the work into the canonical tree "
-                "(Backend Architecture/aether-backend or packages/*) or register it "
+                "(services/backend or packages/*) or register it "
                 "in scripts/allowlists/repo_tree_ownership.json with architect review."
             )
 

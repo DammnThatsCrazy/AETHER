@@ -35,8 +35,7 @@ EVIDENCE_SCHEMA_PATH = (
 )
 READINESS_PY = (
     ROOT
-    / "Backend Architecture"
-    / "aether-backend"
+    / "services" / "backend"
     / "shared"
     / "certification"
     / "readiness.py"

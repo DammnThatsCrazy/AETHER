@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/contracts/consent-registry.json, Backend Architecture/aether-backend/shared/privacy/consent_enforcement.py, Backend Architecture/aether-backend/shared/privacy/retention.py]
+source_files: [packages/shared/contracts/consent-registry.json, services/backend/shared/privacy/consent_enforcement.py, services/backend/shared/privacy/retention.py]
 canonical_owner: platform@aether
 last_synced_commit: 1f19190
 ---

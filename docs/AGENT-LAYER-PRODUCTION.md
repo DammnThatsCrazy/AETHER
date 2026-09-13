@@ -50,7 +50,7 @@ All routes require an authenticated tenant context. Mutating routes require acti
 Local worker examples:
 
 ```bash
-cd "Agent Layer"
+cd services/agents
 celery -A queue.celery_app worker -l info -Q discovery,enrichment,verification,commit,recovery,default
 celery -A queue.celery_app beat -l info
 ```

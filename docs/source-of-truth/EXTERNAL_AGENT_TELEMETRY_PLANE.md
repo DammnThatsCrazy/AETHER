@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [packages/shared/agent-deployment.ts, packages/server/src/agent-telemetry.ts, packages/python/aether_agentic/agentic.py, Backend Architecture/aether-backend/services/agent/deployments.py, Backend Architecture/aether-backend/services/agent/deployment_routes.py, Backend Architecture/aether-backend/services/ingestion/batch.py]
+source_files: [packages/shared/agent-deployment.ts, packages/server/src/agent-telemetry.ts, packages/python/aether_agentic/agentic.py, services/backend/services/agent/deployments.py, services/backend/services/agent/deployment_routes.py, services/backend/services/ingestion/batch.py]
 last_synced_commit: HEAD
 ---
 
@@ -35,14 +35,14 @@ surface only.
   at ingestion.
 - `deployment_id` identifies the deployment; `agent_id` identifies the
   agent. Neither identifies a human, and neither is ever a merge-eligible
-  identity signal (`services/identity/merge_policy.py` denylist).
+  identity signal (`services/backend/services/identity/merge_policy.py` denylist).
 - All registry reads/writes are tenant-scoped; cross-tenant access returns
   not-found without leaking existence.
 
 ## Data model
 
 `AgentDeployment` (shared contract `packages/shared/agent-deployment.ts`,
-backend mirror `services/agent/deployments.py`, durable store
+backend mirror `services/backend/services/agent/deployments.py`, durable store
 `agent_deployments` + `agent_deployment_audit`, migration
 `20260708_agent_deployments.py`):
 

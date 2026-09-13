@@ -27,24 +27,27 @@ def test_registry_present_and_entries_well_formed() -> None:
 
 def test_canonical_units_registered() -> None:
     paths = {entry["path"] for entry in _load_registry()}
-    assert "Backend Architecture/aether-backend" in paths
+    assert "services/backend" in paths
     assert "packages" in paths
     by_path = {entry["path"]: entry for entry in _load_registry()}
-    assert by_path["Backend Architecture/aether-backend"]["role"] == "canonical"
+    assert by_path["services/backend"]["role"] == "canonical"
     assert by_path["packages"]["role"] == "canonical"
 
 
 def test_deprecated_duplicate_stacks_registered() -> None:
     by_path = {entry["path"]: entry for entry in _load_registry()}
-    for tree in ("Data Ingestion Layer", "Data Lake Architecture"):
+    for tree in (
+        "docs/archive/legacy-architecture/data-ingestion-layer",
+        "docs/archive/legacy-architecture/data-lake-architecture",
+    ):
         assert by_path[tree]["role"] == "deprecated"
         assert tree in gate._DEPRECATED_ROOT_TREES
 
 
 def test_agent_layer_role_is_registered_not_deployable() -> None:
-    """Agent Layer is live broker-coupled workers: never canonical/deprecated."""
+    """The agent worker service is canonical internally, but not independently deployable."""
     by_path = {entry["path"]: entry for entry in _load_registry()}
-    assert by_path["Agent Layer"]["role"] == "registered-not-deployable"
+    assert by_path["services/agents"]["role"] == "registered-not-deployable"
 
 
 def test_orphan_modules_match_deprecation_enumeration() -> None:
@@ -67,33 +70,33 @@ def test_orphan_modules_match_deprecation_enumeration() -> None:
         "services/journey-service",
         "services/web3",
     }
-    expected = {f"Backend Architecture/{m}" for m in orphan_modules}
+    expected = {f"docs/archive/legacy-architecture/backend/{m}" for m in orphan_modules}
     registered_orphans = {
-        p for p, e in by_path.items() if p.startswith("Backend Architecture/") and e["role"] == "deprecated"
+        p for p, e in by_path.items() if p.startswith("docs/archive/legacy-architecture/backend/") and e["role"] == "deprecated"
     }
     assert registered_orphans == expected
 
 
 def test_backend_orphan_unit_mapping_from_synthetic_files() -> None:
     files = {
-        "Backend Architecture/auth.py",
-        "Backend Architecture/migrations/2026_07_x.sql",
-        "Backend Architecture/mnt/user-data/out.txt",
-        "Backend Architecture/services/delegation/middleware.py",
-        "Backend Architecture/services/journey-service/main.py",
-        "Backend Architecture/services/web3/web3_service.py",
-        "Backend Architecture/aether-backend/services/ingestion/batch.py",
-        "Backend Architecture/README.md",
+        "docs/archive/legacy-architecture/backend/auth.py",
+        "docs/archive/legacy-architecture/backend/migrations/2026_07_x.sql",
+        "docs/archive/legacy-architecture/backend/mnt/user-data/out.txt",
+        "docs/archive/legacy-architecture/backend/services/delegation/middleware.py",
+        "docs/archive/legacy-architecture/backend/services/journey-service/main.py",
+        "docs/archive/legacy-architecture/backend/services/web3/web3_service.py",
+        "services/backend/services/ingestion/batch.py",
+        "docs/archive/legacy-architecture/backend/README.md",
         "packages/web/src/index.ts",
     }
     units = gate._backend_orphan_units(files)
     assert units == {
-        "Backend Architecture/auth.py",
-        "Backend Architecture/migrations",
-        "Backend Architecture/mnt",
-        "Backend Architecture/services/delegation",
-        "Backend Architecture/services/journey-service",
-        "Backend Architecture/services/web3",
+        "docs/archive/legacy-architecture/backend/auth.py",
+        "docs/archive/legacy-architecture/backend/migrations",
+        "docs/archive/legacy-architecture/backend/mnt",
+        "docs/archive/legacy-architecture/backend/services/delegation",
+        "docs/archive/legacy-architecture/backend/services/journey-service",
+        "docs/archive/legacy-architecture/backend/services/web3",
     }
 
 
@@ -102,7 +105,7 @@ def test_present_detects_registered_missing() -> None:
     assert gate._present("packages", files)
     assert gate._present("docs", files)
     assert not gate._present("scripts", files)
-    assert not gate._present("Data Ingestion Layer", files)
+    assert not gate._present("docs/archive/legacy-architecture/data-ingestion-layer", files)
 
 
 def test_validate_mode_passes_against_live_tree(monkeypatch) -> None:

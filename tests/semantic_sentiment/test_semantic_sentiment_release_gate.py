@@ -3,9 +3,9 @@ from pathlib import Path
 
 def test_semantic_sentiment_release_gate_assets_exist():
     for path in [
-        "Backend Architecture/aether-backend/services/semantic_intelligence/routes.py",
-        "Backend Architecture/aether-backend/services/semantic_intelligence/models.py",
-        "Backend Architecture/aether-backend/alembic/versions/20260702_semantic_sentiment.py",
+        "services/backend/services/semantic_intelligence/routes.py",
+        "services/backend/services/semantic_intelligence/models.py",
+        "services/backend/alembic/versions/20260702_semantic_sentiment.py",
         "packages/shared/semantic-sentiment.ts",
         "scripts/semantic_sentiment/check_release_gate.py",
         "docs/semantic-sentiment/SEMANTIC-SENTIMENT-INTELLIGENCE.md",

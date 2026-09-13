@@ -2,7 +2,7 @@
 
 `packages/shared/data-rights.ts` is the HAND-AUTHORED canonical TypeScript twin
 (never generated) of the Python structured authorities that live in
-`Backend Architecture/aether-backend/services/integrations/data_rights/models.py`
+`services/backend/services/integrations/data_rights/models.py`
 (frozen in docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md §3 and §5).
 
 This test fails on drift in either direction:
@@ -33,8 +33,7 @@ REPO_ROOT = Path(__file__).parents[2]
 TS_PATH = REPO_ROOT / "packages" / "shared" / "data-rights.ts"
 PY_PATH = (
     REPO_ROOT
-    / "Backend Architecture"
-    / "aether-backend"
+    / "services" / "backend"
     / "services"
     / "integrations"
     / "data_rights"

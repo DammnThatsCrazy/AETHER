@@ -6,11 +6,11 @@ visibility: I
 audience: [dev-senior, architect]
 status: experimental
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/comms/contracts.py, Backend Architecture/aether-backend/services/comms/projector.py, Backend Architecture/aether-backend/services/silver/dispatcher.py]
+source_files: [services/backend/services/comms/contracts.py, services/backend/services/comms/projector.py, services/backend/services/silver/dispatcher.py]
 source_hashes:
-  Backend Architecture/aether-backend/services/comms/contracts.py: sha256:9629e0f07c08f85d43c8b7bd24faf4c2c835a1974ca60d98efad27aa6ff5d961
-  Backend Architecture/aether-backend/services/comms/projector.py: sha256:4744e01f562aa331be96730330668f25e0daa14a264f752c90b579f6a567278a
-  Backend Architecture/aether-backend/services/silver/dispatcher.py: sha256:ea6279d0a1242887281ced91e1cb05bc8d94eb4c978f10a6e8615fb4d565f98f
+  services/backend/services/comms/contracts.py: sha256:9629e0f07c08f85d43c8b7bd24faf4c2c835a1974ca60d98efad27aa6ff5d961
+  services/backend/services/comms/projector.py: sha256:4744e01f562aa331be96730330668f25e0daa14a264f752c90b579f6a567278a
+  services/backend/services/silver/dispatcher.py: sha256:ea6279d0a1242887281ced91e1cb05bc8d94eb4c978f10a6e8615fb4d565f98f
 ---
 
 # Architecture Decision Records — Communications Intelligence
@@ -35,14 +35,14 @@ No SMTP, no bulk-send. Provider-side composition/scheduling/deliverability is
 out of scope.
 
 **Enforcement.** `tests/unit/comms/test_comms_contracts.py::TestProductBoundary`
-asserts no send-capable surface exists in `services/comms/`.
+asserts no send-capable surface exists in `services/backend/services/comms/`.
 
 ---
 
 ## ADR-C2 — Canonical communication contract
 
 **Decision.** All providers normalize into one provider-neutral taxonomy
-(`services/comms/contracts.py`):
+(`services/backend/services/comms/contracts.py`):
 
 - Email lifecycle: `email_queued, email_processed, email_sent, email_delivered,
   email_deferred, email_bounced, email_dropped, email_opened, email_clicked,
@@ -67,7 +67,7 @@ generated TS/Python artifacts are regenerated via `scripts/generate_contracts.py
 
 ## ADR-C3 — Multi-projector event fan-out
 
-**Decision.** The Silver dispatcher (`services/silver/dispatcher.py`) maps
+**Decision.** The Silver dispatcher (`services/backend/services/silver/dispatcher.py`) maps
 `event_type → ordered list of projectors` instead of a single projector.
 Semantic order: communications lifecycle → identity evidence → campaign
 touchpoint → preference/suppression → data quality → canonical activity →
@@ -173,7 +173,7 @@ existing attribution engine — no second engine.
 ## ADR-C9 — Campaign hierarchy
 
 **Decision.** Reuse the existing campaign registry
-(`services/campaign/registry.py`) — provider campaigns and automation flows
+(`services/backend/services/campaign/registry.py`) — provider campaigns and automation flows
 map through `campaign_external_refs` to canonical campaign UUIDs. New
 dimensions: `campaign_messages` (message/sequence-step/variant) and
 `campaign_links` (link) reference the canonical campaign. Cross-channel
@@ -188,7 +188,7 @@ registry; email campaigns are rows in the same `campaigns` table with
 ## ADR-C10 — Privacy and content retention
 
 **Decision.** Raw email addresses are normalized then hashed tenant-scoped
-(`services/comms/mailbox.py` reusing `services/identity/hashing.py`); only
+(`services/backend/services/comms/mailbox.py` reusing `services/backend/services/identity/hashing.py`); only
 redacted display forms (`j***@e***.com`) are stored for UI. Full message
 bodies and attachments are never stored by default — only structural metadata
 and evidence references (`raw_evidence_ref`). DSR deletion tombstones comms

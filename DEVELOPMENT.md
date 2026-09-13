@@ -89,7 +89,7 @@ docker compose up -d postgres
 docker compose up -d
 ```
 
-The backend container builds from `Backend Architecture/aether-backend/Dockerfile` and starts on port 8000.
+The backend container builds from `services/backend/Dockerfile` and starts on port 8000.
 
 ---
 
@@ -157,18 +157,20 @@ make docs              # generate API docs
 ## Directory reference
 
 ```
-Backend Architecture/aether-backend/   FastAPI backend (55 routers, 400+ endpoints)
-ML Models/aether-ml/                   ML training + serving
-Agent Layer/                           Autonomous agent workers
-security/                              Model extraction defense
+services/backend/               FastAPI backend (55 routers, 400+ endpoints)
+services/ml/                    ML training + serving
+services/agents/                Autonomous agent workers (internal)
+services/compliance/            GDPR/SOC 2 controls
+security/                       Model extraction defense package
 packages/shared/                       @aether/shared — canonical TypeScript contracts
 packages/ui/                           @aether/ui — shared React component library
 packages/web/                          @aether/web — Web SDK
 packages/react-native/                 @aether/react-native — React Native SDK
 frontend/aether/                       Customer web app (React 19 + Vite, port 5175)
 frontend/kyber/                        Operator console (React 19 + Vite, port 5174)
-Smart Contracts/                       EVM smart contracts (Hardhat)
-Data Ingestion Layer/                  Node.js event ingestion service
+contracts/smart-contracts/       EVM and multi-chain smart contracts
+deploy/aws/                      AWS/Terraform deployment implementation
+docs/archive/legacy-architecture/ Historical, un-deployed duplicate trees only
 ```
 
 ---

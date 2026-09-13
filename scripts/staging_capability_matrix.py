@@ -49,7 +49,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 MATRIX = ROOT / "config" / "deploy_profile.yaml"
-ROLES_PY = ROOT / "Backend Architecture" / "aether-backend" / "services" / "runtime" / "roles.py"
+ROLES_PY = ROOT / "services" / "backend" / "services" / "runtime" / "roles.py"
 
 # Join-layer facet files (see join_errors / _join_facets below).
 JOIN_MATRIX = ROOT / "config" / "capability_matrix.yaml"
@@ -314,7 +314,7 @@ def check() -> dict:
     matrix = yaml.safe_load(MATRIX.read_text(encoding="utf-8")) or {}
     required = set(matrix.get("required_capabilities") or [])
     caps = matrix.get("capabilities") or []
-    modules_dir = matrix.get("terraform_modules_dir", "AWS Deployment/aether-aws/terraform/modules")
+    modules_dir = matrix.get("terraform_modules_dir", "deploy/aws/terraform/modules")
 
     compose = _compose_services()
     modules = _terraform_modules(modules_dir)

@@ -26,8 +26,8 @@ from pathlib import Path
 # =========================================================================
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
-ML_ROOT = ROOT / "ML Models" / "aether-ml"
+BACKEND_ROOT = ROOT / "services" / "backend"
+ML_ROOT = ROOT / "services" / "ml"
 
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))

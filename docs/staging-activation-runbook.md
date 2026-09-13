@@ -59,15 +59,15 @@ faked) until a credentialed operator runs it.
 
 Infrastructure is promoted by the **reviewed Terraform promotion** workflow
 (`.github/workflows/terraform-promote.yml`), never by an un-reviewed apply.
-The canonical root is `AWS Deployment/aether-aws/terraform`; the staging
-environment is `AWS Deployment/aether-aws/terraform/environments/staging/main.tf`
+The canonical root is `deploy/aws/terraform`; the staging
+environment is `deploy/aws/terraform/environments/staging/main.tf`
 (state key `staging/terraform.tfstate` in bucket `aether-terraform-state`, lock
 table `aether-terraform-locks`) and the profile is
 `profiles/staging.tfvars`.
 
 1. Validate and plan (no mutation):
    ```bash
-   cd "AWS Deployment/aether-aws/terraform"
+   cd "deploy/aws/terraform"
    terraform validate
    terraform plan -var-file=profiles/staging.tfvars
    ```
@@ -100,12 +100,12 @@ selectors must be pinned (see step 3).
 ## 2. Apply migrations (LIVE)
 
 Migrations are the alembic chain under
-`Backend Architecture/aether-backend/alembic/versions/` (config
-`Backend Architecture/aether-backend/alembic.ini`).
+`services/backend/alembic/versions/` (config
+`services/backend/alembic.ini`).
 
 1. Against the provisioned Aurora/Postgres endpoint:
    ```bash
-   cd "Backend Architecture/aether-backend"
+   cd "services/backend"
    DATABASE_URL="postgresql://USER:PASS@HOST:5432/aether" alembic upgrade head
    ```
 2. Confirm a single head before and after:
@@ -145,7 +145,7 @@ credentialless gate (`no-forbidden-secret`) fails closed on inline material.
    `ROUTE_REGISTRY_ENFORCED=true`, `KYBER_OPERATOR_GATE_ENFORCED=true`.
 2. **Credential backend selector** `AETHER_CREDENTIAL_BACKEND` chooses between
    `in_memory`, `local_encrypted`, and `aws_secrets_manager` (implementations
-   under `Backend Architecture/aether-backend/shared/credentials/`). In staging
+   under `services/backend/shared/credentials/`). In staging
    use `aws_secrets_manager` (provisioned by terraform `modules/secrets` /
    `modules/kms_credentials`) or `local_encrypted` with `BYOK_ENCRYPTION_KEY`.
 3. **Mobile/notification/distribution slots** come from
@@ -174,7 +174,7 @@ never from a request header.
 
 1. Register one endpoint per `(tenant, provider, environment=sandbox, domain)`
    through the registry in
-   `services/integrations/providers/payment_rails/webhook_endpoints.py`
+   `services/backend/services/integrations/providers/payment_rails/webhook_endpoints.py`
    (table `payment_webhook_endpoints`). The public URL pattern is:
    - payment rails: `…/v1/integrations/webhooks/payment-rails/{provider}/{endpoint_id}`
    - comms family:  `…/v1/integrations/webhooks/comms/{connector}/{endpoint_id}`
@@ -186,7 +186,7 @@ never from a request header.
 3. Confirm the legacy header-tenant route is inert outside local:
    `AETHER_PAYMENT_LEGACY_WEBHOOK_ROUTE_ENABLED=false` makes
    `POST /{provider}` a 404 in every non-local environment (route gate in
-   `services/integrations/providers/payment_rails/routes.py`).
+   `services/backend/services/integrations/providers/payment_rails/routes.py`).
 
 ## 5. Attach tenant credential refs (LIVE for values)
 
@@ -197,13 +197,13 @@ version}` — a sandbox credential can never be decrypted under a live context.
 The in-memory BYOK vault is not the authority outside local.
 
 Slot lifecycle (state machine in
-`services/providers/credentials/authority.py`):
+`services/backend/services/providers/credentials/authority.py`):
 
 ```
 create_pending → test → activate → (rotate → previous/overlap) → revoke → delete
 ```
 
-Per slot, via the tenant-admin API `services/providers/credentials/routes.py`
+Per slot, via the tenant-admin API `services/backend/services/providers/credentials/routes.py`
 (prefix `/v1/providers/credentials`, all mutations require tenant-admin;
 cross-tenant views require a Kyber operator):
 
@@ -228,7 +228,7 @@ curl -X POST "/v1/providers/credentials/{provider}/slots/{slot}/activate?environ
 
 - Slots are server-owned: the set derives from each adapter's
   `certification_descriptor().required_credentials` plus the augmentation map in
-  `services/providers/credentials/slot_registry.py`; an unknown slot is a 400.
+  `services/backend/services/providers/credentials/slot_registry.py`; an unknown slot is a 400.
 - Rotate with `POST …/rotate` (prior active demoted to `previous` for the
   bounded webhook-overlap window); revoke/delete for off-ramp.
 - Operator cross-tenant view (Kyber only, never secrets):
@@ -240,12 +240,12 @@ curl -X POST "/v1/providers/credentials/{provider}/slots/{slot}/activate?environ
 
 1. **Enable the provider** for the tenant: `POST /v1/providers/credentials/{provider}/enable`.
 2. **Promote capability readiness** monotonically via
-   `CapabilityReadinessService.promote` (`services/capabilities/readiness_repo.py`,
+   `CapabilityReadinessService.promote` (`services/backend/services/capabilities/readiness_repo.py`,
    table `capability_readiness`). Promotion only moves the readiness rank UP
    over the canonical `CredentialReadiness` ranks; every change (and every
    rejected attempt) is written to the tamper-evident audit ledger.
 3. **Confirm the readiness graph** for each capability is non-blocking:
-   `services/readiness_graph/graph.py` resolves each declared dependency node
+   `services/backend/services/readiness_graph/graph.py` resolves each declared dependency node
    (credential authority, RPC config, chain identity, price provider, durable
    cursor, observer worker, finality engine, reorg recovery, reconciliation,
    schema, entitlement, usage meter, readiness probe, diagnostics) to
@@ -313,10 +313,10 @@ python scripts/pilot_smoke.py \
   (`cap_delivery_exports` enforces it).
 - **Live pilot flows (LIVE)**: push real sandbox webhooks through the
   registered endpoints and watch the receipt lifecycle
-  (`services/integrations/providers/payment_rails/receipts.py`); let the
+  (`services/backend/services/integrations/providers/payment_rails/receipts.py`); let the
   read-only polling workers (Coinbase/MoonPay/Bridge — `sync_worker.py`) run;
   watch reconciliation and alert evaluation
-  (`services/integrations/providers/payment_rails/reconciliation.py`,
+  (`services/backend/services/integrations/providers/payment_rails/reconciliation.py`,
   `alert_eval.py`).
 - Optional load baselining: `make load-baselines` (Locust; requires
   `STAGING_URL` and a running backend).
@@ -358,13 +358,13 @@ Promotion is evidence-gated and monotonic — never a doc edit ahead of evidence
    exists; `demote` is the only way back down.
 2. **Connection lifecycle**: advance `shared/integration_contracts/lifecycle.py`
    states only through `can_transition`.
-3. **Tenant launch readiness** (`services/tenant_readiness/service.py`, §3.13):
+3. **Tenant launch readiness** (`services/backend/services/tenant_readiness/service.py`, §3.13):
    a tenant is `ready` only when *every required* check is `passed` (or
    `not_applicable`) — including `usage_metering_verified`,
    `billing_mode_verified`, `financial_value_semantics_verified`,
    `connector_signature_verified`. Read-only surface:
    `GET /v1/tenant/readiness` (+ `/trust-states`).
-4. **Activation state machine** (`services/activation/service.py`): the
+4. **Activation state machine** (`services/backend/services/activation/service.py`): the
    self-serve flow advances through `ALLOWED_FROM`
    (`account_verified → plan_selected → billing_active → sdk_selected →
    keys_created → waiting_for_event → event_received → first_value_ready →

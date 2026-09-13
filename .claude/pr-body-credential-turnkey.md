@@ -62,7 +62,7 @@ re-cut of the unique surface onto main's head:
 ## What landed, by domain
 
 ### State machines & durability
-- **Import-session FSM** — [import_session.py](Backend%20Architecture/aether-backend/services/card_linked_payments/import_session.py) + [session_persistence.py](Backend%20Architecture/aether-backend/services/imports/session_persistence.py): guarded `lifecycle_state` machine (`CREATED → … → COMMITTING → COMPLETED`; `REJECTED` / `FAILED` / `DEAD_LETTERED` / `ROLLED_BACK`) with a **parity-safe legacy `status` projection**. Requeue re-stages a `FAILED` or stranded-`COMMITTING` session into `COMMITTING` and re-enqueues a durable `import.commit` under the same id — mapping, validation, `failure_reason`, and `retry_count` preserved for audit.
+- **Import-session FSM** — [import_session.py](services/backend/services/card_linked_payments/import_session.py) + [session_persistence.py](services/backend/services/imports/session_persistence.py): guarded `lifecycle_state` machine (`CREATED → … → COMMITTING → COMPLETED`; `REJECTED` / `FAILED` / `DEAD_LETTERED` / `ROLLED_BACK`) with a **parity-safe legacy `status` projection**. Requeue re-stages a `FAILED` or stranded-`COMMITTING` session into `COMMITTING` and re-enqueues a durable `import.commit` under the same id — mapping, validation, `failure_reason`, and `retry_count` preserved for audit.
 - **Payment rails** — fleet-health supervision on main's KV-backed ledgers: `kyber_aggregate` computes `outbox_lag` / cursor age / worker liveness from live state, with an *honest-unknown* path (`None`) rather than a fabricated zero. The branch-era Postgres mirror seam was **not carried**; main's ledgers are the canonical durability floor.
 - **Stablecoins** — price write path + polling + durable price persistence; append-only reorg rollback (rows **demoted**, never destroyed; audit trail survives).
 - **Derivatives / Interop / Rewards** — durable cursors + sequences, explicit topic/stream contracts, scan worker with reorg/restart handling, reconciliation + metering, on-chain reward rails with **SVM re-homed additively** onto main's `MultiChainSigner` (`SHA-256` + base58 + Anchor instruction; fail-closed chain identity), receipt evidence, and claim reconciliation.
@@ -72,8 +72,8 @@ re-cut of the unique surface onto main's head:
 - **x402** — signer authority + repos, control-plane settlement, money-correct commerce models (Decimal on the wire via `@field_serializer`, float at the boundary).
 
 ### Economic & PnL
-- **Money-correct math** — [ai_models.py](Backend%20Architecture/aether-backend/services/economic/ai_models.py) (Decimal money fields, float-on-wire) + [ai_aggregation.py](Backend%20Architecture/aether-backend/services/economic/ai_aggregation.py) (exact Decimal arithmetic, float at the public boundary) + [gold_materializer.py](Backend%20Architecture/aether-backend/services/economic/gold_materializer.py) (canonical rewrite) + computed-results writer.
-- **PnL** — [pnl_calculator.py](Backend%20Architecture/aether-backend/services/pnl/pnl_calculator.py): `PNLUnavailableError` wired into the failure paths — **unavailable is never zero**.
+- **Money-correct math** — [ai_models.py](services/backend/services/economic/ai_models.py) (Decimal money fields, float-on-wire) + [ai_aggregation.py](services/backend/services/economic/ai_aggregation.py) (exact Decimal arithmetic, float at the public boundary) + [gold_materializer.py](services/backend/services/economic/gold_materializer.py) (canonical rewrite) + computed-results writer.
+- **PnL** — [pnl_calculator.py](services/backend/services/pnl/pnl_calculator.py): `PNLUnavailableError` wired into the failure paths — **unavailable is never zero**.
 
 ### Credentials, capabilities & readiness
 - **Credential authority** — operator view that is **safe (no secret decryption)**, a dead-letter sweeper, and a slot registry derived from adapters' own descriptors; fail-closed guards enforce required env outside local.
@@ -83,13 +83,13 @@ re-cut of the unique surface onto main's head:
 - Capability-metadata evidence families, metering hooks + reconciliation, storage-policy registry extended to every new table, and a payment-rails Grafana dashboard (from the deploy observability tree).
 
 ### Delivery & runtime
-- [outcome_processor.py](Backend%20Architecture/aether-backend/services/delivery/outcome_processor.py): retryable dead-letter delta — a failed delivery is surfaced, replayable, never silently dropped; [worker.py](Backend%20Architecture/aether-backend/services/delivery/worker.py), `dead_letter_sweeper`, worker specs/topology, and the supervisor handle.
+- [outcome_processor.py](services/backend/services/delivery/outcome_processor.py): retryable dead-letter delta — a failed delivery is surfaced, replayable, never silently dropped; [worker.py](services/backend/services/delivery/worker.py), `dead_letter_sweeper`, worker specs/topology, and the supervisor handle.
 
 ### Gate, evidence & docs
 - **[scripts/credential_turnkey_gate.py](scripts/credential_turnkey_gate.py)** (+ `--strict`) and [scripts/build_credential_turnkey_evidence.py](scripts/build_credential_turnkey_evidence.py)
 - **Reports (rewritten for the re-cut)** — [credential-turnkey-capability-matrix.md](reports/credential-turnkey-capability-matrix.md) (10 capabilities × evidence, C/M/R/⛔ carried/main/re-homed/pending-external) and [credential-turnkey-external-blockers.md](reports/credential-turnkey-external-blockers.md) (every external item, each annotated with whether a **repository coding blocker** remains)
 - **Runbooks** — [billing-attachment-runbook.md](docs/billing-attachment-runbook.md) + [staging-activation-runbook.md](docs/staging-activation-runbook.md)
-- **Migration** — [20260901_credential_turnkey_tables.py](Backend%20Architecture/aether-backend/alembic/versions/20260901_credential_turnkey_tables.py), regenerated onto main's migration head
+- **Migration** — [20260901_credential_turnkey_tables.py](services/backend/alembic/versions/20260901_credential_turnkey_tables.py), regenerated onto main's migration head
 - **Deploy + config** — kafka topic-provisioner (module + tests + `topics.json`), ClickHouse terraform, `DEPLOYMENT_CONTRACT.yaml`, `config/storage_policies.yaml`, `Makefile` targets (`credential-turnkey`, `-strict`, `-evidence`)
 - **Frontend seams** — activation uses tenant readiness; API endpoint registration
 
@@ -100,11 +100,11 @@ re-cut of the unique surface onto main's head:
 Five fixes that make the carried surface deterministic and correct against main's
 architecture (each verified by the tests it unblocks):
 
-1. **Money-wire coercion** — [ai_costs.py](Backend%20Architecture/aether-backend/services/economic/ai_costs.py) coerces the observed Decimal costs to float at the `CostSelection` boundary (`test_costs` 9/9).
-2. **Commerce tenant isolation** — [models.py](Backend%20Architecture/aether-backend/services/commerce/models.py) adds `tenant_id` to `PaymentRecord`; [service.py](Backend%20Architecture/aether-backend/services/commerce/service.py) persists it on every `record_payment` (tenant-isolation suite green).
-3. **FX snapshot re-assertion** — [routes.py](Backend%20Architecture/aether-backend/services/economic/routes.py) re-registers the FX provider in `_aggregate_spend` so the USD conversion never depends on import order or a cleared provider registry.
-4. **Store-reset hygiene (flake root cause)** — [conftest.py](Backend%20Architecture/aether-backend/tests/adversarial/conftest.py) now resets `shared.store`'s registry alongside `repositories.repos`/`typed_repo`, matching the repo's own documented dual-reset convention (the adversarial receipt suite was leaking `payment_provider_receipts` rows into `tests/payment_rails/test_alert_eval.py`, causing an intermittent empty-plane failure under xdist).
-5. **Stale x402 store singletons (suite-order flake root cause)** — [test_commerce_domain_closure.py](Backend%20Architecture/aether-backend/tests/unit/test_commerce_domain_closure.py) now also resets the control plane + facilitator/asset registries, which capture the commerce store at construction. `reset_commerce_store()` replaces the store singleton, so leaving those singletons alive made routing read an old cleared store ("No facilitator for asset/chain/environment") whenever a prior test file constructed the control plane first. Fix verified deterministic: `unit/` and full backend suite both green single-process (`-n 0`) and under xdist.
+1. **Money-wire coercion** — [ai_costs.py](services/backend/services/economic/ai_costs.py) coerces the observed Decimal costs to float at the `CostSelection` boundary (`test_costs` 9/9).
+2. **Commerce tenant isolation** — [models.py](services/backend/services/commerce/models.py) adds `tenant_id` to `PaymentRecord`; [service.py](services/backend/services/commerce/service.py) persists it on every `record_payment` (tenant-isolation suite green).
+3. **FX snapshot re-assertion** — [routes.py](services/backend/services/economic/routes.py) re-registers the FX provider in `_aggregate_spend` so the USD conversion never depends on import order or a cleared provider registry.
+4. **Store-reset hygiene (flake root cause)** — [conftest.py](services/backend/tests/adversarial/conftest.py) now resets `shared.store`'s registry alongside `repositories.repos`/`typed_repo`, matching the repo's own documented dual-reset convention (the adversarial receipt suite was leaking `payment_provider_receipts` rows into `tests/payment_rails/test_alert_eval.py`, causing an intermittent empty-plane failure under xdist).
+5. **Stale x402 store singletons (suite-order flake root cause)** — [test_commerce_domain_closure.py](services/backend/tests/unit/test_commerce_domain_closure.py) now also resets the control plane + facilitator/asset registries, which capture the commerce store at construction. `reset_commerce_store()` replaces the store singleton, so leaving those singletons alive made routing read an old cleared store ("No facilitator for asset/chain/environment") whenever a prior test file constructed the control plane first. Fix verified deterministic: `unit/` and full backend suite both green single-process (`-n 0`) and under xdist.
 
 ---
 
@@ -142,7 +142,7 @@ architecture (each verified by the tests it unblocks):
 |---|---|
 | `make docs-fix` | **42/42** |
 | `make ci-check` | **62/62** (canonical completion gate) |
-| backend pytest (`Backend Architecture/aether-backend/tests`) | **5614 passed / 2 skipped** |
+| backend pytest (`services/backend/tests`) | **5614 passed / 2 skipped** |
 | root pytest | **5282 passed / 6 skipped** |
 | `make credential-turnkey` | **38 rows — 36 pass / 0 fail / 2 advisory** |
 | `make credential-turnkey-strict` | **PASS (no FAIL rows)** |

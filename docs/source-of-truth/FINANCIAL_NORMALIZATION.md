@@ -28,9 +28,9 @@ event-time valuation engine.
 
 Implementation status (as of the financial-normalization W1–W4a trunk): the
 platform layers this architecture describes — the universal asset registry
-(`services/assets`), the event-time valuation core with its append-only
-persistence and API (`services/valuation`), and the registry → graph reference
-projector (`services/assets/graph_projector.py`) — are **implemented** as
+(`services/backend/services/assets`), the event-time valuation core with its append-only
+persistence and API (`services/backend/services/valuation`), and the registry → graph reference
+projector (`services/backend/services/assets/graph_projector.py`) — are **implemented** as
 flag-gated **default-off** backend surfaces. Gating is explicit: the assets and
 valuation routers mount in `main.py` only behind `settings.assets.api_enabled`
 / `settings.valuation.api_enabled` (both default false), writes additionally
@@ -39,7 +39,7 @@ require their `ingestion_enabled` flags, and the projector never runs at startup
 (`settings.assets.graph_enabled` / `AETHER_ASSETS_GRAPH_ENABLED`, default false).
 
 The Phase-4 **rollup/display seam** is further along and is **additive rather
-than flag-gated**: `services/value/rollups.py` `safe_rollup` is now
+than flag-gated**: `services/backend/services/value/rollups.py` `safe_rollup` is now
 reporting-asset-keyed with a byte-identical `fiat:USD` default (a reporting
 context adds a `reporting_totals` envelope; conversion to a non-USD reporting
 asset is never guessed), and `ValuationService.reporting_asset_id_for` resolves
@@ -199,7 +199,7 @@ Rollups are the only place many values are combined, and they are strict.
 - **Unknown ≠ 0.** An unpriced or unresolved value contributes no amount and is
   counted, not zeroed. `null` reporting amount and `"0"` are never conflated.
 
-Implemented (W4a): `safe_rollup` in `services/value/rollups.py` accepts a
+Implemented (W4a): `safe_rollup` in `services/backend/services/value/rollups.py` accepts a
 reporting context — `reporting_asset_id` plus an optional
 `amount_in_reporting_asset` resolver — and returns an additive `reporting_totals`
 envelope with priced/unpriced/excluded/stale counts, `coverage_percentage`, and
@@ -244,8 +244,8 @@ Expansion is **data-driven**: adding an asset is a seed row, not a code change.
 ## 10A. Registry admin + automated discovery
 
 W5 (C5-ADMIN) adds a registry-admin facade and an automated-discovery
-**skeleton** over the universal registry (`services/assets/admin.py`), served by
-a global-ADMIN console (`/v1/admin/assets`, `services/assets/admin_routes.py`).
+**skeleton** over the universal registry (`services/backend/services/assets/admin.py`), served by
+a global-ADMIN console (`/v1/admin/assets`, `services/backend/services/assets/admin_routes.py`).
 
 - **This is data-integrity scaffolding, observation-only.** The admin facade is
   a thin, permission-checked review-and-apply layer over the existing registry:

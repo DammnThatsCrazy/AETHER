@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/contracts/graph-mutation-registry.json, packages/shared/graph-mutation.ts, Backend Architecture/aether-backend/shared/graph/mutation_models.py, Backend Architecture/aether-backend/shared/graph/generated_mutation_taxonomy.py, Backend Architecture/aether-backend/shared/graph/edge_properties.py, scripts/validate_graph_write_paths.py, scripts/allowlists/graph_write_paths.json]
+source_files: [packages/shared/contracts/graph-mutation-registry.json, packages/shared/graph-mutation.ts, services/backend/shared/graph/mutation_models.py, services/backend/shared/graph/generated_mutation_taxonomy.py, services/backend/shared/graph/edge_properties.py, scripts/validate_graph_write_paths.py, scripts/allowlists/graph_write_paths.json]
 last_synced_commit: a500f1f
 ---
 

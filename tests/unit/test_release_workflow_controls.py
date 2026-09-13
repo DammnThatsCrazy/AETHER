@@ -251,6 +251,18 @@ def test_deploy_verifies_source_run_identity_before_trusting_artifacts():
     assert verify < download
 
 
+def test_deploy_polls_the_authority_that_exists_for_each_trigger():
+    workflow = _workflow("deploy.yml")
+    assert 'if [ "${GITHUB_EVENT_NAME}" = "push" ]; then' in workflow
+    assert 'required_checks=("Main integration authority")' in workflow
+    assert "required_checks=(validate)" in workflow
+    # A main push intentionally skips Repo Health's nightly/dispatch aggregate
+    # `validate` job, so polling it would fail closed before delivery can run.
+    assert "intentionally skipped job as a failed verification" in workflow
+    assert "timeout-minutes: 35" in workflow
+    assert "deadline=$((SECONDS + 2040))" in workflow
+
+
 def test_deploy_never_interpolates_inputs_into_run_scripts():
     for name in ("deploy.yml", "terraform-promote.yml"):
         workflow = _workflow(name)
@@ -427,7 +439,7 @@ def test_terraform_promote_uses_remote_backend_in_plan_and_apply():
     # the account-level ECS role bootstrap, in addition to plan and apply.
     assert workflow.count('-backend-config="bucket=${TF_STATE_BUCKET}"') == 3
     assert workflow.count('-backend-config="key=profiles/${PROFILE}/terraform.tfstate"') == 3
-    versions = (ROOT / "AWS Deployment/aether-aws/terraform/versions.tf").read_text(
+    versions = (ROOT / "deploy/aws/terraform/versions.tf").read_text(
         encoding="utf-8"
     )
     assert 'backend "s3" {}' in versions
@@ -442,7 +454,7 @@ def test_terraform_promote_requires_release_digest_inputs():
 
 
 def test_image_digest_variables_have_no_mutable_defaults():
-    variables = (ROOT / "AWS Deployment/aether-aws/terraform/variables.tf").read_text(
+    variables = (ROOT / "deploy/aws/terraform/variables.tf").read_text(
         encoding="utf-8"
     )
     assert 'default     = "sha256:' not in variables
@@ -1233,14 +1245,14 @@ def test_the_binary_plan_is_treated_as_a_secret_bearing_artifact():
         s for s in _steps(doc, "plan")
         if str(s.get("uses", "")).startswith("actions/upload-artifact")
     ]
-    binary_path = "AWS Deployment/aether-aws/terraform/reviewed.tfplan"
+    binary_path = "deploy/aws/terraform/reviewed.tfplan"
     evidence = [u for u in uploads if "reviewed.*" in u["with"]["path"]]
     binary = [u for u in uploads if u["with"]["path"].strip() == binary_path]
     assert len(evidence) == 1 and len(binary) == 1, (
         "the binary plan is not uploaded separately from the reviewable evidence"
     )
     # The long-lived evidence artifact must NOT contain the binary plan.
-    assert "!AWS Deployment/aether-aws/terraform/reviewed.tfplan" in evidence[0]["with"]["path"]
+    assert "!deploy/aws/terraform/reviewed.tfplan" in evidence[0]["with"]["path"]
     # A reviewed plan is only legal to apply for 24h, so one day is the whole
     # window the apply path can use.
     assert int(binary[0]["with"]["retention-days"]) == 1, (

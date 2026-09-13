@@ -7,7 +7,7 @@ audience: [architect, dev-senior, ops]
 status: experimental
 since_version: 0.1.0
 canonical_owner: platform@aether
-source_files: [Backend Architecture/aether-backend/services/provider_catalog/models.py, Backend Architecture/aether-backend/repositories/lake.py]
+source_files: [services/backend/services/provider_catalog/models.py, services/backend/repositories/lake.py]
 last_synced_commit: pending
 estimated_read_minutes: 5
 ---

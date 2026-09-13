@@ -31,7 +31,7 @@ import tokenize
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-BACKEND = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = ROOT / "services" / "backend"
 ALLOWLIST = ROOT / "scripts" / "allowlists" / "graph_global_reads.json"
 
 _GLOBAL_READ_METHODS = frozenset({"get_all_vertices"})

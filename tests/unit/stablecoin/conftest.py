@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import pytest
 
-BACKEND = str(Path(__file__).parents[3] / "Backend Architecture" / "aether-backend")
+BACKEND = str(Path(__file__).parents[3] / "services" / "backend")
 if BACKEND not in sys.path:
     sys.path.insert(0, BACKEND)
 

@@ -22,10 +22,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MG_DIR = (
-    ROOT / "Backend Architecture" / "aether-backend" / "services" / "model_governance"
+    ROOT / "services" / "backend" / "services" / "model_governance"
 )
 ROUTES = (
-    ROOT / "Backend Architecture" / "aether-backend"
+    ROOT / "services" / "backend"
     / "services" / "ml_serving" / "routes.py"
 )
 

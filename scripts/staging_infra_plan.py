@@ -10,7 +10,7 @@ NEVER runs `terraform apply`.
 Structural (always, credentialless):
   * canonical modules present with a main.tf each;
   * root main.tf + versions.tf + per-profile tfvars present;
-  * stale duplicate tree (AWS Deployment/mnt) absent;
+  * stale duplicate tree (docs/archive/legacy-architecture/aws-deployment/mnt) absent;
   * capability matrix (config/deploy_profile.yaml) is internally consistent.
 
 Live (gated):
@@ -35,9 +35,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TF_ROOT = ROOT / "AWS Deployment" / "aether-aws" / "terraform"
+TF_ROOT = ROOT / "deploy" / "aws" / "terraform"
 TF_MODULES = TF_ROOT / "modules"
-STALE_MNT = ROOT / "AWS Deployment" / "mnt"
+STALE_MNT = ROOT / "docs" / "archive" / "legacy-architecture" / "aws-deployment" / "mnt"
 
 EXPECTED_MODULES = {
     "alb", "aurora", "auth0", "dynamodb_cache", "ecr", "ecs", "elasticache",
@@ -53,7 +53,7 @@ def _line(status: str, name: str, detail: str = "") -> tuple[str, str, str]:
 def structural() -> list[tuple[str, str, str]]:
     rows: list[tuple[str, str, str]] = []
     rows.append(_line("FAIL" if STALE_MNT.exists() else "PASS", "stale-tree-absent",
-                      str(STALE_MNT) if STALE_MNT.exists() else "AWS Deployment/mnt removed"))
+                      str(STALE_MNT) if STALE_MNT.exists() else "docs/archive/legacy-architecture/aws-deployment/mnt removed"))
     present = {p.name for p in TF_MODULES.iterdir() if p.is_dir()} if TF_MODULES.is_dir() else set()
     missing = EXPECTED_MODULES - present
     no_main = [m for m in EXPECTED_MODULES & present if not (TF_MODULES / m / "main.tf").is_file()]

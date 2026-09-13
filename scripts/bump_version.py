@@ -12,7 +12,7 @@ Usage:
 Files updated:
     - pyproject.toml (root)
     - package.json (root, packages/web, packages/react-native, apps/kyber,
-      Data Ingestion Layer, Data Lake Architecture)
+      the archived ingestion and lake duplicates)
     - All docs/*.md headers containing version numbers
     - EXTRACTION_DEFENSE_AUDIT.md
 """
@@ -45,21 +45,21 @@ PACKAGE_JSONS = [
     ROOT / "frontend" / "demo" / "package.json",
     ROOT / "frontend" / "olympus-marketing" / "package.json",
     ROOT / "frontend" / "aether-marketing" / "package.json",
-    ROOT / "Data Ingestion Layer" / "package.json",
-    ROOT / "Data Ingestion Layer" / "packages" / "common" / "package.json",
-    ROOT / "Data Ingestion Layer" / "packages" / "auth" / "package.json",
-    ROOT / "Data Ingestion Layer" / "packages" / "cache" / "package.json",
-    ROOT / "Data Ingestion Layer" / "packages" / "events" / "package.json",
-    ROOT / "Data Ingestion Layer" / "packages" / "logger" / "package.json",
-    ROOT / "Data Ingestion Layer" / "services" / "ingestion" / "package.json",
-    ROOT / "Data Lake Architecture" / "aether-Datalake-backend" / "package.json",
-    ROOT / "Data Lake Architecture" / "aether-Datalake-backend" / "packages" / "auth" / "package.json",
-    ROOT / "Data Lake Architecture" / "aether-Datalake-backend" / "packages" / "cache" / "package.json",
-    ROOT / "Data Lake Architecture" / "aether-Datalake-backend" / "packages" / "common" / "package.json",
-    ROOT / "Data Lake Architecture" / "aether-Datalake-backend" / "packages" / "events" / "package.json",
-    ROOT / "Data Lake Architecture" / "aether-Datalake-backend" / "packages" / "logger" / "package.json",
-    ROOT / "Data Lake Architecture" / "aether-Datalake-backend" / "services" / "data-lake" / "package.json",
-    ROOT / "Data Lake Architecture" / "aether-Datalake-backend" / "services" / "ingestion" / "package.json",
+    ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "package.json",
+    ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "common" / "package.json",
+    ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "auth" / "package.json",
+    ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "cache" / "package.json",
+    ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "events" / "package.json",
+    ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "logger" / "package.json",
+    ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "services" / "ingestion" / "package.json",
+    ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "package.json",
+    ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "packages" / "auth" / "package.json",
+    ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "packages" / "cache" / "package.json",
+    ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "packages" / "common" / "package.json",
+    ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "packages" / "events" / "package.json",
+    ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "packages" / "logger" / "package.json",
+    ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "services" / "data-lake" / "package.json",
+    ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "services" / "ingestion" / "package.json",
     ROOT / "packages" / "server" / "package.json",
     ROOT / "packages" / "mobile-ui" / "package.json",
 ]
@@ -90,13 +90,13 @@ DOC_HEADERS = [
 
 # README files with version in the first heading
 README_HEADERS = [
-    ROOT / "Agent Layer" / "README.md",
-    ROOT / "Backend Architecture" / "README.md",
-    ROOT / "Data Ingestion Layer" / "README.md",
-    ROOT / "Data Lake Architecture" / "README.md",
-    ROOT / "AWS Deployment" / "aether-aws" / "README.md",
+    ROOT / "services/agents" / "README.md",
+    ROOT / "docs/archive/legacy-architecture/backend" / "README.md",
+    ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "README.md",
+    ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "README.md",
+    ROOT / "deploy" / "aws" / "README.md",
     ROOT / "cicd" / "aether-cicd" / "README.md",
-    ROOT / "GDPR & SOC2" / "aether-compliance" / "README.md",
+    ROOT / "services/compliance" / "README.md",
 ]
 
 VERSION_PATTERN = re.compile(r"v?\d+\.\d+\.\d+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?")
@@ -105,7 +105,7 @@ VERSION_PATTERN = re.compile(r"v?\d+\.\d+\.\d+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?"
 # Packages with intentionally independent versioning. These are checked for
 # existence but are not forced to the pyproject.toml platform version.
 INDEPENDENT_PACKAGE_JSONS = {
-    ROOT / "Smart Contracts" / "package.json",
+    ROOT / "contracts/smart-contracts" / "package.json",
     ROOT / "playground" / "package.json",
 }
 

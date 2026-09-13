@@ -7,7 +7,7 @@ audience: [architect, dev-senior, ops]
 status: experimental
 since_version: 0.1.0
 canonical_owner: platform@aether
-source_files: [Backend Architecture/aether-backend/services/integrations/connectors/base.py, Backend Architecture/aether-backend/shared/integration_contracts/catalog.py]
+source_files: [services/backend/services/integrations/connectors/base.py, services/backend/shared/integration_contracts/catalog.py]
 last_synced_commit: 8b1ca3dc
 estimated_read_minutes: 5
 toc_depth: 3
@@ -23,7 +23,7 @@ toc_depth: 3
 
 The authoritative enum definitions and the full class/role/policy reference live
 in `CONNECTOR_TAXONOMY.md` (mirroring
-`Backend Architecture/aether-backend/services/integrations/connectors/base.py`).
+`services/backend/services/integrations/connectors/base.py`).
 This document is the policy-interaction view: which default policy each class
 carries, the dual-role rule, and how an elevation is governed. `DUAL_ROLE`
 replaces the older conceptual `IDENTITY_BRIDGE`/`AGENT_TOOL` rows — those were

@@ -5,7 +5,7 @@ The pricing & quotas reference page is the most-cited piece of operator
 documentation: every customer sizing conversation links to it. The
 canonical source of truth is::
 
-    Backend Architecture/aether-backend/shared/plans/catalog.py
+    services/backend/shared/plans/catalog.py
 
 This generator parses that module with ``ast`` (no import, no
 dependencies on the rest of the backend) and emits a structured JSON
@@ -16,7 +16,7 @@ Schema::
 
     {
       "version": "0.1.0-alpha.0",
-      "generated_from": "Backend Architecture/aether-backend/shared/plans/catalog.py",
+      "generated_from": "services/backend/shared/plans/catalog.py",
       "plans": [
         {
           "plan_id": "alpha",
@@ -53,7 +53,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-CATALOG_PY = ROOT / "Backend Architecture" / "aether-backend" / "shared" / "plans" / "catalog.py"
+CATALOG_PY = ROOT / "services" / "backend" / "shared" / "plans" / "catalog.py"
 OUTPUT = ROOT / "docs" / "_generated" / "plans.json"
 
 # Fields we expect on each PlanDefinition keyword call.
@@ -174,7 +174,7 @@ def build_payload(text: str) -> dict:
     plans = parse_catalog(text)
     return {
         "version": read_version(),
-        "generated_from": "Backend Architecture/aether-backend/shared/plans/catalog.py",
+        "generated_from": "services/backend/shared/plans/catalog.py",
         "plans": plans,
     }
 

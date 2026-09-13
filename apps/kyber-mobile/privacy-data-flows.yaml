@@ -5,7 +5,7 @@
 #   * `purpose` MUST be a real purpose key in
 #     packages/shared/contracts/consent-registry.json (the 12-purpose registry);
 #   * `classification` MUST be a real tier in the backend DataClassification
-#     taxonomy (Backend Architecture/aether-backend/shared/privacy/classification.py),
+#     taxonomy (services/backend/shared/privacy/classification.py),
 #     and if `field` is a known key in that module's FIELD_CLASSIFICATIONS registry
 #     the declared tier must match classify_field(field);
 #   * `apple_data_type` / `apple_purpose` / `play_purpose` MUST be members of the

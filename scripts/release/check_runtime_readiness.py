@@ -33,7 +33,7 @@ def validate() -> list[str]:
             errors.append(f"RUNTIME_ROLE_MISMATCH:{role}")
     if services.get("api", {}).get("environment", {}).get("AETHER_ROLE") != "api":
         errors.append("RUNTIME_API_ATTACHES_WORKERS")
-    source = (ROOT / "Backend Architecture/aether-backend/services/runtime/consumer_specs.py").read_text()
+    source = (ROOT / "services/backend/services/runtime/consumer_specs.py").read_text()
     names = [line.split('name="', 1)[1].split('"', 1)[0]
              for line in source.splitlines() if 'name="' in line]
     if len(names) != len(set(names)):

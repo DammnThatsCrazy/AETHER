@@ -72,31 +72,31 @@ These surfaces are real, load-bearing parts of the platform but are not
 backed by a `.schema.json` or registry `.json` in either contract directory.
 They are governed only by code review, tests, or narrative docs:
 
-- **Jobs platform** (`Backend Architecture/**/services/jobs/**`) — governed by
+- **Jobs platform** (`docs/archive/legacy-architecture/backend/**/services/jobs/**`) — governed by
   `docs/source-of-truth/JOBS_PLATFORM.md` and tests only; no schema.
-- **Tenant import engine** (`services/imports/**`) — has a TS/Python contract
-  twin (`packages/shared/imports.ts` ↔ `services/imports/contracts.py`) but no
+- **Tenant import engine** (`services/backend/services/imports/**`) — has a TS/Python contract
+  twin (`packages/shared/imports.ts` ↔ `services/backend/services/imports/contracts.py`) but no
   registered JSON Schema/registry file under either contracts directory.
-- **Data exchange plane** (`services/data_exchange/**`, `services/reports/**`)
+- **Data exchange plane** (`services/backend/services/data_exchange/**`, `services/backend/services/reports/**`)
   — has a TS/Python twin (`packages/shared/data-exchange.ts`) but no schema
   file in `contracts/`.
 - **Reconciled control plane / managed integrations**
-  (`services/managed_integrations/**`, `services/security/**`) — TS/Python
+  (`services/backend/services/managed_integrations/**`, `services/backend/services/security/**`) — TS/Python
   twins (`packages/shared/managed-integrations.ts`,
   `packages/shared/security-governance.ts`) exist; no JSON Schema.
-- **Computation substrate** (`services/computation/**`) — governed by
+- **Computation substrate** (`services/backend/services/computation/**`) — governed by
   `config/computation_inventory.yaml`, not a `contracts/` schema.
-- **Universal asset registry** (`services/assets/**`) — governed by
+- **Universal asset registry** (`services/backend/services/assets/**`) — governed by
   `docs/BACKEND-API.md` and route tests; no schema file.
-- **Event-time valuation** (`services/valuation/**`) — governed by narrative
+- **Event-time valuation** (`services/backend/services/valuation/**`) — governed by narrative
   invariants in `docs/source-of-truth/**`; no schema file.
 - **Ingress adapter registry / universal ingestion gateway**
-  (`services/ingestion/adapters/**`, `gateway.py`) — governed by code +
+  (`services/backend/services/ingestion/adapters/**`, `gateway.py`) — governed by code +
   `tests/unit/observation`; consumes the Envelope-B registry but is not
   itself schema-defined.
-- **Ingestion replay + normalization spine** (`services/ingestion/replay.py`,
+- **Ingestion replay + normalization spine** (`services/backend/services/ingestion/replay.py`,
   `spine.py`) — feature-flag-gated behavior with test coverage; no schema.
-- **Backend HTTP routes generally** (`Backend Architecture/**/routes/**`) —
+- **Backend HTTP routes generally** (`docs/archive/legacy-architecture/backend/**/routes/**`) —
   covered by `docs/BACKEND-API.md` (generated) and route tests, not by a
   request/response JSON Schema per endpoint.
 - **Deployment profiles / Terraform topology**

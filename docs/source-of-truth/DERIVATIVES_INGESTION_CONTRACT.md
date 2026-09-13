@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/derivatives/runtime_routes.py, Backend Architecture/aether-backend/services/derivatives/adapters/base.py, Backend Architecture/aether-backend/services/derivatives/streams.py]
+source_files: [services/backend/services/derivatives/runtime_routes.py, services/backend/services/derivatives/adapters/base.py, services/backend/services/derivatives/streams.py]
 canonical_owner: platform@aether
 last_synced_commit: 03ab3a6
 ---

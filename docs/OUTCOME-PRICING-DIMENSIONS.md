@@ -21,7 +21,7 @@ that config is approved.
 ## Entitlement mapping
 
 Each dimension can be configured per tenant as a `TenantEntitlement`
-(`services/billing/revops.py`): `feature_key` = the dimension, with
+(`services/backend/services/billing/revops.py`): `feature_key` = the dimension, with
 `included_quantity`, `overage_allowed`, and `overage_unit_price_notes`. The
 `EntitlementService` splits usage into included vs. overage; `UsageSummaryService`
 and `InvoicePreviewService` build invoice previews from the split.

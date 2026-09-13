@@ -7,10 +7,10 @@ audience: [architect, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/repositories/typed_repo.py
+  - services/backend/repositories/typed_repo.py
 canonical_owner: platform@aether
 source_hashes:
-  "Backend Architecture/aether-backend/repositories/typed_repo.py": "sha256:b0e0fe79957acc7a7009ff34da11be9979d4b21039606c9f67f45650db99a9ac"
+  "services/backend/repositories/typed_repo.py": "sha256:b0e0fe79957acc7a7009ff34da11be9979d4b21039606c9f67f45650db99a9ac"
 ---
 
 # ADR-005: Typed Financial Repositories over JSONB

@@ -25,7 +25,7 @@ SDK evidence (web/android/ios/react-native)
         └─ _resolve_campaign_rows      (campaign identity ONLY when campaign evidence exists)
    → silver_campaign_touchpoint_facts → canonical_activity
    → JourneyCompiler → AttributionEngine → Gold
-   (history repaired via services/traffic/repair.py, immutable revisions)
+   (history repaired via services/backend/services/traffic/repair.py, immutable revisions)
 ```
 
 Classification and campaign identity are **independent**: a touchpoint can carry a
@@ -35,7 +35,7 @@ full source classification with `campaign_resolution_status = not_applicable`.
 
 Single source of truth: `packages/shared/contracts/traffic-source-registry.json`
 → generated `packages/shared/traffic-source.ts` (TS) and
-`Backend Architecture/aether-backend/services/traffic/generated_registry.py` (Python)
+`services/backend/services/traffic/generated_registry.py` (Python)
 via `scripts/generate_contracts.py`.
 
 Independent dimensions: `traffic_origin`, `economic_class`, `channel_family`,
@@ -63,7 +63,7 @@ New nullable columns on `silver_campaign_touchpoint_facts`, `canonical_activity`
 
 ## 5. Historical repair status
 
-`services/traffic/repair.py` reclassifies to v3, normalizing legacy `direct` →
+`services/backend/services/traffic/repair.py` reclassifies to v3, normalizing legacy `direct` →
 `direct_unknown` and legacy `paid` → the split paid_search/paid_social/display, via
 append-only immutable revisions (raw evidence never mutated); dry-run supported.
 

@@ -15,8 +15,7 @@ REGISTRY_JSON = ROOT / "packages" / "shared" / "contracts" / "event-registry.jso
 TS_SOURCE = ROOT / "packages" / "shared" / "events.ts"
 PY_SOURCE = (
     ROOT
-    / "Backend Architecture"
-    / "aether-backend"
+    / "services" / "backend"
     / "services"
     / "ingestion"
     / "generated_registry.py"

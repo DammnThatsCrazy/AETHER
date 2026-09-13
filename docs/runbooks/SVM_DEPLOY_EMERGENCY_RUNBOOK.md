@@ -7,14 +7,14 @@ audience: [ops, dev-senior, security]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Smart Contracts/programs/solana/audit/08-deployment-procedure.md
-  - Smart Contracts/programs/solana/audit/09-pause-rotation-procedure.md
-  - Smart Contracts/programs/solana/registry/upgrade-authority-policy.md
+  - contracts/smart-contracts/programs/solana/audit/08-deployment-procedure.md
+  - contracts/smart-contracts/programs/solana/audit/09-pause-rotation-procedure.md
+  - contracts/smart-contracts/programs/solana/registry/upgrade-authority-policy.md
 canonical_owner: platform@aether
 source_hashes:
-  "Smart Contracts/programs/solana/audit/08-deployment-procedure.md": "sha256:e40cc2aad872891755e5eb84b50a12fab39f518a3e51b5ebaf4e61a09ff841b0"
-  "Smart Contracts/programs/solana/audit/09-pause-rotation-procedure.md": "sha256:f648cedaf0beecc54e0f101c335f95c9256d8f7228a47267cd4b7d4e794b3131"
-  "Smart Contracts/programs/solana/registry/upgrade-authority-policy.md": "sha256:126ca9f59ed8c6789db25f8fdaaf477075f5e554f4cb000ccfb5484cd6e253ad"
+  "contracts/smart-contracts/programs/solana/audit/08-deployment-procedure.md": "sha256:78d567c97c3732b8f88b31305f736565239aec7690b497e7c649da3bf96ace86"
+  "contracts/smart-contracts/programs/solana/audit/09-pause-rotation-procedure.md": "sha256:f648cedaf0beecc54e0f101c335f95c9256d8f7228a47267cd4b7d4e794b3131"
+  "contracts/smart-contracts/programs/solana/registry/upgrade-authority-policy.md": "sha256:126ca9f59ed8c6789db25f8fdaaf477075f5e554f4cb000ccfb5484cd6e253ad"
 ---
 
 # SVM (Solana) Deploy & Emergency Runbook
@@ -22,9 +22,9 @@ source_hashes:
 Operational entry point for the Solana reward program. It points to the audit
 package rather than restating it. Authoritative references:
 
-- Deployment procedure: `Smart Contracts/programs/solana/audit/08-deployment-procedure.md`
-- Pause / rotation / incident procedure: `Smart Contracts/programs/solana/audit/09-pause-rotation-procedure.md`
-- Upgrade-authority policy: `Smart Contracts/programs/solana/registry/upgrade-authority-policy.md`
+- Deployment procedure: `contracts/smart-contracts/programs/solana/audit/08-deployment-procedure.md`
+- Pause / rotation / incident procedure: `contracts/smart-contracts/programs/solana/audit/09-pause-rotation-procedure.md`
+- Upgrade-authority policy: `contracts/smart-contracts/programs/solana/registry/upgrade-authority-policy.md`
 - Threat model / privileged roles: `audit/02-threat-model.md`, `audit/04-privileged-roles.md`
 - Deploy scripts: `programs/solana/migrations/deploy.ts`,
   `programs/solana/scripts/deploy_testnet.sh`, `scripts/smoke_test.sh`

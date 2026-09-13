@@ -2,12 +2,12 @@
 """Generate the TypeScript provider/category mirror — packages/shared/connector-taxonomy.ts.
 
 Sources (read-only — canonical single source of truth, never edited here):
-  Backend Architecture/aether-backend/shared/integration_contracts/catalog.py
+  services/backend/shared/integration_contracts/catalog.py
       ALL_MANIFESTS four-group union — connectors (21) / ad-platforms (7) /
       payment-rails (5) / deferred-credit-bureaus (3). Each ProviderManifest is
       honesty-validated at import (validate_manifest), so everything projected
       here is already honest.
-  Backend Architecture/aether-backend/shared/integration_contracts/experience.py
+  services/backend/shared/integration_contracts/experience.py
       EXPERIENCE_CATEGORIES + experience_category_for (customer-facing grouping,
       ADR-0010). The FE must never re-derive membership, so the derived
       experience→families grouping is emitted as data.
@@ -43,7 +43,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = ROOT / "services" / "backend"
 OUT_TS = ROOT / "packages" / "shared" / "connector-taxonomy.ts"
 
 # The generator imports the real Python catalog from the backend tree.
@@ -55,7 +55,7 @@ if str(BACKEND) not in sys.path:
 # Descriptor-taxonomy template (carried verbatim into the output).
 #
 # This block mirrors the connector-descriptor enums in
-#   Backend Architecture/aether-backend/services/integrations/connectors/base.py
+#   services/backend/services/integrations/connectors/base.py
 # plus the intelligence-source-coverage shape from services/provider_catalog.
 # It predates the unified catalog and is a stable public surface on
 # @aether/shared (frontend/shared/src/status/capability-state.ts imports
@@ -70,17 +70,17 @@ _DESCRIPTOR_TAXONOMY_TEMPLATE = '''/**
  *
  *   1. DESCRIPTOR TAXONOMY (below the header) — a stable compatibility mirror
  *      of the connector-descriptor enums in
- *        Backend Architecture/aether-backend/services/integrations/connectors/base.py
+ *        services/backend/services/integrations/connectors/base.py
  *      (ConnectorClass, ConnectorRole, ImplementationStatus, ...) plus the
  *      provider-corpus intelligence-source coverage shape. Consumed via the
  *      @aether/shared barrel; reproduced verbatim by the generator.
  *
  *   2. PROVIDER / CATEGORY MIRROR (generated) — a pure TypeScript mirror of the
  *      unified integration catalog derived from
- *        Backend Architecture/aether-backend/shared/integration_contracts/catalog.py
+ *        services/backend/shared/integration_contracts/catalog.py
  *      (ALL_MANIFESTS four-group union: connectors / ad-platforms /
  *      payment-rails / deferred-credit-bureaus) and
- *        Backend Architecture/aether-backend/shared/integration_contracts/experience.py
+ *        services/backend/shared/integration_contracts/experience.py
  *      (customer-facing experience categories). Keep it in step by running the
  *      generator — never by hand-editing this file.
  *
@@ -553,7 +553,10 @@ def _build() -> str:
     lines.append("}")
     lines.append("")
 
-    return "\n".join(lines) + "\n"
+    # Keep generated artifacts friendly to the repository's whitespace gate:
+    # callers may append optional sections, but the committed file must end
+    # with exactly one newline rather than a blank line at EOF.
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def main() -> int:

@@ -6,22 +6,22 @@ visibility: C
 audience: [compliance, security, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [GDPR & SOC2/aether-compliance/README.md, GDPR & SOC2/aether-compliance/main.py, GDPR & SOC2/aether-compliance/gdpr/, GDPR & SOC2/aether-compliance/soc2/, GDPR & SOC2/aether-compliance/policies/]
+source_files: [services/compliance/README.md, services/compliance/main.py, services/compliance/gdpr/, services/compliance/soc2/, services/compliance/policies/]
 canonical_owner: compliance@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "GDPR & SOC2/aether-compliance/README.md": "sha256:513928c715bfee43b5077bd260db7a170a46fa95b313ac50ea365303cdcfd2e7"
-  "GDPR & SOC2/aether-compliance/gdpr/": "sha256:8cd8165cd51300182bd4712ab461ac8cea863835c78ddd2436c24d9d980ac326"
-  "GDPR & SOC2/aether-compliance/main.py": "sha256:2b8ddf37aca8aa4b645e40abb4a80be50828046b41afa9e97ddb1d29bf8ee2b8"
-  "GDPR & SOC2/aether-compliance/policies/": "sha256:dcf1e2b334e497de4559884e7c4aeab0aa6d15bcbb9fb95f05e614f6e12e8f53"
-  "GDPR & SOC2/aether-compliance/soc2/": "sha256:fe1106b77ee63999fb2d9548b3a2fc477c139a244ba7073018ff28b4d8a61592"
+  "services/compliance/README.md": "sha256:513928c715bfee43b5077bd260db7a170a46fa95b313ac50ea365303cdcfd2e7"
+  "services/compliance/gdpr/": "sha256:2298051ab00184ea73d4a7ee7136c6944c1beaccaec007a9b2079087544fbda3"
+  "services/compliance/main.py": "sha256:2b8ddf37aca8aa4b645e40abb4a80be50828046b41afa9e97ddb1d29bf8ee2b8"
+  "services/compliance/policies/": "sha256:68c0713cd6d1b4ab6f25cab6d2874d9fb25c00804335367ce9dc897c150aed8a"
+  "services/compliance/soc2/": "sha256:6e806dcc59f06bfc50d58711a1514aa5e288a85e341bdbc4902ad897537717bd"
 ---
 
 # Compliance Framework — GDPR & SOC 2
 
 This page describes Aether's compliance posture, data-protection controls, and
-the automated framework (`GDPR & SOC2/aether-compliance/`) that operationalises
+the automated framework (`services/compliance/`) that operationalises
 those obligations. It is intended for customers evaluating Aether and for
 internal compliance and security teams.
 
@@ -97,7 +97,7 @@ supervisory authority notification target (GDPR Article 33):
 7. Supervisory authority notification (if required, within 72 hours of detection)
 8. Data subject notification (if required, without undue delay)
 
-The runbook is maintained in `GDPR & SOC2/aether-compliance/gdpr/breach_response.py`.
+The runbook is maintained in `services/compliance/gdpr/breach_response.py`.
 
 ### Data Protection Impact Assessments
 
@@ -130,7 +130,7 @@ Nine processing activities are documented in the ROPA:
 ### Generated policy documents
 
 The compliance framework generates six policy documents from canonical source
-data at `GDPR & SOC2/aether-compliance/policies/`:
+data at `services/compliance/policies/`:
 
 - Privacy Policy
 - Cookie Policy
@@ -180,7 +180,7 @@ The 34 controls are distributed across the five Trust Service Criteria:
 
 ## Compliance automation
 
-The compliance framework is implemented in Python at `GDPR & SOC2/aether-compliance/`.
+The compliance framework is implemented in Python at `services/compliance/`.
 
 | Module | Purpose |
 |--------|---------|

@@ -40,7 +40,7 @@ import sys
 import tokenize
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BACKEND = os.path.join(ROOT, "Backend Architecture", "aether-backend")
+BACKEND = os.path.join(ROOT, "services", "backend")
 REGISTRY = os.path.join(
     ROOT, "packages", "shared", "contracts", "relationship-predicate-registry.json"
 )

@@ -18,7 +18,7 @@ classification taxonomy — it does not build a second compliance stack.
 ## Mobile data is reachable by a data-subject erasure
 
 Every mobile principal-scoped store is erased end-to-end by the durable
-`consent.erasure` job (`services/consent/erasure_jobs.py`) with **real evidence** — a
+`consent.erasure` job (`services/backend/services/consent/erasure_jobs.py`) with **real evidence** — a
 component is marked `completed` only with the actual erased-row count from that store,
 never a fabricated one:
 

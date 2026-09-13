@@ -6,11 +6,11 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/shared/graph/graph.py, Backend Architecture/aether-backend/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts]
+source_files: [services/backend/shared/graph/graph.py, services/backend/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts]
 canonical_owner: platform@aether
 source_hashes:
-  Backend Architecture/aether-backend/shared/graph/graph.py: sha256:689f7581a371f6f4f48ca17745a2fb31f88d45f5614da95d69e9d805c4212428
-  Backend Architecture/aether-backend/shared/graph/relationship_layers.py: sha256:0136d18ace82541dbb684d486ad12e93be47f0b726de9b9ba0120bcff753c48e
+  services/backend/shared/graph/graph.py: sha256:689f7581a371f6f4f48ca17745a2fb31f88d45f5614da95d69e9d805c4212428
+  services/backend/shared/graph/relationship_layers.py: sha256:0136d18ace82541dbb684d486ad12e93be47f0b726de9b9ba0120bcff753c48e
   packages/shared/graph-contract.ts: sha256:e8344420da6181b78831c95bc132fdbdfac8ebb92235524ab2191bb4ab74004a
 ---
 
@@ -88,13 +88,13 @@ and 9 edge types (`CAME_FROM`, `PARTICIPATED_IN`, `USED_PROVIDER`,
 `RelationshipLayer.EXCLUDED` — card-linked behavior is intentionally
 never usable as deterministic identity-merge evidence. PaymentScan
 benchmark rows are never projected to the graph at all
-(`services/card_linked_payments/graph_projector.py`).
+(`services/backend/services/card_linked_payments/graph_projector.py`).
 
 The semantic-intelligence relationship Gold follows the same projection
 rules: `SEMANTIC_RELATES_TO` (directed entity → entity, a derived analytics
 overlay) is mapped to `RelationshipLayer.EXCLUDED` in `_EDGE_LAYER_MAP` and is
 projected by the semantic graph projector
-(`services/semantic_intelligence/graph_projector.py`) from
+(`services/backend/services/semantic_intelligence/graph_projector.py`) from
 `gold_relationship_semantic_state` through the canonical `GraphMutationGateway`
 — governed (edge intent, ledger-aware in shadow/enforce mode), idempotent, and
 tenant-scoped, gated on `SEMANTIC_GRAPH_PROJECTOR_ENABLED` (default OFF). See

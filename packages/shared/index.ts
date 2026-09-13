@@ -37,7 +37,7 @@ export * from './economic';
 // NOTE (WS-C row 28 / SDK thinness): ./economic-metrics was previously
 // star-exported here. It ships SDK-side interpretation of backend economic
 // aggregation; canonical home is the backend
-// (Backend Architecture/aether-backend/services/economic/economic360_contracts.py).
+// (services/backend/services/economic/economic360_contracts.py).
 // Consumers that still need the passive UnifiedEconomicBreakdown contract type
 // import it via the explicit subpath '@aether/shared/economic-metrics'
 // (packages/shared/profile360-contract.ts), NOT from this public barrel. Do NOT
@@ -181,7 +181,7 @@ export * from './social-provider-capability-vocabulary';
 // NOTE (WS-C row 28 / SDK thinness): ./commerce-bridge was previously
 // star-exported here. It carries SDK-side interpretation (confirmation / money /
 // canonical event mapping) whose canonical home is the backend
-// (Backend Architecture/aether-backend/shared/integration_contracts/commerce_bridge.py).
+// (services/backend/shared/integration_contracts/commerce_bridge.py).
 // The web SDK imports only the source-observable signal types + schema version it
 // needs via the explicit subpath '@aether/shared/commerce-bridge'
 // (packages/web/src/modules/commerce-detection.ts), NOT from this public barrel.

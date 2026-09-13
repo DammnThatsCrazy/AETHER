@@ -22,7 +22,7 @@ export scope mismatches, and billing scope mismatches.
 
 Contamination is not merely a data-quality signal — high/critical contamination
 escalates into the Security & Governance audit ledger
-(`services/security/audit_ledger.py`) as a
+(`services/backend/services/security/audit_ledger.py`) as a
 `data_quality_contamination_detected` event, with the `escalated_audit_event_id`
 recorded on the originating [Drift Event](DRIFT-DETECTION.md). Low-severity,
 auto-corrected signals do not escalate.

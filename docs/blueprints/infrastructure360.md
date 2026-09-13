@@ -76,7 +76,7 @@ Per ADR-010 and the vertical-slice checklist §9:
 
 ## 4. How it works
 
-### 4.1 Contracts (`services/infrastructure/contracts.py`)
+### 4.1 Contracts (`services/backend/services/infrastructure/contracts.py`)
 
 Canonical infrastructure domain models (Pydantic v2, tolerant `ContractModel`):
 
@@ -90,11 +90,11 @@ Canonical infrastructure domain models (Pydantic v2, tolerant `ContractModel`):
 
 **Reuse, never redefine**: `EntityRef`, `EvidenceRef`, `PageRequest`,
 `TimeRangeFilter` (and `ContractModel`) are imported from
-`services/operational_intelligence/models.py`. This package declares **no**
+`services/backend/services/operational_intelligence/models.py`. This package declares **no**
 second copy of any canonical primitive (checklist §2; enforced by the
 no-redefinition test).
 
-### 4.2 Taxonomy (`services/infrastructure/taxonomy.py`)
+### 4.2 Taxonomy (`services/backend/services/infrastructure/taxonomy.py`)
 
 Pure, deterministic, I/O-free:
 
@@ -108,7 +108,7 @@ Pure, deterministic, I/O-free:
 - `RELATIONSHIP_SEMANTICS` — the single canonical meaning of each edge type.
 - `DEPLOYMENT_TARGET_KINDS` — the entity kinds a deployment may land on.
 
-### 4.3 Provider (`services/infrastructure/provider.py`)
+### 4.3 Provider (`services/backend/services/infrastructure/provider.py`)
 
 `Infrastructure360Provider` implements the plane's
 `IntelligenceProjectionProvider` **Protocol** (`projection_id`, `contract_version`
@@ -119,8 +119,8 @@ Pure, deterministic, I/O-free:
 
 1. Reads canonical sources through a tenant-scoped reader
    (`canonical_reader(request.tenantId)`). The default reader imports
-   `services/provider_runtime/registry.py` (provider/service health),
-   `services/model_runtime/` (model-service presence) and `services/noesis/`
+   `services/backend/services/provider_runtime/registry.py` (provider/service health),
+   `services/backend/services/model_runtime/` (model-service presence) and `services/backend/services/noesis/`
    (deployments) **lazily and defensively**; an authority that cannot be read is
    named in `degraded_sources`.
 2. Re-filters every reader record by `request.tenantId` as a
@@ -138,10 +138,10 @@ Pure, deterministic, I/O-free:
    assertion (checklist §7).
 
 `register_provider(registry)` registers the provider under
-`source="services/infrastructure"`. It does **not** auto-register on the global
+`source="services/backend/services/infrastructure"`. It does **not** auto-register on the global
 `projection_registry` at import time — wiring is the caller's job.
 
-### 4.4 Routes (`services/infrastructure/routes.py`)
+### 4.4 Routes (`services/backend/services/infrastructure/routes.py`)
 
 A FastAPI `APIRouter` at prefix `/v1/infrastructure` (declared in
 `config/route_registry.yaml` `known_prefixes`, between `/v1/imports` and

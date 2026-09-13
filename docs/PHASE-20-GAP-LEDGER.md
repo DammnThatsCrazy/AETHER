@@ -29,28 +29,28 @@ Successor to `UNIVERSAL_INTELLIGENCE_GRAPH_IMPLEMENTATION.md`. Phases 1–19 are
 
 | ID | Description | Priority | Status | Phase | File(s) |
 |----|-------------|----------|--------|-------|---------|
-| G01 | No PathNode/PathEdge/RelationshipPath/PathExplanation/TraversalSnapshot Pydantic models | P1 | ✅ | 1A | `services/operational_intelligence/models.py` |
+| G01 | No PathNode/PathEdge/RelationshipPath/PathExplanation/TraversalSnapshot Pydantic models | P1 | ✅ | 1A | `services/backend/services/operational_intelligence/models.py` |
 | G02 | No versioned path-scoring system (`path_scoring.py`) | P1 | ✅ | 1B | `shared/graph/path_scoring.py` |
 | G03 | No `strongest_path()` algorithm (confidence-weighted Dijkstra) | P1 | ✅ | 1D | `shared/graph/traversal.py` |
 | G04 | No `k_shortest_paths()` algorithm (Yen's) | P1 | ✅ | 1D | `shared/graph/traversal.py` |
 | G05 | No `multi_source_bfs()` | P1 | ✅ | 1D | `shared/graph/traversal.py` |
 | G06 | `TraversalResult` lacks `ordered_node_ids`/`ordered_edge_ids` fields | P1 | ✅ | 1C | `shared/graph/traversal.py` |
-| G07 | No `POST /v1/graph/paths` endpoint (PathQuery → RelationshipPath[]) | P1 | ✅ | 2A | `services/operational_intelligence/routes.py` |
-| G08 | No `POST /v1/graph/paths/expand` endpoint | P1 | ✅ | 2A | `services/operational_intelligence/routes.py` |
-| G09 | No `POST /v1/graph/paths/explain` endpoint | P1 | ✅ | 2A | `services/operational_intelligence/routes.py` |
-| G10 | No `POST /v1/graph/snapshots` / `GET /v1/graph/snapshots/{id}` | P1 | ✅ | 2A | `services/operational_intelligence/routes.py` |
-| G11 | No `POST /v1/graph/paths/jobs` / `GET /v1/graph/paths/jobs/{id}` (async deep traversal) | P2 | ✅ | 2A | `services/operational_intelligence/routes.py` |
-| G12 | No `POST /v1/graph/snapshots/{id}/compare` | P2 | ✅ | 2A | `services/operational_intelligence/routes.py` |
+| G07 | No `POST /v1/graph/paths` endpoint (PathQuery → RelationshipPath[]) | P1 | ✅ | 2A | `services/backend/services/operational_intelligence/routes.py` |
+| G08 | No `POST /v1/graph/paths/expand` endpoint | P1 | ✅ | 2A | `services/backend/services/operational_intelligence/routes.py` |
+| G09 | No `POST /v1/graph/paths/explain` endpoint | P1 | ✅ | 2A | `services/backend/services/operational_intelligence/routes.py` |
+| G10 | No `POST /v1/graph/snapshots` / `GET /v1/graph/snapshots/{id}` | P1 | ✅ | 2A | `services/backend/services/operational_intelligence/routes.py` |
+| G11 | No `POST /v1/graph/paths/jobs` / `GET /v1/graph/paths/jobs/{id}` (async deep traversal) | P2 | ✅ | 2A | `services/backend/services/operational_intelligence/routes.py` |
+| G12 | No `POST /v1/graph/snapshots/{id}/compare` | P2 | ✅ | 2A | `services/backend/services/operational_intelligence/routes.py` |
 | G13 | `TraversalSnapshotRepository` and `DeepTraversalJobRepository` missing from repos.py | P1 | ✅ | 2B | `repositories/repos.py` |
-| G14 | OODA `Recommendation` lacks `path_refs: list[str]` and `snapshot_ref: str` | P2 | ✅ | 3A | `services/intelligence/decision_models.py` |
-| G15 | Suggestion adapters don't populate `graphRefs` with canonical path_ids | P2 | ✅ | 3B | `services/suggestions/adapters/graph_adapter.py`, `services/suggestions/lifecycle.py` |
-| G16 | No persistent `Investigation` with `snapshot_id` + `path_ids` linkage | P2 | ✅ | 3C | `services/operational_intelligence/models.py`, `services/investigation/routes.py` |
-| G17 | No Silver projection reconciliation worker | P2 | ✅ | 3D | `services/silver/reconciliation.py` |
+| G14 | OODA `Recommendation` lacks `path_refs: list[str]` and `snapshot_ref: str` | P2 | ✅ | 3A | `services/backend/services/intelligence/decision_models.py` |
+| G15 | Suggestion adapters don't populate `graphRefs` with canonical path_ids | P2 | ✅ | 3B | `services/backend/services/suggestions/adapters/graph_adapter.py`, `services/backend/services/suggestions/lifecycle.py` |
+| G16 | No persistent `Investigation` with `snapshot_id` + `path_ids` linkage | P2 | ✅ | 3C | `services/backend/services/operational_intelligence/models.py`, `services/backend/services/investigation/routes.py` |
+| G17 | No Silver projection reconciliation worker | P2 | ✅ | 3D | `services/backend/services/silver/reconciliation.py` |
 | G18 | No `PathInspector` component + TS canonical path types | P3 | ✅ | 4A/4B | `packages/shared/operational-intelligence.ts`, `frontend/kyber/src/components/graph/path-inspector.tsx`, `frontend/aether/src/components/graph/path-inspector.tsx` |
 | G19 | Graph toolbar lacks target-node selector and traversal-mode control | P3 | ✅ | 4D | `frontend/kyber/src/components/graph/graph-toolbar.tsx` |
 | G20 | Aether graph-page calls local BFS instead of real `/v1/graph/paths` API | P3 | ✅ | 4E | `frontend/aether/src/pages/graph/graph-page.tsx` |
 | G21 | New endpoints not wired in Kyber/Aether `endpoints.ts` API clients | P3 | ✅ | 4C | `frontend/kyber/src/lib/api/endpoints.ts`, `frontend/aether/src/lib/api/endpoints.ts` |
-| G22 | `GET /v1/graph/capabilities` response not updated with new capabilities | P3 | ✅ | 2A | `services/operational_intelligence/routes.py` |
+| G22 | `GET /v1/graph/capabilities` response not updated with new capabilities | P3 | ✅ | 2A | `services/backend/services/operational_intelligence/routes.py` |
 | G23 | Canonical Path Intelligence Architecture docs missing | P3 | ✅ | 5 | `docs/CANONICAL-PATH-INTELLIGENCE.md`, `docs/MULTI-HOP-TRAVERSAL.md` |
 | G24 | Phase-20 successor gap-ledger doc missing | P3 | ✅ | 5 | `docs/PHASE-20-GAP-LEDGER.md` (this file) |
 

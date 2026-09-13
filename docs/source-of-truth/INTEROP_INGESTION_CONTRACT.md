@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/interop/correlation.py, Backend Architecture/aether-backend/services/interop/providers/base.py, Backend Architecture/aether-backend/services/interop/providers/layerzero_v2.py, Backend Architecture/aether-backend/services/interop/providers/layerzero_abi.py]
+source_files: [services/backend/services/interop/correlation.py, services/backend/services/interop/providers/base.py, services/backend/services/interop/providers/layerzero_v2.py, services/backend/services/interop/providers/layerzero_abi.py]
 canonical_owner: platform@aether
 last_synced_commit: 1f19190
 ---

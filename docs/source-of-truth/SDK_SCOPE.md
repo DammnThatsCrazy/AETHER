@@ -101,7 +101,7 @@ not listed is backend responsibility.
 | User hydration | Emit `userId` field on events after host app login | Resolve `userId` → `canonical_entity_id` |
 | Wallet signals | Emit `walletAddress` field; emit `wallet_signature_verified` when host app provides proof | Verify proof, map wallet → `canonical_entity_id` |
 | Device fingerprint | Collect and emit fingerprint (consent-gated) | Use as weak support signal only; never promote to sole proof |
-| `canonical_entity_id` | **Never set, never emit, never read** | Assign after Bronze ingestion via `services/identity/resolver.py` |
+| `canonical_entity_id` | **Never set, never emit, never read** | Assign after Bronze ingestion via `services/backend/services/identity/resolver.py` |
 | Cross-device linking | Emit all available signals per event | Resolve cross-device links tenant-scoped, consent-gated |
 | Conflict resolution | — | Enqueue candidates; expose operator review via `/v1/identity/conflicts` |
 | Merge / split | — | Operator-initiated via `/v1/identity/merge` and `/v1/identity/split` |

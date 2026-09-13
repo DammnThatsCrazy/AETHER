@@ -256,7 +256,12 @@ Notifications fire on: CI failure, CD start, CD success, rollback, demo deployme
 
 ### `change_detect.py`
 
-Monorepo-aware change detection that compares against `origin/develop` to run only affected services through the pipeline. Paths under `.github/`, `config/`, `infrastructure/`, and `packages/common/` always trigger a full pipeline run.
+This package is a legacy, local CI orchestration fixture. GitHub Actions under
+`.github/workflows/` and the root `Makefile` are the hosted and canonical
+authorities; this nested pipeline is not a second deployment control plane.
+Monorepo-aware change detection that compares against `origin/develop` to run
+only affected services through the fixture pipeline. Paths under `.github/`,
+`config/`, `deploy/aws/`, and `packages/shared/` always trigger a full run.
 
 ---
 
@@ -268,25 +273,25 @@ The pipeline manages the following Aether monorepo layout:
 
 | Path                         | Language   | Build Tool |
 | ---------------------------- | ---------- | ---------- |
-| `packages/sdk-web`           | TypeScript | esbuild    |
-| `packages/sdk-ios`           | Swift      | xcodebuild |
-| `packages/sdk-android`       | Kotlin     | gradle     |
-| `packages/sdk-react-native`  | TypeScript | metro      |
-| `packages/common`            | TypeScript | esbuild    |
+| `packages/web`               | TypeScript | esbuild    |
+| `packages/ios`               | Swift      | xcodebuild |
+| `packages/android`           | Kotlin     | gradle     |
+| `packages/react-native`      | TypeScript | metro      |
+| `packages/shared`            | TypeScript | esbuild    |
 
 **Services (9)**
 
 | Path                       | Language   | Runtime |
 | -------------------------- | ---------- | ------- |
-| `services/ingestion`       | TypeScript | Node    |
-| `services/identity`        | TypeScript | Node    |
-| `services/analytics`       | TypeScript | Node    |
-| `services/ml-serving`      | Python     | Python  |
-| `services/agent`           | Python     | Python  |
-| `services/campaign`        | TypeScript | Node    |
-| `services/consent`         | TypeScript | Node    |
-| `services/notification`    | TypeScript | Node    |
-| `services/admin`           | TypeScript | Node    |
+| `services/backend/services/ingestion`       | Python | Python  |
+| `services/backend/services/identity`        | Python | Python  |
+| `services/backend/services/analytics`       | Python | Python  |
+| `services/backend/services/ml_serving`      | Python | Python  |
+| `services/backend/services/agent`            | Python | Python  |
+| `services/backend/services/campaign`        | Python | Python  |
+| `services/backend/services/consent`         | Python | Python  |
+| `services/backend/services/notification`    | Python | Python  |
+| `services/backend/services/admin`           | Python | Python  |
 
 ---
 

@@ -35,7 +35,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BACKEND = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = ROOT / "services" / "backend"
 
 os.environ.setdefault("AETHER_ENV", "local")
 os.environ.setdefault("JWT_SECRET", "seam-validator")

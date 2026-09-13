@@ -94,7 +94,7 @@ Key: `SHA256(tenant_id:event_id:schema_version)` — tenant-scoped so two tenant
 
 `POST /v1/batch` is implemented in:
 ```
-Backend Architecture/aether-backend/services/ingestion/batch.py
+services/backend/services/ingestion/batch.py
 ```
 
 From there events flow into Kafka (`aether.sdk.events.validated`) and into
@@ -149,7 +149,7 @@ Fingerprint alone must never promote a sensitive identity link to high confidenc
 ## Post-ingestion identity resolution
 
 After an event batch is written to Bronze (`bronze_sdk_events`) and published to
-Kafka, `services/identity/resolver.py` processes each event asynchronously to
+Kafka, `services/backend/services/identity/resolver.py` processes each event asynchronously to
 assign or update `canonical_entity_id`. This step is **not** part of the
 synchronous `POST /v1/batch` response — ingestion and resolution are decoupled.
 
@@ -216,7 +216,7 @@ an operator action; it does not re-invoke `POST /v1/batch`.
 ## Canonical validation boundary
 
 Both the legacy and transactional-outbox batch branches call
-`services/ingestion/validation.py` before any Bronze write or downstream
+`services/backend/services/ingestion/validation.py` before any Bronze write or downstream
 publish. The shared result owns schema/type validation, execution-claim
 normalization, recursive sensitive-field scrubbing, server-authoritative consent,
 live `Sec-GPC`/`DNT` request signals, fingerprint-signal classification,

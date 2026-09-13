@@ -37,5 +37,5 @@ communication intent (campaign / journey / agent trigger)
 ## Current State
 
 Communication architecture is partially implemented. See
-`Backend Architecture/aether-backend/services/communications/` for the
+`services/backend/services/communications/` for the
 current runtime.

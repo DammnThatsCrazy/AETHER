@@ -24,13 +24,13 @@ const ARTIFACTS: Artifact[] = [
     slug: 'plans',
     title: 'Plans & Pricing',
     description: 'Subscription plans, quotas, overage rates, and billing cadences.',
-    source: 'Backend Architecture/aether-backend/shared/plans/catalog.py',
+    source: 'services/backend/shared/plans/catalog.py',
   },
   {
     slug: 'providers',
     title: 'Provider Matrix',
     description: 'External data providers organized by integration category.',
-    source: 'Backend Architecture/aether-backend/shared/providers/categories.py',
+    source: 'services/backend/shared/providers/categories.py',
   },
 ];
 

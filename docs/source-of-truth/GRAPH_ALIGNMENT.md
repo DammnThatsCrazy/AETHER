@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/shared/graph/graph.py, Backend Architecture/aether-backend/shared/graph/relationship_layers.py, Backend Architecture/aether-backend/shared/graph/write_validator.py, Backend Architecture/aether-backend/shared/graph/edge_properties.py, Backend Architecture/aether-backend/services/lake/graph_mutations.py]
+source_files: [services/backend/shared/graph/graph.py, services/backend/shared/graph/relationship_layers.py, services/backend/shared/graph/write_validator.py, services/backend/shared/graph/edge_properties.py, services/backend/services/lake/graph_mutations.py]
 canonical_owner: graph@aether
 last_synced_commit: 401f9bd
 ---
@@ -14,8 +14,8 @@ last_synced_commit: 401f9bd
 # Graph Alignment
 
 Which SDK events feed which Intelligence Graph layer. Vertex/edge definitions
-live in `Backend Architecture/aether-backend/shared/graph/graph.py`. Event→
-mutation wiring lives in `services/lake/graph_mutations.py`.
+live in `services/backend/shared/graph/graph.py`. Event→
+mutation wiring lives in `services/backend/services/lake/graph_mutations.py`.
 
 ## Layer L0 — on-chain (`IG_ONCHAIN_LAYER`)
 
@@ -111,5 +111,5 @@ H2A and A2H edges additionally require:
 Event emission is always allowed client-side. Backend processing into the
 graph is gated by `IG_AGENT_LAYER`, `IG_COMMERCE_LAYER`, `IG_X402_LAYER`,
 `IG_ONCHAIN_LAYER` environment variables (see
-`Backend Architecture/aether-backend/config/settings.py`). When a layer is
+`services/backend/config/settings.py`). When a layer is
 off, the event is still stored in the lake but does not mutate the graph.

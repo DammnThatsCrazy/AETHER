@@ -37,7 +37,7 @@ DynamoDB On-Demand charges per read/write unit consumed — cost is zero at zero
 traffic. No cluster management required. SDK-compatible with `boto3`.
 
 **Local development:** The `AETHER_ENV=local` flag enables in-memory fallback
-in `Backend Architecture/aether-backend/shared/cache.py`. No DynamoDB or Redis
+in `services/backend/shared/cache.py`. No DynamoDB or Redis
 dependency is required to run locally.
 
 **Legacy rollback:** The `docker-compose --profile legacy` profile re-enables

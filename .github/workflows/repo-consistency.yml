@@ -153,12 +153,12 @@ jobs:
           selected="$(python -c 'import json; print(json.load(open("release-evidence/build-selection.json"))["backend_image"])')"
           case "$selected" in
             True)
-              test -f "Backend Architecture/aether-backend/Dockerfile" || {
+              test -f "services/backend/Dockerfile" || {
                 echo "Impact Graph selected backend_image but the canonical Dockerfile is missing" >&2
                 exit 1
               }
               docker build \
-                --file "Backend Architecture/aether-backend/Dockerfile" \
+                --file "services/backend/Dockerfile" \
                 --tag "aether-backend:pr-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
                 .
               ;;

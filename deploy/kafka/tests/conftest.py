@@ -14,7 +14,7 @@ from pathlib import Path
 
 _KAFKA_DIR = Path(__file__).resolve().parent.parent  # deploy/kafka
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent  # repo root
-_BACKEND_DIR = _REPO_ROOT / "Backend Architecture" / "aether-backend"
+_BACKEND_DIR = _REPO_ROOT / "services" / "backend"
 
 for _path in (_KAFKA_DIR, _BACKEND_DIR):
     if str(_path) not in sys.path:

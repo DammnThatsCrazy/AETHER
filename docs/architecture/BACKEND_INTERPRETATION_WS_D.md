@@ -51,7 +51,7 @@ Execution-state row 658 (`EXECUTION_STATE.md`) names this lane.
 ## 2. Flags
 
 All flags live on `Settings.backend_interpretation`
-(`Backend Architecture/aether-backend/config/settings.py`,
+(`services/backend/config/settings.py`,
 `BackendInterpretationConfig`) and are read through function-local helpers in
 `shared/backend_interpretation/flags.py` (import-defensive; never drags the full
 settings graph into a projector). Declared in `.env.example` and
@@ -107,14 +107,14 @@ outcomes telling one story (a support ticket, a user journey, an execution run).
 It carries its own evidence lineage and the ids of the rows it spans — it
 indexes canonical truth, never replaces it.
 
-- `EpisodeEngine` (`services/measurement/episodes/engine.py`) keys an *open
+- `EpisodeEngine` (`services/backend/services/measurement/episodes/engine.py`) keys an *open
   episode* by `(tenant, subject, kind)`: the first observation opens it, later
   observations append evidence/observation ids and widen `occurred_from`/`to`,
   and an explicit `close` (or an `episode.close` completion-kind observation)
   closes it. Episode ids are deterministic digests of `(tenant, subject, kind,
   genesis)` so a second episode for the same key after a close never overwrites
   the closed row. All writes are durable through `EpisodeStore`.
-- `Episode360Provider` (`services/measurement/episodes/provider.py`) is the
+- `Episode360Provider` (`services/backend/services/measurement/episodes/provider.py`) is the
   `episode360` intelligence-projection read surface (six sections: evidence /
   interactions / outcomes / state / summary / timeline), grounded in each
   episode's evidence lineage and fail-isolated like the outcome360 contract.
@@ -142,12 +142,12 @@ outcome-truth surface instead of leaving the hole:
   row into the lineaged record (idempotent key `tenant:event_id:outcome_type`);
   `persist_outcome_truth` is the durable-write seam. Both are no-ops when the
   flag is OFF.
-- `services/ingestion/workers.py` `silver_fact_projector`: when the flag is ON,
+- `services/backend/services/ingestion/workers.py` `silver_fact_projector`: when the flag is ON,
   every projected `silver_outcome_facts` row is mirrored into the truth store
   (best-effort; Bronze is durable and replay recovers missed rows — a recorder
   failure never fails the projection).
 - `OutcomeTruthStoreReader` (`stores.py`) satisfies the
-  `OutcomeStore` protocol (`services/measurement/outcome/provider.py`), so
+  `OutcomeStore` protocol (`services/backend/services/measurement/outcome/provider.py`), so
   `outcome360` reads durable, lineage-carrying truth when the flag is ON and rows
   exist — and degrades to typed `missing`/`empty` exactly as before otherwise
   (OFF keeps `_measurement_outcome_store()` returning `None`).
@@ -176,7 +176,7 @@ outcomes and never duplicate evidence rows.
 
 ### Item 5 — Silver temporal envelope (Invariant #11 / rows 7/22)
 
-`services/ingestion/workers.py` `_apply_silver_temporal`: when
+`services/backend/services/ingestion/workers.py` `_apply_silver_temporal`: when
 `AETHER_SILVER_TEMPORAL_ENVELOPE_ENABLED` is ON and the normalized Bronze payload
 carries the server-built `temporal` block, its authoritative `occurred_at`
 replaces the raw client `timestamp` on the projector envelope, and the full
@@ -302,16 +302,16 @@ Nothing is enabled by default. To adopt a mechanism, set its flag (and for item
 
 ## 8. File inventory
 
-New shared package `Backend Architecture/aether-backend/shared/backend_interpretation/`:
+New shared package `services/backend/shared/backend_interpretation/`:
 `primitives.py`, `dedupe.py`, `stores.py`, `governance.py`, `flags.py`,
 `observe.py`, `money.py`, `facts.py`.
 
-New domain surface `Backend Architecture/aether-backend/services/measurement/`:
+New domain surface `services/backend/services/measurement/`:
 `episodes/engine.py`, `episodes/provider.py`; `outcome/truth_recorder.py`.
 
-Modified: `services/ingestion/workers.py` (items 3/5),
-`services/measurement/outcome/provider.py` (item 3 read),
-`services/silver/projectors/revenue_projector.py` + `outcome_projector.py`
+Modified: `services/backend/services/ingestion/workers.py` (items 3/5),
+`services/backend/services/measurement/outcome/provider.py` (item 3 read),
+`services/backend/services/silver/projectors/revenue_projector.py` + `outcome_projector.py`
 (item 7), `shared/relationship_spine/promotion.py` (items 1/6),
 `config/settings.py` + `.env.example` + `.env.production.example`
 (`BackendInterpretationConfig` + flags), and the item-7 Alembic migration.
@@ -344,7 +344,7 @@ default path is affected by any of these boundaries.
 
 ## 10. Cross-lane coordination
 
-- `services/ingestion/workers.py` is the envelope seam also touched by WS-C
+- `services/backend/services/ingestion/workers.py` is the envelope seam also touched by WS-C
   (correlation/observation envelope). WS-D changes there are additive and
   compose; a reviewer from the envelope-owning lane should confirm the combined
   seam.

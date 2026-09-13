@@ -6,13 +6,13 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/commerce/, Backend Architecture/aether-backend/services/x402/]
+source_files: [services/backend/services/commerce/, services/backend/services/x402/]
 canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
 source_hashes:
-  Backend Architecture/aether-backend/services/commerce/: sha256:5aea9122e586e53d56c3791d56a15fefcf778cf2023d1319efc383af14fa5470
-  Backend Architecture/aether-backend/services/x402/: sha256:c85ba74d3f53f47429da5025d5945bc0eb0527d936b894623af33570cb9f6635
+  "services/backend/services/commerce/": "sha256:0fc4a8ace5ad1402e43d9a6be46c0798e1c15f13c2121a4ad5e6727cffd991ec"
+  "services/backend/services/x402/": "sha256:2c0d22c36af95a3f6e2bc5da01fb55a68f0be36bfac9a1bf0e87df2bc95dd87c"
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
 
@@ -28,10 +28,10 @@ source_hashes:
 Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a) that observe and record payments into a graph. This spec upgrades both into a **graph-native commerce control plane** that issues challenges, governs spend via mandatory approvals, verifies and settles payments, mints entitlements, and grants access — all surfaced through Kyber as the operator command surface.
 
 **What changes:**
-- `services/x402` becomes a full control plane (challenge → verify → settle → entitle → grant) on top of existing capture code.
-- `services/commerce` gains economic analytics, policy evaluation, and treasury/budget modeling.
+- `services/backend/services/x402` becomes a full control plane (challenge → verify → settle → entitle → grant) on top of existing capture code.
+- `services/backend/services/commerce` gains economic analytics, policy evaluation, and treasury/budget modeling.
 - `shared/graph` adds 18 new vertex types and 22 new edge types formalizing the full commerce lifecycle.
-- A new `services/x402/approvals.py` implements mandatory operator approval for every spend class.
+- A new `services/backend/services/x402/approvals.py` implements mandatory operator approval for every spend class.
 - Kyber's 8 existing pages each gain real, audited, RBAC-gated economic actions wired to new `lib/api/commerce.ts`, `approvals.ts`, `entitlements.ts`, `resources.ts` adapters with Zod schemas.
 - The lake gains Silver/Gold tables for the full commerce lifecycle, deterministically rebuildable into graph state.
 - Stablecoin intelligence covers USDC/Base and USDC/Solana at GA with an extensible asset/network/facilitator registry.
@@ -66,10 +66,10 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 
 | System | Current state | Preserved role |
 |---|---|---|
-| `services/x402/interceptor.py` | Parses 3 HTTP headers, builds `CapturedX402Transaction` | Legacy v1 ingest path; delegates to control plane |
-| `services/x402/economic_graph.py` | In-memory subgraph + Neptune snapshots (`PAYS`, `CONSUMES`) | Continues as analytics projection; writes extended by control plane |
-| `services/x402/routes.py` | `/v1/x402/capture`, `/graph`, `/agent/{id}` | Kept; augmented with new control-plane routes |
-| `services/commerce/models.py` | `PaymentRecord`, `AgentHireRecord` | Kept as downstream analytics records, fed by control plane |
+| `services/backend/services/x402/interceptor.py` | Parses 3 HTTP headers, builds `CapturedX402Transaction` | Legacy v1 ingest path; delegates to control plane |
+| `services/backend/services/x402/economic_graph.py` | In-memory subgraph + Neptune snapshots (`PAYS`, `CONSUMES`) | Continues as analytics projection; writes extended by control plane |
+| `services/backend/services/x402/routes.py` | `/v1/x402/capture`, `/graph`, `/agent/{id}` | Kept; augmented with new control-plane routes |
+| `services/backend/services/commerce/models.py` | `PaymentRecord`, `AgentHireRecord` | Kept as downstream analytics records, fed by control plane |
 | `shared/graph/graph.py` | VertexType/EdgeType enums, GraphClient, Gremlin queries | Extended with 18 vertex types + 22 edge types |
 | `shared/events/events.py` | `Topic` enum, `EventProducer` | Extended with 24 new commerce lifecycle topics |
 | `middleware/middleware.py` | Auth + rate-limit + extraction defense | Gains optional `challenge_middleware` hook for protected resources |
@@ -79,19 +79,19 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 
 | Component | Path | Purpose |
 |---|---|---|
-| Commerce Control Plane | `services/x402/control_plane.py` | Orchestrates challenge → approval → verify → settle → entitle → grant |
-| Challenge Middleware | `services/x402/challenge_middleware.py` | FastAPI middleware/hook that returns HTTP 402 with PAYMENT-REQUIRED for protected resources |
-| Verification Engine | `services/x402/verification.py` | Facilitator-aware + local verification, chain/asset-specific verifiers |
-| Settlement Tracker | `services/x402/settlement.py` | Multi-state settlement FSM (pending/verifying/settled/failed/disputed) |
-| Entitlement Service | `services/x402/entitlements.py` | Access grant issuance, reuse, expiry, revocation, SIWX binding |
-| Policy Engine | `services/x402/policies.py` | Price/budget/treasury/asset/network policy evaluation |
-| Budget Policy CRUD | `services/x402/commerce_routes.py` (`POST/GET /v1/x402/policies/budget`, `GET /v1/x402/policies/budget/{subject_id}`) | Per-subject daily/monthly/per-tx cap management. Caps are enforced by the Policy Engine before requests reach the approval queue. |
-| Approval Service | `services/x402/approvals.py` | Mandatory approval workflow (request/queue/assign/decide/expire/revoke) |
-| Facilitator Registry | `services/x402/facilitators.py` | Approved facilitator list, routing, health tracking |
-| Pricing Engine | `services/x402/pricing.py` | Resource→price resolution with tenant overrides |
-| Idempotency Store | `services/x402/idempotency.py` | Payment-Identifier dedupe, Redis-backed |
-| Protected Resource Registry | `services/x402/resources.py` | Unified registry of all Aether-native protected resources |
-| Economic Analytics | `services/commerce/economic_analytics.py` | Service revenue, cluster spend, facilitator performance, reuse metrics |
+| Commerce Control Plane | `services/backend/services/x402/control_plane.py` | Orchestrates challenge → approval → verify → settle → entitle → grant |
+| Challenge Middleware | `services/backend/services/x402/challenge_middleware.py` | FastAPI middleware/hook that returns HTTP 402 with PAYMENT-REQUIRED for protected resources |
+| Verification Engine | `services/backend/services/x402/verification.py` | Facilitator-aware + local verification, chain/asset-specific verifiers |
+| Settlement Tracker | `services/backend/services/x402/settlement.py` | Multi-state settlement FSM (pending/verifying/settled/failed/disputed) |
+| Entitlement Service | `services/backend/services/x402/entitlements.py` | Access grant issuance, reuse, expiry, revocation, SIWX binding |
+| Policy Engine | `services/backend/services/x402/policies.py` | Price/budget/treasury/asset/network policy evaluation |
+| Budget Policy CRUD | `services/backend/services/x402/commerce_routes.py` (`POST/GET /v1/x402/policies/budget`, `GET /v1/x402/policies/budget/{subject_id}`) | Per-subject daily/monthly/per-tx cap management. Caps are enforced by the Policy Engine before requests reach the approval queue. |
+| Approval Service | `services/backend/services/x402/approvals.py` | Mandatory approval workflow (request/queue/assign/decide/expire/revoke) |
+| Facilitator Registry | `services/backend/services/x402/facilitators.py` | Approved facilitator list, routing, health tracking |
+| Pricing Engine | `services/backend/services/x402/pricing.py` | Resource→price resolution with tenant overrides |
+| Idempotency Store | `services/backend/services/x402/idempotency.py` | Payment-Identifier dedupe, Redis-backed |
+| Protected Resource Registry | `services/backend/services/x402/resources.py` | Unified registry of all Aether-native protected resources |
+| Economic Analytics | `services/backend/services/commerce/economic_analytics.py` | Service revenue, cluster spend, facilitator performance, reuse metrics |
 | Graph Schema Extensions | `shared/graph/economic_schema.py` | New VertexType/EdgeType constants for commerce lifecycle |
 | Graph Mutations | `shared/graph/economic_mutations.py` | Deterministic builders: challenge→graph, approval→graph, settlement→graph |
 | Event Topics | `shared/events/economic_topics.py` | 24 commerce lifecycle topics |
@@ -112,9 +112,9 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 
 ## 3. Monorepo Module-by-Module Change List
 
-### 3.1 Backend — `Backend Architecture/aether-backend/`
+### 3.1 Backend — `services/backend/`
 
-**`services/x402/` (extend)**
+**`services/backend/services/x402/` (extend)**
 - `models.py` — ADD: `PaymentChallenge`, `PaymentAuthorization`, `SettlementRecord`, `Entitlement`, `AccessGrant`, `ApprovalRequest`, `ApprovalDecision`, `PolicyDecision`, `PricePolicy`, `BudgetPolicy`, `AcceptedAsset`, `AcceptedNetwork`, `FacilitatorRecord`, `ProtectedResource`, `ServicePlan`, `FulfillmentRecord`, `PaymentRoute`.
 - `control_plane.py` — NEW. Stateful orchestrator. `X402ControlPlane.handle_request()`, `.issue_challenge()`, `.request_approval()`, `.apply_decision()`, `.verify_payment()`, `.settle()`, `.mint_entitlement()`, `.grant_access()`, `.record_fulfillment()`.
 - `challenge_middleware.py` — NEW. `ChallengeMiddleware` FastAPI middleware. Consults `resources.py` registry, returns 402 with PAYMENT-REQUIRED header, honors `X-Payment-Identifier` for idempotency, honors SIWX for entitlement reuse.
@@ -132,36 +132,36 @@ Aether already has a capture-side x402 subsystem (L3b) and a commerce layer (L3a
 - `economic_graph.py` — KEEP. Writes tenant-scoped vertex IDs (`{tenant_id}:{entity_id}` format) and deterministic edge IDs (`{tenant_id}:{capture_id}:pays`) directly via `snapshot_to_graph()`; idempotent on replay.
 - `lifecycle_mapper.py` — NEW. `X402LifecycleMapper` routes 14 canonical x402 lifecycle events (`x402_payment_intent_created`, `x402_payment_settled`, `x402_payment_failed`, etc.) to repositories with full tenant isolation.
 
-**`services/x402/approvals_routes.py`** (NEW)
+**`services/backend/services/x402/approvals_routes.py`** (NEW)
 - `GET /v1/x402/approvals` (queue), `POST /v1/x402/approvals/{id}/assign`, `.../decide`, `.../escalate`, `.../revoke`, `.../replay`, `.../evidence`, `.../preview`.
 
-**`services/commerce/` (extend)**
+**`services/backend/services/commerce/` (extend)**
 - `models.py` — KEEP. Add `ServiceRevenueRecord`, `ClusterSpendSnapshot`, `TreasuryBalance`.
 - `routes.py` — EXTEND: `/v1/commerce/revenue/{service_id}`, `/v1/commerce/cluster/{cluster_id}/spend`, `/v1/commerce/treasury`, `/v1/commerce/facilitators/performance`.
 - `economic_analytics.py` — NEW. Aggregates from Gold lake + graph queries.
 
-**`services/agent/` (extend)**
+**`services/backend/services/agent/` (extend)**
 - `economic.py` — NEW. `AgentEconomicViews` provides `budget_view()` (spend aggregation from `SettlementEventRepository`, pending count, success rate), `delegation_policy_view()` (active granted/received delegations, subagent slice keyed by `source=agent_subagent_spawned`), and `full_economic_profile()` (merged response). Wired to `GET /v1/commerce/agents/{id}/economics`.
 - `lifecycle_mapper.py` — NEW. `AgentLifecycleMapper` routes 19 canonical agent lifecycle events (`agent_registered`, `agent_task_created`, `agent_subagent_spawned`, etc.) to graph mutations and repositories; all vertex IDs tenant-scoped as `{tenant_id}:agent:{agent_id}`. `_handle_subagent_spawned` also writes a `DelegationRepository` record (deterministic ID: `{tenant_id}:{parent}:spawned:{child}`) so `Profile360Composer` and `delegation_policy_view()` find spawned subagents via the standard grantor query.
 
-**`services/intelligence/` (extend)**
+**`services/backend/services/intelligence/` (extend)**
 - Add graph query helpers for economic path tracing: `trace_payment_lifecycle(challenge_id)`.
 
-**`services/analytics/` (extend)**
+**`services/backend/services/analytics/` (extend)**
 - Add commerce KPI aggregators: spend rate, approval latency, settlement degradation, reuse rate.
 
-**`services/diagnostics/` (extend)**
+**`services/backend/services/diagnostics/` (extend)**
 - Add diagnostics for: verification failures, settlement timeouts, approval expirations, duplicate payments, reconciliation drift.
 
-**`services/identity/` (extend)**
+**`services/backend/services/identity/` (extend)**
 - Add SIWX session binding for entitlement reuse.
 
 **`shared/graph/` (extend)**
 - `graph.py` — EXTEND `VertexType` with new node constants (TASK, TOOL, OUTCOME, POLICY, CAPABILITY, AGENT_ECONOMIC_IDENTITY, etc.) and `EdgeType` with new relationship constants (OWNS_AGENT, CREATED_TASK, DECOMPOSED_INTO, SPAWNED_SUBAGENT, CALLED_TOOL, DELEGATED_TO, etc.).
 - `economic_schema.py` — NEW. Documents owner/tenant/provenance/DSR/visualization per vertex/edge.
 
-**`services/x402/` (additional files)**
-- `economic_mutations.py` — NEW (in `services/x402/`, not `shared/graph/`). Deterministic graph builders for each x402 lifecycle stage.
+**`services/backend/services/x402/` (additional files)**
+- `economic_mutations.py` — NEW (in `services/backend/services/x402/`, not `shared/graph/`). Deterministic graph builders for each x402 lifecycle stage.
 
 **`shared/events/` (extend)**
 - `events.py` — EXTEND `Topic` enum.
@@ -311,7 +311,7 @@ Existing edges (`PAYS`, `CONSUMES`, `HIRED`, `DELEGATES`, `LAUNCHED_BY`, etc.) r
 
 All routes require `request.state.tenant` (JWT or API key) and explicit `require_permission()` checks. All responses use existing `APIResponse` envelope. All inputs validated via Pydantic.
 
-### 5.1 Control Plane (`services/x402/routes.py`)
+### 5.1 Control Plane (`services/backend/services/x402/routes.py`)
 
 | Method | Path | Scope | Purpose |
 |---|---|---|---|
@@ -356,7 +356,7 @@ All routes require `request.state.tenant` (JWT or API key) and explicit `require
 | GET | `/v1/x402/assets` | `x402:read` | Approved stablecoin assets + networks |
 | POST | `/v1/x402/assets` | `commerce:admin` | Register asset |
 
-### 5.5 Approvals (`services/x402/approvals_routes.py`)
+### 5.5 Approvals (`services/backend/services/x402/approvals_routes.py`)
 
 | Method | Path | Scope | Purpose |
 |---|---|---|---|
@@ -370,7 +370,7 @@ All routes require `request.state.tenant` (JWT or API key) and explicit `require
 | GET | `/v1/approvals/{id}/evidence` | `approvals:read` | Full evidence bundle |
 | GET | `/v1/approvals/{id}/preview` | `approvals:read` | Graph impact preview |
 
-### 5.6 Commerce Analytics (`services/commerce/routes.py` extend)
+### 5.6 Commerce Analytics (`services/backend/services/commerce/routes.py` extend)
 
 | Method | Path | Scope | Purpose |
 |---|---|---|---|

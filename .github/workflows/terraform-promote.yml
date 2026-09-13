@@ -61,7 +61,7 @@ concurrency:
   cancel-in-progress: false
 env:
   AWS_REGION: us-east-1
-  TF_DIR: AWS Deployment/aether-aws/terraform
+  TF_DIR: deploy/aws/terraform
 jobs:
   plan:
     if: inputs.action == 'plan'
@@ -208,10 +208,10 @@ jobs:
       - name: Record reviewed maintenance listener input
         env:
           STAGING_LISTENER_TARGET_GROUP_ARN: ${{ inputs.staging_listener_target_group_arn }}
-        working-directory: AWS Deployment/aether-aws/terraform
+        working-directory: deploy/aws/terraform
         run: printf '%s\n' "$STAGING_LISTENER_TARGET_GROUP_ARN" > reviewed.staging-listener-target-group-arn
       - name: Create immutable reviewed plan
-        working-directory: AWS Deployment/aether-aws/terraform
+        working-directory: deploy/aws/terraform
         env:
           PROFILE: ${{ inputs.profile }}
           BACKEND_IMAGE_DIGEST: ${{ inputs.backend_image_digest }}
@@ -320,7 +320,7 @@ jobs:
               | tee "${TF_DIR}/reviewed.cost.txt"
           fi
       - name: Summarise the reviewed plan identity
-        working-directory: AWS Deployment/aether-aws/terraform
+        working-directory: deploy/aws/terraform
         run: |
           set -euo pipefail
           {
@@ -344,8 +344,8 @@ jobs:
         with:
           name: terraform-plan-${{ inputs.profile }}-${{ github.sha }}
           path: |
-            AWS Deployment/aether-aws/terraform/reviewed.*
-            !AWS Deployment/aether-aws/terraform/reviewed.tfplan
+            deploy/aws/terraform/reviewed.*
+            !deploy/aws/terraform/reviewed.tfplan
           if-no-files-found: error
           retention-days: 14
       # SECRET-BEARING ARTIFACT. The binary plan embeds every root variable value
@@ -362,7 +362,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: terraform-plan-${{ inputs.profile }}-binary-${{ github.sha }}
-          path: AWS Deployment/aether-aws/terraform/reviewed.tfplan
+          path: deploy/aws/terraform/reviewed.tfplan
           if-no-files-found: error
           retention-days: 1
 
@@ -579,7 +579,7 @@ jobs:
           set -euo pipefail
           python -m pip install --disable-pip-version-check pyyaml
       - name: Stage the reviewed plan before any AWS prerequisite mutation
-        working-directory: AWS Deployment/aether-aws/terraform
+        working-directory: deploy/aws/terraform
         run: |
           set -euo pipefail
           cp "${RUNNER_TEMP}/reviewed-plan"/reviewed.* .
@@ -861,7 +861,7 @@ jobs:
           fi
       - name: Check ECR collisions before account-level role bootstrap
         if: inputs.profile == 'staging' || inputs.profile == 'demo' || inputs.profile == 'preview'
-        working-directory: AWS Deployment/aether-aws/terraform
+        working-directory: deploy/aws/terraform
         env:
           PROFILE: ${{ inputs.profile }}
           TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
@@ -952,7 +952,7 @@ jobs:
       # not proof. The policy and cost rules that ship with the reviewed code
       # must still pass against the reviewed plan at apply time.
       - name: Apply the exact approved plan (never re-plan)
-        working-directory: AWS Deployment/aether-aws/terraform
+        working-directory: deploy/aws/terraform
         env:
           PROFILE: ${{ inputs.profile }}
           PLAN_CHECKSUM: ${{ inputs.plan_checksum }}
@@ -1068,7 +1068,7 @@ jobs:
         with:
           name: terraform-apply-evidence-${{ github.run_id }}
           path: |
-            AWS Deployment/aether-aws/terraform/reviewed.apply.*
-            AWS Deployment/aether-aws/terraform/reviewed.api-host
-            AWS Deployment/aether-aws/terraform/reviewed.alb-dns
+            deploy/aws/terraform/reviewed.apply.*
+            deploy/aws/terraform/reviewed.api-host
+            deploy/aws/terraform/reviewed.alb-dns
           if-no-files-found: error

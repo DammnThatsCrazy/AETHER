@@ -8,7 +8,7 @@
  * the five canonical exchange contracts.
  *
  * The Python mirror lives at
- * `Backend Architecture/aether-backend/services/data_exchange/contracts.py`;
+ * `services/backend/services/data_exchange/contracts.py`;
  * the const arrays below are parity-tested against it by
  * `tests/contracts/test_data_exchange_parity.py`.
  *

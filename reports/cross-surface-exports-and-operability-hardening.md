@@ -30,14 +30,14 @@ pytest and both frontend builds.
 
 ### 1. Cross-surface exports route through the durable export service
 
-Two exporters are registered in `services/export/service.py` alongside the
+Two exporters are registered in `services/backend/services/export/service.py` alongside the
 reference audit-log domain (they self-register by decorator on import):
 
 - **`targeting_package`** — exports persisted targeting recommendation packages
-  (`services/targeting_intelligence`). `params.export_id` selects one (404 if it
+  (`services/backend/services/targeting_intelligence`). `params.export_id` selects one (404 if it
   belongs to another tenant); otherwise the tenant's recent packages are exported.
 - **`governance_evidence_pack`** — exports a tenant's own governance evidence
-  packs (`services/security/evidence_packs`). `params.evidence_pack_id` /
+  packs (`services/backend/services/security/evidence_packs`). `params.evidence_pack_id` /
   `params.pack_type` filter; platform-wide (tenant-less) packs and the operator
   cross-tenant listing stay on the admin route.
 
@@ -82,7 +82,7 @@ Each carries `source_files` frontmatter and a reviewed `last_synced_commit`.
 (claim via `FOR UPDATE SKIP LOCKED` + lease, idempotent enqueue, states, DLQ, the
 `@register_handler` contract, tenant + Kyber surfaces, scheduler) and — critically
 — the **deliberate boundary**: the Redis-backed agent runtime
-(`services/agent/*`) is intentionally *not* routed through this Postgres-backed
+(`services/backend/services/agent/*`) is intentionally *not* routed through this Postgres-backed
 platform, because agent execution has a different actor/approval model and latency
 profile than durable batch jobs.
 

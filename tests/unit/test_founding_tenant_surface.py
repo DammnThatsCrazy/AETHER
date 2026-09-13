@@ -40,7 +40,7 @@ def test_worker_readiness_alert_threshold_matches_the_probe_it_alerts_on() -> No
 
     import yaml
 
-    backend = ROOT / "Backend Architecture/aether-backend"
+    backend = ROOT / "services/backend"
     if str(backend) not in sys.path:
         sys.path.insert(0, str(backend))
     from services.runtime.supervisor import HEARTBEAT_TIMEOUT_S

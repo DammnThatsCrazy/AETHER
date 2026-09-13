@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).parents[2]
-BACKEND_ROOT = REPO_ROOT / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = REPO_ROOT / "services" / "backend"
 
 
 @contextmanager

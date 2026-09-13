@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "Backend Architecture" / "aether-backend"))
+sys.path.insert(0, str(ROOT / "services" / "backend"))
 
 from services.stablecoins.ingestion import ProviderObservation  # noqa: E402
 from services.stablecoins.models import FinalityState, StablecoinEventType  # noqa: E402

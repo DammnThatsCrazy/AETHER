@@ -47,8 +47,8 @@ there is no write path at all.
 ## Why
 
 The backend already ships a fully-wired fraud subsystem — the fraud scoring
-engine (`services/fraud`, `/v1/fraud`), fraud network intelligence
-(`services/fraud_networks`), and flow-of-funds tracing — as mounted routes and
+engine (`services/backend/services/fraud`, `/v1/fraud`), fraud network intelligence
+(`services/backend/services/fraud_networks`), and flow-of-funds tracing — as mounted routes and
 services with Kyber operator pages, but nothing states what the *Fraud360
 surface* is relative to canonical truth, and there is no hypothesis layer
 standing between "a suspicious pattern was detected" and "fraud occurred". This
@@ -105,7 +105,7 @@ synthesis consumes Risk360 assessments and underlying graph truth.
 The slice reuses the canonical `EntityRef`, `RelationshipRef`, `EvidenceRef`,
 `PageRequest`, `TimeRangeFilter`, and `FilterExpression` primitives — the fraud
 synthesis package declares NO second copy (parity-tested). The divergent
-`EvidenceRef` in `services/fraud/models.py` is removed before convergence so
+`EvidenceRef` in `services/backend/services/fraud/models.py` is removed before convergence so
 `FraudHypothesis` evidence is the canonical OI `EvidenceRef`. `inputRefs`
 include `GraphSnapshotRef` (typed in program phase 2), which pins each
 hypothesis to the graph snapshot it was synthesized against.

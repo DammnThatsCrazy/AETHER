@@ -26,7 +26,7 @@ repository_ceiling:
   - Provision the required cloud backend (apply Terraform for the target profile).
   remaining_is_repository_controlled: true
   evidence:
-  - Backend Architecture/aether-backend/services/interop/
+  - services/backend/services/interop/
   - packages/shared/interoperability.ts
   - tests/unit/interop/
 implementation:
@@ -125,7 +125,7 @@ business_readiness:
 confidence:
   level: LOW
   reasons:
-  - 'repository evidence: Backend Architecture/aether-backend/services/interop/'
+  - 'repository evidence: services/backend/services/interop/'
   evidence_gaps:
   - credentialed environment execution not yet performed
 release_profiles:

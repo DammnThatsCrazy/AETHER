@@ -68,7 +68,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - name: Terraform Init + Apply
         run: |
-          cd infrastructure/environments/demo
+          cd deploy/aws/terraform/environments/demo
           terraform init -input=false -backend-config="key=demo/terraform.tfstate"
           terraform apply -auto-approve
       - name: Deploy ECS services

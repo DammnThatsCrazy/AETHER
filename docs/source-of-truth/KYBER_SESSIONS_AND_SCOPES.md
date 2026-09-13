@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, security, ops]
 status: beta
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/kyber/sessions/service.py, Backend Architecture/aether-backend/services/kyber/sessions/step_up.py, Backend Architecture/aether-backend/services/kyber/access/scopes.py, Backend Architecture/aether-backend/services/kyber/access/dependencies.py]
+source_files: [services/backend/services/kyber/sessions/service.py, services/backend/services/kyber/sessions/step_up.py, services/backend/services/kyber/access/scopes.py, services/backend/services/kyber/access/dependencies.py]
 ---
 
 # Kyber Sessions and Tenant Access Scopes
@@ -77,7 +77,7 @@ idle, zero presence).
 the absolute ceiling. An unattended console closes early; an actively used one
 does not; neither outlives the hard ceiling.
 
-This is a deliberate correction. `services/auth/sessions/service.py` sets its
+This is a deliberate correction. `services/backend/services/auth/sessions/service.py` sets its
 idle expiry once at creation and never moves it, which makes its "idle" timeout
 a second absolute cap and kills an actively used session mid-work. Kyber does
 not copy that behaviour.
@@ -248,7 +248,7 @@ rather than failing to start.
 ### 4.2 Evidence
 
 Every decision — allow and deny alike — is recorded through the existing
-`services/security/policy_engine.PolicyEngine`, so Kyber decisions land in the
+`services/backend/services/security/policy_engine.PolicyEngine`, so Kyber decisions land in the
 same governance ledger as everything else. The `kyber_access_decisions` row is
 the Kyber-specific detail hanging off that decision and carries
 `policy_decision_id` when one exists. **There is no second audit ledger.** If

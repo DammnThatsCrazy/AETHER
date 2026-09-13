@@ -26,9 +26,9 @@ repository_ceiling:
   - None — repository-controlled work complete
   remaining_is_repository_controlled: false
   evidence:
-  - Backend Architecture/aether-backend/shared/auth/auth.py
-  - Backend Architecture/aether-backend/services/security/retention.py
-  - Backend Architecture/aether-backend/services/security/retention_worker.py
+  - services/backend/shared/auth/auth.py
+  - services/backend/services/security/retention.py
+  - services/backend/services/security/retention_worker.py
 implementation:
   state: VERIFIED
   denominator: in-scope repository controls (migration-derived)
@@ -111,7 +111,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: Backend Architecture/aether-backend/shared/auth/auth.py'
+  - 'repository evidence: services/backend/shared/auth/auth.py'
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:

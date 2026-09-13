@@ -18,7 +18,7 @@
  * execution (actuator engine, approval, rollout) is a later phase.
  *
  * The Python mirror lives at
- * `Backend Architecture/aether-backend/services/managed_integrations/contracts.py`;
+ * `services/backend/services/managed_integrations/contracts.py`;
  * the const arrays below are parity-tested against it by
  * `tests/contracts/test_managed_integrations_parity.py`.
  *

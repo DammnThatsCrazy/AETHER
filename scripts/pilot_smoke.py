@@ -39,7 +39,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = ROOT / "services" / "backend"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 

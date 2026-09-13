@@ -37,7 +37,7 @@ state?"*
 
 It does **not** re-implement measurement. Achievement truth stays with the
 measurement engine (journey compiler, gold materializer,
-`services/measurement/contracts.py`). Outcome360 reads canonical
+`services/backend/services/measurement/contracts.py`). Outcome360 reads canonical
 `outcome_facts` / `measurement_contract` and projects them into the five
 registered output sections:
 
@@ -60,7 +60,7 @@ corrupting previously-placed work).
 
 ## How it works
 
-### Canonical outcome domain contracts (`services/measurement/outcome/contracts.py`)
+### Canonical outcome domain contracts (`services/backend/services/measurement/outcome/contracts.py`)
 
 The OutcomeState **finality ladder** and its **legality table** are the spine of
 the domain vocabulary:
@@ -94,7 +94,7 @@ transition's `from_state` to match the row's current state before returning a
 new `Outcome`.
 
 The contracts **reuse** the canonical `EvidenceRef`, `PageRequest` and
-`TimeRangeFilter` from `services/operational_intelligence/models.py` — the
+`TimeRangeFilter` from `services/backend/services/operational_intelligence/models.py` — the
 slice declares no second copy of any canonical primitive (parity-tested).
 
 ### Canonical outcome-type vocabulary (`packages/shared/contracts/outcome-type-registry.json`)
@@ -104,17 +104,17 @@ operational, agentic, security, fraud, economic, institutional, onchain), ids
 unique lower-snake and sorted for order-stability. This file is the canonical
 source; the generated twins
 (`packages/shared/outcome-types_generated.ts`,
-`Backend Architecture/aether-backend/shared/measurement/generated_outcome_types.py`,
+`services/backend/shared/measurement/generated_outcome_types.py`,
 `docs/_generated/outcome-type-registry-table.md`) are produced from it by the
 platform contract generator after the slice lands.
 
-`services/measurement/outcome/registry.py` consumes the JSON **directly by
+`services/backend/services/measurement/outcome/registry.py` consumes the JSON **directly by
 repo-root-relative path** (the same pattern as
 `scripts/lib/intelligence_projection_validation.load_context()`), never a
 generated twin, and fails closed at load on an unknown domain, a duplicate /
 non-lower-snake id, or a malformed entry.
 
-### Runtime provider (`services/measurement/outcome/provider.py`)
+### Runtime provider (`services/backend/services/measurement/outcome/provider.py`)
 
 `Outcome360Provider` implements the `IntelligenceProjectionProvider` Protocol
 (`projection_id = "outcome360"`, `contract_version` = the exact
@@ -168,12 +168,12 @@ The registry row declares `projectionDependencies: [temporal360]`. Until a
 
 ## Files
 
-* `Backend Architecture/aether-backend/services/measurement/outcome/__init__.py`
-* `Backend Architecture/aether-backend/services/measurement/outcome/contracts.py`
-* `Backend Architecture/aether-backend/services/measurement/outcome/registry.py`
-* `Backend Architecture/aether-backend/services/measurement/outcome/provider.py`
+* `services/backend/services/measurement/outcome/__init__.py`
+* `services/backend/services/measurement/outcome/contracts.py`
+* `services/backend/services/measurement/outcome/registry.py`
+* `services/backend/services/measurement/outcome/provider.py`
 * `packages/shared/contracts/outcome-type-registry.json`
-* `Backend Architecture/aether-backend/tests/unit/test_outcome_contracts.py`
-* `Backend Architecture/aether-backend/tests/unit/test_outcome360_registry.py`
-* `Backend Architecture/aether-backend/tests/unit/test_outcome360_provider.py`
+* `services/backend/tests/unit/test_outcome_contracts.py`
+* `services/backend/tests/unit/test_outcome360_registry.py`
+* `services/backend/tests/unit/test_outcome360_provider.py`
 * `docs/blueprints/outcome360.md` (this blueprint)

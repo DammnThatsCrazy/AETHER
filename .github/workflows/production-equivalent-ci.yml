@@ -34,7 +34,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  BACKEND_DIR: "Backend Architecture/aether-backend"
+  BACKEND_DIR: "services/backend"
   DATABASE_URL: postgresql://aether:aether_dev_password@localhost:5432/aether
   REDIS_URL: redis://localhost:6379/0
 
@@ -74,9 +74,9 @@ jobs:
           components = set(index["impacted_components"])
           production_paths = (
               "tests/prod_equivalent/",
-              "Backend Architecture/aether-backend/alembic/",
-              "Backend Architecture/aether-backend/repositories/",
-              "Backend Architecture/aether-backend/services/ingestion/",
+              "services/backend/alembic/",
+              "services/backend/repositories/",
+              "services/backend/services/ingestion/",
           )
           direct_production_path = any(
               path == "docker-compose.yml"

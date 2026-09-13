@@ -12,21 +12,21 @@ source_files:
   - .github/workflows/terraform-promote.yml
   - config/runtime_deployment.yaml
   - config/deployment_profiles.yaml
-  - AWS Deployment/aether-aws/terraform/profiles.tf
-  - AWS Deployment/aether-aws/terraform/variables.tf
-  - AWS Deployment/aether-aws/terraform/profiles/staging.tfvars
+  - deploy/aws/terraform/profiles.tf
+  - deploy/aws/terraform/variables.tf
+  - deploy/aws/terraform/profiles/staging.tfvars
 canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/staging-lifecycle.yml": "sha256:5f08e62b17304a5f32896a2e41d0b4e5c0ff5dff55d6e596fd068bf3261aab42"
+  ".github/workflows/staging-lifecycle.yml": "sha256:38e9810399b549e10741393bd424dec755adb29a3aa7a350f9fe1c8ca8645007"
   ".github/workflows/staging-ttl-guard.yml": "sha256:4fe2250c0ccb0f8486800c6e09c8f1adcf6c38371944e911269f103053f0f1da"
-  ".github/workflows/terraform-promote.yml": "sha256:c6ba216364e25afee22be4b62c0e2b3629bc5e68e0f47389fba8cfc4c17f7ef4"
-  "AWS Deployment/aether-aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
-  "AWS Deployment/aether-aws/terraform/profiles/staging.tfvars": "sha256:2e642c5ba9dd8a8dfe65670d0d9eaf88543cb84e0e440ae752b508fc551c37ad"
-  "AWS Deployment/aether-aws/terraform/variables.tf": "sha256:7dfc485a37776610062b703a91e594b49e2d04c5d932592fca67adbda1076961"
+  ".github/workflows/terraform-promote.yml": "sha256:4fe31c78b7d0621cc5db6f35eaa239d30f11ce12e518e5dbee6d343110ed5197"
   "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
+  "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
+  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:2e642c5ba9dd8a8dfe65670d0d9eaf88543cb84e0e440ae752b508fc551c37ad"
+  "deploy/aws/terraform/variables.tf": "sha256:7dfc485a37776610062b703a91e594b49e2d04c5d932592fca67adbda1076961"
 ---
 
 # Staging Wake / Sleep

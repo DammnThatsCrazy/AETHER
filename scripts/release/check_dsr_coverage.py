@@ -37,7 +37,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import Reporter, load_yaml, main_guard, repo_root  # noqa: E402
 
-_BACKEND_REL = Path("Backend Architecture") / "aether-backend"
+_BACKEND_REL = Path("services") / "backend"
 
 # The mobile principal-scoped stores that MUST be reachable by a DSR erasure, each
 # mapped to (repo file exposing the erase hook, hook name, storage-policy tables it

@@ -2,7 +2,7 @@
 
 The canonical source is packages/shared/contracts/metric-registry.json. The
 generator (scripts/generate_contracts.py) emits
-Backend Architecture/aether-backend/shared/measurement/generated_registry.py from
+services/backend/shared/measurement/generated_registry.py from
 it. shared/measurement/registry.py is hand-authored and intentionally NOT merged
 with the generated twin.
 
@@ -16,7 +16,7 @@ import pathlib
 import sys
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = REPO_ROOT / "services" / "backend"
 
 sys.path.insert(0, str(BACKEND))
 

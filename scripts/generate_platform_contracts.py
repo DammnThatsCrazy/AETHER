@@ -27,54 +27,54 @@ Sources (read-only — canonical source of truth):
 
 Generated outputs:
   packages/shared/temporal-policy.ts
-  Backend Architecture/aether-backend/shared/temporal/generated_policy.py
+  services/backend/shared/temporal/generated_policy.py
   docs/_generated/temporal-policy-table.md
   packages/shared/interaction-contract.ts
-  Backend Architecture/aether-backend/shared/product/generated_vocabulary.py
+  services/backend/shared/product/generated_vocabulary.py
   docs/_generated/interaction-vocabulary-table.md
   packages/shared/context-capsule.ts
-  Backend Architecture/aether-backend/shared/context_capsule/generated_taxonomy.py
+  services/backend/shared/context_capsule/generated_taxonomy.py
   docs/_generated/context-capsule-table.md
   packages/shared/location-registry.ts
-  Backend Architecture/aether-backend/shared/geo/generated_taxonomy.py
+  services/backend/shared/geo/generated_taxonomy.py
   docs/_generated/location-registry-table.md
   packages/shared/graph-mutation.ts
-  Backend Architecture/aether-backend/shared/graph/generated_mutation_taxonomy.py
+  services/backend/shared/graph/generated_mutation_taxonomy.py
   docs/_generated/graph-mutation-table.md
   packages/shared/filter-fields.ts
-  Backend Architecture/aether-backend/shared/exploration/generated_fields.py
+  services/backend/shared/exploration/generated_fields.py
   docs/_generated/filter-field-table.md
   packages/shared/surface-capabilities.ts
-  Backend Architecture/aether-backend/shared/exploration/generated_surfaces.py
+  services/backend/shared/exploration/generated_surfaces.py
   docs/_generated/surface-capability-table.md
   packages/shared/comparison-contract.ts
-  Backend Architecture/aether-backend/services/intelligence/comparison/generated_vocabulary.py
+  services/backend/services/intelligence/comparison/generated_vocabulary.py
   docs/_generated/comparison-table.md
-  Backend Architecture/aether-backend/services/silver/generated_ownership.py
+  services/backend/services/silver/generated_ownership.py
   docs/_generated/projector-ownership-table.md
   packages/shared/model-registry.ts
-  Backend Architecture/aether-backend/shared/model_governance/generated_model_registry.py
+  services/backend/shared/model_governance/generated_model_registry.py
   docs/_generated/model-registry-table.md
   packages/shared/task-profile.ts
-  Backend Architecture/aether-backend/shared/model_governance/generated_task_profiles.py
+  services/backend/shared/model_governance/generated_task_profiles.py
   docs/_generated/task-profile-table.md
   packages/shared/intelligence-projections_generated.ts
-  Backend Architecture/aether-backend/shared/intelligence_projections/generated_registry.py
+  services/backend/shared/intelligence_projections/generated_registry.py
   docs/_generated/intelligence-projection-registry-table.md
   docs/_generated/intelligence-projection-dependency-graph.md
   packages/shared/lenses_generated.ts
-  Backend Architecture/aether-backend/shared/projection_engine/generated_lenses.py
+  services/backend/shared/projection_engine/generated_lenses.py
   docs/_generated/lens-registry-table.md
   packages/shared/relationship-predicate-registry.ts
-  Backend Architecture/aether-backend/shared/relationship_spine/generated_relationship_predicate_registry.py
+  services/backend/shared/relationship_spine/generated_relationship_predicate_registry.py
   docs/_generated/relationship-predicate-registry-table.md
   packages/shared/relationship-motif-registry.ts
-  Backend Architecture/aether-backend/shared/relationship_spine/generated_relationship_motif_registry.py
+  services/backend/shared/relationship_spine/generated_relationship_motif_registry.py
   docs/_generated/relationship-motif-registry-table.md
   packages/shared/social-provider-capability-vocabulary.ts
-  Backend Architecture/aether-backend/shared/social_provider/generated_social_provider_capability_vocabulary.py
+  services/backend/shared/social_provider/generated_social_provider_capability_vocabulary.py
   packages/shared/spine-registry.ts
-  Backend Architecture/aether-backend/shared/spine/generated_spine_registry.py
+  services/backend/shared/spine/generated_spine_registry.py
   docs/_generated/spine-registry-table.md
 
 Usage:
@@ -98,7 +98,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 CONTRACTS = ROOT / "packages" / "shared" / "contracts"
-BACKEND = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = ROOT / "services" / "backend"
 
 # The intelligence-projection validator lives in scripts/lib and shares the
 # cross-registry context computed here — delegate to it (see _projection_context)

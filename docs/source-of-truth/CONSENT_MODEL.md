@@ -17,7 +17,7 @@ Do not hardcode a purpose count in docs or validators — every layer must agree
 with the registry.
 
 Generated artifacts: `packages/shared/consent.ts` (TypeScript) and
-`Backend Architecture/aether-backend/services/ingestion/generated_registry.py` (Python).
+`services/backend/services/ingestion/generated_registry.py` (Python).
 Regenerate with: `python scripts/generate_contracts.py`.
 
 ## Purpose categories

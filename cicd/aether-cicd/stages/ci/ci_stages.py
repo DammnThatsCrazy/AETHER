@@ -88,11 +88,11 @@ def stage_lint(gate: QualityGate, workdir: str = ".") -> StageResult:
     # Black + Ruff for Python
     log("Running Black + Ruff...", stage="LINT")
     black_result = run_cmd(
-        "python -m black --check services/ml-serving services/agent 2>&1 || true",
+        "python -m black --check services/backend services/ml services/agents 2>&1 || true",
         cwd=workdir, timeout=120,
     )
     ruff_result = run_cmd(
-        "python -m ruff check services/ml-serving services/agent "
+        "python -m ruff check services/backend services/ml services/agents "
         "--output-format json 2>&1 || true",
         cwd=workdir, timeout=120,
     )
@@ -106,7 +106,7 @@ def stage_lint(gate: QualityGate, workdir: str = ".") -> StageResult:
     # SwiftLint for iOS
     log("Running SwiftLint...", stage="LINT")
     swift_result = run_cmd(
-        "swiftlint lint packages/sdk-ios --reporter json 2>&1 || true",
+        "swiftlint lint packages/ios --reporter json 2>&1 || true",
         cwd=workdir, timeout=120,
     )
     if not swift_result.success:
@@ -116,7 +116,7 @@ def stage_lint(gate: QualityGate, workdir: str = ".") -> StageResult:
     # ktlint for Android
     log("Running ktlint...", stage="LINT")
     kt_result = run_cmd(
-        "ktlint 'packages/sdk-android/**/*.kt' --reporter=json 2>&1 || true",
+        "ktlint 'packages/android/**/*.kt' --reporter=json 2>&1 || true",
         cwd=workdir, timeout=120,
     )
     if not kt_result.success:
@@ -158,7 +158,7 @@ def stage_type_check(gate: QualityGate, workdir: str = ".") -> StageResult:
 
     log("Running mypy...", stage="TYPE")
     mypy_result = run_cmd(
-        "python -m mypy --strict services/ml-serving services/agent 2>&1 || true",
+        "python -m mypy --strict services/backend services/ml services/agents 2>&1 || true",
         cwd=workdir, timeout=300,
     )
     if not mypy_result.success:
@@ -201,7 +201,7 @@ def stage_unit_test(gate: QualityGate, workdir: str = ".") -> StageResult:
     # pytest
     log("Running pytest...", stage="UNIT")
     pytest_result = run_cmd(
-        "python -m pytest services/ml-serving services/agent "
+        "python -m pytest services/backend services/ml services/agents "
         "--cov --cov-report=json -q 2>&1 || true",
         cwd=workdir, timeout=900,
     )

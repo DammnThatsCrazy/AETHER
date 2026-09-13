@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-AWS_ROOT = ROOT / "AWS Deployment" / "aether-aws"
+AWS_ROOT = ROOT / "deploy" / "aws"
 
 
 @contextmanager

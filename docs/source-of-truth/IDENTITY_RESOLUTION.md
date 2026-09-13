@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: "0.1.0"
-source_files: [Backend Architecture/aether-backend/services/identity/models.py, Backend Architecture/aether-backend/services/identity/routes.py, Backend Architecture/aether-backend/services/identity/resolver.py, Backend Architecture/aether-backend/services/identity/repository.py]
+source_files: [services/backend/services/identity/models.py, services/backend/services/identity/routes.py, services/backend/services/identity/resolver.py, services/backend/services/identity/repository.py]
 canonical_owner: identity@aether
 last_synced_commit: 4764707
 ---
@@ -25,7 +25,7 @@ Every entity that Aether observes is assigned a stable UUID called
 `canonical_entity_id`. It is:
 
 - **Backend-owned** — the SDK never assigns or emits it; it is stamped by
-  `services/identity/resolver.py` after Bronze ingestion.
+  `services/backend/services/identity/resolver.py` after Bronze ingestion.
 - **Tenant-scoped** — two tenants observing the same user have independent,
   non-overlapping `canonical_entity_id` namespaces.
 - **Stable under merge** — when two identities are merged, the surviving
@@ -166,7 +166,7 @@ largest or most recent.
 
 ## Resolution replay and revision
 
-New evidence can arrive after the fact. `services/identity/resolution_replay.py`
+New evidence can arrive after the fact. `services/backend/services/identity/resolution_replay.py`
 re-runs the **existing** resolver for the affected identifier component — it is
 not a second matcher and adds no scoring of its own. Replay is asynchronous,
 tenant- and component-scoped, and idempotent on
@@ -384,6 +384,6 @@ The Aether SDK is signals-only. It:
 - Never links cross-device profiles.
 
 `canonical_entity_id` is assigned exclusively by
-`services/identity/resolver.py` after Bronze ingestion. Operators and backend
+`services/backend/services/identity/resolver.py` after Bronze ingestion. Operators and backend
 services may read it via the `/v1/identity/entities` API. The SDK has no
 access to this field.

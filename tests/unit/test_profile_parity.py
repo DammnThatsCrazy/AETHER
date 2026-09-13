@@ -111,8 +111,8 @@ def test_parity_validator_fails_when_demo_tfvars_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(parity, "_read", read_from_real_tree)
     monkeypatch.setattr(parity, "repo_root", lambda: tmp_path)
 
-    src = ROOT / "AWS Deployment" / "aether-aws" / "terraform" / "profiles"
-    dst = tmp_path / "AWS Deployment" / "aether-aws" / "terraform" / "profiles"
+    src = ROOT / "deploy" / "aws" / "terraform" / "profiles"
+    dst = tmp_path / "deploy" / "aws" / "terraform" / "profiles"
     dst.mkdir(parents=True)
     for tfvars in src.glob("*.tfvars"):
         if tfvars.name != "demo.tfvars":

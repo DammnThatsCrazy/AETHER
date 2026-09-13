@@ -7,7 +7,7 @@ audience: [architect, dev-senior, ops]
 status: experimental
 since_version: 0.1.0
 canonical_owner: ml@aether
-source_files: [Backend Architecture/aether-backend/services/unique_signals/models.py]
+source_files: [services/backend/services/unique_signals/models.py]
 last_synced_commit: pending
 estimated_read_minutes: 7
 ---

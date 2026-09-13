@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "contractVersion": "1.0.0",
-  "description": "Canonical comparison vocabulary for the comparison workbench. Owns comparison modes, baseline types, alignment outcomes, run states, severities, dispositions, fact-linkage states, causal claim levels, comparison dimensions, and materiality components. Generated artifacts: packages/shared/comparison-contract.ts, Backend Architecture/aether-backend/services/intelligence/comparison/generated_vocabulary.py, docs/_generated/comparison-table.md (via scripts/generate_platform_contracts.py).",
+  "description": "Canonical comparison vocabulary for the comparison workbench. Owns comparison modes, baseline types, alignment outcomes, run states, severities, dispositions, fact-linkage states, causal claim levels, comparison dimensions, and materiality components. Generated artifacts: packages/shared/comparison-contract.ts, services/backend/services/intelligence/comparison/generated_vocabulary.py, docs/_generated/comparison-table.md (via scripts/generate_platform_contracts.py).",
   "comparisonModes": [
     "entity_vs_entity",
     "entity_vs_history",

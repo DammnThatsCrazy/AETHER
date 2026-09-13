@@ -6,12 +6,12 @@ visibility: I
 audience: [dev-senior, architect]
 status: experimental
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/silver/dispatcher.py, Backend Architecture/aether-backend/services/silver/projectors/touchpoint_projector.py, Backend Architecture/aether-backend/services/measurement/silver_adapters.py, Backend Architecture/aether-backend/services/integrations/connectors/adapters.py, packages/shared/contracts/event-registry.json]
+source_files: [services/backend/services/silver/dispatcher.py, services/backend/services/silver/projectors/touchpoint_projector.py, services/backend/services/measurement/silver_adapters.py, services/backend/services/integrations/connectors/adapters.py, packages/shared/contracts/event-registry.json]
 source_hashes:
-  "Backend Architecture/aether-backend/services/integrations/connectors/adapters.py": "sha256:dc1b09adfa1eecb2690e47cfdf364b7efaa04ec0e8664f46a513eaf0f7213459"
-  "Backend Architecture/aether-backend/services/measurement/silver_adapters.py": "sha256:1488ee3e52430dcc49ac07a280b54f1297434c8d79bfe1c084e4aa3fd862be92"
-  "Backend Architecture/aether-backend/services/silver/dispatcher.py": "sha256:ea6279d0a1242887281ced91e1cb05bc8d94eb4c978f10a6e8615fb4d565f98f"
-  "Backend Architecture/aether-backend/services/silver/projectors/touchpoint_projector.py": "sha256:2bb148c4ac0e5a2584d19227c70823c9211194d33f3246b8d543bfeb9ecd85b6"
+  "services/backend/services/integrations/connectors/adapters.py": "sha256:dc1b09adfa1eecb2690e47cfdf364b7efaa04ec0e8664f46a513eaf0f7213459"
+  "services/backend/services/measurement/silver_adapters.py": "sha256:1488ee3e52430dcc49ac07a280b54f1297434c8d79bfe1c084e4aa3fd862be92"
+  "services/backend/services/silver/dispatcher.py": "sha256:ea6279d0a1242887281ced91e1cb05bc8d94eb4c978f10a6e8615fb4d565f98f"
+  "services/backend/services/silver/projectors/touchpoint_projector.py": "sha256:2bb148c4ac0e5a2584d19227c70823c9211194d33f3246b8d543bfeb9ecd85b6"
   "packages/shared/contracts/event-registry.json": "sha256:7ae978eb7fb11c55e324fc61365baa83e63a976d2b458d101019a1fa2cf431ba"
 ---
 
@@ -30,8 +30,8 @@ unwired · `MISS` missing · `CONF` conflict with intended behavior.
 | # | Requirement | State | Evidence (file) | Work | Priority / Depends on | Recommended change |
 |---|---|---|---|---|---|---|
 | 1.1 | Canonical email lifecycle events | IMPL | `packages/shared/contracts/event-registry.json` — comms family has 23 events: `email_delivered/opened/clicked/bounced/queued/processed/sent/deferred/dropped/replied/spam_complaint/suppressed`, `notification_delivered/opened/clicked`, `message_received/sent/replied_observed`, `unsubscribe_observed`, `support_case_created/resolved/escalated`, `support_sla_breached` | — | — | Registry additions (`email_queued`, `email_processed`, `email_sent`, `email_deferred`, `email_dropped`, `email_replied`, `email_spam_complaint`, `email_suppressed`) delivered; evidence reflects the current family |
-| 1.2 | Provider-neutral CommunicationEventPayload | MISS | No shared payload contract exists; SDK `properties` is free-form | Backend, contracts, tests, docs | P0 / 1.1 | New `services/comms/contracts.py` + registry payload docs |
-| 1.3 | `silverProjection: communication_facts` declared for comms events | UNWIRED | Registry declares it; no projector exists in `services/silver/projectors/` | Backend | P0 / 3.1 | Implement `CommsProjector`; register in dispatcher |
+| 1.2 | Provider-neutral CommunicationEventPayload | MISS | No shared payload contract exists; SDK `properties` is free-form | Backend, contracts, tests, docs | P0 / 1.1 | New `services/backend/services/comms/contracts.py` + registry payload docs |
+| 1.3 | `silverProjection: communication_facts` declared for comms events | UNWIRED | Registry declares it; no projector exists in `services/backend/services/silver/projectors/` | Backend | P0 / 3.1 | Implement `CommsProjector`; register in dispatcher |
 | 1.4 | Generated TS/Python contracts synchronized | IMPL | `scripts/generate_contracts.py --check` passes | — | — | Re-run after registry additions |
 | 1.5 | Lucia Protocol naming/domains/templates | ABSENT | `grep -ri lucia` → no matches anywhere in repo | — | — | Verified absent; nothing to remove |
 
@@ -39,9 +39,9 @@ unwired · `MISS` missing · `CONF` conflict with intended behavior.
 
 | # | Requirement | State | Evidence | Work | Priority / Depends on | Recommended change |
 |---|---|---|---|---|---|---|
-| 2.1 | Multi-projector fan-out (event → ordered list) | CONF | `services/silver/dispatcher.py:52-55` — `_TYPE_MAP[_t] = _p` (dict; one projector per type, last registration wins) | Backend, tests | P0 / — | Rebuild `_TYPE_MAP` as `dict[str, list]` with deterministic semantic ordering, per-projector isolation, structured results, latency/failure metrics |
-| 2.2 | Dispatcher wired into runtime event topology | UNWIRED | `services/ingestion/workers.py` attaches `sdk_bronze_writer`, `silver_normalizer`, `identity_signal_emitter` only; no consumer calls `SilverDispatcher.project()`; only docs reference it | Backend, tests | P0 / — | Attach `silver_fact_projector` worker to `SDK_EVENTS_VALIDATED` translating bus payload → SDK envelope |
-| 2.3 | Communications projector registered | MISS | No comms projector in `services/silver/projectors/__init__.py` | Backend, migration, tests | P0 / 2.1 | New `CommsProjector` (authoritative for comms family) |
+| 2.1 | Multi-projector fan-out (event → ordered list) | CONF | `services/backend/services/silver/dispatcher.py:52-55` — `_TYPE_MAP[_t] = _p` (dict; one projector per type, last registration wins) | Backend, tests | P0 / — | Rebuild `_TYPE_MAP` as `dict[str, list]` with deterministic semantic ordering, per-projector isolation, structured results, latency/failure metrics |
+| 2.2 | Dispatcher wired into runtime event topology | UNWIRED | `services/backend/services/ingestion/workers.py` attaches `sdk_bronze_writer`, `silver_normalizer`, `identity_signal_emitter` only; no consumer calls `SilverDispatcher.project()`; only docs reference it | Backend, tests | P0 / — | Attach `silver_fact_projector` worker to `SDK_EVENTS_VALIDATED` translating bus payload → SDK envelope |
+| 2.3 | Communications projector registered | MISS | No comms projector in `services/backend/services/silver/projectors/__init__.py` | Backend, migration, tests | P0 / 2.1 | New `CommsProjector` (authoritative for comms family) |
 | 2.4 | Touchpoint projector for email events | PART | `touchpoint_projector.py:27-29` maps `email_delivered/opened/clicked` → `email_delivery/email_open/email_click`; no `email_reply`; no message/link/variant fields; no engagement-confidence gating | Backend, tests | P1 / 2.1 | Add `email_replied → email_reply`; carry comms lineage fields; suppress positive touchpoints for bounce/complaint/suppression |
 | 2.5 | One event → one canonical activity | CONF | `projectors/base.py:43-62` — every projector auto-emits activity per row; with fan-out, comms+touchpoint would double-emit. Idempotency keys are row-derived (`sctf:{touchpoint_id}`, `comms:{fact_id}`), not source-derived | Backend, tests | P0 / 2.1 | CommsProjector owns activity for comms events (source-derived key `sha256(tenant+source+provider_account+provider_event_id+semantic_type)`); dispatcher suppresses duplicate emission for comm event types |
 | 2.6 | Per-projector failure isolation / replay safety | PART | Dispatcher has a single try/except around one projector; DB layer has `ON CONFLICT DO NOTHING` idempotency | Backend, tests | P0 / 2.1 | Isolate per projector; structured `ProjectionOutcome`; replay tests |
@@ -61,7 +61,7 @@ unwired · `MISS` missing · `CONF` conflict with intended behavior.
 | # | Requirement | State | Evidence | Work | Priority / Depends on | Recommended change |
 |---|---|---|---|---|---|---|
 | 4.1 | Comms adapter family/actor routing | CONF | `measurement/silver_adapters.py:255-272` — `adapt_comms` hard-codes `activity_family="web2"`, `actor_type="human"` | Backend, tests | P0 / 3.1 | Route family from `message_category` (marketing→campaign, order/invoice→commerce, account/security/support→web2, agent→agent); actor_kind from provenance |
-| 4.2 | Journey-role policy (context/active/state_only/outcome/excluded) | MISS | Journey compiler (`measurement/engine/journey_compiler.py`) has no comms awareness; no journey_role concept | Backend, tests | P1 / 4.1 | Journey-role policy in `services/comms/contracts.py`; adapter emits `journey_role`; compiler collapses `state_only` |
+| 4.2 | Journey-role policy (context/active/state_only/outcome/excluded) | MISS | Journey compiler (`measurement/engine/journey_compiler.py`) has no comms awareness; no journey_role concept | Backend, tests | P1 / 4.1 | Journey-role policy in `services/backend/services/comms/contracts.py`; adapter emits `journey_role`; compiler collapses `state_only` |
 | 4.3 | Coalesced journey rebuilds | PART | `rebuild_affected_by_touchpoint` exists; no burst coalescing for comm events | Backend | P2 / 4.2 | Debounced rebuild queue keyed by (tenant, profile) |
 | 4.4 | Attribution eligibility for comms | MISS | `attribution/models.py` has click/impression eligibility; no machine-open exclusion, no delivered-no-credit, no reply configurability | Backend, tests | P1 / 5.2 | Comms eligibility policy: delivered=context, machine open/click=excluded, human click=eligible, reply=configurable, transactional=excluded |
 
@@ -70,17 +70,17 @@ unwired · `MISS` missing · `CONF` conflict with intended behavior.
 | # | Requirement | State | Evidence | Work | Priority / Depends on | Recommended change |
 |---|---|---|---|---|---|---|
 | 5.1 | Klaviyo connector lifecycle | PART | `integrations/connectors/adapters.py:365-407` — profile pull only; `ingest_event_types=("klaviyo.profile","klaviyo.metric")`; no webhook event mapping, no campaign/flow/message sync, no cursor, no backfill | Backend, tests, docs | P0 / 1.1 | Extend: webhook parse → canonical comm events; campaign/flow sync → campaign registry; incremental events pull with cursor; reconciliation |
-| 5.2 | Machine engagement classification | MISS | No classifier anywhere; opens/clicks all treated equally | Backend, tests | P0 / — | Deterministic classifier (`services/comms/classification.py`): UA/IP-class/timing/scanner rules; `suspected_machine_activity`, `machine_activity_probability`, `engagement_confidence` |
+| 5.2 | Machine engagement classification | MISS | No classifier anywhere; opens/clicks all treated equally | Backend, tests | P0 / — | Deterministic classifier (`services/backend/services/comms/classification.py`): UA/IP-class/timing/scanner rules; `suspected_machine_activity`, `machine_activity_probability`, `engagement_confidence` |
 | 5.3 | Generic signed comms webhook | MISS | `measurement/connectors/generic_webhook.py` is spend/campaign-oriented; integrations webhook lacks comms payload contract | Backend, tests, docs | P0 / 1.2 | `POST /v1/comms/webhook` with HMAC signature verification, replay protection, canonical payload |
-| 5.4 | Reply ingestion + auto-response detection | MISS | `email_replied` absent from registry; no correlation logic | Backend, tests | P1 / 1.1 | `services/comms/replies.py`: Message-ID/In-Reply-To/thread correlation; auto-response/DSN/OOO detection |
-| 5.5 | Signed post-click correlation token | MISS | Touchpoint projector reads UTM/click ids; no signed token | Backend, tests, docs | P1 / — | `services/comms/click_token.py`: HMAC token (`ae=`), key rotation, expiry, cross-tenant rejection; acquisitionEvidence integration |
+| 5.4 | Reply ingestion + auto-response detection | MISS | `email_replied` absent from registry; no correlation logic | Backend, tests | P1 / 1.1 | `services/backend/services/comms/replies.py`: Message-ID/In-Reply-To/thread correlation; auto-response/DSN/OOO detection |
+| 5.5 | Signed post-click correlation token | MISS | Touchpoint projector reads UTM/click ids; no signed token | Backend, tests, docs | P1 / — | `services/backend/services/comms/click_token.py`: HMAC token (`ae=`), key rotation, expiry, cross-tenant rejection; acquisitionEvidence integration |
 
 ## 6. Identity and campaign resolution
 
 | # | Requirement | State | Evidence | Work | Priority / Depends on | Recommended change |
 |---|---|---|---|---|---|---|
 | 6.1 | Email alias identity evidence | PART | `identity/signals.py:174-180` normalizes email; hashing utilities in `identity/hashing.py`; no provider-profile/mailbox evidence kinds | Backend, tests | P1 / — | Comms identity evidence: email_hash, provider_profile_id, provider_recipient_id, thread participant |
-| 6.2 | Shared-mailbox classification | MISS | No classification of role accounts (sales@, support@, …) | Backend, tests | P0 / — | `services/comms/mailbox.py`: role-account detection → organization-level resolution, never auto-human |
+| 6.2 | Shared-mailbox classification | MISS | No classification of role accounts (sales@, support@, …) | Backend, tests | P0 / — | `services/backend/services/comms/mailbox.py`: role-account detection → organization-level resolution, never auto-human |
 | 6.3 | Campaign registry reuse for email | IMPL | `campaign/registry.py` — provider-agnostic upsert/aliases/reviews, tenant-scoped | — | — | Reuse as-is; add channel=email refs via connectors |
 | 6.4 | Campaign hierarchy (message/variant/link) | MISS | Registry stops at campaign level | Migration, backend | P1 / 3.3 | Message/link dimensions keyed to canonical campaign |
 
@@ -115,7 +115,7 @@ unwired · `MISS` missing · `CONF` conflict with intended behavior.
 |---|---|---|---|---|---|---|
 | 10.1 | Marketing consent purpose | IMPL | `consent-registry.json` — `marketing` purpose, 180d retention, DSR scopes | — | — | Reuse; map comms categories → purposes |
 | 10.2 | Category-scoped suppression | MISS | Unsubscribe is a single event; no scope model | Backend, migration, tests | P1 / 3.5 | Scope enum + fail-closed evaluation |
-| 10.3 | PII hashing / redacted display for aliases | PART | `identity/hashing.py` exists; comms facts must never store raw addresses | Backend, tests | P0 / — | Hash + redact in `services/comms/mailbox.py`; enforce in projector |
+| 10.3 | PII hashing / redacted display for aliases | PART | `identity/hashing.py` exists; comms facts must never store raw addresses | Backend, tests | P0 / — | Hash + redact in `services/backend/services/comms/mailbox.py`; enforce in projector |
 | 10.4 | Comms pipeline metrics | MISS | No comms metrics | Backend | P1 / all | Projection latency/failures, machine-event rate, resolution coverage, webhook latency |
 | 10.5 | Feature flags for rollout | PART | `config/settings.py` has per-domain flag precedent | Backend | P0 / — | `comms_*` flags: ingestion, campaign projection, journeys, graph, profile360, campaign360, noesis |
 

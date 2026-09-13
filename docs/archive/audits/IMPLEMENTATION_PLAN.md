@@ -47,7 +47,7 @@ The Data Lake Architecture has real ETL code in TypeScript. The Python backend h
 ### Phase 3: Feature Materialization
 **Why third:** ML training needs features.
 
-The feature pipeline exists in `ML Models/aether-ml/features/pipeline.py`. It needs:
+The feature pipeline exists in `services/ml/features/pipeline.py`. It needs:
 - Connection to the lake tiers for input data
 - Scheduling for periodic materialization
 - Online feature serving via Redis (already implemented)

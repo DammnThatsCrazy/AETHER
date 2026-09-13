@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/model_governance/consent_purposes.py, Backend Architecture/aether-backend/services/model_governance/contracts.py, Backend Architecture/aether-backend/services/model_governance/policy.py, Backend Architecture/aether-backend/services/model_governance/training_gate.py, Backend Architecture/aether-backend/services/model_governance/inference_gate.py, Backend Architecture/aether-backend/services/model_governance/repositories.py, Backend Architecture/aether-backend/services/ml_serving/routes.py]
+source_files: [services/backend/services/model_governance/consent_purposes.py, services/backend/services/model_governance/contracts.py, services/backend/services/model_governance/policy.py, services/backend/services/model_governance/training_gate.py, services/backend/services/model_governance/inference_gate.py, services/backend/services/model_governance/repositories.py, services/backend/services/ml_serving/routes.py]
 last_synced_commit: fabddb8
 ---
 
@@ -15,12 +15,12 @@ last_synced_commit: fabddb8
 Consent-scoped admission of data into model **training** and consent-scoped,
 audited model **inference**. Model training and serving are sensitive actions:
 they are gated by the same canonical consent `PolicyDecision` engine
-(`services/policy`) as every other sensitive path, so their decisions land in the
+(`services/backend/services/policy`) as every other sensitive path, so their decisions land in the
 same tamper-evident audit ledger and `/v1/audit` export.
 
 Purpose semantics are never hardcoded — they are read from the canonical consent
 registry (`packages/shared/contracts/consent-registry.json`) at runtime by
-`services/model_governance/consent_purposes.py`.
+`services/backend/services/model_governance/consent_purposes.py`.
 
 ## Training-data admission (§3.5 / §3.10)
 
@@ -44,7 +44,7 @@ regardless of the purpose's default `allowModelTraining` flag. Every decision
 ## Inference policy gate (§3.9)
 
 `InferencePolicyGate.evaluate(...)` is invoked by the ML serving `predict` route
-(`services/ml_serving/routes.py`) immediately after canonical model resolution.
+(`services/backend/services/ml_serving/routes.py`) immediately after canonical model resolution.
 It **always** records a `serve_inference` consent `PolicyDecision` (the engine
 persists these unconditionally), and returns an `InferenceGateResult`.
 
@@ -64,7 +64,7 @@ prediction response for traceability.
 Required serving purposes are resolved from the ML registry governance metadata
 (`ModelEntry.required_inference_purposes` — the serving scope, distinct from the
 training scope `ModelEntry.allowed_training_purposes`) via
-`services/model_governance/policy.py`. There is no static fallback: a model that
+`services/backend/services/model_governance/policy.py`. There is no static fallback: a model that
 is unknown to the registry, or that declares no inference purposes, is denied
 serving outright (`inference_denied:no_declared_inference_purposes`), with a
 single auditable evidence decision recorded. Purpose declarations are validated

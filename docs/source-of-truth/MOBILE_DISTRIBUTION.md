@@ -13,14 +13,14 @@ since_version: 0.1.0
 Aether distributes two mobile apps — **Aether** (`apps/aether-mobile`) and
 **Kyber** (`apps/kyber-mobile`) — from a single shared SDK
 (`packages/mobile-core`) and a single mobile gateway
-(`services/mobile/`, `GET /v1/mobile/config`). This document is the
+(`services/backend/services/mobile/`, `GET /v1/mobile/config`). This document is the
 distribution reference: the profile vocabulary, the per-build enforcement,
 the version-support policy, and the honest release posture. It does **not**
 claim a store submission that has not happened (see
 [Honest boundaries](#honest-boundaries)).
 
 The canonical machine-readable source of the distribution vocabulary is
-`services/mobile/config.py` (`DistributionProfile`,
+`services/backend/services/mobile/config.py` (`DistributionProfile`,
 `profile_family`, `validate_distribution_profile`, version policy). The
 per-build enforcement lives in `scripts/mobile_build_check.py`. The parity
 test `tests/contracts/test_mobile_config_parity.py` keeps the two in
@@ -52,7 +52,7 @@ vocabulary is deliberately small and family-scoped:
 `expo.extra.distributionProfiles = { "ios": ..., "android": ... }` and fails
 the build if either is missing, unknown, or outside the per-platform allowed
 set (`DISTRIBUTION_PROFILES` in the checker is drift-guarded against
-`services/mobile/config.py` by the contract-parity test). Both shipping apps
+`services/backend/services/mobile/config.py` by the contract-parity test). Both shipping apps
 currently declare `{ ios: "dev", android: "dev" }`.
 
 The native compile step itself (`expo prebuild` → `xcodebuild` / `gradlew`)

@@ -40,7 +40,7 @@ owns it:
 | Clause | Meaning | Owning layer |
 |---|---|---|
 | **Sources observe** | SDKs and ingress adapters may observe, timestamp, identify the local source, preserve source-native references and correlation IDs, capture consent, queue, and retry — nothing more. | SDK surfaces (`packages/*`) + ingress adapters |
-| **Ingestion preserves** | The gateway accepts, validates, deduplicates, orders, and makes durable exactly what sources observed — without interpreting it. | `services/ingestion` (batch/bronze/outbox) |
+| **Ingestion preserves** | The gateway accepts, validates, deduplicates, orders, and makes durable exactly what sources observed — without interpreting it. | `services/backend/services/ingestion` (batch/bronze/outbox) |
 | **Aether interprets** | Normalization, identity resolution, temporal/correlation/relationship/evidence resolution happen server-side, behind a governed envelope. | lake → silver (normalizers, projectors, resolvers) |
 | **The graph establishes governed state** | Canonical entities, relationships, journeys, episodes, and outcomes are written only through governed, auditable graph mutations. | graph gateway + mutation governance |
 | **Intelligence derives meaning** | Metrics, attribution, findings, and 360 projections derive from canonical backend state; nothing source-specific may leak into them. | metrics / attribution / findings / projections / Kyber |
@@ -52,17 +52,19 @@ observation-only invariant (`execution_by_aether = false`) that ADR-011 fixes.
 
 | Tree | Role | Evidence |
 |---|---|---|
-| `Backend Architecture/aether-backend/` | **CANONICAL deployed backend** — the only tree Docker/ECR build and reference | root `docker-compose.yml` (builds this service only), `.github/workflows/deploy.yml` (ECR), `AWS Deployment/main.tf` (+ `AWS Deployment/aether-aws/terraform/…`), `config/runtime_deployment.yaml` |
+| `services/backend/` | **CANONICAL deployed backend** — the only tree Docker/ECR build and reference | root `docker-compose.yml` (builds this service only), `.github/workflows/deploy.yml` (ECR), `deploy/aws/terraform/main.tf`, `config/runtime_deployment.yaml` |
 | `packages/*` (`web`, `server`, `react-native`, `mobile-core`, `mobile-ui`, `android`, `ios`, `python`) + `packages/shared` | **CANONICAL SDK surface** — thin, observation-only clients over `api.aether.io` / `ingest.aether.so` | SDK endpoints never target port `3001`; `packages/web/src/index.ts` default endpoint `https://api.aether.io`; SDK dependency graph imports only `@aether/shared` + sibling SDKs |
 | `packages/shared/contracts/event-registry.json` | **CANONICAL event registry** (Contract Spine source) | generated TS/Python twins + gated docs declare this one JSON as source |
-| `Data Ingestion Layer/` | **LEGACY / UN-DEPLOYED duplicate** — TypeScript; `package.json` `name` is literally `"aether-backend"`; port `:3001`; kept alive only by version-sync/fallback/test-suite config | `Data Ingestion Layer/README.md` (versioned H1, no deprecation marker pre-Phase-0) |
-| `Data Lake Architecture/` | **LEGACY / UN-DEPLOYED duplicate lake** — TypeScript Bronze/Silver/Gold with its own `/v1/batch` | `Data Lake Architecture/README.md` |
-| `Agent Layer/` | **registered-not-deployable** — live, broker-coupled Celery workers; never canonical, never deprecated | `Agent Layer/` |
-| `Backend Architecture/` root modules (besides `aether-backend/`) | **ORPHANED dead legacy** | `auth.py cache.py common.py events.py graph.py limiter.py logger.py repos.py routes.py settings.py migrations/ mnt/ services/{delegation,journey-service,web3}` |
+| `docs/archive/legacy-architecture/data-ingestion-layer/` | **LEGACY / UN-DEPLOYED duplicate** — TypeScript; `package.json` `name` is literally `"aether-backend"`; port `:3001`; kept alive only by version-sync/fallback/test-suite config | `docs/archive/legacy-architecture/data-ingestion-layer/README.md` (versioned H1, no deprecation marker pre-Phase-0) |
+| `docs/archive/legacy-architecture/data-lake-architecture/` | **LEGACY / UN-DEPLOYED duplicate lake** — TypeScript Bronze/Silver/Gold with its own `/v1/batch` | `docs/archive/legacy-architecture/data-lake-architecture/README.md` |
+| `services/agents/` | **registered-not-deployable** — live, broker-coupled Celery workers; never canonical, never deprecated | `services/agents/` |
+| `docs/archive/legacy-architecture/backend/` root modules (besides `aether-backend/`) | **ORPHANED dead legacy** | `auth.py cache.py common.py events.py graph.py limiter.py logger.py repos.py routes.py settings.py migrations/ mnt/ services/{delegation,journey-service,web3}` |
 
-Phase 0 adds a single-owner registration and deprecation banners to the two
-legacy trees; it does **not** delete them (see
-[`REPO_TRUTH_AND_GAP_MATRIX.md`](./REPO_TRUTH_AND_GAP_MATRIX.md#deferred-constraints)).
+The post-#627 structural remediation moved active implementations out of the
+root-era architecture folders and placed the two duplicate TypeScript trees and
+orphaned backend modules under `docs/archive/legacy-architecture/`. The
+single-owner registry and deprecation banners now guard that archive; no active
+runtime or new work may depend on a root-era path.
 
 ## Two-envelope model
 
@@ -81,7 +83,7 @@ subject-hints, field trust, event semantics) hangs off Envelope B.
 **Live status: Envelope B model shipped (WS-A5); the WS-B adapter-convergence
 workstream (B1..B5) has shipped flag-gated default-OFF on the feat branch.** The
 canonical field registry (`packages/shared/contracts/observation-envelope-registry.json`),
-the pydantic runtime model (`Backend Architecture/aether-backend/shared/observation/envelope.py`)
+the pydantic runtime model (`services/backend/shared/observation/envelope.py`)
 and the passive TS twin (`packages/shared/observation-envelope.ts`) now exist and are held in
 lock-step by a parity test; `/v1/batch` can build the envelope per accepted SDK event behind a
 default-OFF flag (`AETHER_OBSERVATION_ENVELOPE_ENABLED`, additive
@@ -130,7 +132,7 @@ per-field enforcement) remain ledger rows Blueprint §3 / §10 / §11 / WS-B.
 ## Contract spine
 
 - Canonical SDK ingress = **`POST /v1/batch`**, implemented by
-  `Backend Architecture/aether-backend/services/ingestion/batch.py`.
+  `services/backend/services/ingestion/batch.py`.
 - SDK endpoints target `https://api.aether.io` / `https://ingest.aether.so` —
   never the legacy port `3001`.
 - Consent/privacy/scrub/minimization is server-authoritative on `/v1/batch`
@@ -171,12 +173,12 @@ OPERATOR_REPLAY
 
 **WS-B1 (flag-gated, default OFF): universal ingress adapter registry + one
 validated gateway.** The adapter registry ships in
-`Backend Architecture/aether-backend/services/ingestion/adapters/`: all seven
+`services/backend/services/ingestion/adapters/`: all seven
 families (SDK / webhook / connector / API-feed / import / harness / replay)
 declared with their Envelope-B `source_type`, blueprint adapter name, and
 allowed credential classes; the SDK family is the first converged adapter
 (`SdkIngressAdapter`, `PUBLIC_CLIENT`).
-`services/ingestion/gateway.py` is the gateway core that validates + stamps the
+`services/backend/services/ingestion/gateway.py` is the gateway core that validates + stamps the
 Envelope-B observations adapters build (schema/type/family/tenant checks,
 credential + source-trust provenance). A public SDK credential must be scoped
 to `observation:write` + `config:read` only (never `graph:read`,
@@ -206,8 +208,8 @@ decision must live in the backend, behind Envelope B + a trust class + a registr
 + evidence lineage.
 
 - SDKs may touch `packages/shared` and sibling SDK packages; they never import
-  backend internals (`Backend Architecture/**`, `Data Ingestion Layer/**`,
-  `Data Lake Architecture/**`).
+  backend internals (`docs/archive/legacy-architecture/backend/**`, `docs/archive/legacy-architecture/data-ingestion-layer/**`,
+  `docs/archive/legacy-architecture/data-lake-architecture/**`).
 - `docs/source-of-truth/SDK_SCOPE.md` conventions forbid `canonical_entity_id`
   in the SDK; `validation.py` strips client/library fields server-side.
 - **Live gap:** no CI gate enforces thinness, and interpretation modules
@@ -229,7 +231,7 @@ Bronze (raw, hash-chained) ──► Normalizers/projectors/resolvers (Silver)
 Silver workers branch on `source_service`/payload keys; five+ Bronze/Silver
 pipelines exist instead of one normalization spine; graph/ledger governance is
 off by default (`mutation_gateway_mode='off'`). WS-B5 ships the consumption-side
-spine (`services/ingestion/spine.py::to_observation_view`, flag-gated default-OFF):
+spine (`services/backend/services/ingestion/spine.py::to_observation_view`, flag-gated default-OFF):
 the additive Envelope-B `observation_envelope` key wins when present, otherwise the
 legacy flat SDK/comms dict or the provider_runtime `AetherEvent` dump is mapped —
 so the ingestion worker + semantic-intelligence + resolution consumers can read

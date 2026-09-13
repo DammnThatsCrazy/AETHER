@@ -161,12 +161,12 @@ remains `in_flight`.
 
 **M13 (A&B, 2026-09-04) — relationship read surface + spine activation seams.** Built
 under *Address A & B*: the D-04 M6↔M7 independence seam is now **filled**
-(`services/relationship_promotion/evidence_independence.py` provides the M6 module M7
-names, and `services/relationship_intelligence/coordinator.py` is its first runtime
+(`services/backend/services/relationship_promotion/evidence_independence.py` provides the M6 module M7
+names, and `services/backend/services/relationship_intelligence/coordinator.py` is its first runtime
 caller — proven end to end by the hermetic full-plane replay test
 `tests/relationship_intelligence/test_full_plane.py`, 4/0). The relationship read APIs,
 consent enforcement surface and spine-run meters land in
-`services/relationship_intelligence/{reads,routes,consent,coordinator}.py`
+`services/backend/services/relationship_intelligence/{reads,routes,consent,coordinator}.py`
 (`GET /v1/relationships/{source}/{target}/fidelity|explain|influence`); the Noesis
 relationship-spine read intents (G048) and influence-as-propagation decomposition
 (G043) are implemented; the six `silver_social_*_facts` tables gained DDL +

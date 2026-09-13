@@ -81,7 +81,7 @@ Legend per cell: `C` = CARRIED on this branch, `M` = main-owned canonical,
 
 | Dimension | Status | Evidence |
 |---|---|---|
-| Code | CARRIED | **Price write path** (`services/stablecoins/price_persistence.py`): `persist_price_observation` + `StablecoinPriceReconciler` (idempotent signature dedupe — re-reconciling a snapshot set yields `duplicate`, never a second conflict row). **`price_feed.py` delta**: `StablecoinPriceObservationSink` (JSONB, deterministic keys), `StablecoinPriceConflictDetector` (CONFLICT/CONSENSUS/PRICE_UNAVAILABLE honest states), sink-wired connectors. `shared/cis/clickhouse.py`: `ClickHouseUnavailableError` re-raise (no silent failure). Main's `providers.py` delete-based rollback is canonical (re-home decision — branch's demote-not-delete is superseded). Registry: `stablecoin_chain:evm|svm` → `CREDENTIAL_WAITING`. |
+| Code | CARRIED | **Price write path** (`services/backend/services/stablecoins/price_persistence.py`): `persist_price_observation` + `StablecoinPriceReconciler` (idempotent signature dedupe — re-reconciling a snapshot set yields `duplicate`, never a second conflict row). **`price_feed.py` delta**: `StablecoinPriceObservationSink` (JSONB, deterministic keys), `StablecoinPriceConflictDetector` (CONFLICT/CONSENSUS/PRICE_UNAVAILABLE honest states), sink-wired connectors. `shared/cis/clickhouse.py`: `ClickHouseUnavailableError` re-raise (no silent failure). Main's `providers.py` delete-based rollback is canonical (re-home decision — branch's demote-not-delete is superseded). Registry: `stablecoin_chain:evm|svm` → `CREDENTIAL_WAITING`. |
 | Transport | MAIN | EVM/SVM connectors + in-process fixture transport are main-owned; live chain RPC/JSON-RPC seams exist and are credential-gated (`required_endpoints=["json_rpc"]`). |
 | Credentials | PENDING EXTERNAL | Per-network RPC/indexer access keys + signed data agreements (deployment contract `stablecoin_chain.required_secrets: rpc_api_key`). |
 | Storage | CARRIED | Main's migrated `stablecoin_*` tables + the re-cut's durable price write path (unavailable snapshot persisted as observed, never fabricated 0/1 USD; durable reconciliation records). |
@@ -106,7 +106,7 @@ Legend per cell: `C` = CARRIED on this branch, `M` = main-owned canonical,
 | Transport | MAIN | Main-owned injectable REST/WS seams + fixture transport; live exchange endpoints external and credential-gated. |
 | Credentials | PENDING EXTERNAL | Read-only exchange API keys per venue; market-data license terms. |
 | Storage | CARRIED | Main's migrated `derivatives_*` tables + `durable_cursor.py` closes the write-path gap (checkpoint/stream-gap rows). |
-| Worker | CARRIED | `SupervisedStreamWorker` (`sequence.py`) real; `services/runtime/specs.py` delta registers `derivatives_venue_sweep` on main's sweep builder seam. |
+| Worker | CARRIED | `SupervisedStreamWorker` (`sequence.py`) real; `services/backend/services/runtime/specs.py` delta registers `derivatives_venue_sweep` on main's sweep builder seam. |
 | Cursor | CARRIED | Durable pull-cursor + stream-gap persistence; `DerivativesPullRunner` at-least-once resume; tested (`test_derivatives_durable_cursor.py`). |
 | Reconciliation | ABSENT | The branch-era derivatives reconciliation modules were not carried (superseded by main's runtime reconciliation plane); the re-cut leaves this to main. |
 | Repair | CARRIED | Sequence-gap detection/recovery, disconnect→reconnect resume at expected sequence (`test_derivatives_faults.py`). |
@@ -165,7 +165,7 @@ Legend per cell: `C` = CARRIED on this branch, `M` = main-owned canonical,
 
 | Dimension | Status | Evidence |
 |---|---|---|
-| Code | CARRIED | **Import-session FSM**: `import_session.py` (state machine) + `services/imports/session_persistence.py` (durable, idempotent) + `services/imports/service.py`/`commit.py` deltas (resumable commits); `projection_routes.py`. Main owns ingestion, gold, repositories, routes, governance. |
+| Code | CARRIED | **Import-session FSM**: `import_session.py` (state machine) + `services/backend/services/imports/session_persistence.py` (durable, idempotent) + `services/backend/services/imports/service.py`/`commit.py` deltas (resumable commits); `projection_routes.py`. Main owns ingestion, gold, repositories, routes, governance. |
 | Transport | MAIN | Main's partner-feed transport; live card-network/processor feeds external. |
 | Credentials | PENDING EXTERNAL | Card-network/processor feed access + import-bridge credentials. |
 | Storage | CARRIED | Main's `card_linked_flow_facts` + the re-cut's durable import-session state (`test_card_linked_import_session.py`). |
@@ -186,13 +186,13 @@ Legend per cell: `C` = CARRIED on this branch, `M` = main-owned canonical,
 
 | Dimension | Status | Evidence |
 |---|---|---|
-| Code | CARRIED | `signer_authority.py` + `signer_repos.py` (refs-only signer authority, never private material); `commerce_models.py`/`commerce_store.py`/`control_plane.py` deltas (Decimal money, proof semantics); `services/commerce/metering.py`, `rail_matrix.py`, `reconciliation.py`, `workers.py`. Main owns verification/settlement/entitlements/idempotency. Registry: `agentic_commerce:x402` → `CREDENTIAL_WAITING` (9 ops). |
+| Code | CARRIED | `signer_authority.py` + `signer_repos.py` (refs-only signer authority, never private material); `commerce_models.py`/`commerce_store.py`/`control_plane.py` deltas (Decimal money, proof semantics); `services/backend/services/commerce/metering.py`, `rail_matrix.py`, `reconciliation.py`, `workers.py`. Main owns verification/settlement/entitlements/idempotency. Registry: `agentic_commerce:x402` → `CREDENTIAL_WAITING` (9 ops). |
 | Transport | MAIN | Main's onchain verification transport (EVM/SVM proof paths); live commerce RPC external + credential-gated. |
 | Credentials | PENDING EXTERNAL | `commerce_rpc_access` (`commerce_base_rpc`, `commerce_solana_rpc`) + oracle signer key. |
 | Storage | CARRIED | `commerce_metering` + `commerce_signer_refs` repos (durable store table claims) + storage policies; challenge/entitlement/grant state through main's durable store + graph. |
-| Worker | CARRIED | `services/runtime/specs.py` delta registers commerce workers on main's builders. |
+| Worker | CARRIED | `services/backend/services/runtime/specs.py` delta registers commerce workers on main's builders. |
 | Cursor | CARRIED | Challenge/settlement idempotency + deterministic ids. |
-| Reconciliation | CARRIED | `services/commerce/reconciliation.py` + `SettlementTracker` (main) settlement state machine. |
+| Reconciliation | CARRIED | `services/backend/services/commerce/reconciliation.py` + `SettlementTracker` (main) settlement state machine. |
 | Repair | CARRIED | Idempotent settlement retry; proof replay guard (`test_x402_proofs.py` 12). |
 | Observability | CARRIED | Commerce metering records + event publish; no dedicated x402 dashboard on this branch. |
 | Tenant UI | MAIN | Tenant commerce surfaces (main-owned). |
@@ -207,14 +207,14 @@ Legend per cell: `C` = CARRIED on this branch, `M` = main-owned canonical,
 
 | Dimension | Status | Evidence |
 |---|---|---|
-| Code | CARRIED | **SVM rail re-homed into `services/rewards/rails.py`**: `_SUPPORTED_VM_TYPES = {"evm", "svm"}`, `_build_svm_proof_payload` (SHA-256 message hash, base58 program id/signer, Anchor instruction) using main's `MultiChainSigner`; fail-closed chain identity outside local. Plus `operator_routes.py`, `receipt_evidence.py` (durable append-only audit), `reconcile.py` (claim reconciliation), `runtime/dead_letter_sweeper.py`. Registry: `agentic_commerce:rewards_onchain_claim` → `CREDENTIAL_WAITING`. |
+| Code | CARRIED | **SVM rail re-homed into `services/backend/services/rewards/rails.py`**: `_SUPPORTED_VM_TYPES = {"evm", "svm"}`, `_build_svm_proof_payload` (SHA-256 message hash, base58 program id/signer, Anchor instruction) using main's `MultiChainSigner`; fail-closed chain identity outside local. Plus `operator_routes.py`, `receipt_evidence.py` (durable append-only audit), `reconcile.py` (claim reconciliation), `runtime/dead_letter_sweeper.py`. Registry: `agentic_commerce:rewards_onchain_claim` → `CREDENTIAL_WAITING`. |
 | Transport | MAIN | Main's tenant-webhook + onchain-claim transport; SSRF-checked, HMAC-signed. |
 | Credentials | PENDING EXTERNAL | `oracle_signer_key`; rail credentials; `REWARD_*_ADDRESS` contract addresses. |
 | Storage | CARRIED | Main's migrated `reward_*` tables + durable evidence/outbox machinery (`receipt_evidence.py`) + storage policies. |
 | Worker | CARRIED | `dead_letter_sweeper.py` (deterministic sweep summary) + main's reward outbox workers. |
 | Cursor | CARRIED | Proof nonce + idempotency keys; delivery outbox lease/backoff; replay protection tested. |
 | Reconciliation | CARRIED | `reconcile.py` claim-reconciliation (proof marked used once, idempotent receipts); `test_reward_claim_reconciliation.py`. |
-| Repair | CARRIED | Durable outbox: timeout→retry→dead-letter→redeliver (retryable semantics in `services/delivery/outcome_processor.py`); `test_reward_receipt_evidence.py`. |
+| Repair | CARRIED | Durable outbox: timeout→retry→dead-letter→redeliver (retryable semantics in `services/backend/services/delivery/outcome_processor.py`); `test_reward_receipt_evidence.py`. |
 | Observability | CARRIED | Operator health surface (`operator_routes.py`), audit log; no dedicated rewards dashboard on this branch. |
 | Tenant UI | MAIN | Tenant reward surfaces (main-owned). |
 | Operator UI | CARRIED | `operator_routes.py` (per-tenant campaign/decision/action/audit views). |
@@ -263,7 +263,7 @@ Legend per cell: `C` = CARRIED on this branch, `M` = main-owned canonical,
 
 | Dimension | Status | Evidence |
 |---|---|---|
-| Code | CARRIED | `services/readiness_graph/` (`graph.py`, `revalidation_worker.py`, `routes.py`), `services/diagnostics/observability_middleware.py` (auto-trace middleware), `services/metering_evidence/` (`families.py`, `reconciliation.py`), `services/kyber/aggregate.py`. Main owns `services/tenant_readiness/` + `services/capabilities/`. |
+| Code | CARRIED | `services/backend/services/readiness_graph/` (`graph.py`, `revalidation_worker.py`, `routes.py`), `services/backend/services/diagnostics/observability_middleware.py` (auto-trace middleware), `services/backend/services/metering_evidence/` (`families.py`, `reconciliation.py`), `services/backend/services/kyber/aggregate.py`. Main owns `services/backend/services/tenant_readiness/` + `services/backend/services/capabilities/`. |
 | Credentials | PENDING EXTERNAL | Live readiness probes against provisioned providers/infra. |
 | Storage | CARRIED | `capability_readiness` + `tenant_launch_readiness` repos + storage policies; readiness evidence durable via main's metering plane. |
 | Worker | CARRIED | `readiness_revalidation` spec delta (auto-demotes on invalid evidence, never promotes); dead-letter sweeper worker. |

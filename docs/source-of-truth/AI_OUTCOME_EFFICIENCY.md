@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [packages/shared/ai-execution.ts, Backend Architecture/aether-backend/services/economic/ai_models.py, Backend Architecture/aether-backend/services/economic/ai_pricing.py, Backend Architecture/aether-backend/services/economic/ai_costs.py, Backend Architecture/aether-backend/services/economic/ai_aggregation.py, Backend Architecture/aether-backend/services/economic/ai_efficiency.py, Backend Architecture/aether-backend/services/economic/ai_routes.py, Backend Architecture/aether-backend/services/silver/projectors/ai_invocation_projector.py]
+source_files: [packages/shared/ai-execution.ts, services/backend/services/economic/ai_models.py, services/backend/services/economic/ai_pricing.py, services/backend/services/economic/ai_costs.py, services/backend/services/economic/ai_aggregation.py, services/backend/services/economic/ai_efficiency.py, services/backend/services/economic/ai_routes.py, services/backend/services/silver/projectors/ai_invocation_projector.py]
 last_synced_commit: HEAD
 ---
 
@@ -29,7 +29,7 @@ business-outcome constraints.
 completed workflow → cost per qualified outcome → incremental business value
 per AI dollar. Aether owns the final three levels.
 
-**Naming:** backend domain **AI Economics** (`services/economic/ai_*.py`),
+**Naming:** backend domain **AI Economics** (`services/backend/services/economic/ai_*.py`),
 tenant surface **AI Efficiency** (`/ai-efficiency`), Kyber surface
 **AI Efficiency Health**.
 
@@ -54,7 +54,7 @@ fields are rejected at validation; `contains_prompt_content` /
   privacy `behavioral`, retention `standard_90d`) — registered in the
   canonical event registry; validated per the shared contract
   (`packages/shared/ai-execution.ts`), mirrored in
-  `services/economic/ai_models.py` (non-negative usage/cost/latency,
+  `services/backend/services/economic/ai_models.py` (non-negative usage/cost/latency,
   `quality_score` 0..1, bounded free-text dimensions, prompt-content field
   rejection).
 - Read model: `ai_execution_facts` — **a new canonical store, not an
@@ -67,7 +67,7 @@ fields are rejected at validation; `contains_prompt_content` /
   break its 14 co-writing projectors and violate the additive-only rule.
   `agent_cost_observed` → `silver_agent_execution_facts` continues
   unchanged; AI Economics reads only `ai_execution_facts`.
-- Projector: `services/silver/projectors/ai_invocation_projector.py`,
+- Projector: `services/backend/services/silver/projectors/ai_invocation_projector.py`,
   flag-gated (`AETHER_AI_EXECUTION_FACTS_ENABLED`), idempotent on
   `(tenant_id, invocation_id)` — duplicate with matching
   `provenance.raw_event_hash` reuses the record; a different hash is
@@ -100,7 +100,7 @@ cost coverage (share of facts with known cost).
 
 ## Noesis — first complete instrumented workload
 
-`services/noesis/provider.py` (Anthropic + OpenAI plan providers) captures
+`services/backend/services/noesis/provider.py` (Anthropic + OpenAI plan providers) captures
 split input/output tokens, latency, status, and model, and records an
 `ai_invocation_observed` fact (`task_type="noesis_plan"`,
 `provenance.source="noesis"`) through the projector path — fail-open so

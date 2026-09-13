@@ -54,7 +54,7 @@ and `docs/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md`.
 - [ ] The provider consumes the shared contracts
       (`ProjectionRequest`, `ProjectionContext`, `ProjectionResult`,
       `ProjectionSection`, `ClaimEnvelope`) from
-      `Backend Architecture/aether-backend/shared/intelligence_projections/contracts.py`
+      `services/backend/shared/intelligence_projections/contracts.py`
       / `packages/shared/intelligence-projection.ts`.
 - [ ] **No redefinitions** — the slice reuses canonical `EntityRef`,
       `EvidenceRef`, `PageRequest`, and the time-range primitive; it does not
@@ -135,7 +135,7 @@ and `docs/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md`.
 - [ ] The full targeted pytest set passes:
       `python -m pytest tests/unit/test_intelligence_projection_*.py -q --tb=short`
       and
-      `python -m pytest "Backend Architecture/aether-backend/tests/unit/" -k intelligence_projection -q --tb=short`.
+      `python -m pytest "services/backend/tests/unit/" -k intelligence_projection -q --tb=short`.
 
 ## 11. Readiness — no `production_ready` claim
 

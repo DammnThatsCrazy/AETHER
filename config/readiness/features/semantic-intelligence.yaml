@@ -26,9 +26,9 @@ repository_ceiling:
   - Insert provider credentials into the credential platform; run credentials-preflight.
   remaining_is_repository_controlled: true
   evidence:
-  - Backend Architecture/aether-backend/services/semantic_intelligence/
-  - Backend Architecture/aether-backend/services/semantic_intelligence/providers.py
-  - Backend Architecture/aether-backend/services/semantic_intelligence/replay.py
+  - services/backend/services/semantic_intelligence/
+  - services/backend/services/semantic_intelligence/providers.py
+  - services/backend/services/semantic_intelligence/replay.py
 implementation:
   state: IMPLEMENTED
   denominator: in-scope repository controls (migration-derived)
@@ -134,7 +134,7 @@ business_readiness:
 confidence:
   level: LOW
   reasons:
-  - 'repository evidence: Backend Architecture/aether-backend/services/semantic_intelligence/'
+  - 'repository evidence: services/backend/services/semantic_intelligence/'
   evidence_gaps:
   - credentialed environment execution not yet performed
 release_profiles:

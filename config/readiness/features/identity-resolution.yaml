@@ -29,8 +29,8 @@ repository_ceiling:
     - Capture credentialed staging + production environment evidence
   remaining_is_repository_controlled: false
   evidence:
-    - "Backend Architecture/aether-backend/services/identity/routes.py"
-    - "Backend Architecture/aether-backend/services/resolution/routes.py"
+    - "services/backend/services/identity/routes.py"
+    - "services/backend/services/resolution/routes.py"
 
 implementation:
   state: TURNKEY

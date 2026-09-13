@@ -10,7 +10,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 SCRIPT = ROOT / "scripts" / "docs_extract" / "extract_plans.py"
-CATALOG_PY = ROOT / "Backend Architecture" / "aether-backend" / "shared" / "plans" / "catalog.py"
+CATALOG_PY = ROOT / "services" / "backend" / "shared" / "plans" / "catalog.py"
 
 
 @pytest.fixture(scope="module")

@@ -68,16 +68,16 @@ externally. The first public pre-release is `0.1.0-alpha.0` above.
 ## Unreleased — Hosted Agent Control Plane
 
 ### Tenant-scoped control plane for the Agent Layer
-- **Durable runtime repository** (`services/agent/runtime_repository.py`)
+- **Durable runtime repository** (`services/backend/services/agent/runtime_repository.py`)
   persists objectives, plans, steps, checkpoints, events, review batches,
   staged mutations, controller heartbeats, worker runs, catalyst triggers,
   and kill-switch state via the shared `get_store` abstraction.
-- **Operator API** under `/v1/agent/*` (`services/agent/routes.py`):
+- **Operator API** under `/v1/agent/*` (`services/backend/services/agent/routes.py`):
   controller health, objective submit/list/detail, pause/resume/cancel,
   dispatch, review-batch approve/reject, timeline/events, heartbeat/status,
   and tenant-scoped kill-switch — with a consistent envelope, RBAC/tenant
   checks, idempotency keys, and secret redaction.
-- **Hardened queue/worker** (`Agent Layer/queue/*`) — explicit routing for
+- **Hardened queue/worker** (`services/agents/queue/*`) — explicit routing for
   discovery/enrichment/verification/commit/recovery, idempotency headers,
   and safer Celery defaults.
 - **Kyber wiring** — env-driven REST base URL and control-plane hooks in
@@ -102,7 +102,7 @@ externally. The first public pre-release is `0.1.0-alpha.0` above.
 - **Ingestion** — validator accepts and normalizes journey types (including
   legacy encodings); new metrics `journey_events_{received,invalid,
   normalized}_total`.
-- **Backend stitching** (`services/journeys/`) — `JourneyStitchingService`
+- **Backend stitching** (`services/backend/services/journeys/`) — `JourneyStitchingService`
   (confidence scoring, handoff detection) with tenant APIs under
   `/v1/journeys/*` and admin health under `/v1/admin/journey-health/*`.
   Identity-resolve responses now carry `confidence`/`confidence_signals` so
@@ -267,9 +267,9 @@ All new surfaces are feature-flagged and default OFF.
 
 ### Production audit remediation (monorepo-wide)
 - **`@aether/shared` workspace**: `packages/shared/` promoted to first-class npm workspace with `exports` map; React Native imports migrated from fragile relative paths to `@aether/shared/*`.
-- **Backend Docker buildable**: repaired broken `COPY` paths in `Backend Architecture/aether-backend/Dockerfile`; added `.dockerignore` to strip unrelated subsystems from every backend build context.
+- **Backend Docker buildable**: repaired broken `COPY` paths in `services/backend/Dockerfile`; added `.dockerignore` to strip unrelated subsystems from every backend build context.
 - **ml-serving stage pinned**: `target: serving` added to both root and staging docker-compose so Docker no longer builds the default-last `monitoring` stage that lacked the `serving/` module.
-- **Staging compose context fix**: staging ml-serving now points at `../../ML Models/aether-ml` (where the ML Dockerfile's relative COPY instructions resolve).
+- **Staging compose context fix**: staging ml-serving now points at `../../services/ml` (where the ML Dockerfile's relative COPY instructions resolve).
 - **Kyber service added to docker-compose** with host port 8081→8080 (no ml-serving collision) and wget `/health` check.
 - **Python version floor** raised to `>=3.10` across root + ML subsystems; ruff `target-version = py310`.
 - **React Native test suite**: real vitest suite with hoisted NativeModule mocks (replaced placeholder `echo` script); 8 tests passing.
@@ -277,7 +277,7 @@ All new surfaces are feature-flagged and default OFF.
 - **Circular-dependency CI gate** via `npx madge --circular`.
 - **CI path parameterization**: `BACKEND_DIR`, `ML_DIR`, `AGENT_DIR` hoisted to env/vars in `repo-health.yml` and `Makefile`.
 - **License parity**: every package.json aligned to `UNLICENSED`.
-- **Stale removals**: `RootPackageSDK.json` (duplicate manifest) and `Backend Architecture/main.py` (stale 10-service entrypoint) deleted.
+- **Stale removals**: `RootPackageSDK.json` (duplicate manifest) and `docs/archive/legacy-architecture/backend/main.py` (stale 10-service entrypoint) deleted.
 - **Release tooling**: `bump_version.py` + `validate_docs.py` now cover `packages/shared`, `apps/kyber`, and the rollback/migration/smoke-test runbook headers.
 
 ---
@@ -577,7 +577,7 @@ All new surfaces are feature-flagged and default OFF.
 
 ## v8.2.0 — Automatic Traffic Source Detection (2026-03-07)
 
-- **NEW**: Server-side `SourceClassifier` (`services/traffic/classifier.py`) with O(1) domain lookup tables — 40+ social platforms, 17+ search engines, 14 email providers, 12 ad platform click IDs
+- **NEW**: Server-side `SourceClassifier` (`services/backend/services/traffic/classifier.py`) with O(1) domain lookup tables — 40+ social platforms, 17+ search engines, 14 email providers, 12 ad platform click IDs
 - **NEW**: Priority classification chain: Click IDs (confidence 1.0) → UTM params (0.95) → Referrer domain (0.9) → Direct (0.5)
 - **Web SDK**: Added `referrerDomain` extraction and `sessionStorage` persistence for SPA navigation
 - **iOS SDK**: Expanded click ID capture from 2 → 12, expanded `CampaignInfo` with content/term/clickIds/referrerDomain, wired into `buildContext()`

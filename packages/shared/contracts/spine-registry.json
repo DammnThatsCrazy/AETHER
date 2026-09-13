@@ -292,8 +292,8 @@
           "entity_ref_resolution"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/identity",
-          "Backend Architecture/aether-backend/services/resolution",
+          "services/backend/services/identity",
+          "services/backend/services/resolution",
           "docs/source-of-truth/IDENTITY_RESOLUTION.md"
         ],
         "migrationMode": "formalize_existing"
@@ -401,9 +401,9 @@
           "evidence_and_restatement"
         ],
         "services": [
-          "Backend Architecture/aether-backend/shared/integrity",
-          "Backend Architecture/aether-backend/services/integrity",
-          "Backend Architecture/aether-backend/shared/cis/provenance.py",
+          "services/backend/shared/integrity",
+          "services/backend/services/integrity",
+          "services/backend/shared/cis/provenance.py",
           "docs/source-of-truth/ENRICHMENT_LINEAGE.md",
           "docs/DATA-QUALITY.md"
         ],
@@ -510,8 +510,8 @@
           "temporal_integrity"
         ],
         "services": [
-          "Backend Architecture/aether-backend/shared/temporal",
-          "Backend Architecture/aether-backend/services/events",
+          "services/backend/shared/temporal",
+          "services/backend/services/events",
           "docs/source-of-truth/TEMPORAL_INTEGRITY.md"
         ],
         "migrationMode": "formalize_existing"
@@ -618,7 +618,7 @@
         ],
         "services": [
           "docs/source-of-truth/GRAPH_LAYER_PARITY.md",
-          "Backend Architecture/aether-backend/services/semantic_intelligence"
+          "services/backend/services/semantic_intelligence"
         ],
         "migrationMode": "formalize_existing"
       },
@@ -743,8 +743,8 @@
           "graph_layer"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/gateway",
-          "Backend Architecture/aether-backend/shared/graph",
+          "services/backend/services/gateway",
+          "services/backend/shared/graph",
           "docs/source-of-truth/GRAPH_CONTRACT.md",
           "docs/source-of-truth/GRAPH_LAYER_PARITY.md"
         ],
@@ -853,7 +853,7 @@
           "context_intelligence"
         ],
         "services": [
-          "Backend Architecture/aether-backend/shared/context_capsule",
+          "services/backend/shared/context_capsule",
           "docs/source-of-truth/CONTEXT_INTELLIGENCE.md"
         ],
         "migrationMode": "formalize_existing"
@@ -960,9 +960,9 @@
           "dsr"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/policy",
-          "Backend Architecture/aether-backend/services/consent",
-          "Backend Architecture/aether-backend/services/dsr_propagation",
+          "services/backend/services/policy",
+          "services/backend/services/consent",
+          "services/backend/services/dsr_propagation",
           "docs/source-of-truth/CONSENT_MODEL.md"
         ],
         "migrationMode": "formalize_existing"
@@ -972,7 +972,7 @@
     {
       "id": "rights_irrl",
       "displayName": "Rights / IRRL runtime",
-      "description": "The Information Rights, Retention & Learning (IRRL) composition spine: resolves a durable, versioned, evidence-linked RightsDecision over data use, retention, output derivation, learning, model-training eligibility, generalization, Olympus internal intelligence, disclosure, portability, and termination by composing the existing consent / data-rights / lifecycle / lineage / storage authorities. Speaks the canonical vocabulary registered in packages/shared/contracts/rights-vocabulary.json (python enums in Backend Architecture/aether-backend/services/integrations/data_rights/models.py; TS twin packages/shared/data-rights.ts).",
+      "description": "The Information Rights, Retention & Learning (IRRL) composition spine: resolves a durable, versioned, evidence-linked RightsDecision over data use, retention, output derivation, learning, model-training eligibility, generalization, Olympus internal intelligence, disclosure, portability, and termination by composing the existing consent / data-rights / lifecycle / lineage / storage authorities. Speaks the canonical vocabulary registered in packages/shared/contracts/rights-vocabulary.json (python enums in services/backend/services/integrations/data_rights/models.py; TS twin packages/shared/data-rights.ts).",
       "plane": "governance_contract",
       "spineKind": "truth_authority",
       "implementationState": "in_flight",
@@ -1105,7 +1105,7 @@
         {
           "ref": "IRRL vocabulary & naming-overlay terms (DataRightsEnvelope, UseAuthority, RightsDerivationClass, LearningClass, OwnershipClass, RightsDecision)",
           "kind": "vocabulary",
-          "reason": "The IRRL vocabulary now resolves against real implementing homes rather than aspirational labels: the canonical value sets live in packages/shared/contracts/rights-vocabulary.json; the python (str, Enum) members land in Backend Architecture/aether-backend/services/integrations/data_rights/models.py; the TS twin is packages/shared/data-rights.ts; and the frozen contract/naming docs are RIGHTS_AUTHORITY_BLUEPRINT.md / IRRL_NAMING_OVERLAY.md / RIGHTS_TAXONOMY.md. Remaining to land across the program phases: the structured DataRightsGrant nested components' runtime parity surface (already in data_rights models + TS twin), the durable rdec_* RightsDecision persistence behind the Effective Rights Resolver, and the Generalization Gateway runtime adapter",
+          "reason": "The IRRL vocabulary now resolves against real implementing homes rather than aspirational labels: the canonical value sets live in packages/shared/contracts/rights-vocabulary.json; the python (str, Enum) members land in services/backend/services/integrations/data_rights/models.py; the TS twin is packages/shared/data-rights.ts; and the frozen contract/naming docs are RIGHTS_AUTHORITY_BLUEPRINT.md / IRRL_NAMING_OVERLAY.md / RIGHTS_TAXONOMY.md. Remaining to land across the program phases: the structured DataRightsGrant nested components' runtime parity surface (already in data_rights models + TS twin), the durable rdec_* RightsDecision persistence behind the Effective Rights Resolver, and the Generalization Gateway runtime adapter",
           "resolvesIn": "Rights IRRL Authority program (feat/rights-irrl-authority; RIGHTS_AUTHORITY_BLUEPRINT.md §17 Phase 0–1)"
         }
       ],
@@ -1117,10 +1117,10 @@
           "information_rights_retention_learning"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/integrations/data_rights",
-          "Backend Architecture/aether-backend/services/policy",
-          "Backend Architecture/aether-backend/services/dsr_propagation",
-          "Backend Architecture/aether-backend/services/storage_lifecycle",
+          "services/backend/services/integrations/data_rights",
+          "services/backend/services/policy",
+          "services/backend/services/dsr_propagation",
+          "services/backend/services/storage_lifecycle",
           "docs/source-of-truth/DATA_RIGHTS_LEDGER.md",
           "docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md",
           "docs/source-of-truth/IRRL_NAMING_OVERLAY.md",
@@ -1241,8 +1241,8 @@
           "provider_neutral_runtime"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/provider_runtime",
-          "Backend Architecture/aether-backend/services/providers",
+          "services/backend/services/provider_runtime",
+          "services/backend/services/providers",
           "docs/UNIVERSAL-PROVIDER-RUNTIME.md",
           "docs/source-of-truth/IMPORTS.md"
         ],
@@ -1349,8 +1349,8 @@
           "sdk_alignment"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/imports",
-          "Backend Architecture/aether-backend/services/integrations/connectors",
+          "services/backend/services/imports",
+          "services/backend/services/integrations/connectors",
           "docs/source-of-truth/SDK_RUNTIME_PARITY.md"
         ],
         "migrationMode": "formalize_existing"
@@ -1460,8 +1460,8 @@
           "metric_algebra"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/measurement",
-          "Backend Architecture/aether-backend/shared/measurement",
+          "services/backend/services/measurement",
+          "services/backend/shared/measurement",
           "docs/source-of-truth/MEASUREMENT_INTEGRITY.md"
         ],
         "migrationMode": "formalize_existing"
@@ -1571,8 +1571,8 @@
           "credit_algebra"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/attribution",
-          "Backend Architecture/aether-backend/services/measurement",
+          "services/backend/services/attribution",
+          "services/backend/services/measurement",
           "docs/source-of-truth/AI_AGENT_REFERRAL_ATTRIBUTION.md"
         ],
         "migrationMode": "formalize_existing"
@@ -1682,8 +1682,8 @@
           "unified_exploration_fabric"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/exploration",
-          "Backend Architecture/aether-backend/shared/exploration",
+          "services/backend/services/exploration",
+          "services/backend/shared/exploration",
           "docs/source-of-truth/EXPLORATION_FABRIC.md"
         ],
         "migrationMode": "formalize_existing"
@@ -1816,7 +1816,7 @@
         ],
         "services": [
           "docs/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md",
-          "Backend Architecture/aether-backend/shared/intelligence_projections"
+          "services/backend/shared/intelligence_projections"
         ],
         "migrationMode": "formalize_existing"
       },
@@ -1928,9 +1928,9 @@
           "ml_contracts"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/model_governance",
-          "Backend Architecture/aether-backend/shared/model_governance",
-          "Backend Architecture/aether-backend/services/model_runtime",
+          "services/backend/services/model_governance",
+          "services/backend/shared/model_governance",
+          "services/backend/services/model_runtime",
           "docs/source-of-truth/MODEL_GOVERNANCE.md"
         ],
         "migrationMode": "formalize_existing"
@@ -2035,9 +2035,9 @@
           "compute_substrate"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/computation",
-          "Backend Architecture/aether-backend/services/jobs",
-          "Backend Architecture/aether-backend/services/flows",
+          "services/backend/services/computation",
+          "services/backend/services/jobs",
+          "services/backend/services/flows",
           "docs/source-of-truth/COMPUTATION_SUBSTRATE.md"
         ],
         "migrationMode": "formalize_existing"
@@ -2144,8 +2144,8 @@
           "execution_contracts"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/agent",
-          "Backend Architecture/aether-backend/services/agent_access_intelligence",
+          "services/backend/services/agent",
+          "services/backend/services/agent_access_intelligence",
           "docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md",
           "docs/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md"
         ],
@@ -2254,8 +2254,8 @@
           "capability_readiness"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/activation",
-          "Backend Architecture/aether-backend/services/tenant_readiness",
+          "services/backend/services/activation",
+          "services/backend/services/tenant_readiness",
           "docs/source-of-truth/ACTIVATION.md",
           "docs/source-of-truth/CAPABILITY_MANIFEST.md"
         ],
@@ -2358,8 +2358,8 @@
           "desired_observed_state"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/reliability",
-          "Backend Architecture/aether-backend/services/diagnostics",
+          "services/backend/services/reliability",
+          "services/backend/services/diagnostics",
           "docs/source-of-truth/PLATFORM_PARITY.md"
         ],
         "migrationMode": "formalize_existing"
@@ -2460,8 +2460,8 @@
           "findings_investigations_decisions"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/operational_intelligence",
-          "Backend Architecture/aether-backend/services/investigation",
+          "services/backend/services/operational_intelligence",
+          "services/backend/services/investigation",
           "docs/DECISION-OUTCOME-INTELLIGENCE.md",
           "docs/INVESTIGATION-WORKSPACE.md"
         ],
@@ -2566,8 +2566,8 @@
           "kyber_control_plane"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/kyber",
-          "Backend Architecture/aether-backend/services/kyber_operator",
+          "services/backend/services/kyber",
+          "services/backend/services/kyber_operator",
           "docs/source-of-truth/KYBER_ACCESS_CONTROL.md",
           "docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md"
         ],
@@ -2677,8 +2677,8 @@
           "interaction_surfaces"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/noesis",
-          "Backend Architecture/aether-backend/services/me",
+          "services/backend/services/noesis",
+          "services/backend/services/me",
           "docs/source-of-truth/UNIFIED_PLATFORM_BASELINE_AUDIT.md"
         ],
         "migrationMode": "formalize_existing"
@@ -2773,7 +2773,7 @@
           "infra_model"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/infrastructure"
+          "services/backend/services/infrastructure"
         ],
         "migrationMode": "formalize_existing"
       },
@@ -2879,8 +2879,8 @@
           "continuation"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/continuation",
-          "Backend Architecture/aether-backend/services/journeys",
+          "services/backend/services/continuation",
+          "services/backend/services/journeys",
           "docs/source-of-truth/CROSS_DEVICE_CONTINUITY.md"
         ],
         "migrationMode": "net_new"
@@ -2989,9 +2989,9 @@
           "history_replay"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/temporal360",
-          "Backend Architecture/aether-backend/shared/graph",
-          "Backend Architecture/aether-backend/shared/temporal",
+          "services/backend/services/temporal360",
+          "services/backend/shared/graph",
+          "services/backend/shared/temporal",
           "docs/source-of-truth/TEMPORAL_INTEGRITY.md"
         ],
         "migrationMode": "net_new"
@@ -3092,8 +3092,8 @@
           "context_capsule_semantics_spine"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/geographic360",
-          "Backend Architecture/aether-backend/shared/context_capsule",
+          "services/backend/services/geographic360",
+          "services/backend/shared/context_capsule",
           "docs/source-of-truth/CONTEXT_INTELLIGENCE.md"
         ],
         "migrationMode": "net_new"
@@ -3196,9 +3196,9 @@
           "cohort_membership"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/population",
-          "Backend Architecture/aether-backend/services/population360",
-          "Backend Architecture/aether-backend/services/cluster"
+          "services/backend/services/population",
+          "services/backend/services/population360",
+          "services/backend/services/cluster"
         ],
         "migrationMode": "net_new"
       },
@@ -3307,8 +3307,8 @@
           "control_plane_rollup"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/provider_runtime",
-          "Backend Architecture/aether-backend/services/activation"
+          "services/backend/services/provider_runtime",
+          "services/backend/services/activation"
         ],
         "migrationMode": "net_new"
       },

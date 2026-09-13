@@ -9,10 +9,10 @@ since_version: 0.1.0
 source_files: [tests/unit/stablecoin/, tests/unit/derivatives/, tests/unit/interop/, tests/unit/test_economic_noesis_ooda_wiring.py]
 canonical_owner: platform@aether
 source_hashes:
-  tests/unit/derivatives/: sha256:d9a1cd03f0263d7dbf311b388458123dc1176d5be1ce081820e2bb482157534d
-  tests/unit/interop/: sha256:7562f7beade6f7ead70a31b0c0d566963eaa7f8430c8c209144a4ca248d609b6
-  tests/unit/stablecoin/: sha256:04b0dd4dda685268cdb37e1ca7389125f3d7b9a2a057b4a11392e399158ffa5e
-  tests/unit/test_economic_noesis_ooda_wiring.py: sha256:f57fb82458204b768fbe8ce99275446cf98351a8fd415e7525577d9a53bd35c9
+  "tests/unit/derivatives/": "sha256:08f5611d9e3d469d50aab4883aab87b6e873c9d8dd7faeddcaf41469e4ecf04b"
+  "tests/unit/interop/": "sha256:3959e6cfc8112c8911ae14a0a50715ee7bc9bea8adda95b5104ec27db1c9c03a"
+  "tests/unit/stablecoin/": "sha256:3bd47ec3116e37e8c19a306d86713149313d443fbe5174b73e2ed646e668d0f9"
+  "tests/unit/test_economic_noesis_ooda_wiring.py": "sha256:fd20cf5c1f3ec182374eb0c85a85261dc11a68bd4f6741ecafaef7a7ab6b27aa"
 ---
 
 # Test Evidence

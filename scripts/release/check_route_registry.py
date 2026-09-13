@@ -29,7 +29,7 @@ _MAX_ACTION_CLASS = 5
 def _backend_on_path() -> str:
     backend = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        "Backend Architecture", "aether-backend",
+        "services", "backend",
     )
     if backend not in sys.path:
         sys.path.insert(0, backend)

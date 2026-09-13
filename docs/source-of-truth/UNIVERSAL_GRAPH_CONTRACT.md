@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/graph-contract.ts, Backend Architecture/aether-backend/shared/graph/graph_contract.py, Backend Architecture/aether-backend/services/operational_intelligence/models.py]
+source_files: [packages/shared/graph-contract.ts, services/backend/shared/graph/graph_contract.py, services/backend/services/operational_intelligence/models.py]
 canonical_owner: graph@aether
 last_synced_commit: fae02a9
 ---

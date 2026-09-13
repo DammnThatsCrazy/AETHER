@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "Backend Architecture" / "aether-backend"))
+sys.path.insert(0, str(ROOT / "services" / "backend"))
 
 from services.stablecoins.aggregation import StablecoinGoldMaterializer, StablecoinMetricInput
 from services.stablecoins.alerts import StablecoinAlertEvaluator, StablecoinAlertSeverity

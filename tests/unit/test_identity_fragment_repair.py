@@ -19,7 +19,7 @@ from unittest.mock import MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = ROOT / "services" / "backend"
 
 # Stub heavy optional dependencies before imports
 _STUBBED: list[str] = []

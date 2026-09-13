@@ -22,7 +22,7 @@ Aether event envelope.
 
 ## Framework
 
-`services/integrations/connectors/` provides:
+`services/backend/services/integrations/connectors/` provides:
 - `BaseConnector` — descriptor + `test_connection` + `pull` + `parse_webhook`.
 - 14 adapters (`adapters.py`), registered in `registry.py`.
 - `ConnectorService` (`service.py`) — tenant-scoped config, connection test,

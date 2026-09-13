@@ -3,10 +3,10 @@ name: "Aether Infrastructure"
 on:
   push:
     branches: [main]
-    paths: ["infrastructure/**", "terraform/**"]
+    paths: ["deploy/aws/**"]
   pull_request:
     branches: [main]
-    paths: ["infrastructure/**", "terraform/**"]
+    paths: ["deploy/aws/**"]
   schedule:
     - cron: "0 6 * * *"   # Daily drift detection at 6 AM UTC
 
@@ -41,15 +41,15 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - name: Terraform Init
         run: |
-          terraform -chdir=terraform/environments/${{ matrix.environment }} init \
+            terraform -chdir=deploy/aws/terraform/environments/${{ matrix.environment }} init \
             -input=false \
             -backend-config="key=${{ matrix.environment }}/terraform.tfstate"
       - name: Terraform Validate
-        run: terraform -chdir=terraform/environments/${{ matrix.environment }} validate
+        run: terraform -chdir=deploy/aws/terraform/environments/${{ matrix.environment }} validate
       - name: Terraform Plan
         id: plan
         run: |
-          terraform -chdir=terraform/environments/${{ matrix.environment }} plan \
+          terraform -chdir=deploy/aws/terraform/environments/${{ matrix.environment }} plan \
             -var-file="${{ matrix.environment }}.tfvars" \
             -out=${{ matrix.environment }}.tfplan \
             -no-color 2>&1 | tee plan_output.txt
@@ -61,7 +61,7 @@ jobs:
       - name: Generate cost diff
         run: |
           infracost breakdown \
-            --path=terraform/environments/${{ matrix.environment }} \
+            --path=deploy/aws/terraform/environments/${{ matrix.environment }} \
             --format=json --out-file=/tmp/infracost.json 2>/dev/null || true
         continue-on-error: true
       - name: Comment PR with plan
@@ -107,7 +107,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - name: Terraform Init + Apply
         run: |
-          cd terraform/environments/dev
+          cd deploy/aws/terraform/environments/dev
           terraform init -input=false -backend-config="key=dev/terraform.tfstate"
           terraform apply -var-file="dev.tfvars" -auto-approve
 
@@ -128,7 +128,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - name: Terraform Init + Apply
         run: |
-          cd terraform/environments/demo
+          cd deploy/aws/terraform/environments/demo
           terraform init -input=false -backend-config="key=demo/terraform.tfstate"
           terraform apply -var-file="demo.tfvars" -auto-approve
 
@@ -149,7 +149,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - name: Terraform Init + Apply
         run: |
-          cd terraform/environments/staging
+          cd deploy/aws/terraform/environments/staging
           terraform init -input=false -backend-config="key=staging/terraform.tfstate"
           terraform apply -var-file="staging.tfvars" -auto-approve
 
@@ -170,7 +170,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - name: Terraform Init + Apply
         run: |
-          cd terraform/environments/production
+          cd deploy/aws/terraform/environments/production
           terraform init -input=false -backend-config="key=production/terraform.tfstate"
           terraform apply -var-file="production.tfvars" -auto-approve
 
@@ -195,14 +195,14 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - name: Terraform Init
         run: |
-          terraform -chdir=terraform/environments/${{ matrix.environment }} init \
+          terraform -chdir=deploy/aws/terraform/environments/${{ matrix.environment }} init \
             -input=false \
             -backend-config="key=${{ matrix.environment }}/terraform.tfstate"
       - name: Check for drift
         id: drift
         run: |
           set +e
-          terraform -chdir=terraform/environments/${{ matrix.environment }} plan \
+          terraform -chdir=deploy/aws/terraform/environments/${{ matrix.environment }} plan \
             -var-file="${{ matrix.environment }}.tfvars" \
             -detailed-exitcode -no-color 2>&1 | tee drift_output.txt
           EXIT_CODE=$?

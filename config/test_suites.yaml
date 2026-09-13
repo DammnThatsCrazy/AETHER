@@ -94,7 +94,7 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 120
     hard_runtime_budget_seconds: 300
-    paths: ["Backend Architecture/aether-backend/tests"]
+    paths: ["services/backend/tests"]
     # Keep behavior tests parallel, then run the wall-clock performance
     # guardrails serially so xdist scheduler contention cannot turn into a
     # false regression. scripts/run_backend_tests.py covers both passes.
@@ -124,9 +124,10 @@ suites:
     # for xgboost/scikit-learn training on shared runners.
     expected_runtime_seconds: 150
     hard_runtime_budget_seconds: 240
-    paths: ["ML Models/aether-ml/tests"]
-    runner:
-      ["python", "-m", "pytest", "ML Models/aether-ml/tests", "-v", "--tb=short"]
+    paths: ["services/ml/tests"]
+    # Run from the ML package root so its local ``tests`` helpers and top-level
+    # ML packages resolve without colliding with the repository test package.
+    runner: ["python", "scripts/run_ml_tests.py"]
     requires:
       # Import names probed by repo_doctor.py before running. scikit-learn's
       # import name is "sklearn". Both ship in the "ml" extra
@@ -154,13 +155,13 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 90
-    paths: ["GDPR & SOC2/aether-compliance/tests"]
+    paths: ["services/compliance/tests"]
     runner:
       [
         "python",
         "-m",
         "pytest",
-        "GDPR & SOC2/aether-compliance/tests",
+        "services/compliance/tests",
         "-v",
         "--tb=short",
       ]
@@ -186,8 +187,8 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 90
-    paths: ["Agent Layer/tests"]
-    runner: ["python", "-m", "pytest", "Agent Layer/tests", "-v", "--tb=short"]
+    paths: ["services/agents/tests"]
+    runner: ["python", "-m", "pytest", "services/agents/tests", "-v", "--tb=short"]
     requires:
       python_packages: []
       services: []
@@ -210,13 +211,13 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 30
     hard_runtime_budget_seconds: 90
-    paths: ["Backend Architecture/services/journey-service/tests"]
+    paths: ["docs/archive/legacy-architecture/backend/services/journey-service/tests"]
     runner:
       [
         "python",
         "-m",
         "pytest",
-        "Backend Architecture/services/journey-service/tests",
+        "docs/archive/legacy-architecture/backend/services/journey-service/tests",
         "-v",
         "--tb=short",
       ]
@@ -249,19 +250,19 @@ suites:
     # standalone per-service invocation would hit for those two).
     paths:
       [
-        "Backend Architecture/aether-backend/services/agent_comm_observability/tests",
-        "Backend Architecture/aether-backend/services/external_account_observability/tests",
-        "Backend Architecture/aether-backend/services/agentic_observability/tests",
-        "Backend Architecture/aether-backend/services/protocol_observability/tests",
+        "services/backend/services/agent_comm_observability/tests",
+        "services/backend/services/external_account_observability/tests",
+        "services/backend/services/agentic_observability/tests",
+        "services/backend/services/protocol_observability/tests",
       ]
     runner:
       [
         "python",
         "scripts/run_pytest_files.py",
-        "Backend Architecture/aether-backend/services/agent_comm_observability/tests",
-        "Backend Architecture/aether-backend/services/external_account_observability/tests",
-        "Backend Architecture/aether-backend/services/agentic_observability/tests",
-        "Backend Architecture/aether-backend/services/protocol_observability/tests",
+        "services/backend/services/agent_comm_observability/tests",
+        "services/backend/services/external_account_observability/tests",
+        "services/backend/services/agentic_observability/tests",
+        "services/backend/services/protocol_observability/tests",
         "--workers",
         "4",
       ]
@@ -295,12 +296,12 @@ suites:
     profiles: [local, ci, release]
     expected_runtime_seconds: 60
     hard_runtime_budget_seconds: 180
-    paths: ["Smart Contracts/test"]
+    paths: ["contracts/smart-contracts/test"]
     # Mirrors .github/workflows/smart-contract-analysis.yml's contract-tests
     # job. This suite is outside the root npm workspaces, so install its
     # lockfile before invoking the local Hardhat binary; relying on npx would
     # silently download an unrelated version in the adaptive PR job.
-    runner: ["bash", "-lc", "npm ci --prefix 'Smart Contracts' --ignore-scripts && npm test --prefix 'Smart Contracts'"]
+    runner: ["bash", "-lc", "npm ci --prefix 'contracts/smart-contracts' --ignore-scripts && npm test --prefix 'contracts/smart-contracts'"]
     requires:
       python_packages: []
       services: []
@@ -323,8 +324,8 @@ suites:
     profiles: [local, release]
     expected_runtime_seconds: 60
     hard_runtime_budget_seconds: 180
-    paths: ["Data Lake Architecture/aether-Datalake-backend/tests"]
-    runner: ["bash", "-lc", "cd 'Data Lake Architecture/aether-Datalake-backend' && npm test"]
+    paths: ["docs/archive/legacy-architecture/data-lake-architecture/aether-Datalake-backend/tests"]
+    runner: ["bash", "-lc", "cd 'docs/archive/legacy-architecture/data-lake-architecture/aether-Datalake-backend' && npm test"]
     requires:
       python_packages: []
       services: []

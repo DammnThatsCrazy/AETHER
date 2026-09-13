@@ -4,7 +4,7 @@
  * The canonical server-side observation model that every ingress adapter
  * builds and the universal ingestion gateway validates. This file is a
  * passive *contract* mirror of the runtime model in
- * `Backend Architecture/aether-backend/shared/observation/envelope.py`
+ * `services/backend/shared/observation/envelope.py`
  * and the canonical field registry at
  * `packages/shared/contracts/observation-envelope-registry.json`.
  *

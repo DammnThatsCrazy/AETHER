@@ -36,8 +36,8 @@ delegations / approvals / revocations, **extensions** to the existing policy-dec
 shadow-capability discovery, capability drift + blast-radius, private enterprise catalogs, and
 the related backend APIs / repositories / migrations / tests / docs.
 
-PR 2 **must not** edit the provider adapters owned by PR 3 (`services/interop/providers/*`,
-`services/agentic_observability/provider_framework.py` and its packs) except shared interfaces
+PR 2 **must not** edit the provider adapters owned by PR 3 (`services/backend/services/interop/providers/*`,
+`services/backend/services/agentic_observability/provider_framework.py` and its packs) except shared interfaces
 already established in PR 1. PR 2 consumes PR 1 contracts; it does not add net-new
 provider-neutral event types (those are deferred to `AAI-3-PROVIDER-FRAMEWORK`).
 
@@ -52,16 +52,16 @@ target). Two facts, verified against the code, drive the design:
    **Bronze-event-driven** (`project(event) -> ProjectionResult`); the dispatcher has no
    mechanism to feed a projector rows from a silver table. Forcing a dispatcher projector in
    would touch four CI-guarded artifacts (`dispatcher.py::_ALL_PROJECTORS`,
-   `projector-ownership-registry.json`, generated `services/silver/generated_ownership.py`,
+   `projector-ownership-registry.json`, generated `services/backend/services/silver/generated_ownership.py`,
    `scripts/validate_projector_ownership.py`) — the #1 CI risk from PR 1 — for no benefit.
    A **plain derived read-model / repository is invisible to the projector-ownership CI** and
-   is the correct fit. Precedents: `services/provider_catalog/*`, `services/comms/repository.py`,
-   `services/measurement/repositories/touchpoint_repo.py`.
+   is the correct fit. Precedents: `services/backend/services/provider_catalog/*`, `services/backend/services/comms/repository.py`,
+   `services/backend/services/measurement/repositories/touchpoint_repo.py`.
 
 2. **The queryable fields live in `payload` JSONB, camelCase.** `silver_agent_execution_facts`
    has only 9 typed agent columns (`agent_id, task_id, model_id, prompt_tokens,
    completion_tokens, cost_usd, outcome, grounding_sources, human_override`). The generic writer
-   (`services/silver/writer.py::SilverFactWriter._persist_generic`) **drops row keys that have
+   (`services/backend/services/silver/writer.py::SilverFactWriter._persist_generic`) **drops row keys that have
    no column**, so `tool_name/server_name/server_url/provider/protocol_version/risk_level/…` are
    **not** typed columns — they survive only inside `payload` (= the event `properties`) under
    **camelCase** keys (`toolName, serverName, serverUrl, protocolVersion, provider, riskLevel,
@@ -71,7 +71,7 @@ target). Two facts, verified against the code, drive the design:
 **Therefore:** PR 2 maintains its own persisted tables (`capability_catalog`,
 `capability_installations`) and upserts them from the agent-execution fact stream via an
 **out-of-band, fire-and-forget dispatcher hook that mirrors `SilverGraphProjector.maybe_emit`**
-(`services/silver/dispatcher.py`). The catalog service reads a fact row's snake_case top-level
+(`services/backend/services/silver/dispatcher.py`). The catalog service reads a fact row's snake_case top-level
 keys first and falls back to `payload` camelCase — so it is correct whether fed a live
 projection row (snake_case present) or a persisted/re-queried row (payload only). The catalog is
 therefore **populated when the PR 1 canonical spine is enabled** (`AGENTIC_OBS_CANONICAL_SPINE_ENABLED`),
@@ -81,7 +81,7 @@ consistent with PR 1's gating.
 
 ## 3. API surface & the `/v1/capabilities` collision
 
-`GET /v1/capabilities` is **already owned** by `services/capabilities/` — a
+`GET /v1/capabilities` is **already owned** by `services/backend/services/capabilities/` — a
 **release/feature-surface discovery** endpoint the frontends use for nav-gating. It is
 load-bearing and must not be repurposed. PR 2's capability *inventory* therefore lives under
 unclaimed prefixes (a documented deviation from the monoprompt's literal path, chosen for
@@ -100,7 +100,7 @@ correctness over literalism):
 Route conventions (verified): tenant handlers take `request: Request`, read
 `request.state.tenant` (`TenantContext`), call `tenant.require_permission("read")` and reject
 `tenantId != tenant.tenant_id` with `ForbiddenError`. Kyber routes use
-`Depends(require_kyber_operator)` (`services/security/request_context.py`) and filter every
+`Depends(require_kyber_operator)` (`services/backend/services/security/request_context.py`) and filter every
 cross-tenant query by explicit `tenant_id`. Responses use `APIResponse(data=…).to_dict()` /
 `@api_response` (`shared/decorators.py`, `shared/common/common.py`). Routers are mounted in
 `main.py`'s `include_router` block. `config/route_registry.yaml` `known_prefixes` gains
@@ -144,9 +144,9 @@ Money/quantity fields (Phases B/C exposure/notional) are decimal strings via
 
 ## 5. Persistence, DSR, and CI touchpoints
 
-- **Service:** `Backend Architecture/aether-backend/services/agent_access_intelligence/`
+- **Service:** `services/backend/services/agent_access_intelligence/`
   (`__init__.py`, `models.py`, `repositories.py`, `catalog_service.py`, `routes.py`).
-- **Repos:** subclass `_ScopedRepo` (`services/security/repositories.py`) →
+- **Repos:** subclass `_ScopedRepo` (`services/backend/services/security/repositories.py`) →
   `CapabilityCatalogRepository("capability_catalog")`,
   `CapabilityInstallationRepository("capability_installations")`. Dual Postgres/in-memory via
   `BaseRepository`/`_IN_MEMORY_STORES`; every read tenant-scoped by `filters={"tenant_id": …}`;
@@ -180,8 +180,8 @@ Money/quantity fields (Phases B/C exposure/notional) are decimal strings via
   read APIs, Kyber health, migration/storage/DSR, tests. (This document's shipped scope.)
 - **Phase B — `AAI-2-AUTHORITY-POLICY`:** authorization grants / delegation / approval /
   revocation and capability-aware policy decisions, **extending** the existing engines
-  (`services/security/policy_engine.py`, `services/security/access_control.py`,
-  `services/policy/engine.py`, `services/consent/authority.py`) — **not** a second engine.
+  (`services/backend/services/security/policy_engine.py`, `services/backend/services/security/access_control.py`,
+  `services/backend/services/policy/engine.py`, `services/backend/services/consent/authority.py`) — **not** a second engine.
   §9.3 artifact/publisher identity + §9.4 tool-schema scanning + §9.5 declared-vs-observed drift.
   B1 (authority + `capability.invoke` policy) and B2 (identity, declarations, scanning)
   are both shipped.
@@ -212,7 +212,7 @@ would be the wrong answer. `repositories/repos.py::DelegationRepository` already
 exactly the required semantics — tenant-scoped, time-bound (`starts_at`/`ends_at`), revocable
 (`revoke()` → `revoked_at` + `revoked_by_entity_id`), Redis-cached `active_for()` with
 invalidation on grant/revoke, and a `DelegationProjector`
-(`services/profile360_workers/workers.py:218`) that mirrors lifecycle to the graph off
+(`services/backend/services/profile360_workers/workers.py:218`) that mirrors lifecycle to the graph off
 `DELEGATION_CREATED`/`DELEGATION_REVOKED`.
 
 **Therefore a capability authorization is stored as a row in `delegations`**, written by
@@ -221,7 +221,7 @@ invalidation on grant/revoke, and a `DelegationProjector`
 level only) fields and stamps `authorization_kind: "capability"` so the generic delegation
 surface and the capability surface never mistake each other's rows.
 
-Scope encoding, evaluated by the existing `services/delegation/engine.py::DelegationEngine`:
+Scope encoding, evaluated by the existing `services/backend/services/delegation/engine.py::DelegationEngine`:
 
 | Grant shape | `scope.actions` | `scope.resources` |
 |---|---|---|
@@ -253,18 +253,18 @@ calls, one cached `active_for` read.
 **No approval queue is invented.** `POST /v1/capability-authorizations` is itself the
 permission-gated authorizing act (`tenant.require_permission("write")`, audited). A multi-party
 pending→approved workflow already exists for spend classes
-(`services/x402/approvals.py`, live router in `services/x402/commerce_routes.py`); if capability
+(`services/backend/services/x402/approvals.py`, live router in `services/backend/services/x402/commerce_routes.py`); if capability
 authority ever needs one it routes through that service. Phase B does **not** clone it, and does
 **not** define a `pending` state that nothing produces. Authorization state is derived from the
 row — `active` / `revoked` / `expired` — never stored as a field that can disagree with it.
 
-⚠️ Do **not** add endpoints to `services/x402/approvals_routes.py`: it declares
+⚠️ Do **not** add endpoints to `services/backend/services/x402/approvals_routes.py`: it declares
 `prefix="/v1/approvals"` but is never mounted in `main.py`. The live approvals router is the
-one in `services/x402/commerce_routes.py`.
+one in `services/backend/services/x402/commerce_routes.py`.
 
 ### B1.2 — Capability-aware policy decisions **extend** `PolicyEngine`
 
-`services/security/policy_engine.py` is the engine that HTTP routes genuinely reach at request
+`services/backend/services/security/policy_engine.py` is the engine that HTTP routes genuinely reach at request
 time. Its documented extension convention is: add one `async def check_*(...) -> PolicyDecision`
 method that builds decisions via `self._decision(...)` and routes them through `self._finalize(...)`,
 and add the new `policy_key` to `_SENSITIVE_KEYS` when decisions must persist even when allowed.
@@ -324,20 +324,20 @@ out as a deliberate behavioral change rather than buried.
 ### B2 — declared identity, scanning, drift inputs (second commit)
 
 - **§9.3 artifact/publisher identity.** No publisher/provenance/SBOM concept exists in the
-  backend (`services/sdk_config/service.py`'s HMAC-signed SDK manifest is for *our own* SDK, not
+  backend (`services/backend/services/sdk_config/service.py`'s HMAC-signed SDK manifest is for *our own* SDK, not
   third-party MCP servers). Nothing in the system can cryptographically verify a third-party
   capability's publisher, so **no `verified` state is offered** — offering one would be a
   fabricated assurance. B2 derives what is honestly derivable: a `publisher_ref` from the
   sanitized `server_url` host (falling back to `provider`), and an `artifact_digest` over the
   capability's identity tuple so a *change* in identity is detectable even when its origin is
   unverifiable. States are `observed_only` / `declared` / `drifted`.
-- **§9.4 tool/schema scanning.** The ingestion scrubber (`services/ingestion/validation.py::scrub_sensitive_fields`)
-  is **key-name based** and inspects no values; `services/security/contracts.py::sanitize_metadata`
+- **§9.4 tool/schema scanning.** The ingestion scrubber (`services/backend/services/ingestion/validation.py::scrub_sensitive_fields`)
+  is **key-name based** and inspects no values; `services/backend/services/security/contracts.py::sanitize_metadata`
   is the only value-aware redactor. Nothing scans tool names/schemas. B2 adds pure-function
   scanning over observed capability identity (credential-bearing URL, non-TLS scheme, private/
   loopback host reusing `policy_engine._is_unsafe_destination`, injection-shaped tool names
-  reusing `services/noesis/models.py::INJECTION_PATTERNS`) producing findings — **no new severity
-  enum**; it reuses `services/agentic_observability/models.py::RiskLevel`.
+  reusing `services/backend/services/noesis/models.py::INJECTION_PATTERNS`) producing findings — **no new severity
+  enum**; it reuses `services/backend/services/agentic_observability/models.py::RiskLevel`.
 - **§9.5 declared-vs-observed drift.** B2 adds the declared side
   (`capability_declarations`); the drift **findings surface** is Phase C, §6b.
 

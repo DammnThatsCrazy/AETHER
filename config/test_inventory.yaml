@@ -14,11 +14,11 @@ defaults:
   disposition: KEEP
 rules:
   - paths: ["tests/**"]
-    dependencies: ["scripts/**", "config/**", "packages/**", "Backend Architecture/**"]
-  - paths: ["Backend Architecture/**/tests/**"]
+    dependencies: ["scripts/**", "config/**", "packages/**", "docs/archive/legacy-architecture/backend/**"]
+  - paths: ["docs/archive/legacy-architecture/backend/**/tests/**"]
     owner: backend
     domain: backend
-    dependencies: ["Backend Architecture/**"]
+    dependencies: ["docs/archive/legacy-architecture/backend/**"]
   - paths: ["frontend/**"]
     owner: frontend
     domain: frontend
@@ -27,8 +27,8 @@ rules:
     owner: sdk
     domain: sdk
     dependencies: ["packages/**"]
-  - paths: ["ML Models/**/tests/**"]
+  - paths: ["services/ml/**/tests/**"]
     owner: ml
     domain: machine_learning
-    dependencies: ["ML Models/**"]
+    dependencies: ["services/ml/**"]
 quarantines: []

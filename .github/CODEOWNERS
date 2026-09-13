@@ -16,11 +16,11 @@
 
 # ── Security & Compliance (highest risk — always requires review) ─────────────
 /security/                                      @DammnThatsCrazy
-/GDPR & SOC2/                                   @DammnThatsCrazy
-/Smart Contracts/                               @DammnThatsCrazy
+/services/compliance/                                   @DammnThatsCrazy
+/contracts/smart-contracts/                               @DammnThatsCrazy
 
 # ── Infrastructure (Terraform / AWS) ─────────────────────────────────────────
-/AWS Deployment/                                @DammnThatsCrazy
+/deploy/aws/                                      @DammnThatsCrazy
 /.github/workflows/deploy.yml                   @DammnThatsCrazy
 /.github/workflows/infrastructure.yml           @DammnThatsCrazy
 
@@ -29,9 +29,9 @@
 /.github/CODEOWNERS                             @DammnThatsCrazy
 
 # ── Core platform ────────────────────────────────────────────────────────────
-/Backend Architecture/                          @DammnThatsCrazy
-/Agent Layer/                                   @DammnThatsCrazy
-/ML Models/                                     @DammnThatsCrazy
+/services/backend/                          @DammnThatsCrazy
+/services/agents/                                   @DammnThatsCrazy
+/services/ml/                                     @DammnThatsCrazy
 
 # ── SDK packages ─────────────────────────────────────────────────────────────
 /packages/                                      @DammnThatsCrazy

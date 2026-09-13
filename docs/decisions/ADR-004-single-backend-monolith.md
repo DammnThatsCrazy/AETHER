@@ -18,7 +18,7 @@ toc_depth: 2
 ## Context
 
 The Aether backend currently mounts **65 service routers** from a single
-`main.py` entry point (`Backend Architecture/aether-backend/main.py`). All
+`main.py` entry point (`services/backend/main.py`). All
 routers share one Python process, one dependency set, one PostgreSQL connection
 pool, one Redis/DynamoDB cache client, and one Neptune gremlin client.
 

@@ -391,7 +391,7 @@ class Violation:
 @functools.lru_cache(maxsize=1)
 def _backend_py_paths() -> tuple[str, ...]:
     """Repo-relative paths of every ``*.py`` under the backend (sorted)."""
-    backend = ROOT / "Backend Architecture" / "aether-backend"
+    backend = ROOT / "services" / "backend"
     rels = sorted(
         str(p.relative_to(ROOT)) for p in backend.rglob("*.py") if p.is_file()
     )
@@ -446,7 +446,7 @@ def load_context() -> dict:
     - ``route_prefixes`` (the ``known_prefixes`` list) from
       ``config/route_registry.yaml`` (pyyaml);
     - ``backend_source_paths`` — repo-relative paths of every ``*.py`` under
-      ``Backend Architecture/aether-backend`` (route-existence source grep);
+      ``services/backend`` (route-existence source grep);
     - ``lens_registry`` — the parsed projection-engine lens registry
       (``packages/shared/contracts/lens-registry.json``), validated by the
       ``lens_registry`` rule group (A8);

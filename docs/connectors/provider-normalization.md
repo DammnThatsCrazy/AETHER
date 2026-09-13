@@ -10,7 +10,7 @@ since_version: "0.1.0"
 
 # Provider Normalization
 
-Provider plugins under `services/providers/` normalize provider-shaped
+Provider plugins under `services/backend/services/providers/` normalize provider-shaped
 records into provider-neutral `AetherEvent` instances through the canonical
 contract at `shared/integration_contracts/normalization.py`. This is the same
 canonical contract layer the connector subsystem registry and capability
@@ -64,8 +64,8 @@ Normalization is a deterministic, network-free translation seam:
 ## How a plugin wires its normalizer
 
 A provider plugin exposes its normalizer through a `normalizer()` accessor
-(see `services/providers/shopify/plugin.py`), returning an object satisfying
-`EventNormalizer`. `services/provider_runtime/normalization.py`
+(see `services/backend/services/providers/shopify/plugin.py`), returning an object satisfying
+`EventNormalizer`. `services/backend/services/provider_runtime/normalization.py`
 (`NormalizationEngine`) is the thin aggregation loop that applies a plugin's
 `normalizer()` to a batch of raw records:
 
@@ -75,7 +75,7 @@ A provider plugin exposes its normalizer through a `normalizer()` accessor
 
 ## Reference implementation
 
-`services/providers/shopify/normalizer.py` (`ShopifyOrderNormalizer`) maps a
+`services/backend/services/providers/shopify/normalizer.py` (`ShopifyOrderNormalizer`) maps a
 `RawProviderRecord` whose payload is a Shopify order dict onto a single
 `commerce.order.*` `AetherEvent`:
 
@@ -97,7 +97,7 @@ for anything unparseable.
 
 ## Certification
 
-`services/provider_runtime/certification.py` checks that a plugin's
+`services/backend/services/provider_runtime/certification.py` checks that a plugin's
 normalizer never raises on an opaque `RawProviderRecord` — it must return a
 `NormalizationResult` (events or drops) even for a record it does not
 recognize.

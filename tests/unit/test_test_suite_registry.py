@@ -76,11 +76,11 @@ def test_real_registry_loads_and_covers_the_formerly_dark_trees() -> None:
 
     covered_paths = {p for s in suites for p in s.paths}
     # The two trees whose exclusion from the gate motivated this registry.
-    assert any("aether-backend/tests" in p for p in covered_paths), (
+    assert any("services/backend/tests" in p for p in covered_paths), (
         "the backend tree is the 225-file suite no gate executed; the registry "
         "must declare it"
     )
-    assert any("aether-ml/tests" in p for p in covered_paths), (
+    assert any("services/ml/tests" in p for p in covered_paths), (
         "the ML tree is the suite skip() reported as passed; the registry must "
         "declare it"
     )

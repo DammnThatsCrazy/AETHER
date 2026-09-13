@@ -7,18 +7,18 @@ audience: [dev-senior, ops, architect]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/shared/integration_contracts/certification.py
-  - Backend Architecture/aether-backend/shared/certification/readiness.py
-  - Backend Architecture/aether-backend/services/provider_runtime/
-  - Backend Architecture/aether-backend/services/providers/routes.py
+  - services/backend/shared/integration_contracts/certification.py
+  - services/backend/shared/certification/readiness.py
+  - services/backend/services/provider_runtime/
+  - services/backend/services/providers/routes.py
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/services/provider_runtime/": "sha256:222fdaf7349cf2f190d5a512550b7f0f45b2d26473ecbbe87d20476f4f4d2ad9"
-  "Backend Architecture/aether-backend/services/providers/routes.py": "sha256:604d8af79653b6472262c42da610787ca6328aadef8c356d6635f56092c6ec39"
-  "Backend Architecture/aether-backend/shared/certification/readiness.py": "sha256:4f49477dd17b2652c27ca458b9d0c7fe8ca242defa7d1d6d5e837b50050846a2"
-  "Backend Architecture/aether-backend/shared/integration_contracts/certification.py": "sha256:2969b5f1176212f462882a7361fcdeebdaf13a390148eba0626c459451fdf101"
+  "services/backend/services/provider_runtime/": "sha256:81502394ca09ea802ea90662dc6f23c1918a0ece952a2bfdac68187007f2c8fa"
+  "services/backend/services/providers/routes.py": "sha256:604d8af79653b6472262c42da610787ca6328aadef8c356d6635f56092c6ec39"
+  "services/backend/shared/certification/readiness.py": "sha256:4f49477dd17b2652c27ca458b9d0c7fe8ca242defa7d1d6d5e837b50050846a2"
+  "services/backend/shared/integration_contracts/certification.py": "sha256:2969b5f1176212f462882a7361fcdeebdaf13a390148eba0626c459451fdf101"
 ---
 
 # Provider Certification
@@ -87,7 +87,7 @@ pass. Examples:
 ## 5. Where certification is invoked
 
 - **Admin certify route** — `POST /v1/admin/kyber/provider-connections/certify`
-  (`services/provider_runtime/routes.py`) certifies a registered plugin by
+  (`services/backend/services/provider_runtime/routes.py`) certifies a registered plugin by
   identity in a chosen environment and returns the `CertificationReport`. The
   admin router mounts only when `KYBER_PROVIDER_RUNTIME_HEALTH_ENABLED` is set
   (in addition to `AETHER_PROVIDER_RUNTIME_ENABLED`).

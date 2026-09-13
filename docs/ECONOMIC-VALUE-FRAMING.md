@@ -8,14 +8,14 @@ status: stable
 since_version: "0.1.0"
 source_files:
   - packages/shared/economic-metrics.ts
-  - Backend Architecture/aether-backend/services/economic/routes.py
+  - services/backend/services/economic/routes.py
 related:
   - concepts/unified-economic-graph
   - concepts/tvl-gmv-revenue-metrics
   - concepts/kyber-economic-observability
 source_hashes:
-  "Backend Architecture/aether-backend/services/economic/routes.py": "sha256:e01e6487d9825b57736b4d523483523698fa47fbd8fc3fd28be5b09c96a58cbc"
-  "packages/shared/economic-metrics.ts": "sha256:2c9c5b55a5131d1aec2625fcb910a36458363affe11bf0de2b660c6270a499d0"
+  "packages/shared/economic-metrics.ts": "sha256:99f596fa31534999e24ec96ec72eef3a8a87c1a18396831105d2e8c88d5a86c3"
+  "services/backend/services/economic/routes.py": "sha256:e01e6487d9825b57736b4d523483523698fa47fbd8fc3fd28be5b09c96a58cbc"
 ---
 
 # Aether — Economic Value Framing

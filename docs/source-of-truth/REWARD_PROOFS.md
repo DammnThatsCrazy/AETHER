@@ -125,7 +125,7 @@ Required fields per registration:
 
 Reward proof signer keys are **tenant-scoped credentials** resolved through the
 durable credential authority — never a deployment-global environment variable.
-`services/rewards/signing.py::resolve_reward_signer(tenant_id, environment,
+`services/backend/services/rewards/signing.py::resolve_reward_signer(tenant_id, environment,
 chain_family)` is the only sanctioned path:
 
 - Production/staging: the tenant's `reward_signer` provider slot
@@ -163,7 +163,7 @@ chain_family)` is the only sanctioned path:
 | TRON | TVM | Beta | EVM-compatible; proof format defined |
 | Cosmos | COSMOS | Beta | Amino signing; proof format defined |
 
-Beta chains: proof format is defined in `services/oracle/multichain_signer.py` but
+Beta chains: proof format is defined in `services/backend/services/oracle/multichain_signer.py` but
 production signing has not been verified against live networks. Do not use for real rewards.
 
 ## Proof Revocation

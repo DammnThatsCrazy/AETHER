@@ -106,7 +106,7 @@ def check_python_backend_event_types(events: dict) -> list[str]:
 
     backend_ingestion = (
         _Path(__file__).resolve().parent.parent
-        / "Backend Architecture" / "aether-backend"
+        / "services" / "backend"
         / "services" / "ingestion"
     )
     batch_path = backend_ingestion / "batch.py"

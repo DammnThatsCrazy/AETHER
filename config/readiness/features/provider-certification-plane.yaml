@@ -26,9 +26,9 @@ repository_ceiling:
   - Connect a live provider and open a validated live-data window.
   remaining_is_repository_controlled: false
   evidence:
-  - Backend Architecture/aether-backend/shared/certification/registry.py
-  - Backend Architecture/aether-backend/shared/certification/readiness.py
-  - Backend Architecture/aether-backend/shared/certification/descriptor.py
+  - services/backend/shared/certification/registry.py
+  - services/backend/shared/certification/readiness.py
+  - services/backend/shared/certification/descriptor.py
 implementation:
   state: TURNKEY
   denominator: in-scope repository controls (migration-derived)
@@ -125,7 +125,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: Backend Architecture/aether-backend/shared/certification/registry.py'
+  - 'repository evidence: services/backend/shared/certification/registry.py'
   evidence_gaps:
   - credentialed environment execution not yet performed
 release_profiles:

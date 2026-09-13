@@ -36,7 +36,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-BACKEND = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = ROOT / "services" / "backend"
 ALLOWLIST = (
     ROOT / "scripts" / "allowlists" / "cross360_monetary_fx.json"
 )

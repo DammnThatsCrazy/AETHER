@@ -12,8 +12,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-POLICY = ROOT / "Backend Architecture" / "aether-backend" / "services" / "policy"
-MAIN = ROOT / "Backend Architecture" / "aether-backend" / "main.py"
+POLICY = ROOT / "services" / "backend" / "services" / "policy"
+MAIN = ROOT / "services" / "backend" / "main.py"
 
 REQUIRED_FILES = ["__init__.py", "contracts.py", "engine.py", "signal_use_matrix.py",
                   "repositories.py", "routes.py"]

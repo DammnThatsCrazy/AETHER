@@ -44,7 +44,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BACKEND = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = ROOT / "services" / "backend"
 MIRROR = BACKEND / "services" / "kyber" / "mirror"
 MANIFEST = ROOT / "packages" / "shared" / "contracts" / "kyber-feature-surface-manifest.json"
 

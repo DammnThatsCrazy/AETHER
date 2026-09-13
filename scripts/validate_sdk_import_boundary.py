@@ -4,8 +4,8 @@
 The Aether client SDKs are thin: they talk to the canonical backend over the
 network (api.aether.io / ingest.aether.so) and must NEVER import backend
 implementation code. The internal trees — the deployed Python monolith
-(``Backend Architecture/aether-backend``) and the two legacy TypeScript
-duplicates (``Data Ingestion Layer/``, ``Data Lake Architecture/``) — are not
+(``services/backend``) and the two legacy TypeScript
+duplicates (``docs/archive/legacy-architecture/data-ingestion-layer/``, ``docs/archive/legacy-architecture/data-lake-architecture/``) — are not
 importable by SDK client surfaces.
 
 This gate is shrink-only: the committed allowlist
@@ -23,8 +23,8 @@ not SDK client surfaces):
   packages/android/src
 
 Forbidden internal targets are DERIVED at run time from the ``name`` fields of
-every ``package.json`` under ``Backend Architecture/**``, ``Data Ingestion
-Layer/**`` and ``Data Lake Architecture/**`` (the legacy trees), plus static
+every ``package.json`` under ``docs/archive/legacy-architecture/backend/**``, ``Data Ingestion
+Layer/**`` and ``docs/archive/legacy-architecture/data-lake-architecture/**`` (the legacy trees), plus static
 root-path markers for trees that ship no ``package.json``.
 
 Usage:
@@ -55,24 +55,22 @@ _SDK_SURFACE_DIRS = (
     "packages/android/src",
 )
 
-# Legacy/internal trees whose package.json ``name`` fields become forbidden
-# specifiers. Backend Architecture has no package.json, so its canonical root
-# name is pinned as a static root-path marker below.
+# Internal trees whose package.json ``name`` fields become forbidden specifiers.
+# The canonical backend root is pinned as a static path marker below.
 _INTERNAL_TREE_ROOTS = (
-    "Backend Architecture",
-    "Data Ingestion Layer",
-    "Data Lake Architecture",
+    "services/backend",
+    "docs/archive/legacy-architecture/data-ingestion-layer",
+    "docs/archive/legacy-architecture/data-lake-architecture",
 )
 
-# Root-path markers: canonical dir basename (Backend Architecture/aether-backend)
-# plus the legacy root names, in case a ``package.json`` disappears or a build
-# references a root by its directory name rather than its package name.
+# Root-path markers: canonical service roots plus archived duplicate roots, in
+# case a package.json disappears or a build references a tree by path.
 _STATIC_ROOT_MARKERS = (
     "aether-backend",
     "aether-datalake-backend",
-    "Backend Architecture",
-    "Data Ingestion Layer",
-    "Data Lake Architecture",
+    "services/backend",
+    "docs/archive/legacy-architecture/data-ingestion-layer",
+    "docs/archive/legacy-architecture/data-lake-architecture",
 )
 
 # Allowed non-relative specifiers for SDK client surfaces (shared + sibling SDK

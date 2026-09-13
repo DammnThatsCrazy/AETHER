@@ -10,7 +10,7 @@ since_version: "0.1.0"
 
 # Break-Glass Operator Access
 
-`BreakGlassService` (`services/security/break_glass.py`) provides time-boxed,
+`BreakGlassService` (`services/backend/services/security/break_glass.py`) provides time-boxed,
 audited, approval-gated emergency access for Olympus operators into a specific
 tenant.
 

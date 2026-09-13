@@ -12,8 +12,8 @@
         "package.json",
         "packages/**/package.json",
         "frontend/**/package.json",
-        "Data Ingestion Layer/**/package.json",
-        "Data Lake Architecture/**/package.json",
+        "docs/archive/legacy-architecture/data-ingestion-layer/**/package.json",
+        "docs/archive/legacy-architecture/data-lake-architecture/**/package.json",
         "docs/**/*.md",
         "packages/ios/**",
         "packages/android/**"
@@ -29,10 +29,10 @@
       "id": "backend_routes",
       "name": "backend route added/changed",
       "source_globs": [
-        "Backend Architecture/**/routes/**/*.py",
-        "Backend Architecture/**/routers/**/*.py",
-        "Backend Architecture/**/main.py",
-        "Backend Architecture/**/api/**/*.py"
+        "services/backend/**/routes/**/*.py",
+        "services/backend/**/routers/**/*.py",
+        "services/backend/**/main.py",
+        "services/backend/**/api/**/*.py"
       ],
       "required_changed_globs": [
         "docs/_generated/**",
@@ -60,7 +60,7 @@
         "schemas/**",
         "contracts/**",
         "!contracts/*.md",
-        "Backend Architecture/**/events/**/*.py"
+        "services/backend/**/events/**/*.py"
       ],
       "required_changed_globs": [
         "docs/_generated/**",
@@ -84,7 +84,7 @@
       "source_globs": [
         "packages/shared/contracts/event-registry.json",
         "packages/shared/events.ts",
-        "Backend Architecture/aether-backend/services/ingestion/generated_registry.py",
+        "services/backend/services/ingestion/generated_registry.py",
         "scripts/generate_contracts.py",
         "scripts/validate_field_trust_parity.py"
       ],
@@ -110,9 +110,9 @@
       "id": "consent_tenant_auth",
       "name": "consent/tenant/auth behavior changed",
       "source_globs": [
-        "Backend Architecture/**/auth/**/*.py",
-        "Backend Architecture/**/tenant/**/*.py",
-        "Backend Architecture/**/consent/**/*.py",
+        "services/backend/**/auth/**/*.py",
+        "services/backend/**/tenant/**/*.py",
+        "services/backend/**/consent/**/*.py",
         "packages/shared/consent.ts",
         "packages/web/src/consent/**",
         "tests/**/tenant*.py",
@@ -218,15 +218,15 @@
       "name": "Kyber operator route/model changed",
       "source_globs": [
         "frontend/kyber/**",
-        "Backend Architecture/**/*operator*",
-        "Backend Architecture/**/*kyber*"
+        "services/backend/**/*operator*",
+        "services/backend/**/*kyber*"
       ],
       "required_changed_globs": [
         "docs/**",
         "frontend/kyber/**",
         "packages/shared/**",
         "tests/**",
-        "Backend Architecture/**/tests/**"
+        "services/backend/**/tests/**"
       ],
       "required_commands": [
         "npm run typecheck",
@@ -278,8 +278,8 @@
       "id": "jobs_platform",
       "name": "durable jobs platform changed",
       "source_globs": [
-        "Backend Architecture/**/services/jobs/**",
-        "Backend Architecture/**/jobs_repo.py"
+        "services/backend/**/services/jobs/**",
+        "services/backend/**/jobs_repo.py"
       ],
       "required_changed_globs": [
         "docs/source-of-truth/JOBS_PLATFORM.md",
@@ -292,16 +292,16 @@
         "python scripts/docs_drift.py --strict",
         "python -m pytest tests/ -v --tb=short"
       ],
-      "remediation": "Review/restamp JOBS_PLATFORM.md (source-linked) and jobs-platform tests, then regenerate docs. Do not move agent-runtime execution onto this platform \u2014 the boundary is deliberate."
+      "remediation": "Review/restamp JOBS_PLATFORM.md (source-linked) and jobs-platform tests, then regenerate docs. Do not move agent-runtime execution onto this platform — the boundary is deliberate."
     },
     {
       "id": "import_engine",
       "name": "tenant import engine changed",
       "source_globs": [
-        "Backend Architecture/**/services/imports/**",
-        "Backend Architecture/**/imports_repo.py",
-        "Backend Architecture/**/import_files.py",
-        "Backend Architecture/**/import_projector.py"
+        "services/backend/**/services/imports/**",
+        "services/backend/**/imports_repo.py",
+        "services/backend/**/import_files.py",
+        "services/backend/**/import_projector.py"
       ],
       "required_changed_globs": [
         "packages/shared/imports.ts",
@@ -314,16 +314,16 @@
         "python scripts/docs_drift.py --strict",
         "python -m pytest tests/ -v --tb=short"
       ],
-      "remediation": "Keep the imports contract twin (packages/shared/imports.ts \u2194 services/imports/contracts.py) in sync, review the IMPORT_FAILURES runbook, and update import tests; regenerate docs."
+      "remediation": "Keep the imports contract twin (packages/shared/imports.ts ↔ services/imports/contracts.py) in sync, review the IMPORT_FAILURES runbook, and update import tests; regenerate docs."
     },
     {
       "id": "data_exchange_plane",
       "name": "data exchange plane changed",
       "source_globs": [
-        "Backend Architecture/**/services/data_exchange/**",
-        "Backend Architecture/**/services/reports/**",
-        "Backend Architecture/**/repositories/data_artifacts.py",
-        "Backend Architecture/**/alembic/versions/*data_exchange*.py",
+        "services/backend/**/services/data_exchange/**",
+        "services/backend/**/services/reports/**",
+        "services/backend/**/repositories/data_artifacts.py",
+        "services/backend/**/alembic/versions/*data_exchange*.py",
         "packages/shared/data-exchange.ts",
         "frontend/aether/src/features/data-exchange/**",
         "frontend/aether/src/pages/settings/data-exchange-section.tsx"
@@ -340,23 +340,23 @@
         "python scripts/docs_drift.py --strict",
         "python -m pytest tests/contracts/test_data_exchange_parity.py -q"
       ],
-      "remediation": "Keep the data exchange contract twin (packages/shared/data-exchange.ts \u2194 services/data_exchange/contracts.py) in sync, refresh the DATA_EXCHANGE_PHASES plan, and update the data exchange tests; regenerate docs."
+      "remediation": "Keep the data exchange contract twin (packages/shared/data-exchange.ts ↔ services/data_exchange/contracts.py) in sync, refresh the DATA_EXCHANGE_PHASES plan, and update the data exchange tests; regenerate docs."
     },
     {
       "id": "reconciled_control_plane",
       "name": "reconciled control plane changed",
       "source_globs": [
-        "Backend Architecture/**/services/managed_integrations/**",
-        "Backend Architecture/**/alembic/versions/20260906_rcp_managed_integrations.py",
+        "services/backend/**/services/managed_integrations/**",
+        "services/backend/**/alembic/versions/20260906_rcp_managed_integrations.py",
         "packages/shared/managed-integrations.ts",
-        "Backend Architecture/**/services/security/contracts.py",
-        "Backend Architecture/**/services/security/access_control.py",
+        "services/backend/**/services/security/contracts.py",
+        "services/backend/**/services/security/access_control.py",
         "packages/shared/security-governance.ts"
       ],
       "required_changed_globs": [
         "packages/shared/managed-integrations.ts",
         "packages/shared/security-governance.ts",
-        "Backend Architecture/**/services/managed_integrations/**",
+        "services/backend/**/services/managed_integrations/**",
         "docs/architecture/RECONCILED_CONTROL_PLANE.md",
         "docs/plans/RECONCILED_CONTROL_PHASES.md",
         "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md",
@@ -369,14 +369,14 @@
         "python -m pytest tests/contracts/test_managed_integrations_parity.py -q",
         "python -m pytest tests/unit/reconciled_control -q"
       ],
-      "remediation": "Keep the reconciled-control contract twin (packages/shared/managed-integrations.ts \u2194 services/managed_integrations/contracts.py) and the reconciled_control governance domain in sync, refresh the RECONCILED_CONTROL_PHASES plan, and update the managed-integration tests; regenerate docs."
+      "remediation": "Keep the reconciled-control contract twin (packages/shared/managed-integrations.ts ↔ services/managed_integrations/contracts.py) and the reconciled_control governance domain in sync, refresh the RECONCILED_CONTROL_PHASES plan, and update the managed-integration tests; regenerate docs."
     },
     {
       "id": "measurement_integrity",
       "name": "measurement integrity plane changed",
       "source_globs": [
-        "Backend Architecture/**/shared/measurement/**",
-        "Backend Architecture/**/measurement_results_repo.py"
+        "services/backend/**/shared/measurement/**",
+        "services/backend/**/measurement_results_repo.py"
       ],
       "required_changed_globs": [
         "packages/shared/contracts/metric-registry.json",
@@ -423,17 +423,17 @@
       "id": "legacy_ingestion_tree_mutation",
       "name": "deprecated legacy ingestion/data-lake tree mutated (do-not-extend)",
       "source_globs": [
-        "Data Ingestion Layer/**",
-        "Data Lake Architecture/**",
-        "Backend Architecture/*.py",
-        "Backend Architecture/migrations/**",
-        "Backend Architecture/mnt/**",
-        "Backend Architecture/services/delegation/**",
-        "Backend Architecture/services/journey-service/**",
-        "Backend Architecture/services/web3/**",
-        "!Backend Architecture/aether-backend/**",
-        "!Data Ingestion Layer/**/package.json",
-        "!Data Lake Architecture/**/package.json"
+        "docs/archive/legacy-architecture/data-ingestion-layer/**",
+        "docs/archive/legacy-architecture/data-lake-architecture/**",
+        "docs/archive/legacy-architecture/backend/*.py",
+        "docs/archive/legacy-architecture/backend/migrations/**",
+        "docs/archive/legacy-architecture/backend/mnt/**",
+        "docs/archive/legacy-architecture/backend/services/delegation/**",
+        "docs/archive/legacy-architecture/backend/services/journey-service/**",
+        "docs/archive/legacy-architecture/backend/services/web3/**",
+        "!services/backend/**",
+        "!docs/archive/legacy-architecture/data-ingestion-layer/**/package.json",
+        "!docs/archive/legacy-architecture/data-lake-architecture/**/package.json"
       ],
       "required_changed_globs": [
         "docs/productization/sdk-universal-ingestion-alignment/**",
@@ -442,16 +442,16 @@
       "required_commands": [
         "python scripts/validate_canonical_ingestion_trees.py"
       ],
-      "remediation": "Do not extend deprecated legacy ingestion/data-lake trees; route new work into Backend Architecture/aether-backend or packages/*. An acknowledged deprecation mutation must co-move the program acknowledgment docs (docs/productization/sdk-universal-ingestion-alignment/**) and REPO_CONSISTENCY_OWNERSHIP.md, and keep scripts/validate_canonical_ingestion_trees.py available on disk."
+      "remediation": "Do not extend deprecated legacy ingestion/data-lake trees; route new work into services/backend or packages/*. An acknowledged deprecation mutation must co-move the program acknowledgment docs (docs/productization/sdk-universal-ingestion-alignment/**) and REPO_CONSISTENCY_OWNERSHIP.md, and keep scripts/validate_canonical_ingestion_trees.py available on disk."
     },
     {
       "id": "deployment_profiles",
       "name": "deployment profile / Terraform topology changed",
       "source_globs": [
-        "AWS Deployment/aether-aws/terraform/**",
-        "!AWS Deployment/aether-aws/terraform/environments/**",
-        "!AWS Deployment/aether-aws/terraform/bootstrap/**",
-        "!AWS Deployment/aether-aws/terraform/**/*.md",
+        "deploy/aws/terraform/**",
+        "!deploy/aws/terraform/environments/**",
+        "!deploy/aws/terraform/bootstrap/**",
+        "!deploy/aws/terraform/**/*.md",
         "config/deployment_profiles.yaml",
         "config/runtime_deployment.yaml",
         "config/terraform_resource_contracts.yaml",
@@ -459,7 +459,7 @@
       ],
       "required_changed_globs": [
         "config/aws_price_book.yaml",
-        "AWS Deployment/aether-aws/terraform/tests/**",
+        "deploy/aws/terraform/tests/**",
         "tests/fixtures/terraform_plans/**",
         "tests/unit/test_terraform_plan_policy.py",
         "tests/unit/test_terraform_resource_contracts.py",
@@ -487,20 +487,20 @@
       "id": "computation_substrate",
       "name": "computation substrate changed",
       "source_globs": [
-        "Backend Architecture/**/shared/computation/**",
-        "Backend Architecture/**/services/computation/**"
+        "services/backend/**/shared/computation/**",
+        "services/backend/**/services/computation/**"
       ],
       "required_changed_globs": [
         "config/computation_inventory.yaml",
         "docs/source-of-truth/COMPUTATION_SUBSTRATE.md",
-        "Backend Architecture/**/tests/computation/**",
+        "services/backend/**/tests/computation/**",
         "tests/**"
       ],
       "required_commands": [
         "python scripts/validate_computation_substrate.py",
         "python scripts/generate_computation_registry.py"
       ],
-      "remediation": "Regenerate the registry twin (python scripts/generate_computation_registry.py), keep config/computation_inventory.yaml in sync, review docs/source-of-truth/COMPUTATION_SUBSTRATE.md, and update tests under Backend Architecture/aether-backend/tests/computation."
+      "remediation": "Regenerate the registry twin (python scripts/generate_computation_registry.py), keep config/computation_inventory.yaml in sync, review docs/source-of-truth/COMPUTATION_SUBSTRATE.md, and update tests under services/backend/tests/computation."
     },
     {
       "id": "intelligence_projection_architecture",
@@ -509,7 +509,7 @@
         "packages/shared/contracts/intelligence-projection-registry.json",
         "packages/shared/intelligence-projection.ts",
         "packages/shared/intelligence-projections_generated.ts",
-        "Backend Architecture/aether-backend/shared/intelligence_projections/**",
+        "services/backend/shared/intelligence_projections/**",
         "scripts/validate_intelligence_projections.py",
         "scripts/lib/intelligence_projection_validation.py"
       ],
@@ -520,7 +520,7 @@
         "docs/AUTOMATION.md",
         "packages/shared/index.ts",
         "tests/**",
-        "Backend Architecture/**/tests/**"
+        "services/backend/**/tests/**"
       ],
       "required_commands": [
         "python scripts/generate_platform_contracts.py --check",
@@ -541,7 +541,7 @@
       "required_changed_globs": [
         "packages/shared/relationship-predicate-registry.ts",
         "packages/shared/relationship-motif-registry.ts",
-        "Backend Architecture/aether-backend/shared/relationship_spine/**",
+        "services/backend/shared/relationship_spine/**",
         "docs/_generated/relationship-predicate-registry-table.md",
         "docs/_generated/relationship-motif-registry-table.md",
         "docs/_generated/**",
@@ -559,8 +559,8 @@
       "id": "universal_asset_registry",
       "name": "universal asset registry changed",
       "source_globs": [
-        "Backend Architecture/aether-backend/services/assets/**",
-        "Backend Architecture/aether-backend/repositories/registry_repos.py"
+        "services/backend/services/assets/**",
+        "services/backend/repositories/registry_repos.py"
       ],
       "required_changed_globs": [
         "docs/BACKEND-API.md",
@@ -580,7 +580,7 @@
       "id": "event_time_valuation",
       "name": "event-time valuation plane changed",
       "source_globs": [
-        "Backend Architecture/aether-backend/services/valuation/**"
+        "services/backend/services/valuation/**"
       ],
       "required_changed_globs": [
         "docs/BACKEND-API.md",
@@ -602,7 +602,7 @@
       "source_globs": [
         "packages/shared/contracts/spine-registry.json",
         "packages/shared/spine-registry.ts",
-        "Backend Architecture/aether-backend/shared/spine/**",
+        "services/backend/shared/spine/**",
         "scripts/validate_spine_registry.py",
         "scripts/lib/spine_registry_validation.py"
       ],
@@ -613,7 +613,7 @@
         "docs/AUTOMATION.md",
         "packages/shared/index.ts",
         "tests/**",
-        "Backend Architecture/**/tests/**"
+        "services/backend/**/tests/**"
       ],
       "required_commands": [
         "python scripts/generate_platform_contracts.py --check",
@@ -622,7 +622,7 @@
         "make spine-registry-check",
         "python -m pytest tests/unit/test_spine_registry_validation.py tests/unit/test_spine_envelope_parity.py -q"
       ],
-      "remediation": "Align the canonical spine registry (ADR-011 Spine Composition Kernel) with its generated twins, runtime package, and the real routes/surfaces/services each spine row binds; a row must bind to machinery that exists (tetris inventory gate) \u2014 declare unresolved bindings pending in unresolvedRefs with a reason and resolving milestone; regenerate via python scripts/generate_platform_contracts.py; and update the spine tests."
+      "remediation": "Align the canonical spine registry (ADR-011 Spine Composition Kernel) with its generated twins, runtime package, and the real routes/surfaces/services each spine row binds; a row must bind to machinery that exists (tetris inventory gate) — declare unresolved bindings pending in unresolvedRefs with a reason and resolving milestone; regenerate via python scripts/generate_platform_contracts.py; and update the spine tests."
     },
     {
       "id": "observation_envelope",
@@ -630,8 +630,8 @@
       "source_globs": [
         "packages/shared/contracts/observation-envelope-registry.json",
         "packages/shared/observation-envelope.ts",
-        "Backend Architecture/aether-backend/shared/observation/**",
-        "Backend Architecture/aether-backend/services/ingestion/observation_envelope.py"
+        "services/backend/shared/observation/**",
+        "services/backend/services/ingestion/observation_envelope.py"
       ],
       "required_changed_globs": [
         "docs/_generated/**",
@@ -639,64 +639,64 @@
         "docs/REPO-INDEX.md",
         "docs/AUTOMATION.md",
         "packages/shared/observation-envelope.ts",
-        "Backend Architecture/aether-backend/shared/observation/**",
+        "services/backend/shared/observation/**",
         "tests/**",
-        "Backend Architecture/**/tests/**"
+        "services/backend/**/tests/**"
       ],
       "required_commands": [
         "python scripts/docs_drift.py --strict",
         "python -m pytest tests/contracts/test_observation_envelope_parity.py -q",
         "python -m pytest tests/unit/observation -q"
       ],
-      "remediation": "Keep the three Envelope-B surfaces in lock-step - packages/shared/contracts/observation-envelope-registry.json (canonical field registry), Backend Architecture/aether-backend/shared/observation/envelope.py (pydantic runtime model), and packages/shared/observation-envelope.ts (passive TS twin) - held by tests/contracts/test_observation_envelope_parity.py; extend tests/unit/observation/test_observation_envelope.py when the model or the SDK mapping (services/ingestion/observation_envelope.py) changes."
+      "remediation": "Keep the three Envelope-B surfaces in lock-step - packages/shared/contracts/observation-envelope-registry.json (canonical field registry), services/backend/shared/observation/envelope.py (pydantic runtime model), and packages/shared/observation-envelope.ts (passive TS twin) - held by tests/contracts/test_observation_envelope_parity.py; extend tests/unit/observation/test_observation_envelope.py when the model or the SDK mapping (services/backend/services/ingestion/observation_envelope.py) changes."
     },
-  {
+    {
       "id": "ingress_adapter_registry",
       "name": "universal ingress adapter registry / gateway (WS-B1) changed",
       "source_globs": [
-        "Backend Architecture/aether-backend/services/ingestion/adapters/**",
-        "Backend Architecture/aether-backend/services/ingestion/gateway.py",
-        "Backend Architecture/aether-backend/services/ingestion/observation_envelope.py",
-        "Backend Architecture/aether-backend/services/ingestion/batch.py"
+        "services/backend/services/ingestion/adapters/**",
+        "services/backend/services/ingestion/gateway.py",
+        "services/backend/services/ingestion/observation_envelope.py",
+        "services/backend/services/ingestion/batch.py"
       ],
       "required_changed_globs": [
         "docs/source-of-truth/**",
-        "Backend Architecture/aether-backend/services/ingestion/adapters/**",
-        "Backend Architecture/aether-backend/services/ingestion/gateway.py",
-        "Backend Architecture/aether-backend/config/settings.py",
+        "services/backend/services/ingestion/adapters/**",
+        "services/backend/services/ingestion/gateway.py",
+        "services/backend/config/settings.py",
         ".env.production.example",
         "tests/**",
-        "Backend Architecture/**/tests/**"
+        "services/backend/**/tests/**"
       ],
       "required_commands": [
         "python -m pytest tests/unit/observation -q"
       ],
-      "remediation": "Keep the adapter registry (Backend Architecture/aether-backend/services/ingestion/adapters/registry.py) and the universal ingestion gateway (services/ingestion/gateway.py) consistent with the Envelope-B surfaces they consume (shared/observation/envelope.py source_type/credential_class vocabulary + packages/shared/contracts/observation-envelope-registry.json) and the Contract Spine they enforce (generated_registry CANONICAL_EVENT_TYPES/EVENT_FAMILY); register a new adapter class under the family it implements and extend tests/unit/observation/test_ingress_adapter_registry.py + test_ingress_gateway.py when the registry, an adapter, or the gateway changes."
+      "remediation": "Keep the adapter registry (services/backend/services/ingestion/adapters/registry.py) and the universal ingestion gateway (services/backend/services/ingestion/gateway.py) consistent with the Envelope-B surfaces they consume (services/backend/shared/observation/envelope.py source_type/credential_class vocabulary + packages/shared/contracts/observation-envelope-registry.json) and the Contract Spine they enforce (generated_registry CANONICAL_EVENT_TYPES/EVENT_FAMILY); register a new adapter class under the family it implements and extend tests/unit/observation/test_ingress_adapter_registry.py + test_ingress_gateway.py when the registry, an adapter, or the gateway changes."
     },
     {
       "id": "ingestion_replay_spine_convergence",
       "name": "ingestion replay + consumption normalization-spine convergence (WS-B4/B5) changed",
       "source_globs": [
-        "Backend Architecture/aether-backend/services/ingestion/replay.py",
-        "Backend Architecture/aether-backend/services/ingestion/replay_routes.py",
-        "Backend Architecture/aether-backend/services/ingestion/spine.py",
-        "Backend Architecture/aether-backend/services/ingestion/workers.py",
-        "Backend Architecture/aether-backend/services/semantic_intelligence/consumer.py",
-        "Backend Architecture/aether-backend/services/resolution/consumer.py"
+        "services/backend/services/ingestion/replay.py",
+        "services/backend/services/ingestion/replay_routes.py",
+        "services/backend/services/ingestion/spine.py",
+        "services/backend/services/ingestion/workers.py",
+        "services/backend/services/semantic_intelligence/consumer.py",
+        "services/backend/services/resolution/consumer.py"
       ],
       "required_changed_globs": [
         "docs/source-of-truth/**",
         "docs/productization/sdk-universal-ingestion-alignment/**",
-        "Backend Architecture/aether-backend/config/settings.py",
+        "services/backend/config/settings.py",
         ".env.example",
         ".env.production.example",
         "tests/**",
-        "Backend Architecture/**/tests/**"
+        "services/backend/**/tests/**"
       ],
       "required_commands": [
         "python -m pytest tests/unit/observation -q"
       ],
-      "remediation": "Keep the WS-B4 replay surface (services/ingestion/replay.py runner + services/ingestion/replay_routes.py Kyber-operator routes + services/ingestion/adapters/replay.py, which also co-moves the ingress_adapter_registry category) and the WS-B5 consumption normalization spine (services/ingestion/spine.py::to_observation_view) in lock-step with their flag blocks (config/settings.py IngestReplayConfig + NormalizationSpineConfig and the AETHER_INGESTION_REPLAY_ENABLED / AETHER_NORMALIZATION_SPINE_ENABLED env examples) and the consumers that read through the spine (services/ingestion/workers.py Bronze-writer consumer original-time/replay-skip logic, services/semantic_intelligence/consumer.py, services/resolution/consumer.py); a replay/spine surface change must co-move the settings/env flag block, extend tests/unit/observation (test_ingest_replay.py / test_replay_adapter.py / test_normalization_spine.py / test_replay_route_mount.py), and update the SOT + alignment docs."
+      "remediation": "Keep the WS-B4 replay surface (services/backend/services/ingestion/replay.py runner + services/backend/services/ingestion/replay_routes.py Kyber-operator routes + services/backend/services/ingestion/adapters/replay.py, which also co-moves the ingress_adapter_registry category) and the WS-B5 consumption normalization spine (services/backend/services/ingestion/spine.py::to_observation_view) in lock-step with their flag blocks (services/backend/config/settings.py IngestReplayConfig + NormalizationSpineConfig and the AETHER_INGESTION_REPLAY_ENABLED / AETHER_NORMALIZATION_SPINE_ENABLED env examples) and the consumers that read through the spine (services/backend/services/ingestion/workers.py Bronze-writer consumer original-time/replay-skip logic, services/backend/services/semantic_intelligence/consumer.py, services/backend/services/resolution/consumer.py); a replay/spine surface change must co-move the settings/env flag block, extend tests/unit/observation (test_ingest_replay.py / test_replay_adapter.py / test_normalization_spine.py / test_replay_route_mount.py), and update the SOT + alignment docs."
     },
     {
       "id": "mobile_native_regions",
@@ -729,9 +729,9 @@
       "source_globs": [
         "packages/shared/contracts/rights-vocabulary.json",
         "packages/shared/data-rights.ts",
-        "Backend Architecture/**/data_rights/models.py",
-        "Backend Architecture/**/data_rights/service.py",
-        "Backend Architecture/**/rights_authority/**",
+        "services/backend/**/data_rights/models.py",
+        "services/backend/**/data_rights/service.py",
+        "services/backend/**/rights_authority/**",
         "packages/shared/contracts/spine-registry.json",
         "scripts/validate_rights_vocabulary.py",
         "scripts/validate_no_parallel_rights_registries.py",
@@ -747,7 +747,7 @@
         "packages/shared/index.ts",
         "packages/shared/spine-registry.ts",
         "tests/**",
-        "Backend Architecture/**/tests/**"
+        "services/backend/**/tests/**"
       ],
       "required_commands": [
         "python scripts/validate_rights_vocabulary.py",
@@ -758,7 +758,7 @@
         "python scripts/generate_platform_contracts.py --check",
         "python scripts/docs_drift.py --strict"
       ],
-      "remediation": "The Rights Authority vocabulary is a tri-surface contract: packages/shared/contracts/rights-vocabulary.json (canonical snake_case values), the python (str, Enum) members in Backend Architecture/aether-backend/services/integrations/data_rights/models.py, and the as-const arrays in packages/shared/data-rights.ts must stay in exact sync (scripts/validate_rights_vocabulary.py enforces it; bindings under registeredCanonicalVocabularies in the JSON name the implementing class/array). No irrl-registry.json / ownership-registry.json / learning-rights-registry.json / retention-rights-registry.json / generalization-rights-registry.json duplicate ledger may exist (ADR-011 D4 / RIGHTS_AUTHORITY_BLUEPRINT.md §13). When the spine-registry.json rights_irrl row moves, regenerate the spine twins/docs (python scripts/generate_platform_contracts.py), and keep the source-linked rights docs (RIGHTS_AUTHORITY_BLUEPRINT.md / RIGHTS_TAXONOMY.md / IRRL_NAMING_OVERLAY.md) reviewed against their declared sources."
+      "remediation": "The Rights Authority vocabulary is a tri-surface contract: packages/shared/contracts/rights-vocabulary.json (canonical snake_case values), the python (str, Enum) members in services/backend/services/integrations/data_rights/models.py, and the as-const arrays in packages/shared/data-rights.ts must stay in exact sync (scripts/validate_rights_vocabulary.py enforces it; bindings under registeredCanonicalVocabularies in the JSON name the implementing class/array). No irrl-registry.json / ownership-registry.json / learning-rights-registry.json / retention-rights-registry.json / generalization-rights-registry.json duplicate ledger may exist (ADR-011 D4 / RIGHTS_AUTHORITY_BLUEPRINT.md §13). When the spine-registry.json rights_irrl row moves, regenerate the spine twins/docs (python scripts/generate_platform_contracts.py), and keep the source-linked rights docs (RIGHTS_AUTHORITY_BLUEPRINT.md / RIGHTS_TAXONOMY.md / IRRL_NAMING_OVERLAY.md) reviewed against their declared sources."
     }
   ]
 }

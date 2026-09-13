@@ -9,7 +9,7 @@
         "Makefile:808: warning: ignoring old commands for target `derivatives-profile-check'",
         "Makefile:841: warning: overriding commands for target `derivatives-intelligence-release-check'",
         "Makefile:811: warning: ignoring old commands for target `derivatives-intelligence-release-check'",
-        "cd \"Backend Architecture/aether-backend\" && python3 -m pytest -q -o addopts='' tests/test_demo_seed.py -k \"clean_install or normal_startup\"",
+        "cd \"services/backend\" && python3 -m pytest -q -o addopts='' tests/test_demo_seed.py -k \"clean_install or normal_startup\"",
         "..                                                                       [100%]",
         "2 passed, 11 deselected in 0.61s",
         "python3 scripts/validate_frontend_data_truth.py",
@@ -39,7 +39,7 @@
         "Makefile:808: warning: ignoring old commands for target `derivatives-profile-check'",
         "Makefile:841: warning: overriding commands for target `derivatives-intelligence-release-check'",
         "Makefile:811: warning: ignoring old commands for target `derivatives-intelligence-release-check'",
-        "cd \"Backend Architecture/aether-backend\" && python3 -m pytest -q -o addopts='' tests/test_demo_seed.py -k \"reset or tenant_ids_are_isolated\"",
+        "cd \"services/backend\" && python3 -m pytest -q -o addopts='' tests/test_demo_seed.py -k \"reset or tenant_ids_are_isolated\"",
         "...                                                                      [100%]",
         "3 passed, 10 deselected in 0.51s"
       ],
@@ -57,7 +57,7 @@
         "Makefile:808: warning: ignoring old commands for target `derivatives-profile-check'",
         "Makefile:841: warning: overriding commands for target `derivatives-intelligence-release-check'",
         "Makefile:811: warning: ignoring old commands for target `derivatives-intelligence-release-check'",
-        "cd \"Backend Architecture/aether-backend\" && python3 -m pytest -q -o addopts='' tests/test_demo_seed.py -k \"idempotent or status_contract or production_refuses or startup_seed_refuses\"",
+        "cd \"services/backend\" && python3 -m pytest -q -o addopts='' tests/test_demo_seed.py -k \"idempotent or status_contract or production_refuses or startup_seed_refuses\"",
         "....                                                                     [100%]",
         "4 passed, 9 deselected in 0.51s"
       ],

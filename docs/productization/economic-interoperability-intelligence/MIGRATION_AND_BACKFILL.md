@@ -6,13 +6,13 @@ visibility: I
 audience: [architect, ops, buyer]
 status: stable
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/alembic/versions/20260708_derivatives_foundation_adoption.py, Backend Architecture/aether-backend/alembic/versions/20260708_derivatives_runtime.py, Backend Architecture/aether-backend/alembic/versions/20260708_stablecoin_intelligence.py, Backend Architecture/aether-backend/alembic/versions/20260708_interop_intelligence.py]
+source_files: [services/backend/alembic/versions/20260708_derivatives_foundation_adoption.py, services/backend/alembic/versions/20260708_derivatives_runtime.py, services/backend/alembic/versions/20260708_stablecoin_intelligence.py, services/backend/alembic/versions/20260708_interop_intelligence.py]
 canonical_owner: platform@aether
 source_hashes:
-  Backend Architecture/aether-backend/alembic/versions/20260708_derivatives_foundation_adoption.py: sha256:f660817df625a2b5969161b2eff5c8f96a371a0bbae4d36b86d780473dcd46cd
-  Backend Architecture/aether-backend/alembic/versions/20260708_derivatives_runtime.py: sha256:909c76fb22947018074331ad091b4a78aa4092747ff0b85236e095ad7dce63ba
-  Backend Architecture/aether-backend/alembic/versions/20260708_interop_intelligence.py: sha256:6278d8461410b06351524afc09c9aa278f76f799832987c06ff24d6210b334e5
-  Backend Architecture/aether-backend/alembic/versions/20260708_stablecoin_intelligence.py: sha256:411197411d327ae2f32ebfd9baf9cff0524cf9853c51e72a2bf4af3e5298d888
+  "services/backend/alembic/versions/20260708_derivatives_foundation_adoption.py": "sha256:7ee61a22415974370ab3b1fe2a678fa7931ab4707aaa400efabe19fd64cb3180"
+  "services/backend/alembic/versions/20260708_derivatives_runtime.py": "sha256:909c76fb22947018074331ad091b4a78aa4092747ff0b85236e095ad7dce63ba"
+  "services/backend/alembic/versions/20260708_interop_intelligence.py": "sha256:6278d8461410b06351524afc09c9aa278f76f799832987c06ff24d6210b334e5"
+  "services/backend/alembic/versions/20260708_stablecoin_intelligence.py": "sha256:411197411d327ae2f32ebfd9baf9cff0524cf9853c51e72a2bf4af3e5298d888"
 ---
 
 # Migration and Backfill

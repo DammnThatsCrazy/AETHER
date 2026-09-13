@@ -1,7 +1,7 @@
 /**
  * Canonical epistemic-status vocabulary — TypeScript mirror.
  *
- * Mirrors `Backend Architecture/aether-backend/shared/contracts_models/epistemic.py`.
+ * Mirrors `services/backend/shared/contracts_models/epistemic.py`.
  * Kept in lockstep by `tests/contracts/test_epistemic_status_parity.py`
  * (const-array set + order equality).
  *

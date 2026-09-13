@@ -53,8 +53,8 @@ must reconcile — never fork — each of them:
    pending spines; the 2026-09-05 re-cut onto `origin/main` re-formalized
    `graph_history_replay`, `grouping_membership`, and
    `context_capsule_semantics` to `implemented` once their authorities —
-   `services/temporal360` history replay, `services/population` membership
-   governor + append-only definition versions, `services/geographic360` capsule
+   `services/backend/services/temporal360` history replay, `services/backend/services/population` membership
+   governor + append-only definition versions, `services/backend/services/geographic360` capsule
    semantics — landed on the base.) That registry is the closest
    existing analog to a spine registry; this ADR is the spine plane that
    formalizes it.
@@ -133,9 +133,9 @@ re-defined.
 
 Information Rights, Retention & Learning becomes a first-class **naming
 overlay** on the rights machinery that already exists:
-`services/integrations/data_rights` (`DataRightsGrant`, `model_training_allowed`),
-`services/policy` (`ConsentPolicyDecision`), `services/dsr_propagation`,
-`services/storage_lifecycle`, and the source-of-truth ledger
+`services/backend/services/integrations/data_rights` (`DataRightsGrant`, `model_training_allowed`),
+`services/backend/services/policy` (`ConsentPolicyDecision`), `services/backend/services/dsr_propagation`,
+`services/backend/services/storage_lifecycle`, and the source-of-truth ledger
 `DATA_RIGHTS_LEDGER.md`. IRRL terms (`DataRightsEnvelope`, `UseAuthority`,
 `DerivationClass`, `RetentionPolicy`, `Generalization Gateway`,
 `RightsDecision`) map onto those existing ids; enforcement continues to live in

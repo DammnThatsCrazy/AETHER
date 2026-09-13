@@ -51,5 +51,5 @@ Added documentation for 31 new endpoints across 3 services:
 **Status:** Not shipped in v8.5.0. Export status tracking works; file generation is a future enhancement.
 
 ### Node.js Data Ingestion Service — PRODUCTION IMPLEMENTATIONS
-**Decision:** The Node.js Data Ingestion Layer (`Data Ingestion Layer/`) now has production sink implementations (Kafka via REST Proxy, ClickHouse via HTTP, S3 via HTTP PUT, Redis via RESP protocol) using Node.js built-in modules (node:http, node:net, node:zlib). The Python FastAPI backend (`Backend Architecture/aether-backend/`) remains the canonical API runtime for all 246 endpoints, all provider connectors, all lake management, and all intelligence outputs.
+**Decision:** The Node.js Data Ingestion Layer (`docs/archive/legacy-architecture/data-ingestion-layer/`) now has production sink implementations (Kafka via REST Proxy, ClickHouse via HTTP, S3 via HTTP PUT, Redis via RESP protocol) using Node.js built-in modules (node:http, node:net, node:zlib). The Python FastAPI backend (`services/backend/`) remains the canonical API runtime for all 246 endpoints, all provider connectors, all lake management, and all intelligence outputs.
 **Status:** Node.js ingestion sinks are production-ready. The Python backend remains the canonical API surface.

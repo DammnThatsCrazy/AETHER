@@ -26,8 +26,8 @@ repository_ceiling:
   - Provision the required cloud backend (apply Terraform for the target profile).
   remaining_is_repository_controlled: true
   evidence:
-  - Backend Architecture/aether-backend/services/derivatives/
-  - Backend Architecture/aether-backend/repositories/typed_repo.py
+  - services/backend/services/derivatives/
+  - services/backend/repositories/typed_repo.py
   - tests/unit/derivatives/
 implementation:
   state: RUNTIME_INTEGRATED
@@ -125,7 +125,7 @@ business_readiness:
 confidence:
   level: LOW
   reasons:
-  - 'repository evidence: Backend Architecture/aether-backend/services/derivatives/'
+  - 'repository evidence: services/backend/services/derivatives/'
   evidence_gaps:
   - credentialed environment execution not yet performed
 release_profiles:

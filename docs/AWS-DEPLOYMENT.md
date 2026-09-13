@@ -7,10 +7,10 @@ audience: [ops, security, architect]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - AWS Deployment/aether-aws/README.md
-  - AWS Deployment/aether-aws/main.py
-  - AWS Deployment/aether-aws/terraform/
-  - AWS Deployment/aether-aws/config/
+  - deploy/aws/README.md
+  - deploy/aws/main.py
+  - deploy/aws/terraform/
+  - deploy/aws/config/
   - scripts/release/verify_terraform_state_role.py
   - .github/workflows/terraform-promote.yml
   - .github/workflows/staging-state-reconcile.yml
@@ -24,16 +24,16 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/staging-lifecycle.yml": "sha256:5f08e62b17304a5f32896a2e41d0b4e5c0ff5dff55d6e596fd068bf3261aab42"
-  ".github/workflows/staging-state-reconcile.yml": "sha256:f84ebf15cff0d5cc46d30890f767d9dcf3ca584b4392b889df3bce7d8bbcc3ed"
+  ".github/workflows/staging-lifecycle.yml": "sha256:38e9810399b549e10741393bd424dec755adb29a3aa7a350f9fe1c8ca8645007"
+  ".github/workflows/staging-state-reconcile.yml": "sha256:e464947339f4be70cc0659f100dbc06ab04d50101b2f848a4d529ac84a5b5341"
   ".github/workflows/staging-ttl-guard.yml": "sha256:4fe2250c0ccb0f8486800c6e09c8f1adcf6c38371944e911269f103053f0f1da"
-  ".github/workflows/terraform-promote.yml": "sha256:c6ba216364e25afee22be4b62c0e2b3629bc5e68e0f47389fba8cfc4c17f7ef4"
-  "AWS Deployment/aether-aws/README.md": "sha256:03270a4543e2c843d8d485cc60b31e8f44768187709db312f88f6487c2ccd6e2"
-  "AWS Deployment/aether-aws/config/": "sha256:c22916c8942b6defa9a3cc28d1eca0e68f3d8419decb8defdc2ceebf79de2050"
-  "AWS Deployment/aether-aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "AWS Deployment/aether-aws/terraform/": "sha256:5816b741221d7c723ba6c74ca6bcc01bab2bcdebc729f2113cf61b876f001062"
+  ".github/workflows/terraform-promote.yml": "sha256:4fe31c78b7d0621cc5db6f35eaa239d30f11ce12e518e5dbee6d343110ed5197"
   "config/staging_apply_iam_policy.yaml": "sha256:acc34d81c456090d4569faac727b6688604fc07c3bb36764f38c422f23d5004a"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:84cc2d5a0cdb621f0dc2ba271fd9e66228e36a80cabf52133cf51d410a85f21e"
+  "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
+  "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
+  "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
+  "deploy/aws/terraform/": "sha256:6f311b2fdd25b3985ca766bfd65a2ec664ef3d7dd4f9b89cc2d223c1ffa4f67a"
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:20998a03fdd484635cc80667220794fb1970be3f2e198ac067ec7c7bda12f2f1"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:08dff05b2a886af751d7e0b1c7886951b240b6a31f18ef14d26f73085ae59145"
   "scripts/release/verify_terraform_state_role.py": "sha256:80dce5faa3a69a530f24a72105f7b340bc52726906a641540ed7ef08fb6e46ac"
@@ -124,18 +124,18 @@ or written by that workflow. The ECS module uses `lookup()` for secret ARN
 references so that `terraform import` can evaluate the full configuration
 graph while secrets are imported incrementally.
 
-## Scope — three different things live under `AWS Deployment/`
+## Scope — three different things live under `docs/archive/legacy-architecture/aws-deployment/`
 
 Read this section before anything else. Conflating these three is the single
 most common way to end up describing infrastructure that does not exist.
 
 | Path | What it is |
 |---|---|
-| `AWS Deployment/aether-aws/terraform/` | **The live Terraform root.** One VPC, one account, profile-driven. Everything in this page's *Live infrastructure* sections describes this and only this. |
-| `AWS Deployment/aether-aws/{README.md,main.py,config/aws_config.py}` and the `scripts/` package | A **reference/demo model**, not provisioning code. `main.py` is a demo runner that prints a six-account, five-VPC architecture from constants in `config/aws_config.py`. It does not wrap `terraform`, it has no `plan`/`apply` commands, and nothing it prints is provisioned by the live root. See [Reference model](#reference-model--described-not-provisioned). |
-| `AWS Deployment/aether-aws/terraform/environments/{dev,staging,production,demo}/` and `AWS Deployment/main.tf` | A **dead second Terraform tree**. See [Dead second tree](#dead-second-terraform-tree). |
+| `deploy/aws/terraform/` | **The live Terraform root.** One VPC, one account, profile-driven. Everything in this page's *Live infrastructure* sections describes this and only this. |
+| `deploy/aws/{README.md,main.py,config/aws_config.py}` and the `scripts/` package | A **reference/demo model**, not provisioning code. `main.py` is a demo runner that prints a six-account, five-VPC architecture from constants in `config/aws_config.py`. It does not wrap `terraform`, it has no `plan`/`apply` commands, and nothing it prints is provisioned by the live root. See [Reference model](#reference-model--described-not-provisioned). |
+| `deploy/aws/terraform/environments/{dev,staging,production,demo}/` and `docs/archive/legacy-architecture/aws-deployment/main.tf` | A **dead second Terraform tree**. See [Dead second tree](#dead-second-terraform-tree). |
 
-`AWS Deployment/aether-aws/main.py` does **not** deploy anything, and there is
+`deploy/aws/main.py` does **not** deploy anything, and there is
 no `dr_failover.py` anywhere in the repository.
 
 ---
@@ -180,7 +180,7 @@ including the four non-cloud profiles, is
 Apply a profile with its checked-in variable file:
 
 ```bash
-cd "AWS Deployment/aether-aws/terraform"
+cd "deploy/aws/terraform"
 terraform plan -var-file=profiles/production-lean.tfvars -out=tfplan
 ```
 
@@ -421,7 +421,7 @@ in `profiles.tf`; the root `main.tf` module call passes that local, not the raw
 root variable (whose default is `false` and which no profile sets).
 
 **Image.** The tfmcp binary is built by
-`AWS Deployment/aether-aws/build-tfmcp.sh` into a dedicated ECR repository
+`deploy/aws/build-tfmcp.sh` into a dedicated ECR repository
 (`aether-tfmcp`) managed by `terraform/modules/ecr`. The task definition pins
 the immutable `sha256` digest (`var.tfmcp_image_digest`). The runtime image
 includes the Aether Terraform configuration via `docker-entrypoint.sh`, so the
@@ -665,7 +665,7 @@ accounts when their names would otherwise collide.
 
 Removing applied infrastructure — including turning a backend off by changing
 the deployment profile — goes through
-`AWS Deployment/aether-aws/terraform/DECOMMISSION.md`. **A profile flip that
+`deploy/aws/terraform/DECOMMISSION.md`. **A profile flip that
 shows `Plan: … 1 to destroy` on a data store is a stop-the-line event**, not a
 diff to skim.
 
@@ -736,7 +736,7 @@ has been run.
 
 ## Reference model — described, not provisioned
 
-`AWS Deployment/aether-aws/README.md` and `config/aws_config.py` describe a
+`deploy/aws/README.md` and `config/aws_config.py` describe a
 larger target architecture: six AWS accounts under one Organization
 (dev/staging/production/data/security/demo), five VPCs, nine named ECS
 services, eight managed data stores including SageMaker Serverless and Athena,
@@ -752,8 +752,8 @@ infrastructure.
 
 ## Dead second Terraform tree
 
-`AWS Deployment/aether-aws/terraform/environments/{dev,staging,production,demo}/`
-and `AWS Deployment/main.tf` are a second, dead Terraform tree. Between them they
+`deploy/aws/terraform/environments/{dev,staging,production,demo}/`
+and `docs/archive/legacy-architecture/aws-deployment/main.tf` are a second, dead Terraform tree. Between them they
 reference seven modules that do not exist in this repository — `cloudfront`,
 `opensearch`, `dynamodb`, `sagemaker`, `api_gateway`, `iam`, `waf` — so
 `terraform init` fails there, and `environments/demo/main.tf` is not valid HCL.
@@ -761,7 +761,7 @@ reference seven modules that do not exist in this repository — `cloudfront`,
 They are not the deployment path, nothing applies them, and they describe an
 architecture Aether does not run. Do not modify, extend, "fix" or copy patterns
 out of that tree. The live root is
-`AWS Deployment/aether-aws/terraform/`, and the live variable surface is
+`deploy/aws/terraform/`, and the live variable surface is
 `variables.tf` plus `profiles/*.tfvars`.
 
 ## What is not claimed
@@ -776,7 +776,7 @@ out of that tree. The live root is
 
 ## See also
 
-- [Setup From Zero](../AWS%20Deployment/aether-aws/SETUP.md) — the guided from-scratch procedure that provisions the state backend and drives the live root
+- [Setup From Zero](../deploy/aws/SETUP.md) — the guided from-scratch procedure that provisions the state backend and drives the live root
 - [Deployment Profiles](DEPLOYMENT-PROFILES.md)
 - [AWS Lean Production](AWS-LEAN-PRODUCTION.md)
 - [Staging Wake / Sleep](STAGING-WAKE-SLEEP.md)

@@ -61,7 +61,7 @@ def test_a2h_interaction_creates_a2h_edges() -> None:
 
 def test_relationship_layers_py_maps_all_a2h_edge_types() -> None:
     """Python relationship_layers.py must map all A2H edge types."""
-    content = _read("Backend Architecture/aether-backend/shared/graph/relationship_layers.py")
+    content = _read("services/backend/shared/graph/relationship_layers.py")
     a2h_edge_types = ["NOTIFIES", "RECOMMENDS", "DELIVERS_TO", "ESCALATES_TO"]
     for et in a2h_edge_types:
         assert et in content, f"A2H edge type {et} missing from relationship_layers.py"
@@ -69,7 +69,7 @@ def test_relationship_layers_py_maps_all_a2h_edge_types() -> None:
 
 def test_no_graph_mutating_event_creates_unclassified_edges() -> None:
     """Every A2H event must produce edges classified as A2H in the layer map."""
-    content = _read("Backend Architecture/aether-backend/shared/graph/relationship_layers.py")
+    content = _read("services/backend/shared/graph/relationship_layers.py")
     # All four layers must be present
     for layer in ("H2H", "H2A", "A2H", "A2A"):
         assert layer in content, f"Layer {layer} missing from relationship_layers.py"

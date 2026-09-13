@@ -44,5 +44,5 @@ raw observations → Bronze normalization → identity keys extraction
 ## Current State
 
 Identity resolution is implemented in the backend resolution service.
-See `Backend Architecture/aether-backend/services/identity/` for the
+See `services/backend/services/identity/` for the
 runtime implementation.

@@ -760,7 +760,7 @@ def test_profile_doctor_budget_declared_check_is_hard(tmp_path: Path) -> None:
         "services": {"api": {"roles": ["api"]}},
     }
 
-    tf_dir = tmp_path / "AWS Deployment" / "aether-aws" / "terraform"
+    tf_dir = tmp_path / "deploy" / "aws" / "terraform"
     (tf_dir / "profiles").mkdir(parents=True)
     (tf_dir / "profiles" / "demo.tfvars").write_text('deployment_profile = "demo"\n')
     (tf_dir / "variables.tf").write_text(

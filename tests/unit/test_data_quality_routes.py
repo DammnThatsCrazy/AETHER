@@ -1,7 +1,7 @@
 """CI-gated tests for Data Quality / Drift / Intelligence Quality.
 
 Mirrors the backend-suite coverage in
-``Backend Architecture/aether-backend/tests/data_quality/`` but runs under the
+``services/backend/tests/data_quality/`` but runs under the
 root ``tests/`` testpath (which is what CI executes) using the standard
 ``backend_module_path`` import-isolation pattern shared by the other root unit
 tests (see test_governance_routes.py).
@@ -18,7 +18,7 @@ from types import SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = ROOT / "services" / "backend"
 _PREFIXES = ("config", "services", "shared", "middleware", "dependencies", "repositories")
 
 

@@ -21,9 +21,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  BACKEND_DIR: "Backend Architecture/aether-backend"
-  ML_DIR: "ML Models/aether-ml"
-  AGENT_DIR: "Agent Layer"
+  BACKEND_DIR: "services/backend"
+  ML_DIR: "services/ml"
+  AGENT_DIR: "services/agents"
 
 jobs:
   detect-changes:
@@ -41,13 +41,13 @@ jobs:
         with:
           filters: |
             ml:
-              - 'ML Models/**'
-              - 'Backend Architecture/aether-backend/services/ml_serving/**'
+              - 'services/ml/**'
+              - 'services/backend/services/ml_serving/**'
               - 'security/model_extraction_defense/**'
               - 'scripts/validate_ml_registry.py'
               - 'scripts/generate_ml_manifest.py'
               - 'deploy/**'
-              - 'AWS Deployment/**'
+              - 'docs/archive/legacy-architecture/aws-deployment/**'
               - 'frontend/kyber/src/features/ml/**'
               - 'frontend/kyber/src/pages/ml/**'
 
@@ -178,7 +178,7 @@ jobs:
 
           disposition = {"schema_version": 1, "component": "backend_image"}
           if selection["backend_image"]:
-              dockerfile = Path("Backend Architecture/aether-backend/Dockerfile")
+              dockerfile = Path("services/backend/Dockerfile")
               if not dockerfile.is_file():
                   raise SystemExit(f"Impact Graph selected backend_image but path is missing: {dockerfile}")
               disposition.update({"status": "SELECTED", "path": str(dockerfile)})
@@ -200,7 +200,7 @@ jobs:
           selected="$(.venv/bin/python -c 'import json; print(json.load(open("release-evidence/backend-image-disposition.json"))["status"])')"
           if [ "$selected" = "SELECTED" ]; then
               docker build \
-                --file "Backend Architecture/aether-backend/Dockerfile" \
+                --file "services/backend/Dockerfile" \
                 --tag "aether-backend:main-integration-${GITHUB_SHA}" \
                 .
           elif [ "$selected" = "NOT_APPLICABLE" ]; then
@@ -406,7 +406,7 @@ jobs:
         run: make ml-validate
 
       - name: ML tests (unit + integration + training smoke)
-        run: python -m pytest "$ML_DIR/tests/" -v --tb=short
+        run: python scripts/run_ml_tests.py
 
       - name: ML docs consistency check
         run: make ml-docs-check

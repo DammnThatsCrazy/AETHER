@@ -37,7 +37,7 @@ honestly.
 
 ## HubSpot Marketing Hub
 
-**Current state.** `services/integrations/connectors/adapters.py` defines a
+**Current state.** `services/backend/services/integrations/connectors/adapters.py` defines a
 HubSpot connector with `connector_type = "hubspot"`, CRM ingest event types
 (`hubspot.contact`, `hubspot.company`, `hubspot.deal`), and native webhook
 signature verification (`x-hubspot-signature-v3` / `x-hubspot-signature`,

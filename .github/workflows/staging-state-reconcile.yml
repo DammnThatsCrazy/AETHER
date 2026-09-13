@@ -53,7 +53,7 @@ concurrency:
 
 env:
   AWS_REGION: us-east-1
-  TF_DIR: AWS Deployment/aether-aws/terraform
+  TF_DIR: deploy/aws/terraform
 
 jobs:
   import-backend-target-group:

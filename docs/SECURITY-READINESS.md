@@ -22,7 +22,7 @@ prepare for third-party assessment.
 ## Implemented controls
 
 - **Tenant isolation** everywhere + an isolation verifier
-  (`services/security/isolation_verifier.py`).
+  (`services/backend/services/security/isolation_verifier.py`).
 - **Access control** (roles/permissions) — see [Access Control Review](ACCESS-CONTROL-REVIEW.md).
 - **Break-glass** time-boxed operator access — see [Break-Glass Access](BREAK-GLASS-ACCESS.md).
 - **Tamper-evident audit ledger** + governed audit exports.

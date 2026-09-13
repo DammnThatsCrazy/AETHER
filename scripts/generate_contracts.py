@@ -11,8 +11,8 @@ Generated outputs:
   packages/shared/consent.ts
   packages/shared/events.ts                 (generated section only, between markers)
   packages/shared/measurement-contract.ts
-  Backend Architecture/aether-backend/services/ingestion/generated_registry.py
-  Backend Architecture/aether-backend/shared/measurement/generated_registry.py
+  services/backend/services/ingestion/generated_registry.py
+  services/backend/shared/measurement/generated_registry.py
   docs/_generated/event-registry-table.md
   docs/_generated/consent-registry-table.md
   docs/_generated/metric-registry-table.md
@@ -53,10 +53,10 @@ CONSENT_TS = ROOT / "packages" / "shared" / "consent.ts"
 EVENTS_TS = ROOT / "packages" / "shared" / "events.ts"
 MEASUREMENT_TS = ROOT / "packages" / "shared" / "measurement-contract.ts"
 GENERATED_REGISTRY_PY = (
-    ROOT / "Backend Architecture" / "aether-backend" / "services" / "ingestion" / "generated_registry.py"
+    ROOT / "services" / "backend" / "services" / "ingestion" / "generated_registry.py"
 )
 GENERATED_METRIC_REGISTRY_PY = (
-    ROOT / "Backend Architecture" / "aether-backend" / "shared" / "measurement" / "generated_registry.py"
+    ROOT / "services" / "backend" / "shared" / "measurement" / "generated_registry.py"
 )
 EVENT_TABLE_MD = ROOT / "docs" / "_generated" / "event-registry-table.md"
 CONSENT_TABLE_MD = ROOT / "docs" / "_generated" / "consent-registry-table.md"
@@ -67,7 +67,7 @@ WEB_CONSENT_MAP_TS = (
 WEB_TYPES_TS = ROOT / "packages" / "web" / "src" / "types.ts"
 INTEGRATION_CONSENT_TS = ROOT / "packages" / "shared" / "integration-consent.ts"
 INTEGRATION_CONSENT_PY = (
-    ROOT / "Backend Architecture" / "aether-backend" / "shared" / "privacy" / "generated_integration_consent.py"
+    ROOT / "services" / "backend" / "shared" / "privacy" / "generated_integration_consent.py"
 )
 INTEGRATION_CONSENT_SWIFT = (
     ROOT / "packages" / "ios" / "Sources" / "AetherSDK" / "GeneratedIntegrationConsent.swift"
@@ -78,7 +78,7 @@ INTEGRATION_CONSENT_KT = (
 INTEGRATION_CONSENT_TABLE_MD = ROOT / "docs" / "_generated" / "integration-consent-registry-table.md"
 TRAFFIC_SOURCE_TS = ROOT / "packages" / "shared" / "traffic-source.ts"
 TRAFFIC_SOURCE_PY = (
-    ROOT / "Backend Architecture" / "aether-backend" / "services" / "traffic" / "generated_registry.py"
+    ROOT / "services" / "backend" / "services" / "traffic" / "generated_registry.py"
 )
 TRAFFIC_SOURCE_TABLE_MD = ROOT / "docs" / "_generated" / "traffic-source-registry-table.md"
 

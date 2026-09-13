@@ -10,7 +10,7 @@ since_version: "0.1.0"
 
 # Governance Evidence Packs
 
-`EvidencePackService` (`services/security/evidence_packs.py`) generates
+`EvidencePackService` (`services/backend/services/security/evidence_packs.py`) generates
 **security-review evidence** packs that summarize a control area for a buyer's
 security team.
 

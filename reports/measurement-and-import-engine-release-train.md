@@ -54,7 +54,7 @@ CLAUDE.md production-claims rule.
   restatement chain.
 
 ### Tenant Import Engine (#429 understand-half, #430 mutation-half, #431 ops)
-- Contract twins `packages/shared/imports.ts` ⇄ `services/imports/contracts.py`
+- Contract twins `packages/shared/imports.ts` ⇄ `services/backend/services/imports/contracts.py`
   (parity-tested): lifecycle, 9 primitives + field registry, transforms, column
   types, governance sensitivity.
 - Analyze (stdlib CSV/JSON/JSONL + PII/secret/identifier/governance detection;
@@ -84,7 +84,7 @@ migration, asserted by a parity test. BaseRepository-shaped tables use the exact
 
 ## Contracts
 
-- `packages/shared/imports.ts` ⇄ `services/imports/contracts.py` — const-array parity
+- `packages/shared/imports.ts` ⇄ `services/backend/services/imports/contracts.py` — const-array parity
   test (`tests/contracts/test_imports_parity.py`).
 - No SDK / event / consent schema changes in the import/measurement train.
 

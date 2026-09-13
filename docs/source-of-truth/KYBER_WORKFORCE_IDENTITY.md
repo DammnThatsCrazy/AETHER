@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, security, ops]
 status: beta
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/kyber/identity/principals.py, Backend Architecture/aether-backend/services/kyber/identity/invitations.py, Backend Architecture/aether-backend/services/kyber/identity/oidc.py, Backend Architecture/aether-backend/services/kyber/identity/bootstrap.py, Backend Architecture/aether-backend/services/kyber/identity/directory_sync.py]
+source_files: [services/backend/services/kyber/identity/principals.py, services/backend/services/kyber/identity/invitations.py, services/backend/services/kyber/identity/oidc.py, services/backend/services/kyber/identity/bootstrap.py, services/backend/services/kyber/identity/directory_sync.py]
 ---
 
 # Kyber Workforce Identity

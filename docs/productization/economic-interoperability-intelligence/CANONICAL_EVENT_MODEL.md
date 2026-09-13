@@ -33,7 +33,7 @@ Rules:
 - `retentionClass`: `financial_7y` for facts; standard classes for ops.
 - `graphProjection` only on material events.
 - Projector routing is registry-derived
-  (`services/silver/projectors/registry_handles.py`) — adding an event
+  (`services/backend/services/silver/projectors/registry_handles.py`) — adding an event
   to a family automatically routes it; a cross-cutting test asserts
   every declared `silverProjection` token maps to a registered projector.
 - Metering uses ONLY the 8 canonical meter names validated by

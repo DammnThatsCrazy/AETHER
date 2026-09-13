@@ -19,12 +19,12 @@ The staging-readiness audit found two domains carrying parallel, both-mounted
 implementations, plus a resolved-but-worth-recording migration split:
 
 - **Stablecoin** — two packages are mounted simultaneously:
-  - `services/stablecoins/` (plural) — the observer/intelligence runtime stack
+  - `services/backend/services/stablecoins/` (plural) — the observer/intelligence runtime stack
     (`ingestion`, `polling`, `providers`, `rpc_observer`, `solana_observer`,
     `aggregation`, `graph_projector`, `profile360`, `release_readiness`).
     Registered unconditionally in `main.py`; gated per-request by the
     `stablecoin_intelligence` settings namespace; serves `/v1/stablecoin`.
-  - `services/stablecoin/` (singular) — the economic-intelligence surface
+  - `services/backend/services/stablecoin/` (singular) — the economic-intelligence surface
     (`valuation`, `flows`, `support`, `finality`, `registry`, `reconciliation`,
     `service`, `foundation`). Mounted behind `settings.stablecoin.api_enabled`;
     serves `/v1/stablecoins`.
@@ -33,12 +33,12 @@ implementations, plus a resolved-but-worth-recording migration split:
     `stablecoin`) and **two contracts** (`packages/shared/stablecoin.ts` vs
     `stablecoin-intelligence.ts`), and the package↔route naming is **inverted**
     (singular package → plural route and vice-versa).
-- **Derivatives** — one package (`services/derivatives/`) exposes **two route
+- **Derivatives** — one package (`services/backend/services/derivatives/`) exposes **two route
   surfaces** (`routes.py` → `/v1/derivatives` product; `runtime_routes.py` →
   `/v1/derivatives/runtime`) with parallel `models.py`/`runtime_models.py` and
   `reconciliation.py`/`runtime_reconciliation.py`.
 - **Migrations** — the raw-SQL foundation files under
-  `Backend Architecture/migrations/*.sql` were already adopted into the Alembic
+  `docs/archive/legacy-architecture/backend/migrations/*.sql` were already adopted into the Alembic
   chain idempotently (see ADR-006). Alembic is the single source of truth; the
   raw files are SUPERSEDED-in-place. A single Alembic head is confirmed
   (`20260730_consent_control_plane_seed`).
@@ -49,9 +49,9 @@ Declare one canonical source of truth per domain and enforce it with tests,
 without a high-risk physical merge that cannot be runtime-validated in the same
 change:
 
-1. **Stablecoin canonical package**: `services/stablecoins/` (plural, observer/
+1. **Stablecoin canonical package**: `services/backend/services/stablecoins/` (plural, observer/
    intelligence runtime) is canonical for observation, ingestion, finality,
-   reconciliation, graph projection, and Profile360. `services/stablecoin/`
+   reconciliation, graph projection, and Profile360. `services/backend/services/stablecoin/`
    (singular, economic-intelligence) is retained as the complementary
    economic-value surface and is **deprecated for the overlapping concerns**
    (`finality`, `registry`, `reconciliation`, `support`): those must converge on

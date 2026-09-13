@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, security, ops]
 status: beta
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/kyber/devices/webauthn.py, Backend Architecture/aether-backend/services/kyber/devices/device_proof.py, Backend Architecture/aether-backend/services/kyber/devices/approvals.py, Backend Architecture/aether-backend/services/kyber/devices/risk.py]
+source_files: [services/backend/services/kyber/devices/webauthn.py, services/backend/services/kyber/devices/device_proof.py, services/backend/services/kyber/devices/approvals.py, services/backend/services/kyber/devices/risk.py]
 ---
 
 # Kyber Device Trust
@@ -91,7 +91,7 @@ Approval rules:
 * **Self-approval is refused and audited.** An operator who could approve their
   own device could enroll a machine of their choosing and reach production
   unaccompanied. This mirrors the second-actor rule in
-  `services/security/break_glass.py`: the attempt is both blocked *and* written
+  `services/backend/services/security/break_glass.py`: the attempt is both blocked *and* written
   to the audit ledger, because a blocked self-approval is precisely the event an
   investigation wants to find.
 * The single exception is an explicit bootstrap of the first founder device,

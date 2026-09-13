@@ -6,23 +6,23 @@ visibility: P
 audience: [dev-junior, dev-senior, architect]
 status: stable
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/]
+source_files: [services/backend/services/]
 canonical_owner: backend@aether
 estimated_read_minutes: 60
 toc_depth: 3
 reviewed_source_commits:
-  - {'commit': 'c607780c', 'reason': "Reviewed c607780c (new services/measurement/connectors/ad_accounts.py account-identity/credential-probe module + its tests). It adds no HTTP surface — the doc's /v1/* endpoint tables are unaffected — so no body change was required."}
-  - {'commit': '41e8356b', 'reason': "Reviewed 41e8356b (additive /v1/campaign-sources overview/ad-options/connect/test/account/disable/enable endpoints in services/campaign/routes.py, orchestrated by new ad_source_links.py). This spec's Campaign Management Service section documents the /v1/campaigns CRUD surface and does not enumerate the /v1/campaign-sources registry router (covered in docs/api/CAMPAIGN_360_API.md), so the additions are additive to routes this doc does not describe; no body change was required."}
-  - {'commit': 'cef18ae4', 'reason': "Reviewed cef18ae4 (new services/rights_authority canonical package: rights resolver/decision core, generalization gateway, revocation & impact pipeline, durable rights repositories). It adds no HTTP surface on this lane — all seams are library/package-level, fail-closed, and tenant-scoped — so the doc's /v1/* endpoint tables are unaffected; no body change was required."}
-  - {'commit': '1f98cb83', 'reason': 'Reviewed 1f98cb83 (rights_authority __init__ surface + additive /v1/rights router for decisions/effective, decisions/{id}, revocations). The router is deliberately NOT wired into main.py (mounting is a later integration phase, matching the unmounted services/dsr_propagation precedent), so no live endpoint documented by this spec changed; no body change was required.'}
+  - {'commit': 'c607780c', 'reason': "Reviewed c607780c (new services/backend/services/measurement/connectors/ad_accounts.py account-identity/credential-probe module + its tests). It adds no HTTP surface — the doc's /v1/* endpoint tables are unaffected — so no body change was required."}
+  - {'commit': '41e8356b', 'reason': "Reviewed 41e8356b (additive /v1/campaign-sources overview/ad-options/connect/test/account/disable/enable endpoints in services/backend/services/campaign/routes.py, orchestrated by new ad_source_links.py). This spec's Campaign Management Service section documents the /v1/campaigns CRUD surface and does not enumerate the /v1/campaign-sources registry router (covered in docs/api/CAMPAIGN_360_API.md), so the additions are additive to routes this doc does not describe; no body change was required."}
+  - {'commit': 'cef18ae4', 'reason': "Reviewed cef18ae4 (new services/backend/services/rights_authority canonical package: rights resolver/decision core, generalization gateway, revocation & impact pipeline, durable rights repositories). It adds no HTTP surface on this lane — all seams are library/package-level, fail-closed, and tenant-scoped — so the doc's /v1/* endpoint tables are unaffected; no body change was required."}
+  - {'commit': '1f98cb83', 'reason': 'Reviewed 1f98cb83 (rights_authority __init__ surface + additive /v1/rights router for decisions/effective, decisions/{id}, revocations). The router is deliberately NOT wired into main.py (mounting is a later integration phase, matching the unmounted services/backend/services/dsr_propagation precedent), so no live endpoint documented by this spec changed; no body change was required.'}
   - {'commit': '2697ddda', 'reason': "Reviewed 2697ddda (security hardening of the unmounted rights router: actor derived from the authenticated principal instead of client input, /revocations moved from 'read' to the established 'write' scope, ownership-guard documented). All changes are internal to the not-yet-mounted router; no live endpoint documented by this spec changed; no body change was required."}
   - {'commit': 'd8a88e2b', 'reason': 'Reviewed d8a88e2b (docstring-only dispositions on the unmounted rights router: why the durable decision store is a tenant-scoped ledger with tenant (not actor) as the ownership boundary for GET /decisions/{id}, and why read-scoped POST /decisions/effective durably records its section-17 audit outcome while /revocations requires write). No behavior change and no live endpoint documented by this spec changed; no body change was required.'}
-  - {'commit': '4cbc67eb', 'reason': "Reviewed 4cbc67eb (services/rights_authority production seams: server consent evaluator + resolver seam, spine-envelope rights-ref producers, rollout modes, retention + training-manifest adapters). All are library/package-level and additive, and no endpoint was live yet at this commit, so the doc's /v1/* tables were unaffected; no body change was required at this commit."}
+  - {'commit': '4cbc67eb', 'reason': "Reviewed 4cbc67eb (services/backend/services/rights_authority production seams: server consent evaluator + resolver seam, spine-envelope rights-ref producers, rollout modes, retention + training-manifest adapters). All are library/package-level and additive, and no endpoint was live yet at this commit, so the doc's /v1/* tables were unaffected; no body change was required at this commit."}
   - {'commit': '33dfedb4', 'reason': 'Reviewed 33dfedb4 — the /v1/rights surface is now MOUNTED in main.py (always mounted beside /v1/dsr); the routes carry the rollout-OFF 503 gate and require scalar source/purpose/destination matching RightsDecisionRequest; the durable repositories accept dict-or-model rows. This commit makes /v1/rights live and supersedes the earlier not-wired-into-main.py review notes. Body change: the Rights Authority section below documents the three endpoints and their rollout-gated 503 posture.'}
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "Backend Architecture/aether-backend/services/": "sha256:b4370cfc7424a9f98849e710be56c73d8d30cfd63420ba853bf67c26e45348b6"
+  "services/backend/services/": "sha256:662331d22e1b25bbb0accd21a84dc5b7fa5d1e2b644e35cc11b2f5967502933f"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -1078,7 +1078,7 @@ Get a single registered contract by ID.
 
 ### POST /v1/rewards/contracts/{id}/verify
 
-**Requires `rewards:admin` (Aether operator only).** Tenants cannot self-verify — an operator must confirm contract ownership before approving. Validates that `oracle_signer_address` matches the tenant's **resolved reward signer** (`services/rewards/signing.py`, credential-authority backed) — returns 422 if they diverge, 422 if no signer resolves, and 503 if `eth_account` is unavailable (fail-closed; never passes unverified). After successful verification the contract satisfies the registry gate in `POST /v1/rewards/evaluate` for `onchain_claim` rails.
+**Requires `rewards:admin` (Aether operator only).** Tenants cannot self-verify — an operator must confirm contract ownership before approving. Validates that `oracle_signer_address` matches the tenant's **resolved reward signer** (`services/backend/services/rewards/signing.py`, credential-authority backed) — returns 422 if they diverge, 422 if no signer resolves, and 503 if `eth_account` is unavailable (fail-closed; never passes unverified). After successful verification the contract satisfies the registry gate in `POST /v1/rewards/evaluate` for `onchain_claim` rails.
 
 ### Kyber operator reward pages (`/v1/admin/kyber`, `require_kyber_operator`)
 
@@ -3110,7 +3110,7 @@ The APIs return real classified observations from the semantic-sentiment reposit
 
 Additional semantic-sentiment routes in this iteration include `GET /v1/campaigns/{campaign_id}/semantic-impact`, `GET /v1/campaigns/{campaign_id}/sentiment`, `POST /v1/graph/semantic-overlay`, and `POST /v1/population/semantic-compare`. These routes are tenant-scoped and return bounded overlays or insufficient-data states instead of merging semantic-mediated estimates into ordinary attribution. `POST /v1/graph/semantic-overlay` returns real `edge_overlays` read from durable Gold (`gold_relationship_semantic_state`): each overlay edge is a directed relationship projection (`source_ref` → `target_ref`) carrying relationship, stance, trust, and confidence metadata, restricted to edges touching the requested subject when a `subject_ref`/`subject` filter is given.
 
-Graph reachability is governed, never implied by the routes: the semantic graph projector (`services/semantic_intelligence/graph_projector.py`, WorkerSpec `semantic_graph_projector` under the `semantic-worker` role) is flag-gated (`SEMANTIC_GRAPH_PROJECTOR_ENABLED`, default OFF) and, per tenant, projects each Gold relationship row as a directed `SEMANTIC_RELATES_TO` edge **through the canonical `GraphMutationGateway`** — never a direct graph write — so the mutation is ledger-recorded in shadow/enforce mode. The pass is idempotent (an edge already present for `(tenant, source, target)` is skipped) and tenant-scoped. `SEMANTIC_RELATES_TO` maps to `RelationshipLayer.EXCLUDED` (a derived analytics overlay, not a human/agent interaction, so enforce-mode validation needs no consent purpose). The overlay route itself never mutates edges.
+Graph reachability is governed, never implied by the routes: the semantic graph projector (`services/backend/services/semantic_intelligence/graph_projector.py`, WorkerSpec `semantic_graph_projector` under the `semantic-worker` role) is flag-gated (`SEMANTIC_GRAPH_PROJECTOR_ENABLED`, default OFF) and, per tenant, projects each Gold relationship row as a directed `SEMANTIC_RELATES_TO` edge **through the canonical `GraphMutationGateway`** — never a direct graph write — so the mutation is ledger-recorded in shadow/enforce mode. The pass is idempotent (an edge already present for `(tenant, source, target)` is skipped) and tenant-scoped. `SEMANTIC_RELATES_TO` maps to `RelationshipLayer.EXCLUDED` (a derived analytics overlay, not a human/agent interaction, so enforce-mode validation needs no consent purpose). The overlay route itself never mutates edges.
 
 ## Communications Intelligence APIs
 
@@ -3195,7 +3195,7 @@ reports `credential_turnkey / staging_validation_pending` — never `provider_li
 ## Integration Catalog Read Model (v8.12.0)
 
 The unified catalog read model
-(`Backend Architecture/aether-backend/services/integrations/connectors/catalog_endpoints.py`)
+(`services/backend/services/integrations/connectors/catalog_endpoints.py`)
 projects the one-customer catalog — the derived manifests in
 `shared/integration_contracts/catalog` (connectors, ad-platforms, payment rails,
 credit bureaus) — plus tenant connector records as read-only endpoints. Mounted
@@ -3212,7 +3212,7 @@ gate as the ingestion/webhook connector routes). Tenant API key required.
 ### Tenant-contextual joined readiness (`/v1/tenant/integration-readiness`)
 
 The joined *tenant-contextual* readiness graph
-(`Backend Architecture/aether-backend/services/readiness_graph/`) is the WS-4
+(`services/backend/services/readiness_graph/`) is the WS-4
 workstream the catalog read model above deferred: it combines the catalog's
 provider truth with the tenant's connection record facts under the "Connected
 ≠ Ready" honesty law.
@@ -3642,7 +3642,7 @@ instead.
 
 Operator + tenant surfaces for the provider-neutral multi-model harness
 (ADR-008) under `/v1/model-runtime`
-(`Backend Architecture/aether-backend/services/model_runtime/`). Serves the
+(`services/backend/services/model_runtime/`). Serves the
 generated model registry, per-provider health, tenant entitlements, usage, and
 routing traces, plus the tenant model-selection preference.
 
@@ -3650,7 +3650,7 @@ routing traces, plus the tenant model-selection preference.
 `MODEL_RUNTIME_ENABLED=false` (the default): every route returns HTTP 503
 `{"status":"disabled","code":"model_runtime_disabled"}` — no data is ever
 served and the response shapes leak nothing. The gate is read from
-`services/model_runtime/config.py` (`ModelRuntimeSettings`), not the app
+`services/backend/services/model_runtime/config.py` (`ModelRuntimeSettings`), not the app
 settings module, and any configuration error resolves to OFF; in a non-local
 environment, enabling the gate additionally requires a production-safe
 credential backend and a real (non-test-only) default provider. The router is
@@ -3710,7 +3710,7 @@ paths in `frontend/aether/src/features/model-selection/types.ts` and
 
 ## Universal Asset Registry API — `/v1/assets` (v8.12.0)
 
-The Universal Asset Registry (`services/assets/`) is the canonical reference
+The Universal Asset Registry (`services/backend/services/assets/`) is the canonical reference
 registry for the financial-normalization program: global identity for fiat
 currencies, crypto natives, stablecoins, and tokens (namespaced ids
 `fiat:USD`, `crypto:ETH`, `stablecoin:USDC`, `token:<chain>:<contract>`),
@@ -3769,7 +3769,7 @@ seeding is not enabled by default — the canonical seed ships as an ADMIN actio
 
 ### Operator console — `/v1/admin/assets` (W5, default OFF)
 
-The financial-normalization operator console (`services/assets/admin_routes.py`)
+The financial-normalization operator console (`services/backend/services/assets/admin_routes.py`)
 is data-integrity scaffolding over the registry — human review-and-apply of
 reference data plus the automated-discovery lifecycle. Observation-only: the
 console records canonical reference data; it never originates, signs, or settles
@@ -3811,7 +3811,7 @@ alias, and gated on `admin_mode`. Nothing auto-advances and nothing auto-writes.
 
 ## Event-Time Valuation API — `/v1/valuation`
 
-The event-time valuation surface (`services/valuation/`) values a native payload
+The event-time valuation surface (`services/backend/services/valuation/`) values a native payload
 (the exact amount + currency a domain observed) into an **immutable tenant
 valuation snapshot** denominated in a canonical reporting asset, at an explicit
 `effective_at`, through the real asset registry. It is the persistence + API
@@ -3883,7 +3883,7 @@ contract-level spec is `docs/plans/data-exchange-api.md`.
 **Authorization:** routes enforce the canonical seam they proxy and are never
 weaker than it. Each dotted `data_exchange.*` grant is enforced *or* resolved
 to the legacy single-word permission the proxied seam admits (read / write /
-admin) via `services/data_exchange/authz.py`, so existing tenant JWTs/API keys
+admin) via `services/backend/services/data_exchange/authz.py`, so existing tenant JWTs/API keys
 keep working; the `admin` role short-circuits as always. Import mutations gate
 on `write`-equivalence, import approve/rollback and all egress
 (export/transfer-download/report) gate on `admin`-equivalence — matching the
@@ -3977,7 +3977,7 @@ read, resolved, or revoked.
 `RIGHTS_AUTHORITY_ROLLOUT=shadow|warn|enforce` and restart. `shadow` and `warn`
 evaluate and return observational metadata without making a denial binding;
 `enforce` makes the decision/revocation result authoritative. The resolver's
-consent seam (the server consent authority behind `services/consent/authority.py`)
+consent seam (the server consent authority behind `services/backend/services/consent/authority.py`)
 and the §66 revocation pipeline therefore remain fail-closed at the mutation
 boundary until `enforce`.
 

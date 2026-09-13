@@ -35,7 +35,7 @@ except ImportError:  # pragma: no cover - constrained local sandboxes only
     pytest_asyncio = SimpleNamespace(fixture=_async_fixture)
 
 ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = ROOT / "services" / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 

@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/shared/temporal/instant.py, Backend Architecture/aether-backend/shared/temporal/zones.py, Backend Architecture/aether-backend/shared/temporal/clock.py, Backend Architecture/aether-backend/shared/temporal/windows.py, Backend Architecture/aether-backend/shared/temporal/recurrence.py, Backend Architecture/aether-backend/shared/temporal/envelope.py, Backend Architecture/aether-backend/shared/temporal/authority.py, Backend Architecture/aether-backend/services/ingestion/temporal_enforcement.py, Backend Architecture/aether-backend/services/temporal_preferences/routes.py, packages/shared/temporal.ts, packages/shared/contracts/temporal-policy-registry.json, frontend/shared/src/time/format.ts, frontend/shared/src/time/time-provider.tsx, scripts/validate_temporal_integrity.py]
+source_files: [services/backend/shared/temporal/instant.py, services/backend/shared/temporal/zones.py, services/backend/shared/temporal/clock.py, services/backend/shared/temporal/windows.py, services/backend/shared/temporal/recurrence.py, services/backend/shared/temporal/envelope.py, services/backend/shared/temporal/authority.py, services/backend/services/ingestion/temporal_enforcement.py, services/backend/services/temporal_preferences/routes.py, packages/shared/temporal.ts, packages/shared/contracts/temporal-policy-registry.json, frontend/shared/src/time/format.ts, frontend/shared/src/time/time-provider.tsx, scripts/validate_temporal_integrity.py]
 last_synced_commit: c6d0e08
 ---
 
@@ -30,8 +30,8 @@ last_synced_commit: c6d0e08
 | Temporal authorities, skew/lag math, state classification | `shared/temporal/authority.py` |
 | Event temporal envelope + bitemporal graph envelope (Py mirror of `graph-contract.ts`) | `shared/temporal/envelope.py` |
 | Reason-code dispositions, mode ladder, per-family skew/lateness bounds | `packages/shared/contracts/temporal-policy-registry.json` → generated twins via `scripts/generate_platform_contracts.py` |
-| Ingestion enforcement (off → shadow → warn → enforce, canary-scoped) | `services/ingestion/temporal_enforcement.py` + the hook in `services/ingestion/batch.py` |
-| Viewer/tenant temporal preferences (display only, never business authority) | `services/temporal_preferences/` |
+| Ingestion enforcement (off → shadow → warn → enforce, canary-scoped) | `services/backend/services/ingestion/temporal_enforcement.py` + the hook in `services/backend/services/ingestion/batch.py` |
+| Viewer/tenant temporal preferences (display only, never business authority) | `services/backend/services/temporal_preferences/` |
 | Frontend formatting (the ONLY sanctioned Intl home) + time lenses | `frontend/shared/src/time/` |
 | Static gates + shrink-only debt allowlists | `scripts/validate_temporal_integrity.py`, `scripts/allowlists/temporal_*.json` |
 

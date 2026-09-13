@@ -7,12 +7,12 @@ audience: [ops, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/services/agent/runtime_repository.py
-  - Backend Architecture/aether-backend/services/agent/mutation_commit.py
+  - services/backend/services/agent/runtime_repository.py
+  - services/backend/services/agent/mutation_commit.py
 canonical_owner: platform@aether
 source_hashes:
-  "Backend Architecture/aether-backend/services/agent/mutation_commit.py": "sha256:53333e556ceba4a84382683687d900f1f1e4e9ea48333fa295fe5b8976a026a8"
-  "Backend Architecture/aether-backend/services/agent/runtime_repository.py": "sha256:58209dbc9455991f64bb67462ef8bfbcd7d7167077c11a5fdcf44feda642914b"
+  "services/backend/services/agent/mutation_commit.py": "sha256:53333e556ceba4a84382683687d900f1f1e4e9ea48333fa295fe5b8976a026a8"
+  "services/backend/services/agent/runtime_repository.py": "sha256:58209dbc9455991f64bb67462ef8bfbcd7d7167077c11a5fdcf44feda642914b"
 ---
 
 # Agent Runtime & Mutation Review Runbook
@@ -70,4 +70,4 @@ as a clean undo. Successful rollbacks are idempotent.
 
 See also: `docs/source-of-truth/KYBER_ONE_PERSON_OPERATIONS.md`,
 `docs/source-of-truth/EXTERNAL_AGENT_TELEMETRY_PLANE.md`,
-`Agent Layer/README.md`.
+`services/agents/README.md`.

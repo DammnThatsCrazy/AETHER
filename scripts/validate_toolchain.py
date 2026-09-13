@@ -84,7 +84,7 @@ GROUPS: tuple[ToolchainGroup, ...] = (
             "the backend test tree imports the FastAPI app at module scope; without these "
             "the suite reports collection errors rather than results"
         ),
-        suites=("Backend Architecture/aether-backend/tests",),
+        suites=("services/backend/tests",),
     ),
     ToolchainGroup(
         name="ml",
@@ -95,7 +95,7 @@ GROUPS: tuple[ToolchainGroup, ...] = (
             "estimator and serialization stack; this is the group whose absence produced a "
             "false-green ML gate"
         ),
-        suites=("ML Models/aether-ml/tests",),
+        suites=("services/ml/tests",),
     ),
     ToolchainGroup(
         name="security",

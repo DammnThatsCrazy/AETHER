@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 # ── backend import bootstrap (mirrors scripts/connector_smoke.py) ─────────────
-BACKEND_ROOT = Path(__file__).parent.parent / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = Path(__file__).parent.parent / "services" / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 os.environ.setdefault("AETHER_ENV", "local")
 

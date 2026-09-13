@@ -50,7 +50,7 @@ export const KYBER_WORKFORCE_ENDPOINTS = {
  * This is the pre-existing security audit ledger, which lives under the admin
  * Kyber surface rather than the workforce plane — there is no
  * `/v1/kyber/audit/events`. Reading it requires `kyber.audit.read`.
- * See `Backend Architecture/aether-backend/services/security/admin_routes.py`.
+ * See `services/backend/services/security/admin_routes.py`.
  */
 export const KYBER_AUDIT_ENDPOINTS = {
   events: '/v1/admin/kyber/security/audit-events',

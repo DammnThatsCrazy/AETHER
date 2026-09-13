@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/interoperability.ts, Backend Architecture/aether-backend/services/interop/models.py, Backend Architecture/aether-backend/repositories/interop_repos.py]
+source_files: [packages/shared/interoperability.ts, services/backend/services/interop/models.py, services/backend/repositories/interop_repos.py]
 canonical_owner: platform@aether
 last_synced_commit: 1f19190
 ---
@@ -34,7 +34,7 @@ the canonical model carries neutral identities plus alias references.
 
 `INTEROP_LEGAL_TRANSITIONS` in `interoperability.ts` is the single source
 of truth (22 states incl. verification/delivery failure-and-retry cycles,
-`reorged` re-derivation, `recovered`); `services/interop/lifecycle.py`
+`reorged` re-derivation, `recovered`); `services/backend/services/interop/lifecycle.py`
 mirrors it with a regex-parity test. Terminal states (`settled`,
 `cancelled`, `refunded`) are immutable. Legal transitions always apply;
 illegal lower-rank arrivals attach as late evidence without regression.

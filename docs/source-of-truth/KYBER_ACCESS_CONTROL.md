@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, security, ops]
 status: beta
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/security/request_context.py, Backend Architecture/aether-backend/services/security/route_registry.py, Backend Architecture/aether-backend/services/security/policy_engine.py, Backend Architecture/aether-backend/services/kyber/access/capabilities.py, Backend Architecture/aether-backend/services/kyber/access/roles.py, config/route_registry.yaml]
+source_files: [services/backend/services/security/request_context.py, services/backend/services/security/route_registry.py, services/backend/services/security/policy_engine.py, services/backend/services/kyber/access/capabilities.py, services/backend/services/kyber/access/roles.py, config/route_registry.yaml]
 ---
 
 # Kyber Access Control
@@ -30,8 +30,8 @@ collapsed into a single "admin" bit:
 
 | Dimension | Question it answers | Where it lives |
 |---|---|---|
-| **Capability** | *What operation?* | `services/kyber/access/capabilities.py` |
-| **Disclosure** | *How much may be revealed?* | `services/kyber/access/disclosure.py` |
+| **Capability** | *What operation?* | `services/backend/services/kyber/access/capabilities.py` |
+| **Disclosure** | *How much may be revealed?* | `services/backend/services/kyber/access/disclosure.py` |
 | **Tenant scope** | *Whose data?* | tenant access scopes (purpose-bound, expiring) |
 | **Action class** | *How much can it break?* | `action_class` on each capability |
 
@@ -92,7 +92,7 @@ dependency, which knows which tenant the resource belongs to.
 
 ## 3. Role templates → AccessRole
 
-Role templates (`services/kyber/access/roles.py`) are the only way a principal
+Role templates (`services/backend/services/kyber/access/roles.py`) are the only way a principal
 acquires capabilities. `ROLE_TEMPLATES` maps each template to its
 `access_roles`, `capabilities`, `max_disclosure`, `max_action_class`, session
 and device lifetimes, and allowed environments.
@@ -203,7 +203,7 @@ second divergent copy of the rules is precisely the failure this design avoids.
 ## 7. Compatibility adapter and migration path
 
 `is_kyber_operator` / `require_kyber_operator`
-(`services/security/request_context.py`) keep their names, signatures and
+(`services/backend/services/security/request_context.py`) keep their names, signatures and
 exception types — `UnauthorizedError` when nothing identifies the caller,
 `ForbiddenError` when the caller is identified but not an operator. What changed
 is the order of resolution:
@@ -221,7 +221,7 @@ is the order of resolution:
 `is_kyber_operator(tenant)` keeps its positional contract; the new optional
 `request` argument is what admits a workforce session.
 
-Worker-owned modules under `services/kyber/access/` are imported **lazily**
+Worker-owned modules under `services/backend/services/kyber/access/` are imported **lazily**
 inside functions. Every failure mode — module absent, import raising, or an
 unawaitable coroutine returned to synchronous code — resolves to "no workforce
 session", which callers treat as **deny**.
@@ -291,12 +291,12 @@ WebAuthn RP id / origin are unset while workforce identity is on.
 
 Two authorization branches that predated this plane were corrected alongside it:
 
-* `services/operational_intelligence/routes.py` gated the graph reconciliation
+* `services/backend/services/operational_intelligence/routes.py` gated the graph reconciliation
   and cross-tenant graph-health paths on `getattr(tenant, "is_platform_admin",
   False)`. `TenantContext` has no such field, so the branch was permanently
   False and the documented operator path could not work. Both now use the
   canonical gate plus a required active tenant access scope.
-* `services/noesis/service.py::_resolve_scope` authorized cross-tenant Kyber
+* `services/backend/services/noesis/service.py::_resolve_scope` authorized cross-tenant Kyber
   access on `tenant.role == Role.ADMIN` — the very tenant the canonical gate
   rejects — and entered fleet-wide mode by substring-matching the user's
   natural-language message. It now uses the canonical gate, requires an active

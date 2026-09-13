@@ -8,7 +8,7 @@ is the only supported way to read that registry.
 Two consumers exist today:
 
 - ``scripts/repo_doctor.py`` replaces its two previously hardcoded pytest
-  invocations (root ``tests/`` and ``ML Models/aether-ml/tests``) with a
+  invocations (root ``tests/`` and ``services/ml/tests``) with a
   registry-driven loop over every pytest-runner suite that applies to the
   current mode (``--check``/``--fix`` -> environment ``local``, ``--ci`` ->
   environment ``ci``).
@@ -350,6 +350,7 @@ def is_pytest_suite(suite: TestSuite) -> bool:
         "pytest" in suite.runner
         or "scripts/run_pytest_files.py" in suite.runner
         or "scripts/run_backend_tests.py" in suite.runner
+        or "scripts/run_ml_tests.py" in suite.runner
     )
 
 

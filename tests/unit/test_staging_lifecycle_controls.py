@@ -689,8 +689,7 @@ def test_promotion_does_not_fail_after_apply_on_external_dns_propagation():
 def test_deactivation_revokes_durable_api_keys_before_marking_inactive():
     source = (
         ROOT
-        / "Backend Architecture"
-        / "aether-backend"
+        / "services" / "backend"
         / "services"
         / "auth"
         / "routes.py"
@@ -744,7 +743,7 @@ def test_cleanup_requires_a_complete_erasure_receipt_and_declares_all_rehearsal_
         "tenant_graph",
     ):
         assert surface in (
-            (ROOT / "Backend Architecture" / "aether-backend" / "services" / "auth" / "routes.py")
+            (ROOT / "services" / "backend" / "services" / "auth" / "routes.py")
             .read_text(encoding="utf-8")
         ), f"cleanup does not name the {surface} surface"
     assert "cleanup_complete receipt" in cleanup

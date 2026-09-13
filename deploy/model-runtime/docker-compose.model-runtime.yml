@@ -21,12 +21,12 @@ services:
   model-runtime:
     # The model runtime ships inside the aether-backend image (D5). The
     # aether-backend Dockerfile copies repo-root-relative paths
-    # (Backend Architecture/aether-backend/...), so the build context is the
+    # (services/backend/...), so the build context is the
     # repository root and the dockerfile path is quoted (contains spaces) —
     # matching the root docker-compose.yml x-backend-build anchor.
     build:
       context: ../..
-      dockerfile: "Backend Architecture/aether-backend/Dockerfile"
+      dockerfile: "services/backend/Dockerfile"
     # All MODEL_RUNTIME_* configuration is passed through from the deploy-scoped
     # .env (copied from .env.example). Nothing is inlined here (D9). The service
     # fails closed (ConfigError) when required config is missing.

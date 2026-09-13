@@ -2,7 +2,7 @@
 // Aether SDK — DataRightsGrant structured authorities (rights_irrl) — canonical TS twin
 // HAND-MAINTAINED contract — NOT generated (do not run generate_platform_contracts.py
 // against this file). Python twin:
-//   Backend Architecture/aether-backend/services/integrations/data_rights/models.py
+//   services/backend/services/integrations/data_rights/models.py
 // Parity is enforced by tests/unit/test_data_rights_contract_parity.py.
 //
 // This module is the TypeScript twin of the Python DataRightsGrant structured

@@ -5,7 +5,7 @@ The provider matrix is one of Aether's most-shared reference pages
 (every integrator needs to know which providers we wrap and whether
 they need an API key). The canonical source of truth is::
 
-    Backend Architecture/aether-backend/shared/providers/categories.py
+    services/backend/shared/providers/categories.py
 
 This generator parses that module with ``ast`` and emits a JSON catalog
 with each ProviderCategory enum value paired with its concrete provider
@@ -53,8 +53,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 CATEGORIES_PY = (
     ROOT
-    / "Backend Architecture"
-    / "aether-backend"
+    / "services" / "backend"
     / "shared"
     / "providers"
     / "categories.py"
@@ -203,7 +202,7 @@ def build_payload(text: str) -> dict:
 
     return {
         "version": read_version(),
-        "generated_from": "Backend Architecture/aether-backend/shared/providers/categories.py",
+        "generated_from": "services/backend/shared/providers/categories.py",
         "category_enum_values": enum_members,
         "categories": categories,
         "all_providers": all_providers,

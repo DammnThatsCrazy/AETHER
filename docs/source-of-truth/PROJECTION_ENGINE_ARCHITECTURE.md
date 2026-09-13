@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/contracts/lens-registry.json, Backend Architecture/aether-backend/shared/projection_engine/__init__.py, Backend Architecture/aether-backend/shared/projection_engine/compiler.py, Backend Architecture/aether-backend/shared/projection_engine/composition.py, Backend Architecture/aether-backend/shared/projection_engine/conflict.py, Backend Architecture/aether-backend/shared/projection_engine/context_operator.py, Backend Architecture/aether-backend/shared/projection_engine/degradation.py, Backend Architecture/aether-backend/shared/projection_engine/digest.py, Backend Architecture/aether-backend/shared/projection_engine/executor.py, Backend Architecture/aether-backend/shared/projection_engine/ir.py, Backend Architecture/aether-backend/shared/projection_engine/lens_composition.py, Backend Architecture/aether-backend/shared/projection_engine/lens_registry.py, Backend Architecture/aether-backend/shared/projection_engine/lens_set.py, Backend Architecture/aether-backend/shared/projection_engine/operators.py, Backend Architecture/aether-backend/shared/projection_engine/plan.py, Backend Architecture/aether-backend/shared/projection_engine/planner.py, Backend Architecture/aether-backend/shared/projection_engine/runtime.py, Backend Architecture/aether-backend/shared/projection_engine/temporal_modes.py, Backend Architecture/aether-backend/shared/projection_engine/generated_lenses.py, packages/shared/intelligence-projection.ts, Backend Architecture/aether-backend/shared/intelligence_projections/contracts.py, Backend Architecture/aether-backend/shared/intelligence_projections/generated_registry.py, scripts/generate_platform_contracts.py, scripts/lib/intelligence_projection_validation.py]
+source_files: [packages/shared/contracts/lens-registry.json, services/backend/shared/projection_engine/__init__.py, services/backend/shared/projection_engine/compiler.py, services/backend/shared/projection_engine/composition.py, services/backend/shared/projection_engine/conflict.py, services/backend/shared/projection_engine/context_operator.py, services/backend/shared/projection_engine/degradation.py, services/backend/shared/projection_engine/digest.py, services/backend/shared/projection_engine/executor.py, services/backend/shared/projection_engine/ir.py, services/backend/shared/projection_engine/lens_composition.py, services/backend/shared/projection_engine/lens_registry.py, services/backend/shared/projection_engine/lens_set.py, services/backend/shared/projection_engine/operators.py, services/backend/shared/projection_engine/plan.py, services/backend/shared/projection_engine/planner.py, services/backend/shared/projection_engine/runtime.py, services/backend/shared/projection_engine/temporal_modes.py, services/backend/shared/projection_engine/generated_lenses.py, packages/shared/intelligence-projection.ts, services/backend/shared/intelligence_projections/contracts.py, services/backend/shared/intelligence_projections/generated_registry.py, scripts/generate_platform_contracts.py, scripts/lib/intelligence_projection_validation.py]
 last_synced_commit: 8bf32a56
 ---
 # Projection Engine Architecture
@@ -31,7 +31,7 @@ The engine sits ABOVE the P0 plane and keeps `shared/intelligence_projections/`
 pristine as the stable contract boundary:
 
 ```
-services/exploration ──► ProjectionRuntime ──► ProjectionExecutor
+services/backend/services/exploration ──► ProjectionRuntime ──► ProjectionExecutor
                                                  │ compile → plan → run
                               ┌──────────────────┴───────────────────┐
                         ProjectionCompiler                     ProviderRegistry (P0)
@@ -350,8 +350,8 @@ The richer engine `TemporalMode` enum never leaks into the wire contract.
 * **Checklist**: `INTELLIGENCE_PROJECTION_VERTICAL_SLICE_CHECKLIST.md` — the
   vertical-slice DoD the engine-backed 360s converge on.
 * **Consumption seams (S6)**: the exploration projection-surface adapter
-  (`services/exploration/adapters/projection.py`) and the Noesis
+  (`services/backend/services/exploration/adapters/projection.py`) and the Noesis
   projection-intelligence adapter
-  (`services/noesis/adapters/projection_intelligence_adapter.py`) run
+  (`services/backend/services/noesis/adapters/projection_intelligence_adapter.py`) run
   tenant-scoped projections through `ProjectionRuntime`; both are read-only,
   fail-isolated and content-free on degradation.

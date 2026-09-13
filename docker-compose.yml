@@ -26,11 +26,11 @@
 # ── Shared anchors ──────────────────────────────────────────────────
 # The runtime workers and the migration job reuse the backend image and a
 # common environment so the local stack mirrors the cloud runtime-role topology
-# (AWS Deployment/aether-aws/terraform/modules/ecs → aws_ecs_service.runtime_role
+# (deploy/aws/terraform/modules/ecs → aws_ecs_service.runtime_role
 # for_each var.runtime_roles). Same code, same roles, no per-profile source edits.
 x-backend-build: &backend-build
   context: .
-  dockerfile: "Backend Architecture/aether-backend/Dockerfile"
+  dockerfile: "services/backend/Dockerfile"
 
 x-runtime-env: &runtime-env
   AETHER_ENV: ${AETHER_ENV:-local}
@@ -106,9 +106,9 @@ services:
       retries: 5
 
   # Kafka (+ zookeeper) — the prod streaming broker. LocalStack SQS/SNS is the
-  # lightweight default; the streaming/full profiles run real Kafka so the
-  # journey-service consumer path matches staging/prod. Cloud equivalent: the
-  # `msk` Terraform module (AWS Deployment/aether-aws/terraform/modules/msk).
+  # lightweight default; the streaming/full profiles run real Kafka for the
+  # backend event-consumer paths that match staging/prod. Cloud equivalent: the
+  # `msk` Terraform module (deploy/aws/terraform/modules/msk).
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
     profiles: ["streaming", "full"]
@@ -182,7 +182,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: "Backend Architecture/aether-backend/Dockerfile"
+      dockerfile: "services/backend/Dockerfile"
     ports:
       - "8000:8000"
     depends_on:
@@ -357,7 +357,7 @@ services:
     # staging-ml profile: AETHER_ENV=staging, real Redis/S3 creds from .env required.
     profiles: ["legacy", "integration", "staging-ml", "full"]
     build:
-      context: "ML Models/aether-ml"
+      context: "services/ml"
       dockerfile: docker/Dockerfile
       target: serving
     ports:
@@ -384,46 +384,11 @@ services:
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
     command: uvicorn serving.src.api:app --host 0.0.0.0 --port 8080
 
-  journey-service:
-    build:
-      context: "Backend Architecture/services/journey-service"
-      dockerfile: Dockerfile
-    # Streaming consumer: needs Kafka + ClickHouse, both profile-gated.
-    # Keep this service in the streaming profile so the default stack stays minimal.
-    profiles: ["streaming", "full"]
-    ports:
-      - "8090:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-      clickhouse:
-        condition: service_started
-    env_file:
-      # Optional: bootstrap.sh generates .env for staging. A fresh checkout has
-      # none, so `docker compose config` still parses (required vars fail-closed).
-      - path: .env
-        required: false
-    environment:
-      AETHER_ENV: ${AETHER_ENV:-staging}
-      DATABASE_URL: postgresql://aether:aether_dev_password@postgres:5432/aether
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      CLICKHOUSE_HOST: clickhouse
-      CLICKHOUSE_PORT: "9000"
-      JOURNEY_CONSUMER_AUTOSTART: "1"
-      ICEBERG_CATALOG_URI: ${ICEBERG_CATALOG_URI:-}
-      ICEBERG_S3_BUCKET:   ${ICEBERG_S3_BUCKET:-aether-snapshots-dev}
-
   # Jupyter Lab — interactive ML exploration using the training image.
   # Access at http://localhost:8888 (token printed in container logs).
   jupyter:
     build:
-      context: "ML Models/aether-ml"
+      context: "services/ml"
       dockerfile: docker/Dockerfile
       target: training
     profiles: ["notebooks", "full"]
@@ -431,14 +396,14 @@ services:
       - "8888:8888"
     command: jupyter lab --ip=0.0.0.0 --port=8888 --allow-root --no-browser --NotebookApp.token=''
     volumes:
-      - ./ML Models/aether-ml:/app
+      - ./services/ml:/app
       - jupyter_data:/root/.jupyter
 
   kyber:
     build:
       # Build context is the repo root (npm workspaces monorepo); the app lives
       # at frontend/kyber. Cloud equivalent: the inline `static_frontends.kyber`
-      # S3+CloudFront SPA in AWS Deployment/aether-aws/terraform/main.tf.
+      # S3+CloudFront SPA in deploy/aws/terraform/main.tf.
       context: .
       dockerfile: frontend/kyber/Dockerfile
     profiles: ["demo", "frontends", "full"]

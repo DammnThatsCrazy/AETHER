@@ -26,8 +26,8 @@ repository_ceiling:
   - None — repository-controlled work complete
   remaining_is_repository_controlled: false
   evidence:
-  - Backend Architecture/aether-backend/services/profile/
-  - Backend Architecture/aether-backend/services/profile/routes.py
+  - services/backend/services/profile/
+  - services/backend/services/profile/routes.py
   - packages/shared/profile360-contract.ts
 implementation:
   state: TURNKEY
@@ -119,7 +119,7 @@ business_readiness:
 confidence:
   level: HIGH
   reasons:
-  - 'repository evidence: Backend Architecture/aether-backend/services/profile/'
+  - 'repository evidence: services/backend/services/profile/'
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:

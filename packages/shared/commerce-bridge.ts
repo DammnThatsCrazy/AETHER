@@ -4,7 +4,7 @@
 // WS-C row 28 (SDK thinness): this module is NOT part of the @aether/shared
 // public barrel (removed in packages/shared/index.ts). It is a legacy SDK-side
 // mirror whose canonical home is backend Python:
-// `Backend Architecture/aether-backend/shared/integration_contracts/commerce_bridge.py`
+// `services/backend/shared/integration_contracts/commerce_bridge.py`
 // (canonical `OrderSnapshot`: `shared/commerce_contracts/order.py`; `Money`:
 // `shared/commerce_contracts/money.py`). Teams A and B own the Python side;
 // this module converges on the exact same contract. SDK client surfaces must not

@@ -151,20 +151,20 @@ def release_web_sdk(
     npm_tag = f"--tag {pre_release.value}" if pre_release != PreRelease.NONE else ""
 
     steps = [
-        ("Version bump",     f"cd packages/sdk-web && npm version {new_version} --no-git-tag-version || true"),
-        ("Build ESM",        "cd packages/sdk-web && npx esbuild src/index.ts --bundle --format=esm --outfile=dist/aether-sdk.esm.js || true"),
-        ("Build UMD",        "cd packages/sdk-web && npx esbuild src/index.ts --bundle --format=iife --global-name=Aether --outfile=dist/aether-sdk.umd.js || true"),
-        ("Minify",           "cd packages/sdk-web && npx esbuild dist/aether-sdk.esm.js --minify --outfile=dist/aether-sdk.esm.min.js || true"),
-        ("Build Loader",     "cd packages/sdk-web && npx rollup -c rollup.loader.mjs || true"),
-        ("Type declarations","cd packages/sdk-web && npx tsc --emitDeclarationOnly --outDir dist/types || true"),
-        ("Test",             "cd packages/sdk-web && npx jest --ci || true"),
-        ("Changelog",        "npx conventional-changelog -p angular -i CHANGELOG.md -s --commit-path packages/sdk-web || true"),
-        ("Publish npm",      f"cd packages/sdk-web && npm publish --access public {npm_tag} || true"),
-        ("Upload CDN",       f"aws s3 sync packages/sdk-web/dist/ s3://cdn.aether.network/sdk/{new_version}/ --acl public-read || true"),
-        ("CDN latest",       "aws s3 sync packages/sdk-web/dist/ s3://cdn.aether.network/sdk/latest/ --acl public-read || true"),
-        ("Upload Loader",    "aws s3 cp packages/sdk-web/dist/loader.js s3://cdn.aether.network/sdk/v5/loader.js --acl public-read || true"),
-        ("Upload Loader ESM","aws s3 cp packages/sdk-web/dist/loader.mjs s3://cdn.aether.network/sdk/v5/loader.mjs --acl public-read || true"),
-        ("Extract data modules", "cd packages/sdk-web && python ../../cicd/aether-cicd/stages/sdk/data_module_publisher.py || true"),
+        ("Version bump",     f"cd packages/web && npm version {new_version} --no-git-tag-version || true"),
+        ("Build ESM",        "cd packages/web && npx esbuild src/index.ts --bundle --format=esm --outfile=dist/aether-sdk.esm.js || true"),
+        ("Build UMD",        "cd packages/web && npx esbuild src/index.ts --bundle --format=iife --global-name=Aether --outfile=dist/aether-sdk.umd.js || true"),
+        ("Minify",           "cd packages/web && npx esbuild dist/aether-sdk.esm.js --minify --outfile=dist/aether-sdk.esm.min.js || true"),
+        ("Build Loader",     "cd packages/web && npx rollup -c rollup.loader.mjs || true"),
+        ("Type declarations","cd packages/web && npx tsc --emitDeclarationOnly --outDir dist/types || true"),
+        ("Test",             "cd packages/web && npx jest --ci || true"),
+        ("Changelog",        "npx conventional-changelog -p angular -i CHANGELOG.md -s --commit-path packages/web || true"),
+        ("Publish npm",      f"cd packages/web && npm publish --access public {npm_tag} || true"),
+        ("Upload CDN",       f"aws s3 sync packages/web/dist/ s3://cdn.aether.network/sdk/{new_version}/ --acl public-read || true"),
+        ("CDN latest",       "aws s3 sync packages/web/dist/ s3://cdn.aether.network/sdk/latest/ --acl public-read || true"),
+        ("Upload Loader",    "aws s3 cp packages/web/dist/loader.js s3://cdn.aether.network/sdk/v5/loader.js --acl public-read || true"),
+        ("Upload Loader ESM","aws s3 cp packages/web/dist/loader.mjs s3://cdn.aether.network/sdk/v5/loader.mjs --acl public-read || true"),
+        ("Extract data modules", "cd packages/web && python ../../cicd/aether-cicd/stages/sdk/data_module_publisher.py || true"),
         ("Publish manifests", f"python cicd/aether-cicd/stages/sdk/manifest_publisher.py --version {new_version} || true"),
         ("Git tag",          f"git tag sdk-web-v{new_version} && git push origin sdk-web-v{new_version} || true"),
     ]
@@ -209,17 +209,17 @@ def release_ios_sdk(
 
     steps = [
         ("Version bump podspec",
-         f"sed -i '' 's/s.version.*=.*/s.version = \"{new_version}\"/' packages/sdk-ios/AetherSDK.podspec || true"),
+         f"sed -i '' 's/s.version.*=.*/s.version = \"{new_version}\"/' packages/ios/AetherSDK.podspec || true"),
         ("Build",
-         "cd packages/sdk-ios && xcodebuild -scheme AetherSDK -sdk iphonesimulator "
+         "cd packages/ios && xcodebuild -scheme AetherSDK -sdk iphonesimulator "
          "-destination 'platform=iOS Simulator,name=iPhone 15' build || true"),
         ("Unit tests",
-         "cd packages/sdk-ios && xcodebuild test -scheme AetherSDK -sdk iphonesimulator "
+         "cd packages/ios && xcodebuild test -scheme AetherSDK -sdk iphonesimulator "
          "-destination 'platform=iOS Simulator,name=iPhone 15' || true"),
         ("Pod lint",
-         "cd packages/sdk-ios && pod lib lint AetherSDK.podspec --allow-warnings || true"),
+         "cd packages/ios && pod lib lint AetherSDK.podspec --allow-warnings || true"),
         ("Pod push",
-         "cd packages/sdk-ios && pod trunk push AetherSDK.podspec --allow-warnings || true"),
+         "cd packages/ios && pod trunk push AetherSDK.podspec --allow-warnings || true"),
         ("Git tag",
          f"git tag sdk-ios-v{new_version} && git push origin sdk-ios-v{new_version} || true"),
     ]
@@ -255,20 +255,20 @@ def release_android_sdk(
 
     steps = [
         ("Version bump",
-         f"cd packages/sdk-android && "
+         f"cd packages/android && "
          f"sed -i '' 's/version = .*/version = \"{new_version}\"/' build.gradle.kts || true"),
         ("Gradle build",
-         "cd packages/sdk-android && ./gradlew assembleRelease || true"),
+         "cd packages/android && ./gradlew assembleRelease || true"),
         ("Unit tests",
-         "cd packages/sdk-android && ./gradlew test || true"),
+         "cd packages/android && ./gradlew test || true"),
         ("Lint",
-         "cd packages/sdk-android && ./gradlew ktlintCheck || true"),
+         "cd packages/android && ./gradlew ktlintCheck || true"),
         ("Firebase Test Lab",
          "gcloud firebase test android run --type instrumentation "
-         "--app packages/sdk-android/app/build/outputs/apk/release/app-release.apk "
-         "--test packages/sdk-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk || true"),
+         "--app packages/android/app/build/outputs/apk/release/app-release.apk "
+         "--test packages/android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk || true"),
         ("Publish Maven Central",
-         "cd packages/sdk-android && ./gradlew publishToMavenCentral --no-configuration-cache || true"),
+         "cd packages/android && ./gradlew publishToMavenCentral --no-configuration-cache || true"),
         ("Git tag",
          f"git tag sdk-android-v{new_version} && git push origin sdk-android-v{new_version} || true"),
     ]
@@ -303,15 +303,15 @@ def release_react_native_sdk(
 
     steps = [
         ("Version bump",
-         f"cd packages/sdk-react-native && npm version {new_version} --no-git-tag-version || true"),
+         f"cd packages/react-native && npm version {new_version} --no-git-tag-version || true"),
         ("Update native deps",
-         "cd packages/sdk-react-native && node scripts/sync-native-deps.js || true"),
+         "cd packages/react-native && node scripts/sync-native-deps.js || true"),
         ("Build",
-         "cd packages/sdk-react-native && npx bob build || true"),
+         "cd packages/react-native && npx bob build || true"),
         ("Test",
-         "cd packages/sdk-react-native && npx jest --ci || true"),
+         "cd packages/react-native && npx jest --ci || true"),
         ("Publish npm",
-         f"cd packages/sdk-react-native && npm publish --access public {npm_tag} || true"),
+         f"cd packages/react-native && npm publish --access public {npm_tag} || true"),
         ("Git tag",
          f"git tag sdk-rn-v{new_version} && git push origin sdk-rn-v{new_version} || true"),
     ]

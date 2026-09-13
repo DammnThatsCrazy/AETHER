@@ -34,7 +34,7 @@ import sys
 from datetime import datetime, timezone
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BACKEND = os.path.join(ROOT, "Backend Architecture", "aether-backend")
+BACKEND = os.path.join(ROOT, "services", "backend")
 TIERS_PY = os.path.join(BACKEND, "services", "ingestion", "sdk_version_tiers.py")
 SETTINGS_PY = os.path.join(BACKEND, "config", "settings.py")
 ENV_EXAMPLE = os.path.join(ROOT, ".env.example")

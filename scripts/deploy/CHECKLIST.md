@@ -9,7 +9,7 @@
 | `aether.olympuslabsml.com` | AWS Amplify | `frontend/aether-marketing/` |
 | `docs.olympuslabsml.com` | AWS Amplify | `frontend/docs/` |
 | `app.olympuslabsml.com` | AWS Amplify | `frontend/aether/` |
-| `api.olympuslabsml.com` | AWS ECS/ALB | `Backend Architecture/aether-backend/` |
+| `api.olympuslabsml.com` | AWS ECS/ALB | `services/backend/` |
 
 ## Prerequisites — gather before running
 

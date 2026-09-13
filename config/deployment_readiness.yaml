@@ -339,7 +339,7 @@ controls:
         description: Terraform encodes the profile cost policy declared in deployment_profiles.yaml.
       - id: profile-tests
         kind: repo_file
-        path: AWS Deployment/aether-aws/terraform/tests/profile_plan.tftest.hcl
+        path: deploy/aws/terraform/tests/profile_plan.tftest.hcl
         contains: run
         external: false
         description: Native terraform test coverage over per-profile planning.
@@ -512,7 +512,7 @@ controls:
     required_evidence:
       - id: staging-profile
         kind: repo_file
-        path: AWS Deployment/aether-aws/terraform/profiles/staging.tfvars
+        path: deploy/aws/terraform/profiles/staging.tfvars
         external: false
         description: The staging profile the lifecycle runs against.
       - id: wake-evidence
@@ -556,7 +556,7 @@ controls:
         description: The resource-class contracts each profile is scored against.
       - id: profiles-tf
         kind: repo_file
-        path: AWS Deployment/aether-aws/terraform/profiles.tf
+        path: deploy/aws/terraform/profiles.tf
         external: false
         description: The Terraform-side profile definitions.
     status: subsystem_tests_pass
@@ -705,7 +705,7 @@ controls:
         description: Canonical runtime/service topology declaration.
       - id: lean-tfvars
         kind: repo_file
-        path: AWS Deployment/aether-aws/terraform/profiles/production-lean.tfvars
+        path: deploy/aws/terraform/profiles/production-lean.tfvars
         external: false
         description: The profile inputs that produce the lean topology.
     status: implementation_in_progress
@@ -797,7 +797,7 @@ controls:
     required_evidence:
       - id: monitoring-module
         kind: repo_file
-        path: AWS Deployment/aether-aws/terraform/modules/monitoring/main.tf
+        path: deploy/aws/terraform/modules/monitoring/main.tf
         external: false
         description: The alarms the profile provisions.
       - id: alarm-evidence
@@ -869,7 +869,7 @@ controls:
     required_evidence:
       - id: staging-tfvars
         kind: repo_file
-        path: AWS Deployment/aether-aws/terraform/profiles/staging.tfvars
+        path: deploy/aws/terraform/profiles/staging.tfvars
         external: false
         description: The staging profile inputs.
       - id: wake-evidence

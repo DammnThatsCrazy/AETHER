@@ -7,14 +7,14 @@ audience: [security, dev-senior, ops]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/services/flow_trace/
-  - Backend Architecture/aether-backend/repositories/repos.py
+  - services/backend/services/flow_trace/
+  - services/backend/repositories/repos.py
 reviewed_source_commits:
   - commit: "54eaac5d"
     reason: "Reviewed the staging first-admin bootstrap change; flow-trace behavior and contracts are unaffected."
 source_hashes:
-  "Backend Architecture/aether-backend/repositories/repos.py": "sha256:17bda309a520403afe5ea14ec5a647d8aeea03839d644e3ce4c0086f1218f70f"
-  "Backend Architecture/aether-backend/services/flow_trace/": "sha256:f02d99a415f211c164a33956739c7fac197535a10af726cb661ff901aba31556"
+  "services/backend/repositories/repos.py": "sha256:96341101e3ef8db15a80a953aa9d86e0d7a1804a02fe58e0a3e8fe53ffbbc4b8"
+  "services/backend/services/flow_trace/": "sha256:ecabf31ddd0dacf96475c891836cc7d7ba3906c17a34f67669393eff874a3348"
 ---
 
 # Flow of Funds Trace
@@ -156,7 +156,7 @@ sub-resources — see `docs/api/FLOW-TRACE.md`.
 
 ## Scoring
 
-Pure functions in `services/flow_trace/scoring.py`; all scores in [0, 100].
+Pure functions in `services/backend/services/flow_trace/scoring.py`; all scores in [0, 100].
 
 ### Path Score (`score_path`)
 

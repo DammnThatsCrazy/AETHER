@@ -13,14 +13,14 @@ def load(path, name):
     return mod
 
 def test_catalog_seed_and_aliases():
-    catalog = load('Backend Architecture/aether-backend/services/payment_catalog/catalog.py', 'catalog')
+    catalog = load('services/backend/services/payment_catalog/catalog.py', 'catalog')
     assert [p.slug for p in catalog.PAYMENTSCAN_CARD_PROGRAMS] == ['redotpay','kast','etherfi','plasma_one','karta','tria','gnosis','cypher','kolo','ready','bfinance','metamask','holyheld','bitget_wallet','avici','safepal','solayer','avalanche_card','exa','tuyo','solflare','phantom_cash','hyperbeat']
     assert [i.slug for i in catalog.PAYMENTSCAN_ISSUERS] == ['rain','wirex','bridge','ur','kulipa','immersve']
     assert catalog.resolve_slug('Redot Pay') == 'redotpay'
     assert catalog.resolve_slug('MetaMask Card') == 'metamask'
 
 def test_models_block_pii_and_benchmark_only():
-    models = load('Backend Architecture/aether-backend/services/card_linked_payments/models.py', 'models')
+    models = load('services/backend/services/card_linked_payments/models.py', 'models')
     try:
         models.reject_blocked_fields({'pan': '4111'})
     except ValueError as exc:
@@ -47,7 +47,7 @@ def test_feature_flags_default_off(monkeypatch):
         "AETHER_CARD_LINKED_PROVIDER_PII_BLOCK",
     ):
         monkeypatch.delenv(var, raising=False)
-    backend = str(ROOT / "Backend Architecture" / "aether-backend")
+    backend = str(ROOT / "services" / "backend")
     if backend not in sys.path:
         sys.path.insert(0, backend)
     from config.settings import CardLinkedPaymentRailsConfig
@@ -70,7 +70,7 @@ def test_blocked_fields_parity_between_ts_and_python():
     """The TS classification map and Python blocked set must agree."""
     import re
 
-    models = load('Backend Architecture/aether-backend/services/card_linked_payments/models.py', 'models_parity')
+    models = load('services/backend/services/card_linked_payments/models.py', 'models_parity')
     ts = (ROOT / "packages" / "shared" / "card-linked-payments.ts").read_text()
     ts_blocked = set(re.findall(r"^\s+(\w+): 'blocked',", ts, re.M))
     assert ts_blocked == set(models.BLOCKED_CARD_LINKED_FIELDS), (

@@ -7,12 +7,12 @@ audience: [ops, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/services/derivatives/admin_routes.py
-  - Backend Architecture/aether-backend/services/derivatives/reconciliation.py
+  - services/backend/services/derivatives/admin_routes.py
+  - services/backend/services/derivatives/reconciliation.py
 canonical_owner: platform@aether
 source_hashes:
-  "Backend Architecture/aether-backend/services/derivatives/admin_routes.py": "sha256:ed8ee4ff62c31207a1313cbf7c3ad9381a0377d28d1200ee3377302dac6b495e"
-  "Backend Architecture/aether-backend/services/derivatives/reconciliation.py": "sha256:0d45163a8bb7eb7c2bc62d35740648dc54216bfb25d888b1314de7d824a75daa"
+  "services/backend/services/derivatives/admin_routes.py": "sha256:ed8ee4ff62c31207a1313cbf7c3ad9381a0377d28d1200ee3377302dac6b495e"
+  "services/backend/services/derivatives/reconciliation.py": "sha256:0d45163a8bb7eb7c2bc62d35740648dc54216bfb25d888b1314de7d824a75daa"
 ---
 
 # Derivatives Reconciliation Runbook

@@ -7,22 +7,22 @@ audience: [dev-senior, architect, ops]
 status: beta
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/config/settings.py
-  - Backend Architecture/aether-backend/main.py
-  - Backend Architecture/aether-backend/services/runtime/roles.py
-  - Backend Architecture/aether-backend/services/runtime/run_role.py
-  - Backend Architecture/aether-backend/services/runtime/specs.py
-  - Backend Architecture/aether-backend/services/runtime/consumer_specs.py
+  - services/backend/config/settings.py
+  - services/backend/main.py
+  - services/backend/services/runtime/roles.py
+  - services/backend/services/runtime/run_role.py
+  - services/backend/services/runtime/specs.py
+  - services/backend/services/runtime/consumer_specs.py
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
-  "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
-  "Backend Architecture/aether-backend/services/runtime/consumer_specs.py": "sha256:8bf1562bea9dcd96bd4ebe71790af816339c70ff829266b16a3142ba68bbd8a2"
-  "Backend Architecture/aether-backend/services/runtime/roles.py": "sha256:e2743b371d47f1224fa99e3d41a93cbb8c702ee61d0c967b53ee0f3684557da7"
-  "Backend Architecture/aether-backend/services/runtime/run_role.py": "sha256:a5b8af9c057dd8c34d97cdeadf5da94d55e4e31bb25827a088ba1ca3b3bacb7c"
-  "Backend Architecture/aether-backend/services/runtime/specs.py": "sha256:8fdd1c725e45177be4a164ad2dbf18faa5207ef7a9c5dddd4fcd8d62d02090b5"
+  "services/backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
+  "services/backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
+  "services/backend/services/runtime/consumer_specs.py": "sha256:8bf1562bea9dcd96bd4ebe71790af816339c70ff829266b16a3142ba68bbd8a2"
+  "services/backend/services/runtime/roles.py": "sha256:e2743b371d47f1224fa99e3d41a93cbb8c702ee61d0c967b53ee0f3684557da7"
+  "services/backend/services/runtime/run_role.py": "sha256:a5b8af9c057dd8c34d97cdeadf5da94d55e4e31bb25827a088ba1ca3b3bacb7c"
+  "services/backend/services/runtime/specs.py": "sha256:8fdd1c725e45177be4a164ad2dbf18faa5207ef7a9c5dddd4fcd8d62d02090b5"
 ---
 
 # Backend Execution Model
@@ -48,8 +48,8 @@ API process no longer starts every worker, consumer, and cron in-request.
 | `maintenance` | Cross-cutting crons/sweepers (retention — including the flag-gated FT-8 storage-lifecycle retention pass, billing overage, SLA, jobs — plus the reward-plane/credential sweeps: stale reward-budget reservation release, reward DLQ depth gauge, expired credential rotation-overlap tombstoning, and the opt-in ledger chain verifier). Also the Reconciled Control Plane continuous-reconcile scheduler (`reconciled_control_scheduler` — one periodic §32/§35 reconcile→plan→execute loop that rides `maintenance` rather than justifying a runtime role of its own; gated on the plane master switch AND its scheduler kill-switch, both default OFF, so it stays idle until flipped). |
 
 The canonical role set lives in `config/settings.py::RUNTIME_ROLES`; the
-role → loop-worker mapping lives in `services/runtime/roles.py`; canonical
-stream ownership lives in `services/runtime/consumer_specs.py::CONSUMER_SPECS`.
+role → loop-worker mapping lives in `services/backend/services/runtime/roles.py`; canonical
+stream ownership lives in `services/backend/services/runtime/consumer_specs.py::CONSUMER_SPECS`.
 
 ## Entry point
 
@@ -63,7 +63,7 @@ python -m services.runtime.run_role maintenance    # cron/sweeper workers
 
 - `api` boots `uvicorn main:app` (host/port from `AETHER_API_HOST` /
   `AETHER_API_PORT`, defaults `0.0.0.0:8000`).
-- A worker role builds `services/runtime/specs.py::build_worker_specs`, filters
+- A worker role builds `services/backend/services/runtime/specs.py::build_worker_specs`, filters
   it to the specs that role owns, and runs them under the existing
   `WorkerSupervisor` (crash → backoff restart; required workers fail-closed in
   staging/production). It also selects and attaches only that role's canonical
@@ -80,7 +80,7 @@ python -m services.runtime.run_role maintenance    # cron/sweeper workers
   everything; workers run in their own role processes.
 
 `should_start_workers(role)` and `should_start_consumers(role)`
-(`services/runtime/roles.py`) are the pure gates the lifespan consults.
+(`services/backend/services/runtime/roles.py`) are the pure gates the lifespan consults.
 
 ## Backend selectors
 
@@ -102,10 +102,10 @@ Each subsystem binds an explicit backend, declared via env and surfaced on
 
 The `/v1/batch` V2 path (FT-5) writes typed Bronze rows plus a transactional
 `event_outbox` row in one transaction and never publishes in-request. The
-**event-outbox relay** (`services/ingestion/outbox_relay.py`, WorkerSpec
+**event-outbox relay** (`services/backend/services/ingestion/outbox_relay.py`, WorkerSpec
 `event_outbox_relay`, owned by the `outbox-relay` role, gated by
 `OUTBOX_RELAY_ENABLED`) drains that table and publishes each row to the event
-bus, where the existing idempotent consumers (`services/ingestion/workers.py`)
+bus, where the existing idempotent consumers (`services/backend/services/ingestion/workers.py`)
 run the Bronze→Silver projection, identity signals, and measurement fan-out —
 downstream work becomes replayable instead of riding the request.
 
@@ -129,7 +129,7 @@ Tuning env vars: `OUTBOX_RELAY_BATCH_SIZE` (100),
 ## Ingestion-level replay (WS-B4)
 
 Operator-triggered re-delivery of a tenant's durable Bronze SDK events
-(`services/ingestion/replay.py`, mounted in `main.py` at
+(`services/backend/services/ingestion/replay.py`, mounted in `main.py` at
 `POST /v1/kyber/ingest/replay/events` and `GET /v1/kyber/ingest/replay/status`,
 Kyber-operator-only) is a synchronous service runner plus a minimal operator
 route — **not** a runtime role and not a durable-jobs control plane. A dry run
@@ -139,14 +139,14 @@ their original occurrence timestamps preserved (Invariant #15) only when
 `AETHER_INGESTION_REPLAY_ENABLED` (`settings.ingest_replay.enabled`, default
 OFF) is on — otherwise refused with 403. Republished events carry
 `source_service="ingestion.replay"`, and the Bronze-writer consumer
-(`services/ingestion/workers.py`) skips them for the same reason it skips
+(`services/backend/services/ingestion/workers.py`) skips them for the same reason it skips
 relay-originated events: the durable Bronze row already exists, so writing
 again would mint a second Bronze row for the same original event.
 
 ## Reward & commerce plane workers
 
-Five supervised loops (`services/runtime/specs.py::build_worker_specs`, builders
-in `services/rewards/workers.py` and `services/rewards/delivery_outbox.py`) close
+Five supervised loops (`services/backend/services/runtime/specs.py::build_worker_specs`, builders
+in `services/backend/services/rewards/workers.py` and `services/backend/services/rewards/delivery_outbox.py`) close
 the reward/x402/credential planes so activation stays credential-only rather than
 depending on an operator manually draining a queue:
 
@@ -168,7 +168,7 @@ depending on an operator manually draining a queue:
 
 Every loop is cancellation-safe and isolates a failing tick (one bad tick logs
 and continues rather than killing the supervised loop). The `/v1/ready`
-component report (`services/gateway/component_status.py`) folds each plane's
+component report (`services/backend/services/gateway/component_status.py`) folds each plane's
 worker roles into the `rewards`, `commerce`, and `provider_credentials`
 component statuses, so an unsupervised or failed loop is observable rather than
 silent.
@@ -195,13 +195,13 @@ production validation.
 ## Model runtime execution flow
 
 The provider-neutral multi-model harness
-(`Backend Architecture/aether-backend/services/model_runtime/`, ADR-008) runs
+(`services/backend/services/model_runtime/`, ADR-008) runs
 **in-process via a feature-flagged router mount — not a runtime role.** `main.py`
 mounts `/v1/model-runtime` **unconditionally**: the real guarded router from
-`services/model_runtime/routes.py` when `ModelRuntimeSettings().enabled` is
+`services/backend/services/model_runtime/routes.py` when `ModelRuntimeSettings().enabled` is
 true, otherwise a `model_runtime_disabled` surface that returns 503 for every
 route (so the disabled state is explicit, never a 404). The gate lives in
-`services/model_runtime/config.py` (`MODEL_RUNTIME_ENABLED`, default OFF per
+`services/backend/services/model_runtime/config.py` (`MODEL_RUNTIME_ENABLED`, default OFF per
 ADR-008 D9) rather than `config/settings.py`, and the import is lazy and
 `ImportError`-guarded so `main` stays importable. There is no model-runtime
 entry in `config/settings.py::RUNTIME_ROLES` — the harness has no supervised
@@ -217,7 +217,7 @@ comes from the authenticated request state, never from client-supplied
 headers) and evidence-backed; see `docs/ARCHITECTURE.md` → "Intelligence
 planes".
 
-Fail-closed settings (`services/model_runtime/config.py`, `MODEL_RUNTIME_*`):
+Fail-closed settings (`services/backend/services/model_runtime/config.py`, `MODEL_RUNTIME_*`):
 
 - `MODEL_RUNTIME_ENABLED=false` by default (ADR-008 D9) — fail-closed while
   OFF: `main.py` still mounts `/v1/model-runtime`, but as the disabled surface

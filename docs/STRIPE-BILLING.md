@@ -7,16 +7,16 @@ audience: [dev-senior, ops, buyer]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/shared/billing/stripe_client.py
-  - Backend Architecture/aether-backend/services/billing/routes.py
-  - Backend Architecture/aether-backend/shared/plans/catalog.py
+  - services/backend/shared/billing/stripe_client.py
+  - services/backend/services/billing/routes.py
+  - services/backend/shared/plans/catalog.py
 canonical_owner: billing@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/services/billing/routes.py": "sha256:c5da14570c9272a06f1e9b3f296ac7892d33916d94d31c4fcfd3421bb1956429"
-  "Backend Architecture/aether-backend/shared/billing/stripe_client.py": "sha256:2f1f6f6fa308966e61557addd32a15ef2bfac6f09a679e235c88db4a240e1a8a"
-  "Backend Architecture/aether-backend/shared/plans/catalog.py": "sha256:fb48b227d7df2f2924088bea3eac0f3b83a036becff0f36418b5e82dcc1522f8"
+  "services/backend/services/billing/routes.py": "sha256:c5da14570c9272a06f1e9b3f296ac7892d33916d94d31c4fcfd3421bb1956429"
+  "services/backend/shared/billing/stripe_client.py": "sha256:2f1f6f6fa308966e61557addd32a15ef2bfac6f09a679e235c88db4a240e1a8a"
+  "services/backend/shared/plans/catalog.py": "sha256:fb48b227d7df2f2924088bea3eac0f3b83a036becff0f36418b5e82dcc1522f8"
 ---
 # Stripe Billing — Aether Alpha–Omega Integration
 

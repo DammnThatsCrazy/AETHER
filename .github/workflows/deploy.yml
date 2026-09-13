@@ -63,10 +63,12 @@ jobs:
     # already-verified production promotion -- see acquire-release below,
     # which only ever consumes an artifact from a staging build that already
     # passed through this same gate) until the test workflows for this exact
-    # commit SHA have completed successfully. repo-health.yml triggers
-    # unconditionally on every push (including main) and its `validate` job
-    # is the aggregate required-status check for the whole Python/TypeScript/
-    # ML/e2e test matrix, so it is the concrete signal polled here.
+    # commit SHA have completed successfully. On main pushes, repo-health.yml
+    # exposes `Main integration authority` as the bounded integration signal;
+    # on explicit staging dispatches, its `validate` job is the aggregate gate
+    # for the scheduled Python/TypeScript/ML/e2e matrix. Poll the signal that
+    # actually exists for the triggering event rather than treating an
+    # intentionally skipped job as a failed verification.
     #
     # This is deliberately independent of GitHub branch protection: a direct
     # push to main (bypassing a PR) or an admin override would otherwise
@@ -75,7 +77,10 @@ jobs:
     name: Verify tests are green for this commit before building
     if: github.event_name == 'push' || inputs.environment == 'staging'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Main integration authority has the same 30-minute execution budget as
+    # repo-health.yml. Leave a bounded margin for the Checks API to observe its
+    # terminal conclusion before this guard reaches its own timeout.
+    timeout-minutes: 35
     permissions:
       contents: read
       checks: read
@@ -87,8 +92,15 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          required_checks=(validate)
-          deadline=$((SECONDS + 1500))
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            required_checks=("Main integration authority")
+          else
+            required_checks=(validate)
+          fi
+          # The selected authority may use its full 30-minute budget. This
+          # guard waits 34 minutes, leaving one minute for the enclosing
+          # 35-minute job to fail closed if GitHub never reports completion.
+          deadline=$((SECONDS + 2040))
           while true; do
             all_done=true
             runs_json=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?per_page=100")
@@ -172,7 +184,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Backend Architecture/aether-backend/Dockerfile
+          file: services/backend/Dockerfile
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/aether-backend:${{ github.sha }}
           cache-from: type=gha,scope=backend
@@ -226,7 +238,7 @@ jobs:
           tar --sort=name --mtime='UTC 1970-01-01' -czf aether-spa.tar.gz -C frontend/aether/dist .
           tar --sort=name --mtime='UTC 1970-01-01' -czf kyber-spa.tar.gz -C frontend/kyber/dist .
           tar --sort=name --mtime='UTC 1970-01-01' -czf migrations.tar.gz \
-            'Backend Architecture/aether-backend/alembic.ini' 'Backend Architecture/aether-backend/alembic'
+            'services/backend/alembic.ini' 'services/backend/alembic'
           cp config/runtime_deployment.yaml runtime_deployment.yaml
       - name: Create commit-bound release manifest
         id: manifest

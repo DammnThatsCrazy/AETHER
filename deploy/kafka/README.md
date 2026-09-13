@@ -1,9 +1,9 @@
 # Aether — Kafka Topic Provisioning
 
 Aether declares every event topic in the `Topic` enum at
-`Backend Architecture/aether-backend/shared/events/events.py`. The MSK cluster
+`services/backend/shared/events/events.py`. The MSK cluster
 is provisioned with `auto.create.topics.enable=false` (see
-`AWS Deployment/aether-aws/terraform/modules/msk/main.tf`), so **a topic that is
+`deploy/aws/terraform/modules/msk/main.tf`), so **a topic that is
 not explicitly created does not exist** — the broker will never materialise it
 on first publish.
 
@@ -29,7 +29,7 @@ Regenerate the JSON after adding a topic:
 
 ```bash
 source .venv/bin/activate
-cd "Backend Architecture/aether-backend"
+cd "services/backend"
 python - <<'PY'
 import json
 from shared.events.events import declared_topics
@@ -42,7 +42,7 @@ PY
 
 ## Wiring
 
-`AWS Deployment/aether-aws/terraform/modules/kafka_topic_provisioner` creates the
+`deploy/aws/terraform/modules/kafka_topic_provisioner` creates the
 Lambda and invokes it once (via `aws_lambda_invocation`) after the MSK cluster
 exists, passing the TLS bootstrap brokers. The Lambda is VPC-attached so it can
 reach the cluster, and reads the same `topics.json` embedded in its archive.

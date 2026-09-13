@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = ROOT / "services" / "backend"
 MATRIX_JSON = ROOT / "docs" / "_generated" / "reward-rail-matrix.json"
 
 ERRORS: list[str] = []

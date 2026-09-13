@@ -64,29 +64,29 @@ BRANCH_CONFIG = BranchConfig()
 # --------------------------------------------------------------------------- #
 
 REPO_PACKAGES: Dict[str, Dict[str, str]] = {
-    "packages/sdk-web":          {"lang": "typescript", "tool": "esbuild"},
-    "packages/sdk-ios":          {"lang": "swift",      "tool": "xcodebuild"},
-    "packages/sdk-android":      {"lang": "kotlin",     "tool": "gradle"},
-    "packages/sdk-react-native": {"lang": "typescript", "tool": "metro"},
-    "packages/common":           {"lang": "typescript", "tool": "esbuild"},
+    "packages/web":              {"lang": "typescript", "tool": "esbuild"},
+    "packages/ios":              {"lang": "swift",      "tool": "xcodebuild"},
+    "packages/android":          {"lang": "kotlin",     "tool": "gradle"},
+    "packages/react-native":     {"lang": "typescript", "tool": "metro"},
+    "packages/shared":           {"lang": "typescript", "tool": "esbuild"},
 }
 
 REPO_SERVICES: Dict[str, Dict[str, str]] = {
-    "services/ingestion":    {"lang": "typescript", "runtime": "node",   "tool": "esbuild"},
-    "services/identity":     {"lang": "typescript", "runtime": "node",   "tool": "esbuild"},
-    "services/analytics":    {"lang": "typescript", "runtime": "node",   "tool": "esbuild"},
-    "services/ml-serving":   {"lang": "python",     "runtime": "python", "tool": "docker"},
-    "services/agent":        {"lang": "python",     "runtime": "python", "tool": "docker"},
-    "services/campaign":     {"lang": "typescript", "runtime": "node",   "tool": "esbuild"},
-    "services/consent":      {"lang": "typescript", "runtime": "node",   "tool": "esbuild"},
-    "services/notification": {"lang": "typescript", "runtime": "node",   "tool": "esbuild"},
-    "services/admin":        {"lang": "typescript", "runtime": "node",   "tool": "esbuild"},
+    "services/backend/services/ingestion":    {"lang": "python", "runtime": "python", "tool": "docker"},
+    "services/backend/services/identity":     {"lang": "python", "runtime": "python", "tool": "docker"},
+    "services/backend/services/analytics":    {"lang": "python", "runtime": "python", "tool": "docker"},
+    "services/backend/services/ml_serving":   {"lang": "python", "runtime": "python", "tool": "docker"},
+    "services/backend/services/agent":        {"lang": "python", "runtime": "python", "tool": "docker"},
+    "services/backend/services/campaign":     {"lang": "python", "runtime": "python", "tool": "docker"},
+    "services/backend/services/consent":      {"lang": "python", "runtime": "python", "tool": "docker"},
+    "services/backend/services/notification": {"lang": "python", "runtime": "python", "tool": "docker"},
+    "services/backend/services/admin":        {"lang": "python", "runtime": "python", "tool": "docker"},
 }
 
 REPO_OTHER: Dict[str, str] = {
-    "infrastructure/": "Terraform IaC for all AWS resources",
-    "ml/":             "ML training pipelines, notebooks, model configs",
-    "dashboard/":      "React dashboard application",
+    "deploy/aws/terraform/": "Terraform IaC for all AWS resources",
+    "services/ml/":          "ML training pipelines, serving, and model configs",
+    "frontend/aether/":      "Customer-facing React application",
 }
 
 
@@ -362,20 +362,20 @@ class ChangeDetectionConfig:
     always_run_paths: List[str] = field(default_factory=lambda: [
         ".github/",
         "config/",
-        "infrastructure/",
-        "packages/common/",
+        "deploy/aws/",
+        "packages/shared/",
     ])
     # Map from path prefix to affected service names
     service_path_map: Dict[str, str] = field(default_factory=lambda: {
-        "services/ingestion":    "ingestion",
-        "services/identity":     "identity",
-        "services/analytics":    "analytics",
-        "services/ml-serving":   "ml-serving",
-        "services/agent":        "agent",
-        "services/campaign":     "campaign",
-        "services/consent":      "consent",
-        "services/notification": "notification",
-        "services/admin":        "admin",
+        "services/backend/services/ingestion": "ingestion",
+        "services/backend/services/identity":     "identity",
+        "services/backend/services/analytics":    "analytics",
+        "services/backend/services/ml_serving":   "ml-serving",
+        "services/backend/services/agent":        "agent",
+        "services/backend/services/campaign":     "campaign",
+        "services/backend/services/consent":      "consent",
+        "services/backend/services/notification": "notification",
+        "services/backend/services/admin":        "admin",
     })
 
 

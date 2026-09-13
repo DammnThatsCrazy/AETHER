@@ -17,7 +17,7 @@ This document describes the Web3 Coverage layer added to the Aether intelligence
 
 ## Files Created (6 new files)
 
-### 1. `Backend Architecture/aether-backend/services/web3/__init__.py`
+### 1. `services/backend/services/web3/__init__.py`
 
 Module documentation and public API surface for the web3 coverage package.
 
@@ -28,7 +28,7 @@ Module documentation and public API surface for the web3 coverage package.
 
 ---
 
-### 2. `Backend Architecture/aether-backend/services/web3/models.py`
+### 2. `services/backend/services/web3/models.py`
 
 Registry models defining the complete Web3 ontology. Approximately 700+ lines.
 
@@ -102,7 +102,7 @@ class ProvenanceEnvelope(BaseModel):
 
 ---
 
-### 3. `Backend Architecture/aether-backend/services/web3/registries.py`
+### 3. `services/backend/services/web3/registries.py`
 
 Thirteen repository classes extending `BaseRepository` with asyncpg PostgreSQL backend in production and in-memory storage for local development.
 
@@ -132,7 +132,7 @@ All repositories inherit:
 
 ---
 
-### 4. `Backend Architecture/aether-backend/services/web3/seed.py`
+### 4. `services/backend/services/web3/seed.py`
 
 Initial registry seed data providing baseline coverage for classification.
 
@@ -185,7 +185,7 @@ Uniswap Governance, Aave Governance, Compound Governance, MakerDAO Governance, L
 
 ---
 
-### 5. `Backend Architecture/aether-backend/services/web3/classifier.py`
+### 5. `services/backend/services/web3/classifier.py`
 
 Classification engine that maps raw observations to registry objects and graph topology.
 
@@ -295,7 +295,7 @@ Creates vertices and edges from a single classified observation:
 
 ---
 
-### 6. `Backend Architecture/aether-backend/services/web3/routes.py`
+### 6. `services/backend/services/web3/routes.py`
 
 Thirty-five API endpoints organized by resource type.
 
@@ -392,7 +392,7 @@ Thirty-five API endpoints organized by resource type.
 
 ## Files Modified (2)
 
-### 1. `Backend Architecture/aether-backend/shared/graph/graph.py`
+### 1. `services/backend/shared/graph/graph.py`
 
 Added 18 new vertex types and 27 new edge types to the graph ontology.
 
@@ -451,7 +451,7 @@ Added 18 new vertex types and 27 new edge types to the graph ontology.
 | `HAS_POSITION` | WALLET → TOKEN_POSITION | Wallet holds position |
 | `POSITION_IN` | TOKEN_POSITION → POOL/VAULT | Position is in pool or vault |
 
-### 2. `Backend Architecture/aether-backend/main.py`
+### 2. `services/backend/main.py`
 
 Mounted the web3 router onto the main FastAPI application:
 

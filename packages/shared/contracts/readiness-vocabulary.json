@@ -4,18 +4,18 @@
   "description": "Canonical, machine-readable readiness vocabulary for the Aether platform. Single source of truth for every readiness/capability token used by the certification plane (Python), the persisted capability lifecycle, and the presentation plane (TypeScript). Neither bound file is generated — both stay hand-written for ergonomics — but scripts/validate_readiness_vocabulary.py fails CI whenever the Python enum, the TypeScript union, this file, or packages/shared/contracts/evidence-manifest.schema.json disagree on membership, rank ordering, or the production_ready-is-never-inferred rule. v2 replaces the v1 draft whose PRODUCTION_READY / NOT_IN_RELEASE / EXTERNALLY_BLOCKED / MOCKED_LOCAL / IMPLEMENTED / CONFIGURED Python members never existed: production_ready is a claim DIMENSION (never an enum state), release-plan classifications are their own category, and the retired draft progression tokens survive only as aliases.",
   "bindings": {
     "python": {
-      "path": "Backend Architecture/aether-backend/shared/certification/readiness.py",
+      "path": "services/backend/shared/certification/readiness.py",
       "enum": "CredentialReadiness",
       "rankTable": "_READINESS_RANK",
       "inferenceFunction": "ReadinessDimensions._coarse_state",
       "honestyValidator": "ReadinessDimensions._enforce_honesty",
       "statusProjection": "IMPLEMENTATION_STATUS_TO_READINESS",
       "statusEnum": {
-        "path": "Backend Architecture/aether-backend/services/integrations/connectors/base.py",
+        "path": "services/backend/services/integrations/connectors/base.py",
         "enum": "ImplementationStatus"
       },
       "connectionStateProjection": {
-        "path": "Backend Architecture/aether-backend/shared/integration_contracts/lifecycle.py",
+        "path": "services/backend/shared/integration_contracts/lifecycle.py",
         "function": "connection_state_to_readiness"
       }
     },

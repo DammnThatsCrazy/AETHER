@@ -47,7 +47,7 @@ build, not per phase.
 | Deliverable | Spec anchor | Status |
 |---|---|---|
 | `ManagedIntegration` abstraction: 21 kinds + CP-12 typed availability | §6, §4 (CP-12) | ✅ implemented |
-| Contract-Spine twin extension: `packages/shared/managed-integrations.ts` ↔ `services/managed_integrations/contracts.py`, parity-gated | §6–7 twin pattern | ✅ implemented |
+| Contract-Spine twin extension: `packages/shared/managed-integrations.ts` ↔ `services/backend/services/managed_integrations/contracts.py`, parity-gated | §6–7 twin pattern | ✅ implemented |
 | Governance domain `reconciled_control` (operator-only, explicit grants, out of `ALL_DOMAINS`) | §21 role model (read slice) | ✅ implemented |
 | Config + flags `AETHER_RECONCILED_CONTROL_*` (all default OFF) | — | ✅ implemented |
 | Desired-state assembly from release-channel policy (`desired_policy.py`) | §22, §28–29 channels | ✅ implemented |

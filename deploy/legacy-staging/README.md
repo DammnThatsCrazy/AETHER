@@ -16,7 +16,7 @@ quarantined under `deploy/legacy-staging/` so it can never be mistaken for the
 canonical staging deployment.
 
 - **Canonical staging**: Terraform root
-  `AWS Deployment/aether-aws/terraform/profiles/staging.tfvars`, exercised by
+  `deploy/aws/terraform/profiles/staging.tfvars`, exercised by
   `.github/workflows/staging-lifecycle.yml` and `terraform-promote.yml`.
 - **This legacy stack**: local-only Redis/Kafka/Prometheus dev harness.
 

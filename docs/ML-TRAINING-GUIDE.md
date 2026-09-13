@@ -6,18 +6,18 @@ visibility: P
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [ML Models/aether-ml/training/]
+source_files: [services/ml/training/]
 canonical_owner: ml@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
-  ML Models/aether-ml/training/: sha256:62cc991f65aec3f15e6953fa4026a236949c371d2d7039ccdff33a8cd6763d69
+  "services/ml/training/": "sha256:d2e9c3de067410d90547b759e4c55bc61f700310e82f4a983c1bd89668b5e95a"
 ---
 # ML Model Training Guide
 
 ## Overview
 
-Aether includes 9 ML models for behavioral analytics. The training pipeline is in `ML Models/aether-ml/training/`.
+Aether includes 9 ML models for behavioral analytics. The training pipeline is in `services/ml/training/`.
 
 ## Models
 
@@ -40,7 +40,7 @@ Aether includes 9 ML models for behavioral analytics. The training pipeline is i
 pip install -e ".[ml]"
 
 # Run training with synthetic data
-cd "ML Models/aether-ml"
+cd "services/ml"
 python -m training.pipelines.train --model intent_prediction --data synthetic
 python -m training.pipelines.train --model bot_detection --data synthetic
 python -m training.pipelines.train --model all --data synthetic
@@ -75,7 +75,7 @@ Training produces:
 
 ## Serving
 
-The ML serving API (`ML Models/aether-ml/serving/src/api.py`) loads model artifacts on first request (lazy loading):
+The ML serving API (`services/ml/serving/src/api.py`) loads model artifacts on first request (lazy loading):
 - If `model.joblib` artifact exists → loads trained model from disk
 - If no artifact and `AETHER_ENV=local` → loads in-process stub model (never production-allowed)
 - If no artifact and `AETHER_ENV=staging` or `production` → returns HTTP 503 (fail-closed)

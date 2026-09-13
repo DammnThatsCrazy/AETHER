@@ -49,7 +49,7 @@ Audit Export Brief collateral may describe available export types, integrity has
 ## Audit export governance
 The live audit export endpoints (`POST /v1/audit/exports` create and
 `GET /v1/audit/exports/{export_id}` download) are wired through
-`AuditExportGovernance` (`services/security/export_governance.py`): export
+`AuditExportGovernance` (`services/backend/services/security/export_governance.py`): export
 permission is enforced via the policy engine, cross-tenant export attempts are
 blocked, sensitive export types (`full_audit_log`, `cross_resource`,
 `operator_access`, `raw_events`) require an `approval_id`, exports carry a

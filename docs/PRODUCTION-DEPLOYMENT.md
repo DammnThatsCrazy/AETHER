@@ -13,7 +13,7 @@ estimated_read_minutes: 9
 # Production Deployment
 
 Provider-agnostic production deployment guidance. The repo ships Docker images,
-an AWS reference (`AWS Deployment/aether-aws/terraform/`,
+an AWS reference (`deploy/aws/terraform/`,
 `.github/workflows/deploy.yml`, `.github/workflows/terraform-promote.yml`), and
 `docker-compose` for non-AWS hosts. Choose the target that fits your infra; the
 contract below is what production needs regardless.

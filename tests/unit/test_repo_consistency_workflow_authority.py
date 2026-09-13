@@ -151,7 +151,7 @@ def test_repo_health_main_integration_is_bounded_and_fail_closed() -> None:
     assert "make generate-contracts-check" in script
     assert "make validate-impact-graph" in script
     assert "make integration-durable" in script
-    assert "Backend Architecture/aether-backend/Dockerfile" in script
+    assert "services/backend/Dockerfile" in script
     assert '"SELECTED"' in script
     assert '"NOT_APPLICABLE"' in script
     assert "Impact Graph did not select backend_image" in script

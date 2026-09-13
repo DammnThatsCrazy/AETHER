@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/stablecoin/service.py, Backend Architecture/aether-backend/services/stablecoin/finality.py, Backend Architecture/aether-backend/services/stablecoin/routes.py]
+source_files: [services/backend/services/stablecoin/service.py, services/backend/services/stablecoin/finality.py, services/backend/services/stablecoin/routes.py]
 canonical_owner: platform@aether
 last_synced_commit: 1f19190
 ---

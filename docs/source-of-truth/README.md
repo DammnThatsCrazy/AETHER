@@ -12,7 +12,7 @@ since_version: 0.1.0
 This directory is **the** authoritative description of SDK behavior in this
 monorepo. Every file here is derived from code that actually runs:
 `packages/shared/*.ts`, `packages/{web,ios,android,react-native}/**`,
-`Backend Architecture/aether-backend/**`, `Data Lake Architecture/**`.
+`services/backend/**`, `docs/archive/legacy-architecture/data-lake-architecture/**`.
 
 If another doc contradicts a file in this directory, this directory wins.
 

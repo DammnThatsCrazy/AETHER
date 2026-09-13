@@ -8,10 +8,10 @@
  * the inner data object exactly as the route returns it.
  *
  * Wire contracts are typed from the backend code, not guessed:
- *   - `services/agent/routes.py`         (health, controllers/status, review-batches)
- *   - `services/agent/worker_routes.py`  (runs, runs/stuck)
- *   - `services/agent/ops_alerts.py`     (ops/alerts)
- *   - `services/agent/briefings.py`      (briefings)
+ *   - `services/backend/services/agent/routes.py`         (health, controllers/status, review-batches)
+ *   - `services/backend/services/agent/worker_routes.py`  (runs, runs/stuck)
+ *   - `services/backend/services/agent/ops_alerts.py`     (ops/alerts)
+ *   - `services/backend/services/agent/briefings.py`      (briefings)
  *   - `services/kyber/ops/routes.py` + `contracts.py` (exceptions, incidents, resume-cards)
  *   - `services/kyber/devices/routes.py` + `access/contracts.py` (devices)
  *   - `services/kyber/sessions/routes.py` + `access/contracts.py` (sessions)
@@ -79,7 +79,7 @@ export const kyberIncidentStatuses = [
 ] as const;
 export type KyberIncidentStatus = (typeof kyberIncidentStatuses)[number];
 
-/** Ops-alert severity vocabulary (`services/agent/ops_alerts.py`). */
+/** Ops-alert severity vocabulary (`services/backend/services/agent/ops_alerts.py`). */
 export const agentAlertSeverities = ['P0', 'P1', 'P2', 'P3', 'P4'] as const;
 export type AgentAlertSeverity = (typeof agentAlertSeverities)[number];
 
@@ -193,7 +193,7 @@ export interface AgentControllersStatus {
   total: number;
 }
 
-/** One compressed operator alert (`services/agent/ops_alerts.py`). */
+/** One compressed operator alert (`services/backend/services/agent/ops_alerts.py`). */
 export interface AgentOpsAlert {
   alert_id: string;
   tenant_id: string;
@@ -291,7 +291,7 @@ export interface BriefingAlert {
   last_seen_at?: string;
 }
 
-/** The `sections` map a briefing carries (services/agent/briefings.py). */
+/** The `sections` map a briefing carries (services/backend/services/agent/briefings.py). */
 export interface BriefingSections {
   objectives: Record<string, number>;
   runs: Record<string, number>;
@@ -303,7 +303,7 @@ export interface BriefingSections {
   attention: string[];
 }
 
-/** One durable operator briefing (services/agent/briefings.py). */
+/** One durable operator briefing (services/backend/services/agent/briefings.py). */
 export interface AgentBriefing {
   briefing_id: string;
   tenant_id: string;

@@ -26,8 +26,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_PROJECTIONS_DIR = (
     REPO_ROOT
-    / "Backend Architecture"
-    / "aether-backend"
+    / "services" / "backend"
     / "shared"
     / "intelligence_projections"
 )

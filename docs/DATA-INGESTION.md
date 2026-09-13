@@ -6,36 +6,36 @@ visibility: P
 audience: [dev-junior, dev-senior, architect, ops]
 status: stable
 since_version: 0.1.0
-source_files: [Data Ingestion Layer/README.md, Data Ingestion Layer/services/ingestion/, Data Ingestion Layer/packages/]
+source_files: [docs/archive/legacy-architecture/data-ingestion-layer/README.md, docs/archive/legacy-architecture/data-ingestion-layer/services/ingestion/, docs/archive/legacy-architecture/data-ingestion-layer/packages/]
 canonical_owner: ingest@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "Data Ingestion Layer/README.md": "sha256:9569100d103f9303585ad6c4bad417276106253bc488d4c4c6253f204c2bcb23"
-  "Data Ingestion Layer/packages/": "sha256:4deb170c7ed7132036bfdb044c2f5e744992fa7a81eee059c25db929f1d816a3"
-  "Data Ingestion Layer/services/ingestion/": "sha256:301803215eea9b96a1b1a96e5a538483bca9af4b78b8c62146fd6b71f57e927e"
+  "docs/archive/legacy-architecture/data-ingestion-layer/README.md": "sha256:36803c56da24609112bf49544119746cea8613644b3bd5816412c237372458ee"
+  "docs/archive/legacy-architecture/data-ingestion-layer/packages/": "sha256:1e113f595375ab054b5c179089e1554d66b4374e437216ad4edab824959f5567"
+  "docs/archive/legacy-architecture/data-ingestion-layer/services/ingestion/": "sha256:14eea185ec7ee77972c0c9bba0fe232cf089ac943134d37e2ed7b4ca9b0f71a5"
 ---
 
 # Data Ingestion — Architecture & API Reference
 
 > **DEPRECATED — historical reference for the un-deployed legacy duplicate.**
-> This document describes the **`Data Ingestion Layer/`** Node.js / TypeScript
+> This document describes the **`docs/archive/legacy-architecture/data-ingestion-layer/`** Node.js / TypeScript
 > tree, which is an **un-deployed legacy duplicate**. The deployed, authoritative
 > ingestion implementation is the Python monolith at
-> `Backend Architecture/aether-backend/` (canonical ingress =
-> `Backend Architecture/aether-backend/services/ingestion/batch.py`,
+> `services/backend/` (canonical ingress =
+> `services/backend/services/ingestion/batch.py`,
 > `POST /v1/batch`). No new code may be added to this legacy tree; route work
 > into the canonical tree. Banner added by the SDK + Universal Ingestion
 > Alignment program (Phase 0) — see
 > `docs/productization/sdk-universal-ingestion-alignment/`. Physical removal is
 > deferred to a later phase.
 
-The `Data Ingestion Layer/` tree (Node.js / TypeScript) historically accepted
+The `docs/archive/legacy-architecture/data-ingestion-layer/` tree (Node.js / TypeScript) historically accepted
 analytics events from every Aether SDK, enriched them, and fanned them out to
 the platform's storage and streaming backends. This reference documents that
 legacy service as it exists in the tree; it is **not** the authoritative entry
 point for raw event data — the canonical `POST /v1/batch` ingress is the Python
-monolith's `Backend Architecture/aether-backend/services/ingestion/batch.py`.
+monolith's `services/backend/services/ingestion/batch.py`.
 
 ## Architecture overview
 
@@ -58,7 +58,7 @@ Failed events land in a dead-letter queue for manual inspection.
 
 ## Packages
 
-The ingestion monorepo (`Data Ingestion Layer/`) contains five internal packages
+The ingestion monorepo (`docs/archive/legacy-architecture/data-ingestion-layer/`) contains five internal packages
 shared across the service and any consumers:
 
 | Package | Purpose |
@@ -72,7 +72,7 @@ shared across the service and any consumers:
 ## Event types
 
 Twelve first-class event types are recognised (source:
-`Data Ingestion Layer/services/ingestion/src/validator.ts`):
+`docs/archive/legacy-architecture/data-ingestion-layer/services/ingestion/src/validator.ts`):
 
 | Event | Description |
 |-------|-------------|
@@ -188,14 +188,15 @@ restoring from the raw S3 archive.
 ## Relationship to the Python backend
 
 Following the SDK + Universal Ingestion Alignment convergence (Phase 0), the
-Python monolith (`Backend Architecture/aether-backend/`) is the deployed,
+Python monolith (`services/backend/`) is the deployed,
 authoritative implementation: SDK-originated event streams land at its canonical
 `POST /v1/batch` ingress
-(`Backend Architecture/aether-backend/services/ingestion/batch.py`). The
-Node.js `Data Ingestion Layer/` tree described above is an un-deployed legacy
-duplicate retained in the repo for reference only; it must not be extended, and
-physical removal is deferred to a later phase. Do not build new SDK or event
-integrations against the legacy tree.
+(`services/backend/services/ingestion/batch.py`). The
+Node.js `docs/archive/legacy-architecture/data-ingestion-layer/` tree described above is an un-deployed legacy
+duplicate retained in the repo for historical reference only; it must not be
+extended or treated as a runtime input. Do not build new SDK or event
+integrations against the archive. New ingestion work belongs in
+`services/backend/services/ingestion/`.
 
 ## Operational notes
 

@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/suggestions/models.py, Backend Architecture/aether-backend/services/suggestions/lifecycle.py, Backend Architecture/aether-backend/services/suggestions/scorer.py, Backend Architecture/aether-backend/services/suggestions/policy.py, Backend Architecture/aether-backend/services/suggestions/service.py, Backend Architecture/aether-backend/services/suggestions/routes.py, Backend Architecture/aether-backend/services/suggestions/events.py, Backend Architecture/aether-backend/services/suggestions/dispatcher.py, Backend Architecture/aether-backend/services/suggestions/outcome.py, Backend Architecture/aether-backend/config/settings.py, packages/shared/suggestions.ts]
+source_files: [services/backend/services/suggestions/models.py, services/backend/services/suggestions/lifecycle.py, services/backend/services/suggestions/scorer.py, services/backend/services/suggestions/policy.py, services/backend/services/suggestions/service.py, services/backend/services/suggestions/routes.py, services/backend/services/suggestions/events.py, services/backend/services/suggestions/dispatcher.py, services/backend/services/suggestions/outcome.py, services/backend/config/settings.py, packages/shared/suggestions.ts]
 last_synced_commit: HEAD
 ---
 
@@ -44,7 +44,7 @@ detected → oriented → suggested → review_required → approved → executi
                          ↘ measured → closed
 ```
 
-Full legal transition table is defined in `services/suggestions/lifecycle.py:LEGAL_TRANSITIONS`.
+Full legal transition table is defined in `services/backend/services/suggestions/lifecycle.py:LEGAL_TRANSITIONS`.
 
 **Key invariants:**
 - `requires_approval=True` blocks `suggested → approved` shortcut; must go through `review_required` first.
@@ -96,7 +96,7 @@ Requires human approval when **any** of these conditions hold:
 - Subject is external-facing (delivery beyond the platform boundary)
 - Graph-mutating actions
 
-Policy evaluation is performed by `services/suggestions/policy.py:evaluate_suggestion_policy()`, which returns a `SuggestionPolicyDecision` stored on the `Suggestion.policy_decision` field.
+Policy evaluation is performed by `services/backend/services/suggestions/policy.py:evaluate_suggestion_policy()`, which returns a `SuggestionPolicyDecision` stored on the `Suggestion.policy_decision` field.
 
 ---
 
@@ -135,7 +135,7 @@ Noesis handles 5 suggestion-specific read-only intents:
 | `suggestion_explain` | Explain a specific suggestion (what/why/impact) |
 | `suggestion_outcome_lookup` | Show recorded outcome for a suggestion |
 
-**Noesis MUST NOT:** approve, reject, execute, suppress, or mutate suggestion state. These constraints are enforced in `services/noesis/service.py:_suggestion_dispatch()`.
+**Noesis MUST NOT:** approve, reject, execute, suppress, or mutate suggestion state. These constraints are enforced in `services/backend/services/noesis/service.py:_suggestion_dispatch()`.
 
 ---
 

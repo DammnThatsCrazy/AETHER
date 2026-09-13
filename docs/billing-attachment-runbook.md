@@ -31,21 +31,21 @@ can call with one line.
 
 | Concern | Module / artifact | Durable table |
 | --- | --- | --- |
-| Contract profile | `services/billing/revops.py` → `TenantContractProfile`, `TenantContractProfileRepository` | `tenant_contract_profiles` |
-| Entitlements | `services/billing/revops.py` → `TenantEntitlement`, `EntitlementService` (`.evaluate`, `.enforce_dimension`) | `tenant_entitlements` |
-| Usage meter | `services/billing/revops.py` → `MeteringService`, `UsageMeteringEvent`, `MeteringEventType` | `usage_metering_events` |
-| Evidence | `services/metering_evidence/service.py` → `MeteringEvidenceService.record` / `.explain` | `metering_evidence` |
-| Metering + entitlement seam | `services/metering_evidence/families.py` → `meter_capability_usage`, `MeterOutcome`, `enforce_entitlement` | (writes both tables above) |
-| Dimension families | `services/metering_evidence/families.py` → `CAPABILITY_FAMILIES`, `meter_family_usage` | — |
-| Reconcile | `services/metering_evidence/reconciliation.py` → `ReconciliationEngine` | (read-only over the three truths) |
-| Usage summary | `services/billing/revops.py` → `UsageSummaryService.calculate` | `billable_usage_summaries` |
-| Invoice preview | `services/billing/revops.py` → `InvoicePreviewService.generate` | `invoice_previews` |
-| Value created | `services/billing/revops.py` → `ValueCreatedEventService` | `value_created_events` |
-| Leakage + expansion | `services/billing/revops.py` → `RevenueLeakageService`, `ExpansionBillingService` | `revenue_leakage_signals` |
-| Billing provider seam | `services/billing/providers/base.py` → `BillingProvider` ABC | — |
+| Contract profile | `services/backend/services/billing/revops.py` → `TenantContractProfile`, `TenantContractProfileRepository` | `tenant_contract_profiles` |
+| Entitlements | `services/backend/services/billing/revops.py` → `TenantEntitlement`, `EntitlementService` (`.evaluate`, `.enforce_dimension`) | `tenant_entitlements` |
+| Usage meter | `services/backend/services/billing/revops.py` → `MeteringService`, `UsageMeteringEvent`, `MeteringEventType` | `usage_metering_events` |
+| Evidence | `services/backend/services/metering_evidence/service.py` → `MeteringEvidenceService.record` / `.explain` | `metering_evidence` |
+| Metering + entitlement seam | `services/backend/services/metering_evidence/families.py` → `meter_capability_usage`, `MeterOutcome`, `enforce_entitlement` | (writes both tables above) |
+| Dimension families | `services/backend/services/metering_evidence/families.py` → `CAPABILITY_FAMILIES`, `meter_family_usage` | — |
+| Reconcile | `services/backend/services/metering_evidence/reconciliation.py` → `ReconciliationEngine` | (read-only over the three truths) |
+| Usage summary | `services/backend/services/billing/revops.py` → `UsageSummaryService.calculate` | `billable_usage_summaries` |
+| Invoice preview | `services/backend/services/billing/revops.py` → `InvoicePreviewService.generate` | `invoice_previews` |
+| Value created | `services/backend/services/billing/revops.py` → `ValueCreatedEventService` | `value_created_events` |
+| Leakage + expansion | `services/backend/services/billing/revops.py` → `RevenueLeakageService`, `ExpansionBillingService` | `revenue_leakage_signals` |
+| Billing provider seam | `services/backend/services/billing/providers/base.py` → `BillingProvider` ABC | — |
 | Plan catalog | `shared/plans/catalog.py` → `PLAN_CATALOG`; `shared/auth/auth.py` → `PlanTier` (P1–P4) | — |
-| Legacy overage cycle | `services/billing/cycle.py`, `services/billing/cron.py`, `shared/billing/overage.py` | `tenant_billing_accounts`, `overage_invoices` |
-| Tenant API | `services/billing/routes.py` → `/v1/billing/*`, `/v1/admin/billing/*`, `/v1/admin/kyber/revops/*` | — |
+| Legacy overage cycle | `services/backend/services/billing/cycle.py`, `services/backend/services/billing/cron.py`, `shared/billing/overage.py` | `tenant_billing_accounts`, `overage_invoices` |
+| Tenant API | `services/backend/services/billing/routes.py` → `/v1/billing/*`, `/v1/admin/billing/*`, `/v1/admin/kyber/revops/*` | — |
 
 Two table families exist:
 
@@ -71,7 +71,7 @@ tenant entitled, capability executed, usage occurred exactly once, evidence dura
 ```
 
 Three truths run in parallel and `ReconciliationEngine`
-(`services/metering_evidence/reconciliation.py`) compares them:
+(`services/backend/services/metering_evidence/reconciliation.py`) compares them:
 
 1. **Quota-engine counters** — `rl:quota` / `rl:overage` (Redis hot path) plus
    the `tenant_usage` snapshot (Postgres), counted per request by middleware.
@@ -91,7 +91,7 @@ price.
 ### Step 1 — Pick the billing mode (configuration only)
 
 `BILLING_PROVIDER_MODE` selects the provider through
-`services/billing/providers/base.py` (`get_billing_provider`):
+`services/backend/services/billing/providers/base.py` (`get_billing_provider`):
 
 | Mode | Class | Invoice export | Payment status |
 | --- | --- | --- | --- |
@@ -112,7 +112,7 @@ external mutation (`ProviderDisabledError`) until it is configured with a real
 
 ### Step 2 — Declare the pricing contract (data, not code)
 
-Price/plan mapping lives in `services/billing/providers/mappings.py` as
+Price/plan mapping lives in `services/backend/services/billing/providers/mappings.py` as
 `ProductPriceMapping` rows:
 
 ```python
@@ -155,7 +155,7 @@ un-entitled tenant.
 
 The domain paths do not change; the metering hook is the one seam. Each
 commercial capability family maps to a canonical dimension in
-`services/metering_evidence/families.py` (`CAPABILITY_FAMILIES`, e.g.
+`services/backend/services/metering_evidence/families.py` (`CAPABILITY_FAMILIES`, e.g.
 `ingestion → event_ingested`, `graph → graph_operation`,
 `profile360 → profile_query`). Execution paths call
 `meter_capability_usage(tenant_id, dimension=…, event_id=…, dedupe_key=…,
@@ -212,8 +212,8 @@ When a preview is approved, export through the active provider:
 
 ### Step 7 — Overage invoicing (optional)
 
-The legacy overage cycle (`services/billing/cycle.py::run_overage_cycle`,
-triggered by the async `services/billing/cron.py::run_monthly_overage_cron` or
+The legacy overage cycle (`services/backend/services/billing/cycle.py::run_overage_cycle`,
+triggered by the async `services/backend/services/billing/cron.py::run_monthly_overage_cron` or
 `POST /v1/admin/billing/overage-cycle`) iterates tenants with an active
 `tenant_billing_accounts` subscription, computes overage with
 `shared/billing/overage.py::OverageCalculator`, and writes invoice items. It is
@@ -254,7 +254,7 @@ Changing pricing never requires editing a domain implementation because:
 - **Every mutation is auditable**: billing contract changes emit security-audit
   events, billing records are retention-preserved, and `sanitize_metadata`
   strips secret-named keys before anything is persisted, logged, or exported
-  (`services/billing/revops.py`, `services/security/contracts.py`).
+  (`services/backend/services/billing/revops.py`, `services/backend/services/security/contracts.py`).
 
 ## 5. Verification checklist
 
@@ -272,7 +272,7 @@ Changing pricing never requires editing a domain implementation because:
    invoice/usage records) and the payment status advanced via the webhook path.
 6. Tenant readiness reflects billing: the §3.13 launch gates
    `usage_metering_verified` and `billing_mode_verified` are `passed` for the
-   tenant (`services/tenant_readiness/service.py`,
+   tenant (`services/backend/services/tenant_readiness/service.py`,
    `GET /v1/tenant/readiness`).
 
 ## Integration-pass notes (owned by the integration pass, not this doc)
