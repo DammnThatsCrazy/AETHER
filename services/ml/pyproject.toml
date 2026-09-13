@@ -55,6 +55,9 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "pytest-xdist>=3.5.0",
+    # Starlette's current TestClient uses httpx2; keep the standalone ML
+    # package's test environment explicit and reproducible.
+    "httpx2>=2.0.0",
     "mypy>=1.8.0",
     "ruff>=0.4.0",
     "jupyter>=1.0.0",
