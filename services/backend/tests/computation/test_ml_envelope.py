@@ -16,6 +16,9 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable, Iterator
+
+import pytest
 
 # Make the ML feature-contract package importable so the envelope's
 # feature_schema_hash resolves to a real value here, mirroring how GET /features
@@ -26,10 +29,6 @@ _ML_ROOT = os.path.abspath(
     os.path.join(_HERE, "..", "..", "..", "..", "services/ml")
 )
 assert os.path.isdir(_ML_ROOT), f"canonical ML package root is missing: {_ML_ROOT}"
-if _ML_ROOT not in sys.path:
-    sys.path.insert(0, _ML_ROOT)
-
-from common.feature_contracts import compute_schema_hash  # noqa: E402
 
 from services.ml_serving.routes import (  # noqa: E402
     _build_payload,
@@ -38,6 +37,35 @@ from services.ml_serving.routes import (  # noqa: E402
     _prediction_cache_hash,
     _prediction_envelope,
 )
+
+
+@pytest.fixture
+def ml_contract_hash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[Callable[[str], str]]:
+    """Expose the real ML contract hash without leaking ``common`` globally.
+
+    The backend suite runs in shared pytest workers.  Leaving ``services/ml``
+    on ``sys.path`` makes unrelated gateway tests discover the optional ML
+    registry and changes their honest ``unknown``/``degraded`` expectations.
+    Keep the canonical import scoped to this test and restore any pre-existing
+    ``common`` modules after it finishes.
+    """
+    previous_common = {
+        name: module
+        for name, module in sys.modules.items()
+        if name == "common" or name.startswith("common.")
+    }
+    monkeypatch.syspath_prepend(_ML_ROOT)
+    from common.feature_contracts import compute_schema_hash
+
+    try:
+        yield compute_schema_hash
+    finally:
+        for name in list(sys.modules):
+            if name == "common" or name.startswith("common."):
+                sys.modules.pop(name, None)
+        sys.modules.update(previous_common)
 
 
 # --- observed_events must not be fabricated --------------------------------
@@ -97,7 +125,9 @@ def test_grounded_derived_from_evidence():
 # --- envelope carries feature_schema_hash + feature digest -----------------
 
 
-def test_envelope_carries_schema_hash_and_feature_digest():
+def test_envelope_carries_schema_hash_and_feature_digest(ml_contract_hash):
+    # The production helper and the expected value must resolve through the
+    # same canonical ML contract package, but only for this test's lifetime.
     tenant, features, consent = "t1", {"x": 1, "y": 2}, ["marketing"]
     env = _prediction_envelope("churn_prediction", tenant, features, consent)
 
@@ -112,7 +142,7 @@ def test_envelope_carries_schema_hash_and_feature_digest():
     # feature_schema_hash is always present and must be the real contract hash,
     # never a fabricated value or an import-error fallback.
     assert "feature_schema_hash" in env
-    assert env["feature_schema_hash"] == compute_schema_hash("churn_prediction")
+    assert env["feature_schema_hash"] == ml_contract_hash("churn_prediction")
     assert env["feature_schema_hash"]  # non-empty real hash
 
 
