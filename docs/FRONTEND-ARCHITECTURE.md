@@ -43,7 +43,7 @@ reviewed_source_commits:
   - commit: "95e6c54f"
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
-  "frontend/aether/src/": "sha256:216e7fdef78611292d7f3f17d78b209a7f8c630da095a269c8e7c2e12b13b1b3"
+  "frontend/aether/src/": "sha256:a5c1c5294aa2b468952a51374ed220c36b5bb9915a0c47da5b4f95d19defe657"
   "frontend/kyber/src/": "sha256:ebdc690054baeebc425c18cbf6455ad8f0a4d137af2a906345a75a5155ba18ef"
   "frontend/shared/src/": "sha256:abef2b4bb7b38a0124fbf2180dd1de701e533d1bbd57866d57b1848815332a2c"
 ---
@@ -850,7 +850,7 @@ Operator-facing and end-user notification components in `apps/kyber/src/features
 
 ---
 
-## Continuation Plane & Command Receipts (v8.12.0)
+## Continuation Plane & Command Receipts (v0.1.0-alpha.0)
 
 Cross-device handoff and governed-action visibility added by the mobile-productization program:
 
@@ -868,7 +868,7 @@ Cross-device handoff and governed-action visibility added by the mobile-producti
 
 ---
 
-## Model Runtime Components (v8.12.0)
+## Model Runtime Components (v0.1.0-alpha.0)
 
 Provider-neutral harness operator + tenant surfaces (ADR-008 D8/D9). All of it
 is feature-gated: the Aether panel behind `enableModelHarness` (default OFF),
@@ -1069,7 +1069,7 @@ The `healthLabel(connector)` function maps `sync_status` + `secret_configured` t
 
 The `connectorCapabilityState` helper maps every state above onto the shared `CapabilityState` matrix, rendered via `CapabilityStateBadge` with honest tones.
 
-### Contextual integration readiness CTAs (v8.12.0)
+### Contextual integration readiness CTAs (v0.1.0-alpha.0)
 
 **Source:** `frontend/aether/src/features/integrations/use-tenant-readiness.ts`,
 `readiness-context.ts`, `types.ts` (additive over the R1 catalog/tenant read models)
@@ -1117,7 +1117,7 @@ The `api.delivery` namespace in `frontend/aether/src/lib/api/endpoints.ts` and `
 - `listAttempts(jobId)` → `GET /v1/delivery/jobs/{id}/attempts`
 - `listLinks(params)` → `GET /v1/delivery/links`
 
-## Economic & Interoperability Intelligence Pages (v8.12.0)
+## Economic & Interoperability Intelligence Pages (v0.1.0-alpha.0)
 
 Observation-only surfaces for the stablecoin, derivatives, and
 interoperability domains. Feature-flagged-off backends return 404, which
@@ -1155,7 +1155,7 @@ Zod schemas in `lib/schemas/economic-ops.ts` parse the raw admin payloads.
 
 ---
 
-## Data Exchange Settings Section (v8.12.0, Aether)
+## Data Exchange Settings Section (v0.1.0-alpha.0, Aether)
 
 The governed tenant import/export plane's Settings surface (M6). Backend routes
 are flag-gated OFF by default; the section is **not** client-feature-flagged —

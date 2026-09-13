@@ -127,7 +127,10 @@ internal `contractVersion` independent of the platform's `0.x` release train
 long-lived counter). Two contracts are "compatible" across versions only when:
 
 1. Both sides are on the same `contractVersion` major (or the same exact
-   version, for internal counters that don't follow semver majors), and
+   version, for internal counters that don't follow semver majors).
+   **Pre-1.0 exception:** for `0.x` versions, compatibility requires the
+   same minor version -- `0.1.x` is compatible with `0.1.y` but **not**
+   with `0.2.x`, since pre-1.0 semver treats minor bumps as breaking.
 2. No `required_commands` in the ownership map for the touched category are
    failing.
 

@@ -26,7 +26,7 @@
     "registry": "https://registry.npmjs.org"
   },
   "peerDependencies": {
-    "@aether/shared": ">=8.11.0"
+    "@aether/shared": ">=0.1.0-alpha.0"
   },
   "devDependencies": {
     "@aether/shared": "^0.1.0-alpha.0",
