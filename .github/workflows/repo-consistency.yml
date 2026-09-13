@@ -432,7 +432,7 @@ jobs:
   publish-evidence:
     name: verification / disposition
     needs: [classify-change, universal-fast, plan-verification, suite-matrix, plan-build, build-node, build-backend-image, candidate-verification]
-    if: always() && needs.classify-change.result == 'success'
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -443,6 +443,7 @@ jobs:
         with:
           python-version: "3.11"
       - uses: actions/download-artifact@v4
+        if: needs.classify-change.result == 'success'
         with:
           pattern: '*evidence*'
           path: release-evidence
@@ -473,7 +474,9 @@ jobs:
           from pathlib import Path
           disposition = Path("release-evidence/pr-disposition.json")
           status = "BLOCKED"
-          if disposition.exists():
+          upstream_results = [value for value in "${UPSTREAM_RESULTS}".split(":") if value]
+          blocking_upstream = [value for value in upstream_results if value not in {"success", "skipped"}]
+          if not blocking_upstream and disposition.exists():
               status = json.loads(disposition.read_text()).get("status", "BLOCKED")
           Path("release-evidence/verification-decision.json").write_text(json.dumps({
               "schema_version": 1,
@@ -481,6 +484,7 @@ jobs:
               "blocking": True,
               "status": status,
               "upstream_results": "${UPSTREAM_RESULTS}",
+              "blocking_upstream": blocking_upstream,
           }, indent=2) + "\n")
           if status not in {"PASS", "PASS_WITH_DEGRADATION"}:
               raise SystemExit(f"blocking verification disposition: {status}")

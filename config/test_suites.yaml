@@ -764,6 +764,7 @@ suites:
       "tests/unit/test_verification_execution_plan.py",
       "tests/unit/test_verification_policy.py",
       "tests/unit/test_verification_router.py",
+      "tests/unit/test_run_pytest_files.py",
       "--workers",
       "4"
     ]

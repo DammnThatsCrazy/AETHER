@@ -109,10 +109,11 @@ def test_repo_doctor_enforces_frontend_data_truth_source_and_bundles() -> None:
     assert '[sys.executable, "scripts/validate_frontend_branding.py"]' in doctor
 
 
-def test_repo_consistency_workflow_names_frontend_data_truth_guardrail() -> None:
+def test_repo_consistency_workflow_uses_universal_fast_control_plane() -> None:
     workflow = _read(".github/workflows/repo-consistency.yml")
-    assert "npm run validate:frontend-data-truth" in workflow
-    assert "npm run validate:frontend-branding" in workflow
+    assert "scripts/universal_fast.py" in workflow
+    assert "verification-execution-plan.json" in workflow
+    assert "scripts/validate_ci_performance_policy.py" in workflow
 
 
 # --------------------------------------------------------------------------- #

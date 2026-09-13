@@ -23,77 +23,97 @@ def _production_equivalent_workflow() -> dict:
     return yaml.safe_load(PRODUCTION_EQUIVALENT_WORKFLOW.read_text(encoding="utf-8"))
 
 
-def test_pr_workflow_has_explicit_delivery_stages() -> None:
+def test_pr_workflow_has_explicit_adaptive_execution_stages() -> None:
     jobs = _workflow()["jobs"]
     assert {
         "classify-change",
-        "build-artifact",
-        "selected-verification",
+        "universal-fast",
+        "plan-verification",
+        "suite-matrix",
+        "plan-build",
+        "build-node",
+        "candidate-verification",
         "publish-evidence",
     }.issubset(jobs)
-    assert jobs["build-artifact"]["needs"] == "classify-change"
-    assert set(jobs["selected-verification"]["needs"]) == {"classify-change", "build-artifact"}
+    assert jobs["universal-fast"]["needs"] == "classify-change"
+    assert jobs["plan-verification"]["needs"] == "classify-change"
+    assert set(jobs["suite-matrix"]["needs"]) == {"classify-change", "plan-verification"}
+    assert jobs["plan-build"]["needs"] == "classify-change"
+    assert set(jobs["build-node"]["needs"]) == {"classify-change", "plan-build"}
+    assert set(jobs["candidate-verification"]["needs"]) == {
+        "classify-change",
+        "universal-fast",
+        "plan-verification",
+        "suite-matrix",
+        "plan-build",
+        "build-node",
+        "build-backend-image",
+    }
     assert set(jobs["publish-evidence"]["needs"]) == {
         "classify-change",
-        "build-artifact",
-        "selected-verification",
+        "universal-fast",
+        "plan-verification",
+        "suite-matrix",
+        "plan-build",
+        "build-node",
+        "build-backend-image",
+        "candidate-verification",
     }
 
 
 def test_adaptive_disposition_is_pr_completion_authority() -> None:
     jobs = _workflow()["jobs"]
     assert jobs["publish-evidence"]["name"] == "verification / disposition"
-    assert jobs["selected-verification"]["name"] != jobs["publish-evidence"]["name"]
+    assert jobs["plan-verification"]["name"] != jobs["publish-evidence"]["name"]
     disposition_script = "\n".join(
-        step.get("run", "") for step in jobs["selected-verification"]["steps"]
+        step.get("run", "") for step in jobs["publish-evidence"]["steps"]
     )
     assert "scripts/verification_disposition.py" in disposition_script
-    assert "--execute" in disposition_script
-    assert '"authority":"verification"' in disposition_script
-    assert '"blocking":true' in disposition_script
+    assert "--evidence" in disposition_script
+    assert "--execution-plan" in disposition_script
+    assert "--candidate-evidence" in disposition_script
+    assert "blocking_upstream" in disposition_script
 
     assert "repo-consistency" not in jobs
 
 
-def test_build_artifact_excludes_dependency_dist_directories() -> None:
+def test_build_node_excludes_dependency_dist_directories() -> None:
     jobs = _workflow()["jobs"]
-    script = "\n".join(step.get("run", "") for step in jobs["build-artifact"]["steps"])
+    script = "\n".join(step.get("run", "") for step in jobs["build-node"]["steps"])
     assert "build-selection.json" in script
     assert "Build only selected workspaces" in script or "npm run build --workspace" in script
     assert "npm run build --workspace=\"$workspace\"" in script
     assert "find packages frontend apps" not in script
-    assert 'selection.get("workspaces")' in script
-    assert "dependency order" in str(jobs["build-artifact"]["steps"])
-    assert jobs["build-artifact"]["env"]["VITE_AETHER_ENV"] == "production"
+    assert "jq -r '.workspaces[]?'" in script
+    assert jobs["build-node"]["env"]["VITE_AETHER_ENV"] == "production"
 
 
 def test_built_candidate_is_verified_without_rebuilding_in_consumers() -> None:
     jobs = _workflow()["jobs"]
-    build = "\n".join(step.get("run", "") for step in jobs["build-artifact"]["steps"])
-    selected = "\n".join(step.get("run", "") for step in jobs["selected-verification"]["steps"])
-    assert "scripts/artifact_builder.py" in build
-    assert "release-candidate.json" in build
-    assert "--verify" in selected
-    assert "tar --extract --gzip --file release-evidence/repository-build.tar.gz" in selected
-    assert "npm run build" not in selected
-    assert "build-artifact" in jobs["selected-verification"]["needs"]
+    build = "\n".join(step.get("run", "") for step in jobs["build-node"]["steps"])
+    candidate = "\n".join(step.get("run", "") for step in jobs["candidate-verification"]["steps"])
+    assert "repository-build.tar.gz" in build
+    assert "scripts/artifact_builder.py" in candidate
+    assert "scripts/verify_candidate_evidence.py" in candidate
+    assert "--expected-commit" in candidate
+    assert "npm run build" not in candidate
+    assert "build-node" in jobs["candidate-verification"]["needs"]
 
 
 def test_backend_image_is_bound_to_candidate_and_loaded_by_consumer() -> None:
     jobs = _workflow()["jobs"]
-    build = "\n".join(step.get("run", "") for step in jobs["build-artifact"]["steps"])
-    selected = "\n".join(step.get("run", "") for step in jobs["selected-verification"]["steps"])
+    build = "\n".join(step.get("run", "") for step in jobs["build-backend-image"]["steps"])
+    selected = "\n".join(step.get("run", "") for step in jobs["candidate-verification"]["steps"])
     assert "docker save" in build
-    assert "--component backend-image=release-evidence/backend-image.tar.gz" in build
-    assert "docker load" in selected
-    assert "--component backend-image=release-evidence/backend-image.tar.gz" in selected
+    assert "release-evidence/backend-image.tar.gz" in build
+    assert "--backend-image release-evidence/backend-image.tar.gz" in selected
 
 
 def test_publication_fails_when_any_required_stage_did_not_pass() -> None:
     publication = _workflow()["jobs"]["publish-evidence"]
     assert str(publication["if"]) == "always()"
     script = "\n".join(step.get("run", "") for step in publication["steps"])
-    assert 'value != "success"' in script
+    assert 'value not in {"success", "skipped"}' in script
     assert "raise SystemExit" in script
     uploads = [
         step for step in publication["steps"]
