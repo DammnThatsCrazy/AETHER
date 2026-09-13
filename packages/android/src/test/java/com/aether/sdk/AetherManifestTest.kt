@@ -14,7 +14,7 @@ class AetherManifestTest {
     private fun manifest(signature: String) = SDKManifest(
         manifest_version = "2026.07.12-1",
         min_sdk_version = "8.0.0",
-        schema_version = "8.12.0",
+        schema_version = "0.1.0-alpha.0",
         rollout_percentage = 100,
         features = mapOf("heatmaps" to true, "funnels" to false),
         published_at = "2026-07-12T00:00:00Z",

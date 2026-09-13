@@ -1,11 +1,11 @@
 ---
-title: "Limitations & Non-Goals"
+title: Limitations & Non-Goals
 slug: productization/staging-capstone/limitations-and-non-goals
 section: operations
 visibility: I
-audience: [exec, architect, ops, buyer]
+audience: [buyer, architect, ops]
 status: stable
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 2

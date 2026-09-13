@@ -3,14 +3,13 @@ title: Release Readiness — Economic & Interoperability Intelligence
 slug: productization/economic-interoperability-intelligence/release-readiness
 section: operations
 visibility: I
-audience: [architect, ops, exec]
+audience: [architect, ops, buyer]
 status: beta
-since_version: "8.12.0"
-source_files:
-  - scripts/production_status.py
+since_version: 0.1.0
+source_files: [scripts/production_status.py]
 canonical_owner: platform@aether
 source_hashes:
-  "scripts/production_status.py": "sha256:15010d4caab7f6e82c6677778332da1de5457d0c7576e11922fd24521a77086d"
+  scripts/production_status.py: sha256:15010d4caab7f6e82c6677778332da1de5457d0c7576e11922fd24521a77086d
 ---
 
 # Release Readiness

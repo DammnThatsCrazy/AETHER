@@ -3,16 +3,14 @@ title: Data Licensing and Entitlements
 slug: productization/economic-interoperability-intelligence/data-licensing-and-entitlements
 section: operations
 visibility: I
-audience: [architect, ops, exec]
+audience: [architect, ops, buyer]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - Backend Architecture/aether-backend/shared/plans/service_catalog.py
-  - Backend Architecture/aether-backend/services/billing/revops.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/shared/plans/service_catalog.py, Backend Architecture/aether-backend/services/billing/revops.py]
 canonical_owner: platform@aether
 source_hashes:
-  "Backend Architecture/aether-backend/services/billing/revops.py": "sha256:7f3d358742375c078663758b879ab491a760f0d340b5b36b7250f5336d6ec6b2"
-  "Backend Architecture/aether-backend/shared/plans/service_catalog.py": "sha256:9c219b76d41c52f8691d2ed11f888c91f051768a58933174e0852d1741519a15"
+  Backend Architecture/aether-backend/services/billing/revops.py: sha256:7f3d358742375c078663758b879ab491a760f0d340b5b36b7250f5336d6ec6b2
+  Backend Architecture/aether-backend/shared/plans/service_catalog.py: sha256:9c219b76d41c52f8691d2ed11f888c91f051768a58933174e0852d1741519a15
 ---
 
 # Data Licensing and Entitlements

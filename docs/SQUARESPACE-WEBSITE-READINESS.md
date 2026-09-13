@@ -3,9 +3,9 @@ title: Squarespace Website Readiness
 slug: operations/squarespace-website-readiness
 section: operations
 visibility: I
-audience: [ops, exec, buyer]
+audience: [ops, buyer]
 status: beta
-since_version: "8.9.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 ---

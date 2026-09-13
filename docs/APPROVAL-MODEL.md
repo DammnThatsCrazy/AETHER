@@ -1,18 +1,17 @@
 ---
 title: Agentic Commerce — Approval Model
 slug: ai/approval-model
-section: ai
+section: architecture
 visibility: P
 audience: [architect, dev-senior]
 status: stable
-since_version: "8.8.0"
-source_files:
-  - Backend Architecture/aether-backend/services/x402/commerce_routes.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/x402/commerce_routes.py]
 canonical_owner: commerce@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/services/x402/commerce_routes.py": "sha256:7709c0d869867366a90b8aa336e38f2b76ba6204e471371bc41b8848502e7e6f"
+  Backend Architecture/aether-backend/services/x402/commerce_routes.py: sha256:7709c0d869867366a90b8aa336e38f2b76ba6204e471371bc41b8848502e7e6f
 ---
 # Agentic Commerce — Approval Model
 

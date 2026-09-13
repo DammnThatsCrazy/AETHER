@@ -1,3 +1,12 @@
+---
+title: Cross Domain Tradfi Web2 Ontology
+slug: archive/audits/cross_domain_tradfi_web2_ontology
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Cross-Domain TradFi/Web2 Ontology
 
 ## Entity Model (21 Entity Types)

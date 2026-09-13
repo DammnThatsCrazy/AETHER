@@ -1,11 +1,11 @@
 ---
 title: GTM Materials
 slug: enterprise/gtm-materials
-section: enterprise
+section: operations
 visibility: I
-audience: [exec, buyer, ops]
+audience: [buyer, ops]
 status: stable
-since_version: "8.9.0"
+since_version: 0.1.0
 ---
 
 # GTM Materials

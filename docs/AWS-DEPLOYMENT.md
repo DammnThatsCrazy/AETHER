@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [ops, security, architect]
 status: stable
-since_version: "8.8.0"
+since_version: "0.1.0"
 source_files:
   - AWS Deployment/aether-aws/README.md
   - AWS Deployment/aether-aws/main.py

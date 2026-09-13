@@ -1,15 +1,12 @@
 ---
 title: Kyber Device Trust
 slug: kyber/device-trust
-section: kyber
+section: operations
 visibility: I
 audience: [architect, security, ops]
 status: beta
-source_files:
-  - Backend Architecture/aether-backend/services/kyber/devices/webauthn.py
-  - Backend Architecture/aether-backend/services/kyber/devices/device_proof.py
-  - Backend Architecture/aether-backend/services/kyber/devices/approvals.py
-  - Backend Architecture/aether-backend/services/kyber/devices/risk.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/kyber/devices/webauthn.py, Backend Architecture/aether-backend/services/kyber/devices/device_proof.py, Backend Architecture/aether-backend/services/kyber/devices/approvals.py, Backend Architecture/aether-backend/services/kyber/devices/risk.py]
 ---
 
 # Kyber Device Trust

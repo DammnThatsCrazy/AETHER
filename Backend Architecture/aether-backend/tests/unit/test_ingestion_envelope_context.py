@@ -22,7 +22,7 @@ from services.ingestion.batch import BaseEvent, EventContext  # noqa: E402
 def _full_envelope_context() -> dict:
     """A context carrying every canonical envelope v1 field an SDK may stamp."""
     return {
-        "library": {"name": "@aether/web", "version": "8.12.0"},
+        "library": {"name": "@aether/web", "version": "0.1.0-alpha.0"},
         "consent": {"analytics": True},
         # canonical envelope v1
         "schemaVersion": "1.0.0",

@@ -1,11 +1,11 @@
 ---
 title: Sales Readiness
 slug: enterprise/sales-readiness
-section: enterprise
+section: operations
 visibility: I
-audience: [exec, buyer, ops]
+audience: [buyer, ops]
 status: stable
-since_version: "8.9.0"
+since_version: 0.1.0
 ---
 
 # Sales Readiness

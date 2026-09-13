@@ -1,3 +1,12 @@
+---
+title: Sdk truth
+slug: source-of-truth/sdk-truth
+section: reference
+visibility: I
+audience: [dev-junior, dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # SDK Truth
 
 Aether SDKs are thin observation clients.

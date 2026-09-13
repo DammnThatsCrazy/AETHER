@@ -1,11 +1,11 @@
 ---
-title: "Start Here"
+title: Start Here
 slug: start-here
-section: home
+section: concepts
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # Start Here

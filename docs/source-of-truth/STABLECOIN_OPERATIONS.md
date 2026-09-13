@@ -1,3 +1,12 @@
+---
+title: Stablecoin Operations
+slug: source-of-truth/stablecoin_operations
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Stablecoin Operations, Governance, and Release Gates
 
 Stablecoin Intelligence PR4 introduces Kyber-facing operational controls as audited, observation-first service primitives. Kyber health and lineage can inspect Bronze, Silver, durable observations, reconciliation, support, and Gold counts, but remediation requests are recorded as durable audit intents and do not execute replay, rollback, graph mutation, or financial correction inline.

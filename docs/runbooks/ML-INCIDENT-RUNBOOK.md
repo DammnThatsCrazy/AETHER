@@ -1,24 +1,20 @@
 ---
 title: ML Incident Runbook
 slug: ai/ml-incident-runbook
-section: ai
+section: architecture
 visibility: I
-audience: [ai, dev-senior, ops]
+audience: [architect, dev-senior, ops]
 status: stable
-since_version: "8.9.0"
+since_version: 0.1.0
 canonical_owner: ml@aether
-source_files:
-  - ML Models/aether-ml/serving/src/api.py
-  - ML Models/aether-ml/common/artifact_registry.py
-  - ML Models/aether-ml/monitoring/monitor.py
-  - deploy/observability/prometheus/alert_rules.yml
+source_files: [ML Models/aether-ml/serving/src/api.py, ML Models/aether-ml/common/artifact_registry.py, ML Models/aether-ml/monitoring/monitor.py, deploy/observability/prometheus/alert_rules.yml]
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "ML Models/aether-ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
-  "ML Models/aether-ml/monitoring/monitor.py": "sha256:dead8fcf2862488278dbfdff89a84a90d068dcc38d5ed750a3d103372589cd08"
-  "ML Models/aether-ml/serving/src/api.py": "sha256:d9d1d8dd0cafaa6351737c1a7140a5abe5cb49d4265ccdf694e6361640a2ba4c"
-  "deploy/observability/prometheus/alert_rules.yml": "sha256:5e8f65fa818bb0d5de947050f6925bac3fd4665facc9e262d16c46a9f3030586"
+  ML Models/aether-ml/common/artifact_registry.py: sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83
+  ML Models/aether-ml/monitoring/monitor.py: sha256:dead8fcf2862488278dbfdff89a84a90d068dcc38d5ed750a3d103372589cd08
+  ML Models/aether-ml/serving/src/api.py: sha256:d9d1d8dd0cafaa6351737c1a7140a5abe5cb49d4265ccdf694e6361640a2ba4c
+  deploy/observability/prometheus/alert_rules.yml: sha256:5e8f65fa818bb0d5de947050f6925bac3fd4665facc9e262d16c46a9f3030586
 ---
 
 # ML Incident Runbook

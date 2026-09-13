@@ -1,14 +1,12 @@
 ---
 title: Derivatives Consent Model
 slug: source-of-truth/derivatives-consent-model
-section: source-of-truth
+section: reference
 visibility: I
-audience: [architect, dev-senior, ai]
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - packages/shared/contracts/consent-registry.json
-  - Backend Architecture/aether-backend/shared/privacy/consent_enforcement.py
+since_version: 0.1.0
+source_files: [packages/shared/contracts/consent-registry.json, Backend Architecture/aether-backend/shared/privacy/consent_enforcement.py]
 canonical_owner: platform@aether
 last_synced_commit: 1f19190
 ---

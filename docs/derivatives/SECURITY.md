@@ -5,7 +5,7 @@ section: security
 visibility: I
 audience: [architect, dev-senior, ops]
 status: experimental
-since_version: "8.11.0"
+since_version: "0.1.0"
 ---
 
 # Derivatives SECURITY

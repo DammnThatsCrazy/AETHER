@@ -1,3 +1,12 @@
+---
+title: Stablecoin Verification Finality
+slug: source-of-truth/stablecoin_verification_finality
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Stablecoin Verification and Finality
 
 Aether Stablecoin Intelligence remains observation-first. A transaction hash is never treated as proof of payment by itself; verification compares tenant-scoped stored observations with provider evidence, registered deployment identity, receipt status, event/log identity, and chain-tip confirmations.

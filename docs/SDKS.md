@@ -1,11 +1,11 @@
 ---
 title: SDKs
 slug: sdks/sdks
-section: sdks
+section: reference
 visibility: I
 audience: [dev-junior, dev-senior, architect]
 status: stable
-since_version: "8.9.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 ---

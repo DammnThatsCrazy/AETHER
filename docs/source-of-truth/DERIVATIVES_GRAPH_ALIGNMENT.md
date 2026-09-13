@@ -1,16 +1,12 @@
 ---
 title: Derivatives Graph Alignment
 slug: source-of-truth/derivatives-graph-alignment
-section: source-of-truth
+section: reference
 visibility: I
-audience: [architect, dev-senior, ai]
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - Backend Architecture/aether-backend/shared/graph/graph.py
-  - Backend Architecture/aether-backend/shared/graph/relationship_layers.py
-  - Backend Architecture/aether-backend/services/derivatives/graph_mutations.py
-  - packages/shared/graph-contract.ts
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/shared/graph/graph.py, Backend Architecture/aether-backend/shared/graph/relationship_layers.py, Backend Architecture/aether-backend/services/derivatives/graph_mutations.py, packages/shared/graph-contract.ts]
 canonical_owner: platform@aether
 last_synced_commit: 1f19190
 ---

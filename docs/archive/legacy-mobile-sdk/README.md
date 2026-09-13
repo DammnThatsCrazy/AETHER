@@ -1,3 +1,12 @@
+---
+title: Readme
+slug: archive/legacy-mobile-sdk/readme
+section: reference
+visibility: I
+audience: [dev-junior, dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Legacy Mobile SDK (Archived)
 
 > **Status: archived for provenance. Do not build against these files.**

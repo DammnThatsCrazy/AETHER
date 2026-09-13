@@ -1,4 +1,4 @@
-# Aether Compliance Framework v8.12.0
+# Aether Compliance Framework v0.1.0-alpha.0
 
 **GDPR Compliance & SOC 2 Type II Readiness Framework**
 

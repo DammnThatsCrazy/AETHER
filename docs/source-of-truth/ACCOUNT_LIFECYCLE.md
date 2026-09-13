@@ -1,17 +1,12 @@
 ---
 title: Account Lifecycle and Erasure
 slug: source-of-truth/account-lifecycle
-section: source-of-truth
+section: reference
 visibility: I
 audience: [dev-senior, ops, architect]
-status: draft
-since_version: "8.9.0"
-source_files:
-  - Backend Architecture/aether-backend/services/account_lifecycle/models.py
-  - Backend Architecture/aether-backend/services/account_lifecycle/storage_registry.py
-  - Backend Architecture/aether-backend/services/account_lifecycle/service.py
-  - Backend Architecture/aether-backend/services/account_lifecycle/routes.py
-  - Backend Architecture/aether-backend/alembic/versions/20260813_account_deletion_workflow.py
+status: experimental
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/account_lifecycle/models.py, Backend Architecture/aether-backend/services/account_lifecycle/storage_registry.py, Backend Architecture/aether-backend/services/account_lifecycle/service.py, Backend Architecture/aether-backend/services/account_lifecycle/routes.py, Backend Architecture/aether-backend/alembic/versions/20260813_account_deletion_workflow.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 toc_depth: 3

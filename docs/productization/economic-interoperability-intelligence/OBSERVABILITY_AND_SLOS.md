@@ -3,14 +3,13 @@ title: Observability and SLOs
 slug: productization/economic-interoperability-intelligence/observability-and-slos
 section: operations
 visibility: I
-audience: [architect, ops, exec]
+audience: [architect, ops, buyer]
 status: beta
-since_version: "8.12.0"
-source_files:
-  - Backend Architecture/aether-backend/services/notification_intelligence/consumer.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/notification_intelligence/consumer.py]
 canonical_owner: platform@aether
 source_hashes:
-  "Backend Architecture/aether-backend/services/notification_intelligence/consumer.py": "sha256:6ed102bb946271ee5d9b52baa0c041f478e170108bdaef32e0eb60645f55c568"
+  Backend Architecture/aether-backend/services/notification_intelligence/consumer.py: sha256:6ed102bb946271ee5d9b52baa0c041f478e170108bdaef32e0eb60645f55c568
 ---
 
 # Observability and SLOs

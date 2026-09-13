@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [ops]
 status: stable
-since_version: "8.8.0"
+since_version: "0.1.0"
 source_files:
   - cicd/aether-cicd/stages/cd/
 canonical_owner: platform@aether
@@ -14,7 +14,7 @@ toc_depth: 3
 source_hashes:
   "cicd/aether-cicd/stages/cd/": "sha256:734a9b2199bafa01c79b0316c07a7ffcceb22b333f30cf2b49cafb0761e2a5d9"
 ---
-# Rollback Runbook — Aether Platform v8.12.0
+# Rollback Runbook — Aether Platform v0.1.0-alpha.0
 
 Step-by-step procedures for rolling back the Aether platform after a failed deployment or production incident.
 

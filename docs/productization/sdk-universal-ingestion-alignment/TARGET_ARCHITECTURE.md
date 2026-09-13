@@ -3,9 +3,9 @@ title: Target Architecture — SDK + Universal Ingestion Alignment
 slug: productization/sdk-universal-ingestion-alignment/target-architecture
 section: operations
 visibility: I
-audience: [architect, ops, exec]
+audience: [architect, ops, buyer]
 status: stable
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 ---
 

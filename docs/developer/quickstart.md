@@ -1,11 +1,11 @@
 ---
-title: "Developer Quickstart"
+title: Developer Quickstart
 slug: developer/quickstart
-section: quickstart
+section: developer
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # Developer Quickstart

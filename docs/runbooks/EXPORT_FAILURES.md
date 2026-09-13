@@ -5,19 +5,16 @@ section: operations
 visibility: I
 audience: [ops, dev-senior]
 status: stable
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 2
-source_files:
-  - Backend Architecture/aether-backend/services/export/service.py
-  - Backend Architecture/aether-backend/services/export/routes.py
-  - Backend Architecture/aether-backend/repositories/artifacts.py
-  - Backend Architecture/aether-backend/services/security/export_governance.py
+source_files: [Backend Architecture/aether-backend/services/export/service.py, Backend Architecture/aether-backend/services/export/routes.py, Backend Architecture/aether-backend/repositories/artifacts.py, Backend Architecture/aether-backend/services/security/export_governance.py]
 source_hashes:
-  "Backend Architecture/aether-backend/repositories/artifacts.py": "sha256:5dc3ac07e04abfbcaae88bcec626252c8f90e66ebc8ebd060d5c21824d04fa89"
-  "Backend Architecture/aether-backend/services/export/routes.py": "sha256:00cc1180e3fe4a3bb6c11109e0584c3771f130dfbc1a71526a42eed2eb6168cd"
-  "Backend Architecture/aether-backend/services/export/service.py": "sha256:2ff73a5658fa3ccb040b20d32e1c83e2178bc9613c5b1c255b5f784fc6d7dbf4"
-  "Backend Architecture/aether-backend/services/security/export_governance.py": "sha256:51fd9d785bdc2169eca5004ca48ded372fa4ddc6c2b4deb2fc4a772bae96ca8e"
+  Backend Architecture/aether-backend/repositories/artifacts.py: sha256:5dc3ac07e04abfbcaae88bcec626252c8f90e66ebc8ebd060d5c21824d04fa89
+  Backend Architecture/aether-backend/services/export/routes.py: sha256:00cc1180e3fe4a3bb6c11109e0584c3771f130dfbc1a71526a42eed2eb6168cd
+  Backend Architecture/aether-backend/services/export/service.py: sha256:2ff73a5658fa3ccb040b20d32e1c83e2178bc9613c5b1c255b5f784fc6d7dbf4
+  Backend Architecture/aether-backend/services/security/export_governance.py: sha256:51fd9d785bdc2169eca5004ca48ded372fa4ddc6c2b4deb2fc4a772bae96ca8e
 ---
 
 # Runbook — Export Failures

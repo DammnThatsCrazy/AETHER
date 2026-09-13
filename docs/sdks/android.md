@@ -1,16 +1,16 @@
 ---
-title: "Aether Android SDK"
+title: Aether Android SDK
 slug: sdks/android
-section: sdks
+section: reference
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # Aether Android SDK
 
-The Aether Android SDK captures observations from Android applications.
+The Aether Android SDK is a thin observation client that captures observations from Android applications.
 
 ## Installation
 

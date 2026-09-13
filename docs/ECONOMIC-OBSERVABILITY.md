@@ -3,16 +3,15 @@ title: Economic Observability
 slug: concepts/economic-observability
 section: concepts
 visibility: P
-audience: [dev-senior, architect, ai]
+audience: [dev-senior, architect]
 status: stable
-since_version: "8.8.0"
-source_files:
-  - packages/shared/economic.ts
+since_version: 0.1.0
+source_files: [packages/shared/economic.ts]
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "packages/shared/economic.ts": "sha256:40976cbf9da7d8e9169ca393c42412394475353c8ce9d0a8d61c0ee2c3c8e4df"
+  packages/shared/economic.ts: sha256:40976cbf9da7d8e9169ca393c42412394475353c8ce9d0a8d61c0ee2c3c8e4df
 ---
 # Economic Observability
 

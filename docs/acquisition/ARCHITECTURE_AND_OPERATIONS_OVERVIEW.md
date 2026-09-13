@@ -1,17 +1,17 @@
 ---
-title: "Architecture & Operations Overview"
+title: Architecture & Operations Overview
 slug: acquisition/architecture-and-operations-overview
 section: operations
 visibility: I
 audience: [architect, ops, buyer]
 status: stable
-source_files:
-  - scripts/production_status.py
+since_version: 0.1.0
+source_files: [scripts/production_status.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 13
 toc_depth: 3
 source_hashes:
-  "scripts/production_status.py": "sha256:15010d4caab7f6e82c6677778332da1de5457d0c7576e11922fd24521a77086d"
+  scripts/production_status.py: sha256:15010d4caab7f6e82c6677778332da1de5457d0c7576e11922fd24521a77086d
 ---
 
 # Architecture & Operations Overview

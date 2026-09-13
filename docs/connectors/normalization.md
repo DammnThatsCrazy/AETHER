@@ -14,6 +14,17 @@ since_version: "0.1.0"
 
 Normalizers translate provider-specific payloads into canonical Aether event contracts.
 
+## Canonical contract
+
+The single canonical normalization contract — for connector subsystems and
+provider plugins alike — is `shared/integration_contracts/normalization.py`
+(`EventNormalizer`, `NormalizationResult`). There is no deprecated or
+alternate normalization contract path; connector-subsystem normalizers and
+provider-plugin normalizers both implement this same `EventNormalizer`
+protocol. See [Provider Normalization](./provider-normalization.md) for the
+provider-plugin path in detail, including the `AetherEvent` envelope and
+determinism rules.
+
 ## Process
 
 1. Receive validated provider payload
@@ -27,3 +38,8 @@ Normalizers translate provider-specific payloads into canonical Aether event con
 - Every normalizer must emit canonical contracts
 - Provider-specific fields that cannot be mapped are preserved as metadata
 - Missing required fields produce validation errors, not silent defaults
+
+## See Also
+
+- [Provider Normalization](./provider-normalization.md)
+- [Provider Manifests](./provider-manifests.md)

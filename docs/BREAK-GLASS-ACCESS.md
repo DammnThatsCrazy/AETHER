@@ -1,11 +1,11 @@
 ---
 title: Break-Glass Operator Access
 slug: enterprise/break-glass-access
-section: enterprise
+section: operations
 visibility: I
 audience: [ops, security]
 status: stable
-since_version: "13.0.0"
+since_version: "0.1.0"
 ---
 
 # Break-Glass Operator Access

@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [ops, architect, dev-senior, security]
 status: stable
-since_version: "8.12.0"
+since_version: "0.1.0"
 source_files:
   - AWS Deployment/aether-aws/terraform/profiles.tf
   - AWS Deployment/aether-aws/terraform/main.tf

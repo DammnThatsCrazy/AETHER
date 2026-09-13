@@ -1,3 +1,12 @@
+---
+title: Backend Intelligence Architecture
+slug: source-of-truth/backend_intelligence_architecture
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Aether Backend Intelligence Architecture Blueprint
 
 This document is the additive target architecture for evolving Aether and Kyber

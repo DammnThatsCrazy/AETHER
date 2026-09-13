@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [ops]
 status: stable
-since_version: "8.8.0"
+since_version: "0.1.0"
 source_files:
   - deploy/legacy-staging/bootstrap.sh
 canonical_owner: platform@aether
@@ -14,7 +14,7 @@ toc_depth: 3
 source_hashes:
   "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
 ---
-# Smoke Test & Post-Deploy Verification Checklist — Aether Platform v8.12.0
+# Smoke Test & Post-Deploy Verification Checklist — Aether Platform v0.1.0-alpha.0
 
 Run after every deployment. Failures in the **Smoke Tests** section are rollback triggers. Failures in **Extended Verification** may be acceptable depending on context.
 

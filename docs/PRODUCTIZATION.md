@@ -3,9 +3,9 @@ title: Productization Gap Analysis — First Paying Customer
 slug: productization
 section: architecture
 visibility: I
-audience: [exec, architect]
+audience: [buyer, architect]
 status: stable
-since_version: "8.8.0"
+since_version: 0.1.0
 canonical_owner: product@aether
 estimated_read_minutes: 15
 toc_depth: 3

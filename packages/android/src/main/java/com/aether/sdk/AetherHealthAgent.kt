@@ -153,7 +153,7 @@ class AetherHealthAgent(
 
             val payload = JSONObject().apply {
                 put("sdk_id", sdkId)
-                put("sdk_version", "8.12.0")
+                put("sdk_version", "0.1.0-alpha.0")
                 put("platform", platform)
                 put("app_version", appVersion)
                 put("queue_depth", queueDepth)

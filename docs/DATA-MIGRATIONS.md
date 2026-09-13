@@ -1,11 +1,11 @@
 ---
 title: Data Migrations
 slug: data/data-migrations
-section: data
+section: architecture
 visibility: I
 audience: [dev-senior, ops, architect]
 status: beta
-since_version: "8.9.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 ---

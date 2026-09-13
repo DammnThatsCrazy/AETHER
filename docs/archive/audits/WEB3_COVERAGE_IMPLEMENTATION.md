@@ -1,3 +1,12 @@
+---
+title: Web3 Coverage Implementation
+slug: archive/audits/web3_coverage_implementation
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Web3 Coverage Implementation
 
 ## Overview

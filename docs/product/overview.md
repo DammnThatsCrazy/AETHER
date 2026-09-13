@@ -3,9 +3,9 @@ title: Product Overview
 slug: product-overview
 section: concepts
 visibility: P
-audience: [buyer, exec]
+audience: [buyer]
 status: experimental
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # Product Overview

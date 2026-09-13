@@ -4,6 +4,8 @@ slug: campaign/runbooks/source-stale
 section: operations
 visibility: I
 audience: [ops]
+status: experimental
+since_version: 0.1.0
 ---
 
 # Runbook: Campaign Source Staleness SLO Violation

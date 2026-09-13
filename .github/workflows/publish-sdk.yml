@@ -183,19 +183,40 @@ jobs:
 
       - name: Publish @aether/shared
         if: ${{ !inputs.dry_run }}
-        run: npm publish --workspace=packages/shared --access public
+        run: |
+          TAG_FLAG=""
+          if [[ "$VERSION" == *-* ]]; then
+            CHANNEL="${VERSION#*-}"    # e.g. alpha.0, beta.1, rc.0
+            CHANNEL="${CHANNEL%%.*}"   # e.g. alpha, beta, rc
+            TAG_FLAG="--tag $CHANNEL"
+          fi
+          npm publish --workspace=packages/shared --access public $TAG_FLAG
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @aether/web
         if: ${{ !inputs.dry_run }}
-        run: npm publish --workspace=packages/web --access public
+        run: |
+          TAG_FLAG=""
+          if [[ "$VERSION" == *-* ]]; then
+            CHANNEL="${VERSION#*-}"
+            CHANNEL="${CHANNEL%%.*}"
+            TAG_FLAG="--tag $CHANNEL"
+          fi
+          npm publish --workspace=packages/web --access public $TAG_FLAG
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @aether/react-native
         if: ${{ !inputs.dry_run }}
-        run: npm publish --workspace=packages/react-native --access public
+        run: |
+          TAG_FLAG=""
+          if [[ "$VERSION" == *-* ]]; then
+            CHANNEL="${VERSION#*-}"
+            CHANNEL="${CHANNEL%%.*}"
+            TAG_FLAG="--tag $CHANNEL"
+          fi
+          npm publish --workspace=packages/react-native --access public $TAG_FLAG
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [architect, dev-senior, ops]
 status: beta
-since_version: "8.9.0"
+since_version: "0.1.0"
 flags:
   - AETHER_CONNECTORS_ENABLED
   - KYBER_CONNECTOR_HEALTH_ENABLED

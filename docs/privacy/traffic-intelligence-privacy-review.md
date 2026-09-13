@@ -1,10 +1,11 @@
 ---
 title: Traffic Intelligence Privacy Review
 slug: privacy/traffic-intelligence-privacy-review
-section: compliance
+section: security
 visibility: I
 audience: [compliance, security, architect]
 status: stable
+since_version: 0.1.0
 canonical_owner: privacy@aether
 ---
 # Traffic Intelligence Privacy Review

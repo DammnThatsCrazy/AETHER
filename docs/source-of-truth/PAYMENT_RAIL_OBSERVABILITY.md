@@ -1,12 +1,12 @@
 ---
-source_files:
-  - packages/shared/payment-rails.ts
-  - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/base.py
-  - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/repository.py
-  - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/reconciliation.py
-  - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/service.py
-  - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/routes.py
-  - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/sync_worker.py
+title: Payment Rail Observability
+slug: source-of-truth/payment_rail_observability
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+source_files: [packages/shared/payment-rails.ts, Backend Architecture/aether-backend/services/integrations/providers/payment_rails/base.py, Backend Architecture/aether-backend/services/integrations/providers/payment_rails/repository.py, Backend Architecture/aether-backend/services/integrations/providers/payment_rails/reconciliation.py, Backend Architecture/aether-backend/services/integrations/providers/payment_rails/service.py, Backend Architecture/aether-backend/services/integrations/providers/payment_rails/routes.py, Backend Architecture/aether-backend/services/integrations/providers/payment_rails/sync_worker.py]
 last_synced_commit: HEAD
 ---
 

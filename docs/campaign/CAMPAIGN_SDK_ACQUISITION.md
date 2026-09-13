@@ -1,17 +1,15 @@
 ---
 title: Campaign SDK Acquisition Evidence
 slug: campaign/campaign-sdk-acquisition
-section: sdks
+section: reference
 visibility: I
 audience: [dev-junior, dev-senior]
-source_files:
-  - packages/shared/acquisition-evidence.ts
-  - packages/web/src/types.ts
-  - packages/web/src/index.ts
-  - packages/web/src/tracking/traffic-source-tracker.ts
+status: experimental
+since_version: 0.1.0
+source_files: [packages/shared/acquisition-evidence.ts, packages/web/src/types.ts, packages/web/src/index.ts, packages/web/src/tracking/traffic-source-tracker.ts]
 source_hashes:
   "packages/shared/acquisition-evidence.ts": "sha256:9f4b8011f9a596a08969cbf5ef1b14f8212715e00e8d6f920f23f48f09c5f855"
-  "packages/web/src/index.ts": "sha256:5bebe67525272c525ad9b68411df2323976b6372d04d4ccf81cf893b64fff749"
+  "packages/web/src/index.ts": "sha256:99dff7a812de9fbb77dd70ad3719d90989b8660ae3071154c213efc65e939ba0"
   "packages/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
   "packages/web/src/types.ts": "sha256:37c3dcce06bfda66dc5f96232e9ccd00f112df47c6469067fa1b03f82dd80200"
 ---

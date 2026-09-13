@@ -1,17 +1,12 @@
 ---
 title: Kyber Access Control
 slug: kyber/access-control
-section: kyber
+section: operations
 visibility: I
 audience: [architect, security, ops]
 status: beta
-source_files:
-  - Backend Architecture/aether-backend/services/security/request_context.py
-  - Backend Architecture/aether-backend/services/security/route_registry.py
-  - Backend Architecture/aether-backend/services/security/policy_engine.py
-  - Backend Architecture/aether-backend/services/kyber/access/capabilities.py
-  - Backend Architecture/aether-backend/services/kyber/access/roles.py
-  - config/route_registry.yaml
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/security/request_context.py, Backend Architecture/aether-backend/services/security/route_registry.py, Backend Architecture/aether-backend/services/security/policy_engine.py, Backend Architecture/aether-backend/services/kyber/access/capabilities.py, Backend Architecture/aether-backend/services/kyber/access/roles.py, config/route_registry.yaml]
 ---
 
 # Kyber Access Control

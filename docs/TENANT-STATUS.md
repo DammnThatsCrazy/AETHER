@@ -5,7 +5,7 @@ section: operations
 visibility: P
 audience: [buyer, ops, architect]
 status: beta
-since_version: "9.0.0"
+since_version: "0.1.0"
 source_files:
   - Backend Architecture/aether-backend/services/reliability/routes.py
   - Backend Architecture/aether-backend/services/reliability/tenant_impact.py

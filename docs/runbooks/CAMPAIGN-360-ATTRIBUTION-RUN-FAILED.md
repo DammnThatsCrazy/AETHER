@@ -5,19 +5,16 @@ section: operations
 visibility: I
 audience: [ops, dev-senior]
 status: stable
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 2
-source_files:
-  - Backend Architecture/aether-backend/services/campaign/exploration.py
-  - Backend Architecture/aether-backend/services/measurement/repositories/attribution_run_repo.py
-  - Backend Architecture/aether-backend/services/measurement/engine/attribution_engine.py
-  - Backend Architecture/aether-backend/services/traffic/repair.py
+source_files: [Backend Architecture/aether-backend/services/campaign/exploration.py, Backend Architecture/aether-backend/services/measurement/repositories/attribution_run_repo.py, Backend Architecture/aether-backend/services/measurement/engine/attribution_engine.py, Backend Architecture/aether-backend/services/traffic/repair.py]
 source_hashes:
-  "Backend Architecture/aether-backend/services/campaign/exploration.py": "sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13"
-  "Backend Architecture/aether-backend/services/measurement/engine/attribution_engine.py": "sha256:7e57d5a7d4c499a7e0e5ee05b4380905c7d31d3040398fe3bb2c9414e2e84b50"
-  "Backend Architecture/aether-backend/services/measurement/repositories/attribution_run_repo.py": "sha256:02840a6564ea69576bb1d43fba35679a9fa41493bf9c10770c4c034d4d389978"
-  "Backend Architecture/aether-backend/services/traffic/repair.py": "sha256:b1f732c004b51f42e9b16635516bcd9ce92682a40d6f33d51e735d5f2f107df0"
+  Backend Architecture/aether-backend/services/campaign/exploration.py: sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13
+  Backend Architecture/aether-backend/services/measurement/engine/attribution_engine.py: sha256:7e57d5a7d4c499a7e0e5ee05b4380905c7d31d3040398fe3bb2c9414e2e84b50
+  Backend Architecture/aether-backend/services/measurement/repositories/attribution_run_repo.py: sha256:02840a6564ea69576bb1d43fba35679a9fa41493bf9c10770c4c034d4d389978
+  Backend Architecture/aether-backend/services/traffic/repair.py: sha256:b1f732c004b51f42e9b16635516bcd9ce92682a40d6f33d51e735d5f2f107df0
 ---
 
 # Runbook — Attribution Run Failed (Campaign 360)

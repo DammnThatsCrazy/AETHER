@@ -5,6 +5,7 @@ section: operations
 visibility: I
 audience: [ops, compliance, security]
 status: stable
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 9
 toc_depth: 3

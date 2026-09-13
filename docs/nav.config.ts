@@ -14,7 +14,7 @@ export type SectionId =
   | 'architecture' | 'ai' | 'data' | 'operations' | 'self-hosting'
   | 'enterprise' | 'compliance' | 'security' | 'smart-contracts'
   | 'tutorials' | 'examples' | 'reference' | 'troubleshooting'
-  | 'kyber' | 'changelog' | 'glossary';
+  | 'kyber' | 'changelog' | 'glossary' | 'developer' | 'connectors';
 
 export type TierVisibility = 'P' | 'C' | 'I';
 
@@ -44,6 +44,8 @@ export const sections: NavSection[] = [
   { id: 'kyber',          title: 'Kyber Console' },
   { id: 'changelog',      title: 'Changelog' },
   { id: 'glossary',       title: 'Glossary' },
+  { id: 'developer',      title: 'Developer' },
+  { id: 'connectors',     title: 'Connectors' },
   { id: 'compliance',     title: 'Compliance',  minTier: 'C' },
   { id: 'enterprise',     title: 'Enterprise',  minTier: 'C' },
   { id: 'security',       title: 'Security',    minTier: 'C' },

@@ -1,3 +1,12 @@
+---
+title: Deployment Assessment
+slug: archive/audits/deployment_assessment
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Aether Platform — Deployment Assessment v8.7.1
 
 **Date:** 2026-04-03

@@ -1,15 +1,12 @@
 ---
 title: Intelligence Graph Contract
 slug: source-of-truth/graph-contract
-section: source-of-truth
-visibility: internal
-audience: [architect, dev-senior, ai]
+section: reference
+visibility: I
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.9.0"
-source_files:
-  - Backend Architecture/aether-backend/shared/graph/graph.py
-  - Backend Architecture/aether-backend/shared/graph/relationship_layers.py
-  - packages/shared/graph-contract.ts
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/shared/graph/graph.py, Backend Architecture/aether-backend/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts]
 canonical_owner: graph@aether
 last_synced_commit: fae02a9
 ---

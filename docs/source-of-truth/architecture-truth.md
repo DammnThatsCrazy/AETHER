@@ -1,3 +1,12 @@
+---
+title: Architecture truth
+slug: source-of-truth/architecture-truth
+section: reference
+visibility: I
+audience: [dev-senior, architect]
+status: experimental
+since_version: 0.1.0
+---
 # Architecture Truth
 
 Aether is organized around canonical contracts and tenant-scoped graph projections.

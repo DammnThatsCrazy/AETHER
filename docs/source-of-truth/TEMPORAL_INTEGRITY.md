@@ -1,21 +1,12 @@
 ---
 title: Temporal Integrity Plane Source of Truth
+slug: source-of-truth/temporal_integrity
+section: reference
+visibility: I
+audience: [dev-senior]
 status: stable
-source_files:
-  - Backend Architecture/aether-backend/shared/temporal/instant.py
-  - Backend Architecture/aether-backend/shared/temporal/zones.py
-  - Backend Architecture/aether-backend/shared/temporal/clock.py
-  - Backend Architecture/aether-backend/shared/temporal/windows.py
-  - Backend Architecture/aether-backend/shared/temporal/recurrence.py
-  - Backend Architecture/aether-backend/shared/temporal/envelope.py
-  - Backend Architecture/aether-backend/shared/temporal/authority.py
-  - Backend Architecture/aether-backend/services/ingestion/temporal_enforcement.py
-  - Backend Architecture/aether-backend/services/temporal_preferences/routes.py
-  - packages/shared/temporal.ts
-  - packages/shared/contracts/temporal-policy-registry.json
-  - frontend/shared/src/time/format.ts
-  - frontend/shared/src/time/time-provider.tsx
-  - scripts/validate_temporal_integrity.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/shared/temporal/instant.py, Backend Architecture/aether-backend/shared/temporal/zones.py, Backend Architecture/aether-backend/shared/temporal/clock.py, Backend Architecture/aether-backend/shared/temporal/windows.py, Backend Architecture/aether-backend/shared/temporal/recurrence.py, Backend Architecture/aether-backend/shared/temporal/envelope.py, Backend Architecture/aether-backend/shared/temporal/authority.py, Backend Architecture/aether-backend/services/ingestion/temporal_enforcement.py, Backend Architecture/aether-backend/services/temporal_preferences/routes.py, packages/shared/temporal.ts, packages/shared/contracts/temporal-policy-registry.json, frontend/shared/src/time/format.ts, frontend/shared/src/time/time-provider.tsx, scripts/validate_temporal_integrity.py]
 last_synced_commit: c6d0e08
 ---
 

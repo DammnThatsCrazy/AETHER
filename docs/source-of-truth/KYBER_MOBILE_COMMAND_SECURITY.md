@@ -1,9 +1,11 @@
 ---
 title: Kyber Mobile — Command Security Model
 slug: kyber/mobile-command-security
-section: kyber
-audience: [architect, security, mobile, operator]
+section: operations
+visibility: I
+audience: [architect, security, dev-senior, ops]
 status: stable
+since_version: 0.1.0
 ---
 
 # Kyber Mobile — Command Security Model

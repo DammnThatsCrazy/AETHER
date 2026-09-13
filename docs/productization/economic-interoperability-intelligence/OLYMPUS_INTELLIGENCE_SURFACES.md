@@ -3,14 +3,13 @@ title: Olympus Intelligence Surfaces
 slug: productization/economic-interoperability-intelligence/olympus-intelligence-surfaces
 section: operations
 visibility: I
-audience: [architect, ops, exec]
+audience: [architect, ops, buyer]
 status: beta
-since_version: "8.12.0"
-source_files:
-  - Backend Architecture/aether-backend/services/noesis/capability_registry.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/noesis/capability_registry.py]
 canonical_owner: platform@aether
 source_hashes:
-  "Backend Architecture/aether-backend/services/noesis/capability_registry.py": "sha256:546ffefe30f3b64e96603a101345d7bb7cbf533a37375f4d8e0b9e480d4e4170"
+  Backend Architecture/aether-backend/services/noesis/capability_registry.py: sha256:546ffefe30f3b64e96603a101345d7bb7cbf533a37375f4d8e0b9e480d4e4170
 ---
 
 # Olympus Intelligence Surfaces

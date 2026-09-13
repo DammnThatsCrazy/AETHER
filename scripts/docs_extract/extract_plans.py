@@ -15,7 +15,7 @@ service count, Stripe product ID, and monthly/annual pricing.
 Schema::
 
     {
-      "version": "8.12.0",
+      "version": "0.1.0-alpha.0",
       "generated_from": "Backend Architecture/aether-backend/shared/plans/catalog.py",
       "plans": [
         {

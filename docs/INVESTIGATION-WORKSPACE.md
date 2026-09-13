@@ -1,27 +1,20 @@
 ---
 title: Investigation Workspace
 slug: ai/investigation-workspace
-section: ai
+section: architecture
 visibility: I
-audience: [ai, architect, dev-senior, ops]
+audience: [architect, dev-senior, ops]
 status: beta
-since_version: "8.9.0"
-source_files:
-  - Backend Architecture/aether-backend/services/intelligence/investigations.py
-  - Backend Architecture/aether-backend/services/intelligence/routes.py
-flags:
-  - AETHER_RECOMMENDATIONS_ENABLED
-  - AETHER_DECISION_RECORDS_ENABLED
-  - AETHER_OUTCOME_FEEDBACK_ENABLED
-related:
-  - ai/decision-outcome-intelligence
-  - ai/recommendation-families
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/intelligence/investigations.py, Backend Architecture/aether-backend/services/intelligence/routes.py]
+flags: [AETHER_RECOMMENDATIONS_ENABLED, AETHER_DECISION_RECORDS_ENABLED, AETHER_OUTCOME_FEEDBACK_ENABLED]
+related: [ai/decision-outcome-intelligence, ai/recommendation-families]
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/services/intelligence/investigations.py": "sha256:3369a68e9650eedefd7709a2e2ff91e2294d3dabe50cf38659a6309365bef517"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:8a705ad12ff7176d486afa586ba3f794da14017b9f9c108a3f9b6313da94884b"
+  Backend Architecture/aether-backend/services/intelligence/investigations.py: sha256:3369a68e9650eedefd7709a2e2ff91e2294d3dabe50cf38659a6309365bef517
+  Backend Architecture/aether-backend/services/intelligence/routes.py: sha256:8a705ad12ff7176d486afa586ba3f794da14017b9f9c108a3f9b6313da94884b
 ---
 # Investigation Workspace
 

@@ -1,3 +1,12 @@
+---
+title: Readme
+slug: source-of-truth/readme
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Source of Truth
 
 This directory is **the** authoritative description of SDK behavior in this

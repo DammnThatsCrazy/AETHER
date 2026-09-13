@@ -5,7 +5,7 @@ section: reference
 visibility: I
 audience: [architect, dev-senior]
 status: stable
-since_version: "8.12.0"
+since_version: "0.1.0"
 source_files:
   - Backend Architecture/aether-backend/alembic/versions/20260708_derivatives_foundation_adoption.py
 canonical_owner: platform@aether

@@ -3,12 +3,10 @@ title: Tenant Data Contamination
 slug: data/tenant-data-contamination
 section: security
 visibility: I
-audience: [security, architect, ops, ai]
+audience: [security, architect, ops]
 status: beta
-since_version: "8.9.0"
-flags:
-  - AETHER_DATA_QUALITY_ENABLED
-  - KYBER_INTELLIGENCE_QUALITY_ENABLED
+since_version: 0.1.0
+flags: [AETHER_DATA_QUALITY_ENABLED, KYBER_INTELLIGENCE_QUALITY_ENABLED]
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 ---

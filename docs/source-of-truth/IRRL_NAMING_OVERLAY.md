@@ -1,22 +1,14 @@
 ---
-title: "Aether Spine P0 — IRRL Naming Overlay (Phase 5)"
+title: Aether Spine P0 — IRRL Naming Overlay (Phase 5)
 slug: architecture/irrl-naming-overlay
 section: architecture
 visibility: I
-audience: [architect, dev-senior, exec]
+audience: [architect, dev-senior, buyer]
 status: experimental
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
-source_files:
-  - Backend Architecture/aether-backend/services/integrations/data_rights/models.py
-  - Backend Architecture/aether-backend/services/integrations/data_rights/service.py
-  - Backend Architecture/aether-backend/services/policy/contracts.py
-  - Backend Architecture/aether-backend/services/policy/engine.py
-  - Backend Architecture/aether-backend/services/dsr_propagation/models.py
-  - Backend Architecture/aether-backend/services/security/contracts.py
-  - Backend Architecture/aether-backend/services/security/retention.py
-  - docs/source-of-truth/DATA_RIGHTS_LEDGER.md
-last_synced_commit: "pending"
+source_files: [Backend Architecture/aether-backend/services/integrations/data_rights/models.py, Backend Architecture/aether-backend/services/integrations/data_rights/service.py, Backend Architecture/aether-backend/services/policy/contracts.py, Backend Architecture/aether-backend/services/policy/engine.py, Backend Architecture/aether-backend/services/dsr_propagation/models.py, Backend Architecture/aether-backend/services/security/contracts.py, Backend Architecture/aether-backend/services/security/retention.py, docs/source-of-truth/DATA_RIGHTS_LEDGER.md]
+last_synced_commit: pending
 estimated_read_minutes: 6
 toc_depth: 3
 ---

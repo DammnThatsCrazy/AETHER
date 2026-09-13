@@ -1,92 +1,12 @@
 ---
 title: Verification and Release Spine
 slug: source-of-truth/verification-spine
-section: source-of-truth
+section: reference
 visibility: I
-audience: [dev, dev-senior, ops, architect]
-status: active
-since_version: "8.9.0"
-source_files:
-  - .github/workflows/repo-consistency.yml
-  - config/verification_router.yaml
-  - config/verification_policy.yaml
-  - config/test_suites.yaml
-  - config/ci_runtime_budgets.yaml
-  - config/deployment_profile_compatibility.yaml
-  - config/runtime_fallbacks.yaml
-  - config/golden_journeys.yaml
-  - contracts/delivery/change-plan.schema.json
-  - contracts/delivery/release-candidate.schema.json
-  - contracts/delivery/deployment-impact.schema.json
-  - contracts/delivery/failure-envelope.schema.json
-  - contracts/delivery/release-evidence-bundle.schema.json
-  - contracts/delivery/migration-evidence.schema.json
-  - contracts/delivery/staging-lifecycle-result.schema.json
-  - contracts/delivery/staging-orchestration-state.schema.json
-  - contracts/delivery/environment-resolution.schema.json
-  - contracts/delivery/environment-capability-snapshot.schema.json
-  - contracts/delivery/effective-iam-evidence.schema.json
-  - contracts/delivery/effective-iam-comparison.schema.json
-  - contracts/delivery/terraform-remote-inventory.schema.json
-  - contracts/delivery/terraform-reconciliation.schema.json
-  - contracts/delivery/hosted-adapter-request.schema.json
-  - contracts/delivery/hosted-adapter-result.schema.json
-  - contracts/delivery/artifact-closure.schema.json
-  - contracts/delivery/profile-delivery-operation.schema.json
-  - config/environment_requirements.yaml
-  - config/staging_apply_iam_policy.yaml
-  - config/terraform_resource_contracts.yaml
-  - scripts/artifact_builder.py
-  - scripts/delivery_contracts.py
-  - scripts/change_plan.py
-  - scripts/check_router.py
-  - scripts/verification_disposition.py
-  - scripts/lib/build_selection.py
-  - scripts/lib/verification_router.py
-  - scripts/lib/impact_graph.py
-  - scripts/delivery_orchestrator.py
-  - scripts/staging_state_machine.py
-  - scripts/release/evidence_bundle.py
-  - scripts/lib/test_suites.py
-  - scripts/run_pytest_files.py
-  - scripts/run_backend_tests.py
-  - scripts/validate_makefile.py
-  - tests/unit/test_repo_consistency_workflow_authority.py
-  - tests/unit/test_verification_disposition.py
-  - tests/unit/test_ci_runtime_budgets.py
-  - scripts/validate_delivery_profiles.py
-  - scripts/validate_delivery_registries.py
-  - scripts/release/resolve_environment.py
-  - scripts/release/discover_environment_capabilities.py
-  - scripts/release/compare_effective_iam.py
-  - scripts/release/terraform_reconciliation.py
-  - scripts/release/hosted_delivery_adapters.py
-  - scripts/release/artifact_closure.py
-  - scripts/release/profile_delivery_contracts.py
-  - scripts/release/check_hosted_delivery_contracts.py
-  - scripts/release/release_candidate_adapter.py
-  - scripts/release/check_environment_requirements.py
-  - scripts/validate_verification_router.py
-  - scripts/validate_verification_policy.py
-  - scripts/validate_ci_runtime_budgets.py
-  - scripts/release/check_deployment_operator_surface.py
-  - config/delivery_workflow_authority.yaml
-  - scripts/release/check_delivery_workflow_authority.py
-  - tests/unit/test_staging_state_machine.py
-  - config/impact_graph.json
-  - config/telemetry_contracts.json
-  - contracts/delivery/impact-graph-index.schema.json
-  - contracts/delivery/telemetry-event.schema.json
-  - scripts/impact_graph.py
-  - scripts/lib/impact_graph.py
-  - scripts/lib/telemetry.py
-  - scripts/validate_impact_graph.py
-  - scripts/validate_telemetry_contracts.py
-  - tests/unit/test_impact_graph.py
-  - tests/unit/test_telemetry_contracts.py
-  - Backend Architecture/aether-backend/services/intelligence/routes.py
-  - frontend/kyber/src/pages/deployment-readiness/deployment-readiness-page.tsx
-  - Makefile
+audience: [dev-junior, dev-senior, ops, architect]
+status: stable
+since_version: 0.1.0
+source_files: [.github/workflows/repo-consistency.yml, config/verification_router.yaml, config/verification_policy.yaml, config/test_suites.yaml, config/ci_runtime_budgets.yaml, config/deployment_profile_compatibility.yaml, config/runtime_fallbacks.yaml, config/golden_journeys.yaml, contracts/delivery/change-plan.schema.json, contracts/delivery/release-candidate.schema.json, contracts/delivery/deployment-impact.schema.json, contracts/delivery/failure-envelope.schema.json, contracts/delivery/release-evidence-bundle.schema.json, contracts/delivery/migration-evidence.schema.json, contracts/delivery/staging-lifecycle-result.schema.json, contracts/delivery/staging-orchestration-state.schema.json, contracts/delivery/environment-resolution.schema.json, contracts/delivery/environment-capability-snapshot.schema.json, contracts/delivery/effective-iam-evidence.schema.json, contracts/delivery/effective-iam-comparison.schema.json, contracts/delivery/terraform-remote-inventory.schema.json, contracts/delivery/terraform-reconciliation.schema.json, contracts/delivery/hosted-adapter-request.schema.json, contracts/delivery/hosted-adapter-result.schema.json, contracts/delivery/artifact-closure.schema.json, contracts/delivery/profile-delivery-operation.schema.json, config/environment_requirements.yaml, config/staging_apply_iam_policy.yaml, config/terraform_resource_contracts.yaml, scripts/artifact_builder.py, scripts/delivery_contracts.py, scripts/change_plan.py, scripts/check_router.py, scripts/verification_disposition.py, scripts/lib/build_selection.py, scripts/lib/verification_router.py, scripts/lib/impact_graph.py, scripts/delivery_orchestrator.py, scripts/staging_state_machine.py, scripts/release/evidence_bundle.py, scripts/lib/test_suites.py, scripts/run_pytest_files.py, scripts/run_backend_tests.py, scripts/validate_makefile.py, tests/unit/test_repo_consistency_workflow_authority.py, tests/unit/test_verification_disposition.py, tests/unit/test_ci_runtime_budgets.py, scripts/validate_delivery_profiles.py, scripts/validate_delivery_registries.py, scripts/release/resolve_environment.py, scripts/release/discover_environment_capabilities.py, scripts/release/compare_effective_iam.py, scripts/release/terraform_reconciliation.py, scripts/release/hosted_delivery_adapters.py, scripts/release/artifact_closure.py, scripts/release/profile_delivery_contracts.py, scripts/release/check_hosted_delivery_contracts.py, scripts/release/release_candidate_adapter.py, scripts/release/check_environment_requirements.py, scripts/validate_verification_router.py, scripts/validate_verification_policy.py, scripts/validate_ci_runtime_budgets.py, scripts/release/check_deployment_operator_surface.py, config/delivery_workflow_authority.yaml, scripts/release/check_delivery_workflow_authority.py, tests/unit/test_staging_state_machine.py, config/impact_graph.json, config/telemetry_contracts.json, contracts/delivery/impact-graph-index.schema.json, contracts/delivery/telemetry-event.schema.json, scripts/impact_graph.py, scripts/lib/impact_graph.py, scripts/lib/telemetry.py, scripts/validate_impact_graph.py, scripts/validate_telemetry_contracts.py, tests/unit/test_impact_graph.py, tests/unit/test_telemetry_contracts.py, Backend Architecture/aether-backend/services/intelligence/routes.py, frontend/kyber/src/pages/deployment-readiness/deployment-readiness-page.tsx, Makefile]
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3

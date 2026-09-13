@@ -1,3 +1,12 @@
+---
+title: Stablecoin Pipeline
+slug: source-of-truth/stablecoin_pipeline
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Stablecoin Pipeline
 
 Stablecoin PR2 keeps the observation-first boundary from PR1. Provider payloads are admitted as governed Bronze records, then deterministic normalization creates eligible stablecoin observation facts. Unknown deployments are rejected for operator registration or quarantine before Silver promotion and before any graph projection.

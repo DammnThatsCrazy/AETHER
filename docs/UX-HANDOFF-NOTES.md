@@ -3,9 +3,9 @@ title: UX Handoff Notes
 slug: operations/ux-handoff-notes
 section: operations
 visibility: I
-audience: [dev-senior, exec]
+audience: [dev-senior, buyer]
 status: beta
-since_version: "8.9.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 ---

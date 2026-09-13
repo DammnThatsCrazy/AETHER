@@ -1,5 +1,5 @@
 {
-  "version": "8.12.0",
+  "version": "0.1.0-alpha.0",
   "generated_from": [
     "packages/shared/dimension-state.ts",
     "Backend Architecture/aether-backend/services/reconciliation/expectations.py"

@@ -1,12 +1,12 @@
 ---
 title: Card-Linked Payment Rails Source of Truth
+slug: source-of-truth/card_linked_payment_rails
+section: reference
+visibility: I
+audience: [dev-senior]
 status: stable
-source_files:
-  - packages/shared/card-linked-payments.ts
-  - Backend Architecture/aether-backend/services/card_linked_payments/models.py
-  - Backend Architecture/aether-backend/services/card_linked_payments/ingestion.py
-  - Backend Architecture/aether-backend/services/card_linked_payments/gold.py
-  - Backend Architecture/aether-backend/services/card_linked_payments/governance.py
+since_version: 0.1.0
+source_files: [packages/shared/card-linked-payments.ts, Backend Architecture/aether-backend/services/card_linked_payments/models.py, Backend Architecture/aether-backend/services/card_linked_payments/ingestion.py, Backend Architecture/aether-backend/services/card_linked_payments/gold.py, Backend Architecture/aether-backend/services/card_linked_payments/governance.py]
 last_synced_commit: pending
 ---
 

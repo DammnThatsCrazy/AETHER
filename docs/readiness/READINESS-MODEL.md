@@ -1,10 +1,11 @@
 ---
-title: "Multidimensional Readiness Model"
+title: Multidimensional Readiness Model
 slug: readiness/readiness-model
 section: operations
 visibility: I
-audience: [ops, architect, exec, security]
+audience: [ops, architect, buyer, security]
 status: stable
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3

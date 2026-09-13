@@ -3,22 +3,18 @@ title: Canonical Path Intelligence
 slug: concepts/canonical-path-intelligence
 section: concepts
 visibility: P
-audience: [architect, dev-senior, ai]
-source_files:
-  - Backend Architecture/aether-backend/services/operational_intelligence/models.py
-  - Backend Architecture/aether-backend/services/operational_intelligence/routes.py
-  - Backend Architecture/aether-backend/shared/graph/traversal.py
-  - Backend Architecture/aether-backend/shared/graph/path_scoring.py
-  - packages/shared/operational-intelligence.ts
+audience: [architect, dev-senior]
+status: experimental
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/operational_intelligence/models.py, Backend Architecture/aether-backend/services/operational_intelligence/routes.py, Backend Architecture/aether-backend/shared/graph/traversal.py, Backend Architecture/aether-backend/shared/graph/path_scoring.py, packages/shared/operational-intelligence.ts]
 reviewed_source_commits:
-  - commit: "0efa07cb"
-    reason: "Reviewed the target-aware temporal path route and traversal depth/tie-breaking changes. Temporal mode now emits only an ordered source-to-target path when the target is valid at as_of; disconnected targets return no path, and shortest/K-shortest searches honor the total hop budget."
+  - {'commit': '0efa07cb', 'reason': 'Reviewed the target-aware temporal path route and traversal depth/tie-breaking changes. Temporal mode now emits only an ordered source-to-target path when the target is valid at as_of; disconnected targets return no path, and shortest/K-shortest searches honor the total hop budget.'}
 source_hashes:
-  "Backend Architecture/aether-backend/services/operational_intelligence/models.py": "sha256:815062a32e218e8835f81cddb4957ceb69b48d18c7cf8d81647ed4439c696e66"
-  "Backend Architecture/aether-backend/services/operational_intelligence/routes.py": "sha256:9a8b3859e2edfd03bee9d6aba42cb6a9684704fef29adf79dca9e7255051bb80"
-  "Backend Architecture/aether-backend/shared/graph/path_scoring.py": "sha256:4bff43191e835d86308a2668dea5ee891ff6768da3d5fe332e32a7be2f592b07"
-  "Backend Architecture/aether-backend/shared/graph/traversal.py": "sha256:d21ebdfd876838189023a32db93a1e08aa7c2e125f66a8125b3c797d94c05719"
-  "packages/shared/operational-intelligence.ts": "sha256:5631f8e8a9ad38167c7ea545837ab0259b3fa3e360af331fb7055d8fe9326d34"
+  Backend Architecture/aether-backend/services/operational_intelligence/models.py: sha256:815062a32e218e8835f81cddb4957ceb69b48d18c7cf8d81647ed4439c696e66
+  Backend Architecture/aether-backend/services/operational_intelligence/routes.py: sha256:9a8b3859e2edfd03bee9d6aba42cb6a9684704fef29adf79dca9e7255051bb80
+  Backend Architecture/aether-backend/shared/graph/path_scoring.py: sha256:4bff43191e835d86308a2668dea5ee891ff6768da3d5fe332e32a7be2f592b07
+  Backend Architecture/aether-backend/shared/graph/traversal.py: sha256:d21ebdfd876838189023a32db93a1e08aa7c2e125f66a8125b3c797d94c05719
+  packages/shared/operational-intelligence.ts: sha256:5631f8e8a9ad38167c7ea545837ab0259b3fa3e360af331fb7055d8fe9326d34
 ---
 
 # Canonical Path Intelligence

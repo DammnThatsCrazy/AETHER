@@ -1,21 +1,14 @@
 ---
 title: Derivatives Runtime Model
 slug: source-of-truth/derivatives-runtime-model
-section: source-of-truth
+section: reference
 visibility: I
-audience: [architect, dev-senior, ai]
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - Backend Architecture/aether-backend/services/derivatives/state_machines.py
-  - Backend Architecture/aether-backend/services/derivatives/streams.py
-  - Backend Architecture/aether-backend/services/derivatives/runtime_reconciliation.py
-  - Backend Architecture/aether-backend/services/derivatives/pnl.py
-  - Backend Architecture/aether-backend/services/derivatives/adapters/base.py
-  - Backend Architecture/aether-backend/services/derivatives/adapters/simulator.py
-  - Backend Architecture/aether-backend/services/derivatives/adapters/conformance.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/derivatives/state_machines.py, Backend Architecture/aether-backend/services/derivatives/streams.py, Backend Architecture/aether-backend/services/derivatives/runtime_reconciliation.py, Backend Architecture/aether-backend/services/derivatives/pnl.py, Backend Architecture/aether-backend/services/derivatives/adapters/base.py, Backend Architecture/aether-backend/services/derivatives/adapters/simulator.py, Backend Architecture/aether-backend/services/derivatives/adapters/conformance.py]
 canonical_owner: platform@aether
-last_synced_commit: "03ab3a6"
+last_synced_commit: 03ab3a6
 ---
 
 # Derivatives Runtime Model

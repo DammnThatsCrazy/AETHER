@@ -1,30 +1,13 @@
 ---
 title: Unified Exploration Fabric Source of Truth
+slug: source-of-truth/exploration_fabric
+section: reference
+visibility: I
+audience: [dev-senior]
 status: stable
-source_files:
-  - packages/shared/exploration-contract.ts
-  - frontend/shared/src/exploration/client.ts
-  - packages/shared/contracts/filter-field-registry.json
-  - packages/shared/contracts/surface-capability-registry.json
-  - packages/shared/filter-fields.ts
-  - packages/shared/surface-capabilities.ts
-  - Backend Architecture/aether-backend/shared/exploration/models.py
-  - Backend Architecture/aether-backend/shared/exploration/generated_fields.py
-  - Backend Architecture/aether-backend/shared/exploration/generated_surfaces.py
-  - Backend Architecture/aether-backend/shared/contracts_models/filters.py
-  - Backend Architecture/aether-backend/services/exploration/planner.py
-  - Backend Architecture/aether-backend/services/exploration/facets.py
-  - Backend Architecture/aether-backend/services/exploration/service.py
-  - Backend Architecture/aether-backend/services/exploration/routes.py
-  - Backend Architecture/aether-backend/services/exploration/operations.py
-  - Backend Architecture/aether-backend/services/exploration/session.py
-  - Backend Architecture/aether-backend/services/exploration/store.py
-  - Backend Architecture/aether-backend/services/exploration/snapshots.py
-  - Backend Architecture/aether-backend/services/exploration/adapters/__init__.py
-  - Backend Architecture/aether-backend/services/exploration/adapters/base.py
-  - Backend Architecture/aether-backend/services/exploration/adapters/graph.py
-  - Backend Architecture/aether-backend/services/exploration/adapters/projection.py
-last_synced_commit: "99736fed"
+since_version: 0.1.0
+source_files: [packages/shared/exploration-contract.ts, frontend/shared/src/exploration/client.ts, packages/shared/contracts/filter-field-registry.json, packages/shared/contracts/surface-capability-registry.json, packages/shared/filter-fields.ts, packages/shared/surface-capabilities.ts, Backend Architecture/aether-backend/shared/exploration/models.py, Backend Architecture/aether-backend/shared/exploration/generated_fields.py, Backend Architecture/aether-backend/shared/exploration/generated_surfaces.py, Backend Architecture/aether-backend/shared/contracts_models/filters.py, Backend Architecture/aether-backend/services/exploration/planner.py, Backend Architecture/aether-backend/services/exploration/facets.py, Backend Architecture/aether-backend/services/exploration/service.py, Backend Architecture/aether-backend/services/exploration/routes.py, Backend Architecture/aether-backend/services/exploration/operations.py, Backend Architecture/aether-backend/services/exploration/session.py, Backend Architecture/aether-backend/services/exploration/store.py, Backend Architecture/aether-backend/services/exploration/snapshots.py, Backend Architecture/aether-backend/services/exploration/adapters/__init__.py, Backend Architecture/aether-backend/services/exploration/adapters/base.py, Backend Architecture/aether-backend/services/exploration/adapters/graph.py, Backend Architecture/aether-backend/services/exploration/adapters/projection.py]
+last_synced_commit: 99736fed
 ---
 
 # Unified Exploration Fabric — source of truth (backend)

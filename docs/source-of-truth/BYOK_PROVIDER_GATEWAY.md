@@ -4,12 +4,11 @@ slug: architecture/byok-provider-gateway
 section: architecture
 visibility: I
 audience: [architect, dev-senior, ops]
-status: draft
+status: experimental
+since_version: 0.1.0
 canonical_owner: platform@aether
-source_files:
-  - Backend Architecture/aether-backend/shared/providers/key_vault.py
-  - Backend Architecture/aether-backend/services/providers/routes.py
-last_synced_commit: "pending"
+source_files: [Backend Architecture/aether-backend/shared/providers/key_vault.py, Backend Architecture/aether-backend/services/providers/routes.py]
+last_synced_commit: pending
 estimated_read_minutes: 5
 ---
 

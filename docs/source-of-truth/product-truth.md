@@ -1,3 +1,12 @@
+---
+title: Product truth
+slug: source-of-truth/product-truth
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Product Truth
 
 Aether is a contract-governed intelligence graph and runtime platform.

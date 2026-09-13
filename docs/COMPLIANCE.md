@@ -1,22 +1,17 @@
 ---
 title: Compliance Framework — GDPR & SOC 2
 slug: compliance/overview
-section: compliance
+section: security
 visibility: C
-audience: [compliance, security, buyer, exec]
+audience: [compliance, security, buyer]
 status: stable
-since_version: "8.8.0"
-source_files:
-  - GDPR & SOC2/aether-compliance/README.md
-  - GDPR & SOC2/aether-compliance/main.py
-  - GDPR & SOC2/aether-compliance/gdpr/
-  - GDPR & SOC2/aether-compliance/soc2/
-  - GDPR & SOC2/aether-compliance/policies/
+since_version: 0.1.0
+source_files: [GDPR & SOC2/aether-compliance/README.md, GDPR & SOC2/aether-compliance/main.py, GDPR & SOC2/aether-compliance/gdpr/, GDPR & SOC2/aether-compliance/soc2/, GDPR & SOC2/aether-compliance/policies/]
 canonical_owner: compliance@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "GDPR & SOC2/aether-compliance/README.md": "sha256:64f2a85f26979f24c68aeea27f5c218bac3b6c2297db326887c23753b9e018ca"
+  "GDPR & SOC2/aether-compliance/README.md": "sha256:513928c715bfee43b5077bd260db7a170a46fa95b313ac50ea365303cdcfd2e7"
   "GDPR & SOC2/aether-compliance/gdpr/": "sha256:8cd8165cd51300182bd4712ab461ac8cea863835c78ddd2436c24d9d980ac326"
   "GDPR & SOC2/aether-compliance/main.py": "sha256:2b8ddf37aca8aa4b645e40abb4a80be50828046b41afa9e97ddb1d29bf8ee2b8"
   "GDPR & SOC2/aether-compliance/policies/": "sha256:dcf1e2b334e497de4559884e7c4aeab0aa6d15bcbb9fb95f05e614f6e12e8f53"

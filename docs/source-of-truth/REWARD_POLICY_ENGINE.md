@@ -1,3 +1,12 @@
+---
+title: Reward Policy Engine
+slug: source-of-truth/reward_policy_engine
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Reward Policy Engine
 
 The reward policy engine evaluates eligibility decisions by applying a chain of gates to

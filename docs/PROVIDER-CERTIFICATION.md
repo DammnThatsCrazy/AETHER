@@ -5,7 +5,7 @@ section: architecture
 visibility: I
 audience: [dev-senior, ops, architect]
 status: stable
-since_version: "8.12.0"
+since_version: "0.1.0"
 source_files:
   - Backend Architecture/aether-backend/shared/integration_contracts/certification.py
   - Backend Architecture/aether-backend/shared/certification/readiness.py

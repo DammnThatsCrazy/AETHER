@@ -1,11 +1,11 @@
 ---
 title: Webhooks
 slug: api/webhooks
-section: api
+section: reference
 visibility: P
 audience: [dev-senior, ops]
 status: stable
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3

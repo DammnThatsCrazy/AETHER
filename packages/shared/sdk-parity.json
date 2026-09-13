@@ -1,6 +1,6 @@
 {
   "note": "Machine-checkable SDK runtime parity matrix (Truth Kernel §2.6/§2.8/§2.9; native durability includes restart/corruption/retry semantics). Each cell status reflects behavior that is actually implemented in the referenced file/symbol — never aspirational. A validator MUST fail if a cell claims 'supported' but the evidence file/symbol is absent.",
-  "version": "8.12.0",
+  "version": "0.1.0-alpha.0",
   "sdks": [
     "web",
     "server",

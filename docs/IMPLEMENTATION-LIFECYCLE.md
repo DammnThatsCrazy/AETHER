@@ -1,11 +1,11 @@
 ---
 title: Implementation Lifecycle
 slug: kyber/implementation-lifecycle
-section: kyber
+section: operations
 visibility: I
-audience: [exec, ops, architect]
+audience: [buyer, ops, architect]
 status: stable
-since_version: "8.9.0"
+since_version: 0.1.0
 ---
 
 # Implementation Lifecycle

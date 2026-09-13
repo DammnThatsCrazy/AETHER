@@ -1,3 +1,12 @@
+---
+title: Repo truth
+slug: source-of-truth/repo-truth
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Repo Truth
 
 This document defines the canonical organization of the Aether repository.

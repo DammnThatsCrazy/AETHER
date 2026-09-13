@@ -1,6 +1,6 @@
 // DO NOT EDIT — generated from packages/shared/contracts/event-registry.json
 // Run: python scripts/generate_contracts.py
-// Contract version: 8.12.0
+// Contract version: 0.1.0-alpha.0
 //
 // Registry-derived event -> primary-consent-purpose map and canonical event
 // type set for the web SDK. This replaces the previously hand-maintained

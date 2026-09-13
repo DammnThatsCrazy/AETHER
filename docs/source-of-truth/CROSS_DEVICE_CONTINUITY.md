@@ -1,10 +1,11 @@
 ---
 title: Cross-Device Continuity
 slug: mobile/cross-device-continuity
-section: mobile
+section: reference
 visibility: I
 audience: [architect, security, ops]
-status: alpha
+status: experimental
+since_version: 0.1.0
 ---
 
 # Cross-Device Continuity

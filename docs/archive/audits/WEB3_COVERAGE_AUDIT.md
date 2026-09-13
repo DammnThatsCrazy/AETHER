@@ -1,3 +1,12 @@
+---
+title: Web3 Coverage Audit
+slug: archive/audits/web3_coverage_audit
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Aether Web3 Coverage Audit
 
 **Date:** 2026-03-25

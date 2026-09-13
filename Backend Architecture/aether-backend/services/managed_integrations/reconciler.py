@@ -127,7 +127,8 @@ def _version_and_release_drift(
                 last_seen_at=now,
             )
         )
-    elif floor_band_for_channel(desired.release_channel) == band_id:
+    elif floor_band_for_channel(desired.release_channel) == band_id \
+            and band_id != "supported":
         drift.append(
             DriftRecord(
                 drift_id=_drift_id(),

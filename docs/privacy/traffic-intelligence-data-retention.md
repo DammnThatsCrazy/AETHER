@@ -1,10 +1,11 @@
 ---
 title: Traffic Intelligence Data Retention
 slug: privacy/traffic-intelligence-data-retention
-section: compliance
+section: security
 visibility: I
 audience: [compliance, ops, security]
 status: stable
+since_version: 0.1.0
 canonical_owner: privacy@aether
 ---
 # Traffic Intelligence Data Retention

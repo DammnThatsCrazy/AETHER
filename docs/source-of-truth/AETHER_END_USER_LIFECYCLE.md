@@ -3,17 +3,12 @@ title: Aether End-User Lifecycle & Integration Management
 slug: architecture/aether-end-user-lifecycle
 section: architecture
 visibility: I
-audience: [architect, dev-senior, ai]
-status: draft
+audience: [architect, dev-senior]
+status: experimental
+since_version: 0.1.0
 canonical_owner: platform@aether
-source_files:
-  - Backend Architecture/aether-backend/shared/integration_contracts/catalog.py
-  - Backend Architecture/aether-backend/shared/integration_contracts/experience.py
-  - Backend Architecture/aether-backend/shared/certification/readiness.py
-  - Backend Architecture/aether-backend/services/integrations/connectors/catalog_endpoints.py
-  - frontend/aether/src/test/e2e/lifecycle.harness.ts
-  - packages/shared/connector-taxonomy.ts
-last_synced_commit: "8b1ca3dc"
+source_files: [Backend Architecture/aether-backend/shared/integration_contracts/catalog.py, Backend Architecture/aether-backend/shared/integration_contracts/experience.py, Backend Architecture/aether-backend/shared/certification/readiness.py, Backend Architecture/aether-backend/services/integrations/connectors/catalog_endpoints.py, frontend/aether/src/test/e2e/lifecycle.harness.ts, packages/shared/connector-taxonomy.ts]
+last_synced_commit: 8b1ca3dc
 estimated_read_minutes: 12
 toc_depth: 3
 ---

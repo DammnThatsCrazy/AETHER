@@ -1,22 +1,12 @@
 ---
 title: Computation Substrate
 slug: source-of-truth/computation-substrate
-section: source-of-truth
+section: reference
 visibility: I
-audience: [architect, dev-senior, ai]
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - Backend Architecture/aether-backend/shared/computation/__init__.py
-  - Backend Architecture/aether-backend/shared/computation/types.py
-  - Backend Architecture/aether-backend/shared/computation/result.py
-  - Backend Architecture/aether-backend/shared/computation/context.py
-  - Backend Architecture/aether-backend/shared/computation/definition.py
-  - Backend Architecture/aether-backend/shared/computation/registry.py
-  - Backend Architecture/aether-backend/shared/computation/allocation.py
-  - Backend Architecture/aether-backend/shared/computation/aggregation.py
-  - config/computation_inventory.yaml
-  - scripts/validate_computation_substrate.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/shared/computation/__init__.py, Backend Architecture/aether-backend/shared/computation/types.py, Backend Architecture/aether-backend/shared/computation/result.py, Backend Architecture/aether-backend/shared/computation/context.py, Backend Architecture/aether-backend/shared/computation/definition.py, Backend Architecture/aether-backend/shared/computation/registry.py, Backend Architecture/aether-backend/shared/computation/allocation.py, Backend Architecture/aether-backend/shared/computation/aggregation.py, config/computation_inventory.yaml, scripts/validate_computation_substrate.py]
 canonical_owner: platform@aether
 ---
 

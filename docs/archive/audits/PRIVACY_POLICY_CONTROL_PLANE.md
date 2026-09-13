@@ -1,3 +1,12 @@
+---
+title: Privacy Policy Control Plane
+slug: archive/audits/privacy_policy_control_plane
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Aether Privacy, Policy, and Hardening Control Plane
 
 ## Architecture Overview

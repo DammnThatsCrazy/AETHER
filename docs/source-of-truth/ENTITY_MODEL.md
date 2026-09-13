@@ -1,3 +1,12 @@
+---
+title: Entity Model
+slug: source-of-truth/entity_model
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Entity Model
 
 The canonical entity model unifies Web2, Web3, and hybrid companies under one

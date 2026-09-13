@@ -1,10 +1,12 @@
 ---
-source_files:
-  - Backend Architecture/aether-backend/shared/graph/graph.py
-  - Backend Architecture/aether-backend/shared/graph/relationship_layers.py
-  - Backend Architecture/aether-backend/shared/graph/write_validator.py
-  - Backend Architecture/aether-backend/shared/graph/edge_properties.py
-  - Backend Architecture/aether-backend/services/lake/graph_mutations.py
+title: Graph Alignment
+slug: source-of-truth/graph_alignment
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/shared/graph/graph.py, Backend Architecture/aether-backend/shared/graph/relationship_layers.py, Backend Architecture/aether-backend/shared/graph/write_validator.py, Backend Architecture/aether-backend/shared/graph/edge_properties.py, Backend Architecture/aether-backend/services/lake/graph_mutations.py]
 canonical_owner: graph@aether
 last_synced_commit: 401f9bd
 ---

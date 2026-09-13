@@ -1,10 +1,11 @@
 ---
 title: Aether Mobile — App Architecture
 slug: mobile/aether-app
-section: mobile
+section: reference
 visibility: I
-audience: [architect, mobile, security]
-status: alpha
+audience: [architect, dev-senior, security]
+status: experimental
+since_version: 0.1.0
 ---
 
 # Aether Mobile — App Architecture

@@ -11,6 +11,7 @@ parallel behavioral suite completes.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -39,7 +40,17 @@ def _run_pytest(*paths: str, serial: bool = False) -> int:
         # Override pyproject.toml's ``-n auto`` for wall-clock benchmarks.
         command.extend(["-n", "0"])
     print("+", " ".join(command), flush=True)
-    return subprocess.run(command, cwd=ROOT).returncode
+    # The backend test tree is a package so importlib mode can disambiguate
+    # repeated module names.  A few shared test factories are intentionally
+    # imported as top-level packages (for example, ``ai_economics``), so expose
+    # the test root explicitly while retaining the repository's environment.
+    env = os.environ.copy()
+    test_root = str((ROOT / BACKEND_TESTS).resolve())
+    existing_pythonpath = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = os.pathsep.join(
+        path for path in (test_root, existing_pythonpath) if path
+    )
+    return subprocess.run(command, cwd=ROOT, env=env).returncode
 
 
 def main() -> int:

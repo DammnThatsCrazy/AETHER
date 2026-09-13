@@ -1,10 +1,12 @@
 ---
 title: PaymentScan Catalog Source of Truth
+slug: source-of-truth/paymentscan_catalog
+section: reference
+visibility: I
+audience: [dev-senior]
 status: stable
-source_files:
-  - packages/shared/payment-catalog.ts
-  - Backend Architecture/aether-backend/services/payment_catalog/catalog.py
-  - Backend Architecture/aether-backend/services/card_linked_payments/paymentscan.py
+since_version: 0.1.0
+source_files: [packages/shared/payment-catalog.ts, Backend Architecture/aether-backend/services/payment_catalog/catalog.py, Backend Architecture/aether-backend/services/card_linked_payments/paymentscan.py]
 last_synced_commit: pending
 ---
 

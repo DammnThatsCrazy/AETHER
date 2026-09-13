@@ -1,11 +1,11 @@
 ---
 title: Derivatives Position Accounting
 slug: derivatives/position-accounting
-section: data
+section: architecture
 visibility: I
 audience: [architect, dev-senior, ops]
 status: experimental
-since_version: "8.11.0"
+since_version: 0.1.0
 ---
 
 # Derivatives POSITION ACCOUNTING

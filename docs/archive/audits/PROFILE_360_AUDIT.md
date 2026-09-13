@@ -1,3 +1,12 @@
+---
+title: Profile 360 Audit
+slug: archive/audits/profile_360_audit
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Profile 360 Audit — What Already Existed
 
 ## What Was Already Present (Reused, Not Rebuilt)

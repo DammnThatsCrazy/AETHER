@@ -1,42 +1,25 @@
 ---
 title: Decision & Outcome Intelligence
 slug: ai/decision-outcome-intelligence
-section: ai
+section: architecture
 visibility: I
-audience: [ai, architect, dev-senior, ops]
+audience: [architect, dev-senior, ops]
 status: beta
-since_version: "8.9.0"
-source_files:
-  - Backend Architecture/aether-backend/services/intelligence/decision_models.py
-  - Backend Architecture/aether-backend/services/intelligence/ooda_engine.py
-  - Backend Architecture/aether-backend/services/intelligence/recommendation_families.py
-  - Backend Architecture/aether-backend/services/intelligence/outcome_ledger.py
-  - Backend Architecture/aether-backend/services/intelligence/routes.py
-  - Backend Architecture/aether-backend/services/intelligence/repositories.py
-  - Backend Architecture/aether-backend/config/settings.py
-flags:
-  - AETHER_RECOMMENDATIONS_ENABLED
-  - AETHER_DECISION_RECORDS_ENABLED
-  - AETHER_OUTCOME_FEEDBACK_ENABLED
-  - AETHER_PLAYBOOKS_ENABLED
-  - KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED
-  - AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD
-related:
-  - architecture/intelligence-graph
-  - ai/recommendation-families
-  - ai/investigation-workspace
-  - operations/cicd
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/intelligence/decision_models.py, Backend Architecture/aether-backend/services/intelligence/ooda_engine.py, Backend Architecture/aether-backend/services/intelligence/recommendation_families.py, Backend Architecture/aether-backend/services/intelligence/outcome_ledger.py, Backend Architecture/aether-backend/services/intelligence/routes.py, Backend Architecture/aether-backend/services/intelligence/repositories.py, Backend Architecture/aether-backend/config/settings.py]
+flags: [AETHER_RECOMMENDATIONS_ENABLED, AETHER_DECISION_RECORDS_ENABLED, AETHER_OUTCOME_FEEDBACK_ENABLED, AETHER_PLAYBOOKS_ENABLED, KYBER_RECOMMENDATION_OBSERVABILITY_ENABLED, AETHER_RECOMMENDATION_CONFIDENCE_THRESHOLD]
+related: [architecture/intelligence-graph, ai/recommendation-families, ai/investigation-workspace, operations/cicd]
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
-  "Backend Architecture/aether-backend/services/intelligence/decision_models.py": "sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25"
-  "Backend Architecture/aether-backend/services/intelligence/ooda_engine.py": "sha256:bea93d08056d5cb9c7c2fc7d3738beaa3b42715c5930a0811900c55b6bb8a486"
-  "Backend Architecture/aether-backend/services/intelligence/outcome_ledger.py": "sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206"
-  "Backend Architecture/aether-backend/services/intelligence/recommendation_families.py": "sha256:9a1375244f013488f51e2a73bd5de32b452bb7232f67fea68ac4cc7955d80e43"
-  "Backend Architecture/aether-backend/services/intelligence/repositories.py": "sha256:e1640a8ffe056bb2c6347773e0efb6080fc470931b4da7a4efcb8cfbe109837a"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:8a705ad12ff7176d486afa586ba3f794da14017b9f9c108a3f9b6313da94884b"
+  Backend Architecture/aether-backend/config/settings.py: sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3
+  Backend Architecture/aether-backend/services/intelligence/decision_models.py: sha256:95d33e7eee251e14114ba3f538f78f32ffe2d1e3cdb9c122ddec7b80086e8e25
+  Backend Architecture/aether-backend/services/intelligence/ooda_engine.py: sha256:bea93d08056d5cb9c7c2fc7d3738beaa3b42715c5930a0811900c55b6bb8a486
+  Backend Architecture/aether-backend/services/intelligence/outcome_ledger.py: sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206
+  Backend Architecture/aether-backend/services/intelligence/recommendation_families.py: sha256:9a1375244f013488f51e2a73bd5de32b452bb7232f67fea68ac4cc7955d80e43
+  Backend Architecture/aether-backend/services/intelligence/repositories.py: sha256:e1640a8ffe056bb2c6347773e0efb6080fc470931b4da7a4efcb8cfbe109837a
+  Backend Architecture/aether-backend/services/intelligence/routes.py: sha256:8a705ad12ff7176d486afa586ba3f794da14017b9f9c108a3f9b6313da94884b
 ---
 # Decision & Outcome Intelligence
 

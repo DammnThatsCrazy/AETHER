@@ -159,7 +159,7 @@ public enum ConsentReceiptError: Error {
 public enum AetherEventType: String, Codable, CaseIterable {
 // @generated-start aether-event-types/ios-enum
 // @generated — DO NOT EDIT. Source: packages/shared/contracts/event-registry.json
-// Contract version: 8.12.0 — Run: python scripts/generate_contracts.py
+// Contract version: 0.1.0-alpha.0 — Run: python scripts/generate_contracts.py
     // core
     case track
     case page
@@ -860,7 +860,7 @@ public final class Aether: NSObject {
     private static let eventConsentPurpose: [AetherEventType: String] = [
 // @generated-start aether-consent-purposes/ios-map
 // @generated — DO NOT EDIT. Source: packages/shared/contracts/event-registry.json
-// Contract version: 8.12.0 — Run: python scripts/generate_contracts.py
+// Contract version: 0.1.0-alpha.0 — Run: python scripts/generate_contracts.py
         // core
         .track: "analytics",
         .page: "analytics",
@@ -1370,7 +1370,7 @@ public final class Aether: NSObject {
         #endif
 
         isInitialized = true
-        log("Aether iOS SDK initialized (v8.12.0)")
+        log("Aether iOS SDK initialized (v0.1.0-alpha.0)")
 
         loadPersistedQueue()
 
@@ -2821,7 +2821,7 @@ public final class Aether: NSObject {
         eventSequence += 1
 
         return EventContext(
-            library: .init(name: "aether-ios", version: "8.12.0"),
+            library: .init(name: "aether-ios", version: "0.1.0-alpha.0"),
             device: .init(
                 osName: osName,
                 osVersion: osVersion,

@@ -1,11 +1,11 @@
 ---
 title: SDK Ingestion Contract
 slug: ingestion-contract
-section: sdks
+section: reference
 visibility: P
 audience: [dev-senior, architect]
 status: experimental
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # SDK Ingestion Contract

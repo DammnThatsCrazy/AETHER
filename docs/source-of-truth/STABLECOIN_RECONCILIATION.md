@@ -1,3 +1,12 @@
+---
+title: Stablecoin Reconciliation
+slug: source-of-truth/stablecoin_reconciliation
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Stablecoin Reconciliation
 
 Reconciliation compares tenant payment-intent evidence with onchain evidence. The PR2 foundation returns these states:

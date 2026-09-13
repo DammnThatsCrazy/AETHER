@@ -1,18 +1,13 @@
 ---
 title: Measurement Integrity Plane Source of Truth
+slug: source-of-truth/measurement_integrity
+section: reference
+visibility: I
+audience: [dev-senior]
 status: stable
-source_files:
-  - Backend Architecture/aether-backend/shared/measurement/value_states.py
-  - Backend Architecture/aether-backend/shared/measurement/context.py
-  - Backend Architecture/aether-backend/shared/measurement/contracts.py
-  - Backend Architecture/aether-backend/shared/measurement/validators.py
-  - Backend Architecture/aether-backend/shared/measurement/uncertainty.py
-  - Backend Architecture/aether-backend/shared/measurement/registry.py
-  - Backend Architecture/aether-backend/shared/measurement/compute.py
-  - Backend Architecture/aether-backend/repositories/measurement_results_repo.py
-  - Backend Architecture/aether-backend/services/measurement/routes/integrity.py
-  - Backend Architecture/aether-backend/services/campaign/routes.py
-last_synced_commit: "ae973059"
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/shared/measurement/value_states.py, Backend Architecture/aether-backend/shared/measurement/context.py, Backend Architecture/aether-backend/shared/measurement/contracts.py, Backend Architecture/aether-backend/shared/measurement/validators.py, Backend Architecture/aether-backend/shared/measurement/uncertainty.py, Backend Architecture/aether-backend/shared/measurement/registry.py, Backend Architecture/aether-backend/shared/measurement/compute.py, Backend Architecture/aether-backend/repositories/measurement_results_repo.py, Backend Architecture/aether-backend/services/measurement/routes/integrity.py, Backend Architecture/aether-backend/services/campaign/routes.py]
+last_synced_commit: ae973059
 ---
 
 # Measurement Integrity Plane

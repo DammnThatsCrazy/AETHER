@@ -3,14 +3,13 @@ title: Canonical Event Model (cross-domain)
 slug: productization/economic-interoperability-intelligence/canonical-event-model
 section: operations
 visibility: I
-audience: [architect, ops, exec]
+audience: [architect, ops, buyer]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - packages/shared/contracts/event-registry.json
+since_version: 0.1.0
+source_files: [packages/shared/contracts/event-registry.json]
 canonical_owner: platform@aether
 source_hashes:
-  "packages/shared/contracts/event-registry.json": "sha256:74c9e8233bb6000f6a80e51aceacb9b2e4c8f47ecaa5d10a3303da15127a6121"
+  "packages/shared/contracts/event-registry.json": "sha256:7ae978eb7fb11c55e324fc61365baa83e63a976d2b458d101019a1fa2cf431ba"
 ---
 
 # Canonical Event Model
@@ -28,7 +27,7 @@ economic-interoperability families:
 
 Rules:
 
-- `introducedVersion: "8.12.0"` on every new event.
+- `introducedVersion: "0.1.0-alpha.0"` on every new event.
 - `privacyClass`: `financial` for facts, `sensitive_financial` for
   positions/P&L, `governance` for registry/ops events.
 - `retentionClass`: `financial_7y` for facts; standard classes for ops.

@@ -189,7 +189,7 @@ def test_spine_default_flags_off_is_exactly_today_no_sdk_tier_no_telemetry():
             _canonical(env.batch, event_id="evt-unknown", event_type="page_view"),
             _canonical(
                 env.batch, event_id="evt-lib",
-                library={"name": "@aether/web", "version": "8.12.0"},
+                library={"name": "@aether/web", "version": "0.1.0-alpha.0"},
             ),
         ], producer)
 
@@ -302,7 +302,7 @@ def test_spine_compat_shadow_attaches_advisory_sdk_tier_label():
         resp = _ingest(env, [
             _canonical(
                 env.batch, event_id="evt-lib",
-                library={"name": "@aether/web", "version": "8.12.0"},
+                library={"name": "@aether/web", "version": "0.1.0-alpha.0"},
             ),
             _canonical(
                 env.batch, event_id="evt-old6",
@@ -317,12 +317,12 @@ def test_spine_compat_shadow_attaches_advisory_sdk_tier_label():
         assert adv["consulted"] is True
         assert adv["mode"] == "shadow"
         assert adv["tier"] == "supported"
-        assert adv["source"] == {"name": "@aether/web", "version": "8.12.0"}
+        assert adv["source"] == {"name": "@aether/web", "version": "0.1.0-alpha.0"}
         assert "batch_ingestion" in adv["capabilities"]
 
-        # 6.x is read-compatible (flat capability set, no Envelope-B cap).
+        # 6.x is also supported in the 0.x version scheme (>= 0.1.0).
         adv6 = payloads["evt-old6"]["sdk_tier"]
-        assert adv6["tier"] == "read_compatible"
+        assert adv6["tier"] == "supported"
         assert adv6["blocked_after"] is None
 
         # A client without a library block is untouched — advisory is additive.
@@ -332,7 +332,6 @@ def test_spine_compat_shadow_attaches_advisory_sdk_tier_label():
 def test_spine_compat_enforce_rejects_blocked_bands_only_after_block_date():
     with _fresh() as env:
         _toggle_version_compat(env.settings, enabled=True, mode="enforce")
-        # Block date has arrived (fresh module is the one batch imported).
         import services.ingestion.sdk_version_tiers as st
         assert st.BLOCKED_AFTER_DATE == "2027-01-31"
         st._utc_today_iso = lambda: "2027-02-01"
@@ -340,29 +339,22 @@ def test_spine_compat_enforce_rejects_blocked_bands_only_after_block_date():
         producer = _FakeProducer()
         resp = _ingest(env, [
             _canonical(
-                env.batch, event_id="evt-old5",
-                library={"name": "@aether/web", "version": "5.2.0"},
+                env.batch, event_id="evt-unsup",
+                library={"name": "@aether/web", "version": "0.0.9"},
             ),
             _canonical(
-                env.batch, event_id="evt-old4",
-                library={"name": "@aether/web", "version": "4.1.0"},
-            ),
-            _canonical(
-                env.batch, event_id="evt-ok8",
-                library={"name": "@aether/web", "version": "8.12.0"},
+                env.batch, event_id="evt-ok",
+                library={"name": "@aether/web", "version": "0.1.0-alpha.0"},
             ),
         ], producer)
 
         assert resp.accepted == 1
-        assert resp.rejected == 2
+        assert resp.rejected == 1
         reasons = {e.id: e.reason for e in resp.events}
-        assert reasons["evt-old5"] == "sdk_version_blocked:blocked:blocked-after-date"
-        assert reasons["evt-old4"] == "sdk_version_blocked:unsupported:unsupported"
-        # Blocked events are never published, never Bronze-durable.
-        assert [e.payload["event_id"] for e in producer.published] == ["evt-ok8"]
+        assert reasons["evt-unsup"] == "sdk_version_blocked:unsupported:unsupported"
+        assert [e.payload["event_id"] for e in producer.published] == ["evt-ok"]
         bronze = env.repos._IN_MEMORY_STORES["bronze_sdk_events"]
-        assert [row.get("provider_record_id") for row in bronze.values()] == ["evt-ok8"]
-        # Supported client keeps an advisory tier label.
+        assert [row.get("provider_record_id") for row in bronze.values()] == ["evt-ok"]
         assert producer.published[0].payload["sdk_tier"]["tier"] == "supported"
 
 
@@ -375,15 +367,15 @@ def test_spine_compat_enforce_before_block_date_is_advisory_only():
         producer = _FakeProducer()
         resp = _ingest(env, [
             _canonical(
-                env.batch, event_id="evt-old5",
-                library={"name": "@aether/web", "version": "5.2.0"},
+                env.batch, event_id="evt-unsup",
+                library={"name": "@aether/web", "version": "0.0.9"},
             ),
         ], producer)
-        # Fail-closed by date, never by band alone: 5.x is still accepted.
+        # Fail-closed by date, never by band alone: unsupported is still accepted before block date.
         assert resp.accepted == 1
         assert resp.rejected == 0
         payload = producer.published[0].payload
-        assert payload["sdk_tier"]["tier"] == "blocked"
+        assert payload["sdk_tier"]["tier"] == "unsupported"
         assert payload["sdk_tier"]["blocked_after"] == "2027-01-31"
         assert payload["sdk_tier"]["mode"] == "enforce"
 

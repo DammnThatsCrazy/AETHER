@@ -4,6 +4,8 @@ slug: reference/phase-20-gap-ledger
 section: reference
 visibility: P
 audience: [architect, dev-senior]
+status: experimental
+since_version: 0.1.0
 source_files: []
 ---
 

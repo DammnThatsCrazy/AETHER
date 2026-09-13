@@ -53,7 +53,7 @@ GOLDEN = {
     "user_id": "gu-9",
     "properties": {"k": "v", "n": 42},
     "device_id": "dev-9",
-    "library": {"name": "@aether/web", "version": "8.12.0"},
+    "library": {"name": "@aether/web", "version": "0.1.0-alpha.0"},
     "event_type": "track",
 }
 

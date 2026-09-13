@@ -1,16 +1,16 @@
 ---
-title: "Aether React SDK"
+title: Aether React SDK
 slug: sdks/react
-section: sdks
+section: reference
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # Aether React SDK
 
-The Aether React SDK wraps the Web SDK with React-specific hooks and components.
+The Aether React SDK is a thin observation client that wraps the Web SDK with React-specific hooks and components.
 
 ## Installation
 

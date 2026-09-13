@@ -1,15 +1,12 @@
 ---
 title: Kyber Sessions and Tenant Access Scopes
 slug: kyber/sessions-and-scopes
-section: kyber
+section: operations
 visibility: I
 audience: [architect, security, ops]
 status: beta
-source_files:
-  - Backend Architecture/aether-backend/services/kyber/sessions/service.py
-  - Backend Architecture/aether-backend/services/kyber/sessions/step_up.py
-  - Backend Architecture/aether-backend/services/kyber/access/scopes.py
-  - Backend Architecture/aether-backend/services/kyber/access/dependencies.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/kyber/sessions/service.py, Backend Architecture/aether-backend/services/kyber/sessions/step_up.py, Backend Architecture/aether-backend/services/kyber/access/scopes.py, Backend Architecture/aether-backend/services/kyber/access/dependencies.py]
 ---
 
 # Kyber Sessions and Tenant Access Scopes

@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [ops, dev-senior]
 status: stable
-since_version: "8.12.0"
+since_version: "0.1.0"
 source_files:
   - Backend Architecture/aether-backend/services/rewards/delivery_outbox.py
   - Backend Architecture/aether-backend/services/rewards/rails.py

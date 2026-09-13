@@ -1,3 +1,12 @@
+---
+title: Consent Model
+slug: source-of-truth/consent_model
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Consent Model
 
 Consent is **registry-derived**. The source of truth is

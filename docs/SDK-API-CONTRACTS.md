@@ -1,11 +1,11 @@
 ---
 title: SDK API Contracts
 slug: api/sdk-api-contracts
-section: api
+section: reference
 visibility: I
 audience: [dev-senior, architect]
 status: beta
-since_version: "8.9.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 3
 ---

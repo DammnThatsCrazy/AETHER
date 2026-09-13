@@ -1,16 +1,12 @@
 ---
 title: Product & Experience Intelligence Source of Truth
+slug: source-of-truth/product_intelligence
+section: reference
+visibility: I
+audience: [dev-senior]
 status: stable
-source_files:
-  - packages/shared/contracts/interaction-vocabulary.json
-  - packages/shared/interaction-contract.ts
-  - Backend Architecture/aether-backend/shared/product/models.py
-  - Backend Architecture/aether-backend/shared/product/generated_vocabulary.py
-  - Backend Architecture/aether-backend/services/product_catalog/models.py
-  - Backend Architecture/aether-backend/services/product_catalog/mapping.py
-  - Backend Architecture/aether-backend/services/product_catalog/manifest.py
-  - Backend Architecture/aether-backend/services/product_catalog/store.py
-  - Backend Architecture/aether-backend/services/product_catalog/routes.py
+since_version: 0.1.0
+source_files: [packages/shared/contracts/interaction-vocabulary.json, packages/shared/interaction-contract.ts, Backend Architecture/aether-backend/shared/product/models.py, Backend Architecture/aether-backend/shared/product/generated_vocabulary.py, Backend Architecture/aether-backend/services/product_catalog/models.py, Backend Architecture/aether-backend/services/product_catalog/mapping.py, Backend Architecture/aether-backend/services/product_catalog/manifest.py, Backend Architecture/aether-backend/services/product_catalog/store.py, Backend Architecture/aether-backend/services/product_catalog/routes.py]
 last_synced_commit: a500f1f
 ---
 

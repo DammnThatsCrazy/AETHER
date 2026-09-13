@@ -5,6 +5,7 @@ section: security
 visibility: I
 audience: [dev-senior, security]
 status: stable
+since_version: 0.1.0
 ---
 
 # Noesis Production Security Checklist

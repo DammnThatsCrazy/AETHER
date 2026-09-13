@@ -5,17 +5,13 @@ Fail-closed, static, no-backend-import validator encoding the Invariant #18
 tier table + the staged (shadow/observe) conformance contract for the
 ``services/ingestion/sdk_version_tiers.py`` model:
 
-Gate H compatibility — previous supported SDK versions continue functioning:
-  * 8.x stays ``supported`` (full capability set, open upper bound);
-  * 7.x stays ``deprecated`` — still fully served with the SAME full capability
-    set, never blocked;
-  * 6.x stays ``read_compatible`` — flat SDK submission still ingests
-    (batch/server-side/replay), never blocked;
-  * 5.x is ``blocked`` ONLY after its declared blocked-after date (enforcement
-    is fail-closed by DATE, never by band alone) — moving the date into the
-    past, or turning a served band into a blocker before its date, fails this
-    gate;
-  * <5.0 is ``unsupported``/advisory — never an ingress blocker by itself;
+Gate H compatibility — pre-1.0 version bands (0.x SemVer):
+  * >=0.1.0 stays ``supported`` (full capability set, open upper bound);
+  * ``deprecated``, ``read_compatible``, ``blocked`` are reserved placeholder
+    bands (no active version range) for future use;
+  * <0.1.0 is ``unsupported`` — advisory only, blocked after its declared
+    blocked-after date (enforcement is fail-closed by DATE, never by band
+    alone);
   * an unparseable/unknown version resolves to ``unclassified`` and NEVER
     blocks;
   * every band capability references a declared canonical capability id (no
@@ -211,34 +207,28 @@ def _check_tier_table() -> None:
     def get(band: dict[str, object], key: str):
         return band.get(key)
 
-    # 8.x supported: min 8.0.0, open upper bound.
+    # >=0.1.0 supported: open upper bound.
     sup = bands.get("supported", {})
-    if get(sup, "min_version") != "8.0.0":
-        fail("supported band must start at 8.0.0")
+    if get(sup, "min_version") != "0.1.0":
+        fail("supported band must start at 0.1.0")
     if get(sup, "max_version_exclusive") is not None:
         fail("supported band must have an open upper bound (never capped)")
-    # 7.x deprecated: still fully served between 7.0.0 and 8.0.0.
+    # deprecated: reserved placeholder (no active version range), never blocked.
     dep = bands.get("deprecated", {})
-    if get(dep, "min_version") != "7.0.0" or get(dep, "max_version_exclusive") != "8.0.0":
-        fail("deprecated (7.x) band must cover [7.0.0, 8.0.0)")
     if get(dep, "blocked_after") not in (None, ""):
-        fail("deprecated (7.x) band must never be date-blocked")
-    # 6.x read_compatible: flat submission still works.
+        fail("deprecated band must never be date-blocked")
+    # read_compatible: reserved placeholder (no active version range), never blocked.
     rc = bands.get("read_compatible", {})
-    if get(rc, "min_version") != "6.0.0" or get(rc, "max_version_exclusive") != "7.0.0":
-        fail("read_compatible (6.x) band must cover [6.0.0, 7.0.0)")
     if get(rc, "blocked_after") not in (None, ""):
-        fail("read_compatible (6.x) band must never be date-blocked")
-    # 5.x blocked after date only.
+        fail("read_compatible band must never be date-blocked")
+    # blocked: reserved placeholder with blocked-after date for future use.
     blk = bands.get("blocked", {})
-    if get(blk, "min_version") != "5.0.0" or get(blk, "max_version_exclusive") != "6.0.0":
-        fail("blocked (5.x) band must cover [5.0.0, 6.0.0)")
     if get(blk, "blocked_after") != blocked_after:
-        fail("blocked (5.x) band must be blocked only after BLOCKED_AFTER_DATE")
-    # <5.0 unsupported — advisory only, open lower bound.
+        fail("blocked band must be blocked only after BLOCKED_AFTER_DATE")
+    # <0.1.0 unsupported — advisory only, open lower bound.
     uns = bands.get("unsupported", {})
-    if get(uns, "min_version") is not None or get(uns, "max_version_exclusive") != "5.0.0":
-        fail("unsupported (<5.0) band must be open-lower, capped exclusively at 5.0.0")
+    if get(uns, "max_version_exclusive") != "0.1.0":
+        fail("unsupported band must be capped exclusively at 0.1.0")
 
     # Capability-set conformance: full vs flat, and ids must be canonical.
     for band_id, band in bands.items():
@@ -274,7 +264,7 @@ def _check_tier_table() -> None:
         today_iso = "2030-01-01"
     if blocked_after <= today_iso:
         fail(f"BLOCKED_AFTER_DATE {blocked_after} has arrived — enforcement would "
-             "block live 5.x clients (compatibility regression)")
+             "block unsupported clients (compatibility regression)")
     NOTES.append(f"BLOCKED_AFTER_DATE = {blocked_after} (future; current tree never blocks)")
 
     # UNCLASSIFIED sentinel must never block (both bounds open).

@@ -5,7 +5,7 @@ section: reference
 visibility: I
 audience: [dev-senior]
 status: stable
-since_version: "8.11.0"
+since_version: "0.1.0"
 ---
 
 # Unified Web2/Web3 + Fraud Intelligence — Gap Recovery Ledger

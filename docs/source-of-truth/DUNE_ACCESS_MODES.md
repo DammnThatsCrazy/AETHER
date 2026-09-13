@@ -4,11 +4,11 @@ slug: architecture/dune-access-modes
 section: architecture
 visibility: I
 audience: [architect, dev-senior, ops]
-status: draft
+status: experimental
+since_version: 0.1.0
 canonical_owner: data@aether
-source_files:
-  - Backend Architecture/aether-backend/services/provider_catalog/models.py
-last_synced_commit: "pending"
+source_files: [Backend Architecture/aether-backend/services/provider_catalog/models.py]
+last_synced_commit: pending
 estimated_read_minutes: 6
 ---
 

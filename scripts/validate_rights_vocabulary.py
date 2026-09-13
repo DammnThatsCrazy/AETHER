@@ -311,8 +311,8 @@ def validate_vocabulary(vocab: dict) -> dict:
     """Structural checks; returns {key: members} for the bound list keys."""
     if vocab.get("schemaVersion") != "2.0.0":
         err("vocabulary: schemaVersion must be \"2.0.0\"")
-    if vocab.get("contractVersion") != "8.12.0":
-        err("vocabulary: contractVersion must be \"8.12.0\"")
+    if vocab.get("contractVersion") != "0.1.0-alpha.0":
+        err("vocabulary: contractVersion must be \"0.1.0-alpha.0\"")
     if not isinstance(vocab.get("description"), str) or not vocab["description"].strip():
         err("vocabulary: description must be a non-empty string")
 
@@ -528,7 +528,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     bound = [k for k in VOCAB_KEYS if isinstance(bindings.get(k), dict)
              and isinstance(bindings[k].get("pythonEnum"), str)]
     print(
-        f"rights-vocabulary: OK — schemaVersion 2.0.0 / contractVersion 8.12.0, "
+        f"rights-vocabulary: OK — schemaVersion 2.0.0 / contractVersion 0.1.0-alpha.0, "
         f"{len(members)} enumerated vocabularies, {len(bound)} python/TS-bound keys "
         f"({len(VOCAB_KEYS) - len(bound)} allowlisted), all three surfaces agree"
     )

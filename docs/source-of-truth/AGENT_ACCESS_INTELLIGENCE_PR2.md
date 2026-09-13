@@ -1,3 +1,12 @@
+---
+title: Agent Access Intelligence Pr2
+slug: source-of-truth/agent_access_intelligence_pr2
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Agent Access Intelligence — PR 2 Capability Catalog, Authority & Governance
 
 **Release train:** `AGENT_ACCESS_INTELLIGENCE`

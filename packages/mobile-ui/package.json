@@ -1,8 +1,8 @@
 {
   "name": "@aether/mobile-ui",
-  "version": "8.12.0",
+  "version": "0.1.0-alpha.0",
   "private": true,
-  "description": "Aether mobile UI kit — typed dark theme, lightweight typed navigation, and shared components (ScreenHeader/Card/Button) for the Aether and Kyber mobile apps. Depends only on react + react-native; no external navigation library.",
+  "description": "Aether mobile UI kit \u2014 typed dark theme, lightweight typed navigation, and shared components (ScreenHeader/Card/Button) for the Aether and Kyber mobile apps. Depends only on react + react-native; no external navigation library.",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "source": "src/index.ts",

@@ -4,6 +4,8 @@ slug: comms/comms-follow-up-roadmap
 section: reference
 visibility: I
 audience: [architect, dev-senior, ops]
+status: experimental
+since_version: 0.1.0
 ---
 
 # Communications Multi-Provider Follow-Up Roadmap

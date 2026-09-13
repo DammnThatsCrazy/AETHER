@@ -1,3 +1,12 @@
+---
+title: Sdk Scope
+slug: source-of-truth/sdk_scope
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # SDK Scope
 
 ## What the Aether SDK IS

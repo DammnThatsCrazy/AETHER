@@ -1,20 +1,19 @@
 ---
 title: Model Extraction Defense
 slug: ai/extraction-defense
-section: ai
+section: architecture
 visibility: P
-audience: [security, ai, architect]
+audience: [security, architect]
 status: stable
-since_version: "8.8.0"
-source_files:
-  - security/model_extraction_defense/
+since_version: 0.1.0
+source_files: [security/model_extraction_defense/]
 canonical_owner: security@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  "security/model_extraction_defense/": "sha256:a39e9edab1b81febc20fb8432a61746b2ac840c1e82c2b8c1842f4e431d2b0b2"
+  security/model_extraction_defense/: sha256:a39e9edab1b81febc20fb8432a61746b2ac840c1e82c2b8c1842f4e431d2b0b2
 ---
-# Model Extraction Defense v8.12.0
+# Model Extraction Defense v0.1.0-alpha.0
 
 Modular defense layer against model extraction and knowledge distillation attacks on the Aether ML serving pipeline.
 

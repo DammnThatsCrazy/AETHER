@@ -5,6 +5,7 @@ section: concepts
 visibility: I
 audience: [dev-senior, architect, ops]
 status: stable
+since_version: 0.1.0
 ---
 
 # Noesis — Operator Guide (Kyber)

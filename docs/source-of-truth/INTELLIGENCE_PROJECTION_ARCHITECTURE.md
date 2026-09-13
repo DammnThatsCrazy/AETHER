@@ -1,23 +1,13 @@
 ---
 title: Intelligence Projection Architecture
 slug: source-of-truth/intelligence-projection-architecture
-section: source-of-truth
+section: reference
 visibility: I
-audience: [architect, dev-senior, ai]
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - packages/shared/contracts/intelligence-projection-registry.json
-  - scripts/lib/intelligence_projection_validation.py
-  - scripts/validate_intelligence_projections.py
-  - Backend Architecture/aether-backend/shared/intelligence_projections/__init__.py
-  - Backend Architecture/aether-backend/shared/intelligence_projections/contracts.py
-  - Backend Architecture/aether-backend/shared/intelligence_projections/errors.py
-  - Backend Architecture/aether-backend/shared/intelligence_projections/generated_registry.py
-  - Backend Architecture/aether-backend/shared/intelligence_projections/provider.py
-  - Backend Architecture/aether-backend/shared/intelligence_projections/readiness.py
-  - Backend Architecture/aether-backend/shared/intelligence_projections/registry.py
-last_synced_commit: "99736fed"
+since_version: 0.1.0
+source_files: [packages/shared/contracts/intelligence-projection-registry.json, scripts/lib/intelligence_projection_validation.py, scripts/validate_intelligence_projections.py, Backend Architecture/aether-backend/shared/intelligence_projections/__init__.py, Backend Architecture/aether-backend/shared/intelligence_projections/contracts.py, Backend Architecture/aether-backend/shared/intelligence_projections/errors.py, Backend Architecture/aether-backend/shared/intelligence_projections/generated_registry.py, Backend Architecture/aether-backend/shared/intelligence_projections/provider.py, Backend Architecture/aether-backend/shared/intelligence_projections/readiness.py, Backend Architecture/aether-backend/shared/intelligence_projections/registry.py]
+last_synced_commit: 99736fed
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3

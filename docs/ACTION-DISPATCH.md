@@ -1,25 +1,20 @@
 ---
 title: Governed Action Dispatch
 slug: ai/action-dispatch
-section: ai
+section: architecture
 visibility: I
 audience: [architect, dev-senior, ops]
 status: beta
-since_version: "8.9.0"
-source_files:
-  - Backend Architecture/aether-backend/services/intelligence/routes.py
-  - Backend Architecture/aether-backend/services/intelligence/action_targets/base.py
-  - Backend Architecture/aether-backend/services/intelligence/action_targets/registry.py
-related:
-  - ai/integration-actions
-  - ai/decision-outcome-intelligence
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/intelligence/routes.py, Backend Architecture/aether-backend/services/intelligence/action_targets/base.py, Backend Architecture/aether-backend/services/intelligence/action_targets/registry.py]
+related: [ai/integration-actions, ai/decision-outcome-intelligence]
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/services/intelligence/action_targets/base.py": "sha256:983f23fdb3696c505d39e80232b5e91c22d917744fef156cc58900bbfde0c449"
-  "Backend Architecture/aether-backend/services/intelligence/action_targets/registry.py": "sha256:06edc4a24ff4a7e14927a05414e5ce40b8da8d187af3895b0e893b21cb98d56c"
-  "Backend Architecture/aether-backend/services/intelligence/routes.py": "sha256:8a705ad12ff7176d486afa586ba3f794da14017b9f9c108a3f9b6313da94884b"
+  Backend Architecture/aether-backend/services/intelligence/action_targets/base.py: sha256:983f23fdb3696c505d39e80232b5e91c22d917744fef156cc58900bbfde0c449
+  Backend Architecture/aether-backend/services/intelligence/action_targets/registry.py: sha256:06edc4a24ff4a7e14927a05414e5ce40b8da8d187af3895b0e893b21cb98d56c
+  Backend Architecture/aether-backend/services/intelligence/routes.py: sha256:8a705ad12ff7176d486afa586ba3f794da14017b9f9c108a3f9b6313da94884b
 ---
 
 # Governed Action Dispatch

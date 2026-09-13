@@ -1,11 +1,11 @@
 ---
-title: "Batching and Retries"
+title: Batching and Retries
 slug: sdks/batching-and-retries
-section: sdks
+section: reference
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # Batching and Retries

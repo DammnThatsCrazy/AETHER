@@ -1,15 +1,12 @@
 ---
 title: Graph Layer Parity Checklist
 slug: source-of-truth/graph-layer-parity
-section: source-of-truth
-visibility: internal
-audience: [architect, dev-senior, ai]
+section: reference
+visibility: I
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.9.0"
-source_files:
-  - Backend Architecture/aether-backend/shared/graph/relationship_layers.py
-  - packages/shared/graph-contract.ts
-  - docs/source-of-truth/GRAPH_CONTRACT.md
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts, docs/source-of-truth/GRAPH_CONTRACT.md]
 canonical_owner: graph@aether
 last_synced_commit: fd2288c
 ---

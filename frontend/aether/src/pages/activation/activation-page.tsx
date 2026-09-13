@@ -63,7 +63,7 @@ const SDK_QUICKSTART: Record<SourcePlatform, { install: string; init: string }> 
     init: "let config = AetherConfig(apiKey: \"YOUR_WRITE_KEY\")\nAether.shared.initialize(config: config)",
   },
   android: {
-    install: "implementation(\"com.aether:sdk:8.12.0\")",
+    install: "implementation(\"com.aether:sdk:0.1.0-alpha.0\")",
     init: 'val config = AetherConfig(apiKey = "YOUR_WRITE_KEY")\nAether.initialize(application, config)',
   },
 };

@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [ops, architect]
 status: stable
-since_version: "8.8.0"
+since_version: "0.1.0"
 source_files:
   - AWS Deployment/main.tf
 canonical_owner: platform@aether
@@ -14,7 +14,7 @@ toc_depth: 3
 source_hashes:
   "AWS Deployment/main.tf": "sha256:ffd0b4b5cadbd3a4e71d2e54546b783104584f86231d8e58c52b8fcc6c014f56"
 ---
-# Production Readiness Review v8.12.0
+# Production Readiness Review v0.1.0-alpha.0
 
 ## Status: Infrastructure Integrated, Operational Prerequisites Remain
 

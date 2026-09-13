@@ -5,7 +5,7 @@ section: architecture
 visibility: P
 audience: [architect, dev-senior, security]
 status: stable
-since_version: "8.8.0"
+since_version: "0.1.0"
 source_files:
   - Backend Architecture/aether-backend/main.py
   - Backend Architecture/aether-backend/middleware/middleware.py
@@ -19,7 +19,7 @@ reviewed_source_commits:
 source_hashes:
   "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
   "Backend Architecture/aether-backend/middleware/middleware.py": "sha256:8cd2cc774efd913fb94fda0bbb4f4336855f90301b7e8f48f1afe84b5c7fa12e"
-  "packages/shared/": "sha256:8e79c77f302663bfd0b7878519bd39736b4f3fc72d4f991f5db1ed3fda05c8cd"
+  "packages/shared/": "sha256:88c2ad32fed48d244579b9b2ff00aada788fc8d15ddfadb98435e492a85bbfd8"
 ---
 # Aether vNext — Architecture Guide
 
@@ -89,7 +89,7 @@ The SDK also collects raw user interactions, device fingerprints, wallet events,
 ### Module Architecture (Web SDK)
 
 ```
-AetherSDK (index.ts) — v8.12.0
+AetherSDK (index.ts) — v0.1.0-alpha.0
 │
 ├── Core (always loaded)
 │   ├── EventQueue .............. Batch + offline queue (POST /v1/batch)
@@ -413,7 +413,7 @@ All four SDKs expose the same core public API surface:
 | **Undo capability** | `RESOLVED_AS` edges store full signal snapshots. Merges can be reversed by restoring the secondary profile. |
 | **Privacy** | All PII (email, phone, IP) stored as SHA-256 hashes only. Raw values never persisted in graph or audit trail. |
 
-## Model Extraction Defense (v8.12.0)
+## Model Extraction Defense (v0.1.0-alpha.0)
 
 The ML serving pipeline is wrapped with a modular defense layer that protects against model extraction and knowledge distillation attacks.
 
@@ -442,7 +442,7 @@ mesh → legacy defense layer → off); with `REQUIRE_EXTRACTION_DEFENSE=true`
 `EXTRACTION_DEFENSE_UNAVAILABLE` instead of silently passing traffic. See
 [Model Extraction Defense](MODEL-EXTRACTION-DEFENSE.md) for full documentation.
 
-## Multi-Model Intelligence Harness (8.12.0)
+## Multi-Model Intelligence Harness (0.1.0-alpha.0)
 
 A provider-neutral intelligence runtime lets AI models operate as
 interchangeable planning, reasoning, classification, and synthesis engines
@@ -656,7 +656,7 @@ retrieval; tenant scope is server-authoritative; staging/production fail closed
 on missing credentials/config; no cross-tenant evidence leakage; the model never
 selects or overrides tenant scope.
 
-## Data Exchange Plane (v8.12.0, flag-gated)
+## Data Exchange Plane (v0.1.0-alpha.0, flag-gated)
 
 A governed tenant-facing import/export layer mounted under `/v1/data-exchange/*`
 (seven router groups: settings/capabilities/usage, import envelopes, saved
@@ -681,7 +681,7 @@ dotted `data_exchange.*` grant to the legacy read/write/admin alias the proxied
 seam admits. See `BACKEND-API.md` ("Data Exchange Plane") and
 `docs/plans/data-exchange-api.md` for the full contract.
 
-## Universal Provider Runtime (8.12.0)
+## Universal Provider Runtime (0.1.0-alpha.0)
 
 The Universal Provider Runtime (UPR) makes provider integrations pluggable: a
 new provider is a self-contained plugin (manifest + capability adapters +

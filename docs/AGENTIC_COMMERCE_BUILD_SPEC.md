@@ -3,18 +3,16 @@ title: Agentic Commerce — Day-1 Build Specification
 slug: concepts/agentic-commerce-spec
 section: concepts
 visibility: I
-audience: [architect, dev-senior, ai]
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.8.0"
-source_files:
-  - Backend Architecture/aether-backend/services/commerce/
-  - Backend Architecture/aether-backend/services/x402/
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/commerce/, Backend Architecture/aether-backend/services/x402/]
 canonical_owner: commerce@aether
 estimated_read_minutes: 45
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/services/commerce/": "sha256:5aea9122e586e53d56c3791d56a15fefcf778cf2023d1319efc383af14fa5470"
-  "Backend Architecture/aether-backend/services/x402/": "sha256:c85ba74d3f53f47429da5025d5945bc0eb0527d936b894623af33570cb9f6635"
+  Backend Architecture/aether-backend/services/commerce/: sha256:5aea9122e586e53d56c3791d56a15fefcf778cf2023d1319efc383af14fa5470
+  Backend Architecture/aether-backend/services/x402/: sha256:c85ba74d3f53f47429da5025d5945bc0eb0527d936b894623af33570cb9f6635
 ---
 # Aether Agentic Commerce — Day-1 Build Specification
 

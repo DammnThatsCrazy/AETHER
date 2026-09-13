@@ -1,14 +1,12 @@
 ---
 title: Temporal Observatory & Decision Memory Source of Truth
+slug: source-of-truth/temporal_observatory
+section: reference
+visibility: I
+audience: [dev-senior]
 status: stable
-source_files:
-  - packages/shared/contracts/graph-mutation-registry.json
-  - packages/shared/graph-mutation.ts
-  - Backend Architecture/aether-backend/shared/graph/mutation_models.py
-  - Backend Architecture/aether-backend/shared/graph/generated_mutation_taxonomy.py
-  - Backend Architecture/aether-backend/shared/graph/edge_properties.py
-  - scripts/validate_graph_write_paths.py
-  - scripts/allowlists/graph_write_paths.json
+since_version: 0.1.0
+source_files: [packages/shared/contracts/graph-mutation-registry.json, packages/shared/graph-mutation.ts, Backend Architecture/aether-backend/shared/graph/mutation_models.py, Backend Architecture/aether-backend/shared/graph/generated_mutation_taxonomy.py, Backend Architecture/aether-backend/shared/graph/edge_properties.py, scripts/validate_graph_write_paths.py, scripts/allowlists/graph_write_paths.json]
 last_synced_commit: a500f1f
 ---
 

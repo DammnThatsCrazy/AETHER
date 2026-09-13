@@ -1,17 +1,14 @@
 ---
 title: Stablecoin Entity Model
 slug: source-of-truth/stablecoin-entity-model
-section: source-of-truth
+section: reference
 visibility: I
-audience: [architect, dev-senior, ai]
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - packages/shared/stablecoin-intelligence.ts
-  - Backend Architecture/aether-backend/services/stablecoin/models.py
-  - Backend Architecture/aether-backend/repositories/stablecoin_repos.py
+since_version: 0.1.0
+source_files: [packages/shared/stablecoin-intelligence.ts, Backend Architecture/aether-backend/services/stablecoin/models.py, Backend Architecture/aether-backend/repositories/stablecoin_repos.py]
 canonical_owner: platform@aether
-last_synced_commit: "03ab3a6"
+last_synced_commit: 03ab3a6
 ---
 
 # Stablecoin Entity Model

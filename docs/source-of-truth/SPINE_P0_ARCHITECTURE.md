@@ -1,11 +1,11 @@
 ---
-title: "Aether Spine P0 — Ground Zero Founding Spine"
+title: Aether Spine P0 — Ground Zero Founding Spine
 slug: architecture/spine-p0-architecture
 section: architecture
 visibility: I
-audience: [architect, dev-senior, exec]
+audience: [architect, dev-senior, buyer]
 status: experimental
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 25
 toc_depth: 3

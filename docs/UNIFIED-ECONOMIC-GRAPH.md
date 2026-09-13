@@ -5,7 +5,7 @@ section: concepts
 visibility: P
 audience: [dev-senior, architect]
 status: stable
-since_version: "8.9.0"
+since_version: "0.1.0"
 source_files:
   - packages/shared/economic-metrics.ts
   - packages/shared/graph-relationships.ts

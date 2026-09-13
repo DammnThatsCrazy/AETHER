@@ -1,11 +1,11 @@
 ---
 title: Elastic Data Plane
 slug: data/elastic-data-plane
-section: data
+section: architecture
 visibility: I
 audience: [dev-senior, architect, ops]
 status: beta
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: data@aether
 estimated_read_minutes: 7
 toc_depth: 3

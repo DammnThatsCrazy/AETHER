@@ -1,22 +1,19 @@
 ---
 title: Agent Controller — Multi-Controller Architecture
 slug: ai/agent-controller
-section: ai
+section: architecture
 visibility: P
-audience: [architect, ai]
+audience: [architect]
 status: stable
-since_version: "8.8.0"
-source_files:
-  - Agent Layer/agent_controller/governance.py
-  - Agent Layer/agent_controller/nous.py
-  - Agent Layer/agent_controller/runtime/cycle_runtime.py
+since_version: 0.1.0
+source_files: [Agent Layer/agent_controller/governance.py, Agent Layer/agent_controller/nous.py, Agent Layer/agent_controller/runtime/cycle_runtime.py]
 canonical_owner: agent@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "Agent Layer/agent_controller/governance.py": "sha256:6b1fb5c987f2a7b20d457f015910020e1d2d7f726454b4b3a22185380e65e5b4"
-  "Agent Layer/agent_controller/nous.py": "sha256:7ba21f17eec0d43e6eef3cb0f5cd01d7735ed75540b96bb6423fc5aae274e0a8"
-  "Agent Layer/agent_controller/runtime/cycle_runtime.py": "sha256:b0e78d62cbfdb594fc4b0e98972fa5bde9e74cd50bb7162d109e5b7cb46ed551"
+  Agent Layer/agent_controller/governance.py: sha256:6b1fb5c987f2a7b20d457f015910020e1d2d7f726454b4b3a22185380e65e5b4
+  Agent Layer/agent_controller/nous.py: sha256:7ba21f17eec0d43e6eef3cb0f5cd01d7735ed75540b96bb6423fc5aae274e0a8
+  Agent Layer/agent_controller/runtime/cycle_runtime.py: sha256:b0e78d62cbfdb594fc4b0e98972fa5bde9e74cd50bb7162d109e5b7cb46ed551
 ---
 # Agent Controller — Multi-Controller Architecture
 

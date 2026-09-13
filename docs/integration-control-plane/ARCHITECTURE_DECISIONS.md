@@ -5,6 +5,7 @@ section: architecture
 visibility: I
 audience: [architect, dev-senior, security]
 status: experimental
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3

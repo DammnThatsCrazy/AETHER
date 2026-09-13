@@ -6,7 +6,7 @@ Updates the version number across ALL files in the monorepo atomically.
 The single source of truth is `pyproject.toml` at the repo root.
 
 Usage:
-    python scripts/bump_version.py 8.4.0
+    python scripts/bump_version.py 0.1.0-alpha.0
     python scripts/bump_version.py --check     # just print current version
 
 Files updated:
@@ -60,6 +60,8 @@ PACKAGE_JSONS = [
     ROOT / "Data Lake Architecture" / "aether-Datalake-backend" / "packages" / "logger" / "package.json",
     ROOT / "Data Lake Architecture" / "aether-Datalake-backend" / "services" / "data-lake" / "package.json",
     ROOT / "Data Lake Architecture" / "aether-Datalake-backend" / "services" / "ingestion" / "package.json",
+    ROOT / "packages" / "server" / "package.json",
+    ROOT / "packages" / "mobile-ui" / "package.json",
 ]
 
 # Native SDK version files (different format than package.json)
@@ -97,7 +99,8 @@ README_HEADERS = [
     ROOT / "GDPR & SOC2" / "aether-compliance" / "README.md",
 ]
 
-VERSION_PATTERN = re.compile(r"v?\d+\.\d+\.\d+")
+VERSION_PATTERN = re.compile(r"v?\d+\.\d+\.\d+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?")
+
 
 # Packages with intentionally independent versioning. These are checked for
 # existence but are not forced to the pyproject.toml platform version.
@@ -321,9 +324,9 @@ def main() -> None:
     new_version = sys.argv[1].lstrip("v")
 
     # Validate format
-    if not re.match(r"^\d+\.\d+\.\d+$", new_version):
+    if not re.match(r"^\d+\.\d+\.\d+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?$", new_version):
         print(f"ERROR: Invalid version format: {new_version}")
-        print("Expected: MAJOR.MINOR.PATCH (e.g., 8.4.0)")
+        print("Expected: MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-pre.N (e.g., 0.1.0-alpha.0)")
         sys.exit(1)
 
     old_version = read_current_version()

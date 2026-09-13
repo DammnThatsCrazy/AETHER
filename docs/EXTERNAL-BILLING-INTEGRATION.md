@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [architect, dev-senior, ops]
 status: beta
-since_version: "8.9.0"
+since_version: "0.1.0"
 flags:
   - AETHER_EXTERNAL_BILLING_ENABLED
   - AETHER_STRIPE_BILLING_ENABLED

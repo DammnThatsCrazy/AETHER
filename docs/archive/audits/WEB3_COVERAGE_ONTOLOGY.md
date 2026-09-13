@@ -1,3 +1,12 @@
+---
+title: Web3 Coverage Ontology
+slug: archive/audits/web3_coverage_ontology
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Web3 Coverage Ontology
 
 > Canonical reference for the Aether Web3 object registry, taxonomy, confidence model, semantic event families, graph edge families, and migration-tracking model.

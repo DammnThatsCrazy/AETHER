@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [architect, dev-senior, ops]
 status: experimental
-since_version: "8.12.0"
+since_version: "0.1.0"
 canonical_owner: frontend@aether
 estimated_read_minutes: 8
 toc_depth: 3

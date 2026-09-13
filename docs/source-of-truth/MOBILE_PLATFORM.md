@@ -1,10 +1,11 @@
 ---
 title: Mobile Platform & Productization Baseplate
 slug: mobile/platform
-section: mobile
+section: reference
 visibility: I
 audience: [architect, security, ops]
-status: alpha
+status: experimental
+since_version: 0.1.0
 ---
 
 # Mobile Platform & Productization Baseplate

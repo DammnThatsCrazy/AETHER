@@ -1,3 +1,12 @@
+---
+title: Implementation Plan
+slug: archive/audits/implementation_plan
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Aether Implementation Plan — Repo Truth to Production
 
 **Based on:** REPO_AUDIT.md ground truth inspection

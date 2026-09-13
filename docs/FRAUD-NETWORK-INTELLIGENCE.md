@@ -5,7 +5,7 @@ section: concepts
 visibility: I
 audience: [security, architect, dev-senior, ops]
 status: stable
-since_version: "9.0.0"
+since_version: "0.1.0"
 source_files:
   - Backend Architecture/aether-backend/services/fraud_networks/
   - Backend Architecture/aether-backend/repositories/repos.py

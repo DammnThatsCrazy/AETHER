@@ -7,7 +7,7 @@ Three jobs, all honest:
      without a native toolchain: both apps exist and are complete (package.json,
      app.json, entry, SDK wiring); the two apps have DISTINCT bundle ids, schemes,
      and product planes (an Aether token can never call Kyber, and no Kyber code
-     ships in the Aether binary); each app pins version 8.12.0. These are real
+     ships in the Aether binary); each app pins version 0.1.0-alpha.0. These are real
      failures if violated (exit 1).
 
   1b. Enforce the per-build DISTRIBUTION PROFILE declaration: each app must
@@ -39,7 +39,7 @@ EXPECTED = {
     "aether-mobile": {"app_kind": "aether", "bundle": "com.aether.mobile", "scheme": "aether"},
     "kyber-mobile": {"app_kind": "kyber", "bundle": "com.aether.kyber", "scheme": "kyber"},
 }
-PLATFORM_VERSION = "8.12.0"
+PLATFORM_VERSION = "0.1.0-alpha.0"
 
 # Distribution profiles per platform family (snake_case). Must agree with
 # services/mobile/config.py DISTRIBUTION_PROFILES — drift-guarded by

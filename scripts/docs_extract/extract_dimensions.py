@@ -11,7 +11,7 @@ Sources:
 Schema::
 
     {
-      "version": "8.12.0",
+      "version": "0.1.0-alpha.0",
       "generated_from": ["packages/shared/dimension-state.ts",
                           ".../services/reconciliation/expectations.py"],
       "states": ["ready", ...],

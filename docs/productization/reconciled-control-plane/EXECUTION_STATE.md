@@ -3,9 +3,9 @@ title: Execution State — Reconciled Control Plane (Phases 0–4)
 slug: productization/reconciled-control-plane/execution-state
 section: operations
 visibility: I
-audience: [architect, ops, exec]
+audience: [architect, ops, buyer]
 status: experimental
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 ---
 

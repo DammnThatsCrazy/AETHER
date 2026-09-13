@@ -4,6 +4,8 @@ slug: comms/comms-provider-hardcode-ledger
 section: reference
 visibility: I
 audience: [dev-senior, architect]
+status: experimental
+since_version: 0.1.0
 ---
 
 # Communications Provider Hardcode Ledger

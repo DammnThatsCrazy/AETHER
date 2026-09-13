@@ -1,3 +1,12 @@
+---
+title: Stablecoin Domain
+slug: source-of-truth/stablecoin_domain
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Stablecoin Intelligence Domain
 
 Aether Stablecoin Intelligence is observation-first. It records externally executed stablecoin activity, evidence, verification state, finality, reconciliation, and tenant-scoped intelligence. It does not custody assets, hold keys, sign transactions, originate transfers, execute trades, settle as merchant of record, or treat payment intents as proof of settlement.

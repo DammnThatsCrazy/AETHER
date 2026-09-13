@@ -3,18 +3,15 @@ title: Canonical Entity Model (cross-domain)
 slug: productization/economic-interoperability-intelligence/canonical-entity-model
 section: operations
 visibility: I
-audience: [architect, ops, exec]
+audience: [architect, ops, buyer]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - packages/shared/stablecoin-intelligence.ts
-  - packages/shared/derivatives.ts
-  - packages/shared/interoperability.ts
+since_version: 0.1.0
+source_files: [packages/shared/stablecoin-intelligence.ts, packages/shared/derivatives.ts, packages/shared/interoperability.ts]
 canonical_owner: platform@aether
 source_hashes:
-  "packages/shared/derivatives.ts": "sha256:f1aa8933c643877fa2472f6d7dd0703eb67661c441a29372bf3817a8b05a4d26"
-  "packages/shared/interoperability.ts": "sha256:fe72abcf3f2c2570871689112419971832674e6d74fa8259a2d9c057b2a7b049"
-  "packages/shared/stablecoin-intelligence.ts": "sha256:e7fc796932dafd5dc1c900f2a5468913f534b129cf418144b5b2716e1a538138"
+  packages/shared/derivatives.ts: sha256:f1aa8933c643877fa2472f6d7dd0703eb67661c441a29372bf3817a8b05a4d26
+  packages/shared/interoperability.ts: sha256:fe72abcf3f2c2570871689112419971832674e6d74fa8259a2d9c057b2a7b049
+  packages/shared/stablecoin-intelligence.ts: sha256:e7fc796932dafd5dc1c900f2a5468913f534b129cf418144b5b2716e1a538138
 ---
 
 # Canonical Entity Model

@@ -1,3 +1,12 @@
+---
+title: Sdk Runtime Parity
+slug: source-of-truth/sdk_runtime_parity
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # SDK Runtime Parity — Source of Truth
 
 Every Aether SDK must expose the same canonical runtime surface so that what a

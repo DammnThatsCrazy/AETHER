@@ -5,6 +5,7 @@ section: operations
 visibility: I
 audience: [ops, architect]
 status: stable
+since_version: 0.1.0
 ---
 
 # Agent Layer production readiness

@@ -1,7 +1,7 @@
 <!-- DO NOT EDIT — generated from packages/shared/contracts/consent-registry.json -->
 <!-- Run: python scripts/generate_contracts.py -->
 
-# Aether Consent Registry (12 purposes, contract v8.12.0)
+# Aether Consent Registry (12 purposes, contract v0.1.0-alpha.0)
 
 | Purpose | Label | Default | Explicit Opt-in | Retention | Revocation | Description |
 |---|---|---|---|---|---|---|

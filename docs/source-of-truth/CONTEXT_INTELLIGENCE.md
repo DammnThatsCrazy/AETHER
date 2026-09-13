@@ -1,15 +1,12 @@
 ---
 title: Contextual Session Intelligence Source of Truth
+slug: source-of-truth/context_intelligence
+section: reference
+visibility: I
+audience: [dev-senior]
 status: stable
-source_files:
-  - packages/shared/contracts/context-capsule-registry.json
-  - packages/shared/context-capsule.ts
-  - Backend Architecture/aether-backend/shared/context_capsule/models.py
-  - Backend Architecture/aether-backend/shared/context_capsule/generated_taxonomy.py
-  - Backend Architecture/aether-backend/services/ingestion/context_enricher.py
-  - Backend Architecture/aether-backend/services/ingestion/geo_provider.py
-  - Backend Architecture/aether-backend/shared/privacy/ip_hmac.py
-  - tests/security/test_no_raw_ip_persistence.py
+since_version: 0.1.0
+source_files: [packages/shared/contracts/context-capsule-registry.json, packages/shared/context-capsule.ts, Backend Architecture/aether-backend/shared/context_capsule/models.py, Backend Architecture/aether-backend/shared/context_capsule/generated_taxonomy.py, Backend Architecture/aether-backend/services/ingestion/context_enricher.py, Backend Architecture/aether-backend/services/ingestion/geo_provider.py, Backend Architecture/aether-backend/shared/privacy/ip_hmac.py, tests/security/test_no_raw_ip_persistence.py]
 last_synced_commit: a500f1f
 ---
 

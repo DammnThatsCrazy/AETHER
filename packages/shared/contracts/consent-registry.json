@@ -1,7 +1,7 @@
 {
   "_comment": "Canonical Aether consent registry. DO NOT manually edit \u2014 this is the source of truth for packages/shared/consent.ts and Backend Architecture/aether-backend/services/ingestion/generated_registry.py",
   "schemaVersion": "2.0.0",
-  "contractVersion": "8.12.0",
+  "contractVersion": "0.1.0-alpha.0",
   "purposes": [
     {
       "key": "analytics",
