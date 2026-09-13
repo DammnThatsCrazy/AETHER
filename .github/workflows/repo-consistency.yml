@@ -409,21 +409,7 @@ jobs:
               "${backend_args[@]}" \
               --output release-evidence/candidate-verification.json
           else
-            python3 - <<'PY'
-            import json
-            from pathlib import Path
-            import os
-            Path("release-evidence/candidate-verification.json").write_text(json.dumps({
-                "schema_version": 1,
-                "stage": "candidate-verification",
-                "status": "PASS",
-                "candidate_path": "not-applicable",
-                "commit_sha": os.environ["EXPECTED_SHA"],
-                "artifact_digest": "not-applicable",
-                "candidate_verification_seconds": 0.0,
-                "errors": [],
-            }, indent=2) + "\n")
-            PY
+            python3 -c 'import json, os; from pathlib import Path; Path("release-evidence/candidate-verification.json").write_text(json.dumps({"schema_version": 1, "stage": "candidate-verification", "status": "PASS", "candidate_path": "not-applicable", "commit_sha": os.environ["EXPECTED_SHA"], "artifact_digest": "not-applicable", "candidate_verification_seconds": 0.0, "errors": []}, indent=2) + "\n")'
           fi
       - uses: actions/upload-artifact@v4
         if: always()
