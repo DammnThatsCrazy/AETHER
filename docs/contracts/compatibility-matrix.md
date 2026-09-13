@@ -65,7 +65,7 @@ checking every consumer that resolves `$id` by string match.
 | Registry | `schemaVersion` | `contractVersion` | Lock-step with |
 |---|---|---|---|
 | `event-registry.json` | 2.2.0 | 0.1.0-alpha.0 | `packages/shared/events.ts`, `Backend Architecture/aether-backend/services/ingestion/generated_registry.py`, `consent-registry.json` (via `consent_purpose` refs), native iOS/Android regions (`mobile_native_regions` ownership category) |
-| `consent-registry.json` | 2.0.0 | 8.12.0 | `event-registry.json` (event `consent_purpose` must exist here), `packages/shared/consent.ts` |
+| `consent-registry.json` | 2.0.0 | 0.1.0-alpha.0 | `event-registry.json` (event `consent_purpose` must exist here), `packages/shared/consent.ts` |
 | `integration-consent-registry.json` | 1.0.0 | 8.13.0 | `consent-registry.json` (shares consent-purpose vocabulary), `processingDecisionVersion`/`canonicalConsentReceiptVersion` fields versioned independently |
 | `graph-mutation-registry.json` | 1.0.0 | 1.0.0 | `intelligence-projection-registry.json` (`graphMutationPolicies` enum reused), `spine-registry.json` |
 | `intelligence-projection-registry.json` | 1.0.0 | 1.0.0 | `packages/shared/intelligence-projection.ts`, `packages/shared/intelligence-projections_generated.ts`, `graph-mutation-registry.json`, `spine-registry.json` |
@@ -123,7 +123,7 @@ truth for which files must change together and which commands must pass.
 
 Per `VERSION_POLICY.md`, all registries are pre-1.0 (`0.x` family) or track an
 internal `contractVersion` independent of the platform's `0.x` release train
-(several registries, e.g. `consent-registry.json` at `8.12.0`, use their own
+(several registries, e.g. `integration-consent-registry.json` at `8.13.0`, use their own
 long-lived counter). Two contracts are "compatible" across versions only when:
 
 1. Both sides are on the same `contractVersion` major (or the same exact

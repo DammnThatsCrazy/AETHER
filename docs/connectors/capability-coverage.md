@@ -28,11 +28,11 @@ Aether has three connector subsystems, each under `Backend Architecture/aether-b
 |---|---|---|---|---|---|
 | Klaviyo | Yes | Yes | Yes | No | Canonical contract |
 | SendGrid | Yes | No | No | No | Canonical contract |
-| Mailchimp | Yes | Yes | Yes | No | Canonical contract |
+| Mailchimp | Yes | No | No | No | Canonical contract |
 | Postmark | Yes | No | No | No | Canonical contract |
 | Iterable | Yes | Yes | Yes | No | Canonical contract |
-| Braze | Yes | Yes | No | No | Canonical contract |
-| Customer.io | Yes | Yes | Yes | No | Canonical contract |
+| Braze | Yes | Yes | Yes | No | Canonical contract |
+| Customer.io | Yes | No | No | No | Canonical contract |
 
 ## Measurement Connectors
 
@@ -52,8 +52,8 @@ Provider plugins at `services/providers/` emit through `shared/integration_contr
 
 | Provider | Auth | Pull | Webhook | Normalizer |
 |---|---|---|---|---|
-| Amazon | OAuth | Yes | Yes | `AetherEvent` via canonical contract |
-| eBay | OAuth | Yes | Yes | `AetherEvent` via canonical contract |
+| Amazon | OAuth | Yes | No | `AetherEvent` via canonical contract |
+| eBay | OAuth | Yes | No | `AetherEvent` via canonical contract |
 | Etsy | OAuth | Yes | No | `AetherEvent` via canonical contract |
 | Shopify | OAuth | Yes | Yes | `AetherEvent` via canonical contract |
 | TikTok | OAuth | Yes | Yes | `AetherEvent` via canonical contract |
