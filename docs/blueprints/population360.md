@@ -44,14 +44,14 @@ consent-gated, and erasure-covered.
 
 The registry names its authorities: `population_definitions`,
 `cohort_membership`, `cluster_definitions`, `entities`, `evidence`, `temporal`;
-surface ids `comparison_workbench` and `cluster360`; legacy binding `services/population`
+surface ids `comparison_workbench` and `cluster360`; legacy binding `services/backend/services/population`
 (`/v1/population`); `hardDependencies: [contract_spine, grouping_membership]`;
 `projectionDependencies: [profile360, relationship360, temporal360]`;
 `supportedTemporalModes: [window, relative]`.
 
 ## Why
 
-`services/population/` already ships auto-created JSONB tables
+`services/backend/services/population/` already ships auto-created JSONB tables
 (`populations`, `population_memberships`, `population_snapshots`) with bus events
 (`ENTITY_MEMBERSHIP_ADDED`) — but membership there is **not** a governed graph
 fact (spike §5.4): no Alembic migration, no versioning (idempotent update, hard
@@ -86,7 +86,7 @@ standalone table row:
   provenance keys — `definition_version`, `membership_state`, `membership_basis`,
   `population_type`, `evidence_refs` — ride on both the edge and the ledger
   record via the canonical optional-edge vocabulary
-  (`services/population/governance.py` `PopulationMembershipGovernor` +
+  (`services/backend/services/population/governance.py` `PopulationMembershipGovernor` +
   `shared/graph/edge_properties.py`). The `population_memberships` table row is
   only the current-state materialisation the governed path maintains.
 * **Close-and-append.** Joins and leaves are appended facts through the gateway
@@ -99,7 +99,7 @@ standalone table row:
   (a version publishes at most once), and `revise_definition` is the only
   definition-change path — it refuses an identical no-op revision and advances
   the current projection only through a documented, supersedes-chained version
-  (`services/population/registry.py`).
+  (`services/backend/services/population/registry.py`).
 * **Consent is enforced where membership is written** (standing rule 8) — the
   governor evaluates consent for the member subject under the population's
   declared `consent_purpose` before any edge/row/ledger write; a denial raises
@@ -108,14 +108,14 @@ standalone table row:
   still exit a cohort).
 * **Erasure is not a dead end** (standing rule 7) — the population artifacts
   gained `DSR_COMPONENT` coverage (`population_memberships`,
-  `population_snapshots`, `populations`; `services/dsr_propagation/models.py`
+  `population_snapshots`, `populations`; `services/backend/services/dsr_propagation/models.py`
   26 -> 29), and the consent erasure handler executes a **governed leave** for
   every active membership the subject holds and recomputes each affected
   population's materialised `member_count` from active memberships
-  (`services/consent/erasure_jobs.py`).
+  (`services/backend/services/consent/erasure_jobs.py`).
 * **Tenant isolation on every route** — every group-by-id population route
   resolves through a tenant-ownership guard (404 on foreign-or-missing ids),
-  matching the campaign/entities guard (`services/population/routes.py`).
+  matching the campaign/entities guard (`services/backend/services/population/routes.py`).
 
 At P3.5 the row's `pendingAuthority` is emptied and `grouping_membership` is
 formalized into the validator `SPINE_INDEX`, so the now-zero-pending row's
@@ -171,9 +171,9 @@ those surfaces out of `missing`.
 ### No redefinition
 
 The slice reuses canonical `EntityRef`, `GraphSnapshotRef`, `GraphResult`,
-`PageRequest`, `TimeRangeFilter`, and `EvidenceRef`; `services/identity/` remains
+`PageRequest`, `TimeRangeFilter`, and `EvidenceRef`; `services/backend/services/identity/` remains
 the identity authority (population membership never merges/splits identities);
-`services/consent/` + `services/dsr_propagation/` remain the consent/erasure
+`services/backend/services/consent/` + `services/backend/services/dsr_propagation/` remain the consent/erasure
 authorities; `shared/temporal/` remains the temporal authority. No second cohort
 registry, no fraud-specific population store, no duplicate evidence model.
 

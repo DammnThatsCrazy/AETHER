@@ -3,11 +3,11 @@
 
 Canonical source of truth: ``packages/shared/contracts/consent-registry.json``.
 
-Every ML model in ``ML Models/aether-ml/common/model_registry.py`` must declare
+Every ML model in ``services/ml/common/model_registry.py`` must declare
 non-empty ``allowed_training_purposes`` (training-data scope) and
 ``required_inference_purposes`` (serving scope), and every declared purpose —
 including each feature contract's ``required_purposes`` in
-``ML Models/aether-ml/common/feature_contracts.py`` — must be a canonical
+``services/ml/common/feature_contracts.py`` — must be a canonical
 registry key. Purpose governance is fail-closed: a model with no declared
 purposes, or one referencing an unknown purpose, must never ship.
 
@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ML_ROOT = ROOT / "ML Models" / "aether-ml"
+ML_ROOT = ROOT / "services" / "ml"
 REGISTRY_JSON = ROOT / "packages" / "shared" / "contracts" / "consent-registry.json"
 
 

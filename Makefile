@@ -37,9 +37,9 @@
         deployment-readiness-score collect-deployment-evidence deployment-profile-gate validate-staging-budget validate-ephemeral-budget
 
 # Centralized subsystem paths — single place to rename if directories move.
-BACKEND_DIR := Backend Architecture/aether-backend
-ML_DIR      := ML Models/aether-ml
-AGENT_DIR   := Agent Layer
+BACKEND_DIR := services/backend
+ML_DIR      := services/ml
+AGENT_DIR   := services/agents
 DEMO_TENANT_ID ?= aether-demo-v1
 DEMO_SEED_NAMESPACE ?= aether-demo-v1
 DEMO_DATABASE_URL ?= postgresql://aether:aether_dev_password@localhost:5432/aether
@@ -58,7 +58,7 @@ LIFECYCLE_E2E_ENV ?= .env.lifecycle-e2e
 PYTHON ?= python3
 # The live Terraform root. NOT terraform/environments/* — that tree references
 # seven modules that do not exist and `terraform init` fails there.
-TF_DIR      := AWS Deployment/aether-aws/terraform
+TF_DIR      := deploy/aws/terraform
 
 # Project virtualenv. The system interpreter resolves /usr/lib/python3/dist-packages,
 # where Debian's cryptography build panics under pyo3 and its PyJWT cannot be replaced
@@ -543,7 +543,7 @@ bump-version: ## Bump version across all files (usage: make bump-version V=8.4.0
 # ---------------------------------------------------------------------------
 
 graph-test: ## Run all graph tests (root-level + backend tests)
-	python -m pytest tests/graph/ "Backend Architecture/aether-backend/tests/graph/" -v --tb=short
+	python -m pytest tests/graph/ "services/backend/tests/graph/" -v --tb=short
 
 graph-replay: ## Run synthetic graph replay workload (in-memory, no Neptune required)
 	python scripts/graph/replay_relationship_layers.py
@@ -1062,7 +1062,7 @@ staging-deploy: ## Documented apply/helm entrypoint (cloud creds required; docum
 	@echo "  3. make staging-infra-plan                 # review the plan (no apply)"
 	@echo ""
 	@echo "Apply steps (run manually, opt-in):"
-	@echo "  terraform -chdir='AWS Deployment/aether-aws/terraform' apply -var-file=profiles/staging.tfvars"
+	@echo "  terraform -chdir='deploy/aws/terraform' apply -var-file=profiles/staging.tfvars"
 	@echo "  # migrations: run the RUN_MIGRATIONS=1 one-off ECS task (compose: make dev + 'up migrate')"
 	@echo "  # verify:     make staging-preflight BASE_URL=https://api.staging.aether.io"
 	@if [ "$(STAGING_APPLY)" = "1" ]; then \
@@ -1102,7 +1102,7 @@ load-smoke-ci: ## Load smoke gate for CI pipelines (same fail-closed contract as
 # ---------------------------------------------------------------------------
 
 semantic-sentiment-unit-test: ## Run semantic/sentiment unit and API tests
-	cd "Backend Architecture/aether-backend" && python -m pytest tests/semantic_intelligence -v
+	cd "services/backend" && python -m pytest tests/semantic_intelligence -v
 
 semantic-sentiment-test: semantic-sentiment-unit-test ## Run semantic/sentiment test suite
 
@@ -1123,19 +1123,19 @@ semantic-sentiment-release-check-strict: semantic-sentiment-contracts-check ## V
 # ---------------------------------------------------------------------------
 
 campaign-test: ## Run campaign registry unit tests
-	cd "Backend Architecture/aether-backend" && python -m pytest tests/unit/test_campaign_registry.py -v
+	cd "services/backend" && python -m pytest tests/unit/test_campaign_registry.py -v
 
 campaign-integration-test: ## Run campaign registry integration tests
-	cd "Backend Architecture/aether-backend" && python -m pytest tests/integration/test_campaign_registry_api.py -v
+	cd "services/backend" && python -m pytest tests/integration/test_campaign_registry_api.py -v
 
 campaign-e2e: ## Run campaign registry E2E tests
-	cd "Backend Architecture/aether-backend" && python -m pytest tests/e2e/test_campaign_registry_e2e.py -v
+	cd "services/backend" && python -m pytest tests/e2e/test_campaign_registry_e2e.py -v
 
 campaign-security-check: ## Run campaign registry security tests
-	cd "Backend Architecture/aether-backend" && python -m pytest tests/security/test_campaign_registry_security.py -v
+	cd "services/backend" && python -m pytest tests/security/test_campaign_registry_security.py -v
 
 campaign-migration-check: ## Verify campaign registry migration round-trip
-	cd "Backend Architecture/aether-backend" && alembic upgrade head && alembic downgrade -1 && alembic upgrade head
+	cd "services/backend" && alembic upgrade head && alembic downgrade -1 && alembic upgrade head
 
 campaign-contracts-check: ## Validate campaign registry contracts
 	python scripts/validate_contracts.py --domain campaign

@@ -27,7 +27,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS_PATH = ROOT / "config/terraform_resource_contracts.yaml"
 PROFILES_PATH = ROOT / "config/deployment_profiles.yaml"
-TERRAFORM_ROOT = ROOT / "AWS Deployment/aether-aws/terraform"
+TERRAFORM_ROOT = ROOT / "deploy/aws/terraform"
 
 CONTRACTS = yaml.safe_load(CONTRACTS_PATH.read_text())
 PROFILES = yaml.safe_load(PROFILES_PATH.read_text())

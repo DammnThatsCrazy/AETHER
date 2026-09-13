@@ -2,7 +2,7 @@
 """Validate the compliance ConsentPurpose enum is in sync with the canonical
 consent registry.
 
-The compliance project (`GDPR & SOC2/aether-compliance`) owns a
+The compliance project (`services/compliance`) owns a
 `config.consent_registry_sync.assert_consent_registry_in_sync()` helper that
 compares its `ConsentPurpose` enum + explicit-opt-in flags against
 `packages/shared/contracts/consent-registry.json`. This root gate invokes it so
@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-COMPLIANCE_DIR = ROOT / "GDPR & SOC2" / "aether-compliance"
+COMPLIANCE_DIR = ROOT / "services" / "compliance"
 
 
 def main() -> int:
@@ -27,13 +27,13 @@ def main() -> int:
     except Exception as exc:  # infra missing is a failure — the gate must exist
         print("consent-purpose reconciliation FAILED: could not import "
               f"config.consent_registry_sync ({exc})")
-        print("Expected: GDPR & SOC2/aether-compliance/config/consent_registry_sync.py")
+        print("Expected: services/compliance/config/consent_registry_sync.py")
         return 1
     try:
         assert_consent_registry_in_sync()
     except Exception as exc:
         print(f"consent-purpose reconciliation FAILED: {exc}")
-        print("Reconcile ConsentPurpose in GDPR & SOC2/aether-compliance/config/"
+        print("Reconcile ConsentPurpose in services/compliance/config/"
               "compliance_config.py with the canonical registry.")
         return 1
     print("consent-purpose reconciliation OK (compliance ConsentPurpose ↔ canonical registry).")

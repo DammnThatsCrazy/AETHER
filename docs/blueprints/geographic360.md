@@ -45,7 +45,7 @@ contract this slice introduces.
 The registry already names its authorities: `context_capsules`,
 `geo_observations`, `locations`, `entity_graph`, `temporal`; a dedicated
 `geographic360` surface (G4.4b — `geo` stays owned by its graph-plane adapter,
-never shadowed); legacy binding `services/geo`; `hardDependencies:
+never shadowed); legacy binding `services/backend/services/geo`; `hardDependencies:
 [temporal_kernel, context_capsule_semantics]`; `projectionDependencies:
 [profile360, temporal360]`.
 
@@ -73,7 +73,7 @@ exactly one new canonical geography authority and no second geography registry:
 * **Location registry + models.** A new `packages/shared/contracts/location-registry.json`
   (role, precision class, region-type vocabulary — **not US-only**) and a
   `shared/geo` model surface (`LocationFact` with roles, precision, coordinates;
-  `Place` / `Region` / `Jurisdiction`), surfaced through `services/geo`. The
+  `Place` / `Region` / `Jurisdiction`), surfaced through `services/backend/services/geo`. The
   registry is the canonical source; generated twins come from it via the
   platform contract generator.
 * **Coordinates live in the contract, never the context capsule.** The
@@ -95,7 +95,7 @@ exactly one new canonical geography authority and no second geography registry:
   GeoLite2 local files remain the air-gapped default; no new external dependency
   is required to converge.
 * **The governed store ships with the flip (G4.5).** The one repository over
-  these facts is `services/geo/location_facts.py::LocationFactRepository`
+  these facts is `services/backend/services/geo/location_facts.py::LocationFactRepository`
   (table `location_facts`, the shared `BaseRepository` — in-memory dicts under
   `AETHER_ENV=local`, asyncpg JSONB in production). `record` is the *internal*
   write boundary (repositories only; deliberately no public route or consent
@@ -159,7 +159,7 @@ compute as `missing` at the registry level while `in_flight`, and the provider
   facts exist — it lifts when `profile360` lands and is never fabricated
   meanwhile.
 * `context_capsule_semantics` — the authority this row resolves — ships in G4.5
-  at `services/geographic360/capsule_semantics.py`: the pure rule set mapping one
+  at `services/backend/services/geographic360/capsule_semantics.py`: the pure rule set mapping one
   privacy-shaped capsule `LocationObservation` to a canonical geographic reading
   (the write-side `capsule_location_fact` builder plus the read-boundary guard
   `normalise_capsule_fact_row`, applied by the provider's reader seam to every

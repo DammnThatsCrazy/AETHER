@@ -54,15 +54,15 @@ PR #354 — Universal Intelligence Graph (this branch).
 ## Phase 0 — Baseline (Complete)
 
 ### Existing Implementation Inventory
-- **Graph client:** `Backend Architecture/aether-backend/shared/graph/graph.py` — in-memory + Neptune, VertexType (20+ types), EdgeType (40+ types)
+- **Graph client:** `services/backend/shared/graph/graph.py` — in-memory + Neptune, VertexType (20+ types), EdgeType (40+ types)
 - **Layers:** `shared/graph/relationship_layers.py` — H2H/H2A/A2H/A2A + EXCLUDED, strict mode in staging/production
 - **Traversal:** `shared/graph/traversal.py` — BFS with depth/limit/cycle detection
 - **Write validator:** `shared/graph/write_validator.py` — consent gating, required properties
-- **API routes:** `services/operational_intelligence/routes.py` — `/v1/graph/{traverse,path,temporal,overlay,filter,contracts,health}`
-- **NLP query:** `services/noesis/` — `/v1/noesis/query`
+- **API routes:** `services/backend/services/operational_intelligence/routes.py` — `/v1/graph/{traverse,path,temporal,overlay,filter,contracts,health}`
+- **NLP query:** `services/backend/services/noesis/` — `/v1/noesis/query`
 - **TS contracts:** `packages/shared/graph-contract.ts`, `graph-relationships.ts`, `provenance.ts`, `temporal-intelligence.ts`
 - **Frontend:** Aether `pages/graph/graph-page.tsx`, `features/graph/use-graph-data.ts`; Kyber `features/noesis/`
-- **Tests:** `tests/graph/` (8 files), `tests/security/` (4 files), `Backend Architecture/.../tests/graph/` (3 files)
+- **Tests:** `tests/graph/` (8 files), `tests/security/` (4 files), `docs/archive/legacy-architecture/backend/.../tests/graph/` (3 files)
 
 ### Confirmed Gaps (35 items — see plan for full table)
 Key P0 gaps:
@@ -85,8 +85,8 @@ Key P0 gaps:
 ### Files Changed
 - [x] `frontend/aether/src/features/graph/use-graph-data.ts` — fix G11 (string-prefix layer derivation replaced with `classifyEdgeType()` from `@aether/shared`)
 - [x] `frontend/aether/vite.config.ts` — extend `commonjsOptions.include` so Rollup resolves `@aether/shared` CJS exports
-- [x] `Backend Architecture/aether-backend/shared/graph/traversal.py` — added `tenant_id` param to BFS/path/temporal; two-set approach (visited + accepted)
-- [x] `Backend Architecture/aether-backend/services/operational_intelligence/routes.py` — `graph_filter` now filters by tenantId; traversal calls pass `tenant_id`
+- [x] `services/backend/shared/graph/traversal.py` — added `tenant_id` param to BFS/path/temporal; two-set approach (visited + accepted)
+- [x] `services/backend/services/operational_intelligence/routes.py` — `graph_filter` now filters by tenantId; traversal calls pass `tenant_id`
 - [x] `tests/security/test_graph_tenant_isolation.py` — 8 adversarial tests; all pass
 - [x] `docs/plans/UNIVERSAL_INTELLIGENCE_GRAPH_IMPLEMENTATION.md` — this ledger
 - [x] `docs/FRONTEND-ARCHITECTURE.md` — stamped after Phase 1 review
@@ -104,8 +104,8 @@ Key P0 gaps:
 ### Files Changed
 - [ ] `packages/shared/graph-contract.ts`
 - [ ] `packages/shared/provenance.ts`
-- [ ] `Backend Architecture/aether-backend/shared/graph/graph.py`
-- [ ] `Backend Architecture/aether-backend/shared/graph/graph_contract.py`
+- [ ] `services/backend/shared/graph/graph.py`
+- [ ] `services/backend/shared/graph/graph_contract.py`
 - [ ] `tests/unit/test_graph_contract_parity.py`
 
 ---
@@ -113,10 +113,10 @@ Key P0 gaps:
 ## Phase 3 — Temporal and Lifecycle Foundation (Complete)
 
 ### Files Changed
-- [x] `Backend Architecture/aether-backend/shared/graph/edge_properties.py` — added `BITEMPORAL_EDGE_PROPERTIES` frozenset; added `valid_to`, `recorded_at`, `superseded_at` to `OPTIONAL_EDGE_PROPERTIES`; extended `build_edge_properties()` signature
-- [x] `Backend Architecture/aether-backend/shared/graph/traversal.py` — `temporal_bfs()` enhanced with bitemporal valid-time filtering (`valid_from <= as_of` + `valid_to > as_of`); falls back to `created_at` for pre-Phase-3 edges
-- [x] `Backend Architecture/aether-backend/services/operational_intelligence/routes.py` — added `POST /v1/graph/compare` route with two-snapshot BFS diff; updated `/contracts` route listing
-- [x] `Backend Architecture/aether-backend/services/operational_intelligence/models.py` — added `GraphCompareRequest`, `GraphCompareNodeDiff`, `GraphCompareEdgeDiff`, `GraphCompareResult` models
+- [x] `services/backend/shared/graph/edge_properties.py` — added `BITEMPORAL_EDGE_PROPERTIES` frozenset; added `valid_to`, `recorded_at`, `superseded_at` to `OPTIONAL_EDGE_PROPERTIES`; extended `build_edge_properties()` signature
+- [x] `services/backend/shared/graph/traversal.py` — `temporal_bfs()` enhanced with bitemporal valid-time filtering (`valid_from <= as_of` + `valid_to > as_of`); falls back to `created_at` for pre-Phase-3 edges
+- [x] `services/backend/services/operational_intelligence/routes.py` — added `POST /v1/graph/compare` route with two-snapshot BFS diff; updated `/contracts` route listing
+- [x] `services/backend/services/operational_intelligence/models.py` — added `GraphCompareRequest`, `GraphCompareNodeDiff`, `GraphCompareEdgeDiff`, `GraphCompareResult` models
 - [x] `tests/graph/test_graph_temporal_integration.py` — 7 new tests; all pass (7/7)
 
 ### Phase 3 Gate
@@ -132,8 +132,8 @@ Key P0 gaps:
 ## Phase 4 — Canonical Universal Graph Query Service (Complete)
 
 ### Files Changed
-- [x] `Backend Architecture/aether-backend/services/operational_intelligence/models.py` — `FilterOperator`, `FilterExpression`, `FilterGroup`, `UniversalGraphQueryRequest`, `GraphResultMeta`, `GraphQueryResponse`, `GraphFacet*`, `GraphExport*`, `QUERY_BUDGET_DEFAULTS`; widened `GraphNode.kind` to `str`
-- [x] `Backend Architecture/aether-backend/services/operational_intelligence/routes.py` — boolean filter evaluation engine (`_evaluate_expression`, `_evaluate_filter_group`, `_apply_boolean_filter`); cursor pagination helpers; `POST /query`, `POST /facets`, `POST /explain`, `POST /export`, `GET /capabilities`
+- [x] `services/backend/services/operational_intelligence/models.py` — `FilterOperator`, `FilterExpression`, `FilterGroup`, `UniversalGraphQueryRequest`, `GraphResultMeta`, `GraphQueryResponse`, `GraphFacet*`, `GraphExport*`, `QUERY_BUDGET_DEFAULTS`; widened `GraphNode.kind` to `str`
+- [x] `services/backend/services/operational_intelligence/routes.py` — boolean filter evaluation engine (`_evaluate_expression`, `_evaluate_filter_group`, `_apply_boolean_filter`); cursor pagination helpers; `POST /query`, `POST /facets`, `POST /explain`, `POST /export`, `GET /capabilities`
 - [x] `tests/unit/test_graph_filter_language.py` — 34 tests covering all operators, AND/OR/NOT, cursor roundtrip, Pydantic validation rejection of unknown operators (34/34 pass)
 - [x] `tests/integration/test_graph_query_api.py` — 17 integration tests via FastAPI TestClient covering all Phase 4 routes (17/17 pass)
 
@@ -152,8 +152,8 @@ Key P0 gaps:
 ## Phase 5 — Identity, Population, Clusters, Cluster360 (Complete)
 
 ### Files Changed
-- [x] `Backend Architecture/aether-backend/shared/graph/graph.py` — added 15 cluster VertexType constants (IDENTITY_CLUSTER, BEHAVIORAL_CLUSTER, ECONOMIC_SEGMENT, FRAUD_NETWORK_CLUSTER, DORMANT_COHORT, REACTIVATED_COHORT, etc.)
-- [x] `Backend Architecture/aether-backend/services/identity/routes.py` — Cluster360 routes: `GET /v1/clusters/{cluster_id}`, `/members`, `/timeline`, `/graph`, `/economic`, `/campaigns`, `/risk`, `/geography`
+- [x] `services/backend/shared/graph/graph.py` — added 15 cluster VertexType constants (IDENTITY_CLUSTER, BEHAVIORAL_CLUSTER, ECONOMIC_SEGMENT, FRAUD_NETWORK_CLUSTER, DORMANT_COHORT, REACTIVATED_COHORT, etc.)
+- [x] `services/backend/services/identity/routes.py` — Cluster360 routes: `GET /v1/clusters/{cluster_id}`, `/members`, `/timeline`, `/graph`, `/economic`, `/campaigns`, `/risk`, `/geography`
 - [x] `frontend/aether/src/features/cluster360/` — 6 tab components: Overview, Members, Timeline, Economic, Campaign, Risk, Geography
 - [x] `frontend/aether/src/pages/cluster360/cluster-360-page.tsx` — new page at `/clusters/:clusterId`
 - [x] `frontend/aether/src/features/graph/use-graph-data.ts` — semantic zoom support (macro aggregates, cluster expand)
@@ -170,8 +170,8 @@ Key P0 gaps:
 ## Phase 6 — Campaign, Attribution, Journey, Causality (Complete)
 
 ### Files Changed
-- [x] `Backend Architecture/aether-backend/services/operational_intelligence/routes.py` — campaign overlay added to `/v1/graph/overlay`
-- [x] `Backend Architecture/aether-backend/shared/graph/edge_properties.py` — `causality_class` added as optional edge property with 6 valid values
+- [x] `services/backend/services/operational_intelligence/routes.py` — campaign overlay added to `/v1/graph/overlay`
+- [x] `services/backend/shared/graph/edge_properties.py` — `causality_class` added as optional edge property with 6 valid values
 - [x] `frontend/aether/src/features/graph/use-graph-data.ts` — campaign overlay hook and fetchOverlay function
 - [x] `frontend/aether/src/pages/graph/graph-page.tsx` — campaign overlay toggle, Inspector drill link to Campaign 360
 
@@ -185,8 +185,8 @@ Key P0 gaps:
 ## Phase 7 — Economic Segmentation, Value, Flow of Funds (Complete)
 
 ### Files Changed
-- [x] `Backend Architecture/aether-backend/services/operational_intelligence/routes.py` — `economic` overlay type; `POST /v1/graph/flow` route for money-flow tracing
-- [x] `Backend Architecture/aether-backend/services/operational_intelligence/models.py` — `ECONOMIC_FILTER_FIELDS` constant; economic fields validated in filter language
+- [x] `services/backend/services/operational_intelligence/routes.py` — `economic` overlay type; `POST /v1/graph/flow` route for money-flow tracing
+- [x] `services/backend/services/operational_intelligence/models.py` — `ECONOMIC_FILTER_FIELDS` constant; economic fields validated in filter language
 - [x] `frontend/aether/src/pages/graph/graph-page.tsx` — economic overlay toggle
 
 ### Phase 7 Gate
@@ -199,7 +199,7 @@ Key P0 gaps:
 ## Phase 8 — Fraud, Risk, Investigations (Complete)
 
 ### Files Changed
-- [x] `Backend Architecture/aether-backend/services/operational_intelligence/routes.py` — `fraud` overlay type returning risk_score, fraud_network_id, member_role, alert_state
+- [x] `services/backend/services/operational_intelligence/routes.py` — `fraud` overlay type returning risk_score, fraud_network_id, member_role, alert_state
 - [x] `frontend/aether/src/pages/graph/graph-page.tsx` — fraud overlay toggle; Inspector "Add to Investigation" action
 - [x] `frontend/aether/src/features/cluster360/ClusterRiskTab.tsx` — fraud network detail (type, member roles, evidence refs, timeline)
 
@@ -212,8 +212,8 @@ Key P0 gaps:
 ## Phase 9 — Geography, Consent, Confidence (Complete)
 
 ### Files Changed
-- [x] `Backend Architecture/aether-backend/services/operational_intelligence/routes.py` — `geography` and `consent` overlay types; geography filter fields in filter language
-- [x] `Backend Architecture/aether-backend/services/operational_intelligence/models.py` — `GEOGRAPHY_FILTER_FIELDS` constant
+- [x] `services/backend/services/operational_intelligence/routes.py` — `geography` and `consent` overlay types; geography filter fields in filter language
+- [x] `services/backend/services/operational_intelligence/models.py` — `GEOGRAPHY_FILTER_FIELDS` constant
 - [x] `frontend/aether/src/pages/graph/graph-page.tsx` — geography/consent/confidence overlay toggles
 
 ### Phase 9 Gate
@@ -227,7 +227,7 @@ Key P0 gaps:
 ## Phase 10 — Agentic Intelligence (Complete)
 
 ### Files Changed
-- [x] `Backend Architecture/aether-backend/services/operational_intelligence/routes.py` — agent overlay returning total_spend, total_revenue_produced, task_count, delegation_depth per agent node
+- [x] `services/backend/services/operational_intelligence/routes.py` — agent overlay returning total_spend, total_revenue_produced, task_count, delegation_depth per agent node
 - [x] `packages/shared/graph-contract.ts` — confirmed x402 edge types (SETTLED_VIA, PAYS) in EDGE_LAYER_MAP as A2A
 
 ### Phase 10 Gate
@@ -274,8 +274,8 @@ Key P0 gaps:
 - [x] `frontend/kyber/src/pages/noesis/fleet-graph-page.tsx` — tenant portfolio comparison table, OperatorSessionBanner, OperatorEntryModal
 - [x] `frontend/kyber/src/app/router.tsx` — `/noesis/fleet` route
 - [x] `frontend/kyber/src/lib/api/endpoints.ts` — `kyberOperator` section (enterTenant, exitTenant, tenantEnvelope)
-- [x] `Backend Architecture/aether-backend/services/operational_intelligence/routes.py` — Kyber operator graph routes with operator_tenant_scope header
-- [x] `Backend Architecture/aether-backend/services/kyber_operator/routes.py` — `POST /v1/kyber/operator/tenant-entry`, `DELETE /v1/kyber/operator/tenant-entry`, `GET /v1/kyber/tenants/{id}/operational-envelope`
+- [x] `services/backend/services/operational_intelligence/routes.py` — Kyber operator graph routes with operator_tenant_scope header
+- [x] `services/backend/services/kyber_operator/routes.py` — `POST /v1/kyber/operator/tenant-entry`, `DELETE /v1/kyber/operator/tenant-entry`, `GET /v1/kyber/tenants/{id}/operational-envelope`
 - [x] `docs/FRONTEND-ARCHITECTURE.md` — stamped after Phase 13
 
 ### Phase 13 Gate
@@ -289,8 +289,8 @@ Key P0 gaps:
 ## Phase 14 — Storage, Performance, Caching, Scale (Complete)
 
 ### Files Changed
-- [x] `Backend Architecture/aether-backend/shared/cache/cache.py` — `CacheKey.graph_query()`, `.graph_facets()`, `.graph_replay()` methods with tenant_id as first path segment
-- [x] `Backend Architecture/aether-backend/services/operational_intelligence/routes.py` — cache read/write in `universal_graph_query`; `GET /v1/graph/export/{job_id}` status endpoint
+- [x] `services/backend/shared/cache/cache.py` — `CacheKey.graph_query()`, `.graph_facets()`, `.graph_replay()` methods with tenant_id as first path segment
+- [x] `services/backend/services/operational_intelligence/routes.py` — cache read/write in `universal_graph_query`; `GET /v1/graph/export/{job_id}` status endpoint
 
 ### Phase 14 Gate
 - [x] All graph cache keys include tenant_id (cross-tenant collision impossible)
@@ -315,7 +315,7 @@ Key P0 gaps:
 ## Phase 16 — Observability, SLOs, Incident Response (Complete)
 
 ### Files Changed
-- [x] `Backend Architecture/aether-backend/services/operational_intelligence/routes.py` — emits `graph_query_duration_seconds`, `graph_query_node_count`, `graph_budget_exceeded_total`, `graph_query_cache_hit`, `graph_tenant_isolation_violation_total` metrics
+- [x] `services/backend/services/operational_intelligence/routes.py` — emits `graph_query_duration_seconds`, `graph_query_node_count`, `graph_budget_exceeded_total`, `graph_query_cache_hit`, `graph_tenant_isolation_violation_total` metrics
 
 ### Phase 16 Gate
 - [x] All 5 required metric names emitted on every graph query

@@ -47,7 +47,7 @@ headings are demoted one level so the document keeps a single title. Where the
 blueprint speaks in vocabulary the repository does not yet share ("eight
 planes", bare `SENT`/`RECEIVED`/`CONTAINS` edges, a dotted event taxonomy), the
 reconciliation of that language onto the real architecture (ADR-010, the
-declarative registries under `packages/shared/contracts/`, the `services/comms`
+declarative registries under `packages/shared/contracts/`, the `services/backend/services/comms`
 silver path, the connector catalog, agentic observability, identity and
 delegation services) is recorded in the program plan's section 0 mapping table
 and reflected in the vertical-slice blueprint.

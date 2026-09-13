@@ -22,7 +22,7 @@ since_version: 0.1.0
 
 | Dimension | Count | Source Files |
 |-----------|-------|-------------|
-| Backend services (Python/FastAPI) | 29 routers | `Backend Architecture/aether-backend/routes.py`, service modules |
+| Backend services (Python/FastAPI) | 29 routers | `services/backend/routes.py`, service modules |
 | API endpoints | 184 | Route registrations across all services |
 | Provider adapters | 24 | `PROVIDER_MATRIX.md`, `shared/providers/` |
 | Graph vertex types | 18 | `shared/graph/graph.py` VertexType enum + extended enums |
@@ -59,7 +59,7 @@ The SDK is a **Tier 2 thin client** by design. It detects wallets, ships raw eve
 - No wallet scoring or classification
 - No chain registry or canonical chain ID resolution
 
-### Backend Web3 Service (Backend Architecture/services/web3/)
+### Backend Web3 Service (docs/archive/legacy-architecture/backend/services/web3/)
 
 **Files:** `web3_models.py`, `web3_service.py`, `web3_queries.py`
 
@@ -86,12 +86,12 @@ The SDK is a **Tier 2 thin client** by design. It detects wallets, ships raw eve
 **6 action types:** DEPLOY, CALL, TRANSFER, UPGRADE, PAUSE, DESTROY
 **7 VM targets:** EVM, SVM, Bitcoin, MoveVM, NEAR, TVM, Cosmos
 
-Smart contract deployment targets exist in `Smart Contracts/`:
+Smart contract deployment targets exist in `contracts/smart-contracts/`:
 - EVM: `AnalyticsRewards.sol`, `RewardRegistry.sol` (Solidity)
-- Solana: `Smart Contracts/programs/solana/`
-- SUI: `Smart Contracts/programs/sui/` (Move)
-- NEAR: `Smart Contracts/programs/near/`
-- Cosmos: `Smart Contracts/programs/cosmos/`
+- Solana: `contracts/smart-contracts/programs/solana/`
+- SUI: `contracts/smart-contracts/programs/sui/` (Move)
+- NEAR: `contracts/smart-contracts/programs/near/`
+- Cosmos: `contracts/smart-contracts/programs/cosmos/`
 
 ### Oracle
 
@@ -108,7 +108,7 @@ Multi-chain proof signing for 7 VMs using secp256k1 ECDSA. Proofs are generated 
 
 **Architecture:** Bronze/Silver/Gold medallion tiers
 **6 domains:** market, onchain, social, identity, governance, tradfi
-**Implementation:** Real ETL scheduler in `Data Lake Architecture/aether-Datalake-backend/`, TypeScript-based pipeline orchestration with S3 integration
+**Implementation:** Real ETL scheduler in `docs/archive/legacy-architecture/data-lake-architecture/aether-Datalake-backend/`, TypeScript-based pipeline orchestration with S3 integration
 
 ### Provider Ecosystem (24 Adapters)
 
@@ -164,9 +164,9 @@ These subsystems are production-ready or architecturally sound. Rebuilding them 
 | Subsystem | Why It Must Not Be Rebuilt | Evidence |
 |-----------|---------------------------|----------|
 | SDK wallet providers (7 VMs) | Comprehensive multi-chain detection with EIP-6963, correct thin-client architecture | `packages/web/src/web3/providers/*.ts` |
-| On-chain action recording | 6 action types across 7 VMs, smart contracts deployed | `Smart Contracts/`, backend action types |
+| On-chain action recording | 6 action types across 7 VMs, smart contracts deployed | `contracts/smart-contracts/`, backend action types |
 | Oracle signing | Multi-chain secp256k1 ECDSA proof generation and verification | Oracle service + contract verifiers |
-| Lake medallion architecture | Bronze/Silver/Gold tiers across 6 domains, real ETL pipeline | `Data Lake Architecture/aether-Datalake-backend/` |
+| Lake medallion architecture | Bronze/Silver/Gold tiers across 6 domains, real ETL pipeline | `docs/archive/legacy-architecture/data-lake-architecture/aether-Datalake-backend/` |
 | Provider adapters (all 24) | Real HTTP implementations with health checks, rate limiting, auth | `PROVIDER_MATRIX.md`, `shared/providers/` |
 | Identity resolution framework | Graph-native clustering with WALLET, EMAIL, PHONE, DEVICE vertices | `shared/graph/graph.py`, IDENTITY_CLUSTER vertex |
 | Behavioral signal engines | Web3-aware signal families already detecting wallet friction, CEX/DEX transitions | Signal pipeline in backend services |
@@ -506,13 +506,13 @@ Once the chain/protocol/token/app registries exist with confidence metadata, the
 
 | File / Module | Change Type | Description |
 |---------------|-------------|-------------|
-| `Backend Architecture/aether-backend/shared/graph/graph.py` | Modify | Add new VertexType entries (CHAIN, TOKEN, APP, POOL, VAULT, PROPOSAL, VOTE, NFT_COLLECTION, BRIDGE_ROUTE). Add new EdgeType entries (12 new types). Add confidence/completeness fields to Vertex and Edge dataclasses. |
-| `Backend Architecture/services/web3/web3_models.py` | Modify | Add ChainEntity, ProtocolEntity, TokenEntity, AppEntity Pydantic models. Add CanonicalAction model with normalized action schema. Add confidence fields to existing response models. |
-| `Backend Architecture/services/web3/web3_service.py` | Modify | Wire new registry endpoints. Add contract classification endpoint. |
-| `Backend Architecture/services/web3/web3_queries.py` | Modify | Add registry-aware queries that join on canonical chain/protocol/token IDs. |
-| `Backend Architecture/aether-backend/shared/registries/` | Create | New module: `chain_registry.py`, `protocol_registry.py`, `token_registry.py`, `app_registry.py`. Seed data + CRUD + refresh scheduling. |
-| `Backend Architecture/aether-backend/shared/classifiers/` | Create | New module: `contract_classifier.py`, `action_normalizer.py`. Bytecode analysis, selector matching, per-VM normalization. |
-| `Data Lake Architecture/aether-Datalake-backend/` | Modify | Add Dune query templates for protocol/pool/governance data. Add DeFiLlama expanded endpoints. Add registry table schemas for Silver/Gold tiers. |
+| `services/backend/shared/graph/graph.py` | Modify | Add new VertexType entries (CHAIN, TOKEN, APP, POOL, VAULT, PROPOSAL, VOTE, NFT_COLLECTION, BRIDGE_ROUTE). Add new EdgeType entries (12 new types). Add confidence/completeness fields to Vertex and Edge dataclasses. |
+| `docs/archive/legacy-architecture/backend/services/web3/web3_models.py` | Modify | Add ChainEntity, ProtocolEntity, TokenEntity, AppEntity Pydantic models. Add CanonicalAction model with normalized action schema. Add confidence fields to existing response models. |
+| `docs/archive/legacy-architecture/backend/services/web3/web3_service.py` | Modify | Wire new registry endpoints. Add contract classification endpoint. |
+| `docs/archive/legacy-architecture/backend/services/web3/web3_queries.py` | Modify | Add registry-aware queries that join on canonical chain/protocol/token IDs. |
+| `services/backend/shared/registries/` | Create | New module: `chain_registry.py`, `protocol_registry.py`, `token_registry.py`, `app_registry.py`. Seed data + CRUD + refresh scheduling. |
+| `services/backend/shared/classifiers/` | Create | New module: `contract_classifier.py`, `action_normalizer.py`. Bytecode analysis, selector matching, per-VM normalization. |
+| `docs/archive/legacy-architecture/data-lake-architecture/aether-Datalake-backend/` | Modify | Add Dune query templates for protocol/pool/governance data. Add DeFiLlama expanded endpoints. Add registry table schemas for Silver/Gold tiers. |
 | `packages/web/src/web3/index.ts` | No change | SDK remains a thin client. No registry logic at the client layer. |
 | `packages/web/src/web3/providers/*.ts` | No change | Wallet providers are already comprehensive. |
 

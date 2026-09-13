@@ -7,12 +7,12 @@ audience: [security, architect, compliance]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/services/x402/
+  - services/backend/services/x402/
 canonical_owner: security@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/services/x402/": "sha256:c85ba74d3f53f47429da5025d5945bc0eb0527d936b894623af33570cb9f6635"
+  "services/backend/services/x402/": "sha256:2c0d22c36af95a3f6e2bc5da01fb55a68f0be36bfac9a1bf0e87df2bc95dd87c"
 ---
 # x402 Protocol Support Audit — Aether Repository
 
@@ -47,23 +47,23 @@ This is not speculative or merely extensible infrastructure. The x402 support is
 
 | Capability | Status | Evidence |
 |---|---|---|
-| **x402 HTTP header parsing** | Implemented | `services/x402/interceptor.py` — parses `PAYMENT-REQUIRED`, `X-PAYMENT`, `X-PAYMENT-RESPONSE` |
-| **Payment terms model** | Implemented | `services/x402/models.py:14-21` — `PaymentTerms` (amount, token, chain CAIP-2, recipient, memo, expires_at) |
-| **Payment proof model** | Implemented | `services/x402/models.py:24-30` — `PaymentProof` (tx_hash, payer, chain, amount, token) |
-| **Payment response/receipt** | Implemented | `services/x402/models.py:33-37` — `PaymentResponse` (verified, receipt_id, settled_at) |
-| **Captured transaction record** | Implemented | `services/x402/models.py:40-54` — `CapturedX402Transaction` with USD conversion + fee elimination |
-| **Economic graph (in-memory)** | Implemented | `services/x402/economic_graph.py` — `X402EconomicGraph` with tenant-isolated nodes |
+| **x402 HTTP header parsing** | Implemented | `services/backend/services/x402/interceptor.py` — parses `PAYMENT-REQUIRED`, `X-PAYMENT`, `X-PAYMENT-RESPONSE` |
+| **Payment terms model** | Implemented | `services/backend/services/x402/models.py:14-21` — `PaymentTerms` (amount, token, chain CAIP-2, recipient, memo, expires_at) |
+| **Payment proof model** | Implemented | `services/backend/services/x402/models.py:24-30` — `PaymentProof` (tx_hash, payer, chain, amount, token) |
+| **Payment response/receipt** | Implemented | `services/backend/services/x402/models.py:33-37` — `PaymentResponse` (verified, receipt_id, settled_at) |
+| **Captured transaction record** | Implemented | `services/backend/services/x402/models.py:40-54` — `CapturedX402Transaction` with USD conversion + fee elimination |
+| **Economic graph (in-memory)** | Implemented | `services/backend/services/x402/economic_graph.py` — `X402EconomicGraph` with tenant-isolated nodes |
 | **Graph persistence (Neptune)** | Implemented | `economic_graph.py` — `snapshot_to_graph()` creates tenant-scoped `PAYS`/`CONSUMES` edges; vertex IDs use `{tenant_id}:{entity_id}` format; every edge carries `tenant_id` property for cross-tenant isolation |
-| **API: capture endpoint** | Implemented | `services/x402/routes.py:24` — `POST /v1/x402/capture` (requires `x402:write`) |
-| **API: economic graph query** | Implemented | `services/x402/routes.py:47` — `GET /v1/x402/graph` (requires `x402:read`) |
-| **API: agent spending history** | Implemented | `services/x402/routes.py:56` — `GET /v1/x402/agent/{agent_id}` (requires `x402:read`) |
-| **API: manual snapshot trigger** | Implemented | `services/x402/routes.py:65` — `POST /v1/x402/graph/snapshot` (requires `admin`) |
+| **API: capture endpoint** | Implemented | `services/backend/services/x402/routes.py:24` — `POST /v1/x402/capture` (requires `x402:write`) |
+| **API: economic graph query** | Implemented | `services/backend/services/x402/routes.py:47` — `GET /v1/x402/graph` (requires `x402:read`) |
+| **API: agent spending history** | Implemented | `services/backend/services/x402/routes.py:56` — `GET /v1/x402/agent/{agent_id}` (requires `x402:read`) |
+| **API: manual snapshot trigger** | Implemented | `services/backend/services/x402/routes.py:65` — `POST /v1/x402/graph/snapshot` (requires `admin`) |
 | **Event bus integration** | Implemented | `shared/events/events.py:115` — `Topic.X402_PAYMENT_CAPTURED = "aether.x402.payment.captured"` |
 | **Audit trail action** | Implemented | `audit/trails/audit_engine.py:46` — `AuditAction.X402_CAPTURED = "x402_captured"` |
 | **GDPR/DSR erasure cascade** | Implemented | `gdpr/data_subject_rights/dsr_engine.py` — x402 in-memory store deletion rules |
 | **SDK event type** | Implemented | `packages/web/src/types.ts:566-575` — `X402PaymentEvent` interface |
 | **Feature flag** | Implemented | `config/settings.py` — `enable_x402_layer`, `IG_X402_LAYER` env var |
-| **RPC gateway x402 mode** | Implemented | `services/onchain/rpc_gateway.py` — `x402_enabled` config for QuickNode pay-per-request |
+| **RPC gateway x402 mode** | Implemented | `services/backend/services/onchain/rpc_gateway.py` — `x402_enabled` config for QuickNode pay-per-request |
 | **Permission scoping** | Implemented | `shared/auth/auth.py` — `x402:read`, `x402:write` permission constants |
 | **Paid resource graph vertex** | Implemented | `shared/graph/graph.py:66` — `VertexType.PAYMENT = "Payment"` |
 | **PAYS edge type** | Implemented | `shared/graph/graph.py:135` — `EdgeType.PAYS` (Agent/User → Agent/Service) |
@@ -75,14 +75,14 @@ This is not speculative or merely extensible infrastructure. The x402 support is
 | **Multi-chain (CAIP-2)** | Implemented | Chain field uses CAIP-2 format (e.g., `eip155:1`, `solana:mainnet`) |
 | **Fee elimination tracking** | Implemented | `interceptor.py:30` — 2.9% card fee rate, computed per transaction |
 | **Agent→Tool→Paid Resource** | Implemented | `CONSUMES` edges track API URL + method; `PAYS` edges track amount/token/chain |
-| **Commerce layer (broader)** | Implemented | `services/commerce/` — `PaymentRecord` with method enum including `x402` |
-| **Facilitator / Institution** | Implemented | `services/x402/facilitators.py` — `FacilitatorRegistry` with per-chain facilitator lookup, filtered by the authorization environment (`supported_environments`) so a live authorization never routes through a sandbox-only facilitator; `services/x402/verification.py` — `VerificationEngine` delegates to an external facilitator via HTTP (x402 wire format), attaching the facilitator's tenant/environment-bound API key (credential authority slot `facilitator_api_key`) as a bearer token — falling through to the on-chain RPC verifier when the key is not configured, rather than firing a doomed unauthenticated request |
-| **Payment deduplication (idempotency)** | Implemented | `services/x402/idempotency.py` — async `_InMemoryIdempotencyStore` (local) + `_RedisIdempotencyStore` (staging/production, key: `aether:x402:idempotency:{tenant_id}:{payment_identifier}`); multi-instance safe |
-| **Settlement state machine** | Implemented | `services/x402/settlement.py` — multi-state lifecycle (pending → clearing → settled / failed); `SettlementEngine.start()` transitions `PaymentReceipt` through states |
-| **On-chain verification** | Implemented | `services/x402/verification.py` — facilitator-delegated verification (primary); direct on-chain RPC fallback via `_verify_evm()` (Base: `eth_getTransactionReceipt` + ERC-20 Transfer log) and `_verify_solana()` (Solana: `getTransaction` + SPL token transfer). Active when `AETHER_ENV != "local"`. Fail-closed on RPC error/timeout. |
-| **Entitlement / access gating** | Latent | Reward eligibility engine exists (`services/rewards/eligibility.py`) but x402 does not gate access — it is observational/capture-only |
-| **HTTP 402 response middleware** | Implemented | `services/x402/challenge_middleware.py` — `X402ChallengeMiddleware` intercepts requests to registered protected resources, returns HTTP 402 with `PAYMENT-REQUIRED` header, honors `X-Payment-Identifier` idempotency and active entitlements (SIWX reuse). Wired via `register_challenge_middleware()` controlled by `commerce_enable_challenge_middleware` setting. |
-| **Signer-authority enforcement** | Implemented | `services/x402/signer_authority.py` + `services/x402/verification.py` — fail-closed payer gate at the proof-verification boundary: a tenant that has registered signer references only accepts payment proofs from an active, tenant-authorized signer (unregistered or deactivated payer → `unauthorized_signer` verdict), while a tenant with no signer registry (the default) is unaffected |
+| **Commerce layer (broader)** | Implemented | `services/backend/services/commerce/` — `PaymentRecord` with method enum including `x402` |
+| **Facilitator / Institution** | Implemented | `services/backend/services/x402/facilitators.py` — `FacilitatorRegistry` with per-chain facilitator lookup, filtered by the authorization environment (`supported_environments`) so a live authorization never routes through a sandbox-only facilitator; `services/backend/services/x402/verification.py` — `VerificationEngine` delegates to an external facilitator via HTTP (x402 wire format), attaching the facilitator's tenant/environment-bound API key (credential authority slot `facilitator_api_key`) as a bearer token — falling through to the on-chain RPC verifier when the key is not configured, rather than firing a doomed unauthenticated request |
+| **Payment deduplication (idempotency)** | Implemented | `services/backend/services/x402/idempotency.py` — async `_InMemoryIdempotencyStore` (local) + `_RedisIdempotencyStore` (staging/production, key: `aether:x402:idempotency:{tenant_id}:{payment_identifier}`); multi-instance safe |
+| **Settlement state machine** | Implemented | `services/backend/services/x402/settlement.py` — multi-state lifecycle (pending → clearing → settled / failed); `SettlementEngine.start()` transitions `PaymentReceipt` through states |
+| **On-chain verification** | Implemented | `services/backend/services/x402/verification.py` — facilitator-delegated verification (primary); direct on-chain RPC fallback via `_verify_evm()` (Base: `eth_getTransactionReceipt` + ERC-20 Transfer log) and `_verify_solana()` (Solana: `getTransaction` + SPL token transfer). Active when `AETHER_ENV != "local"`. Fail-closed on RPC error/timeout. |
+| **Entitlement / access gating** | Latent | Reward eligibility engine exists (`services/backend/services/rewards/eligibility.py`) but x402 does not gate access — it is observational/capture-only |
+| **HTTP 402 response middleware** | Implemented | `services/backend/services/x402/challenge_middleware.py` — `X402ChallengeMiddleware` intercepts requests to registered protected resources, returns HTTP 402 with `PAYMENT-REQUIRED` header, honors `X-Payment-Identifier` idempotency and active entitlements (SIWX reuse). Wired via `register_challenge_middleware()` controlled by `commerce_enable_challenge_middleware` setting. |
+| **Signer-authority enforcement** | Implemented | `services/backend/services/x402/signer_authority.py` + `services/backend/services/x402/verification.py` — fail-closed payer gate at the proof-verification boundary: a tenant that has registered signer references only accepts payment proofs from an active, tenant-authorized signer (unregistered or deactivated payer → `unauthorized_signer` verdict), while a tenant with no signer registry (the default) is unaffected |
 
 ---
 
@@ -123,7 +123,7 @@ This is not speculative or merely extensible infrastructure. The x402 support is
 - `VertexType.INSTITUTION` exists with `InstitutionType` enum including `payment_processor`, `custodian`, `exchange`, `transfer_agent`
 - `oracle/verifier.py` performs off-chain signature verification (ecrecover)
 - `shared/graph/economic_schema.py` — `EconomicGraphSchema` now declares a dedicated `Facilitator` vertex type with `ROUTES_VIA`, `ACCEPTS_ASSET`, and `PREFERS_NETWORK` edge types; `repositories/commerce_repos.py:FacilitatorsRepository` provides Postgres-backed upsert/list for facilitator records.
-- The x402 protocol facilitator concept is now a first-class graph entity with full schema, repository, and registry support (`services/x402/facilitators.py`).
+- The x402 protocol facilitator concept is now a first-class graph entity with full schema, repository, and registry support (`services/backend/services/x402/facilitators.py`).
 
 ### 2.5 Can the graph represent transactions/receipts/settlement states?
 
@@ -141,8 +141,8 @@ This is not speculative or merely extensible infrastructure. The x402 support is
 
 **Latent.**
 
-- `RewardRule` + `Campaign` + `EligibilityResult` in `services/rewards/eligibility.py` implement a full entitlement engine (predicates, tiers, cooldowns, per-user caps, fraud gates)
-- RWA policies (`services/rwa/models.py`) enforce whitelist, accreditation, jurisdiction, lockup, AML/KYC policies
+- `RewardRule` + `Campaign` + `EligibilityResult` in `services/backend/services/rewards/eligibility.py` implement a full entitlement engine (predicates, tiers, cooldowns, per-user caps, fraud gates)
+- RWA policies (`services/backend/services/rwa/models.py`) enforce whitelist, accreditation, jurisdiction, lockup, AML/KYC policies
 - Privacy access control (`shared/privacy/access_control.py`) enforces role-based field masking and graph traversal restrictions
 - **However:** x402 does not currently use any of these to gate access. The x402 layer is purely observational — it captures payments that already happened. It does not enforce "pay before access" entitlements.
 
@@ -193,7 +193,7 @@ Client request → Server returns HTTP 402 with PAYMENT-REQUIRED header
     → Server/facilitator verifies payment → Server returns 200 + X-PAYMENT-RESPONSE
 ```
 
-**This challenge-side flow is now implemented.** `X402ChallengeMiddleware` (`services/x402/challenge_middleware.py`):
+**This challenge-side flow is now implemented.** `X402ChallengeMiddleware` (`services/backend/services/x402/challenge_middleware.py`):
 - Returns HTTP 402 with `PAYMENT-REQUIRED` header for requests to registered protected resources
 - Honors `X-Payment-Identifier` for idempotent payment reuse (SIWX entitlement check)
 - Wired via `register_challenge_middleware(app, protected_paths)` controlled by `commerce_enable_challenge_middleware` feature flag
@@ -208,47 +208,47 @@ Aether's x402 support is now **full-stack**: challenge-side (returning HTTP 402 
 
 | File | Role |
 |---|---|
-| `Backend Architecture/aether-backend/services/x402/models.py` | PaymentTerms, PaymentProof, PaymentResponse, CapturedX402Transaction, X402Node, SpendingSummary |
-| `Backend Architecture/aether-backend/services/x402/commerce_models.py` | Facilitator, PaymentAuthorization, PaymentReceipt — commerce control plane types |
-| `Backend Architecture/aether-backend/services/x402/interceptor.py` | X402Interceptor — header parsing, capture, event publishing |
-| `Backend Architecture/aether-backend/services/x402/challenge_middleware.py` | X402ChallengeMiddleware — challenge-side HTTP 402 gating with idempotency and SIWX entitlement reuse |
-| `Backend Architecture/aether-backend/services/x402/economic_graph.py` | X402EconomicGraph — in-memory subgraph, Neptune snapshots, spending patterns |
-| `Backend Architecture/aether-backend/services/x402/facilitators.py` | FacilitatorRegistry — per-chain facilitator lookup and HTTP endpoint resolution |
-| `Backend Architecture/aether-backend/services/x402/verification.py` | VerificationEngine — facilitator-delegated verification (x402 wire format) + USDC/Base, USDC/Solana local fallback; consults the signer authority at the proof boundary |
-| `Backend Architecture/aether-backend/services/x402/signer_authority.py` | SignerAuthority — tenant signer registry; fail-closed `is_payer_authorized()` gate consulted at proof verification |
-| `Backend Architecture/aether-backend/services/x402/idempotency.py` | Async idempotency store — in-memory (local) or Redis-backed (staging/prod) deduplication |
-| `Backend Architecture/aether-backend/services/x402/settlement.py` | SettlementEngine — multi-state settlement lifecycle (pending → clearing → settled / failed) |
-| `Backend Architecture/aether-backend/services/x402/routes.py` | FastAPI routes: /v1/x402/capture, /graph, /agent/{id}, /graph/snapshot |
+| `services/backend/services/x402/models.py` | PaymentTerms, PaymentProof, PaymentResponse, CapturedX402Transaction, X402Node, SpendingSummary |
+| `services/backend/services/x402/commerce_models.py` | Facilitator, PaymentAuthorization, PaymentReceipt — commerce control plane types |
+| `services/backend/services/x402/interceptor.py` | X402Interceptor — header parsing, capture, event publishing |
+| `services/backend/services/x402/challenge_middleware.py` | X402ChallengeMiddleware — challenge-side HTTP 402 gating with idempotency and SIWX entitlement reuse |
+| `services/backend/services/x402/economic_graph.py` | X402EconomicGraph — in-memory subgraph, Neptune snapshots, spending patterns |
+| `services/backend/services/x402/facilitators.py` | FacilitatorRegistry — per-chain facilitator lookup and HTTP endpoint resolution |
+| `services/backend/services/x402/verification.py` | VerificationEngine — facilitator-delegated verification (x402 wire format) + USDC/Base, USDC/Solana local fallback; consults the signer authority at the proof boundary |
+| `services/backend/services/x402/signer_authority.py` | SignerAuthority — tenant signer registry; fail-closed `is_payer_authorized()` gate consulted at proof verification |
+| `services/backend/services/x402/idempotency.py` | Async idempotency store — in-memory (local) or Redis-backed (staging/prod) deduplication |
+| `services/backend/services/x402/settlement.py` | SettlementEngine — multi-state settlement lifecycle (pending → clearing → settled / failed) |
+| `services/backend/services/x402/routes.py` | FastAPI routes: /v1/x402/capture, /graph, /agent/{id}, /graph/snapshot |
 
 ### Graph Layer
 
 | File | Role |
 |---|---|
-| `Backend Architecture/aether-backend/shared/graph/graph.py` | VertexType (AGENT, SERVICE, PAYMENT, WALLET, etc.), EdgeType (PAYS, CONSUMES, HIRED, OWNS_WALLET, etc.) |
-| `Backend Architecture/aether-backend/shared/graph/relationship_layers.py` | H2H/H2A/A2H/A2A layer classification |
+| `services/backend/shared/graph/graph.py` | VertexType (AGENT, SERVICE, PAYMENT, WALLET, etc.), EdgeType (PAYS, CONSUMES, HIRED, OWNS_WALLET, etc.) |
+| `services/backend/shared/graph/relationship_layers.py` | H2H/H2A/A2H/A2A layer classification |
 
 ### Commerce Integration
 
 | File | Role |
 |---|---|
-| `Backend Architecture/aether-backend/services/commerce/models.py` | PaymentRecord (method enum includes "x402"), AgentHireRecord, FeeEliminationReport |
-| `Backend Architecture/aether-backend/services/commerce/routes.py` | /v1/commerce/payments, /hires, /fees/report, /agent/{id}/spend |
+| `services/backend/services/commerce/models.py` | PaymentRecord (method enum includes "x402"), AgentHireRecord, FeeEliminationReport |
+| `services/backend/services/commerce/routes.py` | /v1/commerce/payments, /hires, /fees/report, /agent/{id}/spend |
 
 ### Event & Audit Infrastructure
 
 | File | Role |
 |---|---|
-| `Backend Architecture/aether-backend/shared/events/events.py:115` | `Topic.X402_PAYMENT_CAPTURED` |
-| `GDPR & SOC2/aether-compliance/audit/trails/audit_engine.py:46` | `AuditAction.X402_CAPTURED` |
-| `GDPR & SOC2/aether-compliance/gdpr/data_subject_rights/dsr_engine.py` | x402 data erasure cascade |
+| `services/backend/shared/events/events.py:115` | `Topic.X402_PAYMENT_CAPTURED` |
+| `services/compliance/audit/trails/audit_engine.py:46` | `AuditAction.X402_CAPTURED` |
+| `services/compliance/gdpr/data_subject_rights/dsr_engine.py` | x402 data erasure cascade |
 
 ### Configuration & Auth
 
 | File | Role |
 |---|---|
-| `Backend Architecture/aether-backend/config/settings.py` | `enable_x402_layer`, `QUICKNODE_X402_ENABLED` |
-| `Backend Architecture/aether-backend/main.py:264-267` | Feature-flagged mount of x402 router via `IG_X402_LAYER` |
-| `Backend Architecture/aether-backend/shared/auth/auth.py` | `x402:read`, `x402:write` permissions |
+| `services/backend/config/settings.py` | `enable_x402_layer`, `QUICKNODE_X402_ENABLED` |
+| `services/backend/main.py:264-267` | Feature-flagged mount of x402 router via `IG_X402_LAYER` |
+| `services/backend/shared/auth/auth.py` | `x402:read`, `x402:write` permissions |
 
 ### SDK & Frontend
 
@@ -261,10 +261,10 @@ Aether's x402 support is now **full-stack**: challenge-side (returning HTTP 402 
 
 | File | Role |
 |---|---|
-| `Backend Architecture/aether-backend/services/onchain/rpc_gateway.py` | QuickNode RPC with `x402_enabled` config |
-| `Backend Architecture/aether-backend/services/oracle/verifier.py` | Off-chain signature verification (ecrecover) |
-| `Backend Architecture/aether-backend/services/rewards/eligibility.py` | Entitlement engine (adjacent, not wired to x402) |
-| `Backend Architecture/aether-backend/services/rwa/models.py` | RWA policy enforcement (adjacent) |
+| `services/backend/services/onchain/rpc_gateway.py` | QuickNode RPC with `x402_enabled` config |
+| `services/backend/services/oracle/verifier.py` | Off-chain signature verification (ecrecover) |
+| `services/backend/services/rewards/eligibility.py` | Entitlement engine (adjacent, not wired to x402) |
+| `services/backend/services/rwa/models.py` | RWA policy enforcement (adjacent) |
 
 ---
 
@@ -299,11 +299,11 @@ Aether has a **production-grade x402 capture and analytics subsystem** that:
   `COMMERCE-CONTROL-PLANE.md §9` and `COMMERCE-OPERATOR-RUNBOOK.md §8`.
 - **Signer-authority enforcement at proof verification** — a tenant that has
   registered signer references is enforced fail-closed at the proof-verification
-  boundary (`services/x402/signer_authority.py` consulted by `verification.py`):
+  boundary (`services/backend/services/x402/signer_authority.py` consulted by `verification.py`):
   proofs from an unregistered or deactivated payer are rejected with an
   `unauthorized_signer` verdict even when chain/facilitator verification would
   otherwise succeed; tenants with no signer registry are unaffected.
 
-**Challenge-side gap is now closed.** `X402ChallengeMiddleware` implements the missing HTTP 402 gating layer (`services/x402/challenge_middleware.py`). Deployment is controlled by `commerce_enable_challenge_middleware` setting.
+**Challenge-side gap is now closed.** `X402ChallengeMiddleware` implements the missing HTTP 402 gating layer (`services/backend/services/x402/challenge_middleware.py`). Deployment is controlled by `commerce_enable_challenge_middleware` setting.
 
 Direct on-chain RPC verification is implemented for EVM (Base) and Solana chains via `_verify_evm()` and `_verify_solana()` in `verification.py`. These run when facilitator delegation is unavailable, active in all non-local environments. As of the credential-only x402 closure, RPC is resolved **per-tenant** from the credential authority (atomic `{url, api_key, auth_mode}`; providers `rpc_evm_base` / `rpc_svm_mainnet` / …) rather than a deployment-global URL; a deployed environment with no configured pair returns the `verification_unavailable` verdict (fail-closed). The tenant-supplied RPC URL is an SSRF surface (a tenant admin controls it and the verifier POSTs to it), so `rpc_resolver._validate_rpc_url()` runs every resolved URL through the hardened DNS-resolving webhook blocklist (loopback / RFC1918 / link-local metadata / ULA) plus HTTPS-outside-local enforcement, failing closed on a non-public address before any request is made. Verification additionally binds the payer and enforces finality (confirmation depth / `finalized` commitment) and strict asset decimals, and — for a batched/multicall receipt — scans **every** candidate transfer to the recipient before rejecting, so a valid transfer among several is not missed. Verdicts are classified terminal vs retryable: `not_finalized` / `verification_unavailable` are **retryable** and are never written to the payment-identifier idempotency store, so a not-yet-final payment re-checks the chain on the next call instead of being stranded behind a cached failure. External-facilitator transport failures (HTTP 5xx / 429 / timeout / unreachable) are likewise classified `verification_unavailable` (retryable), not a terminal failure, so a facilitator outage doesn't strand a valid payment. Receipt ids are deterministic per (tenant, authorization), so a retry UPSERTS the same receipt row rather than colliding on the `commerce_receipts (tenant_id, authorization_id)` unique index. Arbitrary EVM-compatible chains beyond Base are not yet supported; adding a new chain requires a `_ASSET_CONTRACT` entry and an RPC provider mapping.

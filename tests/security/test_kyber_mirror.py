@@ -31,7 +31,7 @@ from typing import Any, Optional
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = REPO_ROOT / "services" / "backend"
 sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")
 

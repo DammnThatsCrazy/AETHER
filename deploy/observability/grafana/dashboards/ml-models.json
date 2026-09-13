@@ -1,6 +1,6 @@
 {
   "uid": "aether-ml-models",
-  "title": "ML Models",
+  "title": "services/ml",
   "tags": ["aether", "ml", "inference"],
   "schemaVersion": 36,
   "version": 1,

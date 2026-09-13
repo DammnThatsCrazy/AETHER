@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/contracts/comparison-registry.json, packages/shared/comparison-contract.ts, Backend Architecture/aether-backend/services/intelligence/comparison/contracts.py, Backend Architecture/aether-backend/services/intelligence/comparison/generated_vocabulary.py, Backend Architecture/aether-backend/services/intelligence/comparison/engine.py, Backend Architecture/aether-backend/services/intelligence/comparison/baselines.py, Backend Architecture/aether-backend/services/intelligence/comparison/alignment.py, Backend Architecture/aether-backend/services/intelligence/comparison/materiality.py, Backend Architecture/aether-backend/services/intelligence/comparison/collection.py, Backend Architecture/aether-backend/services/intelligence/comparison/findings.py, Backend Architecture/aether-backend/services/intelligence/comparison/watchlists.py, Backend Architecture/aether-backend/services/intelligence/comparison/scenarios.py, Backend Architecture/aether-backend/services/intelligence/comparison/jobs.py, Backend Architecture/aether-backend/services/intelligence/comparison/routes.py, Backend Architecture/aether-backend/services/intelligence/comparison/store.py]
+source_files: [packages/shared/contracts/comparison-registry.json, packages/shared/comparison-contract.ts, services/backend/services/intelligence/comparison/contracts.py, services/backend/services/intelligence/comparison/generated_vocabulary.py, services/backend/services/intelligence/comparison/engine.py, services/backend/services/intelligence/comparison/baselines.py, services/backend/services/intelligence/comparison/alignment.py, services/backend/services/intelligence/comparison/materiality.py, services/backend/services/intelligence/comparison/collection.py, services/backend/services/intelligence/comparison/findings.py, services/backend/services/intelligence/comparison/watchlists.py, services/backend/services/intelligence/comparison/scenarios.py, services/backend/services/intelligence/comparison/jobs.py, services/backend/services/intelligence/comparison/routes.py, services/backend/services/intelligence/comparison/store.py]
 last_synced_commit: a500f1f
 ---
 
@@ -21,7 +21,7 @@ require monitoring, investigation, decision, or action.
 | Concern | Canonical owner |
 |---|---|
 | Vocabularies: 6 comparison modes, 8 baseline types, 10 alignment outcomes, 12 run states, 5 severities, 7 dispositions, 10 fact-linkage states, 7 causal-claim levels, 20 comparison dimensions, 14 materiality components | `packages/shared/contracts/comparison-registry.json` → generated TS/Py twins |
-| `ComparisonSubject` / `BaselineSpec` / `ComparisonDefinition` / `ComparisonRun` / `ComparisonFinding` contracts | `services/intelligence/comparison/contracts.py` ↔ `comparison-contract.ts` (parity-tested) |
+| `ComparisonSubject` / `BaselineSpec` / `ComparisonDefinition` / `ComparisonRun` / `ComparisonFinding` contracts | `services/backend/services/intelligence/comparison/contracts.py` ↔ `comparison-contract.ts` (parity-tested) |
 
 ## Rules
 
@@ -47,7 +47,7 @@ introducing a second ledger. These links are additive and do not change the
 default-off comparison boundary or permit execution without an approved,
 policy-authorized decision.
 
-## PR 3 engine (`services/intelligence/comparison/`, flag-gated `AETHER_COMPARISON_INTELLIGENCE_ENABLED`)
+## PR 3 engine (`services/backend/services/intelligence/comparison/`, flag-gated `AETHER_COMPARISON_INTELLIGENCE_ENABLED`)
 
 | Module | Responsibility |
 |---|---|

@@ -26,9 +26,9 @@ repository_ceiling:
   - None — repository-controlled work complete
   remaining_is_repository_controlled: false
   evidence:
-  - Backend Architecture/aether-backend/services/imports/
-  - Backend Architecture/aether-backend/services/imports/service.py
-  - Backend Architecture/aether-backend/services/imports/commit.py
+  - services/backend/services/imports/
+  - services/backend/services/imports/service.py
+  - services/backend/services/imports/commit.py
 implementation:
   state: VERIFIED
   denominator: in-scope repository controls (migration-derived)
@@ -115,7 +115,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: Backend Architecture/aether-backend/services/imports/'
+  - 'repository evidence: services/backend/services/imports/'
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:

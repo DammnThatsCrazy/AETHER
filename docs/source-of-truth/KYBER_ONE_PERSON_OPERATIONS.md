@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/agent/runtime_repository.py, Backend Architecture/aether-backend/services/agent/worker_bridge.py, Backend Architecture/aether-backend/services/agent/worker_routes.py, Backend Architecture/aether-backend/services/agent/mutation_commit.py, Backend Architecture/aether-backend/services/agent/briefings.py, Backend Architecture/aether-backend/services/agent/ops_alerts.py, scripts/ops_readiness.py]
+source_files: [services/backend/services/agent/runtime_repository.py, services/backend/services/agent/worker_bridge.py, services/backend/services/agent/worker_routes.py, services/backend/services/agent/mutation_commit.py, services/backend/services/agent/briefings.py, services/backend/services/agent/ops_alerts.py, scripts/ops_readiness.py]
 last_synced_commit: HEAD
 ---
 
@@ -29,7 +29,7 @@ Kyber/operator objective → backend dispatch → durable run record
 
 ## Worker execution bridge
 
-- `services/agent/worker_bridge.py` publishes objective steps to the Agent
+- `services/backend/services/agent/worker_bridge.py` publishes objective steps to the Agent
   Layer's Celery broker **by task name** (`aether.agent.execute_objective_step`)
   with a canonical envelope: `tenant_id, objective_id, run_id, controller,
   queue, idempotency_key, attempt, payload, created_at, request_id`
@@ -55,7 +55,7 @@ Kyber/operator objective → backend dispatch → durable run record
 
 ## Approval-to-commit graph mutation pipeline
 
-`services/agent/mutation_commit.py` (flag
+`services/backend/services/agent/mutation_commit.py` (flag
 `AETHER_STAGED_GRAPH_MUTATION_REVIEW_ENABLED`):
 
 - Commit runs **only after an explicit operator approval** of a review batch;
@@ -72,13 +72,13 @@ Kyber/operator objective → backend dispatch → durable run record
 
 ## Durable briefings, alerts, and Catalyst/Cycle
 
-- `services/agent/briefings.py` — operator briefings persisted in the
+- `services/backend/services/agent/briefings.py` — operator briefings persisted in the
   `agent_briefings` durable store (replacing the Agent Layer's in-memory
   prototype for backend surfaces): generated from live state (objectives by
   status, stuck runs, pending review batches, staged mutation counts,
   kill-switch state, recent alerts). `GET /v1/agent/briefings` +
   `POST /v1/agent/briefings/generate`.
-- `services/agent/ops_alerts.py` — alert compression (same `dedupe_key`
+- `services/backend/services/agent/ops_alerts.py` — alert compression (same `dedupe_key`
   within the window increments a count instead of duplicating) + notification
   routing through the existing notification service seam; per-channel state
   in `ops_notification_state`.

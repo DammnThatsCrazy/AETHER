@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent
-ML_ROOT = REPO_ROOT / "ML Models" / "aether-ml"
+ML_ROOT = REPO_ROOT / "services" / "ml"
 
 EXPECTED_TRAINABLE = {
     "intent_prediction",
@@ -198,8 +198,7 @@ def check_backend_routes() -> list[str]:
     errors: list[str] = []
     routes_path = (
         REPO_ROOT
-        / "Backend Architecture"
-        / "aether-backend"
+        / "services" / "backend"
         / "services"
         / "ml_serving"
         / "routes.py"
@@ -320,7 +319,7 @@ def check_model_type_enum() -> list[str]:
     if missing:
         errors.append(
             f"ModelType enum missing entries: {sorted(missing)}. "
-            "Add to ML Models/aether-ml/common/src/base.py."
+            "Add to services/ml/common/src/base.py."
         )
     else:
         ok(f"ModelType enum covers all {len(registry_ids)} registry models")
@@ -417,8 +416,7 @@ def check_no_privilege_header() -> list[str]:
     errors: list[str] = []
     routes_path = (
         REPO_ROOT
-        / "Backend Architecture"
-        / "aether-backend"
+        / "services" / "backend"
         / "services"
         / "ml_serving"
         / "routes.py"

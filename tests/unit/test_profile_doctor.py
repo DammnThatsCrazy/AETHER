@@ -156,7 +156,7 @@ def test_demo_preview_lifecycle_contract_gates_credential_waiting(tmp_path):
             "target_monthly_spend": 10,
             "hard_monthly_spend": 25,
         }
-        tf_dir = sub / "AWS Deployment" / "aether-aws" / "terraform"
+        tf_dir = sub / "deploy" / "aws" / "terraform"
         (tf_dir / "profiles").mkdir(parents=True, exist_ok=True)
         (tf_dir / "profiles" / "demo.tfvars").write_text(
             'deployment_profile = "demo"\n', encoding="utf-8")

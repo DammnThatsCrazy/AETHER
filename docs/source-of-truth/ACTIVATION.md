@@ -7,12 +7,12 @@ audience: [architect, dev-senior, ops]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/services/activation/models.py
-  - Backend Architecture/aether-backend/services/activation/repository.py
-  - Backend Architecture/aether-backend/services/activation/service.py
-  - Backend Architecture/aether-backend/services/activation/routes.py
-  - Backend Architecture/aether-backend/services/activation/intents.py
-  - Backend Architecture/aether-backend/services/activation/planner.py
+  - services/backend/services/activation/models.py
+  - services/backend/services/activation/repository.py
+  - services/backend/services/activation/service.py
+  - services/backend/services/activation/routes.py
+  - services/backend/services/activation/intents.py
+  - services/backend/services/activation/planner.py
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
@@ -24,12 +24,12 @@ last_synced_commit: "fffcd7dc5f02"
 Activation is the tenant-facing loop that takes a new tenant from account
 creation to first proven value, without operator hand-holding. It is additive
 to — and does **not** replace — the CS-driven onboarding/implementation-plan
-subsystem (`services/onboarding`). It is mounted at `/v1/activation` **only when
+subsystem (`services/backend/services/onboarding`). It is mounted at `/v1/activation` **only when
 `AETHER_ACTIVATION_ENABLED=true`** (default OFF; zero runtime change when off).
 
 ## State machine
 
-`ActivationState` (`services/activation/models.py`) — one record per tenant,
+`ActivationState` (`services/backend/services/activation/models.py`) — one record per tenant,
 persisted in `tenant_activations`:
 
 ```
@@ -69,14 +69,14 @@ GETs require `read`; state-changing POSTs require `Permissions.WRITE`.
 The activation flow also turns a tenant's *goals* into connect steps over the
 shared connect contracts (`connector_service` + the credential service + the
 consent policy — the same runtime behind Settings). Goal vocabulary lives in
-`ActivationIntent` (`services/activation/intents.py`, stable snake_case tokens
+`ActivationIntent` (`services/backend/services/activation/intents.py`, stable snake_case tokens
 shared with the tenant UI: `grow_revenue`, `run_advertising`, `know_customers`,
 `engage_customers`, `understand_behavior`, `grow_community`,
 `support_customers`, `streamline_work`). Each intent recommends an ordered set
 of `ExperienceCategory` values; recommended integrations are derived from the
 one catalog (`ALL_MANIFESTS`) — never a hand-synced provider list.
 
-The planner (`services/activation/planner.py`) reads the tenant's chosen
+The planner (`services/backend/services/activation/planner.py`) reads the tenant's chosen
 intents (persisted on the same `tenant_activations` record, orthogonal to the
 SDK state machine) and derives, per recommended experience, each integration's
 next connect step from the tenant's REAL connector row facts (enabled /

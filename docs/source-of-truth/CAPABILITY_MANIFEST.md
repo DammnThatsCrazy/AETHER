@@ -49,6 +49,6 @@ can start populating them. SDK-side gating will be added as Tier B work.
 ## Source of truth
 
 - `packages/shared/capabilities.ts` — TypeScript contract
-- `Backend Architecture/aether-backend/config/settings.py` — backend
+- `services/backend/config/settings.py` — backend
   feature flags that feed `layers.*`
 - Backend handler for `GET /v1/config` owns the response shape.

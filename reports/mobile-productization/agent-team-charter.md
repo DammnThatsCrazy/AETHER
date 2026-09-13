@@ -36,9 +36,9 @@ Do NOT rescan the repo for what the packet already names.
 
 Specialists must never write these; they propose, the orchestrator integrates:
 
-- `Backend Architecture/aether-backend/main.py` (route mounts, router unmounts)
-- `Backend Architecture/aether-backend/config/settings.py` (feature flags default OFF)
-- `Backend Architecture/aether-backend/services/runtime/specs.py` (worker registration)
+- `services/backend/main.py` (route mounts, router unmounts)
+- `services/backend/config/settings.py` (feature flags default OFF)
+- `services/backend/services/runtime/specs.py` (worker registration)
 - `packages/shared/index.ts` (TS twin registry)
 - `package.json` (npm workspaces)
 - `Makefile` (gates)

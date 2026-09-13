@@ -47,7 +47,7 @@ def validate() -> list[str]:
     for prefix in manifest["release_surface"]["enabled_route_prefixes"]:
         if prefix not in known:
             errors.append(f"FT_SURFACE_UNKNOWN_ROUTE:{prefix}")
-    runtime = ROOT / "Backend Architecture/aether-backend/services/runtime"
+    runtime = ROOT / "services/backend/services/runtime"
     roles = set(_literal_assignment(runtime / "roles.py", "WORKER_ROLES")) | {"api"}
     declared_roles = set(manifest["release_surface"]["runtime_roles"])
     if roles != declared_roles:

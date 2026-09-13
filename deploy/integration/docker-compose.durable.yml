@@ -3,7 +3,7 @@ name: aether-durable-integration
 x-runtime: &runtime
   build:
     context: ../..
-    dockerfile: Backend Architecture/aether-backend/Dockerfile
+    dockerfile: services/backend/Dockerfile
   depends_on:
     postgres: {condition: service_healthy}
     redis: {condition: service_healthy}

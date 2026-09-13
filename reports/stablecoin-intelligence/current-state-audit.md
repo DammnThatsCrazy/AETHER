@@ -5,7 +5,7 @@ Branch scope: PR1 foundation audit and hardening.
 
 ## Findings
 
-- Existing x402 systems are observation-oriented in `services/x402`, shared lifecycle events, and agentic observability repositories. Production documentation must continue to state that settlements are external observations, not Aether-executed transfers.
+- Existing x402 systems are observation-oriented in `services/backend/services/x402`, shared lifecycle events, and agentic observability repositories. Production documentation must continue to state that settlements are external observations, not Aether-executed transfers.
 - Existing economic repositories include payment intents and settlement events. Payment intents model lifecycle state and must not be counted as finalized stablecoin settlement without onchain or facilitator evidence.
 - Existing data lake repositories already implement Bronze, Silver, and Gold concepts with provenance and quarantine gates, but generic Gold identity was only metric/entity/type and is unsafe for stablecoin metrics. PR1 adds stablecoin-specific versioned Gold identity.
 - Existing Dune repositories are tenant-scoped by `tenant_scope` for query, promotion, and rollback. Stablecoin ingestion must continue to require execution identity and prohibit direct graph mutation.

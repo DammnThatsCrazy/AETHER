@@ -6,15 +6,15 @@ visibility: P
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/shared/graph/, docs/source-of-truth/GRAPH_ALIGNMENT.md]
+source_files: [services/backend/shared/graph/, docs/source-of-truth/GRAPH_ALIGNMENT.md]
 canonical_owner: graph@aether
 estimated_read_minutes: 15
 toc_depth: 3
 reviewed_source_commits:
   - {'commit': '0efa07cb', 'reason': 'Reviewed graph traversal hardening: temporal path queries reconstruct only valid source-to-target paths, shortest and K-shortest expansion respects the total hop budget, and equal-cost candidates have a deterministic tie-break.'}
 source_hashes:
-  "Backend Architecture/aether-backend/shared/graph/": "sha256:2b0077ff61139fb08ae828360c19cff6daf929849ead8098826ca4e3d9afd987"
-  "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:df14891971953c654d4ad3e8584c26c54c22f7463ba2fb3c2d66c1c7bf70675d"
+  "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:fb84c894efabe18943ceb0689d16729a2ce19ddca77a84c96fa4a626d82304d2"
+  "services/backend/shared/graph/": "sha256:117acb310735fddef6cf42abed9d904224f81ad3737e0b52b82f6c0bc2820a49"
 ---
 # Unified On-Chain Intelligence Graph v0.1.0-alpha.0
 
@@ -85,14 +85,14 @@ Graph can be rebuilt from lake state or incrementally updated.
 
 A second, governed mutation path closes the "Gold is computed but never reaches
 the graph" gap for semantic intelligence: the **semantic graph projector**
-(`services/semantic_intelligence/graph_projector.py`) reads each tenant's
+(`services/backend/services/semantic_intelligence/graph_projector.py`) reads each tenant's
 durable `gold_relationship_semantic_state` projections and writes one directed
 `SEMANTIC_RELATES_TO` edge per relationship (`source_ref -> target_ref`) into
 the graph **through the canonical `GraphMutationGateway`** — never a direct
 graph write. See [Semantic relationship overlay](#semantic-relationship-overlay).
 
 A third, governed path makes **population membership a first-class graph fact**
-(population360 P3.1 — `services/population/governance.py`): every join/leave is
+(population360 P3.1 — `services/backend/services/population/governance.py`): every join/leave is
 written as a directed `MEMBER_OF` edge (`entity -> population`) through the same
 canonical `GraphMutationGateway`, never a bare table write. The gateway
 close-and-appends into the bitemporal ledger, so a membership history is
@@ -126,7 +126,7 @@ still error in staging/prod): `LOCATED_AT` (subject -> `REGION`, the resolved
 located-at region at declared precision), `OBSERVED_IN` (subject -> `PLACE`, a
 single observation at a named venue), and `UNDER_JURISDICTION` (subject ->
 `JURISDICTION`, the governing policy scope kept distinct from the observation
-that locates a subject). `services/geo/location_edges.py` is the one assembly
+that locates a subject). `services/backend/services/geo/location_edges.py` is the one assembly
 surface: it fails closed on unknown vocabulary and on a `precise`/`coarse_cell`
 claim the fact's evidence cannot support (precision never exceeds evidence),
 and emits one edge per resolution target carrying the geographic provenance
@@ -400,7 +400,7 @@ When a Data Subject Request is received:
   `MEMBER_OF` edge is soft-revoked (`edge_expired`) via
   `PopulationMembershipGovernor.remove_membership`, the membership row
   transitions to `left`, and each affected population's `member_count` is
-  recomputed (population360 P3.3, `services/consent/erasure_jobs.py::_erase_population_plane`).
+  recomputed (population360 P3.3, `services/backend/services/consent/erasure_jobs.py::_erase_population_plane`).
   The erasure marks the three population dsr_propagation components
   (`population_memberships` / `population_snapshots` / `populations`) with real
   receipts — only memberships carry subject identity; snapshots and population
@@ -628,7 +628,7 @@ See `docs/operations/UNIVERSAL_GRAPH_RUNBOOK.md` for operational procedures.
 
 ### Universal Query API (v8.10.0)
 
-New routes added to `services/operational_intelligence/routes.py`:
+New routes added to `services/backend/services/operational_intelligence/routes.py`:
 
 | Method | Path | Description |
 |--------|------|-------------|

@@ -20,7 +20,7 @@ C4 lands the **compiling app shell** bound to the operator plane: identity, cont
 and sync are wired via the shared SDK, and a navigation skeleton renders. The full
 operator surfaces (Pulse / Exceptions / Incidents / Runs / Reviews) and the governed
 Tier-0–3 actions (challenge / step-up / device-sign over the Kyber command plane
-`services/kyber/ops/*`) are **C5–C7, not this session**.
+`services/backend/services/kyber/ops/*`) are **C5–C7, not this session**.
 
 The native compile is `externally_blocked` in the Linux CI container (needs macOS +
 Xcode + Android SDK + Expo); it runs in the hosted (macOS) CI. See

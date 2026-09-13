@@ -6,16 +6,16 @@ visibility: I
 audience: [architect, dev-senior, ops, buyer]
 status: beta
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/intelligence/outcome_ledger.py, Backend Architecture/aether-backend/services/intelligence/routes.py, Backend Architecture/aether-backend/services/profile/routes.py]
+source_files: [services/backend/services/intelligence/outcome_ledger.py, services/backend/services/intelligence/routes.py, services/backend/services/profile/routes.py]
 flags: [AETHER_RECOMMENDATIONS_ENABLED, AETHER_DECISION_RECORDS_ENABLED, AETHER_OUTCOME_FEEDBACK_ENABLED]
 related: [ai/decision-outcome-intelligence]
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  Backend Architecture/aether-backend/services/intelligence/outcome_ledger.py: sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206
-  Backend Architecture/aether-backend/services/intelligence/routes.py: sha256:8a705ad12ff7176d486afa586ba3f794da14017b9f9c108a3f9b6313da94884b
-  Backend Architecture/aether-backend/services/profile/routes.py: sha256:f51979fa82968ca97bdac3520fd411b20e578c1734547077c594be2c42a6ed4f
+  services/backend/services/intelligence/outcome_ledger.py: sha256:8edf9b6a8db71127202f8225cb8b03330eef96f058ae555eb38a7a576cdbf206
+  services/backend/services/intelligence/routes.py: sha256:8a705ad12ff7176d486afa586ba3f794da14017b9f9c108a3f9b6313da94884b
+  services/backend/services/profile/routes.py: sha256:f51979fa82968ca97bdac3520fd411b20e578c1734547077c594be2c42a6ed4f
 ---
 # Outcome Ledger
 

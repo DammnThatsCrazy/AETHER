@@ -26,7 +26,7 @@ import tokenize
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-BACKEND = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = ROOT / "services" / "backend"
 ALLOWLIST = ROOT / "scripts" / "allowlists" / "graph_write_paths.json"
 
 _WRITE_METHODS = frozenset({"add_edge", "upsert_vertex", "add_vertex", "revoke_edge"})

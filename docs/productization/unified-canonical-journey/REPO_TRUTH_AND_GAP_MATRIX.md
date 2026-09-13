@@ -42,10 +42,10 @@ since_version: 0.1.0
 
 ### New Files
 - `alembic/versions/20260627_canonical_activity.py`
-- `services/measurement/repositories/activity_repo.py`
-- `services/measurement/repositories/journey_step_repo.py`
-- `services/measurement/silver_adapters.py`
-- `services/measurement/metrics.py`
+- `services/backend/services/measurement/repositories/activity_repo.py`
+- `services/backend/services/measurement/repositories/journey_step_repo.py`
+- `services/backend/services/measurement/silver_adapters.py`
+- `services/backend/services/measurement/metrics.py`
 - `frontend/aether/src/features/journey/use-unified-journey.ts`
 - `frontend/aether/src/features/journey/journey-step-card.tsx`
 - `frontend/aether/src/features/journey/journey-timeline.tsx`
@@ -62,12 +62,12 @@ since_version: 0.1.0
 - `docs/productization/unified-canonical-journey/` (this directory)
 
 ### Modified Files
-- `services/measurement/contracts.py` — added ActivityFamily, ActivityStatus, TransitionType, CanonicalActivity, JourneyStep
-- `services/measurement/engine/journey_compiler.py` — extended to v2.0
-- `services/measurement/routes/journeys.py` — added steps, transitions, explain, rebuild endpoints
-- `services/profile/aggregator.py` — added unified_journey() method
-- `services/profile/routes.py` — added unified-journey endpoint
-- `services/silver/projectors/base.py` — added project_and_emit, _emit_to_canonical_activity
+- `services/backend/services/measurement/contracts.py` — added ActivityFamily, ActivityStatus, TransitionType, CanonicalActivity, JourneyStep
+- `services/backend/services/measurement/engine/journey_compiler.py` — extended to v2.0
+- `services/backend/services/measurement/routes/journeys.py` — added steps, transitions, explain, rebuild endpoints
+- `services/backend/services/profile/aggregator.py` — added unified_journey() method
+- `services/backend/services/profile/routes.py` — added unified-journey endpoint
+- `services/backend/services/silver/projectors/base.py` — added project_and_emit, _emit_to_canonical_activity
 - `frontend/aether/src/features/journey/index.ts` — extended exports
 - `frontend/kyber/src/features/measurement/use-journey-explorer.ts` — extended with new hooks
 - `frontend/kyber/src/features/measurement/index.ts` — extended exports

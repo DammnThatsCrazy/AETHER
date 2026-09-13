@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Migration destructive-change gate for the Alembic revision graph.
 
-Every revision under ``Backend Architecture/aether-backend/alembic/versions``
+Every revision under ``services/backend/alembic/versions``
 is parsed as Python *source* (never imported/executed — Alembic need not be
 installed, and we never run arbitrary migration code just to lint it). This
 validator walks each revision's ``upgrade()`` body — including local helper
@@ -52,7 +52,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_VERSIONS_DIR = (
-    REPO_ROOT / "Backend Architecture" / "aether-backend" / "alembic" / "versions"
+    REPO_ROOT / "services" / "backend" / "alembic" / "versions"
 )
 DEFAULT_ALLOWLIST_PATH = REPO_ROOT / "config" / "migration_safety_allowlist.yaml"
 

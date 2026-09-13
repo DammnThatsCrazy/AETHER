@@ -10,7 +10,7 @@ since_version: "0.1.0"
 
 # Access Control
 
-`AccessControlService` (`services/security/access_control.py`) maps `AccessRole`s
+`AccessControlService` (`services/backend/services/security/access_control.py`) maps `AccessRole`s
 to `PermissionGrant`s and evaluates `domain × action × scope` access checks.
 
 ## Implemented controls

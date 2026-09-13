@@ -9,12 +9,12 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 7
 toc_depth: 2
-source_files: [scripts/staging_preflight.py, scripts/lib/preflight_env.py, scripts/lib/preflight_results.py, Backend Architecture/aether-backend/services/gateway/readiness.py]
+source_files: [scripts/staging_preflight.py, scripts/lib/preflight_env.py, scripts/lib/preflight_results.py, services/backend/services/gateway/readiness.py]
 source_hashes:
-  Backend Architecture/aether-backend/services/gateway/readiness.py: sha256:76a97f3b23bdbc35dfed9909b13fbc4de56c3e509e43ea950b60b8855d7c1c3e
-  scripts/lib/preflight_env.py: sha256:e74b3b1dc6de34135b6f3960cb956e2ff137e273d831d779f3d1976602beeb28
-  scripts/lib/preflight_results.py: sha256:ce8f40edac30f24e6be3a9840d43c906436059055525cb2fba8df44c5165da86
-  scripts/staging_preflight.py: sha256:beeb06bb27143f9dd5f27fab06357e201f8816f7933ae8afeb5e6a686c744a15
+  "scripts/lib/preflight_env.py": "sha256:762f42a22b9f7552b330dbeac9d00548516f94be6af235080a9b8accd9fceabe"
+  "scripts/lib/preflight_results.py": "sha256:ce8f40edac30f24e6be3a9840d43c906436059055525cb2fba8df44c5165da86"
+  "scripts/staging_preflight.py": "sha256:beeb06bb27143f9dd5f27fab06357e201f8816f7933ae8afeb5e6a686c744a15"
+  "services/backend/services/gateway/readiness.py": "sha256:76a97f3b23bdbc35dfed9909b13fbc4de56c3e509e43ea950b60b8855d7c1c3e"
 ---
 
 # Runbook — Staging Preflight & Readiness
@@ -76,7 +76,7 @@ the gate has regressed and the dry run fails. `--dry-run` rejects `--env-file` /
 
 ## Readiness — `GET /v1/ready`
 
-The booted service's own health gate (`services/gateway/readiness.py`), public
+The booted service's own health gate (`services/backend/services/gateway/readiness.py`), public
 (no auth), returning **200 when ready, 503 when not**, with a per-check map that
 never echoes secret values. Checks:
 
@@ -87,7 +87,7 @@ never echoes secret values. Checks:
 - **cache**, **event_bus** — backends reachable.
 - **workers** — per-role health of the worker roles *this process supervises*.
   Graded by criticality, declared in
-  `Backend Architecture/aether-backend/services/runtime/roles.py`:
+  `services/backend/services/runtime/roles.py`:
   - a role in `RELEASE_CRITICAL_ROLES` (`outbox-relay`, `stream-worker`,
     `identity-worker`, `graph-writer`) reports `failed` and flips `ready` false;
   - any other role reports `degraded` — `ready` stays true and only that role's
@@ -96,7 +96,7 @@ never echoes secret values. Checks:
     counts as unavailable. Absence of a signal is never treated as health.
   A pure `api` task supervises no roles, so this check is `skipped` there and the
   worker fleet is gated by the worker tasks' own endpoints (see below).
-- **communications** — comms subsystem readiness (`services/comms/readiness.py`):
+- **communications** — comms subsystem readiness (`services/backend/services/comms/readiness.py`):
   storage reachability, comms-required release-critical worker dependency (a dead
   ingestion projector via `stream-worker`, or a stopped `outbox-relay`, fails
   comms readiness), and webhook-inbox backlog (`degraded`, not `failed`). It is a

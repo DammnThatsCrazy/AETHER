@@ -84,9 +84,9 @@ dimensions never merge.
 ## 4. Canonical vocabulary reference
 
 Declared code homes: the python models of the structured contracts / canonical
-package (`Backend Architecture/aether-backend/services/integrations/data_rights/models.py`
+package (`services/backend/services/integrations/data_rights/models.py`
 for grant components and
-`Backend Architecture/aether-backend/services/rights_authority/` for the
+`services/backend/services/rights_authority/` for the
 resolver/enum surface), with the TS twin
 `packages/shared/data-rights.ts`. These are the **planned / implementing**
 homes per the blueprint (this session); the current enforced surface remains the

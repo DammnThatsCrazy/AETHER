@@ -88,7 +88,7 @@ durable catch-up and the polling fallback.
 ## Tenant API surface
 
 The tenant (Aether) continuation router is mounted at `/v1/continuations`
-(`services/continuation/routes.py`), gated by `settings.continuation.enabled`:
+(`services/backend/services/continuation/routes.py`), gated by `settings.continuation.enabled`:
 
 - `POST /v1/continuations` — create (server forces `principal_id` / `tenant_id` /
   `app_kind`; optional `?idempotency_key=`).
@@ -103,10 +103,10 @@ The operator (Kyber) router `/v1/kyber/continuations` is deferred to the Kyber-m
 milestone, where it composes the Kyber access plane.
 
 The client-sync feed is mounted at `GET /v1/client-sync?cursor=`
-(`services/client_sync/routes.py`), gated by `settings.client_sync.enabled`. It
+(`services/backend/services/client_sync/routes.py`), gated by `settings.client_sync.enabled`. It
 returns `{events, cursor, has_more, reset}` — an ordered, gap-free slice of the
 per-scope change log since the cursor. Producers append via
-`services/client_sync/emitter.py::enqueue_sync_change`; the continuation routes are
+`services/backend/services/client_sync/emitter.py::enqueue_sync_change`; the continuation routes are
 the first wired producer (`continuation_changed`), with the remaining producers
 wired incrementally.
 

@@ -39,11 +39,11 @@ description: >-
   server; asserts nothing about a specific vendor's server or tools.
 
 grounded_in:
-  - "Backend Architecture/aether-backend/services/agentic_observability/models.py::ObservationProvider.MCP"
-  - "Backend Architecture/aether-backend/services/agentic_observability/models.py::MCPObservationContext"
-  - "Backend Architecture/aether-backend/services/agentic_observability/event_normalizer.py::_extract_mcp"
-  - "Backend Architecture/aether-backend/services/agent_access_intelligence/models.py::CapabilityKind.MCP_TOOL"
-  - "Backend Architecture/aether-backend/services/agent_access_intelligence/catalog_service.py::_server_key"
+  - "services/backend/services/agentic_observability/models.py::ObservationProvider.MCP"
+  - "services/backend/services/agentic_observability/models.py::MCPObservationContext"
+  - "services/backend/services/agentic_observability/event_normalizer.py::_extract_mcp"
+  - "services/backend/services/agent_access_intelligence/models.py::CapabilityKind.MCP_TOOL"
+  - "services/backend/services/agent_access_intelligence/catalog_service.py::_server_key"
 
 # AETHER only ever observes MCP traffic; it never executes against a server.
 read_only: true

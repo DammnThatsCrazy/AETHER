@@ -9,11 +9,11 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
-source_files: [Backend Architecture/aether-backend/services/campaign/routes.py, Backend Architecture/aether-backend/services/campaign/exploration.py, Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py]
+source_files: [services/backend/services/campaign/routes.py, services/backend/services/campaign/exploration.py, services/backend/services/measurement/repositories/touchpoint_repo.py]
 source_hashes:
-  Backend Architecture/aether-backend/services/campaign/exploration.py: sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13
-  Backend Architecture/aether-backend/services/campaign/routes.py: sha256:d7a4747fba3fa05424c8c6a4ff5a1382739ce942e35c0738b43a9355ad38d26e
-  Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py: sha256:5f1ea2109ff37ba742f1236d651e4fcc00d14fe62b25eb08ae41b8693545f3d8
+  services/backend/services/campaign/exploration.py: sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13
+  services/backend/services/campaign/routes.py: sha256:d7a4747fba3fa05424c8c6a4ff5a1382739ce942e35c0738b43a9355ad38d26e
+  services/backend/services/measurement/repositories/touchpoint_repo.py: sha256:5f1ea2109ff37ba742f1236d651e4fcc00d14fe62b25eb08ae41b8693545f3d8
 ---
 
 # Campaign 360 API Reference
@@ -523,7 +523,7 @@ See `docs/campaign/CAMPAIGN_INTELLIGENCE_OVERVIEW.md` and `docs/campaign/CAMPAIG
 
 The ad-platform connect surface is served from the same `/v1/campaign-sources`
 router, additive to the legacy `POST /v1/campaign-sources` create. Orchestration
-lives in `services/campaign/ad_source_links.py`; ambiguous campaign resolution
+lives in `services/backend/services/campaign/ad_source_links.py`; ambiguous campaign resolution
 after a source is anchored stays in the `/v1/mapping-review` surface.
 
 | Method | Path | Permission | Purpose |

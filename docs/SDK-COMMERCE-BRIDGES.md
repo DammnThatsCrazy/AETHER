@@ -6,19 +6,19 @@ visibility: I
 audience: [dev-senior, architect]
 status: beta
 since_version: 0.1.0
-source_files: [packages/shared/contracts/event-registry.json, packages/shared/commerce.ts, packages/shared/commerce-bridge.ts, packages/web/src/modules/commerce-detection.ts, packages/web/src/bridges/, Backend Architecture/aether-backend/shared/commerce_contracts/order.py, Backend Architecture/aether-backend/shared/integration_contracts/events.py, Backend Architecture/aether-backend/shared/integration_contracts/commerce_bridge.py]
+source_files: [packages/shared/contracts/event-registry.json, packages/shared/commerce.ts, packages/shared/commerce-bridge.ts, packages/web/src/modules/commerce-detection.ts, packages/web/src/bridges/, services/backend/shared/commerce_contracts/order.py, services/backend/shared/integration_contracts/events.py, services/backend/shared/integration_contracts/commerce_bridge.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/shared/commerce_contracts/order.py": "sha256:186c38a97cbc2579bf461b5221f6bd96db126a8d967d0c064b3981f5d4b22893"
-  "Backend Architecture/aether-backend/shared/integration_contracts/commerce_bridge.py": "sha256:bc2dd396267ac6902568ad055c633d2de906c7cdd83f7020c0fe100caa67c9e8"
-  "Backend Architecture/aether-backend/shared/integration_contracts/events.py": "sha256:ba687017a65b1395e00077fd778c43fc394637bc50e95de91a1fb69ed4500ce2"
-  "packages/shared/commerce-bridge.ts": "sha256:b14c263789a1bee3fe21bcc383282bd4fc5b914c23f742f901fd3429cb98de03"
+  "packages/shared/commerce-bridge.ts": "sha256:b052f7b3df53c934250acaefebefedaf49d9a06d3062d8c75617f308372ed665"
   "packages/shared/commerce.ts": "sha256:1ecb0f87838e148ddeaeab7458ea7762350f451361eecf9925ba1c09ded0d32d"
   "packages/shared/contracts/event-registry.json": "sha256:7ae978eb7fb11c55e324fc61365baa83e63a976d2b458d101019a1fa2cf431ba"
   "packages/web/src/bridges/": "sha256:3ceea9d41cd65bfc6442fc6c7809165e4bf651b3625edde1a5cdeebe755c74ba"
   "packages/web/src/modules/commerce-detection.ts": "sha256:14f48bd32335bd9069aec1927d38e4eaaa33274a496f523acfd17ab770934751"
+  "services/backend/shared/commerce_contracts/order.py": "sha256:186c38a97cbc2579bf461b5221f6bd96db126a8d967d0c064b3981f5d4b22893"
+  "services/backend/shared/integration_contracts/commerce_bridge.py": "sha256:bc2dd396267ac6902568ad055c633d2de906c7cdd83f7020c0fe100caa67c9e8"
+  "services/backend/shared/integration_contracts/events.py": "sha256:ba687017a65b1395e00077fd778c43fc394637bc50e95de91a1fb69ed4500ce2"
 ---
 
 # SDK Commerce Bridges

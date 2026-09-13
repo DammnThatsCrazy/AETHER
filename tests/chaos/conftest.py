@@ -29,9 +29,9 @@ from pathlib import Path
 
 import pytest
 
-# Backend lives under "Backend Architecture/aether-backend" (note the space).
+# Backend lives under "services/backend" (note the space).
 # tests/chaos/conftest.py -> parents[2] == repo root.
-_BACKEND = Path(__file__).resolve().parents[2] / "Backend Architecture" / "aether-backend"
+_BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
 if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 

@@ -2,7 +2,7 @@
 // Aether SDK — Ingestion Contract (canonical source of truth)
 // The single place that pins WHERE SDKs send events and WHAT the backend
 // guarantees about acceptance. Mirrors
-// `Backend Architecture/aether-backend/services/ingestion/batch.py` and is
+// `services/backend/services/ingestion/batch.py` and is
 // validated against it by `scripts/validate_sdk_contracts.py`.
 // =============================================================================
 

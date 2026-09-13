@@ -3,7 +3,7 @@
 
 Validates every pack in ``config/agent_access_reference_packs/`` against the pack
 schema owned by
-``Backend Architecture/aether-backend/services/agent_access_intelligence/reference_packs.py``.
+``services/backend/services/agent_access_intelligence/reference_packs.py``.
 The schema is imported from that loader rather than restated here, so the CI gate
 and the runtime loader can never drift apart about what a valid pack is.
 
@@ -36,7 +36,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BACKEND = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = ROOT / "services" / "backend"
 DEFAULT_PACK_DIR = ROOT / "config" / "agent_access_reference_packs"
 
 

@@ -6,10 +6,10 @@ visibility: I
 audience: [dev-senior, architect]
 status: experimental
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/campaign/resolver.py, Backend Architecture/aether-backend/services/campaign/normalization.py]
+source_files: [services/backend/services/campaign/resolver.py, services/backend/services/campaign/normalization.py]
 source_hashes:
-  Backend Architecture/aether-backend/services/campaign/normalization.py: sha256:c434a3a7836cc8eed74f5e836442f0dd04e9f30b9595a636c81a9246b407e917
-  Backend Architecture/aether-backend/services/campaign/resolver.py: sha256:5e5a53b3ae43974148697a8d11bb14b0353ab11a77fd8e7ce423efca0a5b84a6
+  services/backend/services/campaign/normalization.py: sha256:c434a3a7836cc8eed74f5e836442f0dd04e9f30b9595a636c81a9246b407e917
+  services/backend/services/campaign/resolver.py: sha256:5e5a53b3ae43974148697a8d11bb14b0353ab11a77fd8e7ce423efca0a5b84a6
 ---
 
 # Campaign Resolution Contract

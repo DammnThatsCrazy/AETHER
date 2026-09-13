@@ -36,6 +36,7 @@ def test_index_is_deterministic_and_transitive():
     assert first == second
     assert first["direct_nodes"] == [
         "component:impact-graph",
+        "component:verification-and-documentation",
         "component:verification-router",
         "contract:verification-router",
     ]

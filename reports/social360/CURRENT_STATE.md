@@ -7,11 +7,11 @@ projection engine). Purpose: the honest "before" picture the gap ledger (GAP_LED
 measures against.
 
 Repo roots:
-- Python monolith: `Backend Architecture/aether-backend/` — `services/` (one dir per domain),
+- Python monolith: `services/backend/` — `services/` (one dir per domain),
   `shared/` (cross-domain library), `repositories/`, `alembic/versions/`, `config/`, `main.py`.
 - TypeScript contracts: `packages/shared/` (hand-authored + generated twins of JSON registries).
 - Frontends: `frontend/kyber/` (operator console), `frontend/aether/` (marketing/demo console).
-- Legacy data-lake schemas: `Data Lake Architecture/schemas/gold_*.py`.
+- Legacy data-lake schemas: `docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_*.py`.
 - Tooling/validators/generators: `scripts/`; canonical gates in `Makefile`.
 - Program reports: `reports/` (many prior audit/readiness ledgers live here; this program
   owns `reports/social360/`).
@@ -20,19 +20,19 @@ Repo roots:
 
 | Blueprint cites | Status today | Where |
 |---|---|---|
-| Canonical graph, H2H/H2A/A2H/A2A layers, mutation gateway | PRESENT on base | `Backend Architecture/aether-backend/shared/graph/` — `graph_contract.py`, `relationship_layers.py`, `edge_properties.py`, `write_validator.py`, `mutation_gateway.py`, `mutation_intents.py`, `generated_mutation_taxonomy.py`; ledger `repositories/graph_mutation_ledger.py` |
-| 1–N hop / path intelligence (#357) | PRESENT | `shared/graph/path_scoring.py`, `traversal.py`; `RelationshipPath`/`PathExplanation` models in `services/operational_intelligence/models.py` |
-| Canonical Computation Substrate (#508/#510) | PRESENT | `shared/computation/` (definition/registry/types/result/quality/uncertainty/temporal); service `services/computation/`; `metric-registry.json` in `packages/shared/contracts/` |
-| Universal Provider Runtime (#520) | PRESENT | `services/provider_runtime/` (manifest, connection, raw_store, sync, credential_broker, normalizer, plugin, legacy bridge, certification, webhooks); contracts `shared/integration_contracts/`; concrete provider plugins are COMMERCE-only (`services/providers/{shopify,amazon,woocommerce,etsy,ebay,walmart,tiktok}/`) |
-| Semantic/narrative/relationship/episode reducers (#470–#480) | PRESENT | `services/semantic_intelligence/` — `reducers.py` (weighted Silver→Gold), `graph_projector.py` (writes governed `SEMANTIC_RELATES_TO` via mutation gateway) |
-| Identity spine + resolution | PRESENT | `services/identity/` (resolver, merge/split policy, source precedence, confidence, graph_writer/reconciliation), `services/resolution/` |
-| Communications Intelligence (#387/#389/#512) | PRESENT | `services/comms/` (graph_projection with selective-message promotion, identity_bridge, classification, attribution policy) |
-| Campaign / Economic / x402 / Geo / Temporal | PRESENT | `services/campaign/`, `services/economic/` (has the one fully-realized 360 provider: `economic360_provider.py`), `services/x402/`, `services/geo/`, `shared/temporal/` |
-| Exploration Fabric (#458/#460/#496) | PRESENT (partially branch-only) | `services/exploration/`, `shared/exploration/`; LENS RUNTIME `shared/projection_engine/` is **not on origin/main** (branch-only on `feat/aether-360-program`) |
-| Legacy social service | PRESENT (thin, pre-UPR) | `services/social/` (`routes.py`, `social_aggregator.py`) |
-| `gold_social_intelligence` | PRESENT | `Data Lake Architecture/schemas/gold_social_intelligence.py` |
-| Social Profile360 surfaces | PRESENT | `services/profile/composer.py`, `intelligence.py`, `routes.py`; TS `packages/shared/social-intelligence.ts`, `targeting-intelligence.ts` |
-| Kyber operator plane / Noesis / Investigations | PRESENT | `services/kyber/` (+ `graph/`), `services/noesis/`, `services/investigation/` |
+| Canonical graph, H2H/H2A/A2H/A2A layers, mutation gateway | PRESENT on base | `services/backend/shared/graph/` — `graph_contract.py`, `relationship_layers.py`, `edge_properties.py`, `write_validator.py`, `mutation_gateway.py`, `mutation_intents.py`, `generated_mutation_taxonomy.py`; ledger `repositories/graph_mutation_ledger.py` |
+| 1–N hop / path intelligence (#357) | PRESENT | `shared/graph/path_scoring.py`, `traversal.py`; `RelationshipPath`/`PathExplanation` models in `services/backend/services/operational_intelligence/models.py` |
+| Canonical Computation Substrate (#508/#510) | PRESENT | `shared/computation/` (definition/registry/types/result/quality/uncertainty/temporal); service `services/backend/services/computation/`; `metric-registry.json` in `packages/shared/contracts/` |
+| Universal Provider Runtime (#520) | PRESENT | `services/backend/services/provider_runtime/` (manifest, connection, raw_store, sync, credential_broker, normalizer, plugin, legacy bridge, certification, webhooks); contracts `shared/integration_contracts/`; concrete provider plugins are COMMERCE-only (`services/backend/services/providers/{shopify,amazon,woocommerce,etsy,ebay,walmart,tiktok}/`) |
+| Semantic/narrative/relationship/episode reducers (#470–#480) | PRESENT | `services/backend/services/semantic_intelligence/` — `reducers.py` (weighted Silver→Gold), `graph_projector.py` (writes governed `SEMANTIC_RELATES_TO` via mutation gateway) |
+| Identity spine + resolution | PRESENT | `services/backend/services/identity/` (resolver, merge/split policy, source precedence, confidence, graph_writer/reconciliation), `services/backend/services/resolution/` |
+| Communications Intelligence (#387/#389/#512) | PRESENT | `services/backend/services/comms/` (graph_projection with selective-message promotion, identity_bridge, classification, attribution policy) |
+| Campaign / Economic / x402 / Geo / Temporal | PRESENT | `services/backend/services/campaign/`, `services/backend/services/economic/` (has the one fully-realized 360 provider: `economic360_provider.py`), `services/backend/services/x402/`, `services/backend/services/geo/`, `shared/temporal/` |
+| Exploration Fabric (#458/#460/#496) | PRESENT (partially branch-only) | `services/backend/services/exploration/`, `shared/exploration/`; LENS RUNTIME `shared/projection_engine/` is **not on origin/main** (branch-only on `feat/aether-360-program`) |
+| Legacy social service | PRESENT (thin, pre-UPR) | `services/backend/services/social/` (`routes.py`, `social_aggregator.py`) |
+| `gold_social_intelligence` | PRESENT | `docs/archive/legacy-architecture/data-lake-architecture/schemas/gold_social_intelligence.py` |
+| Social Profile360 surfaces | PRESENT | `services/backend/services/profile/composer.py`, `intelligence.py`, `routes.py`; TS `packages/shared/social-intelligence.ts`, `targeting-intelligence.ts` |
+| Kyber operator plane / Noesis / Investigations | PRESENT | `services/backend/services/kyber/` (+ `graph/`), `services/backend/services/noesis/`, `services/backend/services/investigation/` |
 | Contract spine (JSON registry → py/ts twins) | PRESENT | `packages/shared/contracts/*.json` (~22 registries) + `scripts/generate_contracts.py`, `generate_platform_contracts.py`, `generate_computation_registry.py` |
 | Repo-doctor / CI gates | PRESENT | `scripts/repo_doctor.py`, `Makefile` (`make ci-check` canonical) |
 
@@ -48,11 +48,11 @@ Repo roots:
    (SocialIdentity/Connection/Interaction/Content/Community/Metric), no `IncentiveContext`,
    no motif registry/engine, no promotion state machine, no evidence-independence grouper.
 4. **No social provider plugins on UPR** and no social capability vocabulary
-   (`account_read`, `relationship_read`, …) registered. Legacy `services/social/` is the only
+   (`account_read`, `relationship_read`, …) registered. Legacy `services/backend/services/social/` is the only
    social path and predates UPR.
 5. **No Olympus-corpus→tenant-overlay projection rule** resolved for corpus-derived
    relationship writes (blueprint §14 P0 prerequisite). Tenant isolation exists in
-   `shared/graph/graph.py` and `services/kyber/mirror/`, but corpus writes are deferred.
+   `shared/graph/graph.py` and `services/backend/services/kyber/mirror/`, but corpus writes are deferred.
 6. **No fidelity-aware path semantics** (hop contract enrichment, epistemic ceiling,
    path snapshot restatement).
 7. **No SocialFi / EngagementFi / Narrative lenses** and no social/relationship/incentive
@@ -63,7 +63,7 @@ Repo roots:
 - `graph_motifs` is a reserved canonical-authority token in the projection registry
   (relationship360/fraud360 scope) — a motif engine must integrate under that authority,
   not shadow it.
-- `promotion` is an existing term in `services/comms/graph_projection.py`
+- `promotion` is an existing term in `services/backend/services/comms/graph_projection.py`
   ("selective message promotion") — distinct meaning from relationship promotion; must be
   disambiguated in the predicate registry (§21) rather than overloaded.
 - "unknown never 0" is an ACTIVE enforcement precedent on this base (enforced in

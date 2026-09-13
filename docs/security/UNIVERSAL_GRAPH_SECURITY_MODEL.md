@@ -55,7 +55,7 @@ The graph API does NOT automatically hide withdrawn-consent vertices — they re
 
 The consent overlay (`include_overlays: ["consent"]`) surfaces `consent_state` and `activation_eligible` per node in query results.
 
-DSR (Data Subject Request) processing is handled by `services/consent/` and cascades to the graph:
+DSR (Data Subject Request) processing is handled by `services/backend/services/consent/` and cascades to the graph:
 - Soft delete: vertex `lifecycle_state = "tombstoned"`, properties redacted
 - Hard delete (erasure): vertex removed from Neptune; in-memory store cleared on restart
 

@@ -15,7 +15,7 @@ the tenant's system for execution. Aether generates the payload; the tenant exec
 ## Rail Overview
 
 The canonical, machine-readable classification is generated from
-`services/rewards/rail_matrix.py` into
+`services/backend/services/rewards/rail_matrix.py` into
 `docs/_generated/reward-rail-matrix.json` and enforced by
 `scripts/release/check_reward_rail_matrix.py` (bidirectional agreement between
 adapters, the matrix, and the outbox senders). Tiers:
@@ -62,7 +62,7 @@ adapters, the matrix, and the outbox senders). Tiers:
 - Aether delivers a signed JSON payload to the tenant's configured webhook URL.
 - Signing: HMAC-SHA256 of the payload body using the tenant's webhook signing
   secret, resolved from the **durable credential authority** at the narrow send
-  site (`services/rewards/webhook_secret.py`). A submitted `signing_secret` is
+  site (`services/backend/services/rewards/webhook_secret.py`). A submitted `signing_secret` is
   dual-written into the authority (provider `tenant_webhook`, slot
   `webhook_signing_secret`, domain `rewards`) and replaced by a `secret_ref`
   before the rail config is persisted — plaintext never reaches the JSONB row,

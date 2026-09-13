@@ -1,5 +1,5 @@
 {
-  "_comment": "Canonical traffic-source semantics for the whole platform. SDKs observe evidence; the backend classifies. Every dimension here is independent: source_class never implies campaign identity, and campaign identity never implies a source_class. Generated artifacts: packages/shared/traffic-source.ts, Backend Architecture/aether-backend/services/traffic/generated_registry.py, docs/_generated/traffic-source-registry-table.md. Run: python scripts/generate_contracts.py",
+  "_comment": "Canonical traffic-source semantics for the whole platform. SDKs observe evidence; the backend classifies. Every dimension here is independent: source_class never implies campaign identity, and campaign identity never implies a source_class. Generated artifacts: packages/shared/traffic-source.ts, services/backend/services/traffic/generated_registry.py, docs/_generated/traffic-source-registry-table.md. Run: python scripts/generate_contracts.py",
   "schemaVersion": "1.0.0",
   "contractVersion": "1.0.0",
   "dimensions": {

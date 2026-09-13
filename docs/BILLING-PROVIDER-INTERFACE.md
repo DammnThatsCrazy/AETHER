@@ -15,7 +15,7 @@ estimated_read_minutes: 4
 
 # Billing Provider Interface
 
-`services/billing/providers/` defines the provider-safe `BillingProvider`
+`services/backend/services/billing/providers/` defines the provider-safe `BillingProvider`
 abstraction over the internal revops layer. The internal layer is unaffected
 when external billing is off (the default).
 

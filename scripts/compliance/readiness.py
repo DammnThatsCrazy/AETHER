@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Backend source lives under this subtree; evidence paths are repo-root-relative
 # so (ROOT / evidence).exists() resolves correctly from `npm run compliance:*`.
-_BK = "Backend Architecture/aether-backend"
+_BK = "services/backend"
 
 # control_id -> (description, evidence path/doc, readiness)
 CONTROLS: list[tuple[str, str, str, str]] = [

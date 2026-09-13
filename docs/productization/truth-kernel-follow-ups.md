@@ -28,15 +28,15 @@ supported by the `scripts/production_status.py` scorecard.
 |---|---|---|
 | **`TrainingDataGate`** | Model training paths are not auto-fed from restricted data; the feature/model registries exist | Required training manifest in staging/prod; blocks synthetic-in-prod, restricted-purpose features, DSR/suppressed subjects, missing privacy/bias/model/dataset artifacts |
 | **`InferencePolicyGate`** | Inference is served behind existing tenant/actor auth | Per-request gate on consent, feature policy, model governance, DSR/suppression/retention/artifact state; denies or redacts forbidden features |
-| **Backend-unified DSR propagation map** | DSR erasure cascades via `GDPR & SOC2/aether-compliance` `GDPR_DATA_STORES`; suppression + identity split invalidate downstream where possible | A backend propagation-record map across aliases/graph/Profile360/features/training sets/artifacts/exports/replay/reward/attribution/value snapshots with per-step status |
+| **Backend-unified DSR propagation map** | DSR erasure cascades via `services/compliance` `GDPR_DATA_STORES`; suppression + identity split invalidate downstream where possible | A backend propagation-record map across aliases/graph/Profile360/features/training sets/artifacts/exports/replay/reward/attribution/value snapshots with per-step status |
 | **Kyber command center (policy/model/DSR/metering)** | Kyber operator entry is authorized (`is_platform_admin`) and audited | Operator surfaces for blocked training, stale artifacts, feature-policy violations, identity/source conflicts, DSR failures, metering anomalies, valuation exclusions |
 | **Metering evidence + quota controls** | Usage is metered; billing paths exist | Per-event `metered_event_id` explainability (billable/excluded reason, dedupe) and exposed quota/rate-limit states |
-| **Durable valuation tables + live price sources** | `services/value` prices on-the-fly (USD identity / provider-reported / unpriced≠0) with deterministic CI fixtures | Additive `price_snapshots` / `valuation_snapshots` / `value_rollup_snapshots` tables + FX/market/peg price-source adapters with TTL caching |
+| **Durable valuation tables + live price sources** | `services/backend/services/value` prices on-the-fly (USD identity / provider-reported / unpriced≠0) with deterministic CI fixtures | Additive `price_snapshots` / `valuation_snapshots` / `value_rollup_snapshots` tables + FX/market/peg price-source adapters with TTL caching |
 | **Broad economic-surface value adoption** | Profile360 financials + contextual panels render via the canonical value contract; the guardrail blocks new local formatters | Retrofit derivatives / card-linked / campaigns / TVL / LTV / x402 / Kyber diagnostics onto `AetherValue` (tracked by the `validate_frontend_value_display.py` allowlist) |
 
 ## Landed in follow-up PRs
 
-- **Central consent `PolicyDecision` service** (`services/policy/`): the first
+- **Central consent `PolicyDecision` service** (`services/backend/services/policy/`): the first
   runtime consumer of the signal-use matrix. `consent_policy_engine.decide(...)`
   produces an explainable, persisted `ConsentPolicyDecision` (allow-with-id /
   deny+reason / redact+fields) that joins the tamper-evident security audit

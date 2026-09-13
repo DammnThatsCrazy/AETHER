@@ -37,7 +37,7 @@ turnkey_definition: >
 infrastructure_provisioning:
   kafka_topics:
     selector: "event_broker == kafka (production-scale / enterprise-isolated)"
-    module: "AWS Deployment/aether-aws/terraform/modules/kafka_topic_provisioner"
+    module: "deploy/aws/terraform/modules/kafka_topic_provisioner"
     registry_source: "shared/events/events.py Topic enum -> deploy/kafka/topics.json (regeneration drift-tested)"
     mechanism: >
       One-shot Lambda invoked via aws_lambda_invocation after the MSK cluster
@@ -53,7 +53,7 @@ infrastructure_provisioning:
 
   clickhouse:
     selector: "analytics_backend == clickhouse (production-scale / enterprise-isolated)"
-    module: "AWS Deployment/aether-aws/terraform/modules/clickhouse (self-managed EC2 + EBS)"
+    module: "deploy/aws/terraform/modules/clickhouse (self-managed EC2 + EBS)"
     endpoints:
       native: "CLICKHOUSE_HOST:9000 (TCP, runtime protocol)"
       http:   "CLICKHOUSE_HOST:8123 (HTTP interface)"

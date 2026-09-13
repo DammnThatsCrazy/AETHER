@@ -14,13 +14,13 @@ This matrix enumerates each connector subsystem's supported capabilities.
 
 ## Subsystems
 
-Aether has three connector subsystems, each under `Backend Architecture/aether-backend/services/`:
+Aether has three connector subsystems, each under `services/backend/services/`:
 
 | Subsystem | Path | Purpose |
 |---|---|---|
-| Integrations | `services/integrations/connectors/` | Email and marketing platform connectors |
-| Measurement | `services/measurement/connectors/` | Ad platform measurement connectors |
-| Derivatives | `services/derivatives/connectors/` | Financial venue connectors |
+| Integrations | `services/backend/services/integrations/connectors/` | Email and marketing platform connectors |
+| Measurement | `services/backend/services/measurement/connectors/` | Ad platform measurement connectors |
+| Derivatives | `services/backend/services/derivatives/connectors/` | Financial venue connectors |
 
 ## Integration Connectors
 
@@ -48,7 +48,7 @@ Aether has three connector subsystems, each under `Backend Architecture/aether-b
 
 ## Provider Plugins
 
-Provider plugins at `services/providers/` emit through `shared/integration_contracts/normalization.py`:
+Provider plugins at `services/backend/services/providers/` emit through `shared/integration_contracts/normalization.py`:
 
 | Provider | Auth | Pull | Webhook | Normalizer |
 |---|---|---|---|---|
@@ -63,5 +63,5 @@ Provider plugins at `services/providers/` emit through `shared/integration_contr
 ## Validation
 
 All connector subsystems normalize into canonical Aether contracts. The provider
-runtime enforces this through `services/provider_runtime/validation.py` and
-`services/provider_runtime/certification.py`.
+runtime enforces this through `services/backend/services/provider_runtime/validation.py` and
+`services/backend/services/provider_runtime/certification.py`.

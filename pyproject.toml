@@ -144,10 +144,10 @@ all = [
 # Pytest — unified test discovery across all subsystems
 # ---------------------------------------------------------------------------
 
-# NOTE: "ML Models/aether-ml/tests" is NOT listed here. Both suites ship a
+# NOTE: "services/ml/tests" is NOT listed here. Both suites ship a
 # tests/conftest.py that resolves to the same module path, so a combined
 # invocation fails with ImportPathMismatchError. Run the ML suite separately:
-#   python -m pytest "ML Models/aether-ml/tests/"
+#   python -m pytest "services/ml/tests/"
 # (make test, scripts/repo_doctor.py, and CI all run the suites separately.)
 [tool.pytest.ini_options]
 testpaths = [
@@ -172,8 +172,8 @@ filterwarnings = [
 target-version = "py310"
 line-length = 100
 extend-exclude = [
-    "AWS Deployment/mnt/**",
-    "Backend Architecture/mnt/**",
+    "docs/archive/legacy-architecture/aws-deployment/mnt/**",
+    "docs/archive/legacy-architecture/backend/mnt/**",
     "cicd/**",
     "**/node_modules/**",
 ]

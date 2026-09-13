@@ -14,7 +14,7 @@ since_version: 0.1.0
 **Generated artifacts:** `packages/shared/events.ts` (TypeScript — `EventType`,
 `EventFamily`, `EVENT_FAMILY`, `EVENT_CONSENT_PURPOSE`, field-trust / semantic-level
 maps) and
-`Backend Architecture/aether-backend/services/ingestion/generated_registry.py`
+`services/backend/services/ingestion/generated_registry.py`
 (Python), plus the native iOS/Android event-type + consent-purpose regions
 (`Aether.swift` / `Aether.kt`) and the web consent map.  
 **Regenerate with:** `python scripts/generate_contracts.py`  
@@ -147,7 +147,7 @@ Three legacy events are `deprecated` but kept for backward compatibility:
 
 These observe an external agent's account/activity — recorded from the outside;
 Aether does not execute them. (The observability *service* lives under
-`services/agentic_observability/`; the event *family* is `agent`.)
+`services/backend/services/agentic_observability/`; the event *family* is `agent`.)
 
 | Group | Types |
 |---|---|

@@ -154,7 +154,7 @@
           "profile360"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/profile"
+          "services/backend/services/profile"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/profile360.md"
@@ -266,7 +266,7 @@
           "profile360"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/agent"
+          "services/backend/services/agent"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/agent360.md"
@@ -380,8 +380,8 @@
           "profile360"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/operational_intelligence",
-          "Backend Architecture/aether-backend/services/semantic_intelligence"
+          "services/backend/services/operational_intelligence",
+          "services/backend/services/semantic_intelligence"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/relationship360.md"
@@ -486,7 +486,7 @@
           "profile360"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/social"
+          "services/backend/services/social"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/social360.md"
@@ -595,8 +595,8 @@
           "timeline"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/journeys",
-          "Backend Architecture/aether-backend/services/events"
+          "services/backend/services/journeys",
+          "services/backend/services/events"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/episode360.md"
@@ -726,7 +726,7 @@
           "profile360"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/comms"
+          "services/backend/services/comms"
         ],
         "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/communication360.md"
@@ -841,9 +841,9 @@
           "timeline"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/agent",
-          "Backend Architecture/aether-backend/services/jobs",
-          "Backend Architecture/aether-backend/services/flows"
+          "services/backend/services/agent",
+          "services/backend/services/jobs",
+          "services/backend/services/flows"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/execution360.md"
@@ -942,7 +942,7 @@
           "temporal360"
         ],
         "services": [
-          "Backend Architecture/aether-backend/shared/temporal"
+          "services/backend/shared/temporal"
         ],
         "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/temporal360.md"
@@ -1044,7 +1044,7 @@
           "geographic360"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/geo"
+          "services/backend/services/geo"
         ],
         "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/geographic360.md"
@@ -1148,7 +1148,7 @@
           "population360"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/population"
+          "services/backend/services/population"
         ],
         "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/population360.md"
@@ -1251,7 +1251,7 @@
           "graph"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/cluster"
+          "services/backend/services/cluster"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/cluster360.md"
@@ -1362,7 +1362,7 @@
           "outcome360"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/measurement"
+          "services/backend/services/measurement"
         ],
         "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/outcome360.md"
@@ -1479,7 +1479,7 @@
           "economic360"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/economic"
+          "services/backend/services/economic"
         ],
         "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/economic360.md"
@@ -1601,7 +1601,7 @@
           "comparison_workbench"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/campaign"
+          "services/backend/services/campaign"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/campaign360.md"
@@ -1715,7 +1715,7 @@
           "risk360"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/risk_overlay"
+          "services/backend/services/risk_overlay"
         ],
         "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/risk360.md"
@@ -1826,7 +1826,7 @@
           "fraud360"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/fraud"
+          "services/backend/services/fraud"
         ],
         "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/fraud360.md"
@@ -1925,7 +1925,7 @@
           "campaign360"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/imports"
+          "services/backend/services/imports"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/source360.md"
@@ -2030,7 +2030,7 @@
           "connection360"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/provider_runtime"
+          "services/backend/services/provider_runtime"
         ],
         "migrationMode": "adapter",
         "migrationBlueprint": "docs/blueprints/connection360.md"
@@ -2135,7 +2135,7 @@
           "infrastructure360"
         ],
         "services": [
-          "Backend Architecture/aether-backend/services/infrastructure"
+          "services/backend/services/infrastructure"
         ],
         "migrationMode": "converged",
         "migrationBlueprint": "docs/blueprints/infrastructure360.md"

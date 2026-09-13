@@ -1,7 +1,7 @@
 // =============================================================================
 // Aether SDK — Shared Entity Model
 // Canonical entities the SDK may reference. Mirrors backend VertexType enum
-// in Backend Architecture/aether-backend/shared/graph/graph.py.
+// in services/backend/shared/graph/graph.py.
 // See docs/source-of-truth/ENTITY_MODEL.md.
 //
 // Design principle: entity kinds are domain-agnostic. The same kind covers

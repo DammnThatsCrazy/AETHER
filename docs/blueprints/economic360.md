@@ -51,17 +51,17 @@ tenant-scoped**.
 
 | Section | Canonical source read |
 |---|---|
-| `summary` | `services/value` `safe_rollup` over tenant-scoped value records; the absorbed `metric-registry.json` vocabulary |
-| `state` | `services/economic/value_diagnostics.diagnose_rollup` over the rollup |
+| `summary` | `services/backend/services/value` `safe_rollup` over tenant-scoped value records; the absorbed `metric-registry.json` vocabulary |
+| `state` | `services/backend/services/economic/value_diagnostics.diagnose_rollup` over the rollup |
 | `evidence` | the reused `EvidenceRef`s grounding every claim |
 | `outcomes` | canonical computed results; **degraded honestly** while `outcome360` is `in_flight` |
 | `findings` | typed `EconomicWarning` anti-patterns (`MIXED_CURRENCY`, `MISSING_PRICE`, `POSSIBLE_DOUBLE_COUNT`) |
 
 The provider reads canonical sources **defensively** through
-`services/economic/ai_*` (AI execution facts + cost selection),
-`services/economic/computed_results` + `services/computation/campaign` (canonical
-campaign economics), `services/value` (USD-first safe rollups) and
-`services/economic/value_diagnostics`. Every read is wrapped: an unavailable
+`services/backend/services/economic/ai_*` (AI execution facts + cost selection),
+`services/backend/services/economic/computed_results` + `services/backend/services/computation/campaign` (canonical
+campaign economics), `services/backend/services/value` (USD-first safe rollups) and
+`services/backend/services/economic/value_diagnostics`. Every read is wrapped: an unavailable
 backing source degrades its section (typed `degraded` / `missing` / `empty`),
 never crashes, never fabricates. A `RuntimeError` in a source reader yields a
 `missing` summary with no exception detail surfaced.
@@ -69,14 +69,14 @@ never crashes, never fabricates. A `RuntimeError` in a source reader yields a
 ### USD-first value semantics (the no-cross-currency invariant)
 
 Every monetary amount in the economic contracts
-(`services/economic/economic360_contracts.py`) is a `MonetaryAmount` carrying
+(`services/backend/services/economic/economic360_contracts.py`) is a `MonetaryAmount` carrying
 `amount` + `currency` **and** an explicit normalized `usd_value`
 (`None` when unpriced — never coerced to `0`). The invariants:
 
 1. **No cross-currency sums, ever.** `safe_usd_total` sums ONLY normalized USD
    figures; a raw native sum across currencies is **rejected**
    (`MixedCurrencyError`, `native_total`). This mirrors the safe-rollup shape
-   from `services/value` — the projection never produces a mixed native scalar.
+   from `services/backend/services/value` — the projection never produces a mixed native scalar.
 2. **Monetary absences stay `None`.** Unpriced amounts are `usd_value: None`;
    `MISSING_PRICE` is a typed warning, not an invented figure.
 3. **Anti-patterns are typed warnings, not fabricated values.** `MIXED_CURRENCY`,
@@ -90,7 +90,7 @@ is signaled without fabricating a value: an unpriced context keeps
 ### No redefinition
 
 The slice reuses the canonical `EntityRef` / `EvidenceRef` / `PageRequest` /
-`TimeRangeFilter` primitives from `services/operational_intelligence/models.py`
+`TimeRangeFilter` primitives from `services/backend/services/operational_intelligence/models.py`
 — the economic package declares NO second copy (parity-tested).
 
 ### Dependency story (profile360 / relationship360 / outcome360)

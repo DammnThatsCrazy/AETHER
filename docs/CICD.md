@@ -14,24 +14,24 @@ source_files:
   - .github/workflows/
   - scripts/release/verify_effective_staging_apply_policy.py
   - config/staging_apply_iam_policy.yaml
-  - AWS Deployment/aether-aws/terraform/modules/secrets/main.tf
-  - AWS Deployment/aether-aws/terraform/modules/ecr/main.tf
-  - AWS Deployment/aether-aws/terraform/modules/aurora/main.tf
-  - AWS Deployment/aether-aws/terraform/modules/kms_credentials/main.tf
+  - deploy/aws/terraform/modules/secrets/main.tf
+  - deploy/aws/terraform/modules/ecr/main.tf
+  - deploy/aws/terraform/modules/aurora/main.tf
+  - deploy/aws/terraform/modules/kms_credentials/main.tf
 canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:bcd5d5910e327d58be5b42c8469005340ef5ec4b44824b438dd42442d4daee7f"
-  "AWS Deployment/aether-aws/terraform/modules/aurora/main.tf": "sha256:16c4beb8ccab1af164ff62f8aa2d515a5efc3f093b7878411f40aa14ce39e094"
-  "AWS Deployment/aether-aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
-  "AWS Deployment/aether-aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
-  "AWS Deployment/aether-aws/terraform/modules/secrets/main.tf": "sha256:998303bfe6e5a0a24477933beeb650c02e5e43469d9cba6d0af84e27e50d8032"
-  "cicd/aether-cicd/README.md": "sha256:7518eff46d2847a3686bfaa5712e6d64de63764dfc65da0954b7fb5902f145de"
+  ".github/workflows/": "sha256:4192c78941e2e6b2682cc1af0727c5dbac6e0bf255ef73ef7bd00c318a511dc8"
+  "cicd/aether-cicd/README.md": "sha256:c9f5748676ad6390df53ad07c2584029a27803a989c754eefea4a8d19a08819a"
   "cicd/aether-cicd/main.py": "sha256:a20ae99a95de475ad442e9eb72504cf2d613fb549c1e6121350ac07564d75301"
   "cicd/aether-cicd/quality_gates/": "sha256:2cc72d40cd7c324e686271c5ea2c90c2ccb15c4ebe0435b0589844663dd2e436"
-  "cicd/aether-cicd/stages/": "sha256:b3470b88b347932bd98a452e143e9b2cb984f4b786f7c2412448ca8bec098fe9"
+  "cicd/aether-cicd/stages/": "sha256:961dd8ecca17f67988397b1f33515de8a88180ed70a7545fe05b324eb1bf555f"
   "config/staging_apply_iam_policy.yaml": "sha256:acc34d81c456090d4569faac727b6688604fc07c3bb36764f38c422f23d5004a"
+  "deploy/aws/terraform/modules/aurora/main.tf": "sha256:16c4beb8ccab1af164ff62f8aa2d515a5efc3f093b7878411f40aa14ce39e094"
+  "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
+  "deploy/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
+  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:998303bfe6e5a0a24477933beeb650c02e5e43469d9cba6d0af84e27e50d8032"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:08dff05b2a886af751d7e0b1c7886951b240b6a31f18ef14d26f73085ae59145"
 ---
 
@@ -247,7 +247,7 @@ enforced by any workflow in `.github/workflows/`.
 ### 3. Unit tests
 
 - Vitest via `npm test` for TypeScript SDKs and frontends.
-- Pytest via `python -m pytest tests/ -n auto --tb=short` for core Python tests; ML tests run when `ML Models/**` changes.
+- Pytest via `python -m pytest tests/ -n auto --tb=short` for core Python tests; ML tests run when `services/ml/**` changes.
 - Gate: **all tests pass**.
 
 ### 4. Integration tests
@@ -339,7 +339,7 @@ Two things get promoted, on two separate paths that must never be conflated: the
 | Workflow | Trigger | What it does | Applies Terraform |
 |---|---|---|---|
 | `deploy.yml` | push to `main`; `workflow_dispatch` for production | Builds the release once, deploys to staging on push; production promotion is manual and takes the staged run ID plus the approved `release.json` checksum. Registers one task-definition revision per declared service; no rebuild on promotion. **Not armed without `AWS_DEPLOY_ROLE_ARN`:** when the role is absent the build/deploy jobs skip and a `delivery-not-armed` job reports that nothing was built or deployed — that is NOT a claim that a release exists. The moment the role is wired, delivery runs exactly as before. | no |
-| `infrastructure.yml` | PR / push to `main` / dispatch on `AWS Deployment/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the full credential set exists (ephemeral-class is deliberately excluded from remote-plan); plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
+| `infrastructure.yml` | PR / push to `main` / dispatch on `docs/archive/legacy-architecture/aws-deployment/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the full credential set exists (ephemeral-class is deliberately excluded from remote-plan); plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
 | `terraform-promote.yml` | `workflow_dispatch` only | Produces a reviewed, checksum-bound binary plan, and applies exactly that plan. Backend digests are always required; ML digests are required only for production-scale and enterprise-isolated, and are optional for staging, production-lean, demo, and preview when remote ML is disabled. | **yes — the only path** |
 | `staging-lifecycle.yml` | `workflow_dispatch` | Wake / validate / sleep / full rehearsal. Dispatches `terraform-promote.yml` for every mutation and independently re-verifies the reviewed plan first. Dispatching jobs retain `actions: write` and check out the workspace before invoking `gh`; read-only jobs cannot perform the handoff. `plan-wake` is plan-only and requires only the Terraform plan credentials; lifecycle credentials are required for inspection, wake, or sleep actions. A full rehearsal binds the delivery run and `release.json` to the intended merged-main SHA, arms the bounded lease before apply, re-assumes the lifecycle role after the protected promotion wait, preserves the original lease anchor and extension count when refreshing after readiness, revalidates the lease before every mutating phase, publishes and verifies the exact AETHER/Kyber SPA archives, and cleans only a secret-free, run-scoped registration tenant marker. | no (delegates) |
 | `staging-state-reconcile.yml` | `workflow_dispatch` with explicit staging import confirmation | Import-only reconciliation for an existing staging target group and/or the four reviewed Terraform ECR repositories. Requires an approved immutable backend digest, `IMPORT-STAGING`, exact target/repository validation, the reviewed staging ECR KMS key for KMS-encrypted repositories, all required root-module URL/certificate/alert inputs, and the Auth0 provider environment used by ordinary remote plans; those credentials remain runner environment variables and never enter Terraform state or plan variables. If a repository exists at one unambiguous legacy staging address, the workflow validates all import prerequisites and every candidate status before adopting it with a state-only move to the canonical module address; it records the complete adoption set before moving anything, rejects tainted or otherwise non-managed legacy instances, treats an already-canonical healthy entry as a verified retry no-op, and fails closed on ambiguous duplicate ownership or demo/preview ownership. It also has a separate, confirmation-gated `untaint_ecr_repository_names` path for repositories already at the canonical staging address whose reviewed before/after attributes are identical but were left tainted by an interrupted replacement; that path verifies the live repository against the Terraform-managed KMS key in staging state, uses Terraform's top-level `untaint` command, and always requires a fresh reviewed plan. Aurora and DynamoDB monitoring are enabled with static profile decisions, so an unrelated state import never derives Terraform resource cardinality from unresolved resource IDs. Temporary local state snapshots are removed in one exit cleanup path. A fresh reviewed plan is required after any state change. The pre-existing `aether-backend` repository is intentionally immutable AES-256 because ECR encryption cannot be changed after creation; the other staging repositories remain KMS-encrypted. It never deletes or applies infrastructure. | no (state import/taint repair only) |
@@ -563,7 +563,7 @@ external services. The same routine runs locally via
 
 ## Smart contract static analysis
 
-`.github/workflows/smart-contract-analysis.yml` runs Slither static analysis on every push and PR that touches `Smart Contracts/`. Requires Slither to be installed (CI installs it via pip). Results are uploaded as an artifact. The pre-audit checklist at `scripts/smart_contract_audit_prep.py` runs 9 checks (oracle role, reward enforcement, nonce protection, etc.) and must pass 9/9 before external audit.
+`.github/workflows/smart-contract-analysis.yml` runs Slither static analysis on every push and PR that touches `contracts/smart-contracts/`. Requires Slither to be installed (CI installs it via pip). Results are uploaded as an artifact. The pre-audit checklist at `scripts/smart_contract_audit_prep.py` runs 9 checks (oracle role, reward enforcement, nonce protection, etc.) and must pass 9/9 before external audit.
 
 ## Adding a real gate
 

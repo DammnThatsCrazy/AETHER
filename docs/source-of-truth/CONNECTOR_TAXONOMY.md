@@ -7,7 +7,7 @@ audience: [architect, dev-senior, ops]
 status: experimental
 since_version: 0.1.0
 canonical_owner: platform@aether
-source_files: [Backend Architecture/aether-backend/services/integrations/connectors/base.py, Backend Architecture/aether-backend/shared/integration_contracts/catalog.py, Backend Architecture/aether-backend/shared/integration_contracts/experience.py]
+source_files: [services/backend/services/integrations/connectors/base.py, services/backend/shared/integration_contracts/catalog.py, services/backend/shared/integration_contracts/experience.py]
 last_synced_commit: 8b1ca3dc
 estimated_read_minutes: 6
 toc_depth: 3
@@ -25,7 +25,7 @@ toc_depth: 3
 
 This document is the taxonomy **as the code declares it**. The authoritative
 definitions live in
-`Backend Architecture/aether-backend/services/integrations/connectors/base.py`
+`services/backend/services/integrations/connectors/base.py`
 (the enums below) and the customer catalog derives its four-group
 provider/category mirror from
 `shared/integration_contracts/catalog.py` (see §8). The TypeScript twin in

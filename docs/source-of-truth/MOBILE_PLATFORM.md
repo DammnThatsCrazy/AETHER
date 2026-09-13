@@ -49,10 +49,10 @@ notification truth, or client-specific action truth.
 |---|---|---|---|
 | 1 | **Domain truth** | existing backend services (profiles, campaigns, graph, journeys, identity, Kyber ops, …) | reuse — no mobile calculation may diverge |
 | 2 | **Exploration context** | `shared/exploration/ExplorationContextV1` (+ TS twin, URL-backed) | reuse — continuation references it |
-| 3 | **Continuation plane** | `services/continuation/` (NET-NEW) | build — server-owned handoff linking desktop/mobile state |
-| 4 | **Insight & notification plane** | `services/notification_intelligence/` | extend — brand canonical, add TS twins + coverage + mobile projection |
-| 5 | **Governed action plane** | tenant services + `services/kyber/ops/` command plane | reuse — mobile adapts; no new mutation channel |
-| 6 | **Identity & device plane** | `services/auth/` + `services/kyber/{identity,devices,sessions,access}/` | extend — native installations, push identity, attestation, revocation |
+| 3 | **Continuation plane** | `services/backend/services/continuation/` (NET-NEW) | build — server-owned handoff linking desktop/mobile state |
+| 4 | **Insight & notification plane** | `services/backend/services/notification_intelligence/` | extend — brand canonical, add TS twins + coverage + mobile projection |
+| 5 | **Governed action plane** | tenant services + `services/backend/services/kyber/ops/` command plane | reuse — mobile adapts; no new mutation channel |
+| 6 | **Identity & device plane** | `services/backend/services/auth/` + `services/backend/services/kyber/{identity,devices,sessions,access}/` | extend — native installations, push identity, attestation, revocation |
 | 7 | **Release & activation plane** | credential platform + deployment profiles + `config/credential_contracts.yaml` | reuse + extend — a credential activates existing capability; it never unlocks unfinished code |
 
 ### Four separated concepts (do not collapse)
@@ -66,12 +66,12 @@ goes to every channel. Provider-accepted ≠ delivered ≠ opened ≠ read ≠ a
 
 ## Net-new surfaces built this session
 
-- **Continuation plane** (C1) — `services/continuation/`, direct-SQL + alembic (the generic
+- **Continuation plane** (C1) — `services/backend/services/continuation/`, direct-SQL + alembic (the generic
   JSONB repository cannot do the required compare-and-swap). Stores references + a bounded
   selection + a revision, never a whole graph. Introduces the **backend selection token**
   (`continuation_selections`) that the in-code marker in
   `frontend/aether/src/features/noesis/exploration-context.ts` asks for.
-- **Client-sync feed** (C1) — `services/client_sync/`, a durable append-only change log with a
+- **Client-sync feed** (C1) — `services/backend/services/client_sync/`, a durable append-only change log with a
   gapless per-scope cursor. `GET /v1/client-sync?cursor=` emits ten change types for read-state /
   continuation / saved-view / conversation / watchlist / incident / command-receipt / preference /
   session / installation changes. The deferred realtime replay is not relied upon.
@@ -80,7 +80,7 @@ goes to every channel. Provider-accepted ≠ delivered ≠ opened ≠ read ≠ a
   impossible in production.
 - **Installation & push model** (C3) — extends the tenant session and Kyber device planes with
   native installations and push subscriptions; push tokens are encrypted and hashed, never logged.
-  The tenant mobile gateway is mounted at `/v1/mobile` (`services/mobile/routes.py`, flag
+  The tenant mobile gateway is mounted at `/v1/mobile` (`services/backend/services/mobile/routes.py`, flag
   `settings.mobile.enabled`, default OFF → 404): `POST/GET /v1/mobile/installations`,
   `GET/DELETE /v1/mobile/installations/{id}`, `POST /v1/mobile/installations/{id}/subscriptions`.
   Registration forces `app_kind=aether`; only a token's `token_hash` is stored. The Kyber

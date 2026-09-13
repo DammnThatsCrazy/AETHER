@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = ROOT / "services" / "backend"
 OUTPUT = ROOT / "docs" / "_generated" / "reward-rail-matrix.json"
 
 
@@ -37,7 +37,7 @@ def main() -> int:
 
     payload = {
         "version": read_version(),
-        "generated_from": "Backend Architecture/aether-backend/services/rewards/rail_matrix.py",
+        "generated_from": "services/backend/services/rewards/rail_matrix.py",
         **build_rail_matrix(),
     }
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)

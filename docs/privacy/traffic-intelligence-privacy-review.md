@@ -22,7 +22,7 @@ architectural boundary rather than a code-enforced guarantee.
 
 Classification inputs are limited to acquisition evidence: referrer, referrer
 domain, UTM parameters, click identifiers, landing page, and user agent
-(`SourceClassifier.classify` signature in `services/traffic/classifier.py`).
+(`SourceClassifier.classify` signature in `services/backend/services/traffic/classifier.py`).
 There is no form-field, input-value, or DOM-content parameter anywhere in the
 classifier contract. Form values are neither an input nor an output of traffic
 intelligence.
@@ -35,12 +35,12 @@ hostname, an origin-only URL (scheme + host, no path or query), and a one-way
 is stored only as a non-reversible hash, sensitive query strings and full paths
 cannot be reconstructed downstream — the reclassification repair explicitly
 preserves the existing hash instead of recomputing a path
-(`services/traffic/repair.py`).
+(`services/backend/services/traffic/repair.py`).
 
 ### P3 — Token and path hashing
 
 Redirect and handoff tokens are persisted only as SHA-256 digests
-(`_token_hash` in `services/traffic/referral_links.py`); plaintext tokens are
+(`_token_hash` in `services/backend/services/traffic/referral_links.py`); plaintext tokens are
 disclosed once at creation and never returned by read/list paths
 (`public_referral_link`). Referrer paths are stored only as one-way hashes
 (P2). No reversible token or path material is retained.
@@ -57,7 +57,7 @@ source classification.
 Source determination relies on web navigation evidence and platform postbacks,
 not on observing other installed applications. Apple platform evidence is
 consumed only through Apple's own AdAttributionKit / SKAdNetwork postbacks
-(`services/attribution/apple_postbacks.py`), which are aggregate and
+(`services/backend/services/attribution/apple_postbacks.py`), which are aggregate and
 campaign-level — the design does not inspect a device's other apps, and no such
 signal is an input to classification.
 

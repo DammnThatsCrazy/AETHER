@@ -34,7 +34,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = ROOT / "services" / "backend"
 
 FINANCIAL_TS = ROOT / "packages" / "shared" / "financial-assets.ts"
 VALUE_TS = ROOT / "packages" / "shared" / "value.ts"

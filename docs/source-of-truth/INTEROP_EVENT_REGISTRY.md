@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/contracts/event-registry.json, Backend Architecture/aether-backend/services/silver/projectors/interop_projector.py]
+source_files: [packages/shared/contracts/event-registry.json, services/backend/services/silver/projectors/interop_projector.py]
 canonical_owner: platform@aether
 last_synced_commit: 1f19190
 ---

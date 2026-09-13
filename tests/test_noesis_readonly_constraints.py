@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import get_args
 
 # This file lives at repo-root ``tests/``; parents[1] is the repo root and the
-# backend package lives under "Backend Architecture/aether-backend".
-BACKEND = Path(__file__).resolve().parents[1] / "Backend Architecture" / "aether-backend"
+# backend package lives under "services/backend".
+BACKEND = Path(__file__).resolve().parents[1] / "services" / "backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 

@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/card-linked-payments.ts, Backend Architecture/aether-backend/services/card_linked_payments/models.py, Backend Architecture/aether-backend/services/card_linked_payments/ingestion.py, Backend Architecture/aether-backend/services/card_linked_payments/gold.py, Backend Architecture/aether-backend/services/card_linked_payments/governance.py]
+source_files: [packages/shared/card-linked-payments.ts, services/backend/services/card_linked_payments/models.py, services/backend/services/card_linked_payments/ingestion.py, services/backend/services/card_linked_payments/gold.py, services/backend/services/card_linked_payments/governance.py]
 last_synced_commit: pending
 ---
 
@@ -68,7 +68,7 @@ All V1 surfaces are default-off except safety restrictions:
 
 ## V1 pipeline (Bronze → Silver → Gold → Graph)
 
-All modules live in `Backend Architecture/aether-backend/services/card_linked_payments/`.
+All modules live in `services/backend/services/card_linked_payments/`.
 
 1. **Ingestion** (`ingestion.py`, `normalizer.py`, `paymentscan.py`) — four
    sources with deterministic idempotency keys and per-source basis
@@ -82,7 +82,7 @@ All modules live in `Backend Architecture/aether-backend/services/card_linked_pa
 2. **Storage** (`repositories.py`, Alembic `20260713_card_linked_payments`) —
    durable stores for flows (UNIQUE `(tenant_id, idempotency_key)`),
    benchmarks, provider health, reconciliation records, and privacy audits.
-3. **Silver** (`services/silver/projectors/card_linked_projector.py`) —
+3. **Silver** (`services/backend/services/silver/projectors/card_linked_projector.py`) —
    registered LAST in the dispatcher chain; never the canonical-activity
    owner; writes `card_linked_flow_facts`.
 4. **Gold** (`gold.py`) — entity economic activity (top-up and spend counted
@@ -91,7 +91,7 @@ All modules live in `Backend Architecture/aether-backend/services/card_linked_pa
    are excluded from every user-level rollup; nothing is model-training
    eligible. `materialize_gold` is invoked on demand and, when
    `AETHER_CARD_LINKED_PAYMENT_RAILS_ENABLED` is on, periodically per tenant by
-   the supervised payment-rail sync worker (`services/integrations/providers/
+   the supervised payment-rail sync worker (`services/backend/services/integrations/providers/
    payment_rails/sync_worker.py`) — the periodic hook the plane previously
    lacked (`card_linked_gold_materialized_total`).
 5. **Reconciliation** (`ingestion.py::_try_reconcile`) — an on-chain top-up
@@ -143,9 +143,9 @@ build on any violation, and Kyber exposes the same results read-only.
 ## Canonical implementation points
 
 - Shared contracts: `packages/shared/payment-catalog.ts` and `packages/shared/card-linked-payments.ts`.
-- Backend semantics: `Backend Architecture/aether-backend/services/card_linked_payments/models.py`.
-- Backend catalog: `Backend Architecture/aether-backend/services/payment_catalog/catalog.py`.
-- Settings: `Backend Architecture/aether-backend/config/settings.py`.
+- Backend semantics: `services/backend/services/card_linked_payments/models.py`.
+- Backend catalog: `services/backend/services/payment_catalog/catalog.py`.
+- Settings: `services/backend/config/settings.py`.
 
 ## Certification & readiness (staging-capstone)
 

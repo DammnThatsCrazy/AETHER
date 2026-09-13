@@ -12,7 +12,7 @@ from typing import Iterator
 import pytest
 
 
-BACKEND = str(Path(__file__).parents[2] / "Backend Architecture" / "aether-backend")
+BACKEND = str(Path(__file__).parents[2] / "services" / "backend")
 if BACKEND not in sys.path:
     sys.path.insert(0, BACKEND)
 

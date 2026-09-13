@@ -16,7 +16,7 @@ pytest.importorskip("alembic", reason="alembic required for migration-graph chec
 from alembic.config import Config  # noqa: E402
 from alembic.script import ScriptDirectory  # noqa: E402
 
-BACKEND = Path(__file__).resolve().parents[2] / "Backend Architecture" / "aether-backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
 
 
 def _script_directory() -> ScriptDirectory:

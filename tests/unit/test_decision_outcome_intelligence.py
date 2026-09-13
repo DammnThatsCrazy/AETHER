@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = ROOT.parent / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = ROOT.parent / "services" / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
 

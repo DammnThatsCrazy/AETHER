@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def run_file(path: Path) -> tuple[Path, int, str]:
     env = os.environ.copy()
-    backend = str(ROOT / "Backend Architecture" / "aether-backend")
+    backend = str(ROOT / "services" / "backend")
     env["PYTHONPATH"] = backend + os.pathsep + env.get("PYTHONPATH", "")
     proc = subprocess.run(
         [sys.executable, "-m", "pytest", str(path), "-q", "-n", "0", "--tb=short"],

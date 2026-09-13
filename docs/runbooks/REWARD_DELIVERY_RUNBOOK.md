@@ -7,12 +7,12 @@ audience: [ops, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/services/rewards/delivery_outbox.py
-  - Backend Architecture/aether-backend/services/rewards/rails.py
+  - services/backend/services/rewards/delivery_outbox.py
+  - services/backend/services/rewards/rails.py
 canonical_owner: platform@aether
 source_hashes:
-  "Backend Architecture/aether-backend/services/rewards/delivery_outbox.py": "sha256:549cda61fd8cf7587756483f80706eaa47679f1dad9ee32e4d651bb06a442dcc"
-  "Backend Architecture/aether-backend/services/rewards/rails.py": "sha256:45befadbe1ed99d4ef217aba9251bf5e5f234e0c660273f64d32cc62a2a85497"
+  "services/backend/services/rewards/delivery_outbox.py": "sha256:549cda61fd8cf7587756483f80706eaa47679f1dad9ee32e4d651bb06a442dcc"
+  "services/backend/services/rewards/rails.py": "sha256:45befadbe1ed99d4ef217aba9251bf5e5f234e0c660273f64d32cc62a2a85497"
 ---
 
 # Reward Delivery Runbook
@@ -69,7 +69,7 @@ an outage.
 ## Webhook signing secret could not be resolved
 
 The signing secret is resolved from the credential authority at the narrow send
-site (`services/rewards/webhook_secret.py`), NOT stored plaintext in the job —
+site (`services/backend/services/rewards/webhook_secret.py`), NOT stored plaintext in the job —
 the job carries only a `secret_ref`. A `fatal` send outcome with
 "signing secret could not be resolved" means the tenant has no ACTIVE
 `webhook_signing_secret` credential for the `tenant_webhook` provider in this

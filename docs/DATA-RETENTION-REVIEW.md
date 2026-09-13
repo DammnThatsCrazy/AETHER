@@ -13,7 +13,7 @@ estimated_read_minutes: 3
 # Data Retention Review
 
 Periodic review of retention policies and deletion behavior. Builds on the
-implemented retention layer (`services/security/retention.py`, see
+implemented retention layer (`services/backend/services/security/retention.py`, see
 [Data Retention](DATA-RETENTION.md)).
 
 ## Review checklist

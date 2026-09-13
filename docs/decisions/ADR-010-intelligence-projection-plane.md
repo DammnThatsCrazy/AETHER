@@ -223,11 +223,11 @@ P0 blueprint).
   validator (schema, DAG, cross-registry, inventory honesty, ownership,
   surface/metric honesty).
 - `packages/shared/intelligence-projections_generated.ts`,
-  `Backend Architecture/aether-backend/shared/intelligence_projections/generated_registry.py`,
+  `services/backend/shared/intelligence_projections/generated_registry.py`,
   `docs/_generated/intelligence-projection-registry-table.md`,
   `docs/_generated/intelligence-projection-dependency-graph.md` — generated
   twins (never hand-edited).
-- `Backend Architecture/aether-backend/shared/intelligence_projections/`
+- `services/backend/shared/intelligence_projections/`
   — `contracts.py`, `provider.py` (Protocol), `registry.py`
   (`ProviderRegistry`), `errors.py`, `readiness.py`, `__init__.py`.
 - `docs/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md` — the

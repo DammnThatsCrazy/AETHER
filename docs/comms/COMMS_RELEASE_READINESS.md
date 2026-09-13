@@ -6,10 +6,10 @@ visibility: I
 audience: [ops, dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/config/settings.py, tests/integration/test_comms_golden_scenario.py]
+source_files: [services/backend/config/settings.py, tests/integration/test_comms_golden_scenario.py]
 source_hashes:
-  Backend Architecture/aether-backend/config/settings.py: sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3
-  tests/integration/test_comms_golden_scenario.py: sha256:7ff2925fcbcfb63cc4e8b9a1db430501c46bebce028b9bb7455a97213fa42e2c
+  "services/backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
+  "tests/integration/test_comms_golden_scenario.py": "sha256:a26db2d8632f089933adf8df5d15d2a20756b33e6f4f3e082d384e8d5dd831ff"
 ---
 
 # Communications Intelligence — Release Readiness
@@ -73,7 +73,7 @@ Measurement Operations → Communications pipeline health):
   derived state (`confirm=true` required; suppressions retained so
   opt-outs stay honored).
 
-Rebuilds are coalesced (`services/comms/rebuild_coalescer.py`): an event
+Rebuilds are coalesced (`services/backend/services/comms/rebuild_coalescer.py`): an event
 burst for one profile inside the debounce window
 (`AETHER_COMMS_REBUILD_WINDOW_SECONDS`, default 5s) produces exactly one
 state recompute and one journey recompile.

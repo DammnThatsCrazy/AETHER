@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-CONTRACTS_DIR = ROOT / "Smart Contracts"
+CONTRACTS_DIR = ROOT / "contracts/smart-contracts"
 SOLIDITY_CONTRACTS = list((CONTRACTS_DIR / "contracts").glob("*.sol"))
 PROGRAMS = list((CONTRACTS_DIR / "programs").glob("**/*.rs"))
 
@@ -48,7 +48,7 @@ CHECKLIST = [
 def _run_compile() -> tuple[bool, str]:
     node_modules = CONTRACTS_DIR / "node_modules"
     if not node_modules.exists():
-        return True, "node_modules not installed — skipping compile (run npm ci in Smart Contracts/)"
+        return True, "node_modules not installed — skipping compile (run npm ci in contracts/smart-contracts/)"
     r = subprocess.run(
         ["npx", "hardhat", "compile"],
         cwd=CONTRACTS_DIR, capture_output=True, text=True, timeout=120,

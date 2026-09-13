@@ -47,7 +47,7 @@ def test_engine_section_state_vocab_matches_the_engine():
     import os
     import sys as _sys
 
-    backend = REPO_ROOT / "Backend Architecture" / "aether-backend"
+    backend = REPO_ROOT / "services" / "backend"
     if str(backend) not in _sys.path:
         _sys.path.insert(0, str(backend))
     os.environ.setdefault("AETHER_ENV", "local")

@@ -26,9 +26,9 @@ repository_ceiling:
   - None — repository-controlled work complete
   remaining_is_repository_controlled: false
   evidence:
-  - Backend Architecture/aether-backend/services/sdk_drift/routes.py
-  - Backend Architecture/aether-backend/services/data_quality/
-  - Backend Architecture/aether-backend/services/operational_intelligence/
+  - services/backend/services/sdk_drift/routes.py
+  - services/backend/services/data_quality/
+  - services/backend/services/operational_intelligence/
 implementation:
   state: VERIFIED
   denominator: in-scope repository controls (migration-derived)
@@ -115,7 +115,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: Backend Architecture/aether-backend/services/sdk_drift/routes.py'
+  - 'repository evidence: services/backend/services/sdk_drift/routes.py'
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:

@@ -56,11 +56,11 @@ fraud360.**
 1. **One graph** — no `fraud_graph`. Both projections are `read_only`; any graph
    write anywhere in the plane flows through `GraphMutationGateway`.
 2. **One identity model** — risk/fraud consume canonical identity resolution
-   (Plane-4 `services/identity`); they may flag identity-risk conditions but
+   (Plane-4 `services/backend/services/identity`); they may flag identity-risk conditions but
    never merge or split identities.
 3. **One evidence system** — every claim references the canonical `EvidenceRef`
-   from `services/operational_intelligence/models.py`. The divergent
-   `EvidenceRef` in `services/fraud/models.py` is deleted before convergence
+   from `services/backend/services/operational_intelligence/models.py`. The divergent
+   `EvidenceRef` in `services/backend/services/fraud/models.py` is deleted before convergence
    (Phase 2 of the program).
 4. **One temporal authority** — observed/recorded/valid/source/ingestion time,
    corrections, and known-then/known-now come from the temporal kernel

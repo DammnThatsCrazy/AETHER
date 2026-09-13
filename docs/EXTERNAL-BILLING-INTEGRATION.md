@@ -35,7 +35,7 @@ None of these env vars are required for local dev unless provider sync is enable
 
 ## Provider interface
 
-`BillingProvider` (`services/billing/providers/`) defines `create_customer`,
+`BillingProvider` (`services/backend/services/billing/providers/`) defines `create_customer`,
 `sync_customer`, `create_subscription`, `update_subscription`,
 `cancel_subscription`, `create_invoice_preview`, `export_invoice`,
 `sync_payment_status`, `record_usage`, `create_usage_record`, `map_product`,

@@ -21,7 +21,7 @@ services:
 
   aether-backend:
     build:
-      context: ../../Backend Architecture/aether-backend
+      context: ../../services/backend
       dockerfile: Dockerfile
     ports:
       - "8000:8000"

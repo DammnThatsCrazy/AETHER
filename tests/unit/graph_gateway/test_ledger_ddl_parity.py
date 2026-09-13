@@ -15,7 +15,7 @@ import ast
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-BACKEND_ROOT = REPO_ROOT / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = REPO_ROOT / "services" / "backend"
 
 MIGRATION_PATH = (
     BACKEND_ROOT / "alembic" / "versions" / "20260729_graph_mutation_ledger.py"

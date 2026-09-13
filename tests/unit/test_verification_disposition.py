@@ -103,7 +103,7 @@ def test_advisory_failure_does_not_fail_blocking_disposition(monkeypatch) -> Non
 
 
 def test_backend_change_selects_backend_build_without_unrelated_apps() -> None:
-    result = build_disposition(["Backend Architecture/aether-backend/services/profile/routes.py"])
+    result = build_disposition(["services/backend/services/profile/routes.py"])
 
     assert result["impact"]["selected_lane"] == "pr"
     assert "backend" in _ids(result)

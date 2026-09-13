@@ -46,7 +46,7 @@ checks all three declarations + both env examples on every run.
 
 ## 2. Ingestion funnel telemetry + Observation Inspector (blueprint §17)
 
-`services/ingestion/ingestion_observability.py` records **two complementary
+`services/backend/services/ingestion/ingestion_observability.py` records **two complementary
 views** when the observability flag is ON:
 
 * **Funnel** — per-stage aggregate counters over the blueprint stage vocabulary.
@@ -99,7 +99,7 @@ control plane renders: `received`, `accepted`, `duplicates`, `rejected`,
   `bronze`/`degraded` span for a flag fail-open degrade (envelope/gateway
   rejected → flat SDK path).
 
-Worker functions in `services/ingestion/workers.py` record NORMALIZED (after the
+Worker functions in `services/backend/services/ingestion/workers.py` record NORMALIZED (after the
 Bronze → Silver `upsert_record`) and PROJECTIONS (after `silver_fact_projector`
 outcome results persist) when the flag is ON.
 
@@ -123,7 +123,7 @@ discovery sees them; bodies are flag-gated (report `enabled: false` while OFF)
 | Replay service status | `GET /v1/kyber/ingest/replay/status` | replay | Durable Bronze replay service status |
 | Replay run/preview | `POST /v1/kyber/ingest/replay/events` | replay, rejection | Operator-triggered replay / dry-run of durable Bronze rows |
 
-`GET /v1/health/pipeline` (in `services/gateway/routes.py`) fixes the
+`GET /v1/health/pipeline` (in `services/backend/services/gateway/routes.py`) fixes the
 previously-**phantom** pipeline health endpoint the Kyber operator hook called:
 it now resolves and returns a 200-shaped payload from `pipeline_snapshot()`
 (probe `ingestion-pipeline`, status `healthy`/`degraded`/`disabled`). While the
@@ -136,7 +136,7 @@ public/tenant route-policy, never operator-gated (liveness and SDKs read them).
 
 ## 4. SDK version-compatibility tiers (Invariant #18 / Gate H)
 
-`services/ingestion/sdk_version_tiers.py` declares the honest version-band model
+`services/backend/services/ingestion/sdk_version_tiers.py` declares the honest version-band model
 behind the capability manifest. Today the backend strips
 `context.library.version` and treats every SDK client identically; this module
 declares the bands, the per-band capability set, and the **advisory** ingress
@@ -182,7 +182,7 @@ is advisory (substring set in the module); version does the real classification.
 
 ### Capability manifest
 
-`GET /v1/config/sdk/versions` (`services/sdk_config/routes.py`) serves
+`GET /v1/config/sdk/versions` (`services/backend/services/sdk_config/routes.py`) serves
 `tiers_payload()`: `schema_version`, `enabled`, `mode`,
 `blocked_after_date`, the full tier table (id / status / label / min / max /
 `deprecated_after` / `blocked_after` / capabilities / note), and the
@@ -207,13 +207,13 @@ Both gates are real, fail-closed repo-doctor validators dispatched from the
 
 | Concern | Module |
 |---|---|
-| Funnel + trace ledger | `Backend Architecture/aether-backend/services/ingestion/ingestion_observability.py` |
-| Version-band model | `Backend Architecture/aether-backend/services/ingestion/sdk_version_tiers.py` |
-| Operator observability router | `Backend Architecture/aether-backend/services/ingestion/observability_routes.py` |
-| Replay router | `Backend Architecture/aether-backend/services/ingestion/replay_routes.py` |
-| Ingestion spine recording seams | `Backend Architecture/aether-backend/services/ingestion/batch.py` |
-| Worker recording seams (NORMALIZED / PROJECTIONS) | `Backend Architecture/aether-backend/services/ingestion/workers.py` |
-| Pipeline health route | `Backend Architecture/aether-backend/services/gateway/routes.py` |
-| Capability-manifest route | `Backend Architecture/aether-backend/services/sdk_config/routes.py` |
-| Flags | `Backend Architecture/aether-backend/config/settings.py` · `.env.example` · `.env.production.example` |
+| Funnel + trace ledger | `services/backend/services/ingestion/ingestion_observability.py` |
+| Version-band model | `services/backend/services/ingestion/sdk_version_tiers.py` |
+| Operator observability router | `services/backend/services/ingestion/observability_routes.py` |
+| Replay router | `services/backend/services/ingestion/replay_routes.py` |
+| Ingestion spine recording seams | `services/backend/services/ingestion/batch.py` |
+| Worker recording seams (NORMALIZED / PROJECTIONS) | `services/backend/services/ingestion/workers.py` |
+| Pipeline health route | `services/backend/services/gateway/routes.py` |
+| Capability-manifest route | `services/backend/services/sdk_config/routes.py` |
+| Flags | `services/backend/config/settings.py` · `.env.example` · `.env.production.example` |
 | Gate validators | `scripts/validate_kyber_ops_surface.py` · `scripts/validate_sdk_compat_tiers.py` |

@@ -219,7 +219,7 @@ and the per-environment rules overlay. The **derived** conditions that have no
 clean single-series PromQL form — most importantly the reconciliation-conflict
 backlog, which is read from the durable reconciliation records rather than a
 counter — are classified by an in-process evaluator
-(`services/integrations/providers/payment_rails/alert_eval.py`) whose thresholds
+(`services/backend/services/integrations/providers/payment_rails/alert_eval.py`) whose thresholds
 come from `settings.payment_rails.alert_*` (env vars `AETHER_PAYMENT_ALERT_*`, e.g.
 `AETHER_PAYMENT_ALERT_NO_WEBHOOK_SECONDS`, `AETHER_PAYMENT_ALERT_CANONICAL_BACKLOG_WARN`,
 `AETHER_PAYMENT_ALERT_RECONCILIATION_CONFLICT_WARN`). This keeps thresholds

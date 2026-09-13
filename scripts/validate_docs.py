@@ -122,14 +122,14 @@ def run_checks() -> None:
         ROOT / "frontend" / "kyber" / "package.json",
         ROOT / "frontend" / "shared" / "package.json",
         ROOT / "frontend" / "docs" / "package.json",
-        ROOT / "Data Ingestion Layer" / "package.json",
-        ROOT / "Data Ingestion Layer" / "packages" / "common" / "package.json",
-        ROOT / "Data Ingestion Layer" / "packages" / "auth" / "package.json",
-        ROOT / "Data Ingestion Layer" / "packages" / "cache" / "package.json",
-        ROOT / "Data Ingestion Layer" / "packages" / "events" / "package.json",
-        ROOT / "Data Ingestion Layer" / "packages" / "logger" / "package.json",
-        ROOT / "Data Ingestion Layer" / "services" / "ingestion" / "package.json",
-        ROOT / "Data Lake Architecture" / "aether-Datalake-backend" / "package.json",
+        ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "package.json",
+        ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "common" / "package.json",
+        ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "auth" / "package.json",
+        ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "cache" / "package.json",
+        ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "events" / "package.json",
+        ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "packages" / "logger" / "package.json",
+        ROOT / "docs/archive/legacy-architecture/data-ingestion-layer" / "services" / "ingestion" / "package.json",
+        ROOT / "docs/archive/legacy-architecture/data-lake-architecture" / "aether-Datalake-backend" / "package.json",
     ]:
         check_package_json(pj, version)
 

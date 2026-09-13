@@ -50,7 +50,7 @@ implementation:
       weight: 20
       satisfied: true
       rationale: credential_service.byok_ref resolves provider secrets at runtime
-      evidence: ["Backend Architecture/aether-backend/shared/credentials/"]
+      evidence: ["services/backend/shared/credentials/"]
     - id: webhook-verification
       description: Provider webhook signature verification
       weight: 20
@@ -61,7 +61,7 @@ implementation:
       description: Canonical event emission onto the platform event bus
       weight: 20
       satisfied: true
-      evidence: ["Backend Architecture/aether-backend/services/ingestion/batch.py"]
+      evidence: ["services/backend/services/ingestion/batch.py"]
     - id: offline-certification
       description: Credentialless offline certification harness
       weight: 20

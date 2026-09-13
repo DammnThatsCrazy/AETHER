@@ -8,13 +8,13 @@ name: Infrastructure Profiles
 on:
   pull_request:
     paths:
-      - 'AWS Deployment/**'
+      - 'deploy/aws/**'
       - '.github/workflows/infrastructure.yml'
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - 'AWS Deployment/**'
+      - 'deploy/aws/**'
       - '.github/workflows/infrastructure.yml'
 
 concurrency:
@@ -26,7 +26,7 @@ permissions:
 
 env:
   AWS_REGION: us-east-1
-  TF_DIR: AWS Deployment/aether-aws/terraform
+  TF_DIR: deploy/aws/terraform
   TF_IN_AUTOMATION: true
 
 jobs:
@@ -107,7 +107,7 @@ jobs:
           - preview
     defaults:
       run:
-        working-directory: AWS Deployment/aether-aws/terraform
+        working-directory: deploy/aws/terraform
     steps:
       - uses: actions/checkout@v4
 
@@ -197,7 +197,7 @@ jobs:
           - enterprise-isolated
     defaults:
       run:
-        working-directory: AWS Deployment/aether-aws/terraform
+        working-directory: deploy/aws/terraform
     env:
       TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
       TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
@@ -283,7 +283,7 @@ jobs:
           # ROOT VARIABLES -- TF_VAR_auth0_management_client_secret would appear
           # verbatim in the top-level `variables` block of the artifact uploaded
           # below, on every push to main and every same-repo pull request that
-          # touches `AWS Deployment/**`. The raw document is written to a name
+          # touches `deploy/aws/**`. The raw document is written to a name
           # that is never uploaded, sanitised, and deleted.
           terraform show -json "tfplan-${PROFILE}" > plan-raw.json
           python "${GITHUB_WORKSPACE}/scripts/release/sanitize_terraform_plan_json.py" \

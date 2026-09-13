@@ -26,7 +26,7 @@ import threading
 import pytest
 
 # Add backend path early so service imports resolve
-sys.path.insert(0, "Backend Architecture/aether-backend")
+sys.path.insert(0, "services/backend")
 
 # Skip entire module if backend deps aren't installed
 pytest.importorskip("fastapi", reason="Backend deps not installed (pip install -e '.[backend]')")

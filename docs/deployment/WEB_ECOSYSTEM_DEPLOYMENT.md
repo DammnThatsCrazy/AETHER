@@ -170,7 +170,7 @@ out of scope until infrastructure exists.
 4. If analytics is wanted on a real deploy, set `VITE_ANALYTICS_PROVIDER` and
    `VITE_ANALYTICS_PROPERTY_ID` at build time; otherwise leave them off.
 
-The tenant app / Kyber live-deploy machinery (AWS Deployment/, Terraform,
+The tenant app / Kyber live-deploy machinery (docs/archive/legacy-architecture/aws-deployment/, Terraform,
 deploy workflows) is intentionally not referenced: those paths deploy the
 tenant application and Kyber, not these shells.
 

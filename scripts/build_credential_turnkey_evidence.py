@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = REPO_ROOT / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = REPO_ROOT / "services" / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -360,9 +360,9 @@ def _aggregate_worker_topology() -> tuple[dict[str, Any], list[str]]:
             "spec_owner_index": dict(sorted(spec_owner.items())),
         },
         [
-            "Backend Architecture/aether-backend/services/runtime/roles.py",
-            "Backend Architecture/aether-backend/services/runtime/specs.py",
-            "Backend Architecture/aether-backend/services/runtime/supervisor.py",
+            "services/backend/services/runtime/roles.py",
+            "services/backend/services/runtime/specs.py",
+            "services/backend/services/runtime/supervisor.py",
         ],
     )
 
@@ -378,7 +378,7 @@ def _walk_terraform_files(root: Path) -> list[str]:
 
 
 def _aggregate_infrastructure_validation() -> tuple[dict[str, Any], list[str]]:
-    tf_root = REPO_ROOT / "AWS Deployment" / "aether-aws" / "terraform"
+    tf_root = REPO_ROOT / "deploy" / "aws" / "terraform"
     tf_files = _walk_terraform_files(tf_root) if tf_root.exists() else []
     profiles_dir = tf_root / "profiles"
     profiles = sorted(f.name for f in profiles_dir.glob("*.tfvars")) if profiles_dir.exists() else []
@@ -514,7 +514,7 @@ def _aggregate_entitlement_registry() -> tuple[dict[str, Any], list[str]]:
         },
         sorted(
             [
-                "Backend Architecture/aether-backend/shared/plans/service_catalog.py",
+                "services/backend/shared/plans/service_catalog.py",
                 _rel(cm_path),
                 _rel(cc_path),
             ]
@@ -544,11 +544,11 @@ def _aggregate_meter_registry() -> tuple[dict[str, Any], list[str]]:
             "metered_definition": _json_safe(metered[0]) if metered else None,
         },
         [
-            "Backend Architecture/aether-backend/shared/providers/__init__.py",
-            "Backend Architecture/aether-backend/shared/providers/categories.py",
-            "Backend Architecture/aether-backend/shared/providers/meter.py",
-            "Backend Architecture/aether-backend/shared/providers/registry.py",
-            "Backend Architecture/aether-backend/shared/computation/generated_registry.py",
+            "services/backend/shared/providers/__init__.py",
+            "services/backend/shared/providers/categories.py",
+            "services/backend/shared/providers/meter.py",
+            "services/backend/shared/providers/registry.py",
+            "services/backend/shared/computation/generated_registry.py",
         ],
     )
 
@@ -631,7 +631,7 @@ def _aggregate_readiness_state() -> tuple[dict[str, Any], list[str]]:
             ),
         },
         sorted(
-            ["Backend Architecture/aether-backend/shared/certification/readiness.py"]
+            ["services/backend/shared/certification/readiness.py"]
             + [_rel(f) for f in cert_dir.glob("*.json")]
         ),
     )

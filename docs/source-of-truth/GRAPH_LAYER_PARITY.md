@@ -6,7 +6,7 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts, docs/source-of-truth/GRAPH_CONTRACT.md]
+source_files: [services/backend/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts, docs/source-of-truth/GRAPH_CONTRACT.md]
 canonical_owner: graph@aether
 last_synced_commit: fd2288c
 ---
@@ -79,7 +79,7 @@ Every doc that mentions relationship layers must list all four. The following
 docs are checked by CI:
 
 - `README.md`
-- `Backend Architecture/README.md`
+- `docs/archive/legacy-architecture/backend/README.md`
 - `docs/INTELLIGENCE-GRAPH.md`
 - `docs/UNIFIED-ECONOMIC-GRAPH.md`
 - `docs/ECONOMIC-OBSERVABILITY.md`
@@ -97,7 +97,7 @@ The following checks must pass before merge:
 
 1. `python tests/contracts/test_graph_contract_parity.py` — TypeScript/Python contract parity
 2. `python tests/docs/test_graph_layer_docs_parity.py` — no docs omit A2H
-3. `python Backend\ Architecture/aether-backend/tests/graph/test_relationship_layer_parity.py` — every edge mapped
+3. `python services/backend/tests/graph/test_relationship_layer_parity.py` — every edge mapped
 4. `make docs-check` — no stale source-linked docs
 5. `grep -R "H2H, H2A, and A2A" .` must return zero results
 
@@ -105,7 +105,7 @@ The following checks must pass before merge:
 
 ## Known Previous Gap (Resolved in v8.9.0)
 
-Prior to v8.9.0, `Backend Architecture/README.md` listed only three layers
+Prior to v8.9.0, `docs/archive/legacy-architecture/backend/README.md` listed only three layers
 (H2H, H2A, A2A) in the Relationship Layers table and description text,
 omitting A2H entirely. This was fixed in the v8.9.0 productization pass.
 

@@ -13,7 +13,7 @@ estimated_read_minutes: 4
 # Data Migrations
 
 Schema migrations use **Alembic**
-(`Backend Architecture/aether-backend/alembic/`). Locally the backend runs on
+(`services/backend/alembic/`). Locally the backend runs on
 in-memory repositories; staging/production use PostgreSQL via asyncpg.
 
 ## Apply

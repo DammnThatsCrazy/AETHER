@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  scripts/production_status.py: sha256:15010d4caab7f6e82c6677778332da1de5457d0c7576e11922fd24521a77086d
+  "scripts/production_status.py": "sha256:b41b131c5b76447e0ffd146a6a5e111e44d8674e2cb0cb89d5d09351466a0b66"
 ---
 
 # AETHER Productization Audit
@@ -74,7 +74,7 @@ What the June 2026 audit found:
 What this audit pass changed (June 2026):
 
 - Fixed `make test` / bare `pytest` (conftest module collision between
-  `tests/` and `ML Models/aether-ml/tests/`); suites now run separately
+  `tests/` and `services/ml/tests/`); suites now run separately
   everywhere, matching what CI and `repo_doctor.py` already did.
 - Reviewed and fixed the 6 stale source-linked docs flagged by
   `docs_drift.py --strict`: documented the previously-undocumented Economic
@@ -141,7 +141,7 @@ What the 2026-07-23 semantic operational-hardening pass changed (PR8):
   `docs/runbooks/semantic-sentiment/semantic-sentiment-operations.md` runbook as
   `rb_semantic_classification_degraded`, and 3 SLOs (abstention rate ≤0.25,
   classify latency p95 ≤1s, review-queue depth ≤50) keyed to the Prometheus
-  series emitted by `services/semantic_intelligence`
+  series emitted by `services/backend/services/semantic_intelligence`
   (`aether_semantic_observations_{classified,abstained,quarantined}_total`,
   `aether_semantic_classify_latency_ms`, `aether_semantic_review_queue_open`,
   `aether_semantic_replay_jobs_active`).

@@ -23,7 +23,7 @@ import sys
 import asyncio
 from pathlib import Path
 
-BACKEND_ROOT = Path(__file__).parent.parent / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = Path(__file__).parent.parent / "services" / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
 

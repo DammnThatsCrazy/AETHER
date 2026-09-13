@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest  # noqa: F401  (imported for parity / future markers)
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = ROOT / "services" / "backend"
 
 # Ensure backend modules are importable when this file runs in isolation.
 if str(BACKEND_ROOT) not in sys.path:

@@ -199,7 +199,7 @@ now complete are documented in the "What's Production-Ready" section above.
 
 ### 🟡 High Priority 3 — Stripe Billing Wire-Up
 
-**What's missing:** `services/billing/providers/stripe_provider.py` contains a readiness stub — methods raise `ProviderDisabledError` instead of calling the Stripe API. Revenue cannot be collected programmatically.
+**What's missing:** `services/backend/services/billing/providers/stripe_provider.py` contains a readiness stub — methods raise `ProviderDisabledError` instead of calling the Stripe API. Revenue cannot be collected programmatically.
 
 **Required:** Wire `sync_tenant`, `create_usage_record`, and `export_invoices` to real Stripe API calls. Config keys (`STRIPE_SECRET_KEY`, `STRIPE_PRODUCT_MAPPING_JSON`) already in `.env.example`.
 
@@ -213,7 +213,7 @@ now complete are documented in the "What's Production-Ready" section above.
 |---|---|
 | Production AWS infra | Run `scripts/bootstrap_aws_secrets.py` + Terraform |
 | External smart contract audit | Commission Trail of Bits / OpenZeppelin before mainnet with real funds |
-| ML model artifacts | Run training pipelines in `ML Models/aether-ml` and publish |
+| ML model artifacts | Run training pipelines in `services/ml` and publish |
 | Dune feeder persistent backend | Configure S3/Postgres; remove `AETHER_ENV` guard |
 | Load baselines | `make load-smoke` against staging → `docs/LOAD-BASELINES.md` |
 | Neptune capacity | Provision staging Neptune; replay synthetic merge workload |

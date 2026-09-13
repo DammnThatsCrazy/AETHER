@@ -19,7 +19,7 @@ intelligence the platform actually produces — not just raw events.
 ## Metering dimensions
 
 Dimensions are the `MeteringEventType` values recorded via `MeteringService`
-(`services/billing/revops.py`). The catalog:
+(`services/backend/services/billing/revops.py`). The catalog:
 
 | Dimension | Label | Stage |
 | --- | --- | --- |

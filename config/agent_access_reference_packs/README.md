@@ -2,7 +2,7 @@
 
 Curated, versioned descriptions of agent-access providers, expressed entirely in
 the vocabulary that
-`Backend Architecture/aether-backend/services/agentic_observability/provider_framework.py`
+`services/backend/services/agentic_observability/provider_framework.py`
 already defines. One YAML file per pack.
 
 A pack is **read-only configuration**. It authorizes nothing, calls nothing, and

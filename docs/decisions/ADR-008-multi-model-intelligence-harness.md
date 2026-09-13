@@ -20,7 +20,7 @@ graph, but its intelligence today is narrow and ungrounded:
 
 - **Noesis is deterministic classification with an LLM text-to-query fallback
   and no grounded synthesis.** The `NoesisPlanProvider` seam
-  (`services/noesis/provider.py`) returns only a structured, allowlisted
+  (`services/backend/services/noesis/provider.py`) returns only a structured, allowlisted
   `QueryPlan` — the model may pick an intent and filters, and Aether executes
   the read against read-only repositories. There is no path for a model to
   produce a grounded answer: no retrieval-before-synthesis, no evidence
@@ -65,7 +65,7 @@ recorded as nine numbered decisions.
 
 ### D1 — Additive extension layered on existing Aether authority
 
-The harness is a **new runtime** (`services/model_runtime/` in the backend,
+The harness is a **new runtime** (`services/backend/services/model_runtime/` in the backend,
 with contracts under `packages/shared/`) layered on the existing authority:
 intelligence graph, identity, consent, audit ledger, credential backends, and
 policy gates. It reuses — and never re-implements — those systems. The harness
@@ -103,7 +103,7 @@ counterparts) via the `REGISTRIES` table — new registries plug into that
 table; generated artifacts are never hand-edited.
 
 The **harness model registry is distinct from the ML `ModelEntry` registry** in
-`ML Models/aether-ml/common/model_registry.py`. The ML registry describes
+`services/ml/common/model_registry.py`. The ML registry describes
 trainable/serving ML models (intent prediction, churn, LTV, trust score, …)
 with artifacts, training entrypoints, and governance gates. The harness
 registry describes hosted LLM provider models used as interchangeable
@@ -243,7 +243,7 @@ additively safe:
 
 1. **ADR + contracts** — this ADR, plus the model and task-profile registry
    contracts and their generated twins (model registry, task-profile registry).
-2. **Runtime models** — `services/model_runtime/` core models: provider-neutral
+2. **Runtime models** — `services/backend/services/model_runtime/` core models: provider-neutral
    request/response, routing, policy, evidence, verification record types.
 3. **Noesis migration** — Noesis's LLM fallback re-points to the harness
    adapter seam; legacy env-key provider reads are retired behind the
@@ -281,9 +281,9 @@ additively safe:
 
 ## References
 
-- `Backend Architecture/aether-backend/services/noesis/provider.py` — the
+- `services/backend/services/noesis/provider.py` — the
   Noesis provider seam being migrated to the harness adapter interface.
-- `Backend Architecture/aether-backend/shared/credentials/interface.py` — the
+- `services/backend/shared/credentials/interface.py` — the
   `CredentialBackend` abstraction + secret-free `CredentialMetadata`; concrete
   backends live alongside it (`in_memory.py`, `local_encrypted.py`,
   `aws_secrets_manager.py`).
@@ -294,7 +294,7 @@ additively safe:
   catalog (D3).
 - `packages/shared/contracts/task-profile-registry.json` — canonical task
   profiles and routing/guardrail vocabulary (D3, D4).
-- `ML Models/aether-ml/common/model_registry.py` — the distinct ML `ModelEntry`
+- `services/ml/common/model_registry.py` — the distinct ML `ModelEntry`
   registry the harness registry must not be confused with (D3).
 - `docs/decisions/ADR-007-domain-canonicalization.md` — the one-source-of-truth
   precedent this ADR extends.

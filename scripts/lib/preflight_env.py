@@ -3,7 +3,7 @@
 Two fail-closed layers:
 
 1. Explicit checks over the candidate env dict, mirroring the guards in
-   "Backend Architecture/aether-backend/config/settings.py"
+   "services/backend/config/settings.py"
    (``Settings.__post_init__``) plus staging-hardening rules Settings cannot
    express: no wildcard/localhost CORS, no placeholder secret values, and no
    ``AETHER_ALLOW_INMEMORY_STORE`` override (shared/store.py fail-closed
@@ -28,7 +28,7 @@ from typing import Callable, Optional
 from .preflight_results import CheckResult, failed, passed
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_DIR = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND_DIR = ROOT / "services" / "backend"
 
 # Exact env var names from config/settings.py.
 ALLOWED_ENVIRONMENTS = ("staging", "production")        # Environment enum values
@@ -282,7 +282,7 @@ def run_env_checks(
             detail,
             "fix the candidate environment until config.settings.Settings() "
             "constructs (see Settings.__post_init__ guards in "
-            '"Backend Architecture/aether-backend/config/settings.py")',
+            '"services/backend/config/settings.py")',
         ))
 
     return results

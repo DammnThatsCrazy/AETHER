@@ -6,10 +6,10 @@ visibility: I
 audience: [ops]
 status: experimental
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/measurement/routes/kyber.py, Backend Architecture/aether-backend/services/traffic/repair.py, frontend/kyber/src/pages/measurement/campaign-registry-health-page.tsx, frontend/kyber/src/pages/measurement/kyber-measurement-ops-page.tsx]
+source_files: [services/backend/services/measurement/routes/kyber.py, services/backend/services/traffic/repair.py, frontend/kyber/src/pages/measurement/campaign-registry-health-page.tsx, frontend/kyber/src/pages/measurement/kyber-measurement-ops-page.tsx]
 source_hashes:
-  Backend Architecture/aether-backend/services/measurement/routes/kyber.py: sha256:c1676ae3c3dd86f71404f94dfaa08cd7a63772526bf0e7869fc6eed92f5ab0c7
-  Backend Architecture/aether-backend/services/traffic/repair.py: sha256:b1f732c004b51f42e9b16635516bcd9ce92682a40d6f33d51e735d5f2f107df0
+  services/backend/services/measurement/routes/kyber.py: sha256:c1676ae3c3dd86f71404f94dfaa08cd7a63772526bf0e7869fc6eed92f5ab0c7
+  services/backend/services/traffic/repair.py: sha256:b1f732c004b51f42e9b16635516bcd9ce92682a40d6f33d51e735d5f2f107df0
   frontend/kyber/src/pages/measurement/campaign-registry-health-page.tsx: sha256:d4eefb1bd8be378b9648b5eab417465556d3c4f6adb371f37f71932d88f28241
   frontend/kyber/src/pages/measurement/kyber-measurement-ops-page.tsx: sha256:b7f4cedd7f2db749e18a41c66017922fedf6afec7a713e0ccb4578e0b7e64c97
 ---

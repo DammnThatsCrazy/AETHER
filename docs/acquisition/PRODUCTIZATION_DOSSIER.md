@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 13
 toc_depth: 3
 source_hashes:
-  scripts/production_status.py: sha256:15010d4caab7f6e82c6677778332da1de5457d0c7576e11922fd24521a77086d
+  "scripts/production_status.py": "sha256:b41b131c5b76447e0ffd146a6a5e111e44d8674e2cb0cb89d5d09351466a0b66"
 ---
 
 # Acquisition Productization Dossier
@@ -86,7 +86,7 @@ paths (in-memory/local fallbacks are dev/test only):
 
 ## 3. The self-serve activation path (this branch, flag-gated)
 
-A self-serve **activation FSM** (`services/activation`, `/v1/activation/*`,
+A self-serve **activation FSM** (`services/backend/services/activation`, `/v1/activation/*`,
 default OFF) lets a tenant reach first value without operator SQL: select a plan
 tier, choose SDK platforms, mint API keys (raw key shown once), send a test
 event through the **real** in-process ingestion path, and prove **Bronze first

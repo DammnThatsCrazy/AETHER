@@ -4,7 +4,7 @@
 # orchestrator-leased: an agent submits the needed diff as evidence and the orchestrator
 # applies it during landing to avoid cross-agent conflicts on the single branch.
 #
-# Backend root = "Backend Architecture/aether-backend/". Paths are relative to it unless
+# Backend root = "services/backend/". Paths are relative to it unless
 # prefixed with "/" (repo root).
 
 orchestrator:
@@ -103,7 +103,7 @@ deploy_cert:          # A13 (W6)
 # app-shell.tsx nav, endpoints.ts, settings/). Each WS owns its paths exclusively;
 # files not listed are read-only to that WS. Contract files owned by WS-0 freeze
 # after R1 (change only via ADR-0008..0013).
-# Backend root = "Backend Architecture/aether-backend/". Paths relative to it unless
+# Backend root = "services/backend/". Paths relative to it unless
 # prefixed with "/" (repo root).
 # ============================================================================
 

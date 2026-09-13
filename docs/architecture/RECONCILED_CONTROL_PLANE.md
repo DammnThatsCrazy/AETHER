@@ -7,37 +7,37 @@ audience: [architect, dev-senior]
 status: experimental
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/services/managed_integrations/
-  - Backend Architecture/aether-backend/services/kyber/access/
-  - Backend Architecture/aether-backend/alembic/versions/20260906_rcp_managed_integrations.py
-  - Backend Architecture/aether-backend/alembic/versions/20260906_rcp_change_sets.py
-  - Backend Architecture/aether-backend/alembic/versions/20260906_rcp_execution.py
-  - Backend Architecture/aether-backend/alembic/versions/20260906_rcp_admission.py
-  - Backend Architecture/aether-backend/alembic/versions/20260906_rcp_simulation.py
-  - Backend Architecture/aether-backend/alembic/versions/20260906_rcp_schema_mapping.py
-  - Backend Architecture/aether-backend/alembic/versions/20260906_rcp_source_authority.py
-  - Backend Architecture/aether-backend/alembic/versions/20260906_rcp_rollouts.py
-  - Backend Architecture/aether-backend/alembic/versions/20260906_rcp_fleet_update.py
+  - services/backend/services/managed_integrations/
+  - services/backend/services/kyber/access/
+  - services/backend/alembic/versions/20260906_rcp_managed_integrations.py
+  - services/backend/alembic/versions/20260906_rcp_change_sets.py
+  - services/backend/alembic/versions/20260906_rcp_execution.py
+  - services/backend/alembic/versions/20260906_rcp_admission.py
+  - services/backend/alembic/versions/20260906_rcp_simulation.py
+  - services/backend/alembic/versions/20260906_rcp_schema_mapping.py
+  - services/backend/alembic/versions/20260906_rcp_source_authority.py
+  - services/backend/alembic/versions/20260906_rcp_rollouts.py
+  - services/backend/alembic/versions/20260906_rcp_fleet_update.py
   - config/route_registry.yaml
-  - Backend Architecture/aether-backend/main.py
-  - Backend Architecture/aether-backend/config/settings.py
+  - services/backend/main.py
+  - services/backend/config/settings.py
   - packages/shared/managed-integrations.ts
 source_hashes:
-  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_admission.py": "sha256:b57dc1a0b7a5e8d06e9ec985ff04f3dd0e705d6e4d66d7de419d960407759908"
-  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_change_sets.py": "sha256:7becb857318edc7ccd267ed951c0a5cfbc291282c307df663f7d8b9277bf6bc7"
-  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_execution.py": "sha256:fe60187d99dbf2b67a883a5e6155b6a67c2ab5ee954552d762d5e4239ed528a6"
-  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_fleet_update.py": "sha256:e68eb36c569f253c01cab5f263e07432768dc34d9cd8cf48b3ec5626d1461f42"
-  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_managed_integrations.py": "sha256:d2946f405c5a427091f7f3bc08cbc247fca8ca400b72001a1cff5b87335feeff"
-  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_rollouts.py": "sha256:596f4ab7a09e6f9322e876bc84edabc5b81562c72e9c9ff92414684838e34c77"
-  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_schema_mapping.py": "sha256:f52e3ca5ee8ab0050fd9f447642d87fb93f5c7ef0eab16bf8e34211a1360d8b6"
-  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_simulation.py": "sha256:9365aeced6274ca792563a9d8931a54e387e4cced758bfeec7114adc6e932838"
-  "Backend Architecture/aether-backend/alembic/versions/20260906_rcp_source_authority.py": "sha256:b3506114be9179b6592dbc08dfc616de066aea4856d274db16f46cf0f8c17422"
-  "Backend Architecture/aether-backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
-  "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
-  "Backend Architecture/aether-backend/services/kyber/access/": "sha256:b9b0c98e3f9b467678f79d14a0c19b401503cd92da209e7cb0ca51ddb932a24a"
-  "Backend Architecture/aether-backend/services/managed_integrations/": "sha256:1b0a308606abac5158bfd91369498b7f0af26d7517e5fe743fd81b3a70c72137"
   "config/route_registry.yaml": "sha256:6b8f41cc17fa5919a30b07427889e998111c2b0196a37d07c2a7c0664721864f"
-  "packages/shared/managed-integrations.ts": "sha256:3c782bac6c26827e8ea0a80471edd241ca2cd44ca1ef3df74865178197e3a527"
+  "packages/shared/managed-integrations.ts": "sha256:59ae532137ef2c00b41432f7b47baae4057147749719bff78e2b087f581571b2"
+  "services/backend/alembic/versions/20260906_rcp_admission.py": "sha256:b57dc1a0b7a5e8d06e9ec985ff04f3dd0e705d6e4d66d7de419d960407759908"
+  "services/backend/alembic/versions/20260906_rcp_change_sets.py": "sha256:7becb857318edc7ccd267ed951c0a5cfbc291282c307df663f7d8b9277bf6bc7"
+  "services/backend/alembic/versions/20260906_rcp_execution.py": "sha256:fe60187d99dbf2b67a883a5e6155b6a67c2ab5ee954552d762d5e4239ed528a6"
+  "services/backend/alembic/versions/20260906_rcp_fleet_update.py": "sha256:e68eb36c569f253c01cab5f263e07432768dc34d9cd8cf48b3ec5626d1461f42"
+  "services/backend/alembic/versions/20260906_rcp_managed_integrations.py": "sha256:d2946f405c5a427091f7f3bc08cbc247fca8ca400b72001a1cff5b87335feeff"
+  "services/backend/alembic/versions/20260906_rcp_rollouts.py": "sha256:596f4ab7a09e6f9322e876bc84edabc5b81562c72e9c9ff92414684838e34c77"
+  "services/backend/alembic/versions/20260906_rcp_schema_mapping.py": "sha256:f52e3ca5ee8ab0050fd9f447642d87fb93f5c7ef0eab16bf8e34211a1360d8b6"
+  "services/backend/alembic/versions/20260906_rcp_simulation.py": "sha256:9365aeced6274ca792563a9d8931a54e387e4cced758bfeec7114adc6e932838"
+  "services/backend/alembic/versions/20260906_rcp_source_authority.py": "sha256:b3506114be9179b6592dbc08dfc616de066aea4856d274db16f46cf0f8c17422"
+  "services/backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
+  "services/backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
+  "services/backend/services/kyber/access/": "sha256:518b962e1ac1c2d7a4edd9bcfc7882007ab2caf058dd85120946401cf9fbe841"
+  "services/backend/services/managed_integrations/": "sha256:34f17bb2a61cf13704798d359cea1f4a2e7a79850f6bb97e777a30d9c002be04"
 ---
 
 # Reconciled Control Plane — Architecture (§0–40 lane)
@@ -91,7 +91,7 @@ by tests only until a §41+ review lifts the boundary.
 
 ```
 packages/shared/managed-integrations.ts            TS contract twin (canonical const arrays + interfaces)
-Backend Architecture/aether-backend/services/
+services/backend/services/
   managed_integrations/
     contracts.py         Python mirror (tuples + pydantic view models)
     flags.py             function-local OFF-by-default flag reads
@@ -123,7 +123,7 @@ config/route_registry.yaml     six kyber_routes declarations (D4, action_class 0
 config/storage_policies.yaml   17-field rows for every RCP table
 tests/contracts/test_managed_integrations_parity.py   twin parity gate
 tests/unit/reconciled_control/   vocab + engine + console + flag-OFF parity tests
-Backend Architecture/aether-backend/tests/managed_integrations/   repo round-trip tests
+services/backend/tests/managed_integrations/   repo round-trip tests
 ```
 
 ## Key decisions

@@ -7,14 +7,14 @@ audience: [architect, dev-senior, ops]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/services/derivatives/state_machines.py
-  - Backend Architecture/aether-backend/services/derivatives/streams.py
-  - Backend Architecture/aether-backend/services/derivatives/runtime_reconciliation.py
+  - services/backend/services/derivatives/state_machines.py
+  - services/backend/services/derivatives/streams.py
+  - services/backend/services/derivatives/runtime_reconciliation.py
 canonical_owner: platform@aether
 source_hashes:
-  "Backend Architecture/aether-backend/services/derivatives/runtime_reconciliation.py": "sha256:bf32bd026c4a4a03f3c7d74481b72db4527028b9543b28fa2f59c1da7b140f95"
-  "Backend Architecture/aether-backend/services/derivatives/state_machines.py": "sha256:fc7f1c23cc0ca979815182eaea0a0401640741df24c8d57d2b3c07687040ffae"
-  "Backend Architecture/aether-backend/services/derivatives/streams.py": "sha256:92f56d4d9ff03283f2ffebcee9975500eb6f2c3069fc4db73fda9270514c9ab8"
+  "services/backend/services/derivatives/runtime_reconciliation.py": "sha256:bf32bd026c4a4a03f3c7d74481b72db4527028b9543b28fa2f59c1da7b140f95"
+  "services/backend/services/derivatives/state_machines.py": "sha256:fc7f1c23cc0ca979815182eaea0a0401640741df24c8d57d2b3c07687040ffae"
+  "services/backend/services/derivatives/streams.py": "sha256:92f56d4d9ff03283f2ffebcee9975500eb6f2c3069fc4db73fda9270514c9ab8"
 ---
 
 # Derivatives Intelligence — Domain Decisions

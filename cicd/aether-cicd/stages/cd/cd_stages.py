@@ -76,7 +76,7 @@ def stage_staging_deploy(ctx: DeploymentContext, notifier: Notifier) -> bool:
     notifier.slack(NotifyEvent.CD_STARTED, f"Deploying *{ctx.version[:8]}* to staging")
 
     # 1. Terraform plan + apply
-    tf_dir = "infrastructure/environments/staging"
+    tf_dir = "deploy/aws/terraform/environments/staging"
     tf_steps = [
         (f"terraform -chdir={tf_dir} init -input=false",
          "Terraform init"),
@@ -499,7 +499,7 @@ def stage_demo_deploy(ctx: DeploymentContext, notifier: Notifier) -> bool:
     notifier.slack(NotifyEvent.CD_STARTED, f"Deploying *{ctx.version[:8]}* to demo")
 
     # 1. Terraform plan + apply for demo environment
-    tf_dir = "infrastructure/environments/demo"
+    tf_dir = "deploy/aws/terraform/environments/demo"
     tf_steps = [
         (f"terraform -chdir={tf_dir} init -input=false",
          "Terraform init (demo)"),

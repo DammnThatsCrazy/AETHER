@@ -56,20 +56,20 @@ jobs:
           cache: "npm"
       - run: npm ci
       - name: Build SDK bundles
-        working-directory: packages/sdk-web
+        working-directory: packages/web
         run: |
           npx esbuild src/index.ts --bundle --format=esm --outfile=dist/aether-sdk.esm.js
           npx esbuild src/index.ts --bundle --format=esm --minify --outfile=dist/aether-sdk.esm.min.js
           npx esbuild src/index.ts --bundle --format=iife --global-name=Aether --outfile=dist/aether-sdk.umd.js
           npx tsc --emitDeclarationOnly --outDir dist/types
       - name: Run SDK tests
-        working-directory: packages/sdk-web
+        working-directory: packages/web
         run: npx jest --ci
       - name: Generate changelog
-        run: npx conventional-changelog -p angular -i CHANGELOG.md -s --commit-path packages/sdk-web
+        run: npx conventional-changelog -p angular -i CHANGELOG.md -s --commit-path packages/web
       - name: Publish to npm
         if: inputs.dry_run != 'true'
-        working-directory: packages/sdk-web
+        working-directory: packages/web
         run: |
           TAG_FLAG=""
           if [ -n "${{ inputs.pre_release }}" ]; then
@@ -87,9 +87,9 @@ jobs:
       - name: Sync CDN
         if: inputs.dry_run != 'true'
         run: |
-          VERSION=$(node -p "require('./packages/sdk-web/package.json').version")
-          aws s3 sync packages/sdk-web/dist/ "s3://cdn.aether.network/sdk/${VERSION}/" --acl public-read
-          aws s3 sync packages/sdk-web/dist/ "s3://cdn.aether.network/sdk/latest/" --acl public-read
+          VERSION=$(node -p "require('./packages/web/package.json').version")
+          aws s3 sync packages/web/dist/ "s3://cdn.aether.network/sdk/${VERSION}/" --acl public-read
+          aws s3 sync packages/web/dist/ "s3://cdn.aether.network/sdk/latest/" --acl public-read
           aws cloudfront create-invalidation --distribution-id ${{ secrets.CDN_DISTRIBUTION_ID }} --paths "/sdk/*"
       - name: Create GitHub Release
         if: inputs.dry_run != 'true'
@@ -98,8 +98,8 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ inputs.pre_release != '' }}
           files: |
-            packages/sdk-web/dist/aether-sdk.esm.min.js
-            packages/sdk-web/dist/aether-sdk.umd.js
+            packages/web/dist/aether-sdk.esm.min.js
+            packages/web/dist/aether-sdk.umd.js
 
   # ──────────────────────────────────────────────────────────────────────
   # iOS SDK -> CocoaPods + SPM
@@ -113,24 +113,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build
-        working-directory: packages/sdk-ios
+        working-directory: packages/ios
         run: |
           xcodebuild -scheme AetherSDK \
             -sdk iphonesimulator \
             -destination 'platform=iOS Simulator,name=iPhone 15' \
             build
       - name: Test
-        working-directory: packages/sdk-ios
+        working-directory: packages/ios
         run: |
           xcodebuild test -scheme AetherSDK \
             -sdk iphonesimulator \
             -destination 'platform=iOS Simulator,name=iPhone 15'
       - name: Pod lint
-        working-directory: packages/sdk-ios
+        working-directory: packages/ios
         run: pod lib lint AetherSDK.podspec --allow-warnings
       - name: Pod push
         if: inputs.dry_run != 'true'
-        working-directory: packages/sdk-ios
+        working-directory: packages/ios
         run: pod trunk push AetherSDK.podspec --allow-warnings
         env:
           COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
@@ -157,14 +157,14 @@ jobs:
           distribution: temurin
           java-version: "17"
       - name: Build
-        working-directory: packages/sdk-android
+        working-directory: packages/android
         run: ./gradlew assembleRelease
       - name: Unit tests
-        working-directory: packages/sdk-android
+        working-directory: packages/android
         run: ./gradlew test
       - name: Publish to Maven Central
         if: inputs.dry_run != 'true'
-        working-directory: packages/sdk-android
+        working-directory: packages/android
         run: ./gradlew publishToMavenCentral --no-configuration-cache
         env:
           MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
@@ -195,17 +195,17 @@ jobs:
           registry-url: "https://registry.npmjs.org"
       - run: npm ci
       - name: Sync native dependencies
-        working-directory: packages/sdk-react-native
+        working-directory: packages/react-native
         run: node scripts/sync-native-deps.js
       - name: Build
-        working-directory: packages/sdk-react-native
+        working-directory: packages/react-native
         run: npx bob build
       - name: Test
-        working-directory: packages/sdk-react-native
+        working-directory: packages/react-native
         run: npx jest --ci
       - name: Publish to npm
         if: inputs.dry_run != 'true'
-        working-directory: packages/sdk-react-native
+        working-directory: packages/react-native
         run: |
           TAG_FLAG=""
           if [ -n "${{ inputs.pre_release }}" ]; then

@@ -10,7 +10,7 @@ since_version: "0.1.0"
 
 # Tenant Isolation Verification
 
-`TenantIsolationVerifier` (`services/security/isolation_verifier.py`) runs
+`TenantIsolationVerifier` (`services/backend/services/security/isolation_verifier.py`) runs
 structured checks over each tenant-scoped resource store and persists the results
 so Kyber can show the latest run.
 

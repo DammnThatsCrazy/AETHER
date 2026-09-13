@@ -6,24 +6,24 @@ visibility: I
 audience: [ops, architect]
 status: stable
 since_version: 0.1.0
-source_files: [config/deployment_profiles.yaml, config/runtime_deployment.yaml, config/terraform_resource_contracts.yaml, AWS Deployment/aether-aws/terraform/profiles.tf, AWS Deployment/aether-aws/terraform/main.tf, AWS Deployment/aether-aws/terraform/modules/alb/main.tf, AWS Deployment/aether-aws/terraform/modules/aurora/main.tf, AWS Deployment/aether-aws/terraform/modules/ecr/main.tf, AWS Deployment/aether-aws/terraform/modules/secrets/main.tf, AWS Deployment/aether-aws/terraform/modules/secrets/rotation.tf, AWS Deployment/aether-aws/terraform/variables.tf, scripts/release/check_profile_config.py, scripts/release/check_profile_parity.py]
+source_files: [config/deployment_profiles.yaml, config/runtime_deployment.yaml, config/terraform_resource_contracts.yaml, deploy/aws/terraform/profiles.tf, deploy/aws/terraform/main.tf, deploy/aws/terraform/modules/alb/main.tf, deploy/aws/terraform/modules/aurora/main.tf, deploy/aws/terraform/modules/ecr/main.tf, deploy/aws/terraform/modules/secrets/main.tf, deploy/aws/terraform/modules/secrets/rotation.tf, deploy/aws/terraform/variables.tf, scripts/release/check_profile_config.py, scripts/release/check_profile_parity.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
 source_hashes:
-  AWS Deployment/aether-aws/terraform/main.tf: sha256:d49a3a87a2641c8cdd9390f1f0637572ba5961146b30eff37892aeee66c8131e
-  AWS Deployment/aether-aws/terraform/modules/alb/main.tf: sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097
-  AWS Deployment/aether-aws/terraform/modules/aurora/main.tf: sha256:16c4beb8ccab1af164ff62f8aa2d515a5efc3f093b7878411f40aa14ce39e094
-  AWS Deployment/aether-aws/terraform/modules/ecr/main.tf: sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7
-  AWS Deployment/aether-aws/terraform/modules/secrets/main.tf: sha256:998303bfe6e5a0a24477933beeb650c02e5e43469d9cba6d0af84e27e50d8032
-  AWS Deployment/aether-aws/terraform/modules/secrets/rotation.tf: sha256:bf7623169658a9272a007df782216956b750f30bee3c5d8095f708c44a9d2239
-  AWS Deployment/aether-aws/terraform/profiles.tf: sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560
-  AWS Deployment/aether-aws/terraform/variables.tf: sha256:7dfc485a37776610062b703a91e594b49e2d04c5d932592fca67adbda1076961
-  config/deployment_profiles.yaml: sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0
-  config/runtime_deployment.yaml: sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8
-  config/terraform_resource_contracts.yaml: sha256:f915daf101aab4b46b216ade95355eae2e119ab469e98de0c653ac81d92dbdf9
-  scripts/release/check_profile_config.py: sha256:b22ce319b10983826ced5efbe43ab57cd2e3c7463941fbd9a6c22eda9785d90e
-  scripts/release/check_profile_parity.py: sha256:8e9a4635b88277b1794ba725f08763169bfd7a857061a9995e00d6fb41f8385e
+  "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
+  "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
+  "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
+  "deploy/aws/terraform/main.tf": "sha256:d49a3a87a2641c8cdd9390f1f0637572ba5961146b30eff37892aeee66c8131e"
+  "deploy/aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
+  "deploy/aws/terraform/modules/aurora/main.tf": "sha256:16c4beb8ccab1af164ff62f8aa2d515a5efc3f093b7878411f40aa14ce39e094"
+  "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
+  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:998303bfe6e5a0a24477933beeb650c02e5e43469d9cba6d0af84e27e50d8032"
+  "deploy/aws/terraform/modules/secrets/rotation.tf": "sha256:bf7623169658a9272a007df782216956b750f30bee3c5d8095f708c44a9d2239"
+  "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
+  "deploy/aws/terraform/variables.tf": "sha256:7dfc485a37776610062b703a91e594b49e2d04c5d932592fca67adbda1076961"
+  "scripts/release/check_profile_config.py": "sha256:b22ce319b10983826ced5efbe43ab57cd2e3c7463941fbd9a6c22eda9785d90e"
+  "scripts/release/check_profile_parity.py": "sha256:0da55a725906bbca79c6f09c0032ad18ebeb9ae76165e8f86b472c58984dc03e"
 ---
 
 # Deployment Profiles
@@ -187,7 +187,7 @@ through the separate secure bootstrap and are never read by CI.
 | | |
 |---|---|
 | **Purpose** | Temporary live demo against a shared non-production backend. |
-| **Selection** | Terraform-selectable via the same root (`AWS Deployment/aether-aws/terraform/profiles/demo.tfvars`); `variables.tf` accepts `demo`, `terraform-promote.yml` can target it. Same-root shared foundation, not dedicated infrastructure. |
+| **Selection** | Terraform-selectable via the same root (`deploy/aws/terraform/profiles/demo.tfvars`); `variables.tf` accepts `demo`, `terraform-promote.yml` can target it. Same-root shared foundation, not dedicated infrastructure. |
 | **Resource inventory** | Shared non-production Postgres, DynamoDB cache, SNS/SQS, S3, inline ML, synthetic tenant. No MSK, ElastiCache, Neptune, ClickHouse or dedicated ML service (`cost_policy` forbids them). |
 | **Runtime topology** | Consolidated `config/runtime_deployment.yaml` entry (api + lean-worker hosting the eight worker roles, both autoscaling) — the same footprint shape as staging, one step down. |
 | **Data behaviour** | Versioned backend-seeded synthetic tenant only. Never real customer data; normal startup remains empty. |
@@ -204,7 +204,7 @@ through the separate secure bootstrap and are never read by CI.
 | | |
 |---|---|
 | **Purpose** | PR-specific live environment, created only when explicitly requested. |
-| **Selection** | Terraform-selectable via the same root (`AWS Deployment/aether-aws/terraform/profiles/preview.tfvars`); `variables.tf` accepts `preview`, `terraform-promote.yml` can target it. Same-root shared foundation, not dedicated infrastructure. |
+| **Selection** | Terraform-selectable via the same root (`deploy/aws/terraform/profiles/preview.tfvars`); `variables.tf` accepts `preview`, `terraform-promote.yml` can target it. Same-root shared foundation, not dedicated infrastructure. |
 | **Resource inventory** | Shared foundation Postgres, DynamoDB cache, SNS/SQS, S3, inline ML, with a temporary tenant schema/prefix route. No MSK, ElastiCache, Neptune, ClickHouse or dedicated ML service. |
 | **Runtime topology** | Consolidated `config/runtime_deployment.yaml` entry (api + lean-worker hosting the eight worker roles, both autoscaling). |
 | **Data behaviour** | Temporary tenant on the shared foundation; auto-expiring. |
@@ -291,7 +291,7 @@ GitHub PAT. The endpoint uses the configured `domain_name` (cert-backed HTTPS)
 when set. Enabling tfmcp raises the lean fixed baseline by roughly USD 18/month;
 the USD 200 hard ceiling is exceeded and must be reviewed as a cost-policy
 exception. See [AWS Deployment](AWS-DEPLOYMENT.md#tfmcp--terraform-mcp-server)
-and `AWS Deployment/aether-aws/terraform/modules/tfmcp`.
+and `deploy/aws/terraform/modules/tfmcp`.
 ## `production-scale`
 
 | | |
@@ -340,7 +340,7 @@ list names the logical roles that one process hosts. `execution_mode` names the
 packing strategy:
 
 - **`consolidated`** — one task hosts several logical roles through an execution
-  group token (`services/runtime/roles.py::EXECUTION_GROUPS`).
+  group token (`services/backend/services/runtime/roles.py::EXECUTION_GROUPS`).
   `production-lean` and `staging` run **2 always-on tasks, not 10**: `api`, plus
   one `lean-worker` whose task hosts all eight worker roles —
   `outbox-relay`, `stream-worker`, `identity-worker`, `graph-writer`,
@@ -352,8 +352,8 @@ packing strategy:
 **Consolidation moves the process boundary and nothing else.** Inside a
 consolidated task every member role keeps its own queue, consumer group, DLQ,
 retry policy, backpressure budget, metrics label and restart behaviour, resolved
-in-process by `services/runtime/roles.py::roles_in` and
-`services/runtime/consumer_specs.py`. Terraform carries the role list for one
+in-process by `services/backend/services/runtime/roles.py::roles_in` and
+`services/backend/services/runtime/consumer_specs.py`. Terraform carries the role list for one
 reason only: a consolidated task must bind one SQS queue per hosted role, which
 a single `SQS_QUEUE_URL` cannot express.
 
@@ -401,7 +401,7 @@ Validate with `make test-runtime-topology` and `make validate-delivery-topology`
 
 ## Terraform enforcement
 
-The Terraform root at `AWS Deployment/aether-aws/terraform/` selects a profile
+The Terraform root at `deploy/aws/terraform/` selects a profile
 through `var.deployment_profile`, validated to one of `staging`,
 `production-lean`, `production-scale`, `enterprise-isolated` (default
 `production-lean`). `profiles.tf` derives `enable_*` locals from it, and
@@ -587,13 +587,13 @@ from `module.x` to `module.x[0]`, which would otherwise plan a
 destroy-and-recreate of a live cluster — is covered by 14 `moved` blocks in
 `moved.tf`. Do not delete them until every pre-existing workspace has applied at
 least once. Intentional removal of any data store goes through
-`AWS Deployment/aether-aws/terraform/DECOMMISSION.md`, never through a profile
+`deploy/aws/terraform/DECOMMISSION.md`, never through a profile
 toggle.
 
 ### Dead second Terraform tree
 
-`AWS Deployment/aether-aws/terraform/environments/{dev,staging,production,demo}/`
-and `AWS Deployment/main.tf` are a second, **dead** Terraform tree. Between them
+`deploy/aws/terraform/environments/{dev,staging,production,demo}/`
+and `docs/archive/legacy-architecture/aws-deployment/main.tf` are a second, **dead** Terraform tree. Between them
 they reference seven modules that do not exist in this repository —
 `cloudfront`, `opensearch`, `dynamodb`, `sagemaker`, `api_gateway`, `iam`,
 `waf` — so `terraform init` fails there, and `environments/demo/main.tf` is not

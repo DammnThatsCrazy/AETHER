@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "Backend Architecture" / "aether-backend"))
+sys.path.insert(0, str(ROOT / "services" / "backend"))
 
 from repositories.repos import reset_in_memory_stores
 from repositories.stablecoin_repos import StablecoinObservationRepository

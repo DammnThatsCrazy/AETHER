@@ -7,20 +7,20 @@ audience: [architect, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/services/fraud_networks/
-  - Backend Architecture/aether-backend/services/flow_trace/
-  - Backend Architecture/aether-backend/services/risk_overlay/
-  - Backend Architecture/aether-backend/repositories/repos.py
+  - services/backend/services/fraud_networks/
+  - services/backend/services/flow_trace/
+  - services/backend/services/risk_overlay/
+  - services/backend/repositories/repos.py
   - packages/shared/graph-contract.ts
 reviewed_source_commits:
   - commit: "54eaac5d"
     reason: "Reviewed the staging first-admin bootstrap change; fraud-network architecture remains unchanged."
 source_hashes:
-  "Backend Architecture/aether-backend/repositories/repos.py": "sha256:17bda309a520403afe5ea14ec5a647d8aeea03839d644e3ce4c0086f1218f70f"
-  "Backend Architecture/aether-backend/services/flow_trace/": "sha256:f02d99a415f211c164a33956739c7fac197535a10af726cb661ff901aba31556"
-  "Backend Architecture/aether-backend/services/fraud_networks/": "sha256:b44b5cc3deaf995531d3bfa6dce1db3f87410ec829de76fd4631e00f59d6c05a"
-  "Backend Architecture/aether-backend/services/risk_overlay/": "sha256:976adb064b588584245a87408401c479c2e117519ed88590a9541e7be4c89128"
   "packages/shared/graph-contract.ts": "sha256:e8344420da6181b78831c95bc132fdbdfac8ebb92235524ab2191bb4ab74004a"
+  "services/backend/repositories/repos.py": "sha256:96341101e3ef8db15a80a953aa9d86e0d7a1804a02fe58e0a3e8fe53ffbbc4b8"
+  "services/backend/services/flow_trace/": "sha256:ecabf31ddd0dacf96475c891836cc7d7ba3906c17a34f67669393eff874a3348"
+  "services/backend/services/fraud_networks/": "sha256:9c7f503deb4644cf1c70768b9286e147a0ecd22a4d34951b91abfc2036ce06f4"
+  "services/backend/services/risk_overlay/": "sha256:6d04a12540c642817550c816f91c6dfefeab901764d53d05bd0cd7c43e814bc7"
 ---
 
 # Fraud Network Architecture
@@ -133,7 +133,7 @@ POST /v1/fraud/networks/{network_id}/takedown   (fraud:evaluate)
   │
   ├─ reattribute_affected(tenant, reason="fraud_takedown",           ← measurement
   │     identity_selectors=members, voided_touchpoint_selectors=members)
-  │     └─ services/measurement/reattribution.py (Program 3 M3):
+  │     └─ services/backend/services/measurement/reattribution.py (Program 3 M3):
   │        for each affected conversion whose ACTIVE run credits a voided
   │        touchpoint → create fresh zero-credit run → deactivate prior runs
   │        (never raises; partial_failure / truncated surfaced)

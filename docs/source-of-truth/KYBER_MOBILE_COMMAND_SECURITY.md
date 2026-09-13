@@ -16,10 +16,10 @@ step-up, but it **never dispatches or verifies a command**. All mutations stay
 on the desktop command plane. This document states the security model and the
 invariants that keep it honest.
 
-The canonical sources are `services/kyber/ops/*` (command lifecycle,
-`_authorize_command`), `services/kyber/sessions/step_up.py` (`StepUpService`),
-`services/kyber/devices/mobile_proof_routes.py` (mobile proof keys), and
-`services/kyber/ops/mobile_actions.py` (the read-only digest). Related
+The canonical sources are `services/backend/services/kyber/ops/*` (command lifecycle,
+`_authorize_command`), `services/backend/services/kyber/sessions/step_up.py` (`StepUpService`),
+`services/backend/services/kyber/devices/mobile_proof_routes.py` (mobile proof keys), and
+`services/backend/services/kyber/ops/mobile_actions.py` (the read-only digest). Related
 references: `KYBER_ACCESS_CONTROL.md`, `KYBER_SESSIONS_AND_SCOPES.md`,
 `KYBER_DEVICE_TRUST.md`.
 
@@ -80,7 +80,7 @@ Invariants:
 
 ## Step-up
 
-`StepUpService` (`services/kyber/sessions/step_up.py`) issues a challenge,
+`StepUpService` (`services/backend/services/kyber/sessions/step_up.py`) issues a challenge,
 verifies a **device-bound signature** over it, and grants a short-lived,
 single-purpose grant:
 

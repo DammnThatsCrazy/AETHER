@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [reports/economic-interoperability-intelligence/current-state-audit.md]
 canonical_owner: platform@aether
 source_hashes:
-  reports/economic-interoperability-intelligence/current-state-audit.md: sha256:48ce6fb627d3be80737cde320bf2d51334d8ab8e08271603e9921c844570b562
+  "reports/economic-interoperability-intelligence/current-state-audit.md": "sha256:2c7226396b923b3a106d1dc1bf44780b15e95ea8963c36c05474e617162e7908"
 ---
 
 # Repo Truth and Gap Matrix
@@ -19,7 +19,7 @@ Pre-implementation truth (verified by audit, 2026-07-08) and what 8.12.0 changed
 | Area | Before 8.12.0 | After 8.12.0 |
 |---|---|---|
 | Derivatives contracts | PR1 (#395): `derivatives.ts`, `financial_activity` purpose, raw-SQL DDL, 5 doc stubs — zero runtime code | Full runtime: registries, adapters+simulator+conformance, FSMs, streams, reconciliation, P&L |
-| Derivatives migrations | Raw SQL outside Alembic (`Backend Architecture/migrations/2026_07_derivatives_foundation.sql`) | Alembic adoption revision (idempotent IF NOT EXISTS replay); Alembic owns the tables |
+| Derivatives migrations | Raw SQL outside Alembic (`docs/archive/legacy-architecture/backend/migrations/2026_07_derivatives_foundation.sql`) | Alembic adoption revision (idempotent IF NOT EXISTS replay); Alembic owns the tables |
 | Stablecoin | x402 verification + web3 registries only; no stablecoin domain | Full observation domain: registry, observations, valuation/depeg, support, finality/reorg, flows |
 | Interop | Nothing (greenfield); graph had no interop types | Full domain + LayerZero V2 reference adapter + 6 scaffolds |
 | Consent enforcement | Hardcoded stale purpose set missing `financial_activity` (defect) | Registry-derived at import; regression test |
@@ -31,5 +31,5 @@ Pre-implementation truth (verified by audit, 2026-07-08) and what 8.12.0 changed
 ## Known pre-existing issues (NOT introduced or fixed by this release)
 
 - `tests/unit/test_agent_web_crawler_wrapper.py::test_top_level_web_crawler_wraps_canonical_worker` failed on the baseline (before any 8.12.0 change); later root-caused to a missing sandbox dependency (`bs4`) — passes unchanged once beautifulsoup4 is installed. No code fix was needed or made.
-- Backend-internal `Backend Architecture/aether-backend/tests/` suite (not the gated root `tests/`) has pre-existing failures.
+- Backend-internal `services/backend/tests/` suite (not the gated root `tests/`) has pre-existing failures.
 - Multiple Alembic heads existed prior to this release; the new revisions form a linear chain from `20260703_agentic_obs`.

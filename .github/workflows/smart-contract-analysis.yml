@@ -1,7 +1,7 @@
 name: Smart Contract Static Analysis
 
 # Runs Slither and the Hardhat contract test suite on every PR or push that
-# touches Smart Contracts/** so audit-relevant issues are caught before they
+# touches contracts/smart-contracts/** so audit-relevant issues are caught before they
 # reach main.
 #
 # Slither findings are uploaded as a SARIF artifact for reviewer triage.
@@ -13,13 +13,13 @@ name: Smart Contract Static Analysis
 on:
   pull_request:
     paths:
-      - 'Smart Contracts/**'
+      - 'contracts/smart-contracts/**'
       - '.github/workflows/smart-contract-analysis.yml'
   push:
     branches:
       - main
     paths:
-      - 'Smart Contracts/**'
+      - 'contracts/smart-contracts/**'
 
 permissions:
   contents: read
@@ -37,7 +37,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: Smart Contracts
+        working-directory: contracts/smart-contracts
 
     steps:
       - uses: actions/checkout@v4
@@ -47,7 +47,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'Smart Contracts/package-lock.json'
+          cache-dependency-path: 'contracts/smart-contracts/package-lock.json'
 
       - name: Install Node dependencies
         run: npm ci --ignore-scripts
@@ -99,7 +99,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
-          sarif_file: Smart Contracts/results.sarif
+          sarif_file: contracts/smart-contracts/results.sarif
         continue-on-error: true
 
       - name: Fail on HIGH/CRITICAL findings
@@ -123,7 +123,7 @@ jobs:
           path: release-evidence/smart-contract-analysis.json
 
   contract-tests:
-    # Smart Contracts/test/ was not run by any gate. This job closes that gap
+    # contracts/smart-contracts/test/ was not run by any gate. This job closes that gap
     # by running the Hardhat contract test suite (npm test -> `hardhat test`)
     # on the same triggers as Slither.
     name: Hardhat contract test suite
@@ -132,7 +132,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: Smart Contracts
+        working-directory: contracts/smart-contracts
 
     steps:
       - uses: actions/checkout@v4
@@ -142,7 +142,7 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: 'Smart Contracts/package-lock.json'
+          cache-dependency-path: 'contracts/smart-contracts/package-lock.json'
 
       - name: Install Node dependencies
         run: npm ci --ignore-scripts

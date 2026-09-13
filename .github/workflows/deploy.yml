@@ -178,7 +178,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Backend Architecture/aether-backend/Dockerfile
+          file: services/backend/Dockerfile
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/aether-backend:${{ github.sha }}
           cache-from: type=gha,scope=backend
@@ -232,7 +232,7 @@ jobs:
           tar --sort=name --mtime='UTC 1970-01-01' -czf aether-spa.tar.gz -C frontend/aether/dist .
           tar --sort=name --mtime='UTC 1970-01-01' -czf kyber-spa.tar.gz -C frontend/kyber/dist .
           tar --sort=name --mtime='UTC 1970-01-01' -czf migrations.tar.gz \
-            'Backend Architecture/aether-backend/alembic.ini' 'Backend Architecture/aether-backend/alembic'
+            'services/backend/alembic.ini' 'services/backend/alembic'
           cp config/runtime_deployment.yaml runtime_deployment.yaml
       - name: Create commit-bound release manifest
         id: manifest

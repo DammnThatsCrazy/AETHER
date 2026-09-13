@@ -13,7 +13,7 @@ Bronze evidence          (present: provider_runtime/raw_store.py ✅)
         ▼
 Social Silver facts      (NEW service + contracts → M1 contracts, M3 facts; tables per §104)
         │
-        ├──▶ Identity Resolution binding   (present: services/identity/ ✅ CONSUME)
+        ├──▶ Identity Resolution binding   (present: services/backend/services/identity/ ✅ CONSUME)
         ├──▶ Semantic/campaign/comms/economic context  (present ✅ CONSUME)
         └──▶ Data rights / consent gates   (present authorities ✅ CONSUME)
         │
@@ -30,7 +30,7 @@ Relationship360 / Gold   (registry entry exists (in_flight); provider NEW)
 Path Intelligence        (present: path_scoring/traversal ✅ EXTEND in M8; fidelity-aware)
         │
         ▼
-Exploration Fabric       (services/exploration + shared/exploration ✅ present;
+Exploration Fabric       (services/backend/services/exploration + shared/exploration ✅ present;
         │                  projection_engine ⚠️ branch-only — GATES M9)
         ▼
 Lenses SocialFi / EngagementFi / Narrative (NEW → M9)  →  Aether / Kyber / Noesis surfaces (M10)
@@ -49,8 +49,8 @@ Legend: ✅ present on base · NEW created by this program · ⚠️ branch-only
 3. **M4 (legacy honesty migration)** is independent of UPR provider richness; it only needs
    Social360 canonical output to delegate to. Order M4 as soon as M3 has a minimal canonical
    Social360 read path.
-4. **M5 (IncentiveContext)** consumes Campaign360 (`services/campaign/`) + Economic360
-   (`services/economic/`) references and `shared/temporal/` windows. No new campaign engine.
+4. **M5 (IncentiveContext)** consumes Campaign360 (`services/backend/services/campaign/`) + Economic360
+   (`services/backend/services/economic/`) references and `shared/temporal/` windows. No new campaign engine.
 5. **M6 (promotion/motifs)** → **M7 (fidelity)** ordering: fidelity consumes evidence groups
    and asserted candidates produced by promotion; fidelity recompute triggers (§47) drive
    restatement (M11).

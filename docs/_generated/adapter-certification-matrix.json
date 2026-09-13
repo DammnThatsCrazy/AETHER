@@ -1,5 +1,5 @@
 {
-  "generated_from": "Backend Architecture/aether-backend/shared/certification/registry.py",
+  "generated_from": "services/backend/shared/certification/registry.py",
   "providers": {
     "communications:braze": {
       "adapter": "BrazeConnector",

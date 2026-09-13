@@ -26,7 +26,7 @@
 #                      contract pair, and why it's safe to leave as-is>"
 #
 # As of the gate's introduction, a full AST scan of every upgrade() body in
-# Backend Architecture/aether-backend/alembic/versions found zero destructive
+# services/backend/alembic/versions found zero destructive
 # operations outside of downgrade() — so there is nothing to grandfather yet.
 # Do not add entries here to silence a real violation; fix the migration (or
 # give it a proper expand/contract declaration) instead.

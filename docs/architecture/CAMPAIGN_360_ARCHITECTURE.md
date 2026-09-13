@@ -9,14 +9,14 @@ since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 4
-source_files: [Backend Architecture/aether-backend/services/campaign/exploration.py, Backend Architecture/aether-backend/services/campaign/routes.py, Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py, Backend Architecture/aether-backend/services/measurement/repositories/conversion_repo.py, Backend Architecture/aether-backend/services/measurement/repositories/attribution_run_repo.py, Backend Architecture/aether-backend/services/traffic/repair.py]
+source_files: [services/backend/services/campaign/exploration.py, services/backend/services/campaign/routes.py, services/backend/services/measurement/repositories/touchpoint_repo.py, services/backend/services/measurement/repositories/conversion_repo.py, services/backend/services/measurement/repositories/attribution_run_repo.py, services/backend/services/traffic/repair.py]
 source_hashes:
-  Backend Architecture/aether-backend/services/campaign/exploration.py: sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13
-  Backend Architecture/aether-backend/services/campaign/routes.py: sha256:d7a4747fba3fa05424c8c6a4ff5a1382739ce942e35c0738b43a9355ad38d26e
-  Backend Architecture/aether-backend/services/measurement/repositories/attribution_run_repo.py: sha256:02840a6564ea69576bb1d43fba35679a9fa41493bf9c10770c4c034d4d389978
-  Backend Architecture/aether-backend/services/measurement/repositories/conversion_repo.py: sha256:70be3473d422ac0fc495b579755289d2c0d2e5ea78224f217b8ec4c2981192f5
-  Backend Architecture/aether-backend/services/measurement/repositories/touchpoint_repo.py: sha256:5f1ea2109ff37ba742f1236d651e4fcc00d14fe62b25eb08ae41b8693545f3d8
-  Backend Architecture/aether-backend/services/traffic/repair.py: sha256:b1f732c004b51f42e9b16635516bcd9ce92682a40d6f33d51e735d5f2f107df0
+  services/backend/services/campaign/exploration.py: sha256:e13313cc1041aa66ea25ded2d3fac22af21bb6ab7c5ce61641184ed3ac364f13
+  services/backend/services/campaign/routes.py: sha256:d7a4747fba3fa05424c8c6a4ff5a1382739ce942e35c0738b43a9355ad38d26e
+  services/backend/services/measurement/repositories/attribution_run_repo.py: sha256:02840a6564ea69576bb1d43fba35679a9fa41493bf9c10770c4c034d4d389978
+  services/backend/services/measurement/repositories/conversion_repo.py: sha256:70be3473d422ac0fc495b579755289d2c0d2e5ea78224f217b8ec4c2981192f5
+  services/backend/services/measurement/repositories/touchpoint_repo.py: sha256:5f1ea2109ff37ba742f1236d651e4fcc00d14fe62b25eb08ae41b8693545f3d8
+  services/backend/services/traffic/repair.py: sha256:b1f732c004b51f42e9b16635516bcd9ce92682a40d6f33d51e735d5f2f107df0
 ---
 
 # Campaign 360 Architecture
@@ -119,7 +119,7 @@ the prior run; it does not mutate historical credit evidence in place.
 
 The Campaign Sources page's advertising connect flow is additive to this
 architecture and does not change the explorer's read repos. It is orchestrated
-by `services/campaign/ad_source_links.py` over the canonical
+by `services/backend/services/campaign/ad_source_links.py` over the canonical
 `measurement_connectors` store — the same rows the measurement ad connectors
 read at sync time. Connect is idempotent (one *active* source per
 tenant/family) and requires a complete credential set at store time — first

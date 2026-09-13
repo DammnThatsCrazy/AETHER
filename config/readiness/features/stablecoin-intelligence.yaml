@@ -26,8 +26,8 @@ repository_ceiling:
   - Connect a live provider and open a validated live-data window.
   remaining_is_repository_controlled: true
   evidence:
-  - Backend Architecture/aether-backend/services/stablecoin/
-  - Backend Architecture/aether-backend/services/stablecoins/rpc_observer.py
+  - services/backend/services/stablecoin/
+  - services/backend/services/stablecoins/rpc_observer.py
   - packages/shared/stablecoin.ts
 implementation:
   state: RUNTIME_INTEGRATED
@@ -125,7 +125,7 @@ business_readiness:
 confidence:
   level: LOW
   reasons:
-  - 'repository evidence: Backend Architecture/aether-backend/services/stablecoin/'
+  - 'repository evidence: services/backend/services/stablecoin/'
   evidence_gaps:
   - credentialed environment execution not yet performed
 release_profiles:

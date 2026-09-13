@@ -51,7 +51,7 @@ ROOT = Path(__file__).resolve().parent.parent
 APPS_DIR = ROOT / "apps"
 CONSENT_REGISTRY = ROOT / "packages" / "shared" / "contracts" / "consent-registry.json"
 CLASSIFICATION_PY = (
-    ROOT / "Backend Architecture" / "aether-backend" / "shared" / "privacy" / "classification.py"
+    ROOT / "services" / "backend" / "shared" / "privacy" / "classification.py"
 )
 
 # The two shipping apps. App-level facts (name, bundle ids, plane) are read from

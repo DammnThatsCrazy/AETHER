@@ -27,12 +27,9 @@ TOP_LEVEL_DOC_FOCUS = {
     "docs",
     "tests",
     "cicd",
-    "ML Models",
-    "Agent Layer",
-    "Data Ingestion Layer",
-    "Smart Contracts",
-    "AWS Deployment",
-    "GDPR & SOC2",
+    "services",
+    "contracts",
+    "deploy",
 }
 
 

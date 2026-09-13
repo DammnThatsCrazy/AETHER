@@ -20,16 +20,16 @@ Neither targets the program base lane (`feat/aether-360-program`, itself unmerge
 ### PR 584 — IRRL rights authority + verification spine (PRIMARY collision)
 Touches ~120 files across four surfaces this program consumes/extends:
 - **Graph mutation spine**: `shared/graph/mutation_gateway.py` (+110), new `shared/graph/mutation_helpers.py`, `mutation_intents.py`, `mutation_models.py`, `shared/graph/graph.py`, `repositories/graph_mutation_ledger.py` — this is the **sole graph write path** M6/M8 must extend (§52).
-- **Semantic reducers**: `services/semantic_intelligence/` broadly (`reducers.py`, `engine.py`, `models.py`, `consumer.py`, `service.py`, `repositories/base_fact_repo.py`) — the reducer this program must EXTEND, never fork (§83).
-- **Exploration**: `services/exploration/routes.py`, `service.py`, `shared/exploration/models.py` — the M9 lens/filter surface.
+- **Semantic reducers**: `services/backend/services/semantic_intelligence/` broadly (`reducers.py`, `engine.py`, `models.py`, `consumer.py`, `service.py`, `repositories/base_fact_repo.py`) — the reducer this program must EXTEND, never fork (§83).
+- **Exploration**: `services/backend/services/exploration/routes.py`, `service.py`, `shared/exploration/models.py` — the M9 lens/filter surface.
 - **Migrations**: 6 new `alembic/versions/*` files (integrator-owned surface).
-- **Adjacent new modules**: large `shared/rights_authority/` service, `services/olympus/`, `services/ingestion/`, `services/lake/`, `services/profile/`, `services/kyber/access/` + `kyber/graph/scoped_gateway.py`. The `rights_authority`/`services/olympus` work is **directly relevant** to this program's §14 Olympus-corpus→tenant projection rule.
-- **NOT touched**: `provider_runtime/`, `shared/providers/`, `services/providers/`, `shared/computation/`, `services/computation/`, `frontend/*`, `packages/shared/contracts/*`.
+- **Adjacent new modules**: large `shared/rights_authority/` service, `services/olympus/`, `services/backend/services/ingestion/`, `services/backend/services/lake/`, `services/backend/services/profile/`, `services/backend/services/kyber/access/` + `kyber/graph/scoped_gateway.py`. The `rights_authority`/`services/olympus` work is **directly relevant** to this program's §14 Olympus-corpus→tenant projection rule.
+- **NOT touched**: `provider_runtime/`, `shared/providers/`, `services/backend/services/providers/`, `shared/computation/`, `services/backend/services/computation/`, `frontend/*`, `packages/shared/contracts/*`.
 
 Disposition: **coordinate-before-merge.** PR 584 targets `main`; this program's base lane does not contain it, so conflicts materialize at merge-to-main time, not today. Recorded here per §2 rule 4. Because 584 owns large swaths of the rights/olympus/ingestion substrate, M0 does **not** rely on it, but the §14 rule resolution and any later graph/semantic/exploration edits on this branch must be reconciled against it before either merges.
 
 ### PR 586 — identity hardening (LOW, watch-only)
-No file overlap. It changes identity verification/consume semantics in `services/identity/*`, which the social plane binds against (CONSUME). Watch-only; no disposition change. (Note: prior lane guidance to "ignore #584 + concurrent merges" applied to the p0-spine lane; recorded here neutrally for THIS program's ledger.)
+No file overlap. It changes identity verification/consume semantics in `services/backend/services/identity/*`, which the social plane binds against (CONSUME). Watch-only; no disposition change. (Note: prior lane guidance to "ignore #584 + concurrent merges" applied to the p0-spine lane; recorded here neutrally for THIS program's ledger.)
 
 ## 3. Branch-lane context (approximate — NOT open PRs)
 

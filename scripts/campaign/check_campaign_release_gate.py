@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = REPO_ROOT / "services" / "backend"
 
 
 @dataclass

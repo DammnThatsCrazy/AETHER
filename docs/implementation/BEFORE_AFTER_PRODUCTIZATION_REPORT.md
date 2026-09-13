@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  scripts/production_status.py: sha256:15010d4caab7f6e82c6677778332da1de5457d0c7576e11922fd24521a77086d
+  "scripts/production_status.py": "sha256:b41b131c5b76447e0ffd146a6a5e111e44d8674e2cb0cb89d5d09351466a0b66"
 ---
 
 # Before / After Productization Report
@@ -69,8 +69,8 @@ exists to prevent.
 | Wave | Before | After | Score effect | Why not more |
 |------|--------|-------|--------------|--------------|
 | **Tenant routing fix** | Tenant resolution had the addressed defect | Correctness fix in the routing path | No score change | A correctness fix under an existing 4-rated surface does not add live traffic or scale evidence |
-| **Activation FSM** (`services/activation`, `/v1/activation/*`) | First value required operator SQL / manual key mint | Real self-serve FSM: plan → SDK → key mint (once) → test event via in-process `/v1/batch` → Bronze first-value proof → `complete` refused until `first_value_ready` | No score change (flag OFF) | New capability, but flag-gated OFF and unexercised by production traffic; reuses existing ingestion tested on fallbacks — capped below 5 until live |
-| **Kyber Missions** | No mission construct | Thin-root Mission aggregate + `MonitoringCondition` under `services/kyber/ops/` (contracts/repository/service/monitoring/routes) + migration `20260815_kyber_missions`, workforce-scoped `/v1/kyber/missions`, `completed != verified` enforced — all flag-gated OFF | No score change | Real aggregate, but flag-gated OFF with no live traffic and tested only on fallbacks — capped below 5 until exercised live |
+| **Activation FSM** (`services/backend/services/activation`, `/v1/activation/*`) | First value required operator SQL / manual key mint | Real self-serve FSM: plan → SDK → key mint (once) → test event via in-process `/v1/batch` → Bronze first-value proof → `complete` refused until `first_value_ready` | No score change (flag OFF) | New capability, but flag-gated OFF and unexercised by production traffic; reuses existing ingestion tested on fallbacks — capped below 5 until live |
+| **Kyber Missions** | No mission construct | Thin-root Mission aggregate + `MonitoringCondition` under `services/backend/services/kyber/ops/` (contracts/repository/service/monitoring/routes) + migration `20260815_kyber_missions`, workforce-scoped `/v1/kyber/missions`, `completed != verified` enforced — all flag-gated OFF | No score change | Real aggregate, but flag-gated OFF with no live traffic and tested only on fallbacks — capped below 5 until exercised live |
 | **Dossiers** | Release-truth / readiness / acquisition dossiers absent | Eight authored, source-linked dossiers | No score change | Docs area is already 4; these are authored docs, not a validator or generated-doc improvement that would move the docs score |
 
 ---

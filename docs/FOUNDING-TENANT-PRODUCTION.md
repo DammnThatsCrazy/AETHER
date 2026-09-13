@@ -109,7 +109,7 @@ asserts the guarantees:
 Authorization is a protocol, not scattered route logic.
 
 - **One Kyber operator gate.** Every operator/Kyber route uses the canonical
-  fail-closed `is_kyber_operator` gate (`services/security/request_context.py`),
+  fail-closed `is_kyber_operator` gate (`services/backend/services/security/request_context.py`),
   which inspects the raw permission list so a `Role.ADMIN` / `admin`-permission
   tenant is **denied**. This closed a privilege-escalation where several operator
   routes gated on `require_permission("admin")` (exposing cross-tenant
@@ -117,7 +117,7 @@ Authorization is a protocol, not scattered route logic.
   flag. Proven by `tests/security/test_kyber_gate_consolidation.py` and the
   existing `tests/security/test_kyber_boundary.py`.
 - **Route policy registry.** `config/route_registry.yaml` +
-  `services/security/route_registry.py::classify(path)` derive a policy
+  `services/backend/services/security/route_registry.py::classify(path)` derive a policy
   (public/authed, tenant-scoped, kyber-operator-required, sensitive,
   audit-required, risk) for every mounted route. `default_decision: deny` — a
   route whose prefix is not classified fails
@@ -223,4 +223,3 @@ quietly):
 Penetration testing, legal review and formal external assessment remain external
 evidence on the same footing. The absence of any of the above must yield a
 conditional or no-go verdict, never a production-readiness claim.
-

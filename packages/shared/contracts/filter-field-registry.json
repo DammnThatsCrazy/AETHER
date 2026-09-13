@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "contractVersion": "1.0.0",
-  "description": "Canonical filter-field registry for the Unified Exploration Fabric. Every filterable field declares its category, data type, allowed operators (a subset of the FilterOperator union in packages/shared/graph-contract.ts — never a second filter system), sensitivity, and optional consent purpose / minimum cohort size. Generated artifacts: packages/shared/filter-fields.ts, Backend Architecture/aether-backend/shared/exploration/generated_fields.py, docs/_generated/filter-field-table.md (via scripts/generate_platform_contracts.py).",
+  "description": "Canonical filter-field registry for the Unified Exploration Fabric. Every filterable field declares its category, data type, allowed operators (a subset of the FilterOperator union in packages/shared/graph-contract.ts — never a second filter system), sensitivity, and optional consent purpose / minimum cohort size. Generated artifacts: packages/shared/filter-fields.ts, services/backend/shared/exploration/generated_fields.py, docs/_generated/filter-field-table.md (via scripts/generate_platform_contracts.py).",
   "categories": ["entity", "time", "geography", "device", "graph", "risk", "campaign", "economic", "truth", "social", "relationship", "incentive", "source", "evidence", "path", "narrative"],
   "dataTypes": ["string", "number", "boolean", "datetime", "enum", "entity_ref", "geography"],
   "sensitivities": ["public", "tenant_internal", "sensitive", "restricted", "pii"],

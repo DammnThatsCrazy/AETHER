@@ -44,7 +44,7 @@ reviewed_source_commits:
     reason: "Reviewed the graph-first frontend closure: Aether route paths now map to registered exploration surface IDs, Noesis handoffs preserve graph query state, history traversal moves focus without reordering the trail, and the shared lens registry uses explicit browser-compatible ESM subpaths. The Data Exchange E2E profile now supplies the required server-owned graph scope."
 source_hashes:
   "frontend/aether/src/": "sha256:a5c1c5294aa2b468952a51374ed220c36b5bb9915a0c47da5b4f95d19defe657"
-  "frontend/kyber/src/": "sha256:ebdc690054baeebc425c18cbf6455ad8f0a4d137af2a906345a75a5155ba18ef"
+  "frontend/kyber/src/": "sha256:572c2a0043c4078ff636d5bd8e0827bff49120b93124f1ae164a88ef6aecb108"
   "frontend/shared/src/": "sha256:abef2b4bb7b38a0124fbf2180dd1de701e533d1bbd57866d57b1848815332a2c"
 ---
 

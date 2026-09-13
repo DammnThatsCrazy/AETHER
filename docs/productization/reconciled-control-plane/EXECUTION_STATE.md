@@ -37,12 +37,12 @@ and boundary: `docs/architecture/RECONCILED_CONTROL_PLANE.md`.
 
 | Deliverable | Evidence |
 |---|---|
-| Contract-Spine twin extension (`packages/shared/managed-integrations.ts` ↔ `services/managed_integrations/contracts.py`) | `tests/contracts/test_managed_integrations_parity.py` (const-array + barrel parity) |
+| Contract-Spine twin extension (`packages/shared/managed-integrations.ts` ↔ `services/backend/services/managed_integrations/contracts.py`) | `tests/contracts/test_managed_integrations_parity.py` (const-array + barrel parity) |
 | Governance domain `reconciled_control` (twin + explicit operator grants, out of `ALL_DOMAINS`) | `tests/unit/test_security_governance_domain_twin.py::test_reconciled_control_domain_is_in_both_sides` |
 | Desired-state + observed-state assembly from existing authorities | `desired_policy.py` / `sensors.py` (read-only, evidence-backed) |
 | Reconcile classification (§32 steps 1–11) | `tests/unit/reconciled_control/` (match/actionable/blocked/unknown + CP-12 distinctness + flag-OFF parity) |
-| Durable `managed_integrations` + `reconcile_runs` + direct-SQL repos | alembic `20260906_rcp_managed_integrations.py` (additive, migration-safety + temporal-integrity clean); `Backend Architecture/aether-backend/tests/managed_integrations/` |
-| Read-only operator surface | `services/managed_integrations/routes.py` (2 GETs), mounted in `main.py` behind `reconciled_control.enabled AND kyber_route_enabled` (default OFF) |
+| Durable `managed_integrations` + `reconcile_runs` + direct-SQL repos | alembic `20260906_rcp_managed_integrations.py` (additive, migration-safety + temporal-integrity clean); `services/backend/tests/managed_integrations/` |
+| Read-only operator surface | `services/backend/services/managed_integrations/routes.py` (2 GETs), mounted in `main.py` behind `reconciled_control.enabled AND kyber_route_enabled` (default OFF) |
 | Registries + docs | `docs/source-of-truth/repo_consistency_ownership.json` category `reconciled_control_plane`; architecture + phases + this page authored. `config/implementation_ledger.yaml` is reserved for founding-tenant/release-governance items (no prior lane — data-exchange, financial-normalization — adds lane rows); this lane follows that precedent and adds none. |
 
 ## Phase 1 — ChangeSet planning + change-risk engine
@@ -85,7 +85,7 @@ scheduler.
 | Simulation + shadow plane (`compare_paths`, ten axes, shadow never mutates canonical state) | `simulation.py` + `test_simulation.py` (18 tests) |
 | Schema fingerprinting + §38 promotion gates (fail closed on missing gates) | `schema_mapping.py` + 36 unit + 12 backend tests |
 | Source-authority rules + equivalence keys (longest-prefix, equal-specificity rejected) | `source_authority.py` + 29 tests |
-| Scheduler pass (freshness window, only planned + automation_allowed executes) + maintenance-role worker spec | `scheduler.py` + `services/runtime/specs.py`/`roles.py` (single periodic loop, rides `maintenance`) |
+| Scheduler pass (freshness window, only planned + automation_allowed executes) + maintenance-role worker spec | `scheduler.py` + `services/backend/services/runtime/specs.py`/`roles.py` (single periodic loop, rides `maintenance`) |
 | Operator review surface: approvals + action-required GETs | `routes.py` (6 GETs total) + `test_routes_review_surface.py` (7 tests) |
 
 ## Phase 4 — Progressive delivery + fleet upgrade controller + console vocabulary

@@ -26,9 +26,9 @@ repository_ceiling:
   - None — repository-controlled work complete
   remaining_is_repository_controlled: false
   evidence:
-  - Backend Architecture/aether-backend/shared/measurement/
-  - Backend Architecture/aether-backend/shared/measurement/value_states.py
-  - Backend Architecture/aether-backend/shared/measurement/registry.py
+  - services/backend/shared/measurement/
+  - services/backend/shared/measurement/value_states.py
+  - services/backend/shared/measurement/registry.py
 implementation:
   state: VERIFIED
   denominator: in-scope repository controls (migration-derived)
@@ -115,7 +115,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: Backend Architecture/aether-backend/shared/measurement/'
+  - 'repository evidence: services/backend/shared/measurement/'
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:

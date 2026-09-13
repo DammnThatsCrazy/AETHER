@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/payment-catalog.ts, Backend Architecture/aether-backend/services/payment_catalog/catalog.py, Backend Architecture/aether-backend/services/card_linked_payments/paymentscan.py]
+source_files: [packages/shared/payment-catalog.ts, services/backend/services/payment_catalog/catalog.py, services/backend/services/card_linked_payments/paymentscan.py]
 last_synced_commit: pending
 ---
 
@@ -69,7 +69,7 @@ Canonical slugs:
 
 ## V1 ingestion and freshness
 
-`Backend Architecture/aether-backend/services/card_linked_payments/paymentscan.py`
+`services/backend/services/card_linked_payments/paymentscan.py`
 implements the catalog/benchmark pipeline:
 
 - `sync_catalog(tenant_id)` refreshes freshness state from the seed and

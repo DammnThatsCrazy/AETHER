@@ -42,7 +42,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = ROOT / "services" / "backend"
 SCRIPTS = ROOT / "scripts"
 for p in (str(ROOT), str(SCRIPTS), str(SCRIPTS / "release"), str(BACKEND_ROOT)):
     if p not in sys.path:
@@ -53,9 +53,9 @@ from scripts.lib.preflight_results import (  # noqa: E402
     CheckResult, all_passed, count_by_status, failed, passed, render_results, skipped,
 )
 
-TF_MODULES = ROOT / "AWS Deployment" / "aether-aws" / "terraform" / "modules"
-TF_ROOT = ROOT / "AWS Deployment" / "aether-aws" / "terraform"
-STALE_MNT = ROOT / "AWS Deployment" / "mnt"
+TF_MODULES = ROOT / "deploy" / "aws" / "terraform" / "modules"
+TF_ROOT = ROOT / "deploy" / "aws" / "terraform"
+STALE_MNT = ROOT / "docs" / "archive" / "legacy-architecture" / "aws-deployment" / "mnt"
 FOUNDING = ROOT / "config" / "founding_tenant_release.yaml"
 ROUTE_REGISTRY = ROOT / "config" / "route_registry.yaml"
 RUNTIME_DEPLOY = ROOT / "config" / "runtime_deployment.yaml"
@@ -184,9 +184,9 @@ def check_iac_validates() -> list[CheckResult]:
     out: list[CheckResult] = []
     if STALE_MNT.exists():
         out.append(failed("iac-stale-tree", f"stale duplicate tree present: {STALE_MNT}",
-                          "remove AWS Deployment/mnt (canonical tree is aether-aws/terraform)"))
+                          "remove docs/archive/legacy-architecture/aws-deployment/mnt (canonical tree is aether-aws/terraform)"))
     else:
-        out.append(passed("iac-stale-tree", "stale AWS Deployment/mnt tree removed"))
+        out.append(passed("iac-stale-tree", "stale docs/archive/legacy-architecture/aws-deployment/mnt tree removed"))
     present = {p.name for p in TF_MODULES.iterdir() if p.is_dir()} if TF_MODULES.is_dir() else set()
     missing = EXPECTED_MODULES - present
     no_main = [m for m in present & EXPECTED_MODULES if not (TF_MODULES / m / "main.tf").is_file()]

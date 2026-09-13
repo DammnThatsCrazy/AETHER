@@ -51,7 +51,7 @@ jobs:
 
           # Check if global paths changed (always run everything)
           RUN_ALL=false
-          for path in .github/ config/ infrastructure/ packages/common/; do
+          for path in .github/ config/ deploy/aws/ packages/shared/; do
             if echo "$CHANGED" | grep -q "^${path}"; then
               RUN_ALL=true
               break
@@ -65,10 +65,10 @@ jobs:
             # Build comma-separated list of affected services
             AFFECTED=""
             # Map changed paths to the two deployed service names
-            if echo "$CHANGED" | grep -qE "^(Backend Architecture/|Agent Layer/|security/|packages/)"; then
+            if echo "$CHANGED" | grep -qE "^(services/backend/|services/agents/|security/|packages/)"; then
               AFFECTED="${AFFECTED},aether-app"
             fi
-            if echo "$CHANGED" | grep -q "^ML Models/"; then
+            if echo "$CHANGED" | grep -q "^services/ml/"; then
               AFFECTED="${AFFECTED},aether-ml"
             fi
             AFFECTED="${AFFECTED#,}"
@@ -99,7 +99,7 @@ jobs:
       - name: ESLint (TypeScript)
         run: npx turbo run lint --filter='./packages/*' --filter='./services/*'
       - name: Ruff (Python)
-        run: ruff check services/ml-serving services/agent
+        run: ruff check services/backend services/ml services/agents
 
   security-scan:
     name: "5. Security Scan"
@@ -162,7 +162,7 @@ jobs:
       - name: TypeScript type check
         run: npx turbo run type-check
       - name: mypy (Python)
-        run: mypy --strict services/ml-serving services/agent
+        run: mypy --strict services/backend services/ml services/agents
 
   # ──────────────────────────────────────────────────────────────────────
   # STAGE 3: UNIT TEST (depends on type-check)
@@ -184,7 +184,7 @@ jobs:
           npx turbo run test -- --ci --coverage --coverageReporters=json-summary
       - name: pytest (Python services)
         run: |
-          pytest services/ml-serving services/agent \
+          pytest services/backend services/ml services/agents \
             --cov --cov-report=json --cov-fail-under=90 -q
       - name: Upload coverage
         uses: actions/upload-artifact@v4
@@ -284,10 +284,10 @@ jobs:
         run: |
           if [ "${{ matrix.service }}" = "aether-app" ]; then
             echo "context=." >> $GITHUB_OUTPUT
-            echo "dockerfile=Backend Architecture/aether-backend/Dockerfile" >> $GITHUB_OUTPUT
+            echo "dockerfile=services/backend/Dockerfile" >> $GITHUB_OUTPUT
           else
-            echo "context=ML Models/aether-ml" >> $GITHUB_OUTPUT
-            echo "dockerfile=ML Models/aether-ml/docker/Dockerfile" >> $GITHUB_OUTPUT
+            echo "context=services/ml" >> $GITHUB_OUTPUT
+            echo "dockerfile=services/ml/docker/Dockerfile" >> $GITHUB_OUTPUT
           fi
 
       - name: Build & push ${{ matrix.service }}

@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: experimental
 since_version: 0.1.0
-source_files: [packages/shared/payment-rails.ts, Backend Architecture/aether-backend/services/integrations/providers/payment_rails/base.py, Backend Architecture/aether-backend/services/integrations/providers/payment_rails/repository.py, Backend Architecture/aether-backend/services/integrations/providers/payment_rails/reconciliation.py, Backend Architecture/aether-backend/services/integrations/providers/payment_rails/service.py, Backend Architecture/aether-backend/services/integrations/providers/payment_rails/routes.py, Backend Architecture/aether-backend/services/integrations/providers/payment_rails/sync_worker.py]
+source_files: [packages/shared/payment-rails.ts, services/backend/services/integrations/providers/payment_rails/base.py, services/backend/services/integrations/providers/payment_rails/repository.py, services/backend/services/integrations/providers/payment_rails/reconciliation.py, services/backend/services/integrations/providers/payment_rails/service.py, services/backend/services/integrations/providers/payment_rails/routes.py, services/backend/services/integrations/providers/payment_rails/sync_worker.py]
 last_synced_commit: HEAD
 ---
 
@@ -27,7 +27,7 @@ custodies funds, or signs transactions.**
 ## Provider scope — named adapters only
 
 Exactly five first-class adapters in
-`services/integrations/providers/payment_rails/` — there is **no generic
+`services/backend/services/integrations/providers/payment_rails/` — there is **no generic
 webhook fallback**; unknown providers are 404:
 
 | Provider | Module | Flows | Webhooks | Polling | Notes |
@@ -88,7 +88,7 @@ parallel ingestion API.
 ## Background sync worker
 
 `sync_worker.py` registers a supervised `payment_rail_sync` worker
-(`services/runtime/specs.py`, gated on `AETHER_PAYMENT_RAILS_ENABLED`). Webhook
+(`services/backend/services/runtime/specs.py`, gated on `AETHER_PAYMENT_RAILS_ENABLED`). Webhook
 handling never runs on a timer, so two open sessions would otherwise never
 resolve: one whose provider sends no terminal webhook, and one SDK-only session
 no provider confirms. Each cycle (default 15 min) the worker sweeps all open

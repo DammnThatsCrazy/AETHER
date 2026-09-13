@@ -26,8 +26,8 @@ repository_ceiling:
   - Connect a live provider and open a validated live-data window.
   remaining_is_repository_controlled: true
   evidence:
-  - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/
-  - Backend Architecture/aether-backend/services/integrations/providers/payment_rails/sync_worker.py
+  - services/backend/services/integrations/providers/payment_rails/
+  - services/backend/services/integrations/providers/payment_rails/sync_worker.py
   - docs/source-of-truth/PAYMENT_RAIL_OBSERVABILITY.md
 implementation:
   state: RUNTIME_INTEGRATED
@@ -125,7 +125,7 @@ business_readiness:
 confidence:
   level: LOW
   reasons:
-  - 'repository evidence: Backend Architecture/aether-backend/services/integrations/providers/payment_rails/'
+  - 'repository evidence: services/backend/services/integrations/providers/payment_rails/'
   evidence_gaps:
   - credentialed environment execution not yet performed
 release_profiles:

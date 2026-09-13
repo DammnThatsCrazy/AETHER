@@ -46,7 +46,7 @@ Audit agent: ARGUS
 | **Affected components** | fraud service, reward policy engine, journey risk |
 | **Root cause** | Only ephemeral `FraudDecisionInput` Pydantic input existed; no DB table, no versioning, no supersession |
 | **Required change** | Create `fraud_decisions` table migration, `FraudDecision` Pydantic model, `FraudDecisionRepository` with tenant isolation, versioning, supersession, and current-decision resolution |
-| **Implementation** | `alembic/versions/20260702_fraud_decisions.py`, `services/fraud/models.py`, `repositories/repos.py` (FraudDecisionRepository class) |
+| **Implementation** | `alembic/versions/20260702_fraud_decisions.py`, `services/backend/services/fraud/models.py`, `repositories/repos.py` (FraudDecisionRepository class) |
 | **Closed by PR** | claude/aether-web2-web3-fraud-6hu2ou |
 | **Verified by** | ARGUS (pending re-audit) |
 
@@ -86,7 +86,7 @@ Audit agent: ARGUS
 | **Gap ID** | ARGUS-004 |
 | **Severity** | High |
 | **Status** | VERIFIED |
-| **Affected components** | `services/fraud_networks/routes.py` `_run_detection_pipeline` |
+| **Affected components** | `services/backend/services/fraud_networks/routes.py` `_run_detection_pipeline` |
 | **Root cause** | `detect_reward_farming([])` — hardcoded empty list; detector never received real reward events |
 | **Security impact** | Reward farming rings would never be detected during fraud network construction |
 | **Implementation** | Added `RewardEventRepository`, fetches real reward events for all entities in the pipeline |
@@ -141,7 +141,7 @@ Audit agent: ARGUS
 | **Severity** | High |
 | **Status** | VERIFIED |
 | **Root cause** | No event consumer triggered fraud evaluation; evaluation was only available via manual API call to `/v1/fraud/networks/build` |
-| **Implementation** | Created `services/fraud/evaluation.py` with `FraudEvaluationService.evaluate_subject()` and event-driven entry points `evaluate_on_canonical_activity()`, `evaluate_on_entity_event()`, `evaluate_on_commerce_event()` |
+| **Implementation** | Created `services/backend/services/fraud/evaluation.py` with `FraudEvaluationService.evaluate_subject()` and event-driven entry points `evaluate_on_canonical_activity()`, `evaluate_on_entity_event()`, `evaluate_on_commerce_event()` |
 | **Closed by PR** | claude/aether-web2-web3-fraud-6hu2ou |
 
 ---
@@ -154,7 +154,7 @@ Audit agent: ARGUS
 | **Severity** | High |
 | **Status** | VERIFIED |
 | **Root cause** | Journey routes had no `/risk`, `/fraud-decisions`, `/fraud-networks`, `/risk-explain`, or `/risk/recalculate` endpoints |
-| **Implementation** | Added all five endpoints to `services/measurement/routes/journeys.py`; also added `risk_tier` and `fraud_disposition` filters to step listing |
+| **Implementation** | Added all five endpoints to `services/backend/services/measurement/routes/journeys.py`; also added `risk_tier` and `fraud_disposition` filters to step listing |
 | **Closed by PR** | claude/aether-web2-web3-fraud-6hu2ou |
 
 ---
@@ -182,7 +182,7 @@ Audit agent: ARGUS
 | **Affected components** | frontend/ (Aether customer app, Kyber operator console) |
 | **Root cause** | Frontend fraud components exist but call legacy `/v1/fraud/evaluate` (ephemeral) rather than durable decision APIs; no journey risk tab in Aether app; no fraud decision review UI in Kyber |
 | **Required change** | Wire Aether journey risk tab to new `/v1/journeys/{id}/risk` endpoint; wire Kyber fraud review panel to `FraudDecision` CRUD; add risk indicators to journey step list |
-| **Implementation** | Aether: `JourneyExplorerPage` Risk tab (`useJourneyRisk` → `GET /v1/journeys/{id}/risk`); risk_tier badge on `JourneyStepCard`; risk fields added to `JourneyStep` interface. Kyber: `FraudDecisionsPage` with review/suppress modals; `useJourneyRisk`, `useJourneyFraudDecisions`, `useReviewFraudDecision`, `useSuppressFraudDecision` hooks; `api.fraudDecisions` + journey risk methods in `endpoints.ts`. Backend: `GET /v1/fraud/decisions`, `GET /v1/fraud/decisions/{id}`, `POST /v1/fraud/decisions/{id}/review`, `POST /v1/fraud/decisions/{id}/suppress` in `services/fraud/routes.py` |
+| **Implementation** | Aether: `JourneyExplorerPage` Risk tab (`useJourneyRisk` → `GET /v1/journeys/{id}/risk`); risk_tier badge on `JourneyStepCard`; risk fields added to `JourneyStep` interface. Kyber: `FraudDecisionsPage` with review/suppress modals; `useJourneyRisk`, `useJourneyFraudDecisions`, `useReviewFraudDecision`, `useSuppressFraudDecision` hooks; `api.fraudDecisions` + journey risk methods in `endpoints.ts`. Backend: `GET /v1/fraud/decisions`, `GET /v1/fraud/decisions/{id}`, `POST /v1/fraud/decisions/{id}/review`, `POST /v1/fraud/decisions/{id}/suppress` in `services/backend/services/fraud/routes.py` |
 | **Closed by PR** | claude/aether-web2-web3-fraud-6hu2ou |
 | **Verified by** | ARGUS (pending re-audit) |
 
@@ -195,10 +195,10 @@ Audit agent: ARGUS
 | **Gap ID** | ARGUS-012 |
 | **Severity** | High |
 | **Status** | VERIFIED |
-| **Affected components** | `services/profile360_workers/workers.py`, Profile360 API routes |
+| **Affected components** | `services/backend/services/profile360_workers/workers.py`, Profile360 API routes |
 | **Root cause** | Profile360 and Cluster360 do not aggregate risk summary, decision history, fraud networks, or evidence coverage |
 | **Required change** | Add `FraudDecisionRepository.list_for_entity()` call to Profile360 worker; expose risk tier distribution in Cluster360 aggregate |
-| **Implementation** | Added `FraudSummaryProjector` to `services/profile360_workers/workers.py`; subscribes to `FRAUD_DECISION_CREATED` and `FRAUD_EVALUATION_COMPLETED`; fetches all decisions via `FraudDecisionRepository.list_for_entity()`, computes tier distribution, writes `fraud_risk_tier`, `fraud_decision_count`, `fraud_summary` into behavior profile snapshot via extended `BehaviorProfileRepository.upsert_snapshot()` |
+| **Implementation** | Added `FraudSummaryProjector` to `services/backend/services/profile360_workers/workers.py`; subscribes to `FRAUD_DECISION_CREATED` and `FRAUD_EVALUATION_COMPLETED`; fetches all decisions via `FraudDecisionRepository.list_for_entity()`, computes tier distribution, writes `fraud_risk_tier`, `fraud_decision_count`, `fraud_summary` into behavior profile snapshot via extended `BehaviorProfileRepository.upsert_snapshot()` |
 | **Closed by PR** | claude/aether-web2-web3-fraud-6hu2ou |
 | **Verified by** | ARGUS (pending re-audit) |
 

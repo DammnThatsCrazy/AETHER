@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "Backend Architecture" / "aether-backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
 sys.path.insert(0, str(BACKEND))
 
 from repositories import artifacts as artifacts_mod  # noqa: E402

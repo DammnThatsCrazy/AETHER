@@ -46,9 +46,9 @@ a `sequence_360` over canonical communication truth for subjects of kind
 what communicated it, through which mechanism, to whom, while acting for whom,
 under what authority, how it changed in transit, what the recipient knew, what
 action followed, and what outcome was affected" by **reading** the canonical
-communication authorities — the `services/comms` silver path (`silver_comms_facts`
+communication authorities — the `services/backend/services/comms` silver path (`silver_comms_facts`
 / `campaign_touchpoints`), agent communication observability, identity and
-delegation (`services/identity`, `services/delegation`), evidence, and the
+delegation (`services/backend/services/identity`, `services/backend/services/delegation`), evidence, and the
 information layer this program adds — and projecting a typed,
 evidence-grounded, tenant-scoped `sequence` result through the Intelligence
 Projection Plane's shared contracts (`ProjectionRequest` → `ProjectionResult`).
@@ -61,11 +61,11 @@ projection of the Unified Intelligence Graph.
 
 ## Why
 
-The backend already ships a complete, end-to-end comms substrate (`services/comms`
+The backend already ships a complete, end-to-end comms substrate (`services/backend/services/comms`
 connector → silver dispatcher → `silver_comms_facts` → campaign resolver →
 measurement → attribution → graph projection → state) with agent-side
-observation layers (`services/agent_comm_observability`,
-`services/agentic_observability`) and adapter surfaces on profile360 and campaign
+observation layers (`services/backend/services/agent_comm_observability`,
+`services/backend/services/agentic_observability`) and adapter surfaces on profile360 and campaign
 routes — but when this program began, `communication360` was only a registered
 `in_flight` row whose blueprint file did not exist, nothing stated what the
 *Communication360 surface* was relative to canonical truth, and the blueprint's
@@ -189,8 +189,8 @@ the program decision log.
 - **R3 — sender ≠ author ≠ principal.** Roles render via a temporal-validity role
   matrix (role, participant, `valid_from`/`valid_to`) over
   actor/author/generator/editor/approver/sender/presented_sender/principal/
-  delegator/beneficiary/accountable_party, reusing `services/identity`
-  `EntityType` and `services/delegation` grant semantics — never a single
+  delegator/beneficiary/accountable_party, reusing `services/backend/services/identity`
+  `EntityType` and `services/backend/services/delegation` grant semantics — never a single
   `from` attribute.
 - **R4 — delivery ≠ knowledge.** Two typed state families with no cross-ladder
   inference: message lifecycle/delivery (`CommunicationState` ladder) versus

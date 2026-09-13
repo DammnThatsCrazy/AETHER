@@ -40,7 +40,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 DIM_TS = ROOT / "packages" / "shared" / "dimension-state.ts"
 EXPECTATIONS_PY = (
-    ROOT / "Backend Architecture" / "aether-backend"
+    ROOT / "services" / "backend"
     / "services" / "reconciliation" / "expectations.py"
 )
 OUTPUT = ROOT / "docs" / "_generated" / "dimension-registry.json"
@@ -79,7 +79,7 @@ def build_payload() -> dict:
         "version": read_version(),
         "generated_from": [
             "packages/shared/dimension-state.ts",
-            "Backend Architecture/aether-backend/services/reconciliation/expectations.py",
+            "services/backend/services/reconciliation/expectations.py",
         ],
         "states": _const_array(text, "dimensionStates"),
         "precedence": _const_array(text, "dimensionStatePrecedence"),

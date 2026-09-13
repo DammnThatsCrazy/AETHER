@@ -64,7 +64,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 # ── backend import bootstrap (mirrors scripts/credentialless_certification.py) ─
-BACKEND_ROOT = Path(__file__).resolve().parent.parent / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = Path(__file__).resolve().parent.parent / "services" / "backend"
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_ROOT))
 os.environ.setdefault("AETHER_ENV", "local")
@@ -1018,7 +1018,7 @@ def collect_evidence(root: Optional[Path] = None) -> dict:
     """Best-effort evidence aggregation. Never raises: each source degrades the
     relevant rows to FAIL/WARN with a recorded error rather than crashing."""
     root = Path(root) if root is not None else ROOT
-    backend = root / "Backend Architecture" / "aether-backend"
+    backend = root / "services" / "backend"
     evidence: dict = {
         "manifest_count": 0,
         "manifest_errors": [],

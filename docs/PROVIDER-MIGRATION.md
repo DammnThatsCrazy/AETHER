@@ -7,34 +7,34 @@ audience: [dev-senior, ops]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/services/integrations/connectors/base.py
-  - Backend Architecture/aether-backend/services/integrations/connectors/registry.py
-  - Backend Architecture/aether-backend/services/integrations/adapter.py
-  - Backend Architecture/aether-backend/shared/integration_contracts/catalog.py
-  - Backend Architecture/aether-backend/shared/integration_contracts/migration.py
-  - Backend Architecture/aether-backend/services/providers/shopify/
-  - Backend Architecture/aether-backend/services/providers/woocommerce/
-  - Backend Architecture/aether-backend/services/providers/etsy/
-  - Backend Architecture/aether-backend/services/providers/amazon/
-  - Backend Architecture/aether-backend/services/providers/ebay/
-  - Backend Architecture/aether-backend/services/providers/walmart/
-  - Backend Architecture/aether-backend/services/providers/tiktok/
+  - services/backend/services/integrations/connectors/base.py
+  - services/backend/services/integrations/connectors/registry.py
+  - services/backend/services/integrations/adapter.py
+  - services/backend/shared/integration_contracts/catalog.py
+  - services/backend/shared/integration_contracts/migration.py
+  - services/backend/services/providers/shopify/
+  - services/backend/services/providers/woocommerce/
+  - services/backend/services/providers/etsy/
+  - services/backend/services/providers/amazon/
+  - services/backend/services/providers/ebay/
+  - services/backend/services/providers/walmart/
+  - services/backend/services/providers/tiktok/
 canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/services/integrations/adapter.py": "sha256:92065c9a6c459302d05241379d1bc92fbc96a25596c767bfcd7d29671ee4eb7e"
-  "Backend Architecture/aether-backend/services/integrations/connectors/base.py": "sha256:c30c8cf70873be7e5974db3d4199779c4d0baa5ca5facef32157245111c5073e"
-  "Backend Architecture/aether-backend/services/integrations/connectors/registry.py": "sha256:cbd62d89ef255fbe7097d9778d1adc2f728f7ff98bfade29a98d0620d86238f8"
-  "Backend Architecture/aether-backend/services/providers/amazon/": "sha256:5442227fd07f38ccc4855c475a4e45030e37f1330a4f33dfb02d1a9ba3863c53"
-  "Backend Architecture/aether-backend/services/providers/ebay/": "sha256:f993fcea78550f3aff773060537931f627cf3a079a538c88bd1999500f831ec0"
-  "Backend Architecture/aether-backend/services/providers/etsy/": "sha256:9acb2872c25323e154429294fe3989620c2005d068b6ed03d8582f778e71ddb6"
-  "Backend Architecture/aether-backend/services/providers/shopify/": "sha256:54bfbfbaba9b159859cbb085b9b1cd771ac3a334089081d2cf05fe62742dc20f"
-  "Backend Architecture/aether-backend/services/providers/tiktok/": "sha256:7c3b1b4c5bd68a74cbbcda94bf887eeb2b8b5013bc1f473cec6268209a16c6aa"
-  "Backend Architecture/aether-backend/services/providers/walmart/": "sha256:15858d45b8b09d665a14eb44bff4afff6cf7aa74c75e9f263e50a7ca2d72f007"
-  "Backend Architecture/aether-backend/services/providers/woocommerce/": "sha256:4e89a592d41220996fd71724d5d22d05d80e42e2936a52165d450edec9b8901f"
-  "Backend Architecture/aether-backend/shared/integration_contracts/catalog.py": "sha256:895abcded4185c421d1e84cb3e711b5c88abd963daf3260373c0f54a50c4a03c"
-  "Backend Architecture/aether-backend/shared/integration_contracts/migration.py": "sha256:1254c727afc3841b7803a4cecaa9a528049ff6df29086e10246c50844c293df7"
+  "services/backend/services/integrations/adapter.py": "sha256:92065c9a6c459302d05241379d1bc92fbc96a25596c767bfcd7d29671ee4eb7e"
+  "services/backend/services/integrations/connectors/base.py": "sha256:c30c8cf70873be7e5974db3d4199779c4d0baa5ca5facef32157245111c5073e"
+  "services/backend/services/integrations/connectors/registry.py": "sha256:cbd62d89ef255fbe7097d9778d1adc2f728f7ff98bfade29a98d0620d86238f8"
+  "services/backend/services/providers/amazon/": "sha256:47421acb9e29d0fd5d8f6414edb2c86b03c35ccfd226b6027abe0ecc31e6c882"
+  "services/backend/services/providers/ebay/": "sha256:7b1986d902e2fe6e488798464e95abadc2f6a78838e1bb53798a6b1244c1d318"
+  "services/backend/services/providers/etsy/": "sha256:a554214cb6b6058580328f5d94a0ad59d382ed14c27be1a42b2d330c2d170026"
+  "services/backend/services/providers/shopify/": "sha256:c0a12ddb85d4fd9590fe6559c1921a494ef73cf74575a876a56445d13dbd61b9"
+  "services/backend/services/providers/tiktok/": "sha256:7c3e216b87d697b8c9b977cab6fc97a1fc338a529da59686c68c4836327af306"
+  "services/backend/services/providers/walmart/": "sha256:46b1e19cd84c539069b862d86299e45e2af952a0140fa8234e07fad3f3673bc1"
+  "services/backend/services/providers/woocommerce/": "sha256:ae6a2fe8ce2c2b1038e4f146db36a8c6c805cb31ddb59a5ff200cd8075f70732"
+  "services/backend/shared/integration_contracts/catalog.py": "sha256:895abcded4185c421d1e84cb3e711b5c88abd963daf3260373c0f54a50c4a03c"
+  "services/backend/shared/integration_contracts/migration.py": "sha256:1254c727afc3841b7803a4cecaa9a528049ff6df29086e10246c50844c293df7"
 ---
 
 # Provider Migration
@@ -57,7 +57,7 @@ untouched and working throughout; nothing in this migration is core-first.
 ### Path (a) — today: every connector is already exposed
 
 The `LegacyConnectorPlugin`
-(`services/provider_runtime/legacy.py`, installed by `install_legacy_plugins`
+(`services/backend/services/provider_runtime/legacy.py`, installed by `install_legacy_plugins`
 during `provider_registry.load_all()`) wraps the existing connector framework
 with **zero provider code**:
 
@@ -67,7 +67,7 @@ with **zero provider code**:
   `ConnectorDescriptor`, so **the plugin and the catalog cannot drift**.
 - Lifecycle operations delegate to the authoritative
   `IntegrationAdapter` / `ConnectorIntegrationAdapter`
-  (`services/integrations/adapter.py`), which in turn delegate to
+  (`services/backend/services/integrations/adapter.py`), which in turn delegate to
   `BaseConnector`, resolve secrets through the credential platform, and map
   legacy results onto `AdapterResult`.
 - Legacy namespaced event types are preserved — downstream consumers see no
@@ -78,7 +78,7 @@ with **zero provider code**:
 For a provider that wants canonical `commerce.*` events, real capability
 adapters, and UPR-native operation:
 
-1. Write a plugin package under `services/providers/<family>/` following
+1. Write a plugin package under `services/backend/services/providers/<family>/` following
    [PROVIDER-PLUGIN-SPEC](PROVIDER-PLUGIN-SPEC.md).
 2. Honor the manifest + §32 honesty invariants
    ([PROVIDER-MANIFEST-SPEC](PROVIDER-MANIFEST-SPEC.md)).
@@ -95,7 +95,7 @@ same shape:
 1. **Expose** — Shopify is already exposed via `LegacyConnectorPlugin` today
    (`shopify.ingestion.connector`); legacy `shopify.*` namespaced events keep
    flowing.
-2. **Build** — create `services/providers/shopify/` (plugin, adapters,
+2. **Build** — create `services/backend/services/providers/shopify/` (plugin, adapters,
    normalizer, fixtures) per the plugin spec.
 3. **Map events** — the normalizer maps Shopify order status → canonical
    `commerce.order.*` types and `CommerceOrder` → `OrderSnapshot`.
@@ -156,10 +156,10 @@ per-provider decommission, plus the config/secret projection engine (WS6).
 
 Because these six ship **no legacy `BaseConnector`**, there is no legacy path
 to decommission: they land directly as native plugins (path b). Each lives at
-`services/providers/<family>/` with an `install_<family>_providers(registry)`
+`services/backend/services/providers/<family>/` with an `install_<family>_providers(registry)`
 entry in its `__init__.py`, self-registers through the runtime's
 `LOCAL_PLUGIN_MODULES` discovery list
-(`services/provider_runtime/plugin.py`), and is covered by
+(`services/backend/services/provider_runtime/plugin.py`), and is covered by
 `tests/unit/test_provider_plugins.py` (55 collected tests: registry install,
 pull fetch/cursor/error-classification, and the claimed webhook schemes).
 The manifests are honest by construction: `certification_state` stays
@@ -170,7 +170,7 @@ certification-level follow-ons and are not claimed as build facts.
 
 Shopify is the one provider in this build that carries a legacy connector to
 decommission. The decommission procedure uses the retire helper in
-`services/integrations/connectors/registry.py`:
+`services/backend/services/integrations/connectors/registry.py`:
 `retire_connector_type(registry_state, connector_type)` returns a typed
 `RetireResult` (`retired` / `already_retired` / `unknown` /
 `not_eligible`) and is idempotent + audited (first success records

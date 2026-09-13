@@ -64,7 +64,7 @@ checking every consumer that resolves `$id` by string match.
 
 | Registry | `schemaVersion` | `contractVersion` | Lock-step with |
 |---|---|---|---|
-| `event-registry.json` | 2.2.0 | 0.1.0-alpha.0 | `packages/shared/events.ts`, `Backend Architecture/aether-backend/services/ingestion/generated_registry.py`, `consent-registry.json` (via `consent_purpose` refs), native iOS/Android regions (`mobile_native_regions` ownership category) |
+| `event-registry.json` | 2.2.0 | 0.1.0-alpha.0 | `packages/shared/events.ts`, `services/backend/services/ingestion/generated_registry.py`, `consent-registry.json` (via `consent_purpose` refs), native iOS/Android regions (`mobile_native_regions` ownership category) |
 | `consent-registry.json` | 2.0.0 | 0.1.0-alpha.0 | `event-registry.json` (event `consent_purpose` must exist here), `packages/shared/consent.ts` |
 | `integration-consent-registry.json` | 1.0.0 | 8.13.0 | `consent-registry.json` (shares consent-purpose vocabulary), `processingDecisionVersion`/`canonicalConsentReceiptVersion` fields versioned independently |
 | `graph-mutation-registry.json` | 1.0.0 | 1.0.0 | `intelligence-projection-registry.json` (`graphMutationPolicies` enum reused), `spine-registry.json` |
@@ -73,8 +73,8 @@ checking every consumer that resolves `$id` by string match.
 | `relationship-predicate-registry.json` | 1.0.0 | 1.0.0 | `relationship-motif-registry.json`, `packages/shared/relationship-predicate-registry.ts` |
 | `relationship-motif-registry.json` | 1.0.0 | 1.0.0 | `relationship-predicate-registry.json` (motifs reference predicate families), `packages/shared/relationship-motif-registry.ts` |
 | `relationship-fidelity-vector.schema.json` | - | - | `relationship-predicate-registry.json`, `relationship-motif-registry.json` |
-| `observation-envelope-registry.json` | 1.0.0 | - | `packages/shared/observation-envelope.ts`, `Backend Architecture/aether-backend/shared/observation/envelope.py` (three-way parity enforced by `tests/contracts/test_observation_envelope_parity.py`) |
-| `rights-vocabulary.json` | 2.0.0 | 0.1.0-alpha.0 | `packages/shared/data-rights.ts`, `Backend Architecture/**/data_rights/models.py`, `spine-registry.json` (rights_irrl row) |
+| `observation-envelope-registry.json` | 1.0.0 | - | `packages/shared/observation-envelope.ts`, `services/backend/shared/observation/envelope.py` (three-way parity enforced by `tests/contracts/test_observation_envelope_parity.py`) |
+| `rights-vocabulary.json` | 2.0.0 | 0.1.0-alpha.0 | `packages/shared/data-rights.ts`, `docs/archive/legacy-architecture/backend/**/data_rights/models.py`, `spine-registry.json` (rights_irrl row) |
 | `readiness-vocabulary.json` | 2.0.0 | 2.0.0 | Consumed by release-readiness tooling; no direct registry lock-step |
 | `metric-registry.json` | - | 1 | `packages/shared/measurement-contract.ts`, `docs/_generated/metric-registry-table.md` |
 | `outcome-type-registry.json` | 1 | 1.0.0 | `interaction-vocabulary.json` (shared actor/evidence vocabulary) |

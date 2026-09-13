@@ -23,11 +23,11 @@ executive-directive preamble, not a requirement row) against the repository.
 
 1. **Deployed beats un-deployed.** Only the Python monolith is built/referenced
    by deployment authority: root `docker-compose.yml`, `.github/workflows/deploy.yml`
-   (ECR), `AWS Deployment/main.tf` (+ `AWS Deployment/aether-aws/terraform/…`),
+   (ECR), `docs/archive/legacy-architecture/aws-deployment/main.tf` (+ `deploy/aws/terraform/…`),
    `config/runtime_deployment.yaml`. Neither TypeScript duplicate tree appears in
    any of them.
 2. **Live ingress beats README claims.** Canonical SDK ingress is `POST /v1/batch`
-   in `Backend Architecture/aether-backend/services/ingestion/batch.py`; SDKs
+   in `services/backend/services/ingestion/batch.py`; SDKs
    target `api.aether.io` / `ingest.aether.so`, never port `3001`.
 3. **Generated/registry artifacts beat hand-maintained mirrors.** The Contract
    Spine source is `packages/shared/contracts/event-registry.json`; generated TS/
@@ -56,11 +56,11 @@ into these frozen rows — they are tracked live in
 
 | Blueprint § | Classification | File evidence | Owning phase |
 |---|---|---|---|
-| 1 — Target end-to-end architecture | **MISALIGNED** | Two `/v1/batch` acceptors + two lake stacks; canonical path exists only in Python: `Backend Architecture/aether-backend/services/ingestion/batch.py`, root `docker-compose.yml`; duplicate claims in `Data Ingestion Layer/README.md` (:3001) and `Data Lake Architecture/README.md` | Phase 0 (deprecate duplicates) → WS-B |
-| 2 — Point 1: Observation Boundary | **MISALIGNED** | No single observation model after adapters; heterogeneous envelopes on one validated topic; five+ Bronze/Silver pipelines — `…/services/ingestion/workers.py`, `…/bronze_bulk.py`, `Backend Architecture/migrations/…/20260720_silver_import_facts.py` (synthesized `TEXT source_event_id`) | WS-B |
-| 3 — Point 2: Two-Envelope Architecture | **PARTIAL** | Envelope B = canonical field registry + pydantic runtime model + passive TS twin + flag-gated /v1/batch adoption (WS-A5, default OFF) — `packages/shared/contracts/observation-envelope-registry.json`, `Backend Architecture/aether-backend/shared/observation/envelope.py`, `packages/shared/observation-envelope.ts`, `…/services/ingestion/observation_envelope.py`, `…/batch.py`; `BaseEvent` (Envelope A) still the client envelope and the flat dict still the consumption surface until WS-B converges adapters | WS-A5 (model, flag) → WS-B (universal) |
+| 1 — Target end-to-end architecture | **MISALIGNED** | Two `/v1/batch` acceptors + two lake stacks; canonical path exists only in Python: `services/backend/services/ingestion/batch.py`, root `docker-compose.yml`; duplicate claims in `docs/archive/legacy-architecture/data-ingestion-layer/README.md` (:3001) and `docs/archive/legacy-architecture/data-lake-architecture/README.md` | Phase 0 (deprecate duplicates) → WS-B |
+| 2 — Point 1: Observation Boundary | **MISALIGNED** | No single observation model after adapters; heterogeneous envelopes on one validated topic; five+ Bronze/Silver pipelines — `…/services/ingestion/workers.py`, `…/bronze_bulk.py`, `docs/archive/legacy-architecture/backend/migrations/…/20260720_silver_import_facts.py` (synthesized `TEXT source_event_id`) | WS-B |
+| 3 — Point 2: Two-Envelope Architecture | **PARTIAL** | Envelope B = canonical field registry + pydantic runtime model + passive TS twin + flag-gated /v1/batch adoption (WS-A5, default OFF) — `packages/shared/contracts/observation-envelope-registry.json`, `services/backend/shared/observation/envelope.py`, `packages/shared/observation-envelope.ts`, `…/services/ingestion/observation_envelope.py`, `…/batch.py`; `BaseEvent` (Envelope A) still the client envelope and the flat dict still the consumption surface until WS-B converges adapters | WS-A5 (model, flag) → WS-B (universal) |
 | 4 — Point 3: Contract Spine as Generator | **MISALIGNED** | Spine real + drift-gated, but native iOS/Android registries are hand-maintained and documented never-generated; `packages/web/src/types.ts` is a drifted hand-mirror; only consent is generated — `packages/shared/contracts/event-registry.json`, `scripts/generate_contracts.py`, `packages/ios/Sources/AetherSDK/Aether.swift`, `scripts/validate_mobile_event_parity.py` | WS-A (+ Phase 0 drift gates) |
-| 5 — Point 4: Universalize Ingress Adapters | **MISALIGNED** | Deprecated `POST /v1/ingest/events[/batch]` still mounted and publishes un-validated events into the "validated" topic; webhook/feed/import paths distinct — `Backend Architecture/aether-backend/main.py`, `…/services/ingestion/routes.py` | Phase 0 (kill aliases) → WS-B |
+| 5 — Point 4: Universalize Ingress Adapters | **MISALIGNED** | Deprecated `POST /v1/ingest/events[/batch]` still mounted and publishes un-validated events into the "validated" topic; webhook/feed/import paths distinct — `services/backend/main.py`, `…/services/ingestion/routes.py` | Phase 0 (kill aliases) → WS-B |
 | 6 — Point 5: Identity via Subject Hints | **MISALIGNED** | Web is hints-only/aligned; native SDKs stamp canonical top-level ids and re-stamp client-side after `/sdk/identity/resolve`; client `identityConfidence` persisted verbatim to Silver — `packages/ios/Sources/AetherSDK/Aether.swift`, `packages/android/src/…/Aether.kt`, `…/services/ingestion/validation.py` (`strip_canonical_entity_id`), `…/services/silver/projectors/touchpoint_projector.py` | WS-C |
 | 7 — Point 6: Temporal Observation Contract | **PARTIAL** | `EventTemporalEnvelope` server-built but flag-gated default OFF and dropped at the Silver boundary (projectors re-read the raw timestamp string) | WS-D |
 | 8 — Point 7: Correlation First-Class | **MISALIGNED** | Correlation stored as opaque JSONB only; no columns/registry; dropped at promotion; native SDKs carry none | WS-D (+ WS-C native correlation) |
@@ -74,7 +74,7 @@ into these frozen rows — they are tracked live in
 | 16 — Point 15: Universal Backend Projection Pipeline | **MISALIGNED** | Five+ Bronze/Silver pipelines (SDK dispatcher · imports inline to `silver_import_facts` · DUNE lake promotion · connectors Bronze-only · semantic bypassing to `silver_semantic_observations`) instead of one normalization spine | WS-B |
 | 17 — Point 16: Ingestion Observable in Kyber | **MISSING** | No Observation Inspector (RAW→…→METRICS); no ingestion funnel metrics; SDK-fleet stack built but unmounted; the one pipeline hook calls a phantom `GET /v1/health/pipeline` | WS-E |
 | 18 — Point 17: Conformance/Compatibility/Migration Testing | **PARTIAL** | Drift/parity gates strong; no golden cross-path fixture; exhaustive native parity forces iOS/Android to mirror all 403 event types incl. server-only/derived; shadow/staged enforcement absent | Phase 0 (first gates) → WS-E |
-| 19 — Point 18: Controlled Release Program | **MISSING** | Governance encodes no ingestion-architecture invariants; physical-dir realignment and duplicate-tree deprecation pending; ADR numbering collision present at baseline | Phase 0 |
+| 19 — Point 18: Controlled Release Program | **PARTIAL** | Governance now encodes canonical-tree ownership, SDK import boundaries, and the physical root-tree migration; remaining gaps are the runtime invariants listed below and the historical ADR baseline record | Phase 0 + remediation |
 | 20 — Web SDK runtime example | **EXISTS** | Web is the aligned reference surface — thin/observe-only, registry-driven consent, endpoint `https://api.aether.io` (`packages/web/src/index.ts`); nuances: DNT advisory-only, consent defaults all-false | Phase 0 (preserve as bedrock) |
 | 21 — Ingestion runtime | **MISALIGNED** | Three heterogeneous envelopes share `SDK_EVENTS_VALIDATED`; Silver workers branch on `source_service`/payload keys — `…/services/ingestion/workers.py`; deprecated alias publishes un-validated into the same topic | WS-B |
 | 22 — Backend processing example | **PARTIAL** | Silver normalizers/projectors real on the canonical path; branching on source required; projectors re-read the raw client timestamp (temporal envelope dropped) | WS-D |
@@ -89,7 +89,7 @@ into these frozen rows — they are tracked live in
 | 31 — Downstream coverage matrix | **PARTIAL** | SDKs thin (read/no-write) ✓; Bronze raw ✓; normalizers/identity partial; episodes/outcome engines absent | WS-D |
 | 32 — Release gates (A–G) | **MISSING** | None of Gates A–G is encoded in CI; Phase 0 adds the first two (canonical-tree ownership, SDK import boundary); Gate G (Kyber ops) awaits WS-E | Phase 0 → WS-E |
 | 33 — What success looks like | **PARTIAL** | Success conditions partly met (SDK thinness largely holds); single-observation-model + Envelope B remain the blockers | Phase 0 (bedrock) + WS-B |
-| 34 — Final target architecture | **MISSING** | Repository does not yet match the target tree; physical realignment deferred; Phase 0 begins convergence (deprecate duplicates, resolve ADR collision, add gates) | Phase 0 |
+| 34 — Final target architecture | **PARTIAL** | Repository root and active implementation paths now match the target tree; deprecated duplicate trees remain only as explicitly archived historical material, while Envelope B and runtime invariant gaps remain tracked in the workstreams | Phase 0 + remediation |
 
 ### Invariant matrix (§29 — the 18 hard gates)
 
@@ -124,7 +124,8 @@ steer future work away from).
 
 ## Deprecated legacy inventory
 
-Phase 0 deprecates without deleting (see [Deferred constraints](#deferred-constraints)).
+The structural remediation preserves historical material without treating it as
+runtime code (see [Deferred constraints](#deferred-constraints)).
 The ownership-map category introduced by this slice (`legacy_ingestion_tree_mutation`
 in `docs/source-of-truth/repo_consistency_ownership.json` /
 `docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md`) requires this
@@ -133,9 +134,9 @@ acknowledgment surface when any of these trees is touched.
 
 | Legacy artifact | Why deprecated | Evidence | Disposition |
 |---|---|---|---|
-| `Data Ingestion Layer/` | Un-deployed TypeScript duplicate of the backend; `package.json` `name` is literally `"aether-backend"`; port `:3001`; own `/v1/batch` | `Data Ingestion Layer/package.json`, `Data Ingestion Layer/README.md` | DEPRECATED — do-not-extend banner (Phase-0 commit 3); no code may be added |
-| `Data Lake Architecture/` | Un-deployed TypeScript duplicate lake (own Bronze/Silver/Gold, 90/365/730d retention, own `/v1/batch`) parallel to the Python lake/silver with financial-7y retention | `Data Lake Architecture/README.md` | DEPRECATED — do-not-extend banner (Phase-0 commit 3); no code may be added |
-| Orphaned `Backend Architecture/` root modules | Dead legacy outside `aether-backend/` — `auth.py cache.py common.py events.py graph.py limiter.py logger.py repos.py routes.py settings.py migrations/ mnt/ services/{delegation,journey-service,web3}` | `Backend Architecture/README.md` | DEPRECATED — do-not-extend; enumerated in `Backend Architecture/README.md` (Phase-0 commit 3) |
+| `docs/archive/legacy-architecture/data-ingestion-layer/` | Un-deployed TypeScript duplicate of the backend; `package.json` `name` is literally `"aether-backend"`; port `:3001`; own `/v1/batch` | `docs/archive/legacy-architecture/data-ingestion-layer/package.json`, `docs/archive/legacy-architecture/data-ingestion-layer/README.md` | DEPRECATED — do-not-extend banner (Phase-0 commit 3); no code may be added |
+| `docs/archive/legacy-architecture/data-lake-architecture/` | Un-deployed TypeScript duplicate lake (own Bronze/Silver/Gold, 90/365/730d retention, own `/v1/batch`) parallel to the Python lake/silver with financial-7y retention | `docs/archive/legacy-architecture/data-lake-architecture/README.md` | DEPRECATED — do-not-extend banner (Phase-0 commit 3); no code may be added |
+| Orphaned `docs/archive/legacy-architecture/backend/` root modules | Dead legacy outside `aether-backend/` — `auth.py cache.py common.py events.py graph.py limiter.py logger.py repos.py routes.py settings.py migrations/ mnt/ services/{delegation,journey-service,web3}` | `docs/archive/legacy-architecture/backend/README.md` | DEPRECATED — do-not-extend; enumerated in `docs/archive/legacy-architecture/backend/README.md` (Phase-0 commit 3) |
 
 Kept alive (as of baseline) only by `scripts/bump_version.py` version-sync,
 `config/runtime_fallbacks.yaml`, `config/test_suites.yaml`, and
@@ -168,10 +169,11 @@ See `EXECUTION_STATE.md` for the phase that lands them.
 
 ## Deferred constraints
 
-- **No physical deletion in Phase 0.** The legacy trees are kept alive by
-  version-sync / runtime-fallback / test-suite / temporal-integrity coupling;
-  removal is a clean, dedicated later slice once that coupling is cut. Banners +
-  single-owner registration stop new code entering the dead trees at near-zero risk.
+- **Historical archive retained.** The legacy trees were moved under
+  `docs/archive/legacy-architecture/` rather than deleted. Version-sync and
+  compatibility checks may still inspect those files, but no runtime or new
+  implementation path may target them; the ownership registry and impact graph
+  make that boundary explicit.
 - **No Envelope B / field-trust build in Phase 0** — that is Workstream A
   (contract foundation). This slice fixes the governance that lets new work steer
   toward the invariants; it does not implement them.

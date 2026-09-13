@@ -7,7 +7,7 @@ audience: [architect, dev-senior, ops]
 status: experimental
 since_version: 0.1.0
 canonical_owner: compliance@aether
-source_files: [Backend Architecture/aether-backend/services/integrations/data_rights/models.py, Backend Architecture/aether-backend/services/integrations/data_rights/service.py]
+source_files: [services/backend/services/integrations/data_rights/models.py, services/backend/services/integrations/data_rights/service.py]
 last_synced_commit: pending
 estimated_read_minutes: 9
 ---
@@ -23,7 +23,7 @@ This ledger is the source-of-truth narrative for the `DataRightsGrant` authority
 and reconciles it with the canonical Rights Authority blueprint
 ([RIGHTS_AUTHORITY_BLUEPRINT.md](./RIGHTS_AUTHORITY_BLUEPRINT.md)), which governs
 the structured extension described below. The field table reflects the **real
-Python model** (`services/integrations/data_rights/models.py`), presented as the
+Python model** (`services/backend/services/integrations/data_rights/models.py`), presented as the
 legacy boolean surface (today's authoritative field set) alongside the structured
 nested view the blueprint adds.
 
@@ -170,7 +170,7 @@ over, Aether-generated intelligence.
 
 `DataRightsService` remains the **fail-closed grant ledger** and gatekeeper at
 lake/graph/training/baseline entry points. The blueprint adds an **Effective
-Rights Resolver** (`services/rights_authority/`) that composes each grant with
+Rights Resolver** (`services/backend/services/rights_authority/`) that composes each grant with
 `ConsentPolicyDecision`, the tenant's Intelligence Rights Profile, retention
 policy, legal hold, residency, and temporal effective date into a **durable,
 immutable, versioned `RightsDecision`** (`rdec_…`) recorded in the

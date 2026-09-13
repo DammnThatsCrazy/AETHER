@@ -7,7 +7,7 @@ audience: [architect, dev-senior]
 status: experimental
 since_version: 0.1.0
 canonical_owner: platform@aether
-source_files: [Backend Architecture/aether-backend/shared/integration_contracts/catalog.py, Backend Architecture/aether-backend/shared/integration_contracts/experience.py, Backend Architecture/aether-backend/shared/certification/readiness.py, Backend Architecture/aether-backend/services/integrations/connectors/catalog_endpoints.py, frontend/aether/src/test/e2e/lifecycle.harness.ts, packages/shared/connector-taxonomy.ts]
+source_files: [services/backend/shared/integration_contracts/catalog.py, services/backend/shared/integration_contracts/experience.py, services/backend/shared/certification/readiness.py, services/backend/services/integrations/connectors/catalog_endpoints.py, frontend/aether/src/test/e2e/lifecycle.harness.ts, packages/shared/connector-taxonomy.ts]
 last_synced_commit: 8b1ca3dc
 estimated_read_minutes: 12
 toc_depth: 3
@@ -140,7 +140,7 @@ not advertise live capability they cannot demonstrate (§31 data truth).
 
 There is **one** customer catalog: a derived projection over the authoritative
 backend manifest union in
-`Backend Architecture/aether-backend/shared/integration_contracts/catalog.py`
+`services/backend/shared/integration_contracts/catalog.py`
 (`ALL_MANIFESTS` = four-group union of 36 `family.product.capability`
 identities), **never** a second storage model. It is exposed through
 `/v1/integration-catalog` (33 visible entries; the 3 deferred credit bureaus are

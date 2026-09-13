@@ -18,7 +18,7 @@ since_version: 0.1.0
 
 ### 1.1 Query Rate Limiting (PARTIAL)
 
-**File:** `Backend Architecture/aether-backend/shared/rate_limit/limiter.py`
+**File:** `services/backend/shared/rate_limit/limiter.py`
 
 - Token bucket algorithm with per-tier limits (FREE/PRO/ENTERPRISE)
 - Per-API-key tracking via in-memory dictionary
@@ -29,7 +29,7 @@ since_version: 0.1.0
 
 ### 1.2 Authentication & Tenant Context (IMPLEMENTED)
 
-**File:** `Backend Architecture/aether-backend/middleware/middleware.py`
+**File:** `services/backend/middleware/middleware.py`
 
 - API key validation and JWT bearer tokens (lines 100-113)
 - Tenant context extracted per request
@@ -37,7 +37,7 @@ since_version: 0.1.0
 
 ### 1.3 Prediction Caching (IMPLEMENTED)
 
-**File:** `ML Models/aether-ml/serving/src/cache.py`
+**File:** `services/ml/serving/src/cache.py`
 
 - Redis-backed prediction cache with per-model TTLs (30s-24h)
 - Deterministic cache keys from feature hashes
@@ -45,7 +45,7 @@ since_version: 0.1.0
 
 ### 1.4 Fraud Detection Signals (NOT APPLIED TO ML)
 
-**File:** `Backend Architecture/aether-backend/services/fraud/signals.py`
+**File:** `services/backend/services/fraud/signals.py`
 
 - Bot detection, velocity analysis, device fingerprinting, geographic analysis
 - Excellent detection system but only applied to transaction/user-behavior endpoints
@@ -53,7 +53,7 @@ since_version: 0.1.0
 
 ### 1.5 Drift Monitoring (NOT EXTRACTION-SPECIFIC)
 
-**File:** `ML Models/aether-ml/monitoring/monitor.py`
+**File:** `services/ml/monitoring/monitor.py`
 
 - PSI, Kolmogorov-Smirnov, Jensen-Shannon divergence on feature distributions
 - Monitors data drift in production, not query pattern anomalies
@@ -81,11 +81,11 @@ since_version: 0.1.0
 
 ### Attack Surface
 
-The ML serving API (`ML Models/aether-ml/serving/src/api.py`) exposes 9 models across 8 prediction endpoints plus a batch endpoint. All return raw model outputs with 4-decimal precision. There is no output perturbation, no watermarking, and no query anomaly detection.
+The ML serving API (`services/ml/serving/src/api.py`) exposes 9 models across 8 prediction endpoints plus a batch endpoint. All return raw model outputs with 4-decimal precision. There is no output perturbation, no watermarking, and no query anomaly detection.
 
 ### Critical Vulnerability: Distillation Code
 
-`ML Models/aether-ml/optimization/distillation.py` implements knowledge distillation including soft-label extraction via `predict_proba()`. An attacker could replicate this exact workflow against the API.
+`services/ml/optimization/distillation.py` implements knowledge distillation including soft-label extraction via `predict_proba()`. An attacker could replicate this exact workflow against the API.
 
 ### Estimated Attack Complexity: **LOW**
 
@@ -112,17 +112,17 @@ An attacker with a valid API key can:
 
 | File | Lines | Finding |
 |------|-------|---------|
-| `ML Models/aether-ml/serving/src/api.py` | 778 | 9 model endpoints, no extraction defenses |
-| `ML Models/aether-ml/serving/src/batch_predictor.py` | 539 | Batch scoring, no defenses |
-| `ML Models/aether-ml/serving/src/cache.py` | 381 | Redis cache, defense potential unused |
-| `ML Models/aether-ml/server/models.py` | 954 | 4 server models, no watermarking |
-| `ML Models/aether-ml/edge/models.py` | ~400 | 3 edge models, no watermarking |
-| `ML Models/aether-ml/optimization/distillation.py` | 262 | Enables extraction attacks |
-| `ML Models/aether-ml/monitoring/monitor.py` | ~285 | Drift detection only |
-| `Backend Architecture/aether-backend/middleware/middleware.py` | 177 | Auth + basic rate limiting |
-| `Backend Architecture/aether-backend/shared/rate_limit/limiter.py` | 88 | Token bucket, in-memory |
-| `Backend Architecture/aether-backend/services/fraud/signals.py` | ~392 | Fraud signals, not applied to ML |
-| `Backend Architecture/aether-backend/services/fraud/engine.py` | ~300 | Fraud engine, not applied to ML |
+| `services/ml/serving/src/api.py` | 778 | 9 model endpoints, no extraction defenses |
+| `services/ml/serving/src/batch_predictor.py` | 539 | Batch scoring, no defenses |
+| `services/ml/serving/src/cache.py` | 381 | Redis cache, defense potential unused |
+| `services/ml/server/models.py` | 954 | 4 server models, no watermarking |
+| `services/ml/edge/models.py` | ~400 | 3 edge models, no watermarking |
+| `services/ml/optimization/distillation.py` | 262 | Enables extraction attacks |
+| `services/ml/monitoring/monitor.py` | ~285 | Drift detection only |
+| `services/backend/middleware/middleware.py` | 177 | Auth + basic rate limiting |
+| `services/backend/shared/rate_limit/limiter.py` | 88 | Token bucket, in-memory |
+| `services/backend/services/fraud/signals.py` | ~392 | Fraud signals, not applied to ML |
+| `services/backend/services/fraud/engine.py` | ~300 | Fraud engine, not applied to ML |
 
 ---
 

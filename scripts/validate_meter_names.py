@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-BACKEND = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = ROOT / "services" / "backend"
 
 # Canonical meter names for the ingestion spine.
 # Names not in this set are flagged as non-canonical in the checked paths.

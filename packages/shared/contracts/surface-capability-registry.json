@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "contractVersion": "1.0.0",
-  "description": "Canonical surface-capability registry for the Unified Exploration Fabric. Each exploration surface declares which filter-field categories, temporal modes, and views it supports plus its feature switches, so the fabric can report every filter's disposition honestly instead of silently dropping it. Generated artifacts: packages/shared/surface-capabilities.ts, Backend Architecture/aether-backend/shared/exploration/generated_surfaces.py, docs/_generated/surface-capability-table.md (via scripts/generate_platform_contracts.py).",
+  "description": "Canonical surface-capability registry for the Unified Exploration Fabric. Each exploration surface declares which filter-field categories, temporal modes, and views it supports plus its feature switches, so the fabric can report every filter's disposition honestly instead of silently dropping it. Generated artifacts: packages/shared/surface-capabilities.ts, services/backend/shared/exploration/generated_surfaces.py, docs/_generated/surface-capability-table.md (via scripts/generate_platform_contracts.py).",
   "temporalModes": ["window", "as_of", "compare", "relative"],
   "views": ["graph", "table", "map", "timeline", "flow", "comparison"],
   "filterDispositions": ["applied", "translated", "unsupported", "suppressed", "not_applicable"],

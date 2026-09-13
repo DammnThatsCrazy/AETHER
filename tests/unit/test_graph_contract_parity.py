@@ -42,7 +42,7 @@ def _parse_ts_edge_layer_map() -> dict[str, str]:
 
 def _parse_py_edge_layer_map() -> dict[str, str]:
     """Extract the _EDGE_LAYER_MAP from shared/graph/relationship_layers.py."""
-    py_path = REPO_ROOT / "Backend Architecture/aether-backend/shared/graph/relationship_layers.py"
+    py_path = REPO_ROOT / "services/backend/shared/graph/relationship_layers.py"
     content = py_path.read_text(encoding="utf-8")
 
     result: dict[str, str] = {}
@@ -112,7 +112,7 @@ def test_ts_relationship_layers_constant_has_four_entries() -> None:
 
 def test_graph_contract_py_exists_and_has_four_layers() -> None:
     """shared/graph/graph_contract.py must exist and export all four layers."""
-    py_path = REPO_ROOT / "Backend Architecture/aether-backend/shared/graph/graph_contract.py"
+    py_path = REPO_ROOT / "services/backend/shared/graph/graph_contract.py"
     assert py_path.exists(), "shared/graph/graph_contract.py not found"
     content = py_path.read_text(encoding="utf-8")
     for layer in ("H2H", "H2A", "A2H", "A2A"):
@@ -156,7 +156,7 @@ def _parse_ts_lifecycle_state() -> set[str]:
 
 def _parse_py_frozenset(name: str) -> set[str]:
     """Extract string values from a named frozenset in graph_contract.py."""
-    py_path = REPO_ROOT / "Backend Architecture/aether-backend/shared/graph/graph_contract.py"
+    py_path = REPO_ROOT / "services/backend/shared/graph/graph_contract.py"
     content = py_path.read_text(encoding="utf-8")
     pattern = rf"{name}:\s*frozenset\[str\]\s*=\s*frozenset\({{([^}}]+)}}\)"
     match = re.search(pattern, content, re.DOTALL)

@@ -1,18 +1,23 @@
 # =============================================================================
-# Aether journey-service — CI/CD descriptor
+# Aether journey-service — legacy fixture descriptor
+#
+# This descriptor is retained only for the historical journey-service tests.
+# The active journey capability is implemented in
+# services/backend/services/measurement/ and is not a standalone Compose
+# service. The root Makefile and GitHub Actions workflows are authoritative.
 # =============================================================================
 service: journey-service
 language: python
 python_version: "3.11"
 
 build:
-  dockerfile: "Backend Architecture/services/journey-service/Dockerfile"
-  context: "Backend Architecture/services/journey-service"
+  dockerfile: "docs/archive/legacy-architecture/backend/services/journey-service/Dockerfile"
+  context: "docs/archive/legacy-architecture/backend/services/journey-service"
   image: aether/journey-service
 
 test:
   unit:
-    command: pytest -q "Backend Architecture/services/journey-service/tests"
+    command: pytest -q "docs/archive/legacy-architecture/backend/services/journey-service/tests"
   integration:
     command: pytest -q "tests/integration/journey"
 
@@ -41,9 +46,9 @@ dependencies:
 
 migrations:
   postgres:
-    - "Backend Architecture/migrations/2026_05_actors_journeys.sql"
+    - "docs/archive/legacy-architecture/backend/migrations/2026_05_actors_journeys.sql"
   clickhouse:
-    - "Data Lake Architecture/aether-Datalake-backend/services/data-lake/src/schema/migrations/2026_05_event_extension.sql"
+    - "docs/archive/legacy-architecture/data-lake-architecture/aether-Datalake-backend/services/data-lake/src/schema/migrations/2026_05_event_extension.sql"
 
 observability:
   metrics_port: 8080

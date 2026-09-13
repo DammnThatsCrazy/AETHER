@@ -1,6 +1,6 @@
 """Shared fixtures for the M3 Social Silver test package.
 
-Bootstrap: the projectors under test live in ``Backend Architecture/aether-backend``.
+Bootstrap: the projectors under test live in ``services/backend``.
 That backend is ALSO pip-installed as an editable package that points at the
 *other* AETHER checkout (``/Users/osazehunt/AETHER``), whose ``shared`` /
 ``services`` trees predate the M3 social modules. We prepend THIS worktree's
@@ -18,7 +18,7 @@ import pytest
 
 # tests/unit/social360/conftest.py -> parents[3] is the repo root.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_BACKEND = _REPO_ROOT / "Backend Architecture" / "aether-backend"
+_BACKEND = _REPO_ROOT / "services" / "backend"
 if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 

@@ -27,7 +27,7 @@ description: >-
 computations:
   # ---- Campaign / gold materialization (P0) — migrated ---------------------
   - computation_id: gold.ad_spend.ctr
-    file: Backend Architecture/aether-backend/services/measurement/engine/gold_materializer.py
+    file: services/backend/services/measurement/engine/gold_materializer.py
     symbol: materialize_campaign_performance_daily
     domain: campaign
     current_formula: clicks / impressions (zero-denominator persisted as 0.0)
@@ -45,7 +45,7 @@ computations:
     migration_state: migrated
 
   - computation_id: gold.ad_spend.cpc
-    file: Backend Architecture/aether-backend/services/measurement/engine/gold_materializer.py
+    file: services/backend/services/measurement/engine/gold_materializer.py
     symbol: materialize_campaign_performance_daily
     domain: campaign
     current_formula: media_spend / clicks
@@ -63,7 +63,7 @@ computations:
     migration_state: migrated
 
   - computation_id: gold.ad_spend.roas
-    file: Backend Architecture/aether-backend/services/measurement/engine/gold_materializer.py
+    file: services/backend/services/measurement/engine/gold_materializer.py
     symbol: materialize_campaign_performance_daily
     domain: campaign
     current_formula: total_attributed_revenue / total_spend
@@ -81,7 +81,7 @@ computations:
     migration_state: migrated
 
   - computation_id: gold.ad_spend.attributed_conversions
-    file: Backend Architecture/aether-backend/services/measurement/engine/gold_materializer.py
+    file: services/backend/services/measurement/engine/gold_materializer.py
     symbol: materialize_campaign_performance_daily
     domain: campaign
     current_formula: int(total_attributed_conversions) (fractional truncation)
@@ -99,7 +99,7 @@ computations:
     migration_state: migrated
 
   - computation_id: gold.journey_economics.allocated_cost
-    file: Backend Architecture/aether-backend/services/measurement/engine/gold_materializer.py
+    file: services/backend/services/measurement/engine/gold_materializer.py
     symbol: materialize_journey_economics
     domain: journey
     current_formula: sum(full campaign spend per campaign) attributed to each journey
@@ -118,7 +118,7 @@ computations:
 
   # ---- Financial value package (P0) — unpriced subtrahend fixes ------------
   - computation_id: value.portfolio.net_worth_usd
-    file: Backend Architecture/aether-backend/services/value/portfolio_rules.py
+    file: services/backend/services/value/portfolio_rules.py
     symbol: net_worth_usd
     domain: financial
     current_formula: total_portfolio_usd - (liabilities_usd or 0)
@@ -136,7 +136,7 @@ computations:
     migration_state: migrated
 
   - computation_id: value.tvl.net_tvl
-    file: Backend Architecture/aether-backend/services/value/tvl_rules.py
+    file: services/backend/services/value/tvl_rules.py
     symbol: net_tvl
     domain: financial
     current_formula: gross_tvl - (debt or 0)
@@ -156,7 +156,7 @@ computations:
   # ---- Domain honesty migrations (P&L / billing / trust / fraud / ML /
   #      behavioral / cluster) — migrated onto registered definitions ---------
   - computation_id: pnl.tvl_delta_as_daily_pnl
-    file: Backend Architecture/aether-backend/services/pnl/pnl_calculator.py
+    file: services/backend/services/pnl/pnl_calculator.py
     symbol: compute / _best_worst_day
     domain: financial
     current_formula: tvl_end - tvl_start labeled as P&L (balance snapshot delta)
@@ -177,7 +177,7 @@ computations:
     migration_state: migrated
 
   - computation_id: billing.revops.usage_summary
-    file: Backend Architecture/aether-backend/services/billing/revops.py
+    file: services/backend/services/billing/revops.py
     symbol: UsageSummaryService.calculate
     domain: billing
     current_formula: sum(quantity) over find_many(limit=10000) then python period filter
@@ -198,7 +198,7 @@ computations:
     migration_state: migrated
 
   - computation_id: trust.composite_scalar
-    file: Backend Architecture/aether-backend/shared/scoring/trust_score.py
+    file: services/backend/shared/scoring/trust_score.py
     symbol: TrustScoreComposite.compute
     domain: trust
     current_formula: zero risk-evidence -> transaction_trust = 1.0 (max trust)
@@ -216,7 +216,7 @@ computations:
     migration_state: migrated
 
   - computation_id: fraud.evaluation.risk_score
-    file: Backend Architecture/aether-backend/services/fraud/evaluation.py
+    file: services/backend/services/fraud/evaluation.py
     symbol: _run_evaluation
     domain: fraud
     current_formula: distinct_signal_count * 10 (+25 circular) labeled toward probability
@@ -234,7 +234,7 @@ computations:
     migration_state: migrated
 
   - computation_id: ml_serving.prediction_cache_key
-    file: Backend Architecture/aether-backend/services/ml_serving/routes.py
+    file: services/backend/services/ml_serving/routes.py
     symbol: predict
     domain: ml
     current_formula: cache key = model + entity_id (omits feature digest / consent / tenant)
@@ -252,7 +252,7 @@ computations:
     migration_state: migrated
 
   - computation_id: behavioral.staleness_hardcoded_date
-    file: Backend Architecture/aether-backend/services/behavioral/engines.py
+    file: services/backend/services/behavioral/engines.py
     symbol: compute_source_shadow
     domain: behavioral
     current_formula: staleness vs hardcoded calendar date "2026-03-01"
@@ -270,7 +270,7 @@ computations:
     migration_state: migrated
 
   - computation_id: cluster.rollup.revenue_spend
-    file: Backend Architecture/aether-backend/services/cluster/routes.py
+    file: services/backend/services/cluster/routes.py
     symbol: cluster economics rollup
     domain: cluster
     current_formula: sum(float(member revenue/spend)) currency-blind, USD-labeled

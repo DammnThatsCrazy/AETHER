@@ -19,7 +19,7 @@ Required env vars:
 
 Optional:
   ML_ARTIFACT_DIR      — override the default artifact output directory
-                         (default: ML Models/aether-ml/artifacts)
+                         (default: services/ml/artifacts)
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ import sys
 import json
 from pathlib import Path
 
-ML_ROOT = Path(__file__).parent.parent / "ML Models" / "aether-ml"
+ML_ROOT = Path(__file__).parent.parent / "services" / "ml"
 sys.path.insert(0, str(ML_ROOT))
 
 

@@ -26,9 +26,9 @@ repository_ceiling:
   - Insert provider credentials into the credential platform; run credentials-preflight.
   remaining_is_repository_controlled: false
   evidence:
-  - Backend Architecture/aether-backend/services/integrations/connectors/adapters.py
-  - Backend Architecture/aether-backend/services/notification_intelligence/
-  - Backend Architecture/aether-backend/tests/test_slack_notify_e2e.py
+  - services/backend/services/integrations/connectors/adapters.py
+  - services/backend/services/notification_intelligence/
+  - services/backend/tests/test_slack_notify_e2e.py
 implementation:
   state: TURNKEY
   denominator: in-scope repository controls (migration-derived)
@@ -129,7 +129,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: Backend Architecture/aether-backend/services/integrations/connectors/adapters.py'
+  - 'repository evidence: services/backend/services/integrations/connectors/adapters.py'
   evidence_gaps:
   - credentialed environment execution not yet performed
 release_profiles:

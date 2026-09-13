@@ -33,16 +33,20 @@ Core surfaces include:
 | Area | Path |
 |---|---|
 | Applications | `apps/`, `frontend/` |
-| Backend services | `Backend Architecture/aether-backend/` |
+| Backend services | `services/backend/` |
 | Shared packages and SDKs | `packages/` |
-| Provider connectors | `connectors/`, `docs/CONNECTORS.md` |
+| Provider connectors | `services/backend/services/integrations/connectors/`, `docs/CONNECTORS.md` |
 | Canonical contracts | `contracts/`, `packages/shared/contracts/` |
 | Documentation | `docs/` |
 | Scripts and validators | `scripts/` |
 | Tests | `tests/` |
 | Deployment | `deploy/` |
-| ML Models | `ML Models/aether-ml/` |
-| Agent Layer | `Agent Layer/` |
+| ML service (training + serving) | `services/ml/` |
+| Agent service (internal workers) | `services/agents/` |
+| Compliance service | `services/compliance/` |
+| AWS/Terraform deployment | `deploy/aws/` |
+| Smart-contract project | `contracts/smart-contracts/` |
+| Historical architecture archive | `docs/archive/legacy-architecture/` |
 
 ## Core Architecture
 
@@ -63,6 +67,7 @@ Start here:
 - [`ARCHITECTURE.md`](ARCHITECTURE.md)
 - [`docs/START_HERE.md`](docs/START_HERE.md)
 - [`docs/source-of-truth/repo-truth.md`](docs/source-of-truth/repo-truth.md)
+- [`docs/source-of-truth/repo-migration.md`](docs/source-of-truth/repo-migration.md)
 - [`docs/source-of-truth/architecture-truth.md`](docs/source-of-truth/architecture-truth.md)
 
 ## Quick Links

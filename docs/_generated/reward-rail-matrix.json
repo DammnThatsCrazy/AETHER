@@ -1,5 +1,5 @@
 {
-  "generated_from": "Backend Architecture/aether-backend/services/rewards/rail_matrix.py",
+  "generated_from": "services/backend/services/rewards/rail_matrix.py",
   "rails": {
     "coupon": {
       "custody": "no_custody",

@@ -29,7 +29,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-TF = ROOT / "AWS Deployment/aether-aws/terraform"
+TF = ROOT / "deploy/aws/terraform"
 MAIN = TF / "main.tf"
 PROFILES_TF = TF / "profiles.tf"
 ROOT_VARS = TF / "variables.tf"

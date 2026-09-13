@@ -128,7 +128,7 @@ window rather than a routine promotion — the detail is in
 
 If a profile change ever plans a destroy on a data store, **stop**. That is a
 stop-the-line event, not a diff to skim; the sanctioned path is
-`AWS Deployment/aether-aws/terraform/DECOMMISSION.md`.
+`deploy/aws/terraform/DECOMMISSION.md`.
 
 ## Staging rehearsal
 

@@ -7,10 +7,10 @@ audience: [ops, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/services/interop/admin_routes.py
+  - services/backend/services/interop/admin_routes.py
 canonical_owner: platform@aether
 source_hashes:
-  "Backend Architecture/aether-backend/services/interop/admin_routes.py": "sha256:d3b506fdfb47dd45fbfc8c150f48689ac3e7bfe641b080bc7ddf287c1749c9d1"
+  "services/backend/services/interop/admin_routes.py": "sha256:d3b506fdfb47dd45fbfc8c150f48689ac3e7bfe641b080bc7ddf287c1749c9d1"
 ---
 
 # Interop Provider Operations Runbook

@@ -47,8 +47,8 @@ description: >-
 # pack_status: reference — a reference pack that cannot name its grounding is
 # a fabrication and the validator rejects it.
 grounded_in:
-  - "Backend Architecture/aether-backend/services/agentic_observability/provider_framework.py::XReferenceAdapter"
-  - "Backend Architecture/aether-backend/services/agentic_observability/provider_framework.py::compute_permission_findings"
+  - "services/backend/services/agentic_observability/provider_framework.py::XReferenceAdapter"
+  - "services/backend/services/agentic_observability/provider_framework.py::compute_permission_findings"
 
 # Verbatim from ProviderMetadata(read_only=True, webhook_supported=True, ...).
 read_only: true

@@ -7,24 +7,24 @@ audience: [dev-senior, architect]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/shared/integration_contracts/manifest.py
-  - Backend Architecture/aether-backend/shared/integration_contracts/catalog.py
-  - Backend Architecture/aether-backend/shared/integration_contracts/identity.py
-  - Backend Architecture/aether-backend/shared/certification/readiness.py
+  - services/backend/shared/integration_contracts/manifest.py
+  - services/backend/shared/integration_contracts/catalog.py
+  - services/backend/shared/integration_contracts/identity.py
+  - services/backend/shared/certification/readiness.py
 canonical_owner: platform@aether
 estimated_read_minutes: 13
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/shared/certification/readiness.py": "sha256:4f49477dd17b2652c27ca458b9d0c7fe8ca242defa7d1d6d5e837b50050846a2"
-  "Backend Architecture/aether-backend/shared/integration_contracts/catalog.py": "sha256:895abcded4185c421d1e84cb3e711b5c88abd963daf3260373c0f54a50c4a03c"
-  "Backend Architecture/aether-backend/shared/integration_contracts/identity.py": "sha256:8264880ababfa1eb2c6be6cbc099478d3e140e7caf1afcb52b664921b6b2871b"
-  "Backend Architecture/aether-backend/shared/integration_contracts/manifest.py": "sha256:8c78fa334a6c4e6a58f869f81fad103273d8f42c1023eeb5bb6e856fc26b4f34"
+  "services/backend/shared/certification/readiness.py": "sha256:4f49477dd17b2652c27ca458b9d0c7fe8ca242defa7d1d6d5e837b50050846a2"
+  "services/backend/shared/integration_contracts/catalog.py": "sha256:895abcded4185c421d1e84cb3e711b5c88abd963daf3260373c0f54a50c4a03c"
+  "services/backend/shared/integration_contracts/identity.py": "sha256:8264880ababfa1eb2c6be6cbc099478d3e140e7caf1afcb52b664921b6b2871b"
+  "services/backend/shared/integration_contracts/manifest.py": "sha256:8c78fa334a6c4e6a58f869f81fad103273d8f42c1023eeb5bb6e856fc26b4f34"
 ---
 
 # Provider Manifest Spec
 
 The `ProviderManifest`
-(`Backend Architecture/aether-backend/shared/integration_contracts/manifest.py`)
+(`services/backend/shared/integration_contracts/manifest.py`)
 is the single, typed source of truth for what a provider capability **is** and
 **needs**. It describes credential **shape** (`CredentialFieldSpec`) — never
 credential values. This spec is the field-by-field reference and the honesty
@@ -141,7 +141,7 @@ rejects it. Construction only enforces types and simple field bounds.
 ## 12. Capability-honesty gate (`capability_violations`)
 
 Beyond the manifest, the **capability-honesty gate** (`capability_violations`
-in `services/provider_runtime/validation.py`) cross-checks every manifest
+in `services/backend/services/provider_runtime/validation.py`) cross-checks every manifest
 claim against the plugin's actual adapter surface (`CapabilitySet`) in **both
 directions**:
 
@@ -178,7 +178,7 @@ per existing connector from its `ConnectorDescriptor`:
 
 ### 13.2 Shopify native manifest
 
-The reference plugin (`services/providers/shopify/plugin.py`) declares:
+The reference plugin (`services/backend/services/providers/shopify/plugin.py`) declares:
 
 ```python
 ProviderManifest(

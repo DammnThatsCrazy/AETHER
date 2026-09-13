@@ -110,9 +110,9 @@ evidence-less write; restatement leaves an attributable record.
 ### 8. `tenant_consent_rights_retention_residency_export` — Tenant, consent, rights, retention, residency, and export behavior
 **Demands:** the spine honors tenant isolation, consent, rights, retention/delete/
 export, and residency before any data movement. **Evidence:** `consent-registry.json`
-+ `ConsentPolicyDecision` (`services/policy`); `DataRightsGrant` +
-`DATA_RIGHTS_LEDGER.md` (`services/integrations/data_rights`); `DataRetentionPolicy`
-(`services/security`); DSR fan-out (`services/dsr_propagation`, `DSR_COMPONENTS`).
++ `ConsentPolicyDecision` (`services/backend/services/policy`); `DataRightsGrant` +
+`DATA_RIGHTS_LEDGER.md` (`services/backend/services/integrations/data_rights`); `DataRetentionPolicy`
+(`services/backend/services/security`); DSR fan-out (`services/backend/services/dsr_propagation`, `DSR_COMPONENTS`).
 **Demonstrate:** row's rights boundary references the consent/rights/retention ids
 it honors; DSR/export fan-out declared per component. **Done:** fail-closed
 tenant/consent/rights/retention/residency/export behavior is traceable to a real
@@ -149,7 +149,7 @@ beyond what evidence supports; `production_ready` is never inferred.
 
 ### 12. `security_compliance_observability_evidence` — Security / compliance / observability evidence
 **Demands:** the spine names its security/compliance controls and observability /
-recovery path with evidence, not assertion. **Evidence:** `services/security`
+recovery path with evidence, not assertion. **Evidence:** `services/backend/services/security`
 (access/egress policy, `audit_ledger`, evidence packs); observability/metrics
 conventions; registry row schema (controls, observability/recovery).
 **Demonstrate:** row names each control and the evidence pack that backs it.

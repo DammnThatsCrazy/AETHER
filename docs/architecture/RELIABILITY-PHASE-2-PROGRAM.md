@@ -35,7 +35,7 @@ toc_depth: 4
 >   replay and an enforced, surfaced disk-space bound. (Backend rollout M1–M3
 >   remains production-signal-gated.)
 > - **Program 3 (Re-attribution) M2 + M3** — M3 generalized invalidation into
->   `services/measurement/reattribution.py` (privacy erasure + fraud-network
+>   `services/backend/services/measurement/reattribution.py` (privacy erasure + fraud-network
 >   `takedown`); M2 records the re-attribution as DSR propagation evidence on the
 >   `attribution_records` component, wired from the erasure job.
 > - **Program 4 (Prod-equivalent CI) M2 + M4** — M2 added real-stack ingestion
@@ -102,16 +102,16 @@ Aether's own architecture documentation asserts Bronze immutability as a
 design rule — `docs/architecture/BACKEND_INTELLIGENCE_ARCHITECTURE.md`
 lists "Preserve bronze immutability" as a preservation rule for the data
 lake — but nothing enforces or proves that rule at the data layer. A row in
-`bronze_sdk_events` (written by `services/ingestion/bronze_bulk.py`'s
+`bronze_sdk_events` (written by `services/backend/services/ingestion/bronze_bulk.py`'s
 `ingest_many`, or by the legacy per-event path in
-`services/ingestion/batch.py`) can be edited or deleted by anyone with
+`services/backend/services/ingestion/batch.py`) can be edited or deleted by anyone with
 database access, including an operator script, a bad migration, or a
 compromised credential, and nothing downstream would detect it. Every
 number Aether reports — attribution credit, spend, conversions — ultimately
 traces back to that table being what it claims to be.
 
 The repository already contains proof that this problem is solvable
-cheaply: `services/security/audit_ledger.py` (`AuditLedger`, documented in
+cheaply: `services/backend/services/security/audit_ledger.py` (`AuditLedger`, documented in
 `docs/AUDIT-EVENT-LEDGER.md`) chains an `integrity_hash` per event to the
 previous event **for the same tenant**, so `verify_chain()` can detect
 deletion or reordering of governance/security audit events. But that
@@ -135,9 +135,9 @@ architectural intent, not a verifiable property.
   working, tested, per-tenant hash-chain implementation, scoped to
   `SecurityAuditEvent` rows only (`docs/AUDIT-EVENT-LEDGER.md`).
 - `bronze_sdk_events` and `event_outbox` — the two tables the V2 ingestion
-  path (`services/ingestion/bronze_bulk.py`) writes transactionally, with
+  path (`services/backend/services/ingestion/bronze_bulk.py`) writes transactionally, with
   `ON CONFLICT ... DO NOTHING` idempotency, but no chaining or hash column.
-- `services/silver/projectors/*` — Silver/Gold projections computed from
+- `services/backend/services/silver/projectors/*` — Silver/Gold projections computed from
   Bronze with no recorded proof of which Bronze rows/hashes a projection
   run actually consumed.
 - Backward-compatibility precedent: `AuditLedger`'s chain already tolerates
@@ -150,7 +150,7 @@ Generalize the proven `AuditLedger` pattern into a shared, table-agnostic
 primitive rather than reimplementing hash-chaining a second time:
 
 1. Extract `compute_integrity_hash` / `verify_chain` from
-   `services/security/audit_ledger.py` into a new
+   `services/backend/services/security/audit_ledger.py` into a new
    `shared/integrity/hash_chain.py` module parameterized by "canonical
    fields to hash" and "chain partition key" (tenant for audit events,
    likely `(tenant_id)` again for Bronze, since ingestion is already
@@ -192,7 +192,7 @@ primitive rather than reimplementing hash-chaining a second time:
   security-alert path; dashboard for "tenants currently verified" /
   "verification failures."
 - **M4** — Extend chaining to `event_outbox` rows.
-- **M5** — Stamp Silver/Gold projector runs (`services/silver/projectors/*`)
+- **M5** — Stamp Silver/Gold projector runs (`services/backend/services/silver/projectors/*`)
   with the Bronze chain range they consumed.
 - **M6** — External WORM export of verified chain segments on a retention
   cadence, gated on infra/security sign-off for the storage target.
@@ -241,17 +241,17 @@ likely needs a compliance/security review, not just an engineering change.
 ### Problem statement
 
 `POST /v1/batch` is answered today by two parallel, config-selected code
-paths inside `services/ingestion/batch.py`:
+paths inside `services/backend/services/ingestion/batch.py`:
 
 - **V1** — a per-event write loop using Redis `SETNX` for dedupe, a
   fire-and-forget `asyncio.create_task()` identity resolution call, and an
   in-request bus publish.
 - **V2** (`_ingest_batch_v2`, PR 5/PR 6 in the code's own history) — a
   single transaction that bulk-inserts typed Bronze rows plus their
-  transactional-outbox rows via `services/ingestion/bronze_bulk.py`'s
+  transactional-outbox rows via `services/backend/services/ingestion/bronze_bulk.py`'s
   `ingest_many`, with **database uniqueness, not Redis, as the idempotency
   source of truth**, and a separate relay worker
-  (`services/ingestion/outbox_relay.py`) that is supposed to drain
+  (`services/backend/services/ingestion/outbox_relay.py`) that is supposed to drain
   `event_outbox` to the bus.
 
 Which path a given request actually takes is decided per-tenant by
@@ -282,7 +282,7 @@ transactional-outbox pattern in V2) but the reference server SDK has not.
 ### What exists today
 
 - Two live code paths behind `IngestionV2Config` in
-  `services/ingestion/batch.py` / `config/settings.py`, selected per-tenant.
+  `services/backend/services/ingestion/batch.py` / `config/settings.py`, selected per-tenant.
 - `outbox_relay.py` — batch size, poll interval, lease seconds, and max
   attempts are already configurable (`OUTBOX_RELAY_*` env vars), i.e. the
   relay's operational shape is designed, but its `enabled` default is
@@ -305,7 +305,7 @@ mechanism:
 2. Expand `canary_tenants` to 100% using the existing per-tenant flag — a
    pure rollout step, no code change.
 3. Delete the V1 code path and the `IngestionV2Config` flag surface. After
-   this, `services/ingestion/batch.py`'s V2 function plus
+   this, `services/backend/services/ingestion/batch.py`'s V2 function plus
    `outbox_relay.py` **are** the ingestion owner — one function, one
    idempotency model, no runtime branch.
 
@@ -373,19 +373,19 @@ changelog process (`packages/server/package.json`).
 
 Privacy erasure already reaches the measurement layer:
 `MeasurementPrivacyHandler.handle_erasure`
-(`services/measurement/privacy.py`), invoked durably by the
-`consent.erasure` job (`services/consent/erasure_jobs.py`), tombstones a
+(`services/backend/services/measurement/privacy.py`), invoked durably by the
+`consent.erasure` job (`services/backend/services/consent/erasure_jobs.py`), tombstones a
 profile's touchpoints and conversions
 (`TouchpointRepository.tombstone_for_profile`,
 `ConversionRepository.tombstone_for_profile`) and triggers
 `JourneyCompiler.rebuild_affected_by_consent_change` for that profile.
 
 What it does **not** do: call into `AttributionRunRepository`
-(`services/measurement/repositories/attribution_run_repo.py`), which
+(`services/backend/services/measurement/repositories/attribution_run_repo.py`), which
 already exposes exactly the operation this needs —
 `create_run` + `deactivate_prior_runs` — and is already used in production
-by `services/measurement/engine/subscription_ltv.py` and
-`services/measurement/engine/attribution_engine.py`. The result: a
+by `services/backend/services/measurement/engine/subscription_ltv.py` and
+`services/backend/services/measurement/engine/attribution_engine.py`. The result: a
 conversion whose winning touchpoint was just erased keeps its **stale**
 `attribution_run` and credits until some unrelated process happens to
 recompute it. Attribution numbers built on deleted data are not
@@ -393,7 +393,7 @@ automatically corrected — they are just as confidently wrong as they were
 before the deletion, and nothing in the erasure evidence trail records
 that the attribution result is now stale.
 
-Separately, `services/dsr_propagation` is explicit that it is *not* the
+Separately, `services/backend/services/dsr_propagation` is explicit that it is *not* the
 thing that performs erasure — its own module docstring states it "does NOT
 execute erasure/access itself" — it is only the propagation-record and
 impact-index layer. So even once re-attribution is wired up, there is no
@@ -406,7 +406,7 @@ data" capability. `docs/BACKFILL-JOBS.md` documents a generic,
 tenant-scoped, idempotent backfill *pattern*, but nothing today applies
 that pattern specifically to re-draining a Bronze range through
 `journey_compiler` and the attribution engine after a bug fix, a fraud
-network takedown (`services/fraud_networks`), or an attribution-model
+network takedown (`services/backend/services/fraud_networks`), or an attribution-model
 change — that is handled ad hoc today, not as a supported operation.
 
 ### What exists today
@@ -420,19 +420,19 @@ change — that is handled ad hoc today, not as a supported operation.
   `get_active_run` — a working "supersede the active run for a conversion"
   primitive, exercised today by subscription LTV and the core attribution
   engine, but never called from the erasure path.
-- `services/dsr_propagation` — a real evidence/impact-index layer with
+- `services/backend/services/dsr_propagation` — a real evidence/impact-index layer with
   named components (e.g. `attribution_records`, `continuation_records`,
   `mobile_installations`, `client_sync_records` — see
-  `services/consent/erasure_jobs.py`), ready to record a new kind of step
+  `services/backend/services/consent/erasure_jobs.py`), ready to record a new kind of step
   once one exists to record.
 - `docs/BACKFILL-JOBS.md` — the generic backfill pattern (scope,
   idempotency by `(tenant_id, resource_id)`, throttle, observe, verify)
   that a replay job type would extend rather than replace.
-- `services/jobs` (documented in `docs/source-of-truth/JOBS_PLATFORM.md`)
+- `services/backend/services/jobs` (documented in `docs/source-of-truth/JOBS_PLATFORM.md`)
   — the durable jobs platform (`FOR UPDATE SKIP LOCKED` leasing, retries,
   dead-letter, `HANDLER_REGISTRY`/`register_handler`) that already hosts
   `consent.erasure` and is the natural home for a new `replay.*` job type.
-- `services/fraud_networks` — cluster detection and investigation linking
+- `services/backend/services/fraud_networks` — cluster detection and investigation linking
   that identifies groups of entities that may need bulk invalidation, but
   has no wired path to actually invalidate touchpoints/conversions today.
 
@@ -452,11 +452,11 @@ change — that is handled ad hoc today, not as a supported operation.
 3. **Generalize invalidation beyond privacy.** Factor the
    tombstone-then-rebuild-then-reattribute sequence into a named,
    independently callable operation so a fraud-network takedown
-   (`services/fraud_networks`) or a data-quality correction can trigger the
+   (`services/backend/services/fraud_networks`) or a data-quality correction can trigger the
    same correctness path privacy erasure uses today, instead of each
    caller reinventing it.
 4. **Build replay as a typed backfill job**, registered on the existing
-   jobs platform (`services/jobs`, `register_handler`), that re-drains a
+   jobs platform (`services/backend/services/jobs`, `register_handler`), that re-drains a
    bounded, verified Bronze range through the same Silver/Gold projectors
    and `journey_compiler` — idempotent by `(tenant_id, resource_id)` like
    every other backfill in `docs/BACKFILL-JOBS.md`.
@@ -473,9 +473,9 @@ change — that is handled ad hoc today, not as a supported operation.
 - **M2** — Record the re-attribution as DSR propagation evidence on the
   existing `attribution_records` component.
 - **M3** — Generalize invalidation into a callable service usable by
-  `services/fraud_networks` takedown flows, not just privacy erasure.
+  `services/backend/services/fraud_networks` takedown flows, not just privacy erasure.
 - **M4** — Define `replay.bronze_range` (or similarly named) as a typed job
-  on `services/jobs`, re-running Bronze → Silver → journey → attribution
+  on `services/backend/services/jobs`, re-running Bronze → Silver → journey → attribution
   for a bounded range.
 - **M5** — Wire replay's range verification to Program 1's hash-chain
   primitive once it ships.
@@ -494,7 +494,7 @@ deletion of the data they were computed from.
 ### Dependencies
 
 M2 depends on M1. M3 depends on M1 (reuses the same invalidation
-primitive) and on `services/fraud_networks`' existing takedown flow. M4
+primitive) and on `services/backend/services/fraud_networks`' existing takedown flow. M4
 depends on the `docs/BACKFILL-JOBS.md` pattern and, for full range
 verification, on Program 1 (M5 here depends on Program 1's M2/M3).
 
@@ -527,7 +527,7 @@ Every backend test workflow in `.github/workflows/` (`repo-health.yml`,
 and by extension anything invoked through `make ci-check`) runs with
 `AETHER_ENV=local`. Under that setting, every pooled dependency in the
 ingestion and measurement code takes its in-memory fallback branch —
-`services/ingestion/bronze_bulk.py`'s own module docstring documents this
+`services/backend/services/ingestion/bronze_bulk.py`'s own module docstring documents this
 explicitly: "Local / test mode: when `get_pool()` returns `None`
 (`AETHER_ENV=local`, no asyncpg), an in-memory fallback dedupes ... against
 the shared `_IN_MEMORY_STORES` dicts." The same pattern repeats in
@@ -599,7 +599,7 @@ for every PR:
   compose subset; run one existing, already-passing smoke test against the
   real stack to prove the harness works.
 - **M2** — Migrate the ingestion test suite (`tests/` under
-  `services/ingestion`) to run against the real stack; fix whatever
+  `services/backend/services/ingestion`) to run against the real stack; fix whatever
   concurrency assumptions the in-memory-only tests were implicitly making.
 - **M3** — Add `kafka` + `outbox-relay` to the compose subset; add
   relay-specific tests (lease expiry, claim races, dead-letter) that
@@ -664,7 +664,7 @@ rolled up today as if it were USD at 1:1 parity — silently. `ROAS`,
 *looks* precise, while potentially mixing currencies at parity underneath.
 
 The repository already has a real answer for exactly this class of problem
-sitting unused one layer over: `services/value/price_sources.py` is a
+sitting unused one layer over: `services/backend/services/value/price_sources.py` is a
 pluggable USD-pricing subsystem with an explicit, already-enforced
 invariant — "a source being unavailable yields **unpriced** (`usd_value`
 `None`), never 0" — that resolves valuations across FX/fiat, token market
@@ -678,13 +678,13 @@ every valuation recording `conversion_rate` + `conversion_source` +
 - `currency` / `normalized_currency` / `billing_currency` / `exchange_rate`
   columns already present across `conversion_repo.py`, `spend_repo.py`,
   `adjustment_repo.py`, `attribution_run_repo.py`, and
-  `services/measurement/contracts.py`'s Pydantic models — the schema
+  `services/backend/services/measurement/contracts.py`'s Pydantic models — the schema
   surface for multi-currency is largely already there.
-- `services/value/price_sources.py` — a working, provider-registerable USD
+- `services/backend/services/value/price_sources.py` — a working, provider-registerable USD
   valuation subsystem (`register_price_provider`, `PriceProvider`,
   `PriceObservation`) with a documented, tested "unpriced, never silently
   zero" invariant, peg-aware stablecoin classification
-  (`services/stablecoin/valuation.classify_peg`), and an explicit
+  (`services/backend/services/stablecoin/valuation.classify_peg`), and an explicit
   `_FX_FIAT_SYMBOLS` set already naming the ten fiat currencies it's aware
   of — currently used for Web3/value valuation, not wired to measurement.
 - Every measurement repository's `setdefault("currency", "USD")` /
@@ -693,7 +693,7 @@ every valuation recording `conversion_rate` + `conversion_source` +
 
 ### Proposed architecture
 
-1. Wire `services/value/price_sources.py`'s existing provider registry into
+1. Wire `services/backend/services/value/price_sources.py`'s existing provider registry into
    the measurement write path: when a `conversion_repo.upsert` or
    `spend_repo.upsert` call carries a `currency` different from
    `normalized_currency`, resolve a real `PriceObservation` and record its

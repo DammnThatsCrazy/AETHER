@@ -15,7 +15,7 @@ from uuid import uuid4
 import pytest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-BACKEND = REPO_ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = REPO_ROOT / "services" / "backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 

@@ -86,11 +86,13 @@ domains:
     minimum_lane: fast
   backend:
     owner: backend
-    paths: [Backend Architecture/**, tests/**]
+    paths: [services/backend/**, services/agents/**, services/compliance/**, docs/archive/legacy-architecture/backend/**, tests/**]
     checks: [root, backend]
     path_checks:
-      Backend Architecture/aether-backend/**: [backend]
-      Backend Architecture/services/journey-service/**: [journey-service]
+      services/backend/**: [backend]
+      services/agents/**: [agent-layer]
+      services/compliance/**: [compliance]
+      docs/archive/legacy-architecture/backend/services/journey-service/**: [journey-service]
       tests/**: [root]
     minimum_lane: pr
   frontend:
@@ -118,12 +120,12 @@ domains:
     minimum_lane: pr
   machine_learning:
     owner: ml
-    paths: [ML Models/**]
+    paths: [services/ml/**]
     checks: [ml]
     minimum_lane: pr
   infrastructure:
     owner: platform
-    paths: [AWS Deployment/**, deploy/**, docker-compose.yml]
+    paths: [docs/archive/legacy-architecture/aws-deployment/**, deploy/**, docker-compose.yml]
     checks: [integration]
     minimum_lane: integration
   documentation:

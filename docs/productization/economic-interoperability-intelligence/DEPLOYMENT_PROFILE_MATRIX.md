@@ -7,12 +7,12 @@ audience: [architect, ops, exec]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/config/settings.py
+  - services/backend/config/settings.py
   - .env.example
 canonical_owner: platform@aether
 source_hashes:
-  ".env.example": "sha256:cd3a99ef1ec9bc8ca4336b841299334af82c66ea17ac4cd9ddf042651d304e8d"
-  "Backend Architecture/aether-backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
+  ".env.example": "sha256:e2b6b38f488416520011bd3c7bb7fde36acf89d0f967015fbcf6c77d8c755e4f"
+  "services/backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
 ---
 
 # Deployment Profile Matrix

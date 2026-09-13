@@ -41,8 +41,8 @@ already named among the resolved spines in ADR-011 §2 but absent from the
 main-based registry — and the re-cut onto `origin/main` (2026-09-05)
 re-formalized `graph_history_replay`, `grouping_membership`, and
 `context_capsule_semantics` from `pending` to `implemented`: their authorities
-(`services/temporal360` history replay, `services/population` membership
-governor + append-only definition versions, `services/geographic360` capsule
+(`services/backend/services/temporal360` history replay, `services/backend/services/population` membership
+governor + append-only definition versions, `services/backend/services/geographic360` capsule
 semantics) landed on the base the program is now cut against.
 The registry is validated on every `make ci-check`
 (`scripts/validate_spine_registry.py` — schema, conformance, cross-registry,
@@ -84,16 +84,16 @@ capability has actually landed for that row.
 | Universal Provider Runtime | `upr` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | Connector Normalization + SDK & Universal Alignment | `connector_normalization` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | Computation substrate (shared measurement/computation engine) | `computation_substrate` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
-| Rights / IRRL runtime | `rights_irrl` (`in_flight`) | rights fields `@unpopulated` | 14 `open` in-registry; `rights_irrl` realized as composition authority per `RIGHTS_AUTHORITY_BLUEPRINT.md` (`services/rights_authority/` resolver + nested DataRightsGrant contracts implementing); IRRL overlay reconciles existing names | PARTIAL |
+| Rights / IRRL runtime | `rights_irrl` (`in_flight`) | rights fields `@unpopulated` | 14 `open` in-registry; `rights_irrl` realized as composition authority per `RIGHTS_AUTHORITY_BLUEPRINT.md` (`services/backend/services/rights_authority/` resolver + nested DataRightsGrant contracts implementing); IRRL overlay reconciles existing names | PARTIAL |
 | Findings / Investigations / Decision contracts | `decision_contracts` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | Agent / Execution contracts | `agentic_runtime_access` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | Product Runtime / Tenant Activation & Readiness | `tenant_readiness` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | Kyber (operator control surface) | `kyber` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | Aether surfaces / Noesis | `aether_surfaces` (`implemented`) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | Infrastructure Model (platform runtime topology/state read by Infrastructure360) | `infrastructure_model` (`implemented`; row added in the re-cut onto the 360 foundation) | — (shared D1) | 14 `open` in-registry | PARTIAL |
-| Graph History Replay (historical as-of graph reconstruction over the bitemporal mutation ledger, read by temporal360) | `graph_history_replay` (`implemented`; authority = `services/temporal360` history replay over `shared/graph` replay_state — formalized on the re-cut onto origin/main) | — (shared D1) | 14 `open` in-registry | PARTIAL |
-| Context Capsule Semantics (capsule → canonical-geographic reading rules, read by geographic360) | `context_capsule_semantics` (`implemented`; authority = `services/geographic360` capsule_semantics — formalized on the re-cut onto origin/main) | — (shared D1) | 14 `open` in-registry | PARTIAL |
-| Grouping Membership (governed population membership + append-only definition versions, read by population360) | `grouping_membership` (`implemented`; authority = `services/population` membership governor — formalized on the re-cut onto origin/main) | — (shared D1) | 14 `open` in-registry | PARTIAL |
+| Graph History Replay (historical as-of graph reconstruction over the bitemporal mutation ledger, read by temporal360) | `graph_history_replay` (`implemented`; authority = `services/backend/services/temporal360` history replay over `shared/graph` replay_state — formalized on the re-cut onto origin/main) | — (shared D1) | 14 `open` in-registry | PARTIAL |
+| Context Capsule Semantics (capsule → canonical-geographic reading rules, read by geographic360) | `context_capsule_semantics` (`implemented`; authority = `services/backend/services/geographic360` capsule_semantics — formalized on the re-cut onto origin/main) | — (shared D1) | 14 `open` in-registry | PARTIAL |
+| Grouping Membership (governed population membership + append-only definition versions, read by population360) | `grouping_membership` (`implemented`; authority = `services/backend/services/population` membership governor — formalized on the re-cut onto origin/main) | — (shared D1) | 14 `open` in-registry | PARTIAL |
 | journey_continuity (pending projection spine) | declared `pending` row (`unresolvedRefs`: reason + resolving milestone) | — | 14 `open` in-registry | LEGACY |
 | reconciled_control_plane (pending projection spine) | declared `pending` row (`unresolvedRefs`: reason + resolving milestone) | — | 14 `open` in-registry | LEGACY |
 
@@ -121,7 +121,7 @@ capability has actually landed for that row.
   [RIGHTS_AUTHORITY_BLUEPRINT.md](./RIGHTS_AUTHORITY_BLUEPRINT.md), which
   supersedes the standalone-IRRL-runtime framing and defines IRRL as the
   canonical `rights_irrl` **composition authority** (nested DataRightsGrant
-  contracts + `services/rights_authority/` Effective Rights Resolver +
+  contracts + `services/backend/services/rights_authority/` Effective Rights Resolver +
   `RightsDecision`). Both rows stay `in_flight` with 14 conformance checks
   `open` and grade `PARTIAL`; they advance toward `CANONICAL` only as the
   blueprint phases land and their conformance evidence is verified end to end.

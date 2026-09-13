@@ -18,13 +18,13 @@ with the hosting/config contract.
 
 ## Build artifacts
 
-- Backend: `Backend Architecture/aether-backend/Dockerfile`
+- Backend: `services/backend/Dockerfile`
 - Aether frontend: `frontend/aether/Dockerfile`
 - Kyber frontend: `frontend/kyber/Dockerfile`
-- ML serving: `ML Models/aether-ml/docker/Dockerfile`
+- ML serving: `services/ml/docker/Dockerfile`
 
 `.github/workflows/deploy.yml` builds and pushes images to ECR; infrastructure is
-Terraform-managed under `AWS Deployment/aether-aws/terraform/`. `docker-compose.yml`
+Terraform-managed under `deploy/aws/terraform/`. `docker-compose.yml`
 with profiles (`streaming`, `analytics`, `notebooks`, `full`) runs the stack
 locally.
 

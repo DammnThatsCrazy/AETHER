@@ -61,7 +61,7 @@ Removed `= ""` default from `tenant_id` parameter in 5 repository methods:
 Updated all 5 call sites: `delegation/routes.py`, `delegation/engine.py`, `profile/routes.py`,
 `agent/user_agents.py`.
 
-### GAP 8 — Missing operator endpoints in `services/admin/routes.py` — CLOSED
+### GAP 8 — Missing operator endpoints in `services/backend/services/admin/routes.py` — CLOSED
 
 Added 4 new Kyber operator endpoints:
 - `GET /operator/agentic/agents/{agent_id}` — single agent detail
@@ -94,7 +94,7 @@ new event types and consent mappings. Required for `validate_sdk_release_alignme
 
 ### Backend ingestion validator
 
-`services/ingestion/batch.py` `CANONICAL_EVENT_TYPES` + `EVENT_CONSENT_PURPOSE` extended
+`services/backend/services/ingestion/batch.py` `CANONICAL_EVENT_TYPES` + `EVENT_CONSENT_PURPOSE` extended
 with all 33 new event types. Mirror of `packages/shared/events.ts`.
 
 ### Test sync
@@ -112,7 +112,7 @@ reflect the expanded canonical set.
 | `npm run typecheck` | PASS (pre-existing Kyber errors unrelated) |
 | `npm run test` | PASS — 181 web + 93 shared tests |
 | `python -m pytest tests/ -q` | PASS — 998 passed |
-| `python -m pytest "Backend Architecture/aether-backend/tests/agentic_x402/" -v` | PASS — 35 passed |
+| `python -m pytest "services/backend/tests/agentic_x402/" -v` | PASS — 35 passed |
 | `python -m pytest tests/unit/test_event_registry_agentic_x402.py -v` | PASS — 6 passed |
 | `python scripts/validate_contracts.py` | PASS — 66 events, 5 purposes, 8 families |
 | `python scripts/validate_sdk_release_alignment.py` | PASS — 8.9.0 aligned |
@@ -132,13 +132,13 @@ reflect the expanded canonical set.
 | `packages/web/src/index.ts` | +19 agent emitters, +14 x402 emitters |
 | `packages/android/.../Aether.kt` | +33 event types + consent mappings |
 | `packages/ios/.../Aether.swift` | +33 event cases + consent mappings |
-| `Backend Architecture/.../repositories/repos.py` | 5 methods: tenant_id required |
-| `Backend Architecture/.../services/delegation/routes.py` | Pass tenant_id to active_for |
-| `Backend Architecture/.../services/delegation/engine.py` | Accept+store tenant_id |
-| `Backend Architecture/.../services/profile/routes.py` | Pass tenant_id to active_for |
-| `Backend Architecture/.../services/agent/user_agents.py` | Pass tenant_id to list_for_agent |
-| `Backend Architecture/.../services/admin/routes.py` | +4 operator endpoints + enhanced overview |
-| `Backend Architecture/.../services/ingestion/batch.py` | +33 canonical event types + consent |
+| `services/backend/.../repositories/repos.py` | 5 methods: tenant_id required |
+| `services/backend/.../services/delegation/routes.py` | Pass tenant_id to active_for |
+| `services/backend/.../services/delegation/engine.py` | Accept+store tenant_id |
+| `services/backend/.../services/profile/routes.py` | Pass tenant_id to active_for |
+| `services/backend/.../services/agent/user_agents.py` | Pass tenant_id to list_for_agent |
+| `services/backend/.../services/admin/routes.py` | +4 operator endpoints + enhanced overview |
+| `services/backend/.../services/ingestion/batch.py` | +33 canonical event types + consent |
 | `scripts/production_status.py` | +agentic_x402_productization Area + live checks |
 | `docs/source-of-truth/EVENT_REGISTRY.md` | +33 lifecycle events documented |
 | `docs/_generated/events.json` | Regenerated (66 events) |

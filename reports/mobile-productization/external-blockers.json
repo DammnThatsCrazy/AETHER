@@ -92,7 +92,7 @@
     "AWS account + credentials",
     "Terraform apply against a real account"
    ],
-   "implementation_status": "reuses existing config/deployment_profiles.yaml + AWS Deployment/aether-aws terraform; no new infra stack",
+   "implementation_status": "reuses existing config/deployment_profiles.yaml + deploy/aws terraform; no new infra stack",
    "activation": "supply AWS creds; terraform plan/apply an existing profile",
    "evidence_required": "reachable hosted backend + migration applied"
   },

@@ -12,8 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 SCRIPT = ROOT / "scripts" / "docs_extract" / "extract_providers.py"
 CATEGORIES_PY = (
     ROOT
-    / "Backend Architecture"
-    / "aether-backend"
+    / "services" / "backend"
     / "shared"
     / "providers"
     / "categories.py"

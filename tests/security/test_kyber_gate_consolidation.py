@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "Backend Architecture" / "aether-backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 os.environ.setdefault("AETHER_ENV", "local")

@@ -14,7 +14,7 @@ provider-neutral credential platform under `shared/credentials/`). The execution
 
 ## One-line answers to the required reconnaissance questions
 - **What already exists (reuse):** notification control plane
-  (`services/notification_intelligence/`), durable delivery (`services/delivery/`), worker
+  (`services/backend/services/notification_intelligence/`), durable delivery (`services/backend/services/delivery/`), worker
   supervisor + jobs, realtime SSE/WS, exploration context + saved views + Noesis, the full Kyber
   stack (command plane with postcondition verification, identity, device trust, sessions/step-up,
   capabilities/roles/scopes, exceptions/incidents/containment), tenant auth + authz, the credential
@@ -25,19 +25,19 @@ provider-neutral credential platform under `shared/credentials/`). The execution
   feed**, **push/email provider adapters + local fakes**, the **native installation/push model**,
   the **mobile apps** + shared `packages/mobile-*`, and the **notification/delivery/continuation/
   sync TS twins**.
-- **What is legacy/duplicate:** the legacy `services/notification/` router collides at
+- **What is legacy/duplicate:** the legacy `services/backend/services/notification/` router collides at
   `/v1/notifications` and is already shadowed → unmount in C2.
 - **What is out of scope this session:** full app feature surfaces, governed mobile actions,
   compliance/distribution, adversarial review (C5–C9, staged).
 - **What is externally blocked:** APNs, FCM, Web Push, email, Apple/Google signing, AWS infra,
   physical-device matrix — see [`external-blockers.json`](./external-blockers.json).
-- **Shared conflict surfaces:** `main.py`, `config/settings.py`, `services/runtime/specs.py`,
+- **Shared conflict surfaces:** `main.py`, `config/settings.py`, `services/backend/services/runtime/specs.py`,
   `packages/shared/index.ts`, `package.json`, `config/storage_policies.yaml`, `Makefile`,
   `docs/_generated/**` — see [`ownership-map.json`](./ownership-map.json).
 
 ## Open-PR overlap (do NOT merge; reuse-in-place)
 - **#498** — durable multi-slot provider-credential authority (PR 1 of 4). Adds
-  `services/providers/credentials/*` + alembic `20260812_provider_credential_versions` /
+  `services/backend/services/providers/credentials/*` + alembic `20260812_provider_credential_versions` /
   `20260813_payment_webhook_endpoints`. Our credential registry **references** the credential
   platform; our alembic IDs are `20260820+` to avoid name collision. Superseded? No — still
   required, parallel.

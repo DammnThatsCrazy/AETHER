@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent
-ML_ROOT = REPO_ROOT / "ML Models" / "aether-ml"
+ML_ROOT = REPO_ROOT / "services" / "ml"
 OUTPUT_PATH = REPO_ROOT / "docs" / "_generated" / "ml-implementation-manifest.json"
 
 sys.path.insert(0, str(ML_ROOT))

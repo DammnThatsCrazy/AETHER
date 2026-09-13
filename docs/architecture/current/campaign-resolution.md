@@ -44,4 +44,4 @@ observation with source metadata
 ## Current State
 
 Campaign resolution is implemented in
-`Backend Architecture/aether-backend/services/campaigns/`.
+`services/backend/services/campaigns/`.

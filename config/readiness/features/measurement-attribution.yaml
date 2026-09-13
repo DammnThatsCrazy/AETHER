@@ -26,9 +26,9 @@ repository_ceiling:
   - None — repository-controlled work complete
   remaining_is_repository_controlled: false
   evidence:
-  - Backend Architecture/aether-backend/services/measurement/
-  - Backend Architecture/aether-backend/services/measurement/engine/attribution_engine.py
-  - Backend Architecture/aether-backend/services/measurement/engine/journey_compiler.py
+  - services/backend/services/measurement/
+  - services/backend/services/measurement/engine/attribution_engine.py
+  - services/backend/services/measurement/engine/journey_compiler.py
 implementation:
   state: VERIFIED
   denominator: in-scope repository controls (migration-derived)
@@ -119,7 +119,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: Backend Architecture/aether-backend/services/measurement/'
+  - 'repository evidence: services/backend/services/measurement/'
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:

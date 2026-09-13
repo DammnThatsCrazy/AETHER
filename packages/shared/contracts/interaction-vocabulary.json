@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "contractVersion": "1.0.0",
-  "description": "Canonical interaction vocabulary for the product-intelligence plane. Owns the closed interaction-type list, the custom-namespace rule, result states, evidence basis, and actor kinds shared by ingestion and analytics surfaces. Generated artifacts: packages/shared/interaction-contract.ts, Backend Architecture/aether-backend/shared/product/generated_vocabulary.py, docs/_generated/interaction-vocabulary-table.md (via scripts/generate_platform_contracts.py).",
+  "description": "Canonical interaction vocabulary for the product-intelligence plane. Owns the closed interaction-type list, the custom-namespace rule, result states, evidence basis, and actor kinds shared by ingestion and analytics surfaces. Generated artifacts: packages/shared/interaction-contract.ts, services/backend/shared/product/generated_vocabulary.py, docs/_generated/interaction-vocabulary-table.md (via scripts/generate_platform_contracts.py).",
   "interactionTypes": [
     "click",
     "tap",

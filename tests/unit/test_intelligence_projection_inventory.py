@@ -39,7 +39,7 @@ _SURFACE_REGISTRY_JSON = (
     REPO_ROOT / "packages" / "shared" / "contracts" / "surface-capability-registry.json"
 )
 _ROUTE_REGISTRY_YAML = REPO_ROOT / "config" / "route_registry.yaml"
-_BACKEND = REPO_ROOT / "Backend Architecture" / "aether-backend"
+_BACKEND = REPO_ROOT / "services" / "backend"
 
 # A route only counts as evidence of a mounted router when its /v1/... literal
 # sits on a ROUTE-DECLARATION line (APIRouter / include_router / add_api_route /
@@ -223,7 +223,7 @@ def test_nonexistent_service_glob_reported() -> None:
         [
             _entry(
                 "a",
-                services=["Backend Architecture/aether-backend/services/definitely_not_there"],
+                services=["services/backend/services/definitely_not_there"],
             )
         ]
     )

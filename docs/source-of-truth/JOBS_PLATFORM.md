@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/services/jobs/handlers.py, Backend Architecture/aether-backend/services/jobs/service.py, Backend Architecture/aether-backend/services/jobs/worker.py, Backend Architecture/aether-backend/services/jobs/scheduler.py, Backend Architecture/aether-backend/services/jobs/routes.py, Backend Architecture/aether-backend/services/jobs/kyber_routes.py, Backend Architecture/aether-backend/repositories/jobs_repo.py]
+source_files: [services/backend/services/jobs/handlers.py, services/backend/services/jobs/service.py, services/backend/services/jobs/worker.py, services/backend/services/jobs/scheduler.py, services/backend/services/jobs/routes.py, services/backend/services/jobs/kyber_routes.py, services/backend/repositories/jobs_repo.py]
 last_synced_commit: pending
 ---
 
@@ -31,14 +31,14 @@ migration `20260713_platform_control_plane`):
   means an idempotent enqueue returns the existing job (`replayed=True`) instead
   of duplicating work; a previously-*failed* row with the same key is re-queued
   in place.
-- **States** (`services/jobs/models.py::JobStatus`): `accepted → queued → running`
+- **States** (`services/backend/services/jobs/models.py::JobStatus`): `accepted → queued → running`
   → `succeeded` / `partially_succeeded` / `failed`, plus `cancel_requested` →
   `cancelled` and `expired`. A terminal `failed` job dead-letters (a
   `job.dead_lettered` event + an inbox notification).
 
 ## Handlers
 
-`services/jobs/handlers.py` — a handler is registered per `job_type`:
+`services/backend/services/jobs/handlers.py` — a handler is registered per `job_type`:
 
 ```python
 @register_handler("exports.generate", tenant_invocable=True)
@@ -59,7 +59,7 @@ async def generate_export(payload: dict, ctx: JobContext) -> JobOutcome:
 
 ## Surfaces
 
-`services/jobs/service.py::JobsService.enqueue(tenant_id, job_type, payload, *,
+`services/backend/services/jobs/service.py::JobsService.enqueue(tenant_id, job_type, payload, *,
 idempotency_key, correlation_id, requested_by, priority, max_attempts,
 scheduled_for)` is the enqueue entry point. Routes:
 
@@ -68,12 +68,12 @@ scheduled_for)` is the enqueue entry point. Routes:
 | `POST /v1/jobs`, `GET /v1/jobs`, `GET /v1/jobs/{id}`, `/{id}/events`, `/{id}/cancel` | tenant job center |
 | `GET /v1/kyber/jobs/timeline`, `POST /v1/kyber/jobs/{id}/requeue` | operator console (`require_kyber_operator`) |
 
-`services/jobs/scheduler.py` fires cron/one-shot schedules (croniter + zoneinfo,
+`services/backend/services/jobs/scheduler.py` fires cron/one-shot schedules (croniter + zoneinfo,
 misfire/overlap policy, `schedule_id:fire_time` idempotency) onto the same queue.
 
 ## Boundary — the jobs platform does NOT run agent work
 
-The **agent runtime** (`services/agent/runtime_repository.py`,
+The **agent runtime** (`services/backend/services/agent/runtime_repository.py`,
 `worker_bridge.py`, `worker_routes.py`, `mutation_commit.py`) is a **separate,
 Redis-backed** execution system for the agent domain (agent step execution,
 mutation-commit approvals). It has its own store, its own worker bridge, and its

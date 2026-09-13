@@ -18,9 +18,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VALUE_TS = ROOT / "packages" / "shared" / "value.ts"
-VALUE_MODELS_PY = ROOT / "Backend Architecture" / "aether-backend" / "services" / "value" / "models.py"
-ROLLUPS_PY = ROOT / "Backend Architecture" / "aether-backend" / "services" / "value" / "rollups.py"
-AGGREGATOR_PY = ROOT / "Backend Architecture" / "aether-backend" / "services" / "profile" / "aggregator.py"
+VALUE_MODELS_PY = ROOT / "services" / "backend" / "services" / "value" / "models.py"
+ROLLUPS_PY = ROOT / "services" / "backend" / "services" / "value" / "rollups.py"
+AGGREGATOR_PY = ROOT / "services" / "backend" / "services" / "profile" / "aggregator.py"
 
 ERRORS: list[str] = []
 

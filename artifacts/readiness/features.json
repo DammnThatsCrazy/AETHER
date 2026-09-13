@@ -274,7 +274,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/main.py"
+          "repository evidence: services/backend/main.py"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -458,7 +458,7 @@
       "confidence": {
         "level": "HIGH",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/services/campaign/registry.py"
+          "repository evidence: services/backend/services/campaign/registry.py"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -645,7 +645,7 @@
       "confidence": {
         "level": "LOW",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/services/card_linked_payments/"
+          "repository evidence: services/backend/services/card_linked_payments/"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -1020,7 +1020,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/services/integrations/connectors/"
+          "repository evidence: services/backend/services/integrations/connectors/"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -1371,7 +1371,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/services/dune_feeder/service.py"
+          "repository evidence: services/backend/services/dune_feeder/service.py"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -1774,7 +1774,7 @@
       "confidence": {
         "level": "LOW",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/services/derivatives/"
+          "repository evidence: services/backend/services/derivatives/"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -2557,7 +2557,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/services/sdk_drift/routes.py"
+          "repository evidence: services/backend/services/sdk_drift/routes.py"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -2743,7 +2743,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: Agent Layer/README.md"
+          "repository evidence: services/agents/README.md"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -2918,7 +2918,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/shared/graph/graph.py"
+          "repository evidence: services/backend/shared/graph/graph.py"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -3270,7 +3270,7 @@
       "confidence": {
         "level": "LOW",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/services/interop/"
+          "repository evidence: services/backend/services/interop/"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -3641,7 +3641,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/services/measurement/"
+          "repository evidence: services/backend/services/measurement/"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -3818,7 +3818,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/shared/measurement/"
+          "repository evidence: services/backend/shared/measurement/"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -4014,7 +4014,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/services/integrations/connectors/adapters.py"
+          "repository evidence: services/backend/services/integrations/connectors/adapters.py"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -4207,7 +4207,7 @@
       "confidence": {
         "level": "LOW",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/services/integrations/providers/payment_rails/"
+          "repository evidence: services/backend/services/integrations/providers/payment_rails/"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -4401,7 +4401,7 @@
       "confidence": {
         "level": "HIGH",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/services/profile/"
+          "repository evidence: services/backend/services/profile/"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -4583,7 +4583,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/shared/certification/registry.py"
+          "repository evidence: services/backend/shared/certification/registry.py"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -5365,7 +5365,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/shared/auth/auth.py"
+          "repository evidence: services/backend/shared/auth/auth.py"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"
@@ -5568,7 +5568,7 @@
       "confidence": {
         "level": "LOW",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/services/semantic_intelligence/"
+          "repository evidence: services/backend/services/semantic_intelligence/"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -5776,7 +5776,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: Smart Contracts/contracts/AnalyticsRewards.sol"
+          "repository evidence: contracts/smart-contracts/contracts/AnalyticsRewards.sol"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -5965,7 +5965,7 @@
       "confidence": {
         "level": "LOW",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/services/stablecoin/"
+          "repository evidence: services/backend/services/stablecoin/"
         ],
         "evidence_gaps": [
           "credentialed environment execution not yet performed"
@@ -6152,7 +6152,7 @@
       "confidence": {
         "level": "MODERATE",
         "reasons": [
-          "repository evidence: Backend Architecture/aether-backend/services/imports/"
+          "repository evidence: services/backend/services/imports/"
         ],
         "evidence_gaps": [
           "not yet exercised in credentialed staging/production"

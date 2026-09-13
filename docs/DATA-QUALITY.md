@@ -61,7 +61,7 @@ require the `admin` permission.
 ## Isolation & escalation
 
 Critical `tenant_data_contamination` drift escalates into the Security &
-Governance audit ledger (`services/security/audit_ledger.py`) rather than being
+Governance audit ledger (`services/backend/services/security/audit_ledger.py`) rather than being
 silently surfaced. No secrets are written to drift metadata — the ledger
 sanitizes metadata before persistence.
 

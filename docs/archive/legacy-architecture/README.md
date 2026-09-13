@@ -19,17 +19,19 @@ Canonical current documentation lives under:
 
 This material is retained for historical reference only.
 
-## Legacy Root Folders
+## Archived root-era material
 
-The following root-level folders contain legacy architecture that predates the current contract-governed, graph-first architecture:
+The root-era architecture folders from the Truth Reset are no longer present at
+the repository root. Their retained historical material is physically grouped
+here:
 
-- `Backend Architecture/` — See `docs/architecture/current/runtime-architecture.md`
-- `Data Ingestion Layer/` — See `docs/architecture/current/ingestion-architecture.md`
-- `Data Lake Architecture/` — See `docs/architecture/current/ingestion-architecture.md`
-- `AWS Deployment/` — See `docs/operations/` (pending)
-- `ML Models/` — Active subsystem, see `docs/ML-TRAINING-GUIDE.md`
-- `Smart Contracts/` — See `docs/archive/legacy-architecture/`
-- `GDPR & SOC2/` — See `docs/security/compliance-roadmap.md`
-- `Agent Layer/` — Active subsystem, see `docs/AGENT-LAYER-PRODUCTION.md`
+- `backend/` — orphaned modules, migrations, and superseded service shells
+- `data-ingestion-layer/` — deprecated TypeScript ingestion duplicate
+- `data-lake-architecture/` — deprecated TypeScript lake duplicate
+- `aws-deployment/` — superseded root-level AWS runner and Terraform notes
+- `gdpr-soc2/` — superseded compliance tree documentation
 
-Note: Some of these folders (`Backend Architecture/`, `ML Models/`, `Agent Layer/`) contain active code and tests, not just documentation. They will be migrated to `services/` in a future restructuring.
+Active implementations live under `services/`, `deploy/aws/`, and
+`contracts/smart-contracts/`. Do not add code to this archive; update the
+canonical implementation and link the historical material only when it is
+needed to explain a migration or compatibility decision.

@@ -6,7 +6,7 @@ UNCONDITIONALLY on every non-batch ingress seam; ONLY the per-subject (S)
 server-receipt rejection is a per-path toggle (default OFF), and an OFF state
 never bypasses the mandatory layer (imports fail closed).
 
-The backend lives under ``Backend Architecture/aether-backend`` (note the
+The backend lives under ``services/backend`` (note the
 space) — ``tests/ingestion/conftest.py -> parents[2]`` is the repo root.
 """
 
@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-_BACKEND = Path(__file__).resolve().parents[2] / "Backend Architecture" / "aether-backend"
+_BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
 if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 

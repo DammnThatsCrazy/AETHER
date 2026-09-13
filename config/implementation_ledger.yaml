@@ -80,11 +80,11 @@ items:
     current_behavior: verify-email, login, sso/callback return an ak_ key; legacy /v1/tenants returns one; recovery emails one.
     required_behavior: Under the founding-tenant posture, human paths issue durable server-side sessions (no reusable key); legacy registration is contained; recovery never emails a key.
     affected_paths:
-      - Backend Architecture/aether-backend/services/auth/routes.py
-      - Backend Architecture/aether-backend/services/registration/routes.py
-      - Backend Architecture/aether-backend/services/auth/sessions/
-      - Backend Architecture/aether-backend/middleware/middleware.py
-      - Backend Architecture/aether-backend/config/settings.py
+      - services/backend/services/auth/routes.py
+      - services/backend/services/registration/routes.py
+      - services/backend/services/auth/sessions/
+      - services/backend/middleware/middleware.py
+      - services/backend/config/settings.py
     tests_required: [tests/unit/test_trust_containment.py]
     evidence_required: [pytest trust-containment output]
     docs_required: [docs/FOUNDING-TENANT-PRODUCTION.md]
@@ -103,8 +103,8 @@ items:
     current_behavior: Only reusable API keys existed; no durable session or credential-class separation.
     required_behavior: Server-side sessions (idle+absolute expiry, revocable) + scoped/rotatable service credentials + ingest-only public identifiers, behind staged-activation flags.
     affected_paths:
-      - Backend Architecture/aether-backend/services/auth/sessions/
-      - Backend Architecture/aether-backend/alembic/versions/
+      - services/backend/services/auth/sessions/
+      - services/backend/alembic/versions/
     tests_required: [tests/unit/test_trust_containment.py]
     evidence_required: [pytest trust-containment output, alembic upgrade/downgrade/upgrade]
     docs_required: [docs/FOUNDING-TENANT-PRODUCTION.md]
@@ -124,8 +124,8 @@ items:
     current_behavior: Governance is scattered (PolicyEngine, governance decisions, delegation) with no unified mounted-route registry; governance default-allow in one path.
     required_behavior: Every mounted route declared in a registry; unknown production routes deny; Kyber routes require operator identity; sensitive decisions audited.
     affected_paths:
-      - Backend Architecture/aether-backend/services/security/
-      - Backend Architecture/aether-backend/services/kyber_operator/
+      - services/backend/services/security/
+      - services/backend/services/kyber_operator/
       - config/route_registry.yaml
     tests_required: [tests/unit/test_route_registry_coverage.py, tests/security/test_kyber_gate_consolidation.py, tests/security/test_route_policy_hook.py]
     evidence_required: [make validate-route-registry, pytest route registry + kyber gate output]
@@ -150,11 +150,11 @@ items:
     current_behavior: /v1/batch trusts the SDK per-event consent snapshot; server ConsentRepository is consulted only downstream.
     required_behavior: Ingestion loads server consent receipts + tenant compliance profile, enforces lawful processing with stable rejection codes.
     affected_paths:
-      - Backend Architecture/aether-backend/services/ingestion/batch.py
-      - Backend Architecture/aether-backend/services/consent/authority.py
-      - Backend Architecture/aether-backend/shared/privacy/consent_enforcement.py
-      - Backend Architecture/aether-backend/alembic/versions/20260723_consent_authority.py
-      - Backend Architecture/aether-backend/config/settings.py
+      - services/backend/services/ingestion/batch.py
+      - services/backend/services/consent/authority.py
+      - services/backend/shared/privacy/consent_enforcement.py
+      - services/backend/alembic/versions/20260723_consent_authority.py
+      - services/backend/config/settings.py
     tests_required: [tests/unit/test_consent_authority.py]
     evidence_required: [pytest consent-authority output, alembic upgrade/downgrade/upgrade]
     docs_required: [docs/source-of-truth/INGESTION_CONTRACT.md, docs/COMPLIANCE.md]
@@ -173,11 +173,11 @@ items:
     current_behavior: Dedicated roles select canonical consumer pipelines; API owns no consumers.
     required_behavior: AETHER_ROLE + explicit backend selectors; role-specific entrypoints; production rejects role=all and memory backends.
     affected_paths:
-      - Backend Architecture/aether-backend/main.py
-      - Backend Architecture/aether-backend/services/runtime/roles.py
-      - Backend Architecture/aether-backend/services/runtime/run_role.py
-      - Backend Architecture/aether-backend/services/runtime/consumer_specs.py
-      - Backend Architecture/aether-backend/config/settings.py
+      - services/backend/main.py
+      - services/backend/services/runtime/roles.py
+      - services/backend/services/runtime/run_role.py
+      - services/backend/services/runtime/consumer_specs.py
+      - services/backend/config/settings.py
     tests_required: [tests/unit/test_runtime_roles.py, tests/test_runtime_consumer_specs.py]
     evidence_required: [pytest runtime role/consumer tests output, Settings() production role=all + memory-backend rejection]
     docs_required: [docs/BACKEND-EXECUTION-MODEL.md]
@@ -204,10 +204,10 @@ items:
     current_behavior: /v1/batch does per-event Bronze inserts, per-event Redis SET NX, fire-and-forget identity resolution, in-request broker publish.
     required_behavior: Bulk typed Bronze + transactional outbox in one transaction; DB uniqueness is correctness; feature-flagged V2 with canary.
     affected_paths:
-      - Backend Architecture/aether-backend/services/ingestion/batch.py
-      - Backend Architecture/aether-backend/services/ingestion/bronze_bulk.py
-      - Backend Architecture/aether-backend/config/settings.py
-      - Backend Architecture/aether-backend/alembic/versions/20260724_ingestion_v2.py
+      - services/backend/services/ingestion/batch.py
+      - services/backend/services/ingestion/bronze_bulk.py
+      - services/backend/config/settings.py
+      - services/backend/alembic/versions/20260724_ingestion_v2.py
     tests_required: [tests/unit/test_ingestion_v2.py]
     evidence_required: [pytest ingestion v2 output, alembic upgrade/downgrade/upgrade round-trip]
     docs_required: [docs/source-of-truth/INGESTION_CONTRACT.md]
@@ -226,11 +226,11 @@ items:
     current_behavior: Identity resolution and downstream work partly ride the request; no dedicated relay for ingestion outbox.
     required_behavior: FOR UPDATE SKIP LOCKED relay with leases/backoff/dead-letter; idempotent batched workers.
     affected_paths:
-      - Backend Architecture/aether-backend/services/ingestion/outbox_relay.py
-      - Backend Architecture/aether-backend/services/ingestion/workers.py
-      - Backend Architecture/aether-backend/services/runtime/roles.py
-      - Backend Architecture/aether-backend/services/runtime/specs.py
-      - Backend Architecture/aether-backend/config/settings.py
+      - services/backend/services/ingestion/outbox_relay.py
+      - services/backend/services/ingestion/workers.py
+      - services/backend/services/runtime/roles.py
+      - services/backend/services/runtime/specs.py
+      - services/backend/config/settings.py
     tests_required: [tests/unit/test_outbox_relay.py]
     evidence_required: [pytest tests/unit/test_outbox_relay.py output]
     docs_required: [docs/BACKEND-EXECUTION-MODEL.md]
@@ -262,7 +262,7 @@ items:
       default off; object-backed Bronze adoption is FT-8.
     required_behavior: Storage policy per persistent resource type + universal descriptor + manager + reconciler; CI fails if a persistent type lacks a policy.
     affected_paths:
-      - Backend Architecture/aether-backend/shared/storage/
+      - services/backend/shared/storage/
       - config/storage_policies.yaml
     tests_required: [tests/unit/test_storage_descriptors.py (descriptor round-trip, fail-closed policy resolution, externalize/hydrate checksum verification + mismatch rejection, object store protocol, reconciler missing/orphan/drift, coverage-gate self-test)]
     evidence_required: [scripts/release/check_storage_policies.py PASS output (schema + coverage over the derived persistent-type inventory)]
@@ -296,15 +296,15 @@ items:
       sweep worker behind STORAGE_LIFECYCLE_RETENTION_ENABLED.
     required_behavior: Externalized packed objects with hot searchable metadata; hydration with checksum; retention/deletion/legal-hold/DSR across stores.
     affected_paths:
-      - Backend Architecture/aether-backend/shared/storage/
-      - Backend Architecture/aether-backend/services/storage_lifecycle/
-      - Backend Architecture/aether-backend/services/security/retention_worker.py
-      - Backend Architecture/aether-backend/services/runtime/specs.py
-      - Backend Architecture/aether-backend/services/runtime/roles.py
-      - Backend Architecture/aether-backend/repositories/repos.py
-      - Backend Architecture/aether-backend/shared/privacy/retention.py
-      - Backend Architecture/aether-backend/alembic/versions/20260727_object_backed_bronze.py
-      - Backend Architecture/aether-backend/config/settings.py
+      - services/backend/shared/storage/
+      - services/backend/services/storage_lifecycle/
+      - services/backend/services/security/retention_worker.py
+      - services/backend/services/runtime/specs.py
+      - services/backend/services/runtime/roles.py
+      - services/backend/repositories/repos.py
+      - services/backend/shared/privacy/retention.py
+      - services/backend/alembic/versions/20260727_object_backed_bronze.py
+      - services/backend/config/settings.py
       - config/storage_policies.yaml
     tests_required: [tests/unit/test_object_backed_bronze.py]
     evidence_required: [DSR + legal-hold + retention lifecycle tests in tests/unit/test_object_backed_bronze.py]
@@ -366,17 +366,17 @@ items:
       that produced it, so a local that stops being wired into `count` fails
       rather than passes.
     affected_paths:
-      - AWS Deployment/aether-aws/terraform/profiles.tf
-      - AWS Deployment/aether-aws/terraform/main.tf
-      - AWS Deployment/aether-aws/terraform/variables.tf
-      - AWS Deployment/aether-aws/terraform/moved.tf
-      - AWS Deployment/aether-aws/terraform/profiles/
-      - AWS Deployment/aether-aws/terraform/modules/vpc/main.tf
-      - AWS Deployment/aether-aws/terraform/modules/ecs/main.tf
-      - AWS Deployment/aether-aws/terraform/modules/alb/main.tf
-      - AWS Deployment/aether-aws/terraform/modules/monitoring/main.tf
-      - AWS Deployment/aether-aws/terraform/tests/profile_plan.tftest.hcl
-      - AWS Deployment/aether-aws/terraform/DECOMMISSION.md
+      - deploy/aws/terraform/profiles.tf
+      - deploy/aws/terraform/main.tf
+      - deploy/aws/terraform/variables.tf
+      - deploy/aws/terraform/moved.tf
+      - deploy/aws/terraform/profiles/
+      - deploy/aws/terraform/modules/vpc/main.tf
+      - deploy/aws/terraform/modules/ecs/main.tf
+      - deploy/aws/terraform/modules/alb/main.tf
+      - deploy/aws/terraform/modules/monitoring/main.tf
+      - deploy/aws/terraform/tests/profile_plan.tftest.hcl
+      - deploy/aws/terraform/DECOMMISSION.md
       - config/terraform_resource_contracts.yaml
     tests_required:
       - "make test-terraform-profiles (terraform validate + terraform test over tests/profile_plan.tftest.hcl)"
@@ -388,7 +388,7 @@ items:
     docs_required:
       - docs/DEPLOYMENT-PROFILES.md
       - docs/AWS-LEAN-PRODUCTION.md
-      - AWS Deployment/aether-aws/terraform/DECOMMISSION.md
+      - deploy/aws/terraform/DECOMMISSION.md
     owner: platform
     status: subsystem_tests_pass
     blocked_by: [FT-COST-POLICY-DATA]
@@ -495,14 +495,14 @@ items:
       outbox-relay.
     affected_paths:
       - config/runtime_deployment.yaml
-      - AWS Deployment/aether-aws/terraform/profiles.tf
-      - AWS Deployment/aether-aws/terraform/modules/ecs/main.tf
-      - Backend Architecture/aether-backend/services/runtime/roles.py
-      - Backend Architecture/aether-backend/services/runtime/consumer_runner.py
-      - Backend Architecture/aether-backend/services/runtime/consumer_specs.py
-      - Backend Architecture/aether-backend/services/runtime/run_role.py
-      - Backend Architecture/aether-backend/shared/events/events.py
-      - Backend Architecture/aether-backend/config/settings.py
+      - deploy/aws/terraform/profiles.tf
+      - deploy/aws/terraform/modules/ecs/main.tf
+      - services/backend/services/runtime/roles.py
+      - services/backend/services/runtime/consumer_runner.py
+      - services/backend/services/runtime/consumer_specs.py
+      - services/backend/services/runtime/run_role.py
+      - services/backend/shared/events/events.py
+      - services/backend/config/settings.py
       - scripts/release/check_delivery_topology.py
       - tests/unit/test_runtime_execution_groups.py
       - tests/unit/test_runtime_topology.py
@@ -661,7 +661,7 @@ items:
       - .github/workflows/staging-lifecycle.yml
       - .github/workflows/staging-ttl-guard.yml
       - config/runtime_deployment.yaml
-      - AWS Deployment/aether-aws/terraform/profiles.tf
+      - deploy/aws/terraform/profiles.tf
       - tests/unit/test_staging_lifecycle_controls.py
     tests_required:
       - "make test-staging-lifecycle (tests/unit/test_staging_lifecycle_controls.py)"
@@ -731,11 +731,11 @@ items:
       - config/deployment_profiles.yaml
       - config/runtime_deployment.yaml
       - config/terraform_resource_contracts.yaml
-      - AWS Deployment/aether-aws/terraform/variables.tf
-      - AWS Deployment/aether-aws/terraform/profiles.tf
-      - AWS Deployment/aether-aws/terraform/profiles/demo.tfvars
-      - AWS Deployment/aether-aws/terraform/profiles/preview.tfvars
-      - AWS Deployment/aether-aws/terraform/tests/profile_plan.tftest.hcl
+      - deploy/aws/terraform/variables.tf
+      - deploy/aws/terraform/profiles.tf
+      - deploy/aws/terraform/profiles/demo.tfvars
+      - deploy/aws/terraform/profiles/preview.tfvars
+      - deploy/aws/terraform/tests/profile_plan.tftest.hcl
       - scripts/release/ephemeral_ttl_guard.py
       - scripts/release/ephemeral_env.py
       - .github/workflows/ephemeral-ttl-guard.yml
@@ -919,14 +919,14 @@ items:
       plus canonical_activity and SilverGraphProjector). Flag off preserves the
       current synchronous behavior byte-for-byte.
     affected_paths:
-      - Backend Architecture/aether-backend/services/agentic_observability/routes.py
-      - Backend Architecture/aether-backend/services/agentic_observability/pipeline.py
-      - Backend Architecture/aether-backend/services/external_account_observability/routes.py
-      - Backend Architecture/aether-backend/services/ingestion/outbox_relay.py
-      - Backend Architecture/aether-backend/services/silver/dispatcher.py
-      - Backend Architecture/aether-backend/services/silver/projectors/agent_execution_projector.py
-      - Backend Architecture/aether-backend/services/silver/projectors/silver_graph_projector.py
-      - Backend Architecture/aether-backend/config/settings.py
+      - services/backend/services/agentic_observability/routes.py
+      - services/backend/services/agentic_observability/pipeline.py
+      - services/backend/services/external_account_observability/routes.py
+      - services/backend/services/ingestion/outbox_relay.py
+      - services/backend/services/silver/dispatcher.py
+      - services/backend/services/silver/projectors/agent_execution_projector.py
+      - services/backend/services/silver/projectors/silver_graph_projector.py
+      - services/backend/config/settings.py
     tests_required: [tests/unit/test_agentic_canonical_spine.py (flag-off/flag-on parity — planned)]
     evidence_required: [pytest agentic canonical-spine delegation output, flag-off vs flag-on projection parity]
     docs_required:
@@ -954,8 +954,8 @@ items:
     required_behavior: The delegation path uses the existing event-registry *_observed types (silverProjection agent_execution_facts) and the AgentExecutionProjector ownership; net-new provider-neutral event types are deferred, not invented here.
     affected_paths:
       - packages/shared/contracts/event-registry.json
-      - Backend Architecture/aether-backend/services/silver/projectors/agent_execution_projector.py
-      - Backend Architecture/aether-backend/services/silver/dispatcher.py
+      - services/backend/services/silver/projectors/agent_execution_projector.py
+      - services/backend/services/silver/dispatcher.py
     tests_required: [tests/unit/test_agentic_canonical_spine.py (event-name to agent_execution_facts mapping — planned)]
     evidence_required: [event-registry agent_execution_facts coverage output]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
@@ -978,9 +978,9 @@ items:
     current_behavior: Graph projection for agentic observations rides AgenticProjectionOutbox + AgenticGraphOutboxWorker (services/agentic_observability/outbox_worker.py); the platform event_outbox relay is separate.
     required_behavior: When delegating, agentic observations are relayed by the existing event_outbox relay (services/ingestion/outbox_relay.py, FT-6) and its Silver/graph workers; no net-new relay is built.
     affected_paths:
-      - Backend Architecture/aether-backend/services/ingestion/outbox_relay.py
-      - Backend Architecture/aether-backend/services/ingestion/workers.py
-      - Backend Architecture/aether-backend/config/settings.py
+      - services/backend/services/ingestion/outbox_relay.py
+      - services/backend/services/ingestion/workers.py
+      - services/backend/config/settings.py
     tests_required: [tests/unit/test_outbox_relay.py (existing relay coverage — reused)]
     evidence_required: [pytest tests/unit/test_outbox_relay.py output]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR1.md]
@@ -1004,15 +1004,15 @@ items:
     current_behavior: Not implemented. Permission/tool/MCP observations exist as facts but there is no derived capability catalog.
     required_behavior: A capability catalog projected from agent_execution_facts, keyed by agent/tenant, with provenance back to source observations.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/__init__.py"
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/models.py"
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/repositories.py"
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/catalog_service.py"
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/routes.py"
-      - "Backend Architecture/aether-backend/alembic/versions/20260805_capability_catalog.py"
-      - "Backend Architecture/aether-backend/services/silver/dispatcher.py"
-      - "Backend Architecture/aether-backend/main.py"
-      - "Backend Architecture/aether-backend/shared/privacy/retention.py"
+      - "services/backend/services/agent_access_intelligence/__init__.py"
+      - "services/backend/services/agent_access_intelligence/models.py"
+      - "services/backend/services/agent_access_intelligence/repositories.py"
+      - "services/backend/services/agent_access_intelligence/catalog_service.py"
+      - "services/backend/services/agent_access_intelligence/routes.py"
+      - "services/backend/alembic/versions/20260805_capability_catalog.py"
+      - "services/backend/services/silver/dispatcher.py"
+      - "services/backend/main.py"
+      - "services/backend/shared/privacy/retention.py"
       - config/storage_policies.yaml
       - config/route_registry.yaml
     tests_required:
@@ -1042,11 +1042,11 @@ items:
     current_behavior: Not implemented. No canonical authority-policy model for agent access.
     required_behavior: A policy model expressing granted authority per agent/capability with evaluation hooks against the capability catalog.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/authority.py"
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/authority_routes.py"
-      - "Backend Architecture/aether-backend/services/security/policy_engine.py"
-      - "Backend Architecture/aether-backend/shared/privacy/retention.py"
-      - "Backend Architecture/aether-backend/main.py"
+      - "services/backend/services/agent_access_intelligence/authority.py"
+      - "services/backend/services/agent_access_intelligence/authority_routes.py"
+      - "services/backend/services/security/policy_engine.py"
+      - "services/backend/shared/privacy/retention.py"
+      - "services/backend/main.py"
       - config/route_registry.yaml
     tests_required:
       - "tests/unit/capability_catalog/test_capability_authority.py"
@@ -1082,11 +1082,11 @@ items:
     current_behavior: Not implemented. No drift detector between declared authority and observed capability.
     required_behavior: A detector that diffs the authority policy against the observed capability catalog and emits drift findings.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/identity.py"
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/declarations.py"
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/scanning.py"
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/risk_service.py"
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/risk_routes.py"
+      - "services/backend/services/agent_access_intelligence/identity.py"
+      - "services/backend/services/agent_access_intelligence/declarations.py"
+      - "services/backend/services/agent_access_intelligence/scanning.py"
+      - "services/backend/services/agent_access_intelligence/risk_service.py"
+      - "services/backend/services/agent_access_intelligence/risk_routes.py"
     tests_required:
       - "tests/unit/capability_catalog/test_capability_identity.py"
       - "tests/unit/capability_catalog/test_capability_scanning.py"
@@ -1120,8 +1120,8 @@ items:
     current_behavior: Not implemented. No blast-radius computation over agent access.
     required_behavior: A blast-radius computation over the capability catalog and access graph, bounded per agent/credential.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/risk_service.py"
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/risk_routes.py"
+      - "services/backend/services/agent_access_intelligence/risk_service.py"
+      - "services/backend/services/agent_access_intelligence/risk_routes.py"
     tests_required:
       - "tests/unit/capability_catalog/test_capability_risk.py"
       - "tests/unit/capability_catalog/test_capability_review_regressions.py"
@@ -1156,13 +1156,13 @@ items:
     current_behavior: Not implemented. Provider handling is bespoke; no neutral framework or net-new provider-neutral event types.
     required_behavior: A provider-neutral framework plus the deferred net-new provider-neutral *_observed event types registered in the event registry.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/provider_evidence.py"
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/provider_routes.py"
-      - "Backend Architecture/aether-backend/services/agentic_observability/provider_framework.py"
-      - "Backend Architecture/aether-backend/alembic/versions/20260808_provider_evidence.py"
+      - "services/backend/services/agent_access_intelligence/provider_evidence.py"
+      - "services/backend/services/agent_access_intelligence/provider_routes.py"
+      - "services/backend/services/agentic_observability/provider_framework.py"
+      - "services/backend/alembic/versions/20260808_provider_evidence.py"
     tests_required:
       - "tests/unit/capability_catalog/test_provider_evidence.py"
-      - "Backend Architecture/aether-backend/tests/unit/test_agentic_provider_framework.py"
+      - "services/backend/tests/unit/test_agentic_provider_framework.py"
     evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
     docs_required: [docs/source-of-truth/AGENT_ACCESS_INTELLIGENCE_PR3_PR4.md]
     owner: ingestion
@@ -1191,10 +1191,10 @@ items:
     current_behavior: Not implemented. No provider-evidence capture layer.
     required_behavior: An evidence-capture layer producing attestations linked to provider observations and the capability catalog.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/provider_evidence.py"
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/provider_routes.py"
+      - "services/backend/services/agent_access_intelligence/provider_evidence.py"
+      - "services/backend/services/agent_access_intelligence/provider_routes.py"
       - "config/storage_policies.yaml"
-      - "Backend Architecture/aether-backend/shared/privacy/retention.py"
+      - "services/backend/shared/privacy/retention.py"
     tests_required:
       - "tests/unit/capability_catalog/test_provider_evidence.py"
     evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
@@ -1219,9 +1219,9 @@ items:
     current_behavior: Not implemented. No reconciliation across observed access and provider sources.
     required_behavior: A reconciler comparing observed capability state against provider-reported state with missing/orphan/mismatch findings.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/reconciliation_service.py"
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/reconciliation_routes.py"
-      - "Backend Architecture/aether-backend/services/agentic_observability/reconciliation.py"
+      - "services/backend/services/agent_access_intelligence/reconciliation_service.py"
+      - "services/backend/services/agent_access_intelligence/reconciliation_routes.py"
+      - "services/backend/services/agentic_observability/reconciliation.py"
     tests_required:
       - "tests/unit/capability_catalog/test_capability_reconciliation.py"
     evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
@@ -1253,7 +1253,7 @@ items:
     required_behavior: Curated, versioned reference packs built on the provider framework.
     affected_paths:
       - "config/agent_access_reference_packs"
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/reference_packs.py"
+      - "services/backend/services/agent_access_intelligence/reference_packs.py"
       - "scripts/validate_reference_packs.py"
     tests_required:
       - "tests/unit/capability_catalog/test_reference_packs.py"
@@ -1283,8 +1283,8 @@ items:
     current_behavior: Not implemented as a dedicated access graph; graph edges are projected generically by SilverGraphProjector.
     required_behavior: A dedicated agent-access graph projection and query surface built on canonical projections.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/access_graph.py"
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/access_graph_routes.py"
+      - "services/backend/services/agent_access_intelligence/access_graph.py"
+      - "services/backend/services/agent_access_intelligence/access_graph_routes.py"
     tests_required:
       - "tests/unit/capability_catalog/test_access_graph.py"
     evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
@@ -1312,8 +1312,8 @@ items:
     current_behavior: Not implemented. No agent-access profiles/journeys surface.
     required_behavior: Profile and journey compilation over the agent-access graph.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/profiles.py"
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/profile_routes.py"
+      - "services/backend/services/agent_access_intelligence/profiles.py"
+      - "services/backend/services/agent_access_intelligence/profile_routes.py"
     tests_required:
       - "tests/unit/capability_catalog/test_agent_profiles.py"
     evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
@@ -1369,7 +1369,7 @@ items:
     current_behavior: Not implemented. Kyber agentic-observability admin views exist but not the access-intelligence operator surfaces.
     required_behavior: Kyber operator surfaces (operator-gated) for authority, drift, and blast-radius review.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/kyber_ops_routes.py"
+      - "services/backend/services/agent_access_intelligence/kyber_ops_routes.py"
       - "frontend/kyber/src/features/agent-access"
       - "frontend/kyber/src/pages/agent-access"
       - "frontend/kyber/src/app/router.tsx"
@@ -1401,9 +1401,9 @@ items:
     current_behavior: Not implemented. No Noesis alerts/exports wired for agent access intelligence.
     required_behavior: Noesis alert rules and export jobs over drift and blast-radius findings.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/alerts.py"
-      - "Backend Architecture/aether-backend/services/agent_access_intelligence/alert_routes.py"
-      - "Backend Architecture/aether-backend/services/noesis/adapters/agentic_intelligence_adapter.py"
+      - "services/backend/services/agent_access_intelligence/alerts.py"
+      - "services/backend/services/agent_access_intelligence/alert_routes.py"
+      - "services/backend/services/noesis/adapters/agentic_intelligence_adapter.py"
     tests_required:
       - "tests/unit/capability_catalog/test_capability_alerts.py"
     evidence_required: ["pytest tests/unit/capability_catalog/ -> 326 passed"]
@@ -1478,8 +1478,8 @@ items:
       exchange. No customer authentication path can create a principal; no first login
       auto-provisions one. Suspension and offboarding revoke access immediately.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/kyber/identity/"
-      - "Backend Architecture/aether-backend/alembic/versions/20260809_kyber_workforce.py"
+      - "services/backend/services/kyber/identity/"
+      - "services/backend/alembic/versions/20260809_kyber_workforce.py"
       - "docs/source-of-truth/KYBER_WORKFORCE_IDENTITY.md"
       - "docs/runbooks/KYBER_ACCOUNT_RECOVERY.md"
       - "docs/runbooks/KYBER_WORKFORCE_OFFBOARDING.md"
@@ -1514,7 +1514,7 @@ items:
       A second personal machine requires its own approval. Device revocation terminates
       every session bound to it. No company-owned hardware is required.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/kyber/devices/"
+      - "services/backend/services/kyber/devices/"
       - "frontend/kyber/src/features/device-trust/"
       - "pyproject.toml"
       - "docs/source-of-truth/KYBER_DEVICE_TRUST.md"
@@ -1553,9 +1553,9 @@ items:
       naming exactly one tenant, with a purpose and expiry. A client-supplied tenant id
       never grants authority and a mismatch is a denial, never a silent rescope.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/kyber/sessions/"
-      - "Backend Architecture/aether-backend/services/kyber/access/scopes.py"
-      - "Backend Architecture/aether-backend/services/kyber/access/dependencies.py"
+      - "services/backend/services/kyber/sessions/"
+      - "services/backend/services/kyber/access/scopes.py"
+      - "services/backend/services/kyber/access/dependencies.py"
       - "docs/source-of-truth/KYBER_SESSIONS_AND_SCOPES.md"
       - "docs/runbooks/KYBER_SCOPE_LEAK.md"
     tests_required:
@@ -1595,11 +1595,11 @@ items:
       PolicyEngine and audit ledger — no second policy engine, RBAC or audit trail.
       Production must not retain a legacy operator tenant allowlist as authoritative.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/kyber/access/capabilities.py"
-      - "Backend Architecture/aether-backend/services/kyber/access/roles.py"
-      - "Backend Architecture/aether-backend/services/security/route_registry.py"
-      - "Backend Architecture/aether-backend/services/security/request_context.py"
-      - "Backend Architecture/aether-backend/services/security/policy_engine.py"
+      - "services/backend/services/kyber/access/capabilities.py"
+      - "services/backend/services/kyber/access/roles.py"
+      - "services/backend/services/security/route_registry.py"
+      - "services/backend/services/security/request_context.py"
+      - "services/backend/services/security/policy_engine.py"
       - "config/route_registry.yaml"
       - "frontend/kyber/src/features/permissions/"
       - "docs/source-of-truth/KYBER_ACCESS_CONTROL.md"
@@ -1652,19 +1652,19 @@ items:
       the task role's least-privilege crypto grant under the five-key encryption
       context. The legacy generic key API is repaired and deprecated.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/providers/credentials/authority.py"
-      - "Backend Architecture/aether-backend/services/providers/credentials/repository.py"
-      - "Backend Architecture/aether-backend/services/providers/credentials/slot_registry.py"
-      - "Backend Architecture/aether-backend/services/providers/credentials/schema.py"
-      - "Backend Architecture/aether-backend/services/providers/credentials/routes.py"
-      - "Backend Architecture/aether-backend/services/providers/credentials/models.py"
-      - "Backend Architecture/aether-backend/services/providers/credentials/startup.py"
-      - "Backend Architecture/aether-backend/shared/providers/credential_cipher.py"
-      - "Backend Architecture/aether-backend/alembic/versions/20260812_provider_credential_versions.py"
-      - "Backend Architecture/aether-backend/services/providers/routes.py"
-      - "Backend Architecture/aether-backend/shared/privacy/retention.py"
+      - "services/backend/services/providers/credentials/authority.py"
+      - "services/backend/services/providers/credentials/repository.py"
+      - "services/backend/services/providers/credentials/slot_registry.py"
+      - "services/backend/services/providers/credentials/schema.py"
+      - "services/backend/services/providers/credentials/routes.py"
+      - "services/backend/services/providers/credentials/models.py"
+      - "services/backend/services/providers/credentials/startup.py"
+      - "services/backend/shared/providers/credential_cipher.py"
+      - "services/backend/alembic/versions/20260812_provider_credential_versions.py"
+      - "services/backend/services/providers/routes.py"
+      - "services/backend/shared/privacy/retention.py"
       - "config/storage_policies.yaml"
-      - "AWS Deployment/aether-aws/terraform/modules/kms_credentials"
+      - "deploy/aws/terraform/modules/kms_credentials"
     tests_required:
       - "tests/unit/test_credential_cipher.py"
       - "tests/unit/test_credential_slot_registry.py"
@@ -1698,9 +1698,9 @@ items:
       (webhook_signing_secret for verification; the API-key slot for polling); the
       in-memory vault is removed or made a durable shim, leaving a single authority.
     affected_paths:
-      - "Backend Architecture/aether-backend/shared/providers/key_vault.py"
-      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/base.py"
-      - "Backend Architecture/aether-backend/config/settings.py"
+      - "services/backend/shared/providers/key_vault.py"
+      - "services/backend/services/integrations/providers/payment_rails/base.py"
+      - "services/backend/config/settings.py"
     tests_required: ["tests/payment_rails/test_credential_read_path.py"]
     evidence_required:
       - "adapters resolve slot-aware secrets from the authority; no in-memory credential store remains"
@@ -1730,15 +1730,15 @@ items:
       controls; consent + metadata-only quarantine on the payment-rails path;
       read-only polling connection tests using the polling slot.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/routes.py"
-      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/base.py"
-      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/service.py"
-      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/signature_verify.py"
-      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/webhook_endpoints.py"
-      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/rate_limit.py"
-      - "Backend Architecture/aether-backend/alembic/versions/20260813_payment_webhook_endpoints.py"
+      - "services/backend/services/integrations/providers/payment_rails/routes.py"
+      - "services/backend/services/integrations/providers/payment_rails/base.py"
+      - "services/backend/services/integrations/providers/payment_rails/service.py"
+      - "services/backend/services/integrations/providers/payment_rails/signature_verify.py"
+      - "services/backend/services/integrations/providers/payment_rails/webhook_endpoints.py"
+      - "services/backend/services/integrations/providers/payment_rails/rate_limit.py"
+      - "services/backend/alembic/versions/20260813_payment_webhook_endpoints.py"
       - "config/storage_policies.yaml"
-      - "Backend Architecture/aether-backend/config/settings.py"
+      - "services/backend/config/settings.py"
     tests_required:
       - "tests/payment_rails/test_signature_verify.py"
       - "tests/payment_rails/test_signature_golden.py"
@@ -1782,15 +1782,15 @@ items:
       credential preflight; Aether setup/result UI; Kyber diagnostics; entitlements +
       usage meters with billing-outage-safe acceptance.
     affected_paths:
-      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/service.py"
-      - "Backend Architecture/aether-backend/services/integrations/providers/payment_rails/routes.py"
-      - "Backend Architecture/aether-backend/services/ingestion/bronze_bulk.py"
-      - "Backend Architecture/aether-backend/config/settings.py"
-      - "Backend Architecture/aether-backend/services/stablecoins/connector_base.py"
-      - "Backend Architecture/aether-backend/services/stablecoins/ingestion.py"
-      - "Backend Architecture/aether-backend/services/billing/revops.py"
-      - "Backend Architecture/aether-backend/services/onchain/rpc_gateway.py"
-      - "Backend Architecture/aether-backend/services/stablecoins/registry.py"
+      - "services/backend/services/integrations/providers/payment_rails/service.py"
+      - "services/backend/services/integrations/providers/payment_rails/routes.py"
+      - "services/backend/services/ingestion/bronze_bulk.py"
+      - "services/backend/config/settings.py"
+      - "services/backend/services/stablecoins/connector_base.py"
+      - "services/backend/services/stablecoins/ingestion.py"
+      - "services/backend/services/billing/revops.py"
+      - "services/backend/services/onchain/rpc_gateway.py"
+      - "services/backend/services/stablecoins/registry.py"
       - "frontend/aether/src/pages/payment-rails/payment-rails-page.tsx"
       - "frontend/aether/src/features/payment-rails/api.ts"
       - "frontend/aether/src/lib/env/config.ts"

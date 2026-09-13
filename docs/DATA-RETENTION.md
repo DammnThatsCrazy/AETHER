@@ -10,7 +10,7 @@ since_version: "0.1.0"
 
 # Data Retention & Data Requests
 
-`DataRetentionService` (`services/security/retention.py`) manages
+`DataRetentionService` (`services/backend/services/security/retention.py`) manages
 `DataRetentionPolicy` records and processes `DataRequest`s (export / delete /
 review) as structured, audited records.
 

@@ -103,7 +103,7 @@ Phase 2 resolves that authority as a **read-side knowledge-time reconstruction**
 `GraphReplayState` of vertices/edges/digest, the substrate behind digest-only
 `replay_ledger`) and `repositories/graph_mutation_ledger.py` gained
 `list_records_known_as_of` (the knowledge-time-bounded prefix read, in-memory +
-PG); `services/temporal360/history_replay.py` composes them into the read-side
+PG); `services/backend/services/temporal360/history_replay.py` composes them into the read-side
 answers. Once shipped (T2.1), `graph_history_replay` is formalized into the
 validator `SPINE_INDEX` at T2.4 so the now-zero-pending row's `hardDependency`
 still resolves — the designed spine-formalization step, not a validator
@@ -136,7 +136,7 @@ Temporal360 reuses the canonical `TimeRangeFilter`, `GraphSnapshotRef`,
 * `shared/temporal/` + `packages/shared/temporal.ts` — the **only** temporal
   parser/calendar authority (instants, IANA zones, clocks, DST windows,
   bitemporal `TemporalEnvelope`). No new parser.
-* `services/temporal_preferences/` — display preferences, not truth. Temporal360
+* `services/backend/services/temporal_preferences/` — display preferences, not truth. Temporal360
   renders facts, it does not host UI prefs.
 * `shared/projection_engine/temporal_modes.py` — the `TemporalMode` *vocabulary*;
   Temporal360 is a consumer/provider of modes, never a re-declaration.

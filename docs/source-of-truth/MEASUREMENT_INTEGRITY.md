@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/shared/measurement/value_states.py, Backend Architecture/aether-backend/shared/measurement/context.py, Backend Architecture/aether-backend/shared/measurement/contracts.py, Backend Architecture/aether-backend/shared/measurement/validators.py, Backend Architecture/aether-backend/shared/measurement/uncertainty.py, Backend Architecture/aether-backend/shared/measurement/registry.py, Backend Architecture/aether-backend/shared/measurement/compute.py, Backend Architecture/aether-backend/repositories/measurement_results_repo.py, Backend Architecture/aether-backend/services/measurement/routes/integrity.py, Backend Architecture/aether-backend/services/campaign/routes.py]
+source_files: [services/backend/shared/measurement/value_states.py, services/backend/shared/measurement/context.py, services/backend/shared/measurement/contracts.py, services/backend/shared/measurement/validators.py, services/backend/shared/measurement/uncertainty.py, services/backend/shared/measurement/registry.py, services/backend/shared/measurement/compute.py, services/backend/repositories/measurement_results_repo.py, services/backend/services/measurement/routes/integrity.py, services/backend/services/campaign/routes.py]
 last_synced_commit: ae973059
 ---
 
@@ -80,7 +80,7 @@ migration keeps a single alembic head.
 
 ## Read surfaces
 
-`services/measurement/routes/integrity.py` (mounted under `/v1/measurement`):
+`services/backend/services/measurement/routes/integrity.py` (mounted under `/v1/measurement`):
 
 | Route | Returns |
 |---|---|
@@ -103,7 +103,7 @@ result into the plane, idempotently (an active result for the same context is
 returned unchanged, not re-inserted).
 
 The Campaign360 gold materializer
-(`services/measurement/engine/gold_materializer.py`) uses this to record the
+(`services/backend/services/measurement/engine/gold_materializer.py`) uses this to record the
 tenant-day `conversion_rate` into the plane on every materialization. The gold
 ClickHouse row keeps its typed float column for analytical compatibility; the
 plane is the **integrity source of truth** — a `0.0` in gold is legacy

@@ -6,7 +6,7 @@
 #
 #   route            -> a known_prefixes entry in config/route_registry.yaml
 #   runtime_role     -> an ALL_ROLES token from
-#                       Backend Architecture/aether-backend/services/runtime/roles.py
+#                       services/backend/services/runtime/roles.py
 #                       (read via the release gate's AST reader, never imported)
 #   release_flag     -> a required_controls.feature_flags key or rollouts key in
 #                       config/founding_tenant_release.yaml

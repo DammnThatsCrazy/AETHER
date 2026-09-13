@@ -22,7 +22,7 @@ estimated_read_minutes: 5
 | --- | --- | --- |
 | Lawful basis / consent | Consent service + per-purpose gating (SDK `ConsentModule`) | implemented |
 | Right of access / portability | Data requests (DSR) handling | implemented |
-| Right to erasure | Retention + audit-preserving deletion (`services/security/retention.py`) | implemented |
+| Right to erasure | Retention + audit-preserving deletion (`services/backend/services/security/retention.py`) | implemented |
 | Storage limitation | Retention policies per resource type | implemented |
 | Integrity / confidentiality | Tenant isolation, secrets vault, audit ledger | implemented |
 | Records of processing | Audit ledger + evidence inventory | documented |

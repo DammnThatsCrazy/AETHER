@@ -42,7 +42,7 @@ that domain.
 | --- | --- | --- | --- | --- | --- |
 | Universal asset + deployment registry (program capability) | Phase 2 landed — migration A + typed repos + seeds + resolver + registry facade + deterministic sha256 `registry_version`; `/v1/assets` routes flag-gated OFF by default; runtime seeding not enabled | — (registry rows carry metadata, not valuations) | — | Phase 3 landed — reference VertexType/EdgeType members + global reference schemas landed (EXCLUDED layer); registry→graph projector landed (ASSET / FIAT_CURRENCY / CHAIN / ASSET_DEPLOYMENT vertices + DEPLOYED_ON_CHAIN edges; opt-in seeder, default OFF) | PARTIAL |
 | Event-time valuation engine (program capability) | — | Phase 3 landed — engine core (pure, port-injected `value_at` + `observe_price`) + migration B append-only persistence (`valuation_price_observations` / `valuation_snapshots` with the supersede carve-out, `tenant_value_policies`) + `/v1/valuation` routes; flag-gated OFF by default | — | Planned — Phase 3 (valuation snapshot vertices) | PARTIAL |
-| Value (shared contract + `services/value`) | LEGACY — USD-first canonical contract; currency is a bare string | LEGACY — `USDValuation` only; peg-aware via `stablecoin_peg_verified` | — | — | LEGACY |
+| Value (shared contract + `services/backend/services/value`) | LEGACY — USD-first canonical contract; currency is a bare string | LEGACY — `USDValuation` only; peg-aware via `stablecoin_peg_verified` | — | — | LEGACY |
 | Stablecoin registry | LEGACY — today's canonical asset + deployment registry; x402-seeded; **seed source** for the universal registry | LEGACY — peg-aware, source-backed stablecoin valuation | — | — | LEGACY |
 | Stablecoin intelligence | LEGACY | LEGACY | — | — | LEGACY |
 | Commerce | LEGACY | LEGACY | — | — | LEGACY |
@@ -63,7 +63,7 @@ that domain.
   they are LEGACY (no shipped implementation). They move to CANONICAL when Phase
   2 (registry) and Phase 3 (valuation engine + graph surface) complete.
 - **Stablecoin registry as seed source.** The two stablecoin rows carry the
-  note that today's `services/stablecoin/` registry — the only canonical asset +
+  note that today's `services/backend/services/stablecoin/` registry — the only canonical asset +
   deployment registry in the repository, x402-seeded from verified contracts —
   is the seed source the universal registry generalizes. The universal registry
   does not replace it in a breaking way: the stablecoin rows are imported as
@@ -106,7 +106,7 @@ Recorded so the review outcomes travel with the ledger, not just the commit:
 ### W4a shared-layer note (2026-09-02, code 84069154)
 
 Phase-4's rollup/display seam landed before the per-domain convergence lanes.
-`safe_rollup` (`services/value/rollups.py`) is reporting-asset-keyed with a
+`safe_rollup` (`services/backend/services/value/rollups.py`) is reporting-asset-keyed with a
 byte-identical `fiat:USD` default: a reporting context adds a `reporting_totals`
 envelope (priced/unpriced/excluded/stale counts, `coverage_percentage`,
 `rollup_status`) plus opt-in `value_lineage`, conversion to a non-USD reporting
@@ -129,7 +129,7 @@ money/read work ahead of Phase-5 convergence:
   float.
 - **Agent cost** (c10b7876): `services/ai_economics` audited money-clean —
   aggregation was already `Decimal`-native; a money-exactness test locks it.
-- **Stablecoin** (74b92014): additive `services/stablecoin/canonical_identity.py`
+- **Stablecoin** (74b92014): additive `services/backend/services/stablecoin/canonical_identity.py`
   read seam resolves current/legacy references to namespaced `stablecoin:*`
   canonical ids and surfaces the canonical spelling on read rows; legacy rows and
   ids are untouched.

@@ -7,8 +7,8 @@ audience: [architect, dev-senior, security]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/main.py
-  - Backend Architecture/aether-backend/middleware/middleware.py
+  - services/backend/main.py
+  - services/backend/middleware/middleware.py
   - packages/shared/
 canonical_owner: platform@aether
 estimated_read_minutes: 20
@@ -17,9 +17,9 @@ reviewed_source_commits:
   - commit: "5bfb9394"
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
-  "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
-  "Backend Architecture/aether-backend/middleware/middleware.py": "sha256:8cd2cc774efd913fb94fda0bbb4f4336855f90301b7e8f48f1afe84b5c7fa12e"
-  "packages/shared/": "sha256:88c2ad32fed48d244579b9b2ff00aada788fc8d15ddfadb98435e492a85bbfd8"
+  "packages/shared/": "sha256:87db3c28ad4d1f3d2ce481968d4600143febf84ccbf3521f2c949f00f5cf9e8c"
+  "services/backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
+  "services/backend/middleware/middleware.py": "sha256:8cd2cc774efd913fb94fda0bbb4f4336855f90301b7e8f48f1afe84b5c7fa12e"
 ---
 # Aether vNext — Architecture Guide
 
@@ -34,6 +34,28 @@ Aether is a **hybrid Python/FastAPI + Node/TypeScript** platform with four opera
 3. **Data Lake Plane** — Medallion architecture (Bronze/Silver/Gold) for raw data persistence, validation, feature materialization, and intelligence output generation. Lake data feeds ML training, graph mutations, and intelligence APIs.
 
 4. **Frontend Plane** — Two React/Vite SPAs backed by the same `@aether/ui` shared component library (`packages/ui`). **Kyber** (`apps/kyber`, port 5174) is the internal operator control surface — investigation, live monitoring, entity management, and approvals. **Aether** (`apps/aether`, port 5175) is the customer-facing web app — account management and commerce. Both apps use PKCE OIDC auth and communicate exclusively with the backend REST API. Two **Expo mobile apps** extend the plane — **Aether Mobile** (`apps/aether-mobile`, customer plane) and **Kyber Mobile** (`apps/kyber-mobile`, operator plane, distinct bundle/audience from Aether Mobile) — built on the shared `@aether/mobile-core` (typed SDK: auth/continuation/sync/push over SecureStore PKCE) and `@aether/mobile-ui` (dark theme + typed navigation) packages. The mobile apps are read-only, consuming the mobile gateway's bounded redacted projections; their wire contracts (distribution profiles, install/app-version registration) live in `packages/shared/mobile-config.ts` and `packages/shared/installation.ts`.
+
+### Repository topology and runtime ownership
+
+The implementation tree follows the same boundaries as the runtime architecture.
+`services/backend/` is the deployed Python/FastAPI application and owns
+ingestion, lake coordination, graph access, intelligence routes, and backend
+repositories. `services/ml/` owns model training and serving; `services/agents/`
+owns internal broker-coupled workers and staged graph-mutation workflows; and
+`services/compliance/` owns the GDPR/SOC 2 control implementation. AWS and
+Terraform delivery live under `deploy/aws/`, while EVM and multi-chain contract
+code lives under `contracts/smart-contracts/`. Shared contracts remain in
+`packages/shared/contracts/`, and product clients remain under `apps/` and
+`frontend/`.
+
+The old space-containing trees are not alternate implementations. The two
+un-deployed TypeScript duplicates are retained under
+`docs/archive/legacy-architecture/data-ingestion-layer/` and
+`docs/archive/legacy-architecture/data-lake-architecture/` for historical
+reference only. Orphaned backend and deployment material is similarly grouped
+under `docs/archive/legacy-architecture/`. New code, CI paths, impact-graph
+entries, and operational instructions must use the canonical active paths in
+[`repo-migration.md`](source-of-truth/repo-migration.md).
 
 ### Data Flow
 
@@ -136,7 +158,7 @@ All SDKs generate a deterministic device fingerprint (SHA-256 hash) that is incl
 
 ## Traffic Source Classification
 
-SDKs collect raw traffic signals and ship them to the backend, where the `SourceClassifier` (`services/traffic/classifier.py`) classifies every session into source/medium/channel automatically.
+SDKs collect raw traffic signals and ship them to the backend, where the `SourceClassifier` (`services/backend/services/traffic/classifier.py`) classifies every session into source/medium/channel automatically.
 
 ```
 SDK detect()                       Backend SourceClassifier
@@ -498,7 +520,7 @@ projection surface answers live instead of degrading to `provider_unavailable`
 in the source-of-truth). Exploration surfaces compose over the engine through
 projection-backed surface adapters
 
-(`services/exploration/adapters/projection.py`).
+(`services/backend/services/exploration/adapters/projection.py`).
 The design decision is [ADR-010](decisions/ADR-010-intelligence-projection-plane.md);
 the source-of-truth is
 [INTELLIGENCE_PROJECTION_ARCHITECTURE.md](source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md).
@@ -562,9 +584,9 @@ surface.
 ### Provider transport adapters
 
 Provider SDKs live only behind the harness's provider-neutral `AsyncModelProvider`
-contract (`services/model_runtime/provider.py`); orchestrators such as Noesis
+contract (`services/backend/services/model_runtime/provider.py`); orchestrators such as Noesis
 never import them. Real transport for the first two providers lives in
-`services/model_runtime/adapters/`:
+`services/backend/services/model_runtime/adapters/`:
 
 | Adapter | Transport | Env surface |
 |---|---|---|
@@ -612,7 +634,7 @@ OpenAI adapter emits `response_format={"type":"json_object"}` when the request
 asks for it.
 
 The Noesis LLM plan providers (`AnthropicNoesisPlanProvider` and
-`OpenAINoesisPlanProvider` in `services/noesis/provider.py`) now build a
+`OpenAINoesisPlanProvider` in `services/backend/services/noesis/provider.py`) now build a
 `ModelRequest` and delegate the actual API call to the matching adapter via
 `.complete()`, converting the `ModelResponse` back to the legacy `_call_api`
 dict shape (`text`, `tokens_used`, `input_tokens`, `output_tokens`). Plan
@@ -625,7 +647,7 @@ the fail-closed behavior on missing credentials or config is preserved.
 ### Intelligence planes
 
 The model-runtime control plane builds on the provider adapters as a package
-under `services/model_runtime/`:
+under `services/backend/services/model_runtime/`:
 
 | Plane | Package | Responsibility | ADR-008 |
 |---|---|---|---|
@@ -676,7 +698,7 @@ job handler), `DATA_EXCHANGE_SIGNED_TRANSFERS_ENABLED`,
 plus `DATA_EXCHANGE_OBJECT_STORE_ENABLED` / `DATA_EXCHANGE_PARQUET_ENABLED` for
 transport/storage features — all OFF by default. Routes enforce the `data_exchange`
 RBAC domain (added to `ALL_DOMAINS` / `TENANT_DOMAINS`, auto-granted to tenant
-owner/admin/viewer) via `services/data_exchange/authz.py`, resolving each
+owner/admin/viewer) via `services/backend/services/data_exchange/authz.py`, resolving each
 dotted `data_exchange.*` grant to the legacy read/write/admin alias the proxied
 seam admits. See `BACKEND-API.md` ("Data Exchange Plane") and
 `docs/plans/data-exchange-api.md` for the full contract.
@@ -704,8 +726,8 @@ acquisition, health, reconciliation, certification) and `shared/commerce_contrac
 | Layer | Modules |
 |---|---|
 | Contract plane | `shared/integration_contracts/{plugin,capabilities,events,normalization,acquisition,health,reconciliation,certification}.py`; `shared/commerce_contracts/{money,order,events}.py` |
-| Runtime service | `services/provider_runtime/` — registry, validation (capability honesty), legacy compat plugin, credential broker, raw store, normalization engine, event bridge, connection orchestrator, scheduler, webhook gateway, rate-limit/retry coordinators, reconciliation, health, certification, routes |
-| Reference plugin | `services/providers/shopify/` — `shopify.admin.orders_read`, SSRF-safe `shop_domain` allowlist, HMAC webhook verify, order normalizer, incremental pull with page-info cursor |
+| Runtime service | `services/backend/services/provider_runtime/` — registry, validation (capability honesty), legacy compat plugin, credential broker, raw store, normalization engine, event bridge, connection orchestrator, scheduler, webhook gateway, rate-limit/retry coordinators, reconciliation, health, certification, routes |
+| Reference plugin | `services/backend/services/providers/shopify/` — `shopify.admin.orders_read`, SSRF-safe `shop_domain` allowlist, HMAC webhook verify, order normalizer, incremental pull with page-info cursor |
 
 Data flow is **raw-before-canonical**: `RawProviderRecord`s are persisted
 idempotently to `bronze` (`provider_records`, dedup key
@@ -834,7 +856,7 @@ trunk on the backend plane. Its authoritative architecture is
 [FINANCIAL_NORMALIZATION.md](source-of-truth/FINANCIAL_NORMALIZATION.md); this
 subsection is a pointer, not a replacement.
 
-**Universal Asset Registry service domain** (`services/assets/`). Global
+**Universal Asset Registry service domain** (`services/backend/services/assets/`). Global
 reference identity for fiat currencies, crypto natives, stablecoins, and tokens
 (namespaced ids `fiat:USD`, `crypto:ETH`, `stablecoin:USDC`,
 `token:<chain>:<contract>`), their chain deployments, and alias rows that
@@ -852,7 +874,7 @@ additionally require `settings.assets.ingestion_enabled`
 permission; writes require `ADMIN`. Runtime seeding is not enabled by default —
 the seed ships as an ADMIN action, it is not run at startup.
 
-**Event-time valuation + persistence** (`services/valuation/`). The pure
+**Event-time valuation + persistence** (`services/backend/services/valuation/`). The pure
 `value_at` engine and the `observe_price` ingest path price a native value into
 a tenant-scoped `ValuationSnapshot` in a reporting asset at `effective_at`,
 persisted as an immutable append-only row — a correction appends a NEW
@@ -867,7 +889,7 @@ and the observational writes (`observe` / `value` / policy) additionally require
 `AETHER_VALUATION_INGESTION_ENABLED` + ADMIN. `execution_by_aether` is always
 False — the domain observes and reports, never executes.
 
-**Reporting-asset-keyed safe rollup (W4a shared seam)** (`services/value/rollups.py`).
+**Reporting-asset-keyed safe rollup (W4a shared seam)** (`services/backend/services/value/rollups.py`).
 `safe_rollup` accepts a reporting context — a canonical `reporting_asset_id`
 (`fiat:USD` default) and an optional `amount_in_reporting_asset` resolver — and
 returns an additive `reporting_totals` envelope keyed by that asset (priced /
@@ -885,7 +907,7 @@ optional `reporting_totals` / `value_lineage` to `RollupResult`. This is the
 Phase-4 shared seam; per-domain ingestion adapters and viewer-display
 convergence follow.
 
-**Registry → graph reference projector** (`services/assets/graph_projector.py`).
+**Registry → graph reference projector** (`services/backend/services/assets/graph_projector.py`).
 Projects the canonical seed's asset / chain / fiat / deployment rows into GLOBAL
 reference vertices plus DEPLOYED_ON_CHAIN edges (platform tenant, EXCLUDED
 layer). Opt-in and never run at startup: the seeder projects only when invoked
@@ -956,10 +978,10 @@ Three additive service modules mount conditionally via `main.py` behind feature 
 
 | Service | Feature Flag | Router Prefix |
 |---------|-------------|---------------|
-| `services/fraud_networks` | `FEATURE_FRAUD_NETWORKS` | `/v1/fraud/networks` |
-| `services/flow_trace` | `FEATURE_FLOW_TRACE` | `/v1/flow-trace` |
-| `services/risk_overlay` | `FEATURE_RISK_OVERLAYS` | `/v1/risk-overlays` |
+| `services/backend/services/fraud_networks` | `FEATURE_FRAUD_NETWORKS` | `/v1/fraud/networks` |
+| `services/backend/services/flow_trace` | `FEATURE_FLOW_TRACE` | `/v1/flow-trace` |
+| `services/backend/services/risk_overlay` | `FEATURE_RISK_OVERLAYS` | `/v1/risk-overlays` |
 
 These services are fully additive — they add no startup overhead when their flags are disabled. They share the graph client, event producer, and investigation repository with existing services. The `FraudIntelligenceConfig` dataclass in `config/settings.py` owns all five flags and tuning parameters (`alert_risk_threshold`, `max_network_depth`, `max_flow_trace_hops`).
 
-See `docs/AGENT-CONTROLLER.md` for the full specification and `Agent Layer/README.md` for implementation details.
+See `docs/AGENT-CONTROLLER.md` for the full specification and `services/agents/README.md` for implementation details.

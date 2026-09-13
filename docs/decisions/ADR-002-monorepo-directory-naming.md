@@ -13,66 +13,66 @@ toc_depth: 2
 
 # ADR-002: Monorepo Directory Naming Convention
 
-**Status:** Accepted — Migration Pending | **Date:** 2026-05-29
+**Status:** Accepted — Migration Complete | **Date:** 2026-09-13
 
 ## Context
 
-Eight top-level directories use human-readable names with spaces and special
-characters:
+The pre-1.0 repository used eight top-level directories with human-readable
+names containing spaces and special characters. That layout caused repeated
+quoting bugs in CI and local tooling:
 
 ```
-AWS Deployment/
+AWS Deployment/aether-aws/
 Agent Layer/
-Backend Architecture/
+Backend Architecture/aether-backend/
 Data Ingestion Layer/
 Data Lake Architecture/
-GDPR & SOC2/
-ML Models/
+GDPR & SOC2/aether-compliance/
+ML Models/aether-ml/
 Smart Contracts/
 ```
 
-These names predate the current tooling conventions. They require shell quoting
-in every script, CI YAML, Makefile, and Python `Path()` call. Unquoted
-references are a recurring source of CI failures (e.g., the `Check env vars
-documented` step in `repo-health.yml` used `"$BACKEND_DIR/..."` without quotes
-around the variable expansion in some historic versions).
+PR #627 documented the migration but did not move the implementation tree. The
+follow-up remediation completed that move: active code is now under `services/`,
+`deploy/`, and `contracts/`; only historical material remains under
+`docs/archive/legacy-architecture/`. The names below are historical labels,
+not live paths.
 
 The `apps/`, `packages/`, `scripts/`, `tests/`, `docs/`, `security/`,
 `deploy/`, `lambda/`, and `cicd/` directories use the correct, shell-safe
-kebab-case convention.
+kebab-case convention. These support and evidence roots remain intentionally
+separate from deployable services; the active service boundaries are documented
+in [`repo-migration.md`](../source-of-truth/repo-migration.md).
 
 ## Decision
 
-**Current state (Accepted):** Directories with spaces are kept as-is. All CI
-scripts and Makefiles must quote references using `"${VAR}"` syntax. The
-`BACKEND_DIR`, `ML_DIR`, and `AGENT_DIR` env vars in CI are defined with
-quotes and used with `"${BACKEND_DIR}"` everywhere.
+**Current state (Accepted):** Active implementation directories use shell-safe
+paths. `BACKEND_DIR`, `ML_DIR`, `AGENT_DIR`, and `TF_DIR` point to
+`services/backend`, `services/ml`, `services/agents`, and `deploy/aws/terraform`.
+CI still quotes variable expansions at command boundaries.
 
-**Target state (Migration Pending):** In v9.0.0, rename all space-containing
-directories to kebab-case equivalents:
+**Completed migration map:**
 
-| Current | Target |
+| Historical root-era path | Canonical or archive path |
 |---------|--------|
-| `AWS Deployment/` | `infra/` |
-| `Agent Layer/` | `agent/` |
-| `Backend Architecture/aether-backend/` | `backend/` |
-| `Data Ingestion Layer/` | `ingestion/` |
-| `Data Lake Architecture/` | `datalake/` |
-| `GDPR & SOC2/` | `compliance/` |
-| `ML Models/aether-ml/` | `ml/` |
-| `Smart Contracts/` | `contracts/` |
+| `AWS Deployment/aether-aws/` | `deploy/aws/` |
+| `Agent Layer/` | `services/agents/` |
+| `Backend Architecture/aether-backend/` | `services/backend/` |
+| `Data Ingestion Layer/` | `docs/archive/legacy-architecture/data-ingestion-layer/` |
+| `Data Lake Architecture/` | `docs/archive/legacy-architecture/data-lake-architecture/` |
+| `GDPR & SOC2/aether-compliance/` | `services/compliance/` |
+| `ML Models/aether-ml/` | `services/ml/` |
+| `Smart Contracts/` | `contracts/smart-contracts/` |
 
-The migration must be atomic: a single PR updates all directory names,
-all import references, all CI YAML env vars, all Makefile paths, all
-`pyproject.toml` test paths, and all `docs/` source_files references
-in one commit. A migration script should be written and reviewed before
-execution.
+The migration was atomic across the root tree, import references, CI YAML,
+Makefile paths, test paths, source-linked docs, registries, and readiness
+artifacts. The ownership and impact-graph gates now prevent a root-era path
+from returning without an explicit review.
 
 ## Consequences
 
-**Current state:** Low migration risk but constant quoting friction and
-periodic CI bugs from missed quotes.
+**Current state:** Active paths are shell-safe; archived paths are intentionally
+kept under `docs/` and are not runtime inputs.
 
-**Target state:** Eliminates all quoting issues. Reduces `BACKEND_DIR` env var
-indirection in CI — paths can be used inline. Breaking change for any external
-tooling that has hardcoded the old paths.
+**Result:** The root tree now matches the repository-truth blueprint. External
+tooling that hardcoded the old paths must migrate to the canonical map above.

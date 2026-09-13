@@ -142,5 +142,5 @@ re-export from the consolidated `commerce.ts` module for tree-shaking:
 
 These schemas validate all responses from `/v1/x402/*`, `/v1/approvals/*`,
 `/v1/entitlements/*`, and `/v1/diagnostics/commerce/*` at the network boundary.
-Wire format mirrors backend Pydantic models in `services/x402/commerce_models.py`.
+Wire format mirrors backend Pydantic models in `services/backend/services/x402/commerce_models.py`.
 Breaking changes to backend models require coordinated updates to both files.

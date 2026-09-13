@@ -45,7 +45,7 @@ canonical_source: config/deployment_profiles.yaml
 profile: production-lean
 
 # Root module of the plan these contracts are written against.
-terraform_root: AWS Deployment/aether-aws/terraform
+terraform_root: deploy/aws/terraform
 
 # ----------------------------------------------------------------------------
 # required_resources — production-lean MUST provision each of these.

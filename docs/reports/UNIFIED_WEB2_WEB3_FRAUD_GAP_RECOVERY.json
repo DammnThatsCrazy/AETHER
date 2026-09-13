@@ -23,9 +23,9 @@
       "status": "VERIFIED",
       "affected_components": ["fraud service", "reward policy engine", "journey risk"],
       "affected_files": [
-        "Backend Architecture/aether-backend/alembic/versions/20260702_fraud_decisions.py",
-        "Backend Architecture/aether-backend/services/fraud/models.py",
-        "Backend Architecture/aether-backend/repositories/repos.py"
+        "services/backend/alembic/versions/20260702_fraud_decisions.py",
+        "services/backend/services/fraud/models.py",
+        "services/backend/repositories/repos.py"
       ],
       "root_cause": "Only ephemeral FraudDecisionInput Pydantic input existed; no DB table, no versioning, no supersession",
       "security_impact": "Fraud decisions were ephemeral; could not be audited, reviewed, or superseded",
@@ -49,8 +49,8 @@
       "status": "VERIFIED",
       "affected_components": ["canonical_activity", "activity_repo"],
       "affected_files": [
-        "Backend Architecture/aether-backend/alembic/versions/20260702_fraud_decisions.py",
-        "Backend Architecture/aether-backend/services/measurement/repositories/activity_repo.py"
+        "services/backend/alembic/versions/20260702_fraud_decisions.py",
+        "services/backend/services/measurement/repositories/activity_repo.py"
       ],
       "root_cause": "canonical_activity had no risk/fraud fields",
       "required_migration": "20260702_fraud_decisions.py (canonical_activity ALTER)",
@@ -64,8 +64,8 @@
       "status": "VERIFIED",
       "affected_components": ["journey_steps", "journey_step_repo"],
       "affected_files": [
-        "Backend Architecture/aether-backend/alembic/versions/20260702_fraud_decisions.py",
-        "Backend Architecture/aether-backend/services/measurement/repositories/journey_step_repo.py"
+        "services/backend/alembic/versions/20260702_fraud_decisions.py",
+        "services/backend/services/measurement/repositories/journey_step_repo.py"
       ],
       "root_cause": "journey_steps had no risk/fraud fields",
       "required_migration": "20260702_fraud_decisions.py (journey_steps ALTER)",

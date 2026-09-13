@@ -11,7 +11,7 @@ since_version: 0.1.0
 # Notification Control Plane
 
 The canonical notification control plane is the existing **Notification
-Intelligence** service (`services/notification_intelligence/`). This program
+Intelligence** service (`services/backend/services/notification_intelligence/`). This program
 brands it as the single source of truth, adds the missing TypeScript contract
 twins, and (in later increments) a producer-coverage registry and mobile
 projection. It does **not** introduce a second inbox, delivery queue, or audit
@@ -32,11 +32,11 @@ resolved**, and an HTTP 200 is not proof of anything.
 
 | Concern | Owner |
 |---|---|
-| Tenant in-app inbox | `services/notification_intelligence/inbox.py` (table `notification_inbox`) |
-| Forward-only lifecycle | `services/notification_intelligence/lifecycle.py` |
-| Attention / routing policy | `services/notification_intelligence/policy_engine.py` |
-| Delivery (intent → job → adapter → receipt) | `services/delivery/` (leased worker, backoff, dead-letter) |
-| Channel gateways (Slack/Discord/Telegram/webhook) | `services/notification_intelligence/channel_gateway.py` |
+| Tenant in-app inbox | `services/backend/services/notification_intelligence/inbox.py` (table `notification_inbox`) |
+| Forward-only lifecycle | `services/backend/services/notification_intelligence/lifecycle.py` |
+| Attention / routing policy | `services/backend/services/notification_intelligence/policy_engine.py` |
+| Delivery (intent → job → adapter → receipt) | `services/backend/services/delivery/` (leased worker, backoff, dead-letter) |
+| Channel gateways (Slack/Discord/Telegram/webhook) | `services/backend/services/notification_intelligence/channel_gateway.py` |
 | Operator notification center (desktop) | `frontend/kyber/src/features/notifications/` |
 
 Desktop and mobile read the **same** `notification_inbox` records — a
@@ -48,11 +48,11 @@ created (only delivery-attempt records are per-channel).
 The notification and delivery models were Python-only; C2 adds their TS twins,
 drift-guarded by parity tests:
 
-- `packages/shared/notification.ts` ↔ `services/notification_intelligence/models.py`
+- `packages/shared/notification.ts` ↔ `services/backend/services/notification_intelligence/models.py`
   — `notificationLifecycleStates`, `notificationSeverities` (`P0`..`P3`, `info`),
   `notificationClasses` (incl. `action-request`), `operatorActionTypes`, and
   `IntelligenceNotificationEvent`.
-- `packages/shared/delivery-receipt.ts` ↔ `services/delivery/models.py` —
+- `packages/shared/delivery-receipt.ts` ↔ `services/backend/services/delivery/models.py` —
   `deliveryChannels`, `deliveryJobStates`, `deliveryAttemptOutcomes`,
   `externalOutcomeTypes`, `ProviderReceipt`, `DeliveryAttempt`.
 
@@ -69,7 +69,7 @@ terminal off-ramps `suppressed` and `expired`. Transitions are forward-only
 ## Route-prefix collision resolution (landed)
 
 `notification_intelligence` is the single canonical `/v1/notifications` router. The
-legacy `services/notification` router — whose 6 endpoints were all first-match-shadowed
+legacy `services/backend/services/notification` router — whose 6 endpoints were all first-match-shadowed
 except `POST /webhooks/{id}/test` — was **retired**: that one endpoint was migrated into
 `notification_intelligence` (gaining the SSRF guard the legacy handler lacked; both
 already shared `WebhookRepository`), and the legacy router was unmounted. The route
@@ -78,7 +78,7 @@ the collision stays fixed — the 5 resolved pairs were removed from its allowli
 
 ## Producer-coverage registry (landed)
 
-`services/notification_intelligence/coverage.py` reports, honestly, whether each known
+`services/backend/services/notification_intelligence/coverage.py` reports, honestly, whether each known
 producer (by `source_service`) is emitting within its freshness window, via
 `GET /v1/notifications/coverage`. The states are
 `healthy | degraded | stale | unavailable | unknown | coverage_incomplete |

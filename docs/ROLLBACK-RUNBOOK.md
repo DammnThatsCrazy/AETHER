@@ -12,7 +12,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "cicd/aether-cicd/stages/cd/": "sha256:734a9b2199bafa01c79b0316c07a7ffcceb22b333f30cf2b49cafb0761e2a5d9"
+  "cicd/aether-cicd/stages/cd/": "sha256:fffa21adcbacfea59ac5fb7c55ac50b423fd559532d833be37076c9e20507ff8"
 ---
 # Rollback Runbook — Aether Platform v0.1.0-alpha.0
 
@@ -82,7 +82,7 @@ docker compose up -d backend ml-serving
 **Time to recovery: 5-10 minutes**
 
 ```bash
-cd "AWS Deployment/aether-aws"
+cd "deploy/aws"
 
 # Roll back to previous task definition revision
 aws ecs update-service \
@@ -105,7 +105,7 @@ watch -n 5 'aws ecs describe-services \
 Alternatively, revert Terraform:
 
 ```bash
-git checkout v8.6.0 -- "AWS Deployment/aether-aws/"
+git checkout v8.6.0 -- "deploy/aws/"
 terraform plan -var="image_tag=v8.6.0"
 terraform apply -var="image_tag=v8.6.0"
 ```

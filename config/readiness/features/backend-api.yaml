@@ -26,9 +26,9 @@ repository_ceiling:
   - None — repository-controlled work complete
   remaining_is_repository_controlled: false
   evidence:
-  - Backend Architecture/aether-backend/main.py
-  - Backend Architecture/aether-backend/services/ingestion/batch.py
-  - Backend Architecture/aether-backend/middleware/middleware.py
+  - services/backend/main.py
+  - services/backend/services/ingestion/batch.py
+  - services/backend/middleware/middleware.py
 implementation:
   state: VERIFIED
   denominator: in-scope repository controls (migration-derived)
@@ -119,7 +119,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: Backend Architecture/aether-backend/main.py'
+  - 'repository evidence: services/backend/main.py'
   evidence_gaps:
   - not yet exercised in credentialed staging/production
 release_profiles:

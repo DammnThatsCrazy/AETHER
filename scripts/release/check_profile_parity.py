@@ -83,7 +83,7 @@ EPHEMERAL_CLASSES = {"demo", "preview"}
 EXPECTED_SELECTABLE = EXPECTED_CLOUD + ["demo", "preview"]
 
 CHECK_COST_POLICY_TERRAFORM = "scripts/release/check_cost_policy_terraform.py"
-TF_DIR = "AWS Deployment/aether-aws/terraform"
+TF_DIR = "deploy/aws/terraform"
 PROFILES_TF = f"{TF_DIR}/profiles.tf"
 VARIABLES_TF = f"{TF_DIR}/variables.tf"
 CONTRACTS_YAML = "config/terraform_resource_contracts.yaml"

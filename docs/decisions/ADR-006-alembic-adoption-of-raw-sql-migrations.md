@@ -7,10 +7,10 @@ audience: [architect, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/alembic/versions/20260708_derivatives_foundation_adoption.py
+  - services/backend/alembic/versions/20260708_derivatives_foundation_adoption.py
 canonical_owner: platform@aether
 source_hashes:
-  "Backend Architecture/aether-backend/alembic/versions/20260708_derivatives_foundation_adoption.py": "sha256:f660817df625a2b5969161b2eff5c8f96a371a0bbae4d36b86d780473dcd46cd"
+  "services/backend/alembic/versions/20260708_derivatives_foundation_adoption.py": "sha256:7ee61a22415974370ab3b1fe2a678fa7931ab4707aaa400efabe19fd64cb3180"
 ---
 
 # ADR-006: Alembic Adoption of Raw-SQL Migrations
@@ -20,7 +20,7 @@ source_hashes:
 ## Context
 
 Derivatives PR1 anomalously shipped its 11-table DDL as a raw SQL file
-(`Backend Architecture/migrations/2026_07_derivatives_foundation.sql`)
+(`docs/archive/legacy-architecture/backend/migrations/2026_07_derivatives_foundation.sql`)
 outside Alembic, which owns every other schema change. Environments may
 or may not have executed that file.
 

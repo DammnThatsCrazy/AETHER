@@ -46,7 +46,7 @@ implementation:
       description: APNs delivery adapter + provider-shaped fake
       weight: 25
       satisfied: true
-      evidence: ["Backend Architecture/aether-backend/services/delivery/adapters/apns.py"]
+      evidence: ["services/backend/services/delivery/adapters/apns.py"]
     - id: fcm-adapter
       description: FCM delivery adapter + provider-shaped fake
       weight: 25

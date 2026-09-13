@@ -7,26 +7,26 @@ audience: [architect, dev-senior]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/main.py
-  - Backend Architecture/aether-backend/config/settings.py
-  - Backend Architecture/aether-backend/shared/rate_limit/feature_gate.py
-  - Backend Architecture/aether-backend/shared/integration_contracts/
-  - Backend Architecture/aether-backend/shared/commerce_contracts/
-  - Backend Architecture/aether-backend/services/provider_runtime/
-  - Backend Architecture/aether-backend/services/providers/
-  - Backend Architecture/aether-backend/services/providers/shopify/
+  - services/backend/main.py
+  - services/backend/config/settings.py
+  - services/backend/shared/rate_limit/feature_gate.py
+  - services/backend/shared/integration_contracts/
+  - services/backend/shared/commerce_contracts/
+  - services/backend/services/provider_runtime/
+  - services/backend/services/providers/
+  - services/backend/services/providers/shopify/
 canonical_owner: platform@aether
 estimated_read_minutes: 14
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
-  "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
-  "Backend Architecture/aether-backend/services/provider_runtime/": "sha256:222fdaf7349cf2f190d5a512550b7f0f45b2d26473ecbbe87d20476f4f4d2ad9"
-  "Backend Architecture/aether-backend/services/providers/": "sha256:ae867295b135642a9bb21babecc505f78e1505d012ef74b67cdfab1239358f5f"
-  "Backend Architecture/aether-backend/services/providers/shopify/": "sha256:54bfbfbaba9b159859cbb085b9b1cd771ac3a334089081d2cf05fe62742dc20f"
-  "Backend Architecture/aether-backend/shared/commerce_contracts/": "sha256:b9bde3d49c9b1c1719f40f7a2f293e7c868f8a6a5773eb1c2dd5745cddc9ca79"
-  "Backend Architecture/aether-backend/shared/integration_contracts/": "sha256:f43671c8a5e3750e5115ce2acbb0f435f0493d4872e7ac918b8781a73b821853"
-  "Backend Architecture/aether-backend/shared/rate_limit/feature_gate.py": "sha256:504bb343941c6e95bd41b525afaff46a5068e568f88d5c88859e050b503797bc"
+  "services/backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
+  "services/backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
+  "services/backend/services/provider_runtime/": "sha256:81502394ca09ea802ea90662dc6f23c1918a0ece952a2bfdac68187007f2c8fa"
+  "services/backend/services/providers/": "sha256:a31117bea28b5b23d4d83c72c12e32f364e05a51e14d9b0f5470d6a3d4d2e36d"
+  "services/backend/services/providers/shopify/": "sha256:c0a12ddb85d4fd9590fe6559c1921a494ef73cf74575a876a56445d13dbd61b9"
+  "services/backend/shared/commerce_contracts/": "sha256:b2bce635d1c6472fdf0bdccd842098fb601a8a72362521d82fe582f1d536b013"
+  "services/backend/shared/integration_contracts/": "sha256:ef4cb78f58482052f180f54b494bcc90a4dcea3777dfbb0e901a1f214fb1e683"
+  "services/backend/shared/rate_limit/feature_gate.py": "sha256:504bb343941c6e95bd41b525afaff46a5068e568f88d5c88859e050b503797bc"
 ---
 
 # Universal Provider Runtime
@@ -46,11 +46,11 @@ The layer map:
 
 | Layer | Location | Role |
 |---|---|---|
-| Plugin contract | `Backend Architecture/aether-backend/shared/integration_contracts/` | `ProviderPlugin` protocol, manifest + honesty invariants, capability adapters, canonical results, normalization, events, certification contracts |
-| Commerce vocabulary | `Backend Architecture/aether-backend/shared/commerce_contracts/` | Provider-neutral Money / Order shapes and the canonical `commerce.*` event-type set |
-| Runtime service | `Backend Architecture/aether-backend/services/provider_runtime/` | Registry → orchestrator → pipeline → engines → API; registers, certifies, and executes plugins |
-| Plugin modules | `Backend Architecture/aether-backend/services/providers/*/` | One package per provider capability (reference: `services/providers/shopify/`) |
-| Legacy compat | `services/provider_runtime/legacy.py` (`LegacyConnectorPlugin`) | Exposes every existing `BaseConnector` as a plugin with zero code changes |
+| Plugin contract | `services/backend/shared/integration_contracts/` | `ProviderPlugin` protocol, manifest + honesty invariants, capability adapters, canonical results, normalization, events, certification contracts |
+| Commerce vocabulary | `services/backend/shared/commerce_contracts/` | Provider-neutral Money / Order shapes and the canonical `commerce.*` event-type set |
+| Runtime service | `services/backend/services/provider_runtime/` | Registry → orchestrator → pipeline → engines → API; registers, certifies, and executes plugins |
+| Plugin modules | `services/backend/services/providers/*/` | One package per provider capability (reference: `services/backend/services/providers/shopify/`) |
+| Legacy compat | `services/backend/services/provider_runtime/legacy.py` (`LegacyConnectorPlugin`) | Exposes every existing `BaseConnector` as a plugin with zero code changes |
 
 ## Components
 
@@ -64,7 +64,7 @@ The layer map:
                                        │ AETHER_PROVIDER_RUNTIME_ENABLED
                                        ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
-│                     services/provider_runtime                             │
+│                     services/backend/services/provider_runtime                             │
 │                                                                          │
 │   ┌──────────────┐   discover   ┌───────────────┐   invoke    ┌───────┐  │
 │   │   Registry   │ ───────────▶ │  Orchestrator │ ───────────▶ │Pipeline│ │
@@ -82,8 +82,8 @@ The layer map:
                             │ plugin discovery
                             ▼
    ┌────────────────────────────────────────────────────────────────┐
-   │ Plugin modules (services/providers/*/)                          │
-   │   services/providers/shopify/   (native plugin)                 │
+   │ Plugin modules (services/backend/services/providers/*/)                          │
+   │   services/backend/services/providers/shopify/   (native plugin)                 │
    │   ...future native plugins...                                    │
    │   LegacyConnectorPlugin          (wraps BaseConnector, identity │
    │                                    (connector_type,"ingestion", │
@@ -95,7 +95,7 @@ The layer map:
 ### Package layout
 
 ```
-Backend Architecture/aether-backend/
+services/backend/
 ├── shared/
 │   ├── integration_contracts/          # plugin contract layer (additive)
 │   │   ├── plugin.py                   #   ProviderPlugin, BaseProviderPlugin,
@@ -192,7 +192,7 @@ The pipeline honors three invariants:
   from each `AetherEvent`'s `data`/`context` in place before the durable dump
   (mandatory and unconditional — Bronze and the publish carry only scrubbed
   payloads) and runs the shared ingress decision
-  (`services/ingestion/validation.evaluate_ingress_decision`) per event. A
+  (`services/backend/services/ingestion/validation.evaluate_ingress_decision`) per event. A
   denied event is rejected — no Bronze row, no publish,
   `provider_runtime_consent_blocked_total` incremented — while the provider RAW
   record stays intact for replay; a delivery is never failed wholesale. The
@@ -223,7 +223,7 @@ The pipeline honors three invariants:
 
 ## How a new provider lands
 
-1. **Build the plugin package** (`services/providers/<family>/`): plugin class,
+1. **Build the plugin package** (`services/backend/services/providers/<family>/`): plugin class,
    manifest (honest, §32-valid), one adapter per claimed capability, a
    deterministic normalizer, and replay fixtures.
 2. **Register** it: `register_provider(plugin)` / `ProviderRegistry.register`

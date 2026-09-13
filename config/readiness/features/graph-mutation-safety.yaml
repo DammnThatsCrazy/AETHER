@@ -26,9 +26,9 @@ repository_ceiling:
   - Provision the required cloud backend (apply Terraform for the target profile).
   remaining_is_repository_controlled: false
   evidence:
-  - Agent Layer/README.md
-  - Backend Architecture/aether-backend/services/agent/mutation_commit.py
-  - Backend Architecture/aether-backend/services/agent/runtime_repository.py
+  - services/agents/README.md
+  - services/backend/services/agent/mutation_commit.py
+  - services/backend/services/agent/runtime_repository.py
 implementation:
   state: TURNKEY
   denominator: in-scope repository controls (migration-derived)
@@ -122,7 +122,7 @@ business_readiness:
 confidence:
   level: MODERATE
   reasons:
-  - 'repository evidence: Agent Layer/README.md'
+  - 'repository evidence: services/agents/README.md'
   evidence_gaps:
   - credentialed environment execution not yet performed
 release_profiles:

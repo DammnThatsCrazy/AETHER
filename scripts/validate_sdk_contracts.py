@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = ROOT / "services" / "backend"
 ERRORS: list[str] = []
 CHECKS: list[dict] = []
 
@@ -122,7 +122,7 @@ def check_contract_doc_references() -> None:
         "doc never mentions the canonical endpoint",
     )
     missing: list[str] = []
-    for ref in re.findall(r"`((?:packages|Backend Architecture|docs|scripts)/[^`\s]+?\.[a-z]{1,4})`", body):
+    for ref in re.findall(r"`((?:packages|services|docs|scripts)/[^`\s]+?\.[a-z]{1,4})`", body):
         if not (ROOT / ref).exists():
             missing.append(ref)
     record(

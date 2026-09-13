@@ -31,7 +31,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-BACKEND = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = ROOT / "services" / "backend"
 ALLOWLIST_DIR = ROOT / "scripts" / "allowlists"
 
 PY_ALLOWLIST = ALLOWLIST_DIR / "temporal_naive_datetime.json"
@@ -101,7 +101,7 @@ def scan_frontend() -> set[str]:
 def scan_clickhouse() -> set[str]:
     paths: list[Path] = []
     paths.extend((ROOT / "deploy" / "clickhouse").rglob("*.sql"))
-    lake_schemas = ROOT / "Data Lake Architecture"
+    lake_schemas = ROOT / "docs/archive/legacy-architecture/data-lake-architecture"
     if lake_schemas.exists():
         paths.extend(lake_schemas.rglob("schemas/*.py"))
     return _scan(paths, (_CH_BARE_DATETIME,), ())

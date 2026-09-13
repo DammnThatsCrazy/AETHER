@@ -36,7 +36,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-BACKEND = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND = ROOT / "services" / "backend"
 REGISTRY_JSON = ROOT / "packages" / "shared" / "contracts" / "projector-ownership-registry.json"
 EVENT_REGISTRY_JSON = ROOT / "packages" / "shared" / "contracts" / "event-registry.json"
 ADAPTERS_PY = BACKEND / "services" / "measurement" / "silver_adapters.py"

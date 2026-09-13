@@ -21,19 +21,19 @@ since_version: 0.1.0
 
 | # | Subsystem | Path | Language | LOC (est.) | Tests | Docker | Maturity |
 |---|-----------|------|----------|-----------|-------|--------|----------|
-| 1 | **Backend API** | `Backend Architecture/aether-backend/` | Python (FastAPI) | ~8,000 | 14 files | Dockerfile | Production |
-| 2 | **ML Models** | `ML Models/aether-ml/` | Python (FastAPI/sklearn/xgboost) | ~5,000 | 7 files | Dockerfile (multi-stage) | Production |
+| 1 | **Backend API** | `services/backend/` | Python (FastAPI) | ~8,000 | 14 files | Dockerfile | Production |
+| 2 | **ML Models** | `services/ml/` | Python (FastAPI/sklearn/xgboost) | ~5,000 | 7 files | Dockerfile (multi-stage) | Production |
 | 3 | **Web SDK** | `packages/web/` | TypeScript | ~3,000 | 1 test file | N/A (NPM) | Production |
 | 4 | **React Native SDK** | `packages/react-native/` | TypeScript | ~1,500 | None | N/A (NPM) | Beta |
 | 5 | **iOS SDK** | `packages/ios/` | Swift | ~2,000 | 1 test dir | N/A | Beta |
 | 6 | **Android SDK** | `packages/android/` | Kotlin | ~1,500 | None | N/A | Beta |
-| 7 | **Data Ingestion** | `Data Ingestion Layer/` | TypeScript (Node.js) | ~4,000 | None | Dockerfile | Beta |
-| 8 | **Data Lake** | `Data Lake Architecture/` | TypeScript (Node.js) | ~2,000 | 1 test dir | Dockerfile | Prototype |
-| 9 | **Smart Contracts** | `Smart Contracts/` | Solidity/Rust/Move | ~2,000 | None (Hardhat config present) | N/A | Beta |
-| 10 | **Agent Layer** | `Agent Layer/` | Python (Celery) | ~3,000 | 2 wrapper tests | N/A | Production |
+| 7 | **Data Ingestion** | `docs/archive/legacy-architecture/data-ingestion-layer/` | TypeScript (Node.js) | ~4,000 | None | Dockerfile | Beta |
+| 8 | **Data Lake** | `docs/archive/legacy-architecture/data-lake-architecture/` | TypeScript (Node.js) | ~2,000 | 1 test dir | Dockerfile | Prototype |
+| 9 | **Smart Contracts** | `contracts/smart-contracts/` | Solidity/Rust/Move | ~2,000 | None (Hardhat config present) | N/A | Beta |
+| 10 | **Agent Layer** | `services/agents/` | Python (Celery) | ~3,000 | 2 wrapper tests | N/A | Production |
 | 11 | **Security Module** | `security/` | Python | ~2,500 | 2 test files | N/A | Production |
-| 12 | **AWS Deployment** | `AWS Deployment/` | Python/Terraform/HCL | ~3,000 | None | N/A | Beta |
-| 13 | **GDPR & SOC2** | `GDPR & SOC2/aether-compliance/` | Python | ~2,000 | 1 test dir | N/A | Beta |
+| 12 | **AWS Deployment** | `docs/archive/legacy-architecture/aws-deployment/` | Python/Terraform/HCL | ~3,000 | None | N/A | Beta |
+| 13 | **GDPR & SOC2** | `services/compliance/` | Python | ~2,000 | 1 test dir | N/A | Beta |
 | 14 | **CI/CD** | `cicd/aether-cicd/` | Python/YAML/Terraform | ~2,500 | None | N/A | Beta |
 | 15 | **Mobile SDK (Legacy)** | `Aether Mobile SDK/` | Swift/Kotlin/TSX | ~3,000 | None | N/A | Legacy |
 | 16 | **Playground** | `playground/` | HTML/JS | ~2,500 | None | N/A | Demo |
@@ -81,10 +81,10 @@ since_version: 0.1.0
 
 | # | Category | Finding | File(s) | Fix Applied |
 |---|----------|---------|---------|-------------|
-| 1 | Security | ML serving API CORS wildcard `allow_origins=["*"]` | `ML Models/aether-ml/serving/src/api.py:611` | Replaced with env-configurable origins |
+| 1 | Security | ML serving API CORS wildcard `allow_origins=["*"]` | `services/ml/serving/src/api.py:611` | Replaced with env-configurable origins |
 | 2 | Security | Staging docker-compose has weak default password fallbacks | `deploy/staging/docker-compose.staging.yml` | Changed `:-default` to `:?required` syntax |
-| 3 | Security | Backend CORS uses `allow_methods=["*"]` and `allow_headers=["*"]` | `Backend Architecture/aether-backend/main.py:206-207` | Restricted to explicit list |
-| 4 | Security | Data Ingestion CORS wildcard + `credentials=true` (spec violation) | `Data Ingestion Layer/services/ingestion/src/index.ts:613,617` | Skip credentials header on wildcard; changed default origins |
+| 3 | Security | Backend CORS uses `allow_methods=["*"]` and `allow_headers=["*"]` | `services/backend/main.py:206-207` | Restricted to explicit list |
+| 4 | Security | Data Ingestion CORS wildcard + `credentials=true` (spec violation) | `docs/archive/legacy-architecture/data-ingestion-layer/services/ingestion/src/index.ts:613,617` | Skip credentials header on wildcard; changed default origins |
 | 5 | Security | ConsentModule innerHTML with unsanitized config interpolation | `ConsentModule.ts:86-88`, `packages/web/src/consent/index.ts:86-88` | Added input validation for position/theme/accent |
 | 6 | Deploy | Root docker-compose backend build context mismatch | `docker-compose.yml:83-84` | Changed context to repo root, dockerfile to relative path |
 | 7 | Deploy | Staging bootstrap missing WATERMARK/CANARY secret generation | `deploy/staging/bootstrap.sh` | Added auto-generation for both secrets |
@@ -97,12 +97,12 @@ since_version: 0.1.0
 | # | Category | Finding | File(s) | Recommendation |
 |---|----------|---------|---------|---------------|
 | 1 | Security | Playground `index.html` has ~22 innerHTML usages with template literals | `playground/index.html` | Refactor to DOM API or add DOMPurify sanitizer. Low urgency — playground is not production-facing |
-| 2 | Security | ClickHouse empty password in Data Ingestion docker-compose | `Data Ingestion Layer/docker/docker-compose.yml:132` | Set required password |
-| 3 | Testing | Data Ingestion Layer has zero test files | `Data Ingestion Layer/` | Add integration tests for ingestion pipeline |
-| 4 | Testing | Smart Contracts have Hardhat config but no test files | `Smart Contracts/` | Add Hardhat test suite for AnalyticsRewards |
+| 2 | Security | ClickHouse empty password in Data Ingestion docker-compose | `docs/archive/legacy-architecture/data-ingestion-layer/docker/docker-compose.yml:132` | Set required password |
+| 3 | Testing | Data Ingestion Layer has zero test files | `docs/archive/legacy-architecture/data-ingestion-layer/` | Add integration tests for ingestion pipeline |
+| 4 | Testing | Smart Contracts have Hardhat config but no test files | `contracts/smart-contracts/` | Add Hardhat test suite for AnalyticsRewards |
 | 5 | Testing | React Native, iOS, Android SDKs have no tests | `packages/react-native/`, `packages/ios/`, `packages/android/` | Add platform-specific test suites |
-| 6 | Deploy | ML Dockerfile EXPOSE 8000 but compose runs on 8080 | `ML Models/aether-ml/docker/Dockerfile:60` | Change to EXPOSE 8080 |
-| 7 | Security | Base64 fallback for encryption in local mode | `Backend Architecture/aether-backend/shared/providers/key_vault.py:106` | Already gated to local-only; consider removing entirely |
+| 6 | Deploy | ML Dockerfile EXPOSE 8000 but compose runs on 8080 | `services/ml/docker/Dockerfile:60` | Change to EXPOSE 8080 |
+| 7 | Security | Base64 fallback for encryption in local mode | `services/backend/shared/providers/key_vault.py:106` | Already gated to local-only; consider removing entirely |
 | 8 | Deploy | CI/CD workflows in `cicd/aether-cicd/.github/` never execute (wrong path) | `cicd/aether-cicd/.github/workflows/*.yml` | Move/symlink to root `.github/workflows/` or delete; they also reference nonexistent directories |
 | 9 | Deploy | Root docker-compose `env_file: .env` but only `.env.example` exists | `docker-compose.yml:94` | Document that `cp .env.example .env` is required, or make env_file optional |
 | 10 | Deploy | ClickHouse service defined in docker-compose but nothing connects to it | `docker-compose.yml:69-77` | Remove or connect to a consumer |

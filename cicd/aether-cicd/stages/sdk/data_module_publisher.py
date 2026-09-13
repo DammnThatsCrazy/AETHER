@@ -414,10 +414,10 @@ def _regenerate_manifests(
 
 def _read_sdk_version() -> str:
     """
-    Read the current SDK version from packages/sdk-web/package.json.
+    Read the current SDK version from packages/web/package.json.
     Falls back to "0.0.0" if unavailable.
     """
-    pkg_path = "packages/sdk-web/package.json"
+    pkg_path = "packages/web/package.json"
     try:
         with open(pkg_path, "r") as f:
             pkg = json.load(f)

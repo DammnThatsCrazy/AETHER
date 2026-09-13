@@ -10,7 +10,7 @@ since_version: "0.1.0"
 
 # Integration Security
 
-`IntegrationSecurity` (`services/security/integration_security.py`) hardens the
+`IntegrationSecurity` (`services/backend/services/security/integration_security.py`) hardens the
 integration / webhook dispatch surface. **Secrets are never returned by any method
 here.**
 

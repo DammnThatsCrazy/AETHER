@@ -95,7 +95,7 @@ repos:
         entry: bash -c 'python scripts/docs_extract/run_all.py >/dev/null && if ! git diff --quiet -- docs/_generated/ || [ -n "$(git ls-files --others --exclude-standard docs/_generated/)" ]; then echo "docs/_generated drifted — run \"make extract-docs\" then git add docs/_generated/"; git status --porcelain docs/_generated/; exit 1; fi'
         language: system
         pass_filenames: false
-        files: '^(packages/shared/.*\.ts|\.env\.example|pyproject\.toml|Backend Architecture/aether-backend/shared/(plans/catalog|providers/categories|events/events)\.py|scripts/docs_extract/.*\.py)$'
+        files: '^(packages/shared/.*\.ts|\.env\.example|pyproject\.toml|services/backend/shared/(plans/catalog|providers/categories|events/events)\.py|scripts/docs_extract/.*\.py)$'
         stages: [commit]
 
   # Python linting

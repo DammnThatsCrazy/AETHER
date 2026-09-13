@@ -1,7 +1,7 @@
 """TS <-> Python parity for the ADR-011 D3 common spine envelope.
 
 `packages/shared/spine-envelope.ts` is the HAND-AUTHORED canonical contract
-(never generated) and `Backend Architecture/aether-backend/shared/spine/
+(never generated) and `services/backend/shared/spine/
 spine_envelope.py` is its Python mirror. This test fails on field-set drift
 (either side, in either direction), on order drift, on divergence of the
 no-producer `@unpopulated` field set, on a Python mirror whose pydantic model
@@ -19,8 +19,7 @@ REPO_ROOT = Path(__file__).parents[2]
 TS_PATH = REPO_ROOT / "packages" / "shared" / "spine-envelope.ts"
 PY_PATH = (
     REPO_ROOT
-    / "Backend Architecture"
-    / "aether-backend"
+    / "services" / "backend"
     / "shared"
     / "spine"
     / "spine_envelope.py"

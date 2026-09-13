@@ -45,7 +45,7 @@ npm run dev
 ## Run Backend
 
 ```bash
-cd "Backend Architecture/aether-backend"
+cd "services/backend"
 python -m uvicorn main:app --reload
 ```
 

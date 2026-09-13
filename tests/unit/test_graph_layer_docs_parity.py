@@ -14,7 +14,7 @@ REPO_ROOT = Path(__file__).parents[2]
 # Docs that must list all four layers when they mention relationship layers
 LAYER_DOCS = [
     "README.md",
-    "Backend Architecture/README.md",
+    "docs/archive/legacy-architecture/backend/README.md",
     "docs/INTELLIGENCE-GRAPH.md",
     "docs/UNIFIED-ECONOMIC-GRAPH.md",
     "docs/ECONOMIC-OBSERVABILITY.md",
@@ -51,11 +51,11 @@ def test_no_doc_uses_three_layer_pattern() -> None:
 
 
 def test_backend_readme_has_a2h_in_relationship_table() -> None:
-    """Backend Architecture/README.md must include A2H in the Relationship Layers table."""
-    content = _read("Backend Architecture/README.md")
-    assert content, "Backend Architecture/README.md not found"
-    assert "A2H" in content, "A2H missing from Backend Architecture/README.md"
-    assert "Agent-to-Human" in content, "Agent-to-Human description missing from Backend Architecture/README.md"
+    """docs/archive/legacy-architecture/backend/README.md must include A2H in the Relationship Layers table."""
+    content = _read("docs/archive/legacy-architecture/backend/README.md")
+    assert content, "docs/archive/legacy-architecture/backend/README.md not found"
+    assert "A2H" in content, "A2H missing from docs/archive/legacy-architecture/backend/README.md"
+    assert "Agent-to-Human" in content, "Agent-to-Human description missing from docs/archive/legacy-architecture/backend/README.md"
 
 
 def test_intelligence_graph_doc_has_all_four_layers() -> None:
@@ -96,7 +96,7 @@ def test_graph_layer_parity_doc_exists() -> None:
 
 def test_no_placeholder_in_operational_intelligence_routes() -> None:
     """operational_intelligence/routes.py must not contain placeholder overlay strings."""
-    content = _read("Backend Architecture/aether-backend/services/operational_intelligence/routes.py")
+    content = _read("services/backend/services/operational_intelligence/routes.py")
     assert content, "operational_intelligence/routes.py not found"
     assert "placeholder" not in content.lower(), (
         "Placeholder overlay string found in operational_intelligence/routes.py"
@@ -108,7 +108,7 @@ def test_no_placeholder_in_operational_intelligence_routes() -> None:
 
 def test_no_contract_stage_skeleton_in_routes() -> None:
     """contractStage: 'skeleton' must not be in production code routes."""
-    content = _read("Backend Architecture/aether-backend/services/operational_intelligence/routes.py")
+    content = _read("services/backend/services/operational_intelligence/routes.py")
     assert content, "routes.py not found"
     # skeleton stage must not be set on production nodes
     assert '"contractStage": "skeleton"' not in content, (

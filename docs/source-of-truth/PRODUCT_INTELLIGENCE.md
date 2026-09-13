@@ -6,7 +6,7 @@ visibility: I
 audience: [dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [packages/shared/contracts/interaction-vocabulary.json, packages/shared/interaction-contract.ts, Backend Architecture/aether-backend/shared/product/models.py, Backend Architecture/aether-backend/shared/product/generated_vocabulary.py, Backend Architecture/aether-backend/services/product_catalog/models.py, Backend Architecture/aether-backend/services/product_catalog/mapping.py, Backend Architecture/aether-backend/services/product_catalog/manifest.py, Backend Architecture/aether-backend/services/product_catalog/store.py, Backend Architecture/aether-backend/services/product_catalog/routes.py]
+source_files: [packages/shared/contracts/interaction-vocabulary.json, packages/shared/interaction-contract.ts, services/backend/shared/product/models.py, services/backend/shared/product/generated_vocabulary.py, services/backend/services/product_catalog/models.py, services/backend/services/product_catalog/mapping.py, services/backend/services/product_catalog/manifest.py, services/backend/services/product_catalog/store.py, services/backend/services/product_catalog/routes.py]
 last_synced_commit: a500f1f
 ---
 
@@ -25,8 +25,8 @@ is never settlement.
 | Interaction event lifecycle (12 `interaction`-family events) | `packages/shared/contracts/event-registry.json` (via `scripts/generate_contracts.py`) |
 | Interaction types / result states / evidence basis / actor kinds (+ registered custom namespaces `tenant.* wallet.* dapp.* agent.* financial_rail.*`) | `packages/shared/contracts/interaction-vocabulary.json` → generated TS/Py twins |
 | Canonical interaction payload | `shared/product/models.py::InteractionPayload` ↔ `interaction-contract.ts` (parity-tested) |
-| Product → Area → Feature → FeatureVersion → Surface → Control catalog + mapping rules + proposals + instrumentation-as-code manifests | `services/product_catalog/` (`/v1/product-catalog`, flag `AETHER_PRODUCT_CATALOG_ENABLED`, default off) |
-| Mapping precedence | `services/product_catalog/mapping.py`: explicit_instrumentation > tenant_catalog > verified_framework > reviewed_discovery > inferred > unmapped; every resolution records `mapping_source`/`mapping_confidence`/`mapping_version` |
+| Product → Area → Feature → FeatureVersion → Surface → Control catalog + mapping rules + proposals + instrumentation-as-code manifests | `services/backend/services/product_catalog/` (`/v1/product-catalog`, flag `AETHER_PRODUCT_CATALOG_ENABLED`, default off) |
+| Mapping precedence | `services/backend/services/product_catalog/mapping.py`: explicit_instrumentation > tenant_catalog > verified_framework > reviewed_discovery > inferred > unmapped; every resolution records `mapping_source`/`mapping_confidence`/`mapping_version` |
 
 ## Non-negotiables
 

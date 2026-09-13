@@ -16,7 +16,7 @@ Fixtures in tests/fixtures/terraform_plans/ are `terraform show -json`
 documents: `format_version` / `terraform_version` at the top, `planned_values.
 root_module` with `child_modules`, and `resource_changes` carrying
 `change.actions` and `change.after`. Module addresses, resource names, for_each
-keys and count indices mirror AWS Deployment/aether-aws/terraform.
+keys and count indices mirror deploy/aws/terraform.
 """
 
 from __future__ import annotations

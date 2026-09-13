@@ -1,7 +1,7 @@
 # Aether Model Runtime — Deployment Guide
 
 This guide documents how to deploy the **Multi-Model Intelligence Harness**
-(`Backend Architecture/aether-backend/services/model_runtime`), the
+(`services/backend/services/model_runtime`), the
 provider-neutral model runtime introduced by ADR-008. It covers the runtime
 model, the `MODEL_RUNTIME_*` configuration surface, fail-closed startup
 behavior, credential management, observability, and the differences between
@@ -11,7 +11,7 @@ local, staging, and production.
 
 The model runtime is Aether's provider-neutral multi-model harness. It treats
 LLMs as interchangeable engines behind a single `AsyncModelProvider` contract
-(`services/model_runtime/provider.py`): provider routing, task profiles,
+(`services/backend/services/model_runtime/provider.py`): provider routing, task profiles,
 per-tenant credentials, grounded retrieval context, verification, and
 observability all live in-process and independent of any provider SDK. OpenAI
 and Anthropic ship as isolated adapters; additional providers (OpenAI-compatible
@@ -35,7 +35,7 @@ services.
 - The deployment unit is the existing aether-backend process; `model_runtime`
   is a library package loaded by that process at startup.
 - Provider adapters are **in-process** modules under
-  `services/model_runtime/adapters/`. There is no per-provider container,
+  `services/backend/services/model_runtime/adapters/`. There is no per-provider container,
   sidecar, or separately deployed adapter service.
 - `MODEL_RUNTIME_ADAPTERS_DIR` points at the directory whose modules are
   registered into the runtime's provider registry at startup.
@@ -59,7 +59,7 @@ single service, D5) and passes `MODEL_RUNTIME_*` through from the deploy-scoped
 
 All runtime configuration is read from the `MODEL_RUNTIME_*` environment
 surface. The authoritative parse and validation live in
-`services/model_runtime/config.py`. Two templates exist: the `=== Model Runtime
+`services/backend/services/model_runtime/config.py`. Two templates exist: the `=== Model Runtime
 ===` block of the repo-root `.env.example` (production annotations) and the
 deploy-scoped `deploy/model-runtime/.env.example` (copied to
 `deploy/model-runtime/.env` and passed to the service by the compose manifest).
@@ -68,7 +68,7 @@ Never embed the values in source.
 | Variable | Default | Meaning | Production requirement |
 |---|---|---|---|
 | `MODEL_RUNTIME_ENABLED` | `false` | Master feature gate (ADR-008 D9: default OFF) | `true` to serve harness traffic; remains OFF until cutover |
-| `MODEL_RUNTIME_ADAPTERS_DIR` | `services/model_runtime/adapters` | Directory of in-process provider adapter modules loaded into the registry | Must exist and be readable at startup |
+| `MODEL_RUNTIME_ADAPTERS_DIR` | `services/backend/services/model_runtime/adapters` | Directory of in-process provider adapter modules loaded into the registry | Must exist and be readable at startup |
 | `MODEL_RUNTIME_DEFAULT_PROVIDER` | `deterministic` | Provider used when no routing/provider override is selected | **MUST NOT be `deterministic`** — that is the local test fallback only |
 | `MODEL_RUNTIME_ESTIMATED_REQUEST_TOKENS` | `800` | Per-request token budget reserved before invocation | Positive integer; tune per task profile |
 | `MODEL_RUNTIME_MAX_PROVIDERS` | `16` | Maximum providers considered per routing decision | `>= 1` |
@@ -174,7 +174,7 @@ rules can key off `model_runtime_circuit_open` and
 | `MODEL_RUNTIME_OBSERVABILITY_ENABLED` | `false` | `true` | `true` |
 | Credential fail-closed gate | off | **on** | **on** |
 
-Exact startup gates (enforced by `services/model_runtime/config.py`):
+Exact startup gates (enforced by `services/backend/services/model_runtime/config.py`):
 
 - **Every environment:** the feature flag defaults OFF, so
   `MODEL_RUNTIME_ENABLED=false` boots the runtime inert with no startup errors.
@@ -185,23 +185,23 @@ Exact startup gates (enforced by `services/model_runtime/config.py`):
   The credential fail-closed gate is turned on so missing credentials block
   readiness. The staging environment block is provisioned by the staging
   Terraform profile
-  (`AWS Deployment/aether-aws/terraform/profiles/staging.tfvars`).
+  (`deploy/aws/terraform/profiles/staging.tfvars`).
 - **Production:** identical validator checks, hardened by the production
   deployment profile (`config/deployment_profiles.yaml`) and the production
   Terraform profiles
-  (`AWS Deployment/aether-aws/terraform/profiles/production-*.tfvars`). No
+  (`deploy/aws/terraform/profiles/production-*.tfvars`). No
   insecure credential backend is accepted; `deterministic` is always rejected.
 
 ## 8. References
 
 - `docs/decisions/ADR-008-multi-model-intelligence-harness.md` — the design
   decision record (D5 credentials, D8 observability, D9 flags-off).
-- `Backend Architecture/aether-backend/services/model_runtime/` — the runtime
+- `services/backend/services/model_runtime/` — the runtime
   package (service, adapters, credentials, routing, task_profiles, context,
   observability).
 - `.env.example` (`=== Model Runtime ===` block) — the canonical env template.
 - `deploy/observability/README.md` — Prometheus / Grafana / Loki / Alertmanager
   stack that consumes the runtime metrics.
 - `config/deployment_profiles.yaml` and
-  `AWS Deployment/aether-aws/terraform/profiles/` — canonical staging and
+  `deploy/aws/terraform/profiles/` — canonical staging and
   production deployment profiles.

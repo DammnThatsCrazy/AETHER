@@ -17,7 +17,7 @@ This document is the **contract freeze** for the Data Exchange Plane program
 frontend builds against. It is written once, up front, so that parallel
 milestone work stays shape-consistent without cross-agent coordination. The
 canonical vocabulary (directions, statuses, formats, classifications, source
-types) is owned by `services/data_exchange/contracts.py` and
+types) is owned by `services/backend/services/data_exchange/contracts.py` and
 `packages/shared/data-exchange.ts`; **this document does not redefine it.**
 
 ## Doctrine
@@ -76,10 +76,10 @@ envelope proxies the canonical engine — it never re-implements the engine.
 | M | Route module(s) | Prefix | Flag |
 |---|---|---|---|
 | M1 | (no routes — storage/migration + `data_artifacts` repo) | — | — |
-| M2 | `services/data_exchange/routes_transfer.py` | `/v1/data-exchange/transfers` | object store |
-| M3 | `services/data_exchange/routes_import.py` (+ `saved_mappings.py`, `identity_preview.py`, `graph_preview.py`, `capabilities.py`) | `/v1/data-exchange` (subpaths) | enabled |
-| M4 | `services/data_exchange/routes_export.py` + `history.py` | `/v1/data-exchange/exports`; `/v1/data-exchange/artifacts` | enabled |
-| M5 | `services/reports/routes.py` | `/v1/data-exchange/reports` | reports |
+| M2 | `services/backend/services/data_exchange/routes_transfer.py` | `/v1/data-exchange/transfers` | object store |
+| M3 | `services/backend/services/data_exchange/routes_import.py` (+ `saved_mappings.py`, `identity_preview.py`, `graph_preview.py`, `capabilities.py`) | `/v1/data-exchange` (subpaths) | enabled |
+| M4 | `services/backend/services/data_exchange/routes_export.py` + `history.py` | `/v1/data-exchange/exports`; `/v1/data-exchange/artifacts` | enabled |
+| M5 | `services/backend/services/reports/routes.py` | `/v1/data-exchange/reports` | reports |
 | M6 | frontend only (`features/data-exchange/`, settings sections) | — | — |
 | M7 | ops (jobs + harnesses) — no new tenant route surface | — | — |
 
@@ -162,12 +162,12 @@ Import envelope (verb = translation of the canonical lifecycle):
 | GET | `/artifacts/{artifact_id}` | — | full `DataArtifactContract` | — |
 
 Parquet is an egress structured format via a registered parquet exporter
-(`services/data_exchange/parquet.py` using pyarrow). Partitioned exports +
-manifest use the canonical manifest builder (`services/export/manifest.py`).
+(`services/backend/services/data_exchange/parquet.py` using pyarrow). Partitioned exports +
+manifest use the canonical manifest builder (`services/backend/services/export/manifest.py`).
 
 ## M5 — reports plane (`/v1/data-exchange/reports`)
 
-`DATA_EXCHANGE_REPORTS_ENABLED`. `services/reports/` + `report.generate` job +
+`DATA_EXCHANGE_REPORTS_ENABLED`. `services/backend/services/reports/` + `report.generate` job +
 PDF renderer (reportlab; M5 adds the dependency). PDF is an `artifact_type=
 "report"` egress artifact — **never** a structured EgressFormat.
 
@@ -211,10 +211,10 @@ them at integration:
 2. Alembic — one `YYYYMMDD_data_exchange.py` migration from the agents' DDL
    fragments (`data_artifacts`, saved mappings, report/render state).
 3. `config/storage_policies.yaml` — policy rows for every new table.
-4. `Backend Architecture/aether-backend/pyproject.toml` — combine pyarrow
+4. `services/backend/pyproject.toml` — combine pyarrow
    (M4) + reportlab (M5) once.
 5. RBAC — add `data_exchange` to `GovernanceDomain` in BOTH
-   `services/security/contracts.py` and `packages/shared/security-governance.ts`;
+   `services/backend/services/security/contracts.py` and `packages/shared/security-governance.ts`;
    extend `ALL_DOMAINS`/`TENANT_DOMAINS`/`ROLE_SPECS`; map `policy.py` grants.
 6. Events — at first emission map onto canonical topics (`IMPORT_COMMITTED`,
    `EXPORT_READY`, `EXPORT_DOWNLOADED`); add genuinely-new `Topic` members only

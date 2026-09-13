@@ -61,7 +61,7 @@ the routes already read, fail-isolated, tenant-scoped, and epistemically honest.
 
 | Section | Canonical source read |
 |---|---|
-| `summary` | risk state for the subject: dimension states, primary drivers, mitigating factors, confidence, freshness — assembled from the sources below through `services/risk_overlay` (overlay graphs) + `services/agent_access_intelligence` (capability-risk findings) + trust vectors |
+| `summary` | risk state for the subject: dimension states, primary drivers, mitigating factors, confidence, freshness — assembled from the sources below through `services/backend/services/risk_overlay` (overlay graphs) + `services/backend/services/agent_access_intelligence` (capability-risk findings) + trust vectors |
 | `state` | typed `SectionState` per risk dimension — `available`/`missing`/`degraded`/`unknown`/`not_applicable`; a dimension with no observation is `unknown`, never `0` |
 | `evidence` | the reused `EvidenceRef`s grounding every claim |
 | `findings` | risk finding candidates passing materiality; degraded honestly until the findings path (program phase 6) is live |

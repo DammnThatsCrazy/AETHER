@@ -7,7 +7,7 @@ audience: [architect, dev-senior, ops]
 status: experimental
 since_version: 0.1.0
 canonical_owner: platform@aether
-source_files: [Backend Architecture/aether-backend/shared/providers/key_vault.py, Backend Architecture/aether-backend/services/providers/routes.py]
+source_files: [services/backend/shared/providers/key_vault.py, services/backend/services/providers/routes.py]
 last_synced_commit: pending
 estimated_read_minutes: 5
 ---

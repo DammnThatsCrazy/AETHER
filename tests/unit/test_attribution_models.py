@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ROOT = ROOT / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = ROOT / "services" / "backend"
 
 # shared/__init__.py → shared.decorators → shared.auth.auth → jwt.
 # Stub missing crypto modules so the import chain resolves on runners where

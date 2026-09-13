@@ -20,7 +20,7 @@ ALERT_RULES = ROOT / "deploy/observability/prometheus/alert_rules.yml"
 DASHBOARD = ROOT / "deploy/observability/grafana/dashboards/semantic-pipeline.json"
 
 # The complete metric contract emitted by
-# Backend Architecture/aether-backend/services/semantic_intelligence.
+# services/backend/services/semantic_intelligence.
 # Any semantic alert expr or dashboard query MUST resolve to one of these.
 CONTRACTED_METRICS = frozenset(
     {

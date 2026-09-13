@@ -90,7 +90,7 @@ env:
   DELIVERY_WORKFLOW_PATH: .github/workflows/deploy.yml
   AWAKE_LEASE_PARAM: /aether/staging/lifecycle/awake-until
   MAX_AWAKE_HOURS_CAP: "8"
-  TF_DIR: AWS Deployment/aether-aws/terraform
+  TF_DIR: deploy/aws/terraform
 
 jobs:
   # ---------------------------------------------------------------------------

@@ -21,7 +21,7 @@ connectors (Slack, Stripe, Segment, …).
 ## Signature scheme
 
 HMAC-SHA256 over `"{timestamp}." + body`, verified by
-`services/security/integration_security.verify_signature` with a ±5-minute
+`services/backend/services/security/integration_security.verify_signature` with a ±5-minute
 tolerance. Headers: `X-Aether-Timestamp`, `X-Aether-Signature` (`v1=...`).
 Secrets are generated via `generate_webhook_secret()` and stored in the vault —
 never in connector config or API responses.

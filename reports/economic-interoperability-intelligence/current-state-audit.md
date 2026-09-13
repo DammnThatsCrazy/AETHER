@@ -11,7 +11,7 @@ Intelligence, and Interoperability Intelligence expansion.
 
 | Command | Result |
 |---|---|
-| `python scripts/bump_version.py --check` | PASS (8.11.0 aligned; 3 pre-existing doc warnings: `docs/AGENT-CONTROLLER.md` no versioned heading, `EXTRACTION_DEFENSE_AUDIT.md` listed-but-missing, `Backend Architecture/README.md` no versioned heading) |
+| `python scripts/bump_version.py --check` | PASS (8.11.0 aligned; 3 pre-existing doc warnings: `docs/AGENT-CONTROLLER.md` no versioned heading, `EXTRACTION_DEFENSE_AUDIT.md` listed-but-missing, archived backend README has no versioned heading) |
 | `python -m pytest tests/ -n auto` | **1772 passed, 1 failed, 3 skipped** |
 | `npm run build --workspace=packages/shared && npm test` | PASS (all workspaces) |
 | `python scripts/production_status.py` | Overall 4.05/5 — pre-production; deployment/cloud readiness 3/5, scale readiness 3/5 |
@@ -40,7 +40,7 @@ which are not pulled in by `pip install -e ".[dev,backend]"` on a fresh containe
   `DERIVATIVES_ACTOR_EDGE_LAYER_MAP` (30 actor edges H2H/H2A/A2H/A2A) +
   `DERIVATIVES_DOMAIN_EDGE_LAYER_MAP` (23 domain edges, all `DOMAIN_EXCLUDED`),
   `execution_by_aether: false` fail-closed envelope.
-- `Backend Architecture/migrations/2026_07_derivatives_foundation.sql` — raw SQL (NOT Alembic),
+- `services/backend/migrations/2026_07_derivatives_foundation.sql` — raw SQL (NOT Alembic),
   11 tables, `NUMERIC(38,18)`, `CHECK (execution_by_aether = FALSE)`,
   `UNIQUE(tenant_id, idempotency_key)`.
 - Consent purpose `financial_activity` in `packages/shared/contracts/consent-registry.json`
@@ -50,11 +50,11 @@ which are not pulled in by `pip install -e ".[dev,backend]"` on a fresh containe
   mirror, silver projector, Profile360 section, Noesis intent, metering dimension, DSR table mapping.
 
 ### Stablecoin (no dedicated domain; strong adjacent code)
-- `services/x402/`: `StablecoinAsset` model, **real on-chain USDC verification** (Base ERC-20 log +
+- `services/backend/services/x402/`: `StablecoinAsset` model, **real on-chain USDC verification** (Base ERC-20 log +
   Solana SPL via manual JSON-RPC), facilitator registry, settlement FSM.
-- `services/web3/registries.py`: `TokenRegistry`, `ChainRegistry`, `ProtocolRegistry`,
+- `services/backend/services/web3/registries.py`: `TokenRegistry`, `ChainRegistry`, `ProtocolRegistry`,
   `BridgeRouteRegistry`, `MarketVenueRegistry` (all `BaseRepository`-backed).
-- `services/onchain/`: `rpc_gateway.py`, `chain_listener.py` (single-chain RPC observation).
+- `services/backend/services/onchain/`: `rpc_gateway.py`, `chain_listener.py` (single-chain RPC observation).
 - Graph: `STABLECOIN_ASSET` vertex, `ACCEPTS_ASSET` / `PRICES_IN` edges already exist.
 - **Absent**: canonical asset/deployment identity, observation taxonomy, valuation/depeg,
   support assertions, finality/reorg handling, reconciliation, flows, all product surfaces.
@@ -78,9 +78,9 @@ which are not pulled in by `pip install -e ".[dev,backend]"` on a fresh containe
 
 ## Known defects found during audit (root-cause fixes in scope)
 
-1. `Backend Architecture/aether-backend/shared/privacy/consent_enforcement.py` hardcodes a stale
+1. `services/backend/shared/privacy/consent_enforcement.py` hardcodes a stale
    `CONSENT_PURPOSES` set that is missing `financial_activity` (added in PR1). Consumed by
-   `services/capabilities/routes.py`. Fix: derive from the consent registry.
+   `services/backend/services/capabilities/routes.py`. Fix: derive from the consent registry.
 2. Derivatives PR1 migration bypassed Alembic (raw SQL in a separate dir). Fix: idempotent
    Alembic adoption revision so migrations have a single owner.
 3. `shared/privacy/retention.py` `_DSR_SCOPE_TO_SILVER_TABLE` lacks mappings for the

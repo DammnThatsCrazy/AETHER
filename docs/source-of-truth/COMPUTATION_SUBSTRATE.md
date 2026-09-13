@@ -6,19 +6,19 @@ visibility: I
 audience: [architect, dev-senior]
 status: stable
 since_version: 0.1.0
-source_files: [Backend Architecture/aether-backend/shared/computation/__init__.py, Backend Architecture/aether-backend/shared/computation/types.py, Backend Architecture/aether-backend/shared/computation/result.py, Backend Architecture/aether-backend/shared/computation/context.py, Backend Architecture/aether-backend/shared/computation/definition.py, Backend Architecture/aether-backend/shared/computation/registry.py, Backend Architecture/aether-backend/shared/computation/allocation.py, Backend Architecture/aether-backend/shared/computation/aggregation.py, config/computation_inventory.yaml, scripts/validate_computation_substrate.py]
+source_files: [services/backend/shared/computation/__init__.py, services/backend/shared/computation/types.py, services/backend/shared/computation/result.py, services/backend/shared/computation/context.py, services/backend/shared/computation/definition.py, services/backend/shared/computation/registry.py, services/backend/shared/computation/allocation.py, services/backend/shared/computation/aggregation.py, config/computation_inventory.yaml, scripts/validate_computation_substrate.py]
 canonical_owner: platform@aether
 ---
 
 # Computation Substrate
 
-The **AETHER Computation Substrate** (`shared/computation` + `services/computation`)
+The **AETHER Computation Substrate** (`shared/computation` + `services/backend/services/computation`)
 is the single governed contract under which every material platform number is
 defined, typed, scoped, versioned, explainable, quality-aware, uncertainty-aware,
 restatable, and consistent wherever it appears.
 
 It **generalizes** the Measurement Integrity Plane (`shared/measurement`) and
-**composes** the financial value semantics (`services/value` / `packages/shared/value.ts`),
+**composes** the financial value semantics (`services/backend/services/value` / `packages/shared/value.ts`),
 the dimension-state envelopes (`shared/dimension_state`), and the Temporal
 Integrity kernel (`shared/temporal`). It does not replace or duplicate them.
 
@@ -110,7 +110,7 @@ tolerance and rationale; a value is not "reconciled" merely because a formula ra
 scores that are not empirically calibrated are typed `OrdinalScore` /
 `HeuristicScore` / `UncalibratedScore` and must not claim to be probabilities.
 
-## Persistence & runs (`services/computation/repositories.py`)
+## Persistence & runs (`services/backend/services/computation/repositories.py`)
 
 Canonical results are stored immutably in `computed_results` (Alembic migration
 `20260815_computation_substrate`), with at most one *active* row per
@@ -120,7 +120,7 @@ index). `computation_runs` records the run that produced a result;
 DDL-parity idiom (repo constants asserted equal to the migration) and the dual
 local/asyncpg backend.
 
-## Explain API (`services/computation/routes.py`, mounted at `/v1/computations`)
+## Explain API (`services/backend/services/computation/routes.py`, mounted at `/v1/computations`)
 
 Read-only, tenant-scoped endpoints:
 

@@ -1,6 +1,6 @@
 {
   "version": "0.1.0-alpha.0",
-  "generated_from": "Backend Architecture/aether-backend/shared/providers/categories.py",
+  "generated_from": "services/backend/shared/providers/categories.py",
   "category_enum_values": [
     {
       "name": "BLOCKCHAIN_RPC",

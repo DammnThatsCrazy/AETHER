@@ -37,7 +37,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2] / "Backend Architecture" / "aether-backend"
+BACKEND = Path(__file__).resolve().parents[2] / "services" / "backend"
 ROUTES = BACKEND / "services" / "kyber" / "ops" / "routes.py"
 
 #: The four handlers whose authorization is deferred to the command spec.

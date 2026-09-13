@@ -7,20 +7,20 @@ audience: [ops, dev-senior, architect]
 status: beta
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/services/model_runtime/config.py
-  - Backend Architecture/aether-backend/services/model_runtime/service.py
-  - Backend Architecture/aether-backend/services/model_runtime/routing/engine.py
-  - Backend Architecture/aether-backend/services/model_runtime/credentials/interface.py
-  - Backend Architecture/aether-backend/services/model_runtime/context/evidence.py
+  - services/backend/services/model_runtime/config.py
+  - services/backend/services/model_runtime/service.py
+  - services/backend/services/model_runtime/routing/engine.py
+  - services/backend/services/model_runtime/credentials/interface.py
+  - services/backend/services/model_runtime/context/evidence.py
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/services/model_runtime/config.py": "sha256:e258302a79e904ebd3f193b20c72fe6270c9f3c7f4f97b1928f1958ed5c6dc03"
-  "Backend Architecture/aether-backend/services/model_runtime/context/evidence.py": "sha256:07382fdbcd3b1cdff3e2129ae03530d91ccd47bfb158329ae29a84e5cf91a0fa"
-  "Backend Architecture/aether-backend/services/model_runtime/credentials/interface.py": "sha256:254fb0df4f45996b5da164a470176b951d28f6f6b0c066f96713106b017cbed5"
-  "Backend Architecture/aether-backend/services/model_runtime/routing/engine.py": "sha256:9c997defc5062e445ff8374c987d558592bb227b442860b7df0a3425d18ffb99"
-  "Backend Architecture/aether-backend/services/model_runtime/service.py": "sha256:c9c879b3a1025a81c5c693c1dfdc734a387f707a65993eaffaf5d1e2a408e4e8"
+  "services/backend/services/model_runtime/config.py": "sha256:e258302a79e904ebd3f193b20c72fe6270c9f3c7f4f97b1928f1958ed5c6dc03"
+  "services/backend/services/model_runtime/context/evidence.py": "sha256:07382fdbcd3b1cdff3e2129ae03530d91ccd47bfb158329ae29a84e5cf91a0fa"
+  "services/backend/services/model_runtime/credentials/interface.py": "sha256:254fb0df4f45996b5da164a470176b951d28f6f6b0c066f96713106b017cbed5"
+  "services/backend/services/model_runtime/routing/engine.py": "sha256:9c997defc5062e445ff8374c987d558592bb227b442860b7df0a3425d18ffb99"
+  "services/backend/services/model_runtime/service.py": "sha256:c9c879b3a1025a81c5c693c1dfdc734a387f707a65993eaffaf5d1e2a408e4e8"
 ---
 
 # Model Runtime Deployment
@@ -33,7 +33,7 @@ describe how to operate it once it is running.
 
 ## 1. Overview
 
-The model runtime (`Backend Architecture/aether-backend/services/model_runtime/`)
+The model runtime (`services/backend/services/model_runtime/`)
 is a **new, additive runtime** layered on the existing Aether authority. It is
 **additive to Noesis** — Noesis keeps its read-only intent +
 repository-dispatch architecture, and the harness may be consumed by Noesis or
@@ -142,7 +142,7 @@ falling back to an insecure default.
 | `MODEL_RUNTIME_OBSERVABILITY_ENABLED` | `false` | Production: set `true` (metrics/circuit telemetry) | `false` disables telemetry; keep OFF locally |
 | `MODEL_RUNTIME_CIRCUIT_FAILURE_THRESHOLD` | `5` | Optional (consecutive failures before a provider trips) | Tripped provider degrades the request; never silently bypasses policy |
 | `MODEL_RUNTIME_CIRCUIT_RECOVERY_TIMEOUT_S` | `60` | Optional (seconds before a tripped provider retries) | Recovery is time-boxed and re-trips on repeat failure |
-| `MODEL_RUNTIME_ADAPTERS_DIR` | `services/model_runtime/adapters` | Optional (provider adapter registry directory) | Only providers in this directory are loadable |
+| `MODEL_RUNTIME_ADAPTERS_DIR` | `services/backend/services/model_runtime/adapters` | Optional (provider adapter registry directory) | Only providers in this directory are loadable |
 
 Secrets are **never** declared in `.env` files — the `MODEL_RUNTIME_COMPAT_*`
 and `MODEL_RUNTIME_DETERMINISTIC_*` provider-level overrides are the only
@@ -186,14 +186,14 @@ For the design and security rationale, see
 
 ## References
 
-- `Backend Architecture/aether-backend/services/model_runtime/config.py` —
+- `services/backend/services/model_runtime/config.py` —
   authoritative `MODEL_RUNTIME_*` env parse.
-- `Backend Architecture/aether-backend/services/model_runtime/service.py` —
+- `services/backend/services/model_runtime/service.py` —
   runtime orchestration seam.
-- `Backend Architecture/aether-backend/services/model_runtime/routing/engine.py` —
+- `services/backend/services/model_runtime/routing/engine.py` —
   routing modes, entitlements, fallback.
-- `Backend Architecture/aether-backend/services/model_runtime/credentials/interface.py` —
+- `services/backend/services/model_runtime/credentials/interface.py` —
   per-tenant credential resolution seam.
-- `Backend Architecture/aether-backend/services/model_runtime/context/evidence.py` —
+- `services/backend/services/model_runtime/context/evidence.py` —
   grounded-synthesis evidence models.
 - `docs/decisions/ADR-008-multi-model-intelligence-harness.md` — decisions D1–D9.

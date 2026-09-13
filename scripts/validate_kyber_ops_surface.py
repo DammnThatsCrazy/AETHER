@@ -29,7 +29,7 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BACKEND = os.path.join(ROOT, "Backend Architecture", "aether-backend")
+BACKEND = os.path.join(ROOT, "services", "backend")
 
 MAIN_PY = os.path.join(BACKEND, "main.py")
 OBS_ROUTES = os.path.join(BACKEND, "services", "ingestion", "observability_routes.py")

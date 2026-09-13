@@ -7,12 +7,12 @@ audience: [architect, ops, security]
 status: stable
 since_version: "0.1.0"
 source_files:
-  - Backend Architecture/aether-backend/shared/certification/readiness.py
-  - Backend Architecture/aether-backend/shared/certification/checks.py
+  - services/backend/shared/certification/readiness.py
+  - services/backend/shared/certification/checks.py
 canonical_owner: platform@aether
 source_hashes:
-  "Backend Architecture/aether-backend/shared/certification/checks.py": "sha256:beda94f222993aecb30e43e5483667d856f39dbb74fc74cb758c86391efb4ea9"
-  "Backend Architecture/aether-backend/shared/certification/readiness.py": "sha256:4f49477dd17b2652c27ca458b9d0c7fe8ca242defa7d1d6d5e837b50050846a2"
+  "services/backend/shared/certification/checks.py": "sha256:beda94f222993aecb30e43e5483667d856f39dbb74fc74cb758c86391efb4ea9"
+  "services/backend/shared/certification/readiness.py": "sha256:4f49477dd17b2652c27ca458b9d0c7fe8ca242defa7d1d6d5e837b50050846a2"
 ---
 
 # Credential-Waiting Promotion Guide
@@ -27,7 +27,7 @@ Promotion is evidence-driven at BOTH layers:
 * **Tenant (runtime) state** — per-(tenant, provider, environment, capability)
   lifecycle state is persisted in `capability_activation_states` and moves
   ONLY through the machine-enforced `CapabilityLifecycleAuthority`
-  (`services/capabilities/lifecycle.py`): strictly single-step promotions,
+  (`services/backend/services/capabilities/lifecycle.py`): strictly single-step promotions,
   fail-closed evidence/credential/entitlement preconditions, every transition
   recording actor, reason, evidence references, and the bound credential
   version. Credential rotation demotes to `credential_supplied`; revocation

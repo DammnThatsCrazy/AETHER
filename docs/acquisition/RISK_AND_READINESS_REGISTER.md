@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
-  scripts/production_status.py: sha256:15010d4caab7f6e82c6677778332da1de5457d0c7576e11922fd24521a77086d
+  "scripts/production_status.py": "sha256:b41b131c5b76447e0ffd146a6a5e111e44d8674e2cb0cb89d5d09351466a0b66"
 ---
 
 # Risk & Readiness Register
@@ -98,7 +98,7 @@ inert in a default deployment. **None of them move the ~3.77 overall.**
 | Wave | State | Risk posture |
 |------|-------|--------------|
 | Tenant routing fix | Correctness fix | Low — no new default behavior |
-| Activation FSM (`services/activation`, `/v1/activation/*`) | Real service + migration, flag OFF | Bounded — reuses registration key-mint + in-process `/v1/batch`; refuses `complete` until Bronze first value |
+| Activation FSM (`services/backend/services/activation`, `/v1/activation/*`) | Real service + migration, flag OFF | Bounded — reuses registration key-mint + in-process `/v1/batch`; refuses `complete` until Bronze first value |
 | Kyber Missions | Migration + flag-gated monitoring-loop **scaffold** (orchestrator not in tree) | Honest — present as scaffolding; do **not** count a mission aggregate as landed |
 | These dossiers | Docs only | None |
 

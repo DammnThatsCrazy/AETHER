@@ -84,7 +84,7 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
       - name: Terraform Init + Plan + Apply
         run: |
-          cd infrastructure/environments/staging
+          cd deploy/aws/terraform/environments/staging
           terraform init -input=false
           terraform plan -var="image_tag=${{ needs.prepare.outputs.version }}" -out=staging.tfplan
           terraform apply -auto-approve staging.tfplan
@@ -312,7 +312,7 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
       - name: Terraform Init + Plan + Apply (demo)
         run: |
-          cd infrastructure/environments/demo
+          cd deploy/aws/terraform/environments/demo
           terraform init -input=false
           terraform plan -var="image_tag=${{ needs.prepare.outputs.version }}" -out=demo.tfplan
           terraform apply -auto-approve demo.tfplan

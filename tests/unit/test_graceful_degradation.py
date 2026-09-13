@@ -25,7 +25,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-BACKEND_ROOT = Path(__file__).parent.parent.parent / "Backend Architecture" / "aether-backend"
+BACKEND_ROOT = Path(__file__).parent.parent.parent / "services" / "backend"
 
 
 @contextmanager
