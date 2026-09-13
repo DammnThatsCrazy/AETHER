@@ -5,17 +5,15 @@ section: operations
 visibility: I
 audience: [ops, security, compliance]
 status: beta
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 7
 toc_depth: 2
-source_files:
-  - Backend Architecture/aether-backend/services/kyber/access/scopes.py
-  - Backend Architecture/aether-backend/services/kyber/access/dependencies.py
-  - Backend Architecture/aether-backend/services/security/policy_engine.py
+source_files: [Backend Architecture/aether-backend/services/kyber/access/scopes.py, Backend Architecture/aether-backend/services/kyber/access/dependencies.py, Backend Architecture/aether-backend/services/security/policy_engine.py]
 source_hashes:
-  "Backend Architecture/aether-backend/services/kyber/access/dependencies.py": "sha256:c7ea789d50648a18192156fd238bc0bdd32d63748949522a2642489a2866412e"
-  "Backend Architecture/aether-backend/services/kyber/access/scopes.py": "sha256:e3726ddcb97772cf40d59fa3433a8fa04a5b09bf38f92411b1b34c16a7de4b34"
-  "Backend Architecture/aether-backend/services/security/policy_engine.py": "sha256:a0ec68cf5e7fb524e02ca0c6fef0332462282b01c9db2161e1eed7eedb70c713"
+  Backend Architecture/aether-backend/services/kyber/access/dependencies.py: sha256:c7ea789d50648a18192156fd238bc0bdd32d63748949522a2642489a2866412e
+  Backend Architecture/aether-backend/services/kyber/access/scopes.py: sha256:e3726ddcb97772cf40d59fa3433a8fa04a5b09bf38f92411b1b34c16a7de4b34
+  Backend Architecture/aether-backend/services/security/policy_engine.py: sha256:a0ec68cf5e7fb524e02ca0c6fef0332462282b01c9db2161e1eed7eedb70c713
 ---
 
 # Runbook — Kyber Tenant Scope Leak

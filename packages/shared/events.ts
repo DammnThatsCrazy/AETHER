@@ -9,7 +9,7 @@ import type { ActorKind, Provenance } from './provenance';
 
 // @generated-start
 // @generated — DO NOT EDIT. Source: packages/shared/contracts/event-registry.json
-// Contract version: 8.12.0 — Run: python scripts/generate_contracts.py
+// Contract version: 0.1.0-alpha.0 — Run: python scripts/generate_contracts.py
 
 /** The canonical event-type string union the backend validates. */
 export type EventType =

@@ -1,18 +1,17 @@
 ---
 title: ML Model Training Guide
 slug: ai/ml-training
-section: ai
+section: architecture
 visibility: P
-audience: [ai, dev-senior]
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.8.0"
-source_files:
-  - ML Models/aether-ml/training/
+since_version: 0.1.0
+source_files: [ML Models/aether-ml/training/]
 canonical_owner: ml@aether
 estimated_read_minutes: 4
 toc_depth: 3
 source_hashes:
-  "ML Models/aether-ml/training/": "sha256:62cc991f65aec3f15e6953fa4026a236949c371d2d7039ccdff33a8cd6763d69"
+  ML Models/aether-ml/training/: sha256:62cc991f65aec3f15e6953fa4026a236949c371d2d7039ccdff33a8cd6763d69
 ---
 # ML Model Training Guide
 

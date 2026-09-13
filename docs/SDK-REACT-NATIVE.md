@@ -1,27 +1,23 @@
 ---
 title: Aether React Native SDK — Integration Guide
 slug: sdks/react-native
-section: sdks
+section: reference
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "8.9.0"
-source_files:
-  - packages/react-native/src/bridge.ts
-  - packages/react-native/src/index.tsx
-  - packages/shared/events.ts
-  - packages/shared/consent.ts
+since_version: 0.1.0
+source_files: [packages/react-native/src/bridge.ts, packages/react-native/src/index.tsx, packages/shared/events.ts, packages/shared/consent.ts]
 canonical_owner: sdk@aether
 estimated_read_minutes: 9
 toc_depth: 3
 source_hashes:
   "packages/react-native/src/bridge.ts": "sha256:0beb3a5ee8f7158a6a4cee5016735b96b6a8f9269721bd772a51d41d6ed34246"
   "packages/react-native/src/index.tsx": "sha256:8861ddc797def68d8580f489007f78a65d6f3dd882b4538fdbeb99ddecb54fbe"
-  "packages/shared/consent.ts": "sha256:e8cc43b2a64f70eca68d499d7a1fb7b85ceacb44bc94f77a70e105e0d05e8730"
-  "packages/shared/events.ts": "sha256:216fa41739a8613800f057f2937071bf40a28ac35ba47b4a77f438cfd2fd9477"
+  "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
+  "packages/shared/events.ts": "sha256:96f08a92d2a10b3555264bd76dc1e59c78ae3de63fe99665c13189201ad5c120"
 ---
 
-# Aether React Native SDK v8.12.0 — Integration Guide
+# Aether React Native SDK v0.1.0-alpha.0 — Integration Guide
 
 ## Installation
 

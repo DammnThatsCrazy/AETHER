@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [ops, dev-senior, architect]
 status: beta
-since_version: "8.12.0"
+since_version: "0.1.0"
 source_files:
   - Backend Architecture/aether-backend/services/model_runtime/config.py
   - Backend Architecture/aether-backend/services/model_runtime/service.py

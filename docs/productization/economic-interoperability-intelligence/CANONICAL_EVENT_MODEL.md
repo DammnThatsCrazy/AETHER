@@ -3,14 +3,13 @@ title: Canonical Event Model (cross-domain)
 slug: productization/economic-interoperability-intelligence/canonical-event-model
 section: operations
 visibility: I
-audience: [architect, ops, exec]
+audience: [architect, ops, buyer]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - packages/shared/contracts/event-registry.json
+since_version: 0.1.0
+source_files: [packages/shared/contracts/event-registry.json]
 canonical_owner: platform@aether
 source_hashes:
-  "packages/shared/contracts/event-registry.json": "sha256:74c9e8233bb6000f6a80e51aceacb9b2e4c8f47ecaa5d10a3303da15127a6121"
+  "packages/shared/contracts/event-registry.json": "sha256:95f3b66f97a2e57e4466d18da534084a91b411a629c5b7a752788813701242e8"
 ---
 
 # Canonical Event Model

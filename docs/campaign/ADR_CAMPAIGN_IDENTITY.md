@@ -4,6 +4,8 @@ slug: campaign/adr-campaign-identity
 section: architecture
 visibility: I
 audience: [dev-senior, architect]
+status: experimental
+since_version: 0.1.0
 ---
 
 # ADR: Campaign Identity — Canonical UUID Strategy

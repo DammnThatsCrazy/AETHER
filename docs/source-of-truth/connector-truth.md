@@ -1,3 +1,12 @@
+---
+title: Connector truth
+slug: source-of-truth/connector-truth
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Connector Truth
 
 Providers are external systems.

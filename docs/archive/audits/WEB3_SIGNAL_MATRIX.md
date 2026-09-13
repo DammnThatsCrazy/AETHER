@@ -1,3 +1,12 @@
+---
+title: Web3 Signal Matrix
+slug: archive/audits/web3_signal_matrix
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Web3 Signal Matrix
 
 ## Overview

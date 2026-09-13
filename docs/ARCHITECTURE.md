@@ -5,7 +5,7 @@ section: architecture
 visibility: P
 audience: [architect, dev-senior, security]
 status: stable
-since_version: "8.8.0"
+since_version: "0.1.0"
 source_files:
   - Backend Architecture/aether-backend/main.py
   - Backend Architecture/aether-backend/middleware/middleware.py
@@ -19,7 +19,7 @@ reviewed_source_commits:
 source_hashes:
   "Backend Architecture/aether-backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
   "Backend Architecture/aether-backend/middleware/middleware.py": "sha256:8cd2cc774efd913fb94fda0bbb4f4336855f90301b7e8f48f1afe84b5c7fa12e"
-  "packages/shared/": "sha256:8e79c77f302663bfd0b7878519bd39736b4f3fc72d4f991f5db1ed3fda05c8cd"
+  "packages/shared/": "sha256:0465437d70518fb1cc4fe14b154f3210849312ea4d336c99d9429f0cb6d21d8d"
 ---
 # Aether vNext — Architecture Guide
 
@@ -413,7 +413,7 @@ All four SDKs expose the same core public API surface:
 | **Undo capability** | `RESOLVED_AS` edges store full signal snapshots. Merges can be reversed by restoring the secondary profile. |
 | **Privacy** | All PII (email, phone, IP) stored as SHA-256 hashes only. Raw values never persisted in graph or audit trail. |
 
-## Model Extraction Defense (v8.12.0)
+## Model Extraction Defense (v0.1.0-alpha.0)
 
 The ML serving pipeline is wrapped with a modular defense layer that protects against model extraction and knowledge distillation attacks.
 

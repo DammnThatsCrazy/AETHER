@@ -1,11 +1,11 @@
 ---
-title: "SDK Parity Matrix"
+title: SDK Parity Matrix
 slug: sdks/parity-matrix
-section: sdks
+section: reference
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # SDK Parity Matrix

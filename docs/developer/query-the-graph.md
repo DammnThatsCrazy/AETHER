@@ -1,11 +1,11 @@
 ---
 title: Query the Graph
 slug: query-the-graph
-section: quickstart
+section: developer
 visibility: P
 audience: [dev-junior, dev-senior]
 status: experimental
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # Query the Graph

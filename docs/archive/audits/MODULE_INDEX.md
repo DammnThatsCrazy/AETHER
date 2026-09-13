@@ -1,3 +1,12 @@
+---
+title: Module Index
+slug: archive/audits/module_index
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Aether Module Index v8.7.0
 
 Complete inventory of all modules, services, packages, and system layers.

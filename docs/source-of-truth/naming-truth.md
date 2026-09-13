@@ -1,3 +1,12 @@
+---
+title: Naming truth
+slug: source-of-truth/naming-truth
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Naming Truth
 
 This document defines canonical product language across Aether, Kyber, Noesis, marketing sites, docs, SDKs, APIs, and internal architecture.

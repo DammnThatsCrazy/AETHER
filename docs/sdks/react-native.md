@@ -1,16 +1,16 @@
 ---
-title: "Aether React Native SDK"
+title: Aether React Native SDK
 slug: sdks/react-native
-section: sdks
+section: reference
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # Aether React Native SDK
 
-The Aether React Native SDK captures observations from React Native applications.
+The Aether React Native SDK is a thin observation client that captures observations from React Native applications.
 
 ## Installation
 

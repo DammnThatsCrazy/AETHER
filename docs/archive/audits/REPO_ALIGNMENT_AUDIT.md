@@ -1,3 +1,12 @@
+---
+title: Repo Alignment Audit
+slug: archive/audits/repo_alignment_audit
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Aether Repository Alignment Audit v8.7.1
 
 **Audit Date:** 2026-03-25 (updated 2026-04-03)

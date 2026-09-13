@@ -1,22 +1,12 @@
 ---
 title: Continuous Relationship Decision Intelligence Source of Truth
+slug: source-of-truth/comparison_intelligence
+section: reference
+visibility: I
+audience: [dev-senior]
 status: stable
-source_files:
-  - packages/shared/contracts/comparison-registry.json
-  - packages/shared/comparison-contract.ts
-  - Backend Architecture/aether-backend/services/intelligence/comparison/contracts.py
-  - Backend Architecture/aether-backend/services/intelligence/comparison/generated_vocabulary.py
-  - Backend Architecture/aether-backend/services/intelligence/comparison/engine.py
-  - Backend Architecture/aether-backend/services/intelligence/comparison/baselines.py
-  - Backend Architecture/aether-backend/services/intelligence/comparison/alignment.py
-  - Backend Architecture/aether-backend/services/intelligence/comparison/materiality.py
-  - Backend Architecture/aether-backend/services/intelligence/comparison/collection.py
-  - Backend Architecture/aether-backend/services/intelligence/comparison/findings.py
-  - Backend Architecture/aether-backend/services/intelligence/comparison/watchlists.py
-  - Backend Architecture/aether-backend/services/intelligence/comparison/scenarios.py
-  - Backend Architecture/aether-backend/services/intelligence/comparison/jobs.py
-  - Backend Architecture/aether-backend/services/intelligence/comparison/routes.py
-  - Backend Architecture/aether-backend/services/intelligence/comparison/store.py
+since_version: 0.1.0
+source_files: [packages/shared/contracts/comparison-registry.json, packages/shared/comparison-contract.ts, Backend Architecture/aether-backend/services/intelligence/comparison/contracts.py, Backend Architecture/aether-backend/services/intelligence/comparison/generated_vocabulary.py, Backend Architecture/aether-backend/services/intelligence/comparison/engine.py, Backend Architecture/aether-backend/services/intelligence/comparison/baselines.py, Backend Architecture/aether-backend/services/intelligence/comparison/alignment.py, Backend Architecture/aether-backend/services/intelligence/comparison/materiality.py, Backend Architecture/aether-backend/services/intelligence/comparison/collection.py, Backend Architecture/aether-backend/services/intelligence/comparison/findings.py, Backend Architecture/aether-backend/services/intelligence/comparison/watchlists.py, Backend Architecture/aether-backend/services/intelligence/comparison/scenarios.py, Backend Architecture/aether-backend/services/intelligence/comparison/jobs.py, Backend Architecture/aether-backend/services/intelligence/comparison/routes.py, Backend Architecture/aether-backend/services/intelligence/comparison/store.py]
 last_synced_commit: a500f1f
 ---
 

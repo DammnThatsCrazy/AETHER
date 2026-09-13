@@ -1,20 +1,12 @@
 ---
 title: SDK Commerce Bridges
 slug: sdks/sdk-commerce-bridges
-section: sdks
+section: reference
 visibility: I
 audience: [dev-senior, architect]
 status: beta
-since_version: "8.12.0"
-source_files:
-  - packages/shared/contracts/event-registry.json
-  - packages/shared/commerce.ts
-  - packages/shared/commerce-bridge.ts
-  - packages/web/src/modules/commerce-detection.ts
-  - packages/web/src/bridges/
-  - Backend Architecture/aether-backend/shared/commerce_contracts/order.py
-  - Backend Architecture/aether-backend/shared/integration_contracts/events.py
-  - Backend Architecture/aether-backend/shared/integration_contracts/commerce_bridge.py
+since_version: 0.1.0
+source_files: [packages/shared/contracts/event-registry.json, packages/shared/commerce.ts, packages/shared/commerce-bridge.ts, packages/web/src/modules/commerce-detection.ts, packages/web/src/bridges/, Backend Architecture/aether-backend/shared/commerce_contracts/order.py, Backend Architecture/aether-backend/shared/integration_contracts/events.py, Backend Architecture/aether-backend/shared/integration_contracts/commerce_bridge.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
@@ -24,7 +16,7 @@ source_hashes:
   "Backend Architecture/aether-backend/shared/integration_contracts/events.py": "sha256:ba687017a65b1395e00077fd778c43fc394637bc50e95de91a1fb69ed4500ce2"
   "packages/shared/commerce-bridge.ts": "sha256:b14c263789a1bee3fe21bcc383282bd4fc5b914c23f742f901fd3429cb98de03"
   "packages/shared/commerce.ts": "sha256:1ecb0f87838e148ddeaeab7458ea7762350f451361eecf9925ba1c09ded0d32d"
-  "packages/shared/contracts/event-registry.json": "sha256:74c9e8233bb6000f6a80e51aceacb9b2e4c8f47ecaa5d10a3303da15127a6121"
+  "packages/shared/contracts/event-registry.json": "sha256:95f3b66f97a2e57e4466d18da534084a91b411a629c5b7a752788813701242e8"
   "packages/web/src/bridges/": "sha256:3ceea9d41cd65bfc6442fc6c7809165e4bf651b3625edde1a5cdeebe755c74ba"
   "packages/web/src/modules/commerce-detection.ts": "sha256:14f48bd32335bd9069aec1927d38e4eaaa33274a496f523acfd17ab770934751"
 ---

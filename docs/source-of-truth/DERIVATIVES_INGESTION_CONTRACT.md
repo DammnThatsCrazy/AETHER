@@ -1,17 +1,14 @@
 ---
 title: Derivatives Ingestion Contract
 slug: source-of-truth/derivatives-ingestion-contract
-section: source-of-truth
+section: reference
 visibility: I
-audience: [architect, dev-senior, ai]
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - Backend Architecture/aether-backend/services/derivatives/runtime_routes.py
-  - Backend Architecture/aether-backend/services/derivatives/adapters/base.py
-  - Backend Architecture/aether-backend/services/derivatives/streams.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/derivatives/runtime_routes.py, Backend Architecture/aether-backend/services/derivatives/adapters/base.py, Backend Architecture/aether-backend/services/derivatives/streams.py]
 canonical_owner: platform@aether
-last_synced_commit: "03ab3a6"
+last_synced_commit: 03ab3a6
 ---
 # Derivatives Ingestion Contract
 

@@ -42,7 +42,9 @@
         "troubleshooting",
         "kyber",
         "changelog",
-        "glossary"
+        "glossary",
+        "developer",
+        "connectors"
       ],
       "description": "Top-level navigation section the page belongs to."
     },
@@ -79,7 +81,7 @@
     },
     "since_version": {
       "type": "string",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9]+(\\.[a-zA-Z0-9]+)*)?$",
       "description": "Semver of the platform version this page first applies to."
     },
     "last_synced_commit": {

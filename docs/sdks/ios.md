@@ -1,16 +1,16 @@
 ---
-title: "Aether iOS SDK"
+title: Aether iOS SDK
 slug: sdks/ios
-section: sdks
+section: reference
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # Aether iOS SDK
 
-The Aether iOS SDK captures observations from iOS applications.
+The Aether iOS SDK is a thin observation client that captures observations from iOS applications.
 
 ## Installation
 

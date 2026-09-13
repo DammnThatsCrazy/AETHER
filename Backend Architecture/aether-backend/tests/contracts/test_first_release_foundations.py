@@ -51,7 +51,7 @@ class TestAIInvocationObservedRegistration:
         assert entry["silverProjection"] == "ai_execution_facts"
         assert entry["graphProjection"] == "USED_MODEL"
         assert entry["status"] == "active"
-        assert entry["introducedVersion"] == "8.12.0"
+        assert entry["introducedVersion"] == "0.1.0-alpha.0"
 
     def test_events_ts_contains_event_type(self):
         events_ts = _read("packages/shared/events.ts")

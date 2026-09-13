@@ -55,7 +55,7 @@ def _reg(**over):
         platform="ios",
         bundle_id="com.aether.app",
         environment="production",
-        app_version="8.12.0",
+        app_version="0.1.0-alpha.0",
         distribution_profile="app_store",
     )
     base.update(over)
@@ -67,14 +67,14 @@ def _register(**over):
 
 
 def test_config_returns_typed_response():
-    _register(installation_id="dev-1", app_version="8.11.0", distribution_profile="testflight")
+    _register(installation_id="dev-1", app_version="0.0.10", distribution_profile="testflight")
     cfg = _run(mobile_routes.get_mobile_config(_req(), installation_id="dev-1")).data
 
     assert cfg["app_kind"] == "aether"
     assert cfg["environment"] == "production"
     assert cfg["min_version"] == MIN_SUPPORTED_MOBILE_VERSION
     assert cfg["latest_version"] == LATEST_MOBILE_VERSION
-    assert cfg["upgrade_policy"] == "suggested"  # 8.11.0 >= min and < latest
+    assert cfg["upgrade_policy"] == "suggested"  # 0.0.10 >= min and < latest
     assert cfg["distribution_profile"] == "testflight"
 
     # Feature flags all present, all default OFF.
@@ -106,18 +106,18 @@ def test_config_404_when_installation_absent():
 
 def test_app_version_registration_feeds_upgrade_policy():
     # Below the support floor -> required.
-    _register(installation_id="old-dev", app_version="8.9.0", distribution_profile="testflight")
+    _register(installation_id="old-dev", app_version="0.0.1", distribution_profile="testflight")
     cfg = _run(mobile_routes.get_mobile_config(_req(), installation_id="old-dev")).data
     assert cfg["upgrade_policy"] == "required"
 
     # At latest -> none.
-    _register(installation_id="curr-dev", app_version="8.12.0", distribution_profile="app_store")
+    _register(installation_id="curr-dev", app_version="0.1.0-alpha.0", distribution_profile="app_store")
     cfg = _run(mobile_routes.get_mobile_config(_req(), installation_id="curr-dev")).data
     assert cfg["upgrade_policy"] == "none"
 
     # Registration persists the values on the installation row.
     row = _run(mobile_routes.get_installation(_req(), installation_id="curr-dev")).data
-    assert row["app_version"] == "8.12.0"
+    assert row["app_version"] == "0.1.0-alpha.0"
     assert row["distribution_profile"] == "app_store"
 
     # Unknown app version is fail-safe (required), profile defaults to dev.

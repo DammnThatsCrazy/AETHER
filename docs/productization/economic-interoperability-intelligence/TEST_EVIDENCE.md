@@ -3,20 +3,16 @@ title: Test Evidence
 slug: productization/economic-interoperability-intelligence/test-evidence
 section: operations
 visibility: I
-audience: [architect, ops, exec]
+audience: [architect, ops, buyer]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - tests/unit/stablecoin/
-  - tests/unit/derivatives/
-  - tests/unit/interop/
-  - tests/unit/test_economic_noesis_ooda_wiring.py
+since_version: 0.1.0
+source_files: [tests/unit/stablecoin/, tests/unit/derivatives/, tests/unit/interop/, tests/unit/test_economic_noesis_ooda_wiring.py]
 canonical_owner: platform@aether
 source_hashes:
-  "tests/unit/derivatives/": "sha256:d9a1cd03f0263d7dbf311b388458123dc1176d5be1ce081820e2bb482157534d"
-  "tests/unit/interop/": "sha256:7562f7beade6f7ead70a31b0c0d566963eaa7f8430c8c209144a4ca248d609b6"
-  "tests/unit/stablecoin/": "sha256:04b0dd4dda685268cdb37e1ca7389125f3d7b9a2a057b4a11392e399158ffa5e"
-  "tests/unit/test_economic_noesis_ooda_wiring.py": "sha256:f57fb82458204b768fbe8ce99275446cf98351a8fd415e7525577d9a53bd35c9"
+  tests/unit/derivatives/: sha256:d9a1cd03f0263d7dbf311b388458123dc1176d5be1ce081820e2bb482157534d
+  tests/unit/interop/: sha256:7562f7beade6f7ead70a31b0c0d566963eaa7f8430c8c209144a4ca248d609b6
+  tests/unit/stablecoin/: sha256:04b0dd4dda685268cdb37e1ca7389125f3d7b9a2a057b4a11392e399158ffa5e
+  tests/unit/test_economic_noesis_ooda_wiring.py: sha256:f57fb82458204b768fbe8ce99275446cf98351a8fd415e7525577d9a53bd35c9
 ---
 
 # Test Evidence

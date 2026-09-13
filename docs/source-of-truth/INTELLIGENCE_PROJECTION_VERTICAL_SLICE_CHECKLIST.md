@@ -1,16 +1,13 @@
 ---
 title: Intelligence Projection Vertical Slice Checklist
 slug: source-of-truth/intelligence-projection-vertical-slice-checklist
-section: source-of-truth
+section: reference
 visibility: I
 audience: [architect, dev-senior]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - docs/decisions/ADR-010-intelligence-projection-plane.md
-  - docs/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md
-  - packages/shared/contracts/intelligence-projection-registry.json
-last_synced_commit: "ae973059"
+since_version: 0.1.0
+source_files: [docs/decisions/ADR-010-intelligence-projection-plane.md, docs/source-of-truth/INTELLIGENCE_PROJECTION_ARCHITECTURE.md, packages/shared/contracts/intelligence-projection-registry.json]
+last_synced_commit: ae973059
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3

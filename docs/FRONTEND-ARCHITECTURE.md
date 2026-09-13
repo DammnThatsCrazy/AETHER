@@ -5,7 +5,7 @@ section: architecture
 visibility: I
 audience: [dev-senior, architect]
 status: stable
-since_version: "8.8.0"
+since_version: "0.1.0"
 source_files:
   - frontend/aether/src/
   - frontend/kyber/src/

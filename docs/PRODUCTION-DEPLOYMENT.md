@@ -1,11 +1,11 @@
 ---
 title: Production Deployment
 slug: self-hosting/production-deployment
-section: self-hosting
+section: operations
 visibility: I
 audience: [ops, architect, dev-senior]
 status: beta
-since_version: "8.9.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 9
 ---

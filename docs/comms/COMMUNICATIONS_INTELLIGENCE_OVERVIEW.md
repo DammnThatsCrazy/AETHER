@@ -3,17 +3,15 @@ title: Communications Intelligence Overview
 slug: comms/communications-intelligence-overview
 section: architecture
 visibility: I
-audience: [dev-senior, architect, exec]
-source_files:
-  - Backend Architecture/aether-backend/services/comms/contracts.py
-  - Backend Architecture/aether-backend/services/comms/projector.py
-  - Backend Architecture/aether-backend/services/comms/state.py
-  - Backend Architecture/aether-backend/services/silver/dispatcher.py
+audience: [dev-senior, architect, buyer]
+status: experimental
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/comms/contracts.py, Backend Architecture/aether-backend/services/comms/projector.py, Backend Architecture/aether-backend/services/comms/state.py, Backend Architecture/aether-backend/services/silver/dispatcher.py]
 source_hashes:
-  "Backend Architecture/aether-backend/services/comms/contracts.py": "sha256:9629e0f07c08f85d43c8b7bd24faf4c2c835a1974ca60d98efad27aa6ff5d961"
-  "Backend Architecture/aether-backend/services/comms/projector.py": "sha256:4744e01f562aa331be96730330668f25e0daa14a264f752c90b579f6a567278a"
-  "Backend Architecture/aether-backend/services/comms/state.py": "sha256:8a2cb4265352d598cc6a50a1e789f89f1ee88249d003b59902f6d5f4a7c481fc"
-  "Backend Architecture/aether-backend/services/silver/dispatcher.py": "sha256:ea6279d0a1242887281ced91e1cb05bc8d94eb4c978f10a6e8615fb4d565f98f"
+  Backend Architecture/aether-backend/services/comms/contracts.py: sha256:9629e0f07c08f85d43c8b7bd24faf4c2c835a1974ca60d98efad27aa6ff5d961
+  Backend Architecture/aether-backend/services/comms/projector.py: sha256:4744e01f562aa331be96730330668f25e0daa14a264f752c90b579f6a567278a
+  Backend Architecture/aether-backend/services/comms/state.py: sha256:8a2cb4265352d598cc6a50a1e789f89f1ee88249d003b59902f6d5f4a7c481fc
+  Backend Architecture/aether-backend/services/silver/dispatcher.py: sha256:ea6279d0a1242887281ced91e1cb05bc8d94eb4c978f10a6e8615fb4d565f98f
 ---
 
 # Communications Intelligence Overview

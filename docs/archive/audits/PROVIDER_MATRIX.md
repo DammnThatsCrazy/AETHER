@@ -1,3 +1,12 @@
+---
+title: Provider Matrix
+slug: archive/audits/provider_matrix
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Aether Provider Matrix
 
 ## Implemented Providers (24 total)

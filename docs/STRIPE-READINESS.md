@@ -3,11 +3,10 @@ title: Stripe Readiness
 slug: operations/stripe-readiness
 section: operations
 visibility: I
-audience: [ops, architect, exec]
+audience: [ops, architect, buyer]
 status: beta
-since_version: "8.9.0"
-flags:
-  - AETHER_STRIPE_BILLING_ENABLED
+since_version: 0.1.0
+flags: [AETHER_STRIPE_BILLING_ENABLED]
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 ---

@@ -1,3 +1,12 @@
+---
+title: Reward No Custody Model
+slug: source-of-truth/reward_no_custody_model
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Reward No-Custody Model
 
 Aether does **not** hold, custody, transfer, or directly distribute rewards on behalf of tenants

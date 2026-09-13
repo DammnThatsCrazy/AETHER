@@ -1,3 +1,12 @@
+---
+title: Agent Access Intelligence Pr1
+slug: source-of-truth/agent_access_intelligence_pr1
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Agent Access Intelligence — PR 1 Compatibility & Ownership Map
 
 **Release train:** `AGENT_ACCESS_INTELLIGENCE`

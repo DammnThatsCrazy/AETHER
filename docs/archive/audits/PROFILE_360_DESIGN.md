@@ -1,3 +1,12 @@
+---
+title: Profile 360 Design
+slug: archive/audits/profile_360_design
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Profile 360 Design — Entity Omniview Architecture
 
 ## Architecture

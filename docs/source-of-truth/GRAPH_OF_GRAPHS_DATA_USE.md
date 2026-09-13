@@ -4,11 +4,11 @@ slug: architecture/graph-of-graphs-data-use
 section: architecture
 visibility: I
 audience: [architect, dev-senior, ops]
-status: draft
+status: experimental
+since_version: 0.1.0
 canonical_owner: platform@aether
-source_files:
-  - Backend Architecture/aether-backend/services/integrations/data_rights/models.py
-last_synced_commit: "pending"
+source_files: [Backend Architecture/aether-backend/services/integrations/data_rights/models.py]
+last_synced_commit: pending
 estimated_read_minutes: 5
 ---
 

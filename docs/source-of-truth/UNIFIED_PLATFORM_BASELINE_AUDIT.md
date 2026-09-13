@@ -1,6 +1,11 @@
 ---
 title: Unified Intelligence Plane — Baseline Audit
+slug: source-of-truth/unified_platform_baseline_audit
+section: reference
+visibility: I
+audience: [dev-senior]
 status: stable
+since_version: 0.1.0
 ---
 
 # Unified Intelligence Plane — Baseline Audit

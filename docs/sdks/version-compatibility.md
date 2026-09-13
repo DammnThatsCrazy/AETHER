@@ -1,11 +1,11 @@
 ---
 title: SDK Version Compatibility
 slug: version-compatibility
-section: sdks
+section: reference
 visibility: P
 audience: [dev-senior]
 status: experimental
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # SDK Version Compatibility

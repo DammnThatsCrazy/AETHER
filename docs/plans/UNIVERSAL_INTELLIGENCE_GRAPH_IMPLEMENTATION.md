@@ -3,9 +3,9 @@ title: Universal Intelligence Graph — Implementation Ledger
 slug: plans/universal-intelligence-graph-implementation
 section: architecture
 visibility: I
-audience: [architect, dev-senior, ai]
+audience: [architect, dev-senior]
 status: experimental
-since_version: "8.10.0"
+since_version: 0.1.0
 canonical_owner: graph@aether
 ---
 # Universal Intelligence Graph — Implementation Ledger

@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [dev-senior, ops]
 status: experimental
-since_version: "8.11.0"
+since_version: "0.1.0"
 source_files:
   - Backend Architecture/aether-backend/services/semantic_intelligence/routes.py
   - Backend Architecture/aether-backend/alembic/versions/20260702_semantic_sentiment.py

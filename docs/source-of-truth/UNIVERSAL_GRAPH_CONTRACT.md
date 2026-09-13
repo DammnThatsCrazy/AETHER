@@ -1,15 +1,12 @@
 ---
 title: Universal Intelligence Graph Contract
 slug: source-of-truth/universal-graph-contract
-section: source-of-truth
-visibility: internal
-audience: [architect, dev-senior, ai]
+section: reference
+visibility: I
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.10.0"
-source_files:
-  - packages/shared/graph-contract.ts
-  - Backend Architecture/aether-backend/shared/graph/graph_contract.py
-  - Backend Architecture/aether-backend/services/operational_intelligence/models.py
+since_version: 0.1.0
+source_files: [packages/shared/graph-contract.ts, Backend Architecture/aether-backend/shared/graph/graph_contract.py, Backend Architecture/aether-backend/services/operational_intelligence/models.py]
 canonical_owner: graph@aether
 last_synced_commit: fae02a9
 ---

@@ -1,11 +1,12 @@
 ---
-source_files:
-  - packages/shared/contracts/event-registry.json
-  - packages/shared/agent-deployment.ts
-  - packages/shared/ai-execution.ts
-  - packages/shared/payment-rails.ts
-  - packages/shared/targeting-intelligence.ts
-  - Backend Architecture/aether-backend/config/settings.py
+title: First Release Intelligence Telemetry Operations
+slug: source-of-truth/first_release_intelligence_telemetry_operations
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+source_files: [packages/shared/contracts/event-registry.json, packages/shared/agent-deployment.ts, packages/shared/ai-execution.ts, packages/shared/payment-rails.ts, packages/shared/targeting-intelligence.ts, Backend Architecture/aether-backend/config/settings.py]
 last_synced_commit: HEAD
 ---
 

@@ -2,7 +2,7 @@
   "$comment": "Classified baseline of every system the mobile/continuity/notification program touches. Classifications: existing_reuse | existing_extend | existing_repair | missing_build | duplicate_remove | intentionally_out_of_scope | externally_blocked | needs_owner_decision. Derived from a one-time bounded reconnaissance (three read-only surveys + one design pass) at base_commit 78562dd. Hand-maintained.",
   "schema_version": 1,
   "base_commit": "78562ddae28de01ec0fe3c59e42bb357baaffb1f",
-  "platform_version": "8.12.0",
+  "platform_version": "0.1.0-alpha.0",
   "backend_root": "Backend Architecture/aether-backend",
   "systems": [
     {"name": "notification_intelligence", "classification": "existing_extend", "path": "Backend Architecture/aether-backend/services/notification_intelligence/", "detail": "Inbox (table notification_inbox), lifecycle engine, policy engine, delivery router, channel gateway (slack/discord/telegram/webhook), audit; routes /v1/notifications. Extend: brand canonical, add TS twins, coverage registry, mobile projection. Do NOT build a second inbox."},

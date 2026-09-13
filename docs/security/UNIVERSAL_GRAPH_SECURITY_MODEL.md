@@ -3,9 +3,9 @@ title: Universal Intelligence Graph Security Model
 slug: security/universal-graph-security-model
 section: security
 visibility: I
-audience: [architect, dev-senior, security, ai]
+audience: [architect, dev-senior, security]
 status: stable
-since_version: "8.10.0"
+since_version: 0.1.0
 canonical_owner: security@aether
 ---
 # Universal Intelligence Graph Security Model

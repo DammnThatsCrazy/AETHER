@@ -1,11 +1,11 @@
 ---
 title: SDK Field Trust Parity
 slug: field-trust-parity
-section: sdks
+section: reference
 visibility: I
 audience: [dev-senior, architect]
 status: experimental
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # SDK Field Trust Parity

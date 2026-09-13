@@ -4,6 +4,8 @@ slug: campaign/runbooks/connector-credential-rotation
 section: operations
 visibility: I
 audience: [ops]
+status: experimental
+since_version: 0.1.0
 ---
 
 # Runbook: Campaign Source Connector Credential Rotation

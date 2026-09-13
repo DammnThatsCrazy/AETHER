@@ -3,9 +3,9 @@ title: Contextual 360 — Phased Implementation Program
 slug: plans/contextual-360-phases
 section: architecture
 visibility: I
-audience: [architect, dev-senior, ai]
+audience: [architect, dev-senior]
 status: experimental
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: backend@aether
 ---
 

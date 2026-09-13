@@ -1,28 +1,22 @@
 ---
 title: ML Security Threat Model
 slug: ai/ml-security-threat-model
-section: ai
+section: architecture
 visibility: I
-audience: [ai, dev-senior, architect, security]
+audience: [architect, dev-senior, security]
 status: stable
-since_version: "8.9.0"
+since_version: 0.1.0
 canonical_owner: ml@aether
-source_files:
-  - security/model_extraction_defense/__init__.py
-  - security/model_extraction_defense/defense_layer.py
-  - security/model_extraction_defense/rate_limiter.py
-  - ML Models/aether-ml/common/artifact_registry.py
-  - ML Models/aether-ml/serving/src/api.py
-  - Backend Architecture/aether-backend/services/ml_serving/routes.py
+source_files: [security/model_extraction_defense/__init__.py, security/model_extraction_defense/defense_layer.py, security/model_extraction_defense/rate_limiter.py, ML Models/aether-ml/common/artifact_registry.py, ML Models/aether-ml/serving/src/api.py, Backend Architecture/aether-backend/services/ml_serving/routes.py]
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/services/ml_serving/routes.py": "sha256:7f6fe06f72b1f5e08b9c732a59f800b4bfb5bd3662e51100d2d700535aee369d"
-  "ML Models/aether-ml/common/artifact_registry.py": "sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83"
-  "ML Models/aether-ml/serving/src/api.py": "sha256:d9d1d8dd0cafaa6351737c1a7140a5abe5cb49d4265ccdf694e6361640a2ba4c"
-  "security/model_extraction_defense/__init__.py": "sha256:e275b980e96643b072d6f2505f3e47742d0e3f5a8501a35c4ddb5e2851a02072"
-  "security/model_extraction_defense/defense_layer.py": "sha256:f6c9effcb694d2e3b00e3939c418208ad7137568dc7ceb5704b88f0ae086730a"
-  "security/model_extraction_defense/rate_limiter.py": "sha256:a2429c3ad4dd0198764124b8a4c5e1d7a9046eca740b9fe983564b4c6d80c7a8"
+  Backend Architecture/aether-backend/services/ml_serving/routes.py: sha256:7f6fe06f72b1f5e08b9c732a59f800b4bfb5bd3662e51100d2d700535aee369d
+  ML Models/aether-ml/common/artifact_registry.py: sha256:5c20f5bd0fdd0d98c8ded43a5e1b470372097d252f3646187840550c8926ea83
+  ML Models/aether-ml/serving/src/api.py: sha256:d9d1d8dd0cafaa6351737c1a7140a5abe5cb49d4265ccdf694e6361640a2ba4c
+  security/model_extraction_defense/__init__.py: sha256:e275b980e96643b072d6f2505f3e47742d0e3f5a8501a35c4ddb5e2851a02072
+  security/model_extraction_defense/defense_layer.py: sha256:f6c9effcb694d2e3b00e3939c418208ad7137568dc7ceb5704b88f0ae086730a
+  security/model_extraction_defense/rate_limiter.py: sha256:a2429c3ad4dd0198764124b8a4c5e1d7a9046eca740b9fe983564b4c6d80c7a8
 ---
 
 # ML Security Threat Model

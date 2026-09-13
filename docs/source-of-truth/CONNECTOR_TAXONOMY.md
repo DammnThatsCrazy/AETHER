@@ -4,13 +4,11 @@ slug: architecture/connector-taxonomy
 section: architecture
 visibility: I
 audience: [architect, dev-senior, ops]
-status: draft
+status: experimental
+since_version: 0.1.0
 canonical_owner: platform@aether
-source_files:
-  - Backend Architecture/aether-backend/services/integrations/connectors/base.py
-  - Backend Architecture/aether-backend/shared/integration_contracts/catalog.py
-  - Backend Architecture/aether-backend/shared/integration_contracts/experience.py
-last_synced_commit: "8b1ca3dc"
+source_files: [Backend Architecture/aether-backend/services/integrations/connectors/base.py, Backend Architecture/aether-backend/shared/integration_contracts/catalog.py, Backend Architecture/aether-backend/shared/integration_contracts/experience.py]
+last_synced_commit: 8b1ca3dc
 estimated_read_minutes: 6
 toc_depth: 3
 ---

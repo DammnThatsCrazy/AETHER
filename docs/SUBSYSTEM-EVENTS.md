@@ -1,20 +1,18 @@
 ---
 title: Events / Kafka Subsystem
 slug: data/kafka
-section: data
+section: architecture
 visibility: P
 audience: [dev-senior, architect, ops]
 status: stable
-since_version: "8.8.0"
-source_files:
-  - Backend Architecture/aether-backend/shared/events/events.py
-  - Backend Architecture/aether-backend/services/ingestion/validation.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/shared/events/events.py, Backend Architecture/aether-backend/services/ingestion/validation.py]
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/services/ingestion/validation.py": "sha256:e20d8be5e9ae488438edd35b94252e64312a462ebf75786a1292a6630782c1f8"
-  "Backend Architecture/aether-backend/shared/events/events.py": "sha256:c8bd9450991073d2dc7387cb621fd18e992a9f37e5b4ab1aea775f5bb2d0b17e"
+  Backend Architecture/aether-backend/services/ingestion/validation.py: sha256:e20d8be5e9ae488438edd35b94252e64312a462ebf75786a1292a6630782c1f8
+  Backend Architecture/aether-backend/shared/events/events.py: sha256:c8bd9450991073d2dc7387cb621fd18e992a9f37e5b4ab1aea775f5bb2d0b17e
 ---
 
 # Events / Kafka Subsystem

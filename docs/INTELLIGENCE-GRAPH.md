@@ -3,23 +3,20 @@ title: Unified Intelligence Graph
 slug: concepts/intelligence-graph
 section: concepts
 visibility: P
-audience: [architect, dev-senior, ai]
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.8.0"
-source_files:
-  - Backend Architecture/aether-backend/shared/graph/
-  - docs/source-of-truth/GRAPH_ALIGNMENT.md
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/shared/graph/, docs/source-of-truth/GRAPH_ALIGNMENT.md]
 canonical_owner: graph@aether
 estimated_read_minutes: 15
 toc_depth: 3
 reviewed_source_commits:
-  - commit: "0efa07cb"
-    reason: "Reviewed graph traversal hardening: temporal path queries reconstruct only valid source-to-target paths, shortest and K-shortest expansion respects the total hop budget, and equal-cost candidates have a deterministic tie-break."
+  - {'commit': '0efa07cb', 'reason': 'Reviewed graph traversal hardening: temporal path queries reconstruct only valid source-to-target paths, shortest and K-shortest expansion respects the total hop budget, and equal-cost candidates have a deterministic tie-break.'}
 source_hashes:
   "Backend Architecture/aether-backend/shared/graph/": "sha256:2b0077ff61139fb08ae828360c19cff6daf929849ead8098826ca4e3d9afd987"
-  "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:bfe704e317b86363155e3626d15f0e6a8816b674fad15858ac946d7bb4d9eb62"
+  "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:df14891971953c654d4ad3e8584c26c54c22f7463ba2fb3c2d66c1c7bf70675d"
 ---
-# Unified On-Chain Intelligence Graph v8.12.0
+# Unified On-Chain Intelligence Graph v0.1.0-alpha.0
 
 ## Overview
 

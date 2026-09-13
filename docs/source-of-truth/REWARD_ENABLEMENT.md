@@ -1,3 +1,12 @@
+---
+title: Reward Enablement
+slug: source-of-truth/reward_enablement
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Reward Enablement (A6)
 
 A6 is Aether's attribution-verified reward enablement feature. It produces eligibility

@@ -1,11 +1,11 @@
 ---
 title: Getting Started with the React SDK
 slug: quickstart/react-sdk
-section: quickstart
+section: developer
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: sdk@aether
 estimated_read_minutes: 4
 toc_depth: 3

@@ -1,22 +1,19 @@
 ---
 title: Data Ingestion — Architecture & API Reference
 slug: data/ingestion
-section: data
+section: architecture
 visibility: P
 audience: [dev-junior, dev-senior, architect, ops]
 status: stable
-since_version: "8.8.0"
-source_files:
-  - Data Ingestion Layer/README.md
-  - Data Ingestion Layer/services/ingestion/
-  - Data Ingestion Layer/packages/
+since_version: 0.1.0
+source_files: [Data Ingestion Layer/README.md, Data Ingestion Layer/services/ingestion/, Data Ingestion Layer/packages/]
 canonical_owner: ingest@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "Data Ingestion Layer/README.md": "sha256:01904fb731e09585dd364cf88b807a226aa3ab3d865577d876176da97a388889"
-  "Data Ingestion Layer/packages/": "sha256:3b3af160248d0216f4a04b097e7fd6866d5cdf5a84f33a0655c3498b2ed8472e"
-  "Data Ingestion Layer/services/ingestion/": "sha256:c4950c17bda002217581c1cf02cf66708763abeebc6a718f4a45bfec8e158cee"
+  "Data Ingestion Layer/README.md": "sha256:9569100d103f9303585ad6c4bad417276106253bc488d4c4c6253f204c2bcb23"
+  "Data Ingestion Layer/packages/": "sha256:4deb170c7ed7132036bfdb044c2f5e744992fa7a81eee059c25db929f1d816a3"
+  "Data Ingestion Layer/services/ingestion/": "sha256:301803215eea9b96a1b1a96e5a538483bca9af4b78b8c62146fd6b71f57e927e"
 ---
 
 # Data Ingestion — Architecture & API Reference

@@ -1,3 +1,12 @@
+---
+title: Readme
+slug: archive/readme
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Archive
 
 Historically useful material that no longer represents current runtime.

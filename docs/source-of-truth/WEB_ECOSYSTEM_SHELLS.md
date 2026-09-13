@@ -3,9 +3,9 @@ title: Web Ecosystem — Shell Architecture and Domain Model
 slug: architecture/web-ecosystem-shells
 section: architecture
 visibility: I
-audience: [architect, dev-senior, exec, ops]
+audience: [architect, dev-senior, buyer, ops]
 status: stable
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: frontend@aether
 estimated_read_minutes: 12
 toc_depth: 3

@@ -1,11 +1,11 @@
 ---
-title: "SDK Heartbeat"
+title: SDK Heartbeat
 slug: sdks/heartbeat
-section: sdks
+section: reference
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # SDK Heartbeat

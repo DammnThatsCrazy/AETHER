@@ -1,11 +1,12 @@
 ---
-source_files:
-  - packages/shared/targeting-intelligence.ts
-  - Backend Architecture/aether-backend/services/targeting_intelligence/models.py
-  - Backend Architecture/aether-backend/services/targeting_intelligence/policy.py
-  - Backend Architecture/aether-backend/services/targeting_intelligence/service.py
-  - Backend Architecture/aether-backend/services/targeting_intelligence/leakage.py
-  - Backend Architecture/aether-backend/services/targeting_intelligence/routes.py
+title: Cluster Targeting Intelligence
+slug: source-of-truth/cluster_targeting_intelligence
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+source_files: [packages/shared/targeting-intelligence.ts, Backend Architecture/aether-backend/services/targeting_intelligence/models.py, Backend Architecture/aether-backend/services/targeting_intelligence/policy.py, Backend Architecture/aether-backend/services/targeting_intelligence/service.py, Backend Architecture/aether-backend/services/targeting_intelligence/leakage.py, Backend Architecture/aether-backend/services/targeting_intelligence/routes.py]
 last_synced_commit: HEAD
 ---
 

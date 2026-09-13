@@ -3,9 +3,9 @@ title: Financial Normalization — Domain Migration Status
 slug: architecture/financial-domain-migration-status
 section: architecture
 visibility: I
-audience: [architect, dev-senior, exec]
+audience: [architect, dev-senior, buyer]
 status: experimental
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: backend@aether
 estimated_read_minutes: 6
 toc_depth: 3

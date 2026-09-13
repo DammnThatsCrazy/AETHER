@@ -3,9 +3,9 @@ title: Repo Truth and Gap Matrix — Unified Canonical Journey
 slug: productization/unified-canonical-journey/repo-truth-and-gap-matrix
 section: operations
 visibility: I
-audience: [architect, ops, exec]
-since_version: "8.12.0"
+audience: [architect, ops, buyer]
 status: stable
+since_version: 0.1.0
 ---
 
 # Repo Truth and Gap Matrix

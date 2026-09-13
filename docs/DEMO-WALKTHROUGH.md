@@ -1,11 +1,11 @@
 ---
 title: Demo Walkthrough
 slug: tutorials/demo-walkthrough
-section: tutorials
+section: developer
 visibility: I
-audience: [exec, buyer, ops]
+audience: [buyer, ops]
 status: beta
-since_version: "8.9.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 ---

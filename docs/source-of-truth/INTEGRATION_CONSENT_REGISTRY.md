@@ -1,18 +1,12 @@
 ---
 title: Integration Consent Registry Source of Truth
-source_files:
-  - packages/shared/contracts/integration-consent-registry.json
-  - scripts/generate_contracts.py
-  - packages/shared/integration-consent.ts
-  - Backend Architecture/aether-backend/shared/privacy/generated_integration_consent.py
-  - Backend Architecture/aether-backend/services/consent/control_plane.py
-  - Backend Architecture/aether-backend/services/consent/integration_governance.py
-  - Backend Architecture/aether-backend/services/consent/routes.py
-  - Backend Architecture/aether-backend/services/integrations/connectors/service.py
-  - Backend Architecture/aether-backend/services/integrations/connectors/routes.py
-  - Backend Architecture/aether-backend/services/integrations/discovery.py
-  - Backend Architecture/aether-backend/services/integrations/webhook_policy.py
-  - Backend Architecture/aether-backend/services/integrations/webhook_quarantine.py
+slug: source-of-truth/integration_consent_registry
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+source_files: [packages/shared/contracts/integration-consent-registry.json, scripts/generate_contracts.py, packages/shared/integration-consent.ts, Backend Architecture/aether-backend/shared/privacy/generated_integration_consent.py, Backend Architecture/aether-backend/services/consent/control_plane.py, Backend Architecture/aether-backend/services/consent/integration_governance.py, Backend Architecture/aether-backend/services/consent/routes.py, Backend Architecture/aether-backend/services/integrations/connectors/service.py, Backend Architecture/aether-backend/services/integrations/connectors/routes.py, Backend Architecture/aether-backend/services/integrations/discovery.py, Backend Architecture/aether-backend/services/integrations/webhook_policy.py, Backend Architecture/aether-backend/services/integrations/webhook_quarantine.py]
 ---
 
 # Integration Consent Registry Source of Truth

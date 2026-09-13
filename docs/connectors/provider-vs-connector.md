@@ -36,3 +36,9 @@ SDKs capture first-party observations from apps and sites that the tenant contro
 Connectors capture third-party data from external provider systems.
 
 Both emit canonical event envelopes to the ingestion pipeline. Neither writes directly to the graph.
+
+## See Also
+
+- [Connector Subsystem Registry](./subsystem-registry.md)
+- [Provider Manifests](./provider-manifests.md)
+- [Provider Normalization](./provider-normalization.md)

@@ -1,13 +1,12 @@
 ---
-source_files:
-  - packages/shared/ai-execution.ts
-  - Backend Architecture/aether-backend/services/economic/ai_models.py
-  - Backend Architecture/aether-backend/services/economic/ai_pricing.py
-  - Backend Architecture/aether-backend/services/economic/ai_costs.py
-  - Backend Architecture/aether-backend/services/economic/ai_aggregation.py
-  - Backend Architecture/aether-backend/services/economic/ai_efficiency.py
-  - Backend Architecture/aether-backend/services/economic/ai_routes.py
-  - Backend Architecture/aether-backend/services/silver/projectors/ai_invocation_projector.py
+title: Ai Outcome Efficiency
+slug: source-of-truth/ai_outcome_efficiency
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+source_files: [packages/shared/ai-execution.ts, Backend Architecture/aether-backend/services/economic/ai_models.py, Backend Architecture/aether-backend/services/economic/ai_pricing.py, Backend Architecture/aether-backend/services/economic/ai_costs.py, Backend Architecture/aether-backend/services/economic/ai_aggregation.py, Backend Architecture/aether-backend/services/economic/ai_efficiency.py, Backend Architecture/aether-backend/services/economic/ai_routes.py, Backend Architecture/aether-backend/services/silver/projectors/ai_invocation_projector.py]
 last_synced_commit: HEAD
 ---
 

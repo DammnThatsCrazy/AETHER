@@ -5,7 +5,7 @@ section: architecture
 visibility: I
 audience: [architect, dev-senior]
 status: stable
-since_version: "8.12.0"
+since_version: "0.1.0"
 source_files:
   - Backend Architecture/aether-backend/main.py
   - Backend Architecture/aether-backend/config/settings.py

@@ -24,22 +24,22 @@ from services.managed_integrations.desired_policy import (
 )
 
 
-def test_managed_stable_is_the_default_and_floor_is_deprecated() -> None:
+def test_managed_stable_is_the_default_and_floor_is_supported() -> None:
     desired = build_desired_state(
         managed_integration_id="mi-1",
         tenant_id="tenant-a",
         environment_id="env-1",
     )
     assert desired.release_channel == "managed_stable"
-    assert desired.minimum_runtime_version == "7.0.0"  # deprecated band floor
+    assert desired.minimum_runtime_version == "0.1.0"  # supported band floor
     assert desired.revision == "1"
 
 
 def test_channel_floor_band_policy_table() -> None:
-    # managed channels keep the runtime inside a *served* band; pinned pins.
-    assert floor_band_for_channel("managed_stable") == "deprecated"
-    assert floor_band_for_channel("security_auto") == "deprecated"
-    assert floor_band_for_channel("compatible_auto") == "deprecated"
+    # All managed channels floor at supported (only active band); pinned pins.
+    assert floor_band_for_channel("managed_stable") == "supported"
+    assert floor_band_for_channel("security_auto") == "supported"
+    assert floor_band_for_channel("compatible_auto") == "supported"
     assert floor_band_for_channel("patch_auto") == "supported"
     assert floor_band_for_channel("pinned") is None
     assert channel_pins_version("pinned") is True
@@ -47,9 +47,9 @@ def test_channel_floor_band_policy_table() -> None:
 
 
 def test_minimum_runtime_version_resolves_from_the_band_floor() -> None:
-    # The floor bands in the canonical tiers: supported 8.0.0, deprecated 7.0.0.
-    assert minimum_runtime_version_for_channel("patch_auto") == "8.0.0"
-    assert minimum_runtime_version_for_channel("managed_stable") == "7.0.0"
+    # All managed channels resolve to the supported band floor (0.1.0).
+    assert minimum_runtime_version_for_channel("patch_auto") == "0.1.0"
+    assert minimum_runtime_version_for_channel("managed_stable") == "0.1.0"
     assert minimum_runtime_version_for_channel("pinned") is None
 
 
@@ -97,41 +97,36 @@ def test_build_desired_state_mints_desired_state_id() -> None:
 
 
 def test_classify_observed_runtime_maps_to_sdk_bands() -> None:
-    assert classify_observed_runtime("8.1.3") == "supported"
-    assert classify_observed_runtime("7.9.0") == "deprecated"
-    assert classify_observed_runtime("6.4.2") == "read_compatible"
+    assert classify_observed_runtime("0.1.3") == "supported"
+    assert classify_observed_runtime("0.2.0") == "supported"
+    assert classify_observed_runtime("0.0.9") == "unsupported"
     # Missing / unparseable -> None (never a fabricated drift dimension).
     assert classify_observed_runtime(None) is None
     assert classify_observed_runtime("not.a.version") is None
 
 
 def test_classify_observed_runtime_agrees_with_tier_classifier() -> None:
-    assert classify_sdk_version("8.1.3").id == "supported"
-    assert classify_sdk_version("7.9.0").id == "deprecated"
-    assert classify_sdk_version("6.4.2").id == "read_compatible"
+    assert classify_sdk_version("0.1.3").id == "supported"
+    assert classify_sdk_version("0.2.0").id == "supported"
+    assert classify_sdk_version("0.0.9").id == "unsupported"
 
 
 def test_is_below_channel_floor_semantics() -> None:
-    # managed_stable floor = deprecated: 7.x is at the floor (acceptable);
-    # 6.x and older are below it (actionable).
-    assert is_below_channel_floor("managed_stable", "deprecated") is False
+    # managed_stable floor = supported: supported is at-or-above (no drift);
+    # unsupported is below it (actionable).
     assert is_below_channel_floor("managed_stable", "supported") is False
-    assert is_below_channel_floor("managed_stable", "read_compatible") is True
     assert is_below_channel_floor("managed_stable", "unsupported") is True
-    # patch_auto floor = supported: a deprecated 7.x is below it.
-    assert is_below_channel_floor("patch_auto", "deprecated") is True
     # pinned has no floor -> nothing is below it.
     assert is_below_channel_floor("pinned", "unsupported") is False
     # Unknown bands resolve to False (never invent drift from an unclassified id).
     assert is_below_channel_floor("managed_stable", None) is False
 
 
-def test_managed_stable_does_not_mean_latest() -> None:
-    # The default is "stay inside the served band", not "follow the newest".
-    assert minimum_runtime_version_for_channel("managed_stable") == "7.0.0"
+def test_managed_stable_floor_is_supported() -> None:
+    # With the pre-1.0 scheme, supported (>=0.1.0) is the only active band.
+    assert minimum_runtime_version_for_channel("managed_stable") == "0.1.0"
     supported_min = next(b.min_version for b in SDK_VERSION_BANDS if b.id == "supported")
-    assert supported_min == "8.0.0"
-    assert minimum_runtime_version_for_channel("managed_stable") != supported_min
+    assert supported_min == "0.1.0"
 
 
 def test_desired_state_timestamps_are_aware_utc() -> None:

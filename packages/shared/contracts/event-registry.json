@@ -7,7 +7,7 @@
     "sdk_boundary": "WS-A3 SDK boundary. sdkBoundary.publicSdk.assertableTrustClasses is the SDK-assertable class SET and per-event sdkEmitable enumerates public-SDK-emittable types (sdkEmitable=true implies semanticLevel A/B). The static boundary gate asserts registry self-consistency; runtime enforcement at the ingestion boundary (flag-gated) is deferred to WS-B's universal gateway."
   },
   "schemaVersion": "2.2.0",
-  "contractVersion": "8.12.0",
+  "contractVersion": "0.1.0-alpha.0",
   "fieldTrustSchemaVersion": "1.0.0",
   "trustClasses": [
     "OBSERVED",

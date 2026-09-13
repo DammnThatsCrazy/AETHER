@@ -3,9 +3,9 @@ title: Financial Normalization — Architecture
 slug: architecture/financial-normalization
 section: architecture
 visibility: I
-audience: [architect, dev-senior, exec, compliance]
+audience: [architect, dev-senior, buyer, compliance]
 status: experimental
-since_version: "8.12.0"
+since_version: 0.1.0
 canonical_owner: backend@aether
 estimated_read_minutes: 10
 toc_depth: 3

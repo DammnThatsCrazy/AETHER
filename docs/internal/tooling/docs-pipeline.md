@@ -5,7 +5,7 @@ section: operations
 visibility: I
 audience: [ops, dev-senior, architect]
 status: stable
-since_version: "8.8.0"
+since_version: "0.1.0"
 source_files:
   - scripts/validate_docs.py
   - scripts/validate_frontmatter.py
@@ -28,10 +28,10 @@ source_hashes:
   "scripts/docs_drift.py": "sha256:b6c0cd0a27f72b8c0d207d799f6daabdf0ed02e8bea17feaf6ccbfff43c1016a"
   "scripts/docs_extract/run_all.py": "sha256:404445eba05d12de88af585f79839b7496a1658411a110e606c46d5ed7e8c338"
   "scripts/docs_idempotency.py": "sha256:fe8628ef3a9b9d824645a5db062857754d2984b0f3f4d866b571df6232302f17"
-  "scripts/docs_schema.json": "sha256:3193754ebab2af05e0985c72c3ab2cc6d7e7fc8118dff88235c93d5768f86226"
+  "scripts/docs_schema.json": "sha256:1a062b35ae5b18e85a10efedaa56708de3d9a332808cac699456ce6bb112fc74"
   "scripts/sync_docs.py": "sha256:70c30ae3579955dce5bc7a202690347810f6e2a53cf018cf96ddff244fd6ce67"
   "scripts/validate_contracts.py": "sha256:0ffda1a3b37627be929cd82b15c5e6e3c188faf8e190a98dc3727bba6b0d4816"
-  "scripts/validate_docs.py": "sha256:a0831684326b8489fe7e2c65253bbb4dae1586d5ea4e8fcb367d59184e7b6031"
+  "scripts/validate_docs.py": "sha256:0eaece6116cb30303252f69323a519790825e8715ab7844be452402a52eabbb1"
   "scripts/validate_frontmatter.py": "sha256:1b4ba24575565584f7fc5e01c01a245ee4702f5220c85aa701bc86af2bdaa0c4"
 ---
 

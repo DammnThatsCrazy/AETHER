@@ -1,11 +1,12 @@
 ---
-source_files:
-  - packages/shared/agent-deployment.ts
-  - packages/server/src/agent-telemetry.ts
-  - packages/python/aether_agentic/agentic.py
-  - Backend Architecture/aether-backend/services/agent/deployments.py
-  - Backend Architecture/aether-backend/services/agent/deployment_routes.py
-  - Backend Architecture/aether-backend/services/ingestion/batch.py
+title: External Agent Telemetry Plane
+slug: source-of-truth/external_agent_telemetry_plane
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+source_files: [packages/shared/agent-deployment.ts, packages/server/src/agent-telemetry.ts, packages/python/aether_agentic/agentic.py, Backend Architecture/aether-backend/services/agent/deployments.py, Backend Architecture/aether-backend/services/agent/deployment_routes.py, Backend Architecture/aether-backend/services/ingestion/batch.py]
 last_synced_commit: HEAD
 ---
 

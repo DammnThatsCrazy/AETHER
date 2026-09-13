@@ -5,6 +5,7 @@ section: operations
 visibility: I
 audience: [dev-senior, architect]
 status: stable
+since_version: 0.1.0
 ---
 
 # Docs Review Backlog — Audit Snapshot (2026-07-30)

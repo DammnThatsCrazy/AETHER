@@ -5,6 +5,7 @@ section: concepts
 visibility: C
 audience: [buyer]
 status: stable
+since_version: 0.1.0
 ---
 
 # Noesis — Ask Aether

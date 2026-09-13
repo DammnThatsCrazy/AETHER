@@ -3,9 +3,9 @@ title: Universal Intelligence Graph Architecture
 slug: architecture/universal-graph-architecture
 section: architecture
 visibility: I
-audience: [architect, dev-senior, ai]
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.10.0"
+since_version: 0.1.0
 canonical_owner: graph@aether
 ---
 # Universal Intelligence Graph Architecture

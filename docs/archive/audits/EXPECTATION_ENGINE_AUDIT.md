@@ -1,3 +1,12 @@
+---
+title: Expectation Engine Audit
+slug: archive/audits/expectation_engine_audit
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Expectation Engine Audit — What Already Existed
 
 ## What Was Already Present (Reused)

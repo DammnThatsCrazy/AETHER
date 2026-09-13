@@ -1,3 +1,12 @@
+---
+title: Release truth
+slug: source-of-truth/release-truth
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Release Truth
 
 Aether has not reached public production release.

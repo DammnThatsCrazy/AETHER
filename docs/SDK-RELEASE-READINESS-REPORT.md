@@ -1,11 +1,11 @@
 ---
 title: SDK Release Readiness Report
 slug: sdks/release-readiness-report
-section: sdks
+section: reference
 visibility: I
 audience: [dev-senior, architect]
 status: stable
-since_version: "8.9.0"
+since_version: 0.1.0
 canonical_owner: sdk@aether
 estimated_read_minutes: 6
 ---

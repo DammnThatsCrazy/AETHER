@@ -1,3 +1,12 @@
+---
+title: Event Registry
+slug: source-of-truth/event_registry
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Event Registry
 
 **Canonical source of truth:** `packages/shared/contracts/event-registry.json`  

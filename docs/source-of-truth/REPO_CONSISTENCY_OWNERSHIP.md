@@ -1,15 +1,12 @@
 ---
 title: Repo Consistency Ownership
 slug: source-of-truth/repo-consistency-ownership
-section: source-of-truth
+section: reference
 visibility: I
 audience: [dev-senior, ops, architect]
 status: stable
-since_version: "8.9.0"
-source_files:
-  - docs/source-of-truth/repo_consistency_ownership.json
-  - scripts/validate_consistency_ownership.py
-  - scripts/repo_doctor.py
+since_version: 0.1.0
+source_files: [docs/source-of-truth/repo_consistency_ownership.json, scripts/validate_consistency_ownership.py, scripts/repo_doctor.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
@@ -45,6 +42,7 @@ until they are registered.
 | `pyproject.toml` version | all package versions, docs version metadata, generated docs |
 | backend route added/changed | generated API docs, route index, contract validation, frontend/client types if applicable |
 | event schema changed | contract docs, SDK types, validation fixtures, generated docs |
+| contract governance docs changed | this md, `contracts/VERSION_POLICY.md`, `contracts/README.md` |
 | event field-trust/authority + semantic-level/trust-boundary metadata or its generator/gate changed | regenerated TS/Python field-trust + semantic-boundary twins, `python scripts/generate_contracts.py --check`, field-trust + semantic-boundary parity gate, boundary tests |
 | consent/tenant/auth behavior changed | source-linked docs, contract validation, tests |
 | SDK public method changed | package exports, `src/index.ts`, declaration output, SDK release alignment |

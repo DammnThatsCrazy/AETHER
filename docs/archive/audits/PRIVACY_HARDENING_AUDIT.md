@@ -1,3 +1,12 @@
+---
+title: Privacy Hardening Audit
+slug: archive/audits/privacy_hardening_audit
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Privacy Hardening Audit
 
 **Repository:** Aether

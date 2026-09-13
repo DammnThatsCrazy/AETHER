@@ -1,7 +1,7 @@
 {
   "_comment": "Canonical signal-use policy matrix. Maps each identity/data signal to the exact consent purpose(s) it requires and what it may be used for. No broad-consent fallback: sensitive (explicit opt-in) signals require their exact purpose. required_purposes MUST reference keys in consent-registry.json. Enforced by scripts/validate_signal_use_matrix.py.",
   "schemaVersion": "1.0.0",
-  "contractVersion": "8.12.0",
+  "contractVersion": "0.1.0-alpha.0",
   "signals": [
     {
       "signal_type": "email_hash",

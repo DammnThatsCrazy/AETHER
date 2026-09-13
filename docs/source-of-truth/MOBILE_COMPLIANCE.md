@@ -1,10 +1,11 @@
 ---
 title: Mobile Compliance — DSR Erasure & Privacy Manifests
 slug: mobile/compliance
-section: mobile
+section: reference
 visibility: I
-audience: [architect, security, compliance, mobile]
-status: alpha
+audience: [architect, security, compliance, dev-senior]
+status: experimental
+since_version: 0.1.0
 ---
 
 # Mobile Compliance — DSR Erasure & Privacy Manifests

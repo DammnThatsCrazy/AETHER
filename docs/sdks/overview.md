@@ -1,11 +1,11 @@
 ---
-title: "Aether SDKs"
+title: Aether SDKs
 slug: sdks/overview
-section: sdks
+section: reference
 visibility: P
 audience: [dev-junior, dev-senior]
 status: stable
-since_version: "0.1.0"
+since_version: 0.1.0
 ---
 
 # Aether SDKs

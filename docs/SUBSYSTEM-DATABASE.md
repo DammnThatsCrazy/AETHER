@@ -1,23 +1,20 @@
 ---
 title: PostgreSQL / Repository Subsystem
 slug: data/postgres
-section: data
+section: architecture
 visibility: P
 audience: [dev-senior, architect, ops]
 status: stable
-since_version: "8.8.0"
-source_files:
-  - Backend Architecture/aether-backend/repositories/repos.py
-  - Backend Architecture/aether-backend/repositories/lake.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/repositories/repos.py, Backend Architecture/aether-backend/repositories/lake.py]
 canonical_owner: backend@aether
 estimated_read_minutes: 5
 toc_depth: 3
 reviewed_source_commits:
-  - commit: "54eaac5d"
-    reason: "Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged."
+  - {'commit': '54eaac5d', 'reason': 'Reviewed the staging first-admin bootstrap change; repository and database behavior remain unchanged.'}
 source_hashes:
-  "Backend Architecture/aether-backend/repositories/lake.py": "sha256:88bf547d48f6e7daebde249ed6c16805fa9ff9d6462a2e4637bea89924cf5fdd"
-  "Backend Architecture/aether-backend/repositories/repos.py": "sha256:17bda309a520403afe5ea14ec5a647d8aeea03839d644e3ce4c0086f1218f70f"
+  Backend Architecture/aether-backend/repositories/lake.py: sha256:88bf547d48f6e7daebde249ed6c16805fa9ff9d6462a2e4637bea89924cf5fdd
+  Backend Architecture/aether-backend/repositories/repos.py: sha256:17bda309a520403afe5ea14ec5a647d8aeea03839d644e3ce4c0086f1218f70f
 ---
 
 # PostgreSQL / Repository Subsystem

@@ -5,6 +5,7 @@ section: architecture
 visibility: I
 audience: [dev-senior, architect, security]
 status: stable
+since_version: 0.1.0
 ---
 
 # Noesis GA Production Contract

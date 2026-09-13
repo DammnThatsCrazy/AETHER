@@ -1,3 +1,12 @@
+---
+title: Stablecoin Provider Execution
+slug: source-of-truth/stablecoin_provider_execution
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Stablecoin Provider Execution and Backfill
 
 Stablecoin provider execution is tenant-scoped and observation-first. Configured connectors pass rows into `StablecoinProviderIngestionRunner`, which validates tenant identity, source execution identity, deployment registry resolution, and source manifest identity before writing through the canonical Bronze to Silver to observation pipeline.

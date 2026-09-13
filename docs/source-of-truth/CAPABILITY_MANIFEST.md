@@ -1,3 +1,12 @@
+---
+title: Capability Manifest
+slug: source-of-truth/capability_manifest
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Capability Manifest (`/v1/config`)
 
 Every SDK calls `GET {endpoint}/v1/config?apiKey=...` once at init. The

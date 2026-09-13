@@ -1,11 +1,11 @@
 ---
 title: Tenant Isolation Verification
 slug: enterprise/tenant-isolation-verification
-section: enterprise
+section: operations
 visibility: I
 audience: [ops, security]
 status: stable
-since_version: "13.0.0"
+since_version: "0.1.0"
 ---
 
 # Tenant Isolation Verification

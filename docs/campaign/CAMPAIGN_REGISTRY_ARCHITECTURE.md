@@ -4,14 +4,13 @@ slug: campaign/campaign-registry-architecture
 section: architecture
 visibility: I
 audience: [dev-senior, architect]
-source_files:
-  - Backend Architecture/aether-backend/services/campaign/registry.py
-  - Backend Architecture/aether-backend/services/campaign/repository.py
-  - Backend Architecture/aether-backend/alembic/versions/20260627_campaign_registry.py
+status: experimental
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/campaign/registry.py, Backend Architecture/aether-backend/services/campaign/repository.py, Backend Architecture/aether-backend/alembic/versions/20260627_campaign_registry.py]
 source_hashes:
-  "Backend Architecture/aether-backend/alembic/versions/20260627_campaign_registry.py": "sha256:0e241e5ddb71cf5843ae307ee6c3cb5f5bc2d6d10d0a0f268c5e9c9df36af7d1"
-  "Backend Architecture/aether-backend/services/campaign/registry.py": "sha256:584907f95420352ceff625497421f825d5d7c1f4e02696b4c639e3ab06dd0dc6"
-  "Backend Architecture/aether-backend/services/campaign/repository.py": "sha256:347ac55f441ccf22f62b58f0bb9b05ca8c8c0b00defa9055bcf6c303df5ec4ba"
+  Backend Architecture/aether-backend/alembic/versions/20260627_campaign_registry.py: sha256:0e241e5ddb71cf5843ae307ee6c3cb5f5bc2d6d10d0a0f268c5e9c9df36af7d1
+  Backend Architecture/aether-backend/services/campaign/registry.py: sha256:584907f95420352ceff625497421f825d5d7c1f4e02696b4c639e3ab06dd0dc6
+  Backend Architecture/aether-backend/services/campaign/repository.py: sha256:347ac55f441ccf22f62b58f0bb9b05ca8c8c0b00defa9055bcf6c303df5ec4ba
 ---
 
 # Campaign Registry Architecture

@@ -1,3 +1,12 @@
+---
+title: Graph truth
+slug: source-of-truth/graph-truth
+section: reference
+visibility: I
+audience: [dev-senior]
+status: experimental
+since_version: 0.1.0
+---
 # Graph Truth
 
 Aether's graph is tenant-scoped, contract-governed, and projection-driven.

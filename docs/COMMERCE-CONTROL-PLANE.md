@@ -1,22 +1,19 @@
 ---
 title: Agentic Commerce — Control Plane
 slug: api/commerce-control-plane
-section: api
+section: reference
 visibility: P
 audience: [architect, dev-senior]
 status: stable
-since_version: "8.8.0"
-source_files:
-  - Backend Architecture/aether-backend/services/x402/commerce_routes.py
-  - Backend Architecture/aether-backend/services/x402/approvals.py
-  - Backend Architecture/aether-backend/services/x402/control_plane.py
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/x402/commerce_routes.py, Backend Architecture/aether-backend/services/x402/approvals.py, Backend Architecture/aether-backend/services/x402/control_plane.py]
 canonical_owner: commerce@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/services/x402/approvals.py": "sha256:abc0603d95c56fcb56004bf7d7aee5b627add843e73a98c06fe4638a04c5ce24"
-  "Backend Architecture/aether-backend/services/x402/commerce_routes.py": "sha256:7709c0d869867366a90b8aa336e38f2b76ba6204e471371bc41b8848502e7e6f"
-  "Backend Architecture/aether-backend/services/x402/control_plane.py": "sha256:df8956842b85a3bbac67a711dfda005a80858a51fa71973c3a8106e9bb16b8df"
+  Backend Architecture/aether-backend/services/x402/approvals.py: sha256:abc0603d95c56fcb56004bf7d7aee5b627add843e73a98c06fe4638a04c5ce24
+  Backend Architecture/aether-backend/services/x402/commerce_routes.py: sha256:7709c0d869867366a90b8aa336e38f2b76ba6204e471371bc41b8848502e7e6f
+  Backend Architecture/aether-backend/services/x402/control_plane.py: sha256:df8956842b85a3bbac67a711dfda005a80858a51fa71973c3a8106e9bb16b8df
 ---
 # Aether Agentic Commerce — Control Plane
 

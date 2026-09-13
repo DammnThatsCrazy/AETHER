@@ -75,7 +75,7 @@ def test_bogus_purpose_exits_nonzero_via_cli(tmp_path, monkeypatch):
             {
                 "expo": {
                     "name": "Aether",
-                    "version": "8.12.0",
+                    "version": "0.1.0-alpha.0",
                     "ios": {"bundleIdentifier": "com.aether.mobile"},
                     "android": {"package": "com.aether.mobile"},
                     "extra": {"appKind": "aether"},

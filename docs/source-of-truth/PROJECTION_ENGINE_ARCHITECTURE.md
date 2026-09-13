@@ -1,36 +1,12 @@
 ---
 title: Projection Engine Architecture
 slug: source-of-truth/projection-engine-architecture
-section: source-of-truth
+section: reference
 visibility: I
-audience: [architect, dev-senior, ai]
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - packages/shared/contracts/lens-registry.json
-  - Backend Architecture/aether-backend/shared/projection_engine/__init__.py
-  - Backend Architecture/aether-backend/shared/projection_engine/compiler.py
-  - Backend Architecture/aether-backend/shared/projection_engine/composition.py
-  - Backend Architecture/aether-backend/shared/projection_engine/conflict.py
-  - Backend Architecture/aether-backend/shared/projection_engine/context_operator.py
-  - Backend Architecture/aether-backend/shared/projection_engine/degradation.py
-  - Backend Architecture/aether-backend/shared/projection_engine/digest.py
-  - Backend Architecture/aether-backend/shared/projection_engine/executor.py
-  - Backend Architecture/aether-backend/shared/projection_engine/ir.py
-  - Backend Architecture/aether-backend/shared/projection_engine/lens_composition.py
-  - Backend Architecture/aether-backend/shared/projection_engine/lens_registry.py
-  - Backend Architecture/aether-backend/shared/projection_engine/lens_set.py
-  - Backend Architecture/aether-backend/shared/projection_engine/operators.py
-  - Backend Architecture/aether-backend/shared/projection_engine/plan.py
-  - Backend Architecture/aether-backend/shared/projection_engine/planner.py
-  - Backend Architecture/aether-backend/shared/projection_engine/runtime.py
-  - Backend Architecture/aether-backend/shared/projection_engine/temporal_modes.py
-  - Backend Architecture/aether-backend/shared/projection_engine/generated_lenses.py
-  - packages/shared/intelligence-projection.ts
-  - Backend Architecture/aether-backend/shared/intelligence_projections/contracts.py
-  - Backend Architecture/aether-backend/shared/intelligence_projections/generated_registry.py
-  - scripts/generate_platform_contracts.py
-  - scripts/lib/intelligence_projection_validation.py
+since_version: 0.1.0
+source_files: [packages/shared/contracts/lens-registry.json, Backend Architecture/aether-backend/shared/projection_engine/__init__.py, Backend Architecture/aether-backend/shared/projection_engine/compiler.py, Backend Architecture/aether-backend/shared/projection_engine/composition.py, Backend Architecture/aether-backend/shared/projection_engine/conflict.py, Backend Architecture/aether-backend/shared/projection_engine/context_operator.py, Backend Architecture/aether-backend/shared/projection_engine/degradation.py, Backend Architecture/aether-backend/shared/projection_engine/digest.py, Backend Architecture/aether-backend/shared/projection_engine/executor.py, Backend Architecture/aether-backend/shared/projection_engine/ir.py, Backend Architecture/aether-backend/shared/projection_engine/lens_composition.py, Backend Architecture/aether-backend/shared/projection_engine/lens_registry.py, Backend Architecture/aether-backend/shared/projection_engine/lens_set.py, Backend Architecture/aether-backend/shared/projection_engine/operators.py, Backend Architecture/aether-backend/shared/projection_engine/plan.py, Backend Architecture/aether-backend/shared/projection_engine/planner.py, Backend Architecture/aether-backend/shared/projection_engine/runtime.py, Backend Architecture/aether-backend/shared/projection_engine/temporal_modes.py, Backend Architecture/aether-backend/shared/projection_engine/generated_lenses.py, packages/shared/intelligence-projection.ts, Backend Architecture/aether-backend/shared/intelligence_projections/contracts.py, Backend Architecture/aether-backend/shared/intelligence_projections/generated_registry.py, scripts/generate_platform_contracts.py, scripts/lib/intelligence_projection_validation.py]
 last_synced_commit: 8bf32a56
 ---
 # Projection Engine Architecture

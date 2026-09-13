@@ -1,20 +1,18 @@
 ---
 title: Semantic Context Intelligence Layer
 slug: ai/semantic-context
-section: ai
+section: architecture
 visibility: P
-audience: [architect, ai, dev-senior]
+audience: [architect, dev-senior]
 status: stable
-since_version: "8.8.0"
-source_files:
-  - Backend Architecture/aether-backend/shared/semantic_context.py
-  - Data Ingestion Layer/services/ingestion/src/event-enricher.ts
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/shared/semantic_context.py, Data Ingestion Layer/services/ingestion/src/event-enricher.ts]
 canonical_owner: ai@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  "Backend Architecture/aether-backend/shared/semantic_context.py": "sha256:f55822b931a36ba89ef33ecb82f3b31bd79c3b28dd0b32a88cfa36e7101c8553"
-  "Data Ingestion Layer/services/ingestion/src/event-enricher.ts": "sha256:e71f321c28ac593689501eb411a9067d45e6ec3cc46ef838dd6da597451ed4c1"
+  Backend Architecture/aether-backend/shared/semantic_context.py: sha256:f55822b931a36ba89ef33ecb82f3b31bd79c3b28dd0b32a88cfa36e7101c8553
+  Data Ingestion Layer/services/ingestion/src/event-enricher.ts: sha256:e71f321c28ac593689501eb411a9067d45e6ec3cc46ef838dd6da597451ed4c1
 ---
 # Semantic Context Intelligence Layer
 

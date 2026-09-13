@@ -3,9 +3,9 @@ title: Security Questionnaire Library
 slug: security/security-questionnaire-library
 section: security
 visibility: I
-audience: [security, exec, buyer]
+audience: [security, buyer]
 status: beta
-since_version: "8.9.0"
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 4
 ---

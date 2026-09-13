@@ -4,11 +4,11 @@ slug: security/api-anti-distillation
 section: security
 visibility: I
 audience: [architect, dev-senior, ops]
-status: draft
+status: experimental
+since_version: 0.1.0
 canonical_owner: security@aether
-source_files:
-  - Backend Architecture/aether-backend/services/security/anti_distillation.py
-last_synced_commit: "pending"
+source_files: [Backend Architecture/aether-backend/services/security/anti_distillation.py]
+last_synced_commit: pending
 estimated_read_minutes: 6
 ---
 

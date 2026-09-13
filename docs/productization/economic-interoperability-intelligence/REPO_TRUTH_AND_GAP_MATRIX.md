@@ -3,14 +3,13 @@ title: Repo Truth and Gap Matrix — Economic & Interoperability Intelligence
 slug: productization/economic-interoperability-intelligence/repo-truth-and-gap-matrix
 section: operations
 visibility: I
-audience: [architect, ops, exec]
+audience: [architect, ops, buyer]
 status: stable
-since_version: "8.12.0"
-source_files:
-  - reports/economic-interoperability-intelligence/current-state-audit.md
+since_version: 0.1.0
+source_files: [reports/economic-interoperability-intelligence/current-state-audit.md]
 canonical_owner: platform@aether
 source_hashes:
-  "reports/economic-interoperability-intelligence/current-state-audit.md": "sha256:48ce6fb627d3be80737cde320bf2d51334d8ab8e08271603e9921c844570b562"
+  reports/economic-interoperability-intelligence/current-state-audit.md: sha256:48ce6fb627d3be80737cde320bf2d51334d8ab8e08271603e9921c844570b562
 ---
 
 # Repo Truth and Gap Matrix

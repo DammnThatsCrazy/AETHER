@@ -4,18 +4,15 @@ slug: comms/comms-truth-matrix
 section: architecture
 visibility: I
 audience: [dev-senior, architect]
-source_files:
-  - Backend Architecture/aether-backend/services/silver/dispatcher.py
-  - Backend Architecture/aether-backend/services/silver/projectors/touchpoint_projector.py
-  - Backend Architecture/aether-backend/services/measurement/silver_adapters.py
-  - Backend Architecture/aether-backend/services/integrations/connectors/adapters.py
-  - packages/shared/contracts/event-registry.json
+status: experimental
+since_version: 0.1.0
+source_files: [Backend Architecture/aether-backend/services/silver/dispatcher.py, Backend Architecture/aether-backend/services/silver/projectors/touchpoint_projector.py, Backend Architecture/aether-backend/services/measurement/silver_adapters.py, Backend Architecture/aether-backend/services/integrations/connectors/adapters.py, packages/shared/contracts/event-registry.json]
 source_hashes:
   "Backend Architecture/aether-backend/services/integrations/connectors/adapters.py": "sha256:dc1b09adfa1eecb2690e47cfdf364b7efaa04ec0e8664f46a513eaf0f7213459"
   "Backend Architecture/aether-backend/services/measurement/silver_adapters.py": "sha256:1488ee3e52430dcc49ac07a280b54f1297434c8d79bfe1c084e4aa3fd862be92"
   "Backend Architecture/aether-backend/services/silver/dispatcher.py": "sha256:ea6279d0a1242887281ced91e1cb05bc8d94eb4c978f10a6e8615fb4d565f98f"
   "Backend Architecture/aether-backend/services/silver/projectors/touchpoint_projector.py": "sha256:2bb148c4ac0e5a2584d19227c70823c9211194d33f3246b8d543bfeb9ecd85b6"
-  "packages/shared/contracts/event-registry.json": "sha256:74c9e8233bb6000f6a80e51aceacb9b2e4c8f47ecaa5d10a3303da15127a6121"
+  "packages/shared/contracts/event-registry.json": "sha256:95f3b66f97a2e57e4466d18da534084a91b411a629c5b7a752788813701242e8"
 ---
 
 # Communications Intelligence — Repository Truth Matrix (Phase 0)

@@ -5,37 +5,25 @@ section: operations
 visibility: I
 audience: [ops, architect]
 status: stable
-source_files:
-  - config/deployment_profiles.yaml
-  - config/runtime_deployment.yaml
-  - config/terraform_resource_contracts.yaml
-  - AWS Deployment/aether-aws/terraform/profiles.tf
-  - AWS Deployment/aether-aws/terraform/main.tf
-  - AWS Deployment/aether-aws/terraform/modules/alb/main.tf
-  - AWS Deployment/aether-aws/terraform/modules/aurora/main.tf
-  - AWS Deployment/aether-aws/terraform/modules/ecr/main.tf
-  - AWS Deployment/aether-aws/terraform/modules/secrets/main.tf
-  - AWS Deployment/aether-aws/terraform/modules/secrets/rotation.tf
-  - AWS Deployment/aether-aws/terraform/variables.tf
-  - scripts/release/check_profile_config.py
-  - scripts/release/check_profile_parity.py
+since_version: 0.1.0
+source_files: [config/deployment_profiles.yaml, config/runtime_deployment.yaml, config/terraform_resource_contracts.yaml, AWS Deployment/aether-aws/terraform/profiles.tf, AWS Deployment/aether-aws/terraform/main.tf, AWS Deployment/aether-aws/terraform/modules/alb/main.tf, AWS Deployment/aether-aws/terraform/modules/aurora/main.tf, AWS Deployment/aether-aws/terraform/modules/ecr/main.tf, AWS Deployment/aether-aws/terraform/modules/secrets/main.tf, AWS Deployment/aether-aws/terraform/modules/secrets/rotation.tf, AWS Deployment/aether-aws/terraform/variables.tf, scripts/release/check_profile_config.py, scripts/release/check_profile_parity.py]
 canonical_owner: platform@aether
 estimated_read_minutes: 22
 toc_depth: 3
 source_hashes:
-  "AWS Deployment/aether-aws/terraform/main.tf": "sha256:d49a3a87a2641c8cdd9390f1f0637572ba5961146b30eff37892aeee66c8131e"
-  "AWS Deployment/aether-aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
-  "AWS Deployment/aether-aws/terraform/modules/aurora/main.tf": "sha256:16c4beb8ccab1af164ff62f8aa2d515a5efc3f093b7878411f40aa14ce39e094"
-  "AWS Deployment/aether-aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
-  "AWS Deployment/aether-aws/terraform/modules/secrets/main.tf": "sha256:998303bfe6e5a0a24477933beeb650c02e5e43469d9cba6d0af84e27e50d8032"
-  "AWS Deployment/aether-aws/terraform/modules/secrets/rotation.tf": "sha256:bf7623169658a9272a007df782216956b750f30bee3c5d8095f708c44a9d2239"
-  "AWS Deployment/aether-aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
-  "AWS Deployment/aether-aws/terraform/variables.tf": "sha256:7dfc485a37776610062b703a91e594b49e2d04c5d932592fca67adbda1076961"
-  "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
-  "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
-  "config/terraform_resource_contracts.yaml": "sha256:f915daf101aab4b46b216ade95355eae2e119ab469e98de0c653ac81d92dbdf9"
-  "scripts/release/check_profile_config.py": "sha256:b22ce319b10983826ced5efbe43ab57cd2e3c7463941fbd9a6c22eda9785d90e"
-  "scripts/release/check_profile_parity.py": "sha256:8e9a4635b88277b1794ba725f08763169bfd7a857061a9995e00d6fb41f8385e"
+  AWS Deployment/aether-aws/terraform/main.tf: sha256:d49a3a87a2641c8cdd9390f1f0637572ba5961146b30eff37892aeee66c8131e
+  AWS Deployment/aether-aws/terraform/modules/alb/main.tf: sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097
+  AWS Deployment/aether-aws/terraform/modules/aurora/main.tf: sha256:16c4beb8ccab1af164ff62f8aa2d515a5efc3f093b7878411f40aa14ce39e094
+  AWS Deployment/aether-aws/terraform/modules/ecr/main.tf: sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7
+  AWS Deployment/aether-aws/terraform/modules/secrets/main.tf: sha256:998303bfe6e5a0a24477933beeb650c02e5e43469d9cba6d0af84e27e50d8032
+  AWS Deployment/aether-aws/terraform/modules/secrets/rotation.tf: sha256:bf7623169658a9272a007df782216956b750f30bee3c5d8095f708c44a9d2239
+  AWS Deployment/aether-aws/terraform/profiles.tf: sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560
+  AWS Deployment/aether-aws/terraform/variables.tf: sha256:7dfc485a37776610062b703a91e594b49e2d04c5d932592fca67adbda1076961
+  config/deployment_profiles.yaml: sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0
+  config/runtime_deployment.yaml: sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8
+  config/terraform_resource_contracts.yaml: sha256:f915daf101aab4b46b216ade95355eae2e119ab469e98de0c653ac81d92dbdf9
+  scripts/release/check_profile_config.py: sha256:b22ce319b10983826ced5efbe43ab57cd2e3c7463941fbd9a6c22eda9785d90e
+  scripts/release/check_profile_parity.py: sha256:8e9a4635b88277b1794ba725f08763169bfd7a857061a9995e00d6fb41f8385e
 ---
 
 # Deployment Profiles

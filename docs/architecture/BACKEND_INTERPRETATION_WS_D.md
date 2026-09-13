@@ -3,8 +3,9 @@ title: Backend Interpretation (WS-D) Architecture
 slug: architecture/backend-interpretation-ws-d
 section: architecture
 visibility: I
-audience: [architect, dev-senior, ai]
+audience: [architect, dev-senior]
 status: experimental
+since_version: 0.1.0
 canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 4

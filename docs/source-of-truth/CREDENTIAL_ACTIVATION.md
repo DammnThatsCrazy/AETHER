@@ -1,10 +1,11 @@
 ---
 title: Credential Activation
 slug: mobile/credential-activation
-section: mobile
+section: reference
 visibility: I
 audience: [architect, security, ops]
-status: alpha
+status: experimental
+since_version: 0.1.0
 ---
 
 # Credential Activation

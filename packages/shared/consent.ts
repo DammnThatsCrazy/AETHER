@@ -1,5 +1,5 @@
        // =============================================================================
-       // Aether SDK — Shared Consent Contract (v8.12.0)
+       // Aether SDK — Shared Consent Contract (v0.1.0-alpha.0)
        // DO NOT EDIT — generated from packages/shared/contracts/consent-registry.json
        // Run: python scripts/generate_contracts.py
        // =============================================================================
