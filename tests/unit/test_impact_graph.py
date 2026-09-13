@@ -60,6 +60,12 @@ def test_branch_protection_authority_script_is_registered():
     assert "component:verification-router" in result["direct_nodes"]
 
 
+def test_isolated_pytest_runner_is_registered():
+    result = build_impact_index(["scripts/run_pytest_files.py"])
+    assert result["unresolved_paths"] == []
+    assert "component:verification-and-documentation" in result["direct_nodes"]
+
+
 def test_shared_contract_change_selects_registered_transitive_consumers():
     result = build_impact_index(["packages/shared/contracts/event-registry.json"])
     assert "shared-runtime-contracts" in result["impacted_contracts"]
