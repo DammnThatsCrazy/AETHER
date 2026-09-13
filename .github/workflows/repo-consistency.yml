@@ -462,10 +462,11 @@ jobs:
         run: |
           .venv/bin/python - <<'PY'
           import json
+          import os
           from pathlib import Path
           disposition = Path("release-evidence/pr-disposition.json")
           status = "BLOCKED"
-          upstream_results = [value for value in "${UPSTREAM_RESULTS}".split(":") if value]
+          upstream_results = [value for value in os.environ.get("UPSTREAM_RESULTS", "").split(":") if value]
           blocking_upstream = [value for value in upstream_results if value not in {"success", "skipped"}]
           if not blocking_upstream and disposition.exists():
               status = json.loads(disposition.read_text()).get("status", "BLOCKED")
