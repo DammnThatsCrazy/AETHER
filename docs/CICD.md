@@ -22,7 +22,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:815189d61a2b827ea81b38379f80f670235604cfa07991ba7d3197d580588964"
+  ".github/workflows/": "sha256:f3d5101d0b1ebf76e8ac082c2009a6a98a3cd44701b678bb703d0017a9ef9f9a"
   "cicd/aether-cicd/README.md": "sha256:07bc236b744bd0c54bae8b6fa661beba9d3767a3300470814f071a119f8244ee"
   "cicd/aether-cicd/main.py": "sha256:8027fb1fcb5e4a1aeb6428224fe0ca9f7756df0aaca5f39e7e84bb6c9c85feb9"
   "cicd/aether-cicd/quality_gates/": "sha256:2cc72d40cd7c324e686271c5ea2c90c2ccb15c4ebe0435b0589844663dd2e436"
@@ -79,6 +79,10 @@ to an oversized control worker. Root and backend aggregate suites are retained
 for regression/release lanes, while ordinary PR impact maps to component suites
 and pooled/isolated workers. Node setup, Python extras, and backend image builds
 are selected from that same plan; they are not repeated by individual jobs.
+Each suite worker writes and uploads a worker-unique evidence filename so the
+aggregator can account for every selected suite without artifact-path collisions;
+missing selected evidence remains blocking rather than being treated as a partial
+pass.
 Each selected Node worker installs the lockfile and builds `packages/shared`
 before its workspace suite so generated contract twins are available without
 requiring a broad application build.

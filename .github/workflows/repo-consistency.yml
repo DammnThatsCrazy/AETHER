@@ -209,12 +209,12 @@ jobs:
             --suite-ids '${{ toJson(matrix.worker.suite_ids) }}' \
             --dependency-profile "${{ matrix.worker.dependency_profile }}" \
             --runtime-class "${{ matrix.worker.runtime_class }}" \
-            --output release-evidence/suite-evidence.json
+            --output "release-evidence/suite-evidence-${{ matrix.worker.id }}.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: suite-evidence-${{ matrix.worker.id }}
-          path: release-evidence/suite-evidence.json
+          path: release-evidence/suite-evidence-${{ matrix.worker.id }}.json
           if-no-files-found: error
 
   plan-build:
