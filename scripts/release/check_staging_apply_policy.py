@@ -75,6 +75,19 @@ REQUIRED_ACTIONS = {
     "ssm:GetParameter",
     "ssm:GetParameters",
     "ssm:DescribeParameters",
+    # Amplify Hosting
+    "amplify:CreateApp",
+    "amplify:GetApp",
+    "amplify:UpdateApp",
+    "amplify:DeleteApp",
+    "amplify:ListBranches",
+    "amplify:CreateBranch",
+    "amplify:GetBranch",
+    "amplify:UpdateBranch",
+    "amplify:DeleteBranch",
+    "amplify:TagResource",
+    "amplify:UntagResource",
+    "amplify:ListTagsForResource",
     # KMS
     "kms:CreateKey",
     "kms:TagResource",
@@ -474,6 +487,9 @@ ALLOWED_GLOBAL_ACTIONS = {
     "kms:ListAliases",
     # Free Tier
     "freetier:GetAccountPlanState",
+    # Amplify CreateApp has no resource-level ARN; the app and branch
+    # operations below remain resource-scoped.
+    "amplify:CreateApp",
 }
 REQUIRED_AUTH0_SCOPES = {
     "create:resource_servers",
@@ -498,6 +514,8 @@ _S3_STAGING_BUCKET = "arn:aws:s3:::aether-staging-*"
 _ECR_REPO = "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*"
 _SECRET_ARN = "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*"
 _SSM_PARAM = "arn:aws:ssm:us-east-1:${account_id}:parameter/aether/staging/*"
+_AMPLIFY_APPS = "arn:aws:amplify:us-east-1:${account_id}:apps/*"
+_AMPLIFY_BRANCHES = "arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*"
 _DYNAMO_TABLE = "arn:aws:dynamodb:us-east-1:${account_id}:table/AETHER-staging-*"
 _SQS_QUEUE = "arn:aws:sqs:us-east-1:${account_id}:AETHER-staging-*"
 _EVENTS_RULE = "arn:aws:events:us-east-1:${account_id}:rule/AETHER-staging-*"
@@ -670,6 +688,24 @@ def main() -> int:
     ):
         expected_resources[_ssm] = _SSM_PARAM
     expected_resources["ssm:DescribeParameters"] = "*"
+
+    # Amplify Hosting. CreateApp is one of the AWS APIs that has no
+    # resource-level ARN; all existing-app and branch operations are scoped to
+    # the generated staging app/branch ARN families.
+    expected_resources["amplify:CreateApp"] = "*"
+    for _amplify_app in (
+        "amplify:GetApp", "amplify:UpdateApp", "amplify:DeleteApp",
+        "amplify:ListBranches",
+    ):
+        expected_resources[_amplify_app] = _AMPLIFY_APPS
+    for _amplify_branch in (
+        "amplify:CreateBranch", "amplify:GetBranch",
+        "amplify:UpdateBranch", "amplify:DeleteBranch",
+    ):
+        expected_resources[_amplify_branch] = _AMPLIFY_BRANCHES
+    expected_resources["amplify:TagResource"] = [_AMPLIFY_APPS, _AMPLIFY_BRANCHES]
+    expected_resources["amplify:UntagResource"] = [_AMPLIFY_APPS, _AMPLIFY_BRANCHES]
+    expected_resources["amplify:ListTagsForResource"] = [_AMPLIFY_APPS, _AMPLIFY_BRANCHES]
 
     # KMS
     expected_resources["kms:CreateKey"] = "*"

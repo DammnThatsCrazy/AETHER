@@ -104,16 +104,10 @@ data "aws_iam_policy_document" "secrets" {
       identifiers = ["logs.${data.aws_region.current.name}.amazonaws.com"]
     }
 
-    # kms:ViaService is intentionally omitted: CloudWatch Logs calls KMS as its
-    # own service principal, so that condition key is not present during
-    # CreateLogGroup and causes spurious denials.  kms:CallerAccount +
-    # EncryptionContext scope access sufficiently.
-
-    condition {
-      test     = "StringEquals"
-      variable = "kms:CallerAccount"
-      values   = [data.aws_caller_identity.current.account_id]
-    }
+    # kms:ViaService and kms:CallerAccount are intentionally omitted. Logs
+    # calls KMS as its own regional service principal and does not consistently
+    # provide either request context key while creating an encrypted log group.
+    # The account-qualified encryption context below is the enforceable scope.
 
     condition {
       test     = "ArnLike"

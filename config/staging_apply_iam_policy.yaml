@@ -629,6 +629,39 @@ statements:
       - ssm:DescribeParameters
     resource: '*'
     scope: global-read-required-by-api
+  # ----- Amplify Hosting (root main.tf) -----
+  # Staging uses Amplify default domains. Custom-domain associations are
+  # production-only and therefore are not included in this staging contract.
+  - sid: CreateStagingAmplifyApps
+    actions:
+      - amplify:CreateApp
+    resource: '*'
+    scope: amplify-create-required-by-api
+  - sid: ManageStagingAmplifyApps
+    actions:
+      - amplify:GetApp
+      - amplify:UpdateApp
+      - amplify:DeleteApp
+      - amplify:ListBranches
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*
+    scope: staging-amplify-apps
+  - sid: ManageStagingAmplifyBranches
+    actions:
+      - amplify:CreateBranch
+      - amplify:GetBranch
+      - amplify:UpdateBranch
+      - amplify:DeleteBranch
+    resource: arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*
+    scope: staging-amplify-branches
+  - sid: TagStagingAmplifyResources
+    actions:
+      - amplify:TagResource
+      - amplify:UntagResource
+      - amplify:ListTagsForResource
+    resource:
+      - arn:aws:amplify:us-east-1:${account_id}:apps/*
+      - arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*
+    scope: staging-amplify-apps-and-branches
   # ----- ECR repositories (module.ecr) -----
   - sid: ManageStagingEcrRepositories
     actions:

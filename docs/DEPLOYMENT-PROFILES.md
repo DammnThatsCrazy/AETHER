@@ -16,9 +16,9 @@ source_hashes:
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
   "deploy/aws/terraform/main.tf": "sha256:2f170c805082a37de69a6e26370354e313947cedb76dffe07dde2a7577f1dd70"
   "deploy/aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
-  "deploy/aws/terraform/modules/aurora/main.tf": "sha256:16c4beb8ccab1af164ff62f8aa2d515a5efc3f093b7878411f40aa14ce39e094"
+  "deploy/aws/terraform/modules/aurora/main.tf": "sha256:c1c005d1f9662dc4dfcc72ca8fbaeda01f4b1c95ea020578c09d5d368516b863"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
-  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:998303bfe6e5a0a24477933beeb650c02e5e43469d9cba6d0af84e27e50d8032"
+  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:f9eca9796663c747d2e9b103ce940e2c5abbb59e31aaaa2032826c6ae1568a22"
   "deploy/aws/terraform/modules/secrets/rotation.tf": "sha256:bf7623169658a9272a007df782216956b750f30bee3c5d8095f708c44a9d2239"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
   "deploy/aws/terraform/variables.tf": "sha256:4890da151abf54a6493d26a0290e13fc88e4a0891bb801ce4361e5fba6ff4307"
@@ -36,6 +36,10 @@ profile, so their alarms and dashboard widgets are selected by static root
 profile flags. They never use resource-derived cluster or table IDs to decide
 Terraform cardinality, which keeps state-import and plan-only runs resolvable
 before those resources exist in state.
+The shared Aurora module pins the standard provisioned Aurora PostgreSQL 16.8
+release while retaining the `aurora-postgresql16` parameter-group family. This
+is the currently available standard 16.x release in the staging account/region;
+the previously pinned 16.4 release is not offered there.
 
 Aether declares eight deployment profiles, from a zero-backend local mock to a
 contractually isolated enterprise deployment. `config/deployment_profiles.yaml`
