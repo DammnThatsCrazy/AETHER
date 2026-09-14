@@ -248,6 +248,8 @@ def test_deploy_recovers_an_immutable_tag_publish_race():
     assert "id: backend-race" in workflow
     assert "steps.backend.outcome == 'failure'" in workflow
     assert "imageTag=\"${GITHUB_SHA}\"" in workflow
+    assert "for attempt in 1 2 3 4 5 6 7 8 9 10 11 12" in workflow
+    assert "sleep 5" in workflow
     assert "no immutable image exists" in workflow
     assert "RACE_DIGEST: ${{ steps.backend-race.outputs.digest }}" in workflow
     assert 'digest="${EXISTING_DIGEST:-${RACE_DIGEST:-${BUILT_DIGEST:-}}}"' in workflow
