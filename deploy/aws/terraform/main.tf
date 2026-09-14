@@ -807,7 +807,9 @@ resource "aws_amplify_app" "frontend" {
       VITE_AUTH0_LOGOUT_URI   = "${var.aether_app_url}/login"
     } : {},
     each.key == "status" ? {
-      VITE_STATUS_API_URL = var.status_api_url
+      VITE_STATUS_API_URL              = var.status_api_url
+      VITE_STATUS_DOCS_URL             = "https://docs.${var.amplify_domain_name}"
+      VITE_STATUS_AETHER_MARKETING_URL = "https://aether.${var.amplify_domain_name}"
     } : {},
   )
 
@@ -839,8 +841,18 @@ resource "aws_amplify_branch" "main" {
   stage     = var.environment == "production" ? "PRODUCTION" : "DEVELOPMENT"
 
   environment_variables = {
-    AETHER_ENV              = var.environment
-    VITE_STATUS_API_URL     = each.key == "status" ? var.status_api_url : ""
+    AETHER_ENV          = var.environment
+    VITE_STATUS_API_URL = each.key == "status" ? var.status_api_url : ""
+    VITE_STATUS_DOCS_URL = each.key == "status" ? (
+      var.amplify_custom_domain_enabled && var.amplify_domain_name != ""
+      ? "https://docs.${var.amplify_domain_name}"
+      : "https://${aws_amplify_app.frontend["docs"].default_domain}"
+    ) : ""
+    VITE_STATUS_AETHER_MARKETING_URL = each.key == "status" ? (
+      var.amplify_custom_domain_enabled && var.amplify_domain_name != ""
+      ? "https://aether.${var.amplify_domain_name}"
+      : "https://${aws_amplify_app.frontend["aether-marketing"].default_domain}"
+    ) : ""
     VITE_AETHER_ENV         = each.key == "aether-app" ? var.environment : ""
     VITE_API_BASE_URL       = each.key == "aether-app" ? "https://${var.domain_name}" : ""
     VITE_AETHER_ENDPOINT    = each.key == "aether-app" ? "https://${var.domain_name}" : ""

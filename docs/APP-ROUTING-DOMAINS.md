@@ -39,6 +39,11 @@ Amplify/Terraform variables.
 - Set the status app's `VITE_STATUS_API_URL` only after the API certificate,
   DNS, and CORS path have been verified. An empty value must remain visibly
   unverified, not green.
+- The status app's docs and Aether contact links are also environment-driven:
+  staging resolves them to the sibling Amplify default domains, while
+  production resolves them to `docs.olympuslabsml.com` and
+  `aether.olympuslabsml.com`. They must not send a staging visitor to an
+  unprovisioned production origin.
 - `AETHER_DEMO_APP_URL`, app/kyber URLs are env-driven for cross-links.
 
 See [Domain & DNS Readiness](DOMAIN-DNS-READINESS.md) and
