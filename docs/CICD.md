@@ -27,7 +27,7 @@ source_hashes:
   "cicd/aether-cicd/main.py": "sha256:8027fb1fcb5e4a1aeb6428224fe0ca9f7756df0aaca5f39e7e84bb6c9c85feb9"
   "cicd/aether-cicd/quality_gates/": "sha256:2cc72d40cd7c324e686271c5ea2c90c2ccb15c4ebe0435b0589844663dd2e436"
   "cicd/aether-cicd/stages/": "sha256:961dd8ecca17f67988397b1f33515de8a88180ed70a7545fe05b324eb1bf555f"
-  "config/staging_apply_iam_policy.yaml": "sha256:acc34d81c456090d4569faac727b6688604fc07c3bb36764f38c422f23d5004a"
+  "config/staging_apply_iam_policy.yaml": "sha256:077f7ec5ab4a05f950278c684035aeb3ae0ba3aec718eb8fa2b23068af65f71c"
   "deploy/aws/terraform/modules/aurora/main.tf": "sha256:16c4beb8ccab1af164ff62f8aa2d515a5efc3f093b7878411f40aa14ce39e094"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "deploy/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
