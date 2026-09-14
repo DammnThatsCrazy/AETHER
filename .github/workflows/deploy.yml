@@ -183,6 +183,12 @@ jobs:
       - name: Build backend by commit
         id: backend
         if: steps.existing-backend.outputs.exists != 'true'
+        # Two delivery runs for the same immutable SHA can race ECR's
+        # describe visibility: both may observe no tag, while the first push
+        # wins and the second receives an immutable-tag error. Keep the build
+        # failure observable, then verify the immutable tag before deciding
+        # whether the run can safely continue.
+        continue-on-error: true
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -191,14 +197,32 @@ jobs:
           tags: ${{ steps.ecr.outputs.registry }}/aether-backend:${{ github.sha }}
           cache-from: type=gha,scope=backend
           cache-to: type=gha,scope=backend,mode=max
+      - name: Recover immutable backend digest after a publish race
+        id: backend-race
+        if: steps.existing-backend.outputs.exists != 'true' && steps.backend.outcome == 'failure'
+        env:
+          AWS_REGION: ${{ env.AWS_REGION }}
+        run: |
+          set -euo pipefail
+          digest=$(aws ecr describe-images \
+            --repository-name aether-backend \
+            --image-ids imageTag="${GITHUB_SHA}" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text 2>/dev/null || true)
+          test -n "$digest" && test "$digest" != "None" || {
+            echo "::error::backend build failed and no immutable image exists for ${GITHUB_SHA}"; exit 1;
+          }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "The immutable tag became visible after the concurrent publish; reusing ${digest}."
       - name: Resolve backend image digest
         id: backend-digest
         env:
           EXISTING_DIGEST: ${{ steps.existing-backend.outputs.digest }}
+          RACE_DIGEST: ${{ steps.backend-race.outputs.digest }}
           BUILT_DIGEST: ${{ steps.backend.outputs.digest }}
         run: |
           set -euo pipefail
-          digest="${EXISTING_DIGEST:-${BUILT_DIGEST:-}}"
+          digest="${EXISTING_DIGEST:-${RACE_DIGEST:-${BUILT_DIGEST:-}}}"
           test -n "$digest"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - name: Build static frontends (per-app Auth0 client and endpoints)

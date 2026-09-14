@@ -242,6 +242,17 @@ def test_deploy_builds_each_spa_with_its_own_auth0_client_and_endpoints():
     assert 'VITE_WS_BASE_URL="$KYBER_WS_BASE_URL"' in kyber_build
 
 
+def test_deploy_recovers_an_immutable_tag_publish_race():
+    workflow = _workflow("deploy.yml")
+    assert "continue-on-error: true" in workflow
+    assert "id: backend-race" in workflow
+    assert "steps.backend.outcome == 'failure'" in workflow
+    assert "imageTag=\"${GITHUB_SHA}\"" in workflow
+    assert "no immutable image exists" in workflow
+    assert "RACE_DIGEST: ${{ steps.backend-race.outputs.digest }}" in workflow
+    assert 'digest="${EXISTING_DIGEST:-${RACE_DIGEST:-${BUILT_DIGEST:-}}}"' in workflow
+
+
 def test_deploy_verifies_source_run_identity_before_trusting_artifacts():
     workflow = _workflow("deploy.yml")
     assert "actions/runs/${SOURCE_RUN_ID}" in workflow
