@@ -22,7 +22,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:db243ba3073715c3b2f117f32a5b13aac099eddf96b4ba38ff1052d92bb6ca46"
+  ".github/workflows/": "sha256:8993cf387d411408a67a255a3ea9227dd95c499ae05078380644e19a5eeb925f"
   "cicd/aether-cicd/README.md": "sha256:07bc236b744bd0c54bae8b6fa661beba9d3767a3300470814f071a119f8244ee"
   "cicd/aether-cicd/main.py": "sha256:8027fb1fcb5e4a1aeb6428224fe0ca9f7756df0aaca5f39e7e84bb6c9c85feb9"
   "cicd/aether-cicd/quality_gates/": "sha256:2cc72d40cd7c324e686271c5ea2c90c2ccb15c4ebe0435b0589844663dd2e436"
@@ -481,6 +481,14 @@ The Terraform workflows pass `TF_AUTH0_DOMAIN` both as the non-secret
 as `AUTH0_DOMAIN` for the Auth0 provider. The management client ID and secret
 remain runner environment variables; they are never placed in Terraform
 variables, plan artifacts or state.
+
+The immutable delivery workflow keeps repository variables as optional
+overrides for the packaged Aether and Kyber SPAs. When those variables are not
+configured, it derives the Auth0 domain and API/WebSocket origins from the
+reviewed Terraform secret inputs (`TF_AUTH0_DOMAIN` and `TF_DOMAIN_NAME`) and
+uses the canonical API audience. This prevents a release build from silently
+embedding empty identity or endpoint configuration while preserving an
+explicit override path for a later environment-specific release train.
 
 ### Deployment gates
 
