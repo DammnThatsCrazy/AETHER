@@ -22,7 +22,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:06500e9e4535222f1422b6f56747e4c554584f7cfeebd2a58a871f6f9a107cf7"
+  ".github/workflows/": "sha256:db243ba3073715c3b2f117f32a5b13aac099eddf96b4ba38ff1052d92bb6ca46"
   "cicd/aether-cicd/README.md": "sha256:07bc236b744bd0c54bae8b6fa661beba9d3767a3300470814f071a119f8244ee"
   "cicd/aether-cicd/main.py": "sha256:8027fb1fcb5e4a1aeb6428224fe0ca9f7756df0aaca5f39e7e84bb6c9c85feb9"
   "cicd/aether-cicd/quality_gates/": "sha256:2cc72d40cd7c324e686271c5ea2c90c2ccb15c4ebe0435b0589844663dd2e436"
@@ -364,6 +364,16 @@ Two things get promoted, on two separate paths that must never be conflated: the
 **application** (an immutable release bound in `release.json`) and the
 **infrastructure** (a reviewed Terraform plan).
 
+The public web layer follows the infrastructure topology but has its own
+Amplify build path. `olympus-marketing`, `aether-marketing`, `docs`,
+`aether-app`, and `status` are connected to the checked-in monorepo build
+configuration; staging uses their Amplify default domains and production adds
+the reviewed `*.olympuslabsml.com` associations. The protected tenant and
+Kyber artifacts remain part of the immutable release and are published to
+their private S3 origins by the staging rehearsal. This keeps Kyber internal
+and prevents a public marketing build from being mistaken for an operator
+deployment.
+
 | Workflow | Trigger | What it does | Applies Terraform |
 |---|---|---|---|
 | `deploy.yml` | push to `main`; `workflow_dispatch` for production | Builds the release once, deploys to staging on push; production promotion is manual and takes the staged run ID plus the approved `release.json` checksum. Registers one task-definition revision per declared service; no rebuild on promotion. **Not armed without `AWS_DEPLOY_ROLE_ARN`:** when the role is absent the build/deploy jobs skip and a `delivery-not-armed` job reports that nothing was built or deployed — that is NOT a claim that a release exists. The moment the role is wired, delivery runs exactly as before. | no |
@@ -466,10 +476,17 @@ permission and throttling errors remain failures. Auth0 tokens with malformed
 or non-string scope claims are likewise rejected rather than treated as a
 successful preflight.
 
+The Terraform workflows pass `TF_AUTH0_DOMAIN` both as the non-secret
+`TF_VAR_auth0_domain` root input used by the Amplify runtime configuration and
+as `AUTH0_DOMAIN` for the Auth0 provider. The management client ID and secret
+remain runner environment variables; they are never placed in Terraform
+variables, plan artifacts or state.
+
 ### Deployment gates
 
 ```bash
 make deployment-profile-gate      # every profile gate that needs no AWS credentials
+make resolved-feature-flags        # explicit staging and production-lean flag manifests
 make deployment-readiness-score   # three-column readiness scorecard
 make collect-deployment-evidence  # materialise release-evidence/ + checksum
 ```

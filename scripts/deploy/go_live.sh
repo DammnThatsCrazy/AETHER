@@ -5,11 +5,12 @@
 # Consolidated script that walks every step from an empty AWS account to live
 # websites at olympuslabsml.com:
 #
-#   olympuslabsml.com        → Squarespace (marketing site)
-#   www.olympuslabsml.com    → Squarespace
+#   olympuslabsml.com        → Squarespace apex/redirect surface
+#   www.olympuslabsml.com    → Amplify (Olympus Labs marketing)
 #   aether.olympuslabsml.com → Amplify (product marketing)
 #   docs.olympuslabsml.com   → Amplify (developer docs)
 #   app.olympuslabsml.com    → Amplify (customer dashboard)
+#   status.olympuslabsml.com → Amplify (public status)
 #   api.olympuslabsml.com    → ALB (backend API)
 #
 # Run interactively — the script pauses for manual steps (console actions,
@@ -20,7 +21,7 @@
 #   - Terraform >= 1.7
 #   - Docker (for backend image build)
 #   - Auth0 tenant credentials (exported as env vars)
-#   - A Squarespace site at olympuslabsml.com (or ready to connect)
+#   - Squarespace DNS access for the apex redirect and Amplify CNAME records
 #
 # Usage:
 #   cd "$(git rev-parse --show-toplevel)"
@@ -271,70 +272,38 @@ echo "    ${AMPLIFY_DOMAINS}"
 pause "Verify Amplify apps are building and serving"
 
 # =============================================================================
-step 10 "Squarespace + Route 53 DNS"
+step 10 "Squarespace DNS + Amplify custom domains"
 # =============================================================================
 echo ""
-echo "    Now we wire up DNS. This creates a Route 53 hosted zone and points:"
-echo "      - olympuslabsml.com (apex)     → Squarespace (4 A records)"
-echo "      - www.olympuslabsml.com        → Squarespace (CNAME)"
+echo "    Squarespace remains authoritative for the first release."
+echo "    Add the Amplify custom-domain CNAME targets from:"
+echo "      terraform output -json amplify_custom_domain_dns_records"
+echo "    Required records:"
+echo "      - www.olympuslabsml.com        → Olympus Amplify association"
 echo "      - aether.olympuslabsml.com     → Amplify"
 echo "      - docs.olympuslabsml.com       → Amplify"
 echo "      - app.olympuslabsml.com        → Amplify"
+echo "      - status.olympuslabsml.com     → Amplify"
 echo "      - api.olympuslabsml.com        → ALB (${ALB_DNS})"
+echo "    Keep olympuslabsml.com on the Squarespace apex redirect to www."
 echo ""
 echo "    Before proceeding, go to Squarespace:"
 echo "      Settings → Domains → DNS Settings"
-echo "      Copy the verification code (looks like a random string)"
+echo "      Add the CNAME records returned by the Terraform output"
 echo ""
-
-read -rp "    Enter Squarespace verification code (or press ENTER to skip): " SQ_VERIFY
-
-SQ_ARGS=(-var="squarespace_hosted_zone_enabled=true")
-if [ -n "${SQ_VERIFY}" ]; then
-  SQ_ARGS+=(-var="squarespace_verification_code=${SQ_VERIFY}")
-fi
-
-terraform plan \
-  -var-file="profiles/${PROFILE}.tfvars" \
-  -var="acm_certificate_arn=${CERT_ARN}" \
-  -var="alert_email=ops@olympuslabsml.com" \
-  -var="backend_image_digest=${BACKEND_DIGEST}" \
-  "${GH_TOKEN_ARGS[@]}" \
-  "${SQ_ARGS[@]}" \
-  -out=tfplan-dns
-
-echo ""
-echo "    Review the DNS plan above."
-pause "Type ENTER to apply DNS records, or Ctrl-C to abort"
-
-terraform apply tfplan-dns
-
-NS_RECORDS="$(terraform output -json route53_nameservers)"
-info "Route 53 zone created"
-echo ""
-echo "    ┌────────────────────────────────────────────────────────────────┐"
-echo "    │  CRITICAL: Update your domain registrar's nameservers to:     │"
-echo "    │                                                                │"
-echo "    │  ${NS_RECORDS}"
-echo "    │                                                                │"
-echo "    │  Go to your domain registrar (where you bought olympuslabsml  │"
-echo "    │  .com) and replace the existing NS records with these.        │"
-echo "    │  DNS propagation takes 15 minutes to 48 hours.                │"
-echo "    └────────────────────────────────────────────────────────────────┘"
-echo ""
-pause "Update nameservers at your registrar"
+pause "Add the CNAME records in Squarespace and wait for DNS propagation"
 
 # =============================================================================
-step 11 "Squarespace Domain Connection"
+step 11 "Squarespace Domain Verification"
 # =============================================================================
 echo ""
 echo "    In Squarespace:"
-echo "      1. Go to Settings → Domains → Use a Domain I Own"
-echo "      2. Enter: ${DOMAIN}"
-echo "      3. Squarespace will check the A records and verification CNAME"
-echo "      4. Once verified, your marketing site is live at ${DOMAIN}"
+echo "      1. Confirm the apex redirect points to www.${DOMAIN}"
+echo "      2. Confirm the five Amplify CNAMEs resolve"
+echo "      3. Confirm Amplify custom-domain certificates are issued"
+echo "      4. Confirm the API CNAME and status health origin"
 echo ""
-pause "Connect the domain in Squarespace"
+pause "Verify the Squarespace and Amplify domain surfaces"
 
 # =============================================================================
 # Done
@@ -345,7 +314,8 @@ echo "╔═══════════════════════�
 echo "║                    🎉  WEBSITES ARE LIVE  🎉                    ║"
 echo "╠══════════════════════════════════════════════════════════════════╣"
 echo "║                                                                 ║"
-echo "║  Marketing:  https://${DOMAIN}                (Squarespace)     "
+echo "║  Marketing:  https://www.${DOMAIN}             (Amplify)         "
+echo "║  Apex:       https://${DOMAIN}           (Squarespace redirect) "
 echo "║  Product:    https://aether.${DOMAIN}         (Amplify)         "
 echo "║  Docs:       https://docs.${DOMAIN}           (Amplify)         "
 echo "║  App:        https://app.${DOMAIN}            (Amplify)         "

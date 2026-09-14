@@ -127,14 +127,14 @@ export const SECTIONS: readonly SectionCopy[] = [
   {
     slug: '/pricing',
     nav: 'Pricing',
-    eyebrow: 'Pricing',
-    title: 'Pricing that matches usage, not guesswork',
-    description: 'Aether pricing — plan audience, usage limits, capabilities, support, retention, environments, integration limits, and deployment options.',
-    lead: 'Every plan states its intended audience, monthly event allowance, seat cap, and overage rates. Self-serve tiers are billed monthly or annually (15% discount). Enterprise and specialized deployments are priced per engagement.',
+    eyebrow: 'Pricing and packages',
+    title: 'Package the infrastructure around the relationship question',
+    description: 'Aether packages access to connection and relationship intelligence infrastructure around connected evidence, perspectives, governance, support, and deployment complexity.',
+    lead: 'Aether pricing reflects the platform scope required to connect evidence, create perspectives, govern decisions, and observe outcomes. It is not a connector fee or an SDK tax.',
     paragraphs: [
-      'Each self-serve tier includes a monthly raw-event allowance and a seat cap. Usage beyond the included allowance is metered and billed at the published overage rate — no surprise tiers, no hidden multipliers, and no retroactive adjustments.',
-      'Aether Harness workloads (managed and BYOK) are metered separately per ACU. Managed workloads include provider execution; BYOK workloads carry a 50% discount with model-provider charges remaining separate.',
-      'Enterprise and specialized tiers — Epsilon, Omega, and Omicron — are scoped per engagement for organizations with volume, deployment, or governance needs beyond the self-serve plans. Contact Olympus Labs to discuss.',
+      'Choose the smallest useful starting point: establish the source, tenant, consent, event, and provenance path before expanding the scope. Packages then add context, operate the perspective, expand the relationship graph, scale the operating model, or address enterprise and sovereign deployment requirements.',
+      'The commercial conversation covers platform and tenant scope, connected evidence volume and retention, source activation, intelligence and workflow surfaces, governance and support requirements, deployment complexity, and the specific capabilities and providers enabled for the target tenant.',
+      'There are no connector fees as a substitute for product value. A connection is valuable when it helps answer a relationship question, form a perspective, or make an outcome observable. Aether does not promise a universal ROI number before the evidence and baseline exist.',
     ],
   },
   {

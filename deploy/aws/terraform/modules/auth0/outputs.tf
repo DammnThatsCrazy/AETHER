@@ -10,8 +10,9 @@ output "kyber_client_id" {
 
 # There is deliberately no `auth0_domain` output any more: it only echoed a
 # root variable back, and that variable is gone (see main.tf). The tenant
-# domain reaches an SPA build from the same AUTH0_DOMAIN environment value the
-# provider authenticates with, not through a Terraform plan.
+# domain reaches an SPA build through the non-secret root `auth0_domain` input;
+# the provider's management credentials still come only from AUTH0_DOMAIN /
+# AUTH0_CLIENT_ID / AUTH0_CLIENT_SECRET in the runner environment.
 
 output "api_audience" {
   description = "API resource server audience — use as VITE_AUTH0_AUDIENCE build arg"

@@ -4,11 +4,13 @@
 
 | URL | Host | Source |
 |---|---|---|
-| `olympuslabsml.com` | Squarespace | Marketing site (your Squarespace editor) |
-| `www.olympuslabsml.com` | Squarespace | → redirects to apex |
+| `olympuslabsml.com` | Squarespace | Apex/redirect surface → `www` |
+| `www.olympuslabsml.com` | AWS Amplify | `frontend/olympus-marketing/` |
 | `aether.olympuslabsml.com` | AWS Amplify | `frontend/aether-marketing/` |
 | `docs.olympuslabsml.com` | AWS Amplify | `frontend/docs/` |
 | `app.olympuslabsml.com` | AWS Amplify | `frontend/aether/` |
+| `status.olympuslabsml.com` | AWS Amplify | `frontend/status/` |
+| `kyber.olympuslabsml.com` | Internal only | No public DNS/application route by default |
 | `api.olympuslabsml.com` | AWS ECS/ALB | `services/backend/` |
 
 ## Prerequisites — gather before running
@@ -40,13 +42,16 @@
 ### 4. Domain
 
 - [ ] `olympuslabsml.com` registered at a domain registrar
-- [ ] Access to change nameservers at the registrar
+- [ ] Access to edit Squarespace DNS records (nameserver changes are not part
+      of the first-release path)
 
 ### 5. Squarespace
 
-- [ ] Squarespace site created (any plan)
+- [ ] Squarespace domain access confirmed (an editorial site is optional; the
+      first-release Olympus shell is the Amplify build)
 - [ ] Access to Settings → Domains in Squarespace admin
-- [ ] Verification code ready (Settings → Domains → DNS Settings)
+- [ ] Ability to add the Amplify custom-domain CNAME targets from Terraform
+      output
 
 ### 6. GitHub
 
@@ -86,5 +91,6 @@ and manual actions (certificate validation, secret injection, nameserver update)
 - [ ] Run database migrations via ECS Exec
 - [ ] Verify `GET https://api.olympuslabsml.com/v1/ready` returns 200
 - [ ] Verify all Amplify apps build and serve
-- [ ] Verify Squarespace marketing site loads at apex domain
+- [ ] Verify the Squarespace apex redirects to the Amplify-hosted
+      `www.olympuslabsml.com` Olympus shell
 - [ ] Set up CI: wire `TF_STATE_BUCKET`, `TF_LOCK_TABLE`, and OIDC role ARNs into GitHub environment secrets

@@ -137,6 +137,8 @@ export function OlympusShell() {
               <FooterLink to="/company" label="Company" />
               <FooterLink to="/principles" label="Principles" />
               <FooterLink to="/research" label="Research" />
+              <FooterLink to="/resources" label="Resources" />
+              <FooterLink to="/stories" label="Stories and proof" />
               <FooterLink to="/careers" label="Careers" />
               <FooterLink to="/contact" label="Contact" />
             </FooterColumn>
@@ -147,6 +149,8 @@ export function OlympusShell() {
             </FooterColumn>
             <FooterColumn title="Legal">
               <FooterLink to="/legal" label="Legal notices" />
+              <FooterLink to="/legal/privacy" label="Privacy and data use" />
+              <FooterLink to="/legal/terms" label="Terms and use" />
             </FooterColumn>
           </div>
           <div className="mt-10 flex flex-col gap-2 border-t border-border-default pt-6 text-xs text-text-muted md:flex-row md:items-center md:justify-between">

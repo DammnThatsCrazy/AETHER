@@ -32,10 +32,14 @@ aurora_backup_retention_days = 1
 # Express mode uses AWS-managed encryption instead of a customer-managed KMS
 # key, which is required for AWS Free-tier accounts.
 aurora_express_mode = true
-# AWS Free-tier accounts require WithExpressConfiguration for Aurora, which
-# forces Internet Access Gateway mode (no VPC). Skip Aurora until the account
-# is upgraded; the rest of the stack validates without it.
-skip_aurora = true
+# The account is now paid. Keep Aurora Serverless v2 auto-paused and bounded
+# rather than skipping the real database from full application staging.
+skip_aurora = false
+
+# Staging uses Amplify default domains. Do not claim the production
+# olympuslabsml.com DNS family before the reviewed production promotion.
+amplify_custom_domain_enabled = false
+status_api_url                = ""
 
 # Logs — short retention; INFO/DEBUG ship to S3.
 log_retention_days        = 3

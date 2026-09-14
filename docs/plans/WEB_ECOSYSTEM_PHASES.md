@@ -197,7 +197,31 @@ scorecard area is claimed. This program's gate is `make ci-check` (green on the
 Phase 7 union); deployment and go-live belong to an infra phase, not to this
 marketing program.
 
-## 5. Ledger
+## 5. Phase 8 — external content and hosting execution (in progress)
+
+This is the execution continuation after the historical Phase 7 acceptance.
+The Google Drive **Olympus Labs + Aether — Complete External Content and Launch
+Pack** is now imported into the canonical launch-pack content loader and public
+documentation corpus. Olympus corporate pages and Aether product pages use the
+pack's positioning, language, proof boundaries, and calls to action; the richer
+interactive Aether directories and developer flows remain intact rather than
+being replaced by static copy.
+
+The hosting shape is implemented for five separate Amplify applications:
+Olympus marketing, Aether marketing, docs, the end-user app, and status. Staging
+uses Amplify default domains and cost-aware Aurora auto-pause. Production-lean
+uses the reviewed custom-domain association under `olympuslabsml.com`. Kyber
+remains an internal operator surface with protected artifacts and no public DNS
+by default. The status app is fail-closed and remains unverified until its API
+health origin, TLS, DNS, CORS, and structured payload are proven live.
+
+Repository evidence is complete for this slice; live AWS evidence is not. The
+next execution sequence is AWS authentication, credentialed staging plan and
+apply, wake/migrate/smoke/load/rollback/sleep evidence, cost observation, and
+then a separately reviewed production-lean promotion. No public release claim
+is made until those live checks and the canonical release scorecard support it.
+
+## 6. Ledger
 
 | Date | Phase | Result |
 | --- | --- | --- |

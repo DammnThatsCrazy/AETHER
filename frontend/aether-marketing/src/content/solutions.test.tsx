@@ -5,6 +5,7 @@ import { SolutionPage } from '../pages/solution-page';
 import { SolutionsPage } from '../pages/solutions-page';
 import { findSection } from './sections';
 import { findSolution, SOLUTION_LABEL, SOLUTIONS } from './solutions';
+import { getLaunchPackPage, launchPackHeading } from '../../../marketing/src/content-loader';
 
 const KEBAB_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -112,8 +113,12 @@ describe('solutions landing page', () => {
 
     renderSolutionsPage();
 
+    const launchPack = getLaunchPackPage('Aether', '/solutions');
+    const expectedHeading = launchPackHeading(launchPack);
+    expect(expectedHeading).toBeDefined();
+    if (expectedHeading === undefined) return;
     expect(
-      screen.getByRole('heading', { level: 1, name: section.title }),
+      screen.getByRole('heading', { level: 1, name: expectedHeading }),
     ).toBeInTheDocument();
 
     const explorerHrefs = screen

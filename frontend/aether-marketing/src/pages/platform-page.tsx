@@ -4,6 +4,7 @@ import { CtaBand, PageHero } from '@aether-marketing/components/marketing-sectio
 import { CAPABILITIES } from '@aether-marketing/content/capabilities';
 import { findSection } from '@aether-marketing/content/sections';
 import { usePageMeta } from '@aether-marketing/lib/meta';
+import { getLaunchPackPage, launchPackHeading } from '../../../marketing/src/content-loader';
 
 /**
  * The /platform overview. AetherShell owns the header, nav, and footer for the
@@ -16,10 +17,14 @@ import { usePageMeta } from '@aether-marketing/lib/meta';
  */
 export function PlatformPage() {
   const section = findSection('/platform');
+  const launchPack = getLaunchPackPage('Aether', '/product');
 
   usePageMeta(
     section !== undefined
-      ? { title: `${section.title} — Aether by Olympus Labs`, description: section.description }
+      ? {
+          title: launchPack?.seoTitle ?? `${section.title} — Aether by Olympus Labs`,
+          description: launchPack?.seoDescription ?? section.description,
+        }
       : { title: 'Aether by Olympus Labs' },
   );
 
@@ -39,7 +44,11 @@ export function PlatformPage() {
 
   return (
     <>
-      <PageHero eyebrow={section.eyebrow} title={section.title} lead={section.lead} />
+      <PageHero
+        eyebrow={section.eyebrow}
+        title={launchPackHeading(launchPack) ?? section.title}
+        lead={launchPack?.seoDescription ?? section.lead}
+      />
       <CapabilityExplorer />
       <section className="border-b border-border-default">
         <div className="mkt-container py-16 md:py-20">
@@ -65,9 +74,10 @@ export function PlatformPage() {
         </div>
       </section>
       <CtaBand
-        title="Start building on Aether"
-        body="Aether is not yet generally available. When it opens to customers, this is the front door — create your workspace here and the Aether application takes over from there."
-        primary={{ label: 'Start building', to: '/signup' }}
+        title="Keep exploring Aether"
+        body="Start with the graph loop, then bring one relationship question and one governed connection into a pilot."
+        primary={{ label: launchPack?.primaryCta ?? 'Start building', to: '/intelligence-graph' }}
+        secondary={{ label: launchPack?.secondaryCta ?? 'Start building', to: '/start-pilot' }}
       />
     </>
   );

@@ -1618,3 +1618,27 @@ suites:
     release_class: advisory
     evidence_artifact: null
     quarantine: null
+
+  - id: frontend-status
+    suite_role: component
+    subsystem: frontend-status
+    owner: frontend
+    components: [public-status]
+    contracts: [marketing-ui]
+    dependencies: [node]
+    dependency_profile: node-frontend
+    runtime_class: small
+    isolation: workspace
+    lane: pr
+    profiles: [local, ci, release]
+    expected_runtime_seconds: 30
+    hard_runtime_budget_seconds: 90
+    paths: ["frontend/status"]
+    # Public fail-closed status surface (status.olympuslabsml.com).
+    runner: ["npm", "run", "test", "--workspace=frontend/status"]
+    requires: {python_packages: [], services: [], docker: false, credentials: []}
+    environments: [local, ci, release]
+    skip_policy: never
+    release_class: advisory
+    evidence_artifact: null
+    quarantine: null

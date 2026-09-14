@@ -3,6 +3,7 @@ import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
 import { usePageMeta, type PageMeta } from './meta';
+import { OLYMPUS_SITE_URL } from './env';
 
 function Probe({
   title,
@@ -40,11 +41,11 @@ describe('usePageMeta', () => {
 
     expect(document.title).toBe('Aether — Olympus Labs');
     expect(document.querySelector('meta[name="description"]')?.getAttribute('content')).toBe('Platform description');
-    expect(canonicalHref()).toBe('https://olympuslabsml.com/products/aether');
+    expect(canonicalHref()).toBe(`${OLYMPUS_SITE_URL}/products/aether`);
     expect(document.querySelectorAll('link[rel="canonical"]')).toHaveLength(1);
     expect(document.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe('Aether — Olympus Labs');
     expect(document.querySelector('meta[property="og:description"]')?.getAttribute('content')).toBe('Platform description');
-    expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe('https://olympuslabsml.com/products/aether');
+    expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe(`${OLYMPUS_SITE_URL}/products/aether`);
     expect(document.querySelector('meta[property="og:type"]')?.getAttribute('content')).toBe('website');
     expect(document.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe('Olympus Labs');
     expect(document.querySelector('meta[name="twitter:card"]')?.getAttribute('content')).toBe('summary');
@@ -61,8 +62,8 @@ describe('usePageMeta', () => {
       </MemoryRouter>,
     );
 
-    expect(canonicalHref()).toBe('https://olympuslabsml.com/');
-    expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe('https://olympuslabsml.com/');
+    expect(canonicalHref()).toBe(`${OLYMPUS_SITE_URL}/`);
+    expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe(`${OLYMPUS_SITE_URL}/`);
     unmount();
   });
 
@@ -96,12 +97,12 @@ describe('usePageMeta', () => {
     );
 
     expect(document.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('noindex,nofollow');
-    expect(canonicalHref()).toBe('https://olympuslabsml.com/legal');
+    expect(canonicalHref()).toBe(`${OLYMPUS_SITE_URL}/legal`);
 
     fireEvent.click(screen.getByRole('link', { name: 'Company' }));
 
     expect(document.querySelector('meta[name="robots"]')).toBeNull();
-    expect(canonicalHref()).toBe('https://olympuslabsml.com/company');
+    expect(canonicalHref()).toBe(`${OLYMPUS_SITE_URL}/company`);
     expect(document.querySelectorAll('link[rel="canonical"]')).toHaveLength(1);
     expect(document.querySelector('meta[name="description"]')?.getAttribute('content')).toBe('Company copy');
     expect(document.title).toBe('Company — Olympus Labs');

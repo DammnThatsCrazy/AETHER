@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import { IntegrationsPage } from "./integrations-page";
 import { CONNECTORS } from "@aether-marketing/content/connectors";
 import { buildIntegrationsHandoffUrl } from "@aether-marketing/lib/handoff";
-import { AETHER_DOCS_URL } from "@aether-marketing/lib/env";
 
 function renderPage() {
   return render(
@@ -29,12 +28,12 @@ function resultCount(): string {
 }
 
 describe("IntegrationsPage", () => {
-  it("renders the /integrations hero copy from the SECTIONS entry", () => {
+  it("renders the /integrations hero copy from the launch pack", () => {
     renderPage();
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: /connectors with truthful availability states/i,
+        name: /connect the systems where the relationship happens/i,
       }),
     ).toBeTruthy();
   });
@@ -101,20 +100,20 @@ describe("IntegrationsPage", () => {
     );
   });
 
-  it("points the entry CTA at the documentation and the secondary at the public sign-up threshold", () => {
+  it("points the entry CTA at the launch-pack connection path", () => {
     renderPage();
     const docs = screen.getByRole("link", {
-      name: "Read the integration documentation",
+      name: "Explore connections",
     });
-    expect(docs).toHaveAttribute("href", AETHER_DOCS_URL);
-    expect(docs).toHaveAttribute("target", "_blank");
-    expect(docs).toHaveAttribute("rel", "noreferrer");
+    expect(docs).toHaveAttribute("href", "/connections");
+    expect(docs).not.toHaveAttribute("target");
+    expect(docs).not.toHaveAttribute("rel");
 
     // Sign-up stays inside the marketing surface: it routes through the public
     // /signup threshold (the single entry to the application), not to the app.
-    const signup = screen.getByRole("link", { name: "Start building" });
-    expect(signup).toHaveAttribute("href", "/signup");
-    expect(signup).not.toHaveAttribute("target");
+    const developerPath = screen.getByRole("link", { name: "Choose a developer path" });
+    expect(developerPath).toHaveAttribute("href", "/developers");
+    expect(developerPath).not.toHaveAttribute("target");
   });
 
   it("filters by the shared customer experience vocabulary, not only engineering categories", () => {

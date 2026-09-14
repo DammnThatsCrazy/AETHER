@@ -25,15 +25,15 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/staging-lifecycle.yml": "sha256:38e9810399b549e10741393bd424dec755adb29a3aa7a350f9fe1c8ca8645007"
-  ".github/workflows/staging-state-reconcile.yml": "sha256:e464947339f4be70cc0659f100dbc06ab04d50101b2f848a4d529ac84a5b5341"
+  ".github/workflows/staging-state-reconcile.yml": "sha256:b7dd5cef545fdf60ac882b917ddde4dcada633a4eb0f321759bc5fc5b3e7f38a"
   ".github/workflows/staging-ttl-guard.yml": "sha256:4fe2250c0ccb0f8486800c6e09c8f1adcf6c38371944e911269f103053f0f1da"
-  ".github/workflows/terraform-promote.yml": "sha256:4fe31c78b7d0621cc5db6f35eaa239d30f11ce12e518e5dbee6d343110ed5197"
+  ".github/workflows/terraform-promote.yml": "sha256:f4df3b2fe853abe6605fbebcd9d85cf093c247251d6be971900804894749f1e9"
   "config/staging_apply_iam_policy.yaml": "sha256:acc34d81c456090d4569faac727b6688604fc07c3bb36764f38c422f23d5004a"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:84cc2d5a0cdb621f0dc2ba271fd9e66228e36a80cabf52133cf51d410a85f21e"
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:6f311b2fdd25b3985ca766bfd65a2ec664ef3d7dd4f9b89cc2d223c1ffa4f67a"
+  "deploy/aws/terraform/": "sha256:ceb53e751ba7b5ff1904635160b6465202aec12b8203f7388dcdf75dca4561e7"
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:20998a03fdd484635cc80667220794fb1970be3f2e198ac067ec7c7bda12f2f1"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:08dff05b2a886af751d7e0b1c7886951b240b6a31f18ef14d26f73085ae59145"
   "scripts/release/verify_terraform_state_role.py": "sha256:80dce5faa3a69a530f24a72105f7b340bc52726906a641540ed7ef08fb6e46ac"
@@ -174,7 +174,7 @@ including the four non-cloud profiles, is
 | ML serving | inline in backend | inline in backend | dedicated ECS service | dedicated ECS service |
 | Egress | `public_ip` — **0 NAT** | `public_ip` — **0 NAT** | `single_nat` — 1 NAT | `ha_nat` — 3 NAT |
 | Legacy RDS | never | never | never | never |
-| Frontends | S3 static origins | S3 static origins | S3 static origins | S3 static origins |
+| Public web | Amplify shells + app/status; private S3 artifacts | Amplify shells + app/status; private S3 artifacts | Amplify shells + app/status; private S3 artifacts | Amplify shells + app/status; private S3 artifacts |
 | Log retention | 3 days | 3 days | 7 days | 30 days |
 
 Apply a profile with its checked-in variable file:
@@ -336,13 +336,23 @@ Which backend a running task uses is passed explicitly (`event_broker`,
 `cache_backend`, `graph_backend`, `analytics_backend`), never inferred from
 whether a host string happens to be empty.
 
-### Static frontends
+### Static frontends and public web surfaces
 
-The Aether and Kyber SPAs are immutable object-store origins at **every**
-profile — `aws_s3_bucket.static_frontend` with public access blocked,
-server-side encryption, and SSM parameters the deploy workflow resolves bucket
-names from. `frontend_ecs_services` is a forbidden resource everywhere; the root
-creates no frontend ECS service at any profile.
+The public Olympus, Aether, documentation, end-user application, and status
+surfaces are separate Amplify applications. They build from the monorepo root
+using their app-specific `appRoot` entries in `amplify.yml`; staging uses the
+Amplify default domains and production associates the canonical
+`*.olympuslabsml.com` hosts.
+
+The protected tenant application release and private Kyber operator release
+remain immutable object-store artifacts at **every** profile —
+`aws_s3_bucket.static_frontend` with public access blocked, server-side
+encryption, and SSM parameters the deploy workflow resolves bucket names from.
+Kyber has no public DNS record and is not an Amplify application; its operator
+access is a separate internal delivery path. An unauthenticated request to the
+Kyber hostname therefore has no public application route. `frontend_ecs_services`
+is a forbidden resource everywhere; the root creates no frontend ECS service at
+any profile.
 
 **The CDN distribution is provisioned outside this root.** The S3 origins and
 their SSM pointers are the Terraform-owned half of the contract, as
@@ -351,31 +361,59 @@ CloudFront resource in the live tree.
 
 ### AWS Amplify hosting
 
-Three product frontends are provisioned as Amplify apps: `aether-marketing`
-(`aether.*`), `docs` (`docs.*`), and `aether-app` (`app.*`). Each app builds
+The public web surfaces are provisioned as five Amplify apps: `olympus-marketing`
+(`www.*`), `aether-marketing` (`aether.*`), `docs` (`docs.*`), `aether-app`
+(`app.*`), and `status` (`status.*`). Each app builds
 from the monorepo root with an app-specific `appRoot` in `amplify.yml` and
 targets the main branch. Custom domain associations map each app to its
 canonical subdomain under `var.amplify_domain_name`. SSM parameters export
 Amplify app IDs and default domains for downstream consumption.
 
-The apex/www domain is **not** served by Amplify — it is served by Squarespace
-(see below). Gated by the same `enable_static_frontends` toggle used for S3
-origins.
+The apex domain remains on Squarespace and redirects to the canonical
+`www.olympuslabsml.com` Amplify surface. The `www` host itself is served by
+Amplify when the custom-domain association is enabled. Staging leaves custom
+domains disabled and uses the five Amplify default domains. Production-lean
+leaves Squarespace authoritative by default; the Amplify association's DNS
+targets are exported for the controlled manual DNS change. The public status
+application consumes `status_api_url` only after the API hostname and CORS
+policy have been verified; an empty value renders an explicit unverified state.
+The Amplify applications and the private S3 artifacts are both gated by the
+same `enable_static_frontends` toggle, but they are separate delivery paths:
+Amplify serves the public web surfaces; S3 stores the protected tenant and Kyber
+release archives.
+
+Routing is app-specific. Olympus marketing and status serve prerendered files
+without a catch-all rewrite. Aether marketing has only the explicit
+`/login`, `/signup`, and `/forgot-password` fallbacks needed by its public auth
+threshold; the end-user app and docs portal use an index fallback because they
+resolve client routes at runtime. This keeps route-specific marketing metadata
+intact while preserving direct navigation for the two runtime-routed apps.
 
 ### Route 53 and Squarespace DNS
 
-When `var.squarespace_hosted_zone_enabled` is `true`, the root creates a
-Route 53 hosted zone for `var.amplify_domain_name` and populates it with:
+Squarespace remains the authoritative DNS provider for the first release. After
+the Amplify custom-domain association is created, add the exported
+`amplify_custom_domain_dns_records` CNAME targets in Squarespace for `www`,
+`aether`, `docs`, `app`, and `status`; keep the apex redirect in Squarespace.
+The `amplify_custom_domain_dns_records` output is the source for those records,
+not the Amplify app default domain. `kyber` has no record.
+
+If `var.squarespace_hosted_zone_enabled` is explicitly set to `true`, the root
+instead creates a Route 53 hosted zone for `var.amplify_domain_name` and
+populates it with:
 
 - **Apex A records** — four Squarespace IPs for the marketing site
 - **www CNAME** — `ext-cust.squarespace.com`
 - **Verification CNAME** — optional, gated by `var.squarespace_verification_code`
-- **Product subdomain CNAMEs** — point each Amplify app's subdomain to its
-  default domain
+- **Product subdomain CNAMEs** — point each Amplify app's subdomain to the
+  DNS target returned by its Amplify custom-domain association
 - **API CNAME** — `api.*` points to the ALB automatically (wired from the same
   root module)
-- **Optional CNAMEs** — `kyber` and `status` subdomains, each gated by a
-  non-empty variable
+- **Status** — managed by the Amplify status app when static frontends are
+  enabled; the legacy external CNAME is used only when that app is absent
+- **Kyber** — no record by default. An internal CNAME can be enabled only with
+  the explicit `kyber_internal_dns_enabled` control and target; otherwise a
+  visitor to `kyber.olympuslabsml.com` has no application route
 
 ### Terraform modules
 

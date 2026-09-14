@@ -10,11 +10,23 @@ canonical_owner: sdk@aether
 estimated_read_minutes: 6
 ---
 
-# SDK Release Readiness Report — 8.9.0
+# SDK Release Readiness Report — 1.0.0-alpha.0
 
 ## Release alignment
 
-Aether SDK 8.9.0 uses `packages/shared` as the canonical contract source for event types, consent purposes, schema metadata, health payload shape, wallet VM metadata, commerce, agent, and x402 payloads. Runtime constants and package metadata are synchronized by `scripts/bump-sdk-version.sh` and enforced by `scripts/validate_sdk_release_alignment.py`.
+The first external SDK release target is **1.0.0-alpha.0**. The repository
+platform and package source currently remain at `0.1.0-alpha.0`; the manual
+`publish-sdk.yml` workflow applies the explicit `1.0.0-alpha.0` release version
+across the publishable SDK packages and native artifacts immediately before
+publication. No package is advertised as published until that workflow has
+completed its dry run, required credentials are present, and the publish jobs
+finish successfully.
+
+Aether SDK uses `packages/shared` as the canonical contract source for event
+types, consent purposes, schema metadata, health payload shape, wallet VM
+metadata, commerce, agent, and x402 payloads. Runtime constants and package
+metadata are synchronized by `scripts/bump-sdk-version.sh` and enforced by
+`scripts/validate_sdk_release_alignment.py`.
 
 ## Canonical ingestion contract
 
@@ -38,6 +50,20 @@ any unverifiable claim. The derivation runs inside the repo-doctor SDK
 runtime-parity gate and is embedded in the release evidence bundle
 (`scripts/release/collect_evidence.py`).
 
+## First-release scope
+
+The first release exposes the shared, Web, and React Native SDK families when
+their release gates pass. React Native is a conditional SDK release surface:
+its typecheck, conformance evidence, and hosted native compile gates must pass
+before it is included in the release announcement. The Aether and Kyber mobile
+applications themselves are not part of this release; they remain in
+design-partner/development posture and are explicitly disabled in the staging
+and production-lean feature-flag manifests.
+
+The publish workflow publishes SDK libraries and artifacts only. It does not
+submit either mobile application to TestFlight, the Play internal track, or a
+store.
+
 ## Remaining limitations
 
 - Native iOS/Android queues persist bounded, versioned envelopes with atomic
@@ -46,3 +72,6 @@ runtime-parity gate and is embedded in the release evidence bundle
   events are dropped first under sustained offline backlog.
 - Native multi-VM wallet support is manual metadata emission; automatic provider detection remains Web-only.
 - Native health payloads do not yet include every Web-only metric such as detailed endpoint latency histograms.
+- Publication still requires the repository's external npm, CocoaPods, and
+  GitHub Packages credentials; this checkout contains the workflow and release
+  gates, not those credentials.

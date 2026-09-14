@@ -11,6 +11,7 @@ import { DEFAULT_PATH_ID, DEVELOPER_PATHS, findDeveloperPath } from '@aether-mar
 import { findSection } from '@aether-marketing/content/sections';
 import { AETHER_DOCS_URL } from '@aether-marketing/lib/env';
 import { usePageMeta } from '@aether-marketing/lib/meta';
+import { getLaunchPackPage, launchPackHeading } from '../../../marketing/src/content-loader';
 
 /**
  * Aether /developers marketing page.
@@ -24,11 +25,15 @@ import { usePageMeta } from '@aether-marketing/lib/meta';
  */
 export function DevelopersPage() {
   const section = findSection('/developers');
+  const launchPack = getLaunchPackPage('Aether', '/developers');
   const [activeId, setActiveId] = useState<string>(DEFAULT_PATH_ID);
 
   usePageMeta(
     section !== undefined
-      ? { title: `${section.title} — Aether by Olympus Labs`, description: section.description }
+      ? {
+          title: launchPack?.seoTitle ?? `${section.title} — Aether by Olympus Labs`,
+          description: launchPack?.seoDescription ?? section.description,
+        }
       : { title: 'Aether by Olympus Labs' },
   );
 
@@ -54,7 +59,11 @@ export function DevelopersPage() {
 
   return (
     <>
-      <PageHero eyebrow={section.eyebrow} title={section.title} lead={section.lead} />
+      <PageHero
+        eyebrow={section.eyebrow}
+        title={launchPackHeading(launchPack) ?? section.title}
+        lead={launchPack?.seoDescription ?? section.lead}
+      />
 
       {/* Developer-path selector */}
       <section aria-labelledby="developer-paths-heading" className="border-b border-border-default">
@@ -205,11 +214,11 @@ Aether.track('order_completed', {
         title="Go deeper in the documentation"
         body="Aether’s documentation site carries the technical depth behind the platform — the event model, identity resolution, consent, connectors, and validation."
         primary={{
-          label: cta?.label ?? 'Read the technical documentation',
-          to: cta?.to ?? AETHER_DOCS_URL,
+          label: launchPack?.primaryCta ?? cta?.label ?? 'Read the technical documentation',
+          to: AETHER_DOCS_URL,
           external: true,
         }}
-        secondary={{ label: 'Start building', to: '/signup' }}
+        secondary={{ label: launchPack?.secondaryCta ?? 'Start building', to: '/start-pilot' }}
       />
     </>
   );

@@ -13,37 +13,42 @@ toc_depth: 3
 
 # Web Ecosystem — Deployment Contract
 
-Deployment contract for the two public marketing shells built by the
+Deployment contract for the public marketing and service surfaces built by the
 [Web Ecosystem program](../plans/WEB_ECOSYSTEM_PHASES.md):
-`frontend/aether-marketing` and `frontend/olympus-marketing`.
+`frontend/olympus-marketing`, `frontend/aether-marketing`, `frontend/docs`,
+`frontend/status`, and the protected `frontend/aether` application.
 
 This document is an engineering contract, not marketing copy. Read it as the
 spec a deployer must satisfy and the honest inventory of what does **not** exist
-yet. The shells are static, prerendered sites; their hosting is configured but
-**nothing in this document is deployed**.
+yet. The public shells are static, prerendered sites; their Amplify hosting and
+Terraform wiring are implemented, but **no credentialed AWS apply or live
+origin verification has run**.
 
-## 1. Canonical origins are TARGET origins only
+## 1. Canonical origins and current evidence
 
 The Olympus + Aether web ecosystem targets a fixed set of canonical origins.
-Every one of them is a **target** for a future deploy. None is served by this
-repository today, none has a live TLS certificate provisioned here, and none has
-a CNAME/alias record owned by these shells. This repository deliberately holds
-no live-deploy machinery for the marketing shells: no DNS records, no wiring
-into the tenant app's S3/Terraform/deploy.yml paths (those are live machinery
-for the tenant application and Kyber and are untouched), and no claim that
-traffic is being served.
+The repository now contains the Amplify application definitions, branch builds,
+custom-domain associations, status app, CORS wiring, and profile controls for
+those origins. The checkout has not performed a credentialed AWS plan/apply,
+so none of the domains below may be described as live yet. Staging deliberately
+uses Amplify default domains; production-lean is the controlled custom-domain
+promotion shape.
 
 Kyber stays internal. `kyber.olympuslabsml.com` is declared only so the topology
 is explicit; public marketing never links to it.
 
-## 2. The two shells and their advertised hosts
+## 2. Public surfaces and their advertised hosts
 
 | Workspace | Advertised host | Surface |
 | --- | --- | --- |
 | `frontend/aether-marketing` (`@aether/aether-marketing`) | `https://aether.olympuslabsml.com` | Aether public marketing: platform, solutions, developers, integrations, security, pricing, resources, public auth-threshold routes |
-| `frontend/olympus-marketing` (`@olympus/olympus-marketing`) | `https://olympuslabsml.com` | Olympus Labs corporate marketing |
+| `frontend/olympus-marketing` (`@olympus/olympus-marketing`) | `https://www.olympuslabsml.com` (apex redirects here) | Olympus Labs corporate marketing |
+| `frontend/docs` | `https://docs.olympuslabsml.com` | Public documentation |
+| `frontend/status` | `https://status.olympuslabsml.com` | Public status page backed by the verified API health payload |
+| `frontend/aether` | `https://app.olympuslabsml.com` | Protected end-user tenant application |
+| `frontend/kyber` | No public host by default | Internal operator application; no public DNS or marketing link |
 
-Both builds run the same pipeline:
+The two marketing shell builds run the same pipeline:
 
 ```bash
 npm run build   # = tsc --noEmit && vite build && node scripts/prerender.mjs
@@ -69,18 +74,42 @@ as-is** and must **not** apply an SPA-style catch-all rewrite to `/index.html`
 (such a rewrite would shadow the prerendered deep shells and serve the home head
 to crawlers).
 
-## 3. Static-hosting configuration (`vercel.json`)
+## 3. Amplify hosting configuration
 
-Each shell carries a provider-agnostic static config at
-`frontend/<shell>/vercel.json`. The two files are structurally identical:
+The public surfaces are defined in the root `amplify.yml` and the Terraform
+`local.amplify_apps` map. Each app builds from the monorepo root with its
+app-specific `appRoot`, installs the root lockfile, runs the workspace build,
+and publishes that workspace's `dist/` directory. The managed apps are:
 
-- **No rewrites and no redirects.** The output is prerendered; a blanket
+- `olympus-marketing` → `www`;
+- `aether-marketing` → `aether`;
+- `docs` → `docs`;
+- `aether-app` → `app`; and
+- `status` → `status`.
+
+Staging sets `amplify_custom_domain_enabled = false` and records each app's
+Amplify default domain in SSM. `production-lean` enables the reviewed custom
+domain associations under `olympuslabsml.com` and exports their DNS targets for
+Squarespace. The apex remains on Squarespace and redirects to the `www` surface;
+the Route 53 hosted-zone path is an explicit opt-in. `kyber` is not an Amplify
+app and receives no public DNS record unless the explicit internal DNS controls
+are enabled.
+
+The prerendered marketing bundles retain the following delivery guarantees:
+
+- **No blanket rewrites.** The output is prerendered; a blanket
   rewrite to `/index.html` is explicitly rejected because it would shadow the
   prerendered per-route shells. A catch-all 404 fallback is also omitted: there
   is no authored/prerendered `404.html` in the build to point one at, and a
   rewrite to a nonexistent destination would be a dangling rule. Unknown paths
   therefore fall through to the host's own 404 — the honest default for a fully
   prerendered site.
+- **Only the required client fallbacks are rewired.** Terraform gives
+  `frontend/aether` and `frontend/docs` their SPA fallback because those apps
+  resolve route content at runtime. The Aether marketing app receives targeted
+  `/login`, `/signup`, and `/forgot-password` fallbacks for its auth threshold.
+  Olympus marketing and status receive no catch-all rewrite, so their
+  prerendered route heads and fail-closed status root remain intact.
 - **Security headers** on every response: `X-Content-Type-Options: nosniff`,
   `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`.
 - **Immutable caching** for `/assets/(.*)`: Vite content-hashes those filenames,
@@ -88,13 +117,13 @@ Each shell carries a provider-agnostic static config at
   mirror the tenant app config (`frontend/aether/vercel.json`) for `/assets/*`.
 - No API rewrite, no `framework` field, no trailing-slash/clean-url mutation.
 
-Known limitation recorded here rather than hidden: SPA-only routes that are not
-prerendered — the Aether auth-threshold pages (`/login`, `/signup`,
-`/forgot-password`) and the client-side `*` not-found route — are reachable via
-in-app client navigation only. A direct deep link to one of those paths on a
-pure static host returns the host's default 404. Serving those routes with a
-custom static 404 / threshold shell is future work, not fabricated in this
-phase.
+Known limitation recorded here rather than hidden: the Aether marketing
+auth-threshold routes are direct-linkable on the managed Amplify deployment
+through the three targeted fallbacks, but a pure static host without those
+rules returns its default 404. The client-side `*` not-found route and any
+unlisted marketing path still fall through to the host's default 404. Serving
+those paths with a custom static 404 shell is future work, not fabricated in
+this phase.
 
 ## 4. Environment contract (`VITE_*`)
 
@@ -110,7 +139,7 @@ template ships as `frontend/<shell>/.env.example`.
 | `VITE_AETHER_APP_URL` | `https://app.olympuslabsml.com` | Protected Aether tenant application origin |
 | `VITE_KYBER_URL` | `https://kyber.olympuslabsml.com` | Olympus internal Kyber origin; never linked from public marketing |
 | `VITE_AETHER_DOCS_URL` | `https://docs.olympuslabsml.com` | Aether documentation origin |
-| `VITE_AETHER_STATUS_URL` | `https://status.olympuslabsml.com` | Planned public status origin (see STATUS-GAP below) |
+| `VITE_AETHER_STATUS_URL` | `https://status.olympuslabsml.com` | Public status origin; remains unverified until the API, TLS, DNS, and structured health payload are connected |
 | `VITE_ANALYTICS_PROVIDER` | `off` | `off` \| `plausible` \| `ga4` |
 | `VITE_ANALYTICS_PROPERTY_ID` | *(empty)* | Plausible site domain or GA4 measurement id |
 
@@ -148,55 +177,59 @@ analytics story:
 - This is **configuration surface, not a live claim**. No analytics property is
   provisioned, and no script loads in the default build.
 
-## 6. "To deploy" — procedure only
+## 6. Provisioning sequence
 
-The steps below are a **procedure** for whoever provisions a static host later.
-They are not a record of something already done, and origin/TLS/Route53 work is
-out of scope until infrastructure exists.
+The repository implementation is now complete for the web layer. External
+evidence starts with AWS authentication and a reviewed Terraform plan; no
+credentialed apply has occurred from this checkout.
 
-1. Produce the artifact: from the shell workspace run `npm run build`, which
-   emits the `dist/` layout from section 2.
-2. Point a provider static host at that `dist/` directory:
-   - **Static host (Vercel-style):** apply `frontend/<shell>/vercel.json` as-is.
-     Confirm the security headers and the immutable `/assets/(.*)` cache header
-     are honored, and confirm no platform setting injects a catch-all rewrite.
-   - **Object store + CDN (S3 + CloudFront-style):** upload `dist/` to the
-     bucket, map the CDN origin to it, replicate the two header rules from
-     `vercel.json` as CloudFront response-headers policies (immutable cache for
-     `/assets/*`, security headers for the remaining paths), and leave unknown
-     paths to the default 403/404 error response.
-3. Provision the advertised host's TLS certificate and DNS as the owning infra
-   work — deliberately **not** included here.
-4. If analytics is wanted on a real deploy, set `VITE_ANALYTICS_PROVIDER` and
-   `VITE_ANALYTICS_PROPERTY_ID` at build time; otherwise leave them off.
+1. Authenticate the AWS account and confirm the intended account and region
+   before touching infrastructure.
+2. Run the repository checks and a credentialed plan with the staging profile.
+   Staging uses the real Aurora path with auto-pause (`0` minimum ACU), no NAT
+   gateway, Amplify default domains, and an empty status API URL until the
+   backend health origin is verified.
+3. Apply only the checksum-bound plan through the repository's Terraform
+   promotion workflow.
+4. Execute the staging lifecycle: wake, migrate, publish the protected tenant
+   and Kyber artifacts, verify the API and all five Amplify default domains,
+   run smoke/load checks, prove rollback, then sleep the environment. If the
+   status API URL is still unset, the status page must remain explicitly
+   **not yet verified**, not green.
+5. After staging evidence and cost observation, create and review a separate
+   production-lean plan. That profile enables the reviewed custom-domain
+   association under `olympuslabsml.com`, keeps Kyber without public DNS, and
+   requires a verified status health origin before promotion.
+6. Enable analytics only as a separate, deliberate configuration change after
+   a property owner and budget are known; it is off in the release profiles.
 
-The tenant app / Kyber live-deploy machinery (docs/archive/legacy-architecture/aws-deployment/, Terraform,
-deploy workflows) is intentionally not referenced: those paths deploy the
-tenant application and Kyber, not these shells.
+The tenant app and Kyber deploy machinery remain in the same Terraform and
+workflow system as the public shells. Kyber is an internal operator surface:
+there is no public Amplify app or Route 53 record by default, and a request to
+the Kyber hostname must not expose a public application.
 
-## 7. STATUS-GAP: the status origin is planned, not real
+## 7. Status evidence boundary
 
-`status.olympuslabsml.com` is a **planned origin**. The real status source today
-is the tenant-safe backend status surface (`/v1/status*` API) described in
-[App Routing & Domains](../APP-ROUTING-DOMAINS.md); it is owned by the tenant
-deployable, not by the marketing shells.
+`frontend/status` is a buildable public status application and is wired as the
+fifth Amplify app. It consumes the backend health endpoint configured through
+`VITE_STATUS_API_URL` and applies a fail-closed display policy:
 
-- The Olympus shell's footer **"Service status"** link (authored in
-  `frontend/olympus-marketing/src/content/sections.ts`) is env-driven through
-  `VITE_AETHER_STATUS_URL`, so it can later point at a real, public status page
-  without a code change.
-- **No public status page is fabricated in this phase.** The marketing shells
-  must not present `status.olympuslabsml.com` as a live surface. Until a real
-  status page is deployed, that footer link resolves to a target origin only.
+- an unset URL means **Status not yet verified**;
+- a non-success or unhealthy structured payload means **degraded**;
+- an unreachable endpoint means **incident**; and
+- only a structured healthy payload can display **operational**.
 
-## 8. Known coverage gap: marketing shells are outside data-truth/domain checks
+The Olympus footer link may point to the status origin as part of the public
+information architecture, but the live status claim remains external evidence:
+certificate, DNS, CORS, API reachability, and payload shape all have to be
+verified in staging before the page can be treated as operational.
 
-`scripts/validate_frontend_data_truth.py` enforces source/bundle data-truth
-boundaries for `aether` and `kyber` only; there is no equivalent covering the
-marketing shells, and no `frontend-data-truth`/domain-check manifest exists for
-either marketing workspace yet. The marketing shells also have no route-state /
-value-display matrix of the kind the tenant applications carry. This document is
-the record of that gap: it exists, it is intentional for this phase, and it
-should be closed before any shell is promoted to a live origin. Phase 7 of the
-[Web Ecosystem program](../plans/WEB_ECOSYSTEM_PHASES.md) is the acceptance
-point that must revisit this.
+## 8. Coverage and follow-up
+
+Focused shell tests, type checks, production builds, the launch-pack content
+loader, the status fail-closed behavior, and the Terraform/profile validators
+cover the implemented web layer. The remaining release work is credentialed:
+verify the deployed domain matrix and API health contract in staging, capture
+the smoke/load/rollback/sleep evidence, observe cost, and then promote the
+reviewed production-lean profile. This document must not be used to imply that
+those live checks have already run.

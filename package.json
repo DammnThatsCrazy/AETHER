@@ -19,6 +19,7 @@
     "frontend/shared",
     "frontend/docs",
     "frontend/demo",
+    "frontend/status",
     "frontend/olympus-marketing",
     "frontend/aether-marketing"
   ],

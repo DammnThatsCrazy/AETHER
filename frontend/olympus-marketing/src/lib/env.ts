@@ -10,7 +10,7 @@ const meta = import.meta as unknown as { env?: Record<string, string | undefined
 const env = meta.env ?? {};
 
 /** Olympus Labs corporate marketing origin (this site). */
-export const OLYMPUS_SITE_URL = env.VITE_OLYMPUS_SITE_URL ?? 'https://olympuslabsml.com';
+export const OLYMPUS_SITE_URL = env.VITE_OLYMPUS_SITE_URL ?? 'https://www.olympuslabsml.com';
 
 /** Aether public marketing origin (aether.olympuslabsml.com). */
 export const AETHER_MARKETING_URL = env.VITE_AETHER_MARKETING_URL ?? 'https://aether.olympuslabsml.com';

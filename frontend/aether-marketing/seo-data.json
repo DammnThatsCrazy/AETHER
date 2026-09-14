@@ -1,41 +1,45 @@
 {
   "host": "https://aether.olympuslabsml.com",
-  "robotsDisallow": ["/login", "/signup", "/forgot-password"],
+  "robotsDisallow": [
+    "/login",
+    "/signup",
+    "/forgot-password"
+  ],
   "routes": [
     {
       "path": "/platform",
-      "title": "One governed graph across the activity that shapes outcomes — Aether by Olympus Labs",
-      "description": "The Aether platform — identity resolution, intelligence graph, journey, campaign, communications, financial observability, agents, outcomes, and governance."
+      "title": "Aether product overview",
+      "description": "Aether connects evidence across applications, business systems, campaigns, communications, agents, and value flows to create governed relationship perspectives."
     },
     {
       "path": "/solutions",
-      "title": "Built for the shape of your business — Aether by Olympus Labs",
-      "description": "Aether solutions — customer intelligence, commerce, SaaS, fintech, Web3, AI-native, enterprise, and public sector."
+      "title": "Aether solutions",
+      "description": "Relationship intelligence solutions for commerce, SaaS, communications, operations, and governed agents."
     },
     {
       "path": "/developers",
-      "title": "Integrate once. Resolve everywhere. — Aether by Olympus Labs",
-      "description": "Aether developer surface — SDKs, event model, identity resolution, consent, validation, and technical documentation."
+      "title": "Developers — Aether",
+      "description": "Build Aether's connection layer through the source path you already control, then preserve consent, identity, relationships, perspectives, and outcomes."
     },
     {
       "path": "/integrations",
-      "title": "Connectors with truthful availability states — Aether by Olympus Labs",
-      "description": "Aether integrations directory — search by provider, category, use case, authentication type, data direction, and availability."
+      "title": "Aether integrations and connections",
+      "description": "Connect the systems, channels, and actors that make a relationship visible."
     },
     {
       "path": "/security",
-      "title": "Boundaries are the design — Aether by Olympus Labs",
-      "description": "Aether security — tenant isolation, credential handling, authorization, consent, retention, auditability, and deployment models."
+      "title": "Security and trust — Aether",
+      "description": "Aether keeps tenant scope, consent, provenance, freshness, confidence, authority, and availability visible across the connection-to-perspective loop."
     },
     {
       "path": "/pricing",
-      "title": "Pricing that matches usage, not guesswork — Aether by Olympus Labs",
-      "description": "Aether pricing — plan audience, usage limits, capabilities, support, retention, environments, integration limits, and deployment options."
+      "title": "Pricing and packages — Aether",
+      "description": "Aether packages access to connection and relationship intelligence infrastructure around connected evidence, perspectives, governance, support, and deployment complexity."
     },
     {
       "path": "/resources",
-      "title": "Guides, research, and product notes — Aether by Olympus Labs",
-      "description": "Aether resources — guides, research, changelog, webinars, and future case material."
+      "title": "Aether resources — Olympus Labs",
+      "description": "Guides, research, release notes, and proof material for teams evaluating relationship intelligence."
     },
     {
       "path": "/company",
@@ -109,8 +113,8 @@
     },
     {
       "path": "/solutions/saas",
-      "title": "SaaS on a governed account graph — Aether by Olympus Labs",
-      "description": "How Aether resolves users, accounts, and organizations into one governed graph so product-led businesses read usage, billing, and support as one relationship."
+      "title": "SaaS relationship intelligence — Aether",
+      "description": "Connect product usage, accounts, communications, campaigns, support, expansion, and outcomes for SaaS teams."
     },
     {
       "path": "/solutions/fintech",
@@ -134,8 +138,228 @@
     },
     {
       "path": "/solutions/public-sector",
-      "title": "Public service on one governed graph — Aether by Olympus Labs",
-      "description": "How Aether helps public-sector teams see constituents across programs on one consent- and audit-governed graph — only where the rules permit."
+      "title": "Governed intelligence for public-sector systems — Aether",
+      "description": "Connect authorized evidence across public-sector workflows while preserving scope, provenance, review, and deployment boundaries."
+    },
+    {
+      "path": "/architecture",
+      "title": "Aether architecture",
+      "description": "Understand how Aether moves from source connections through evidence preservation, relationship resolution, perspectives, governance, and outcomes."
+    },
+    {
+      "path": "/proof/benchmark",
+      "title": "Aether benchmark program",
+      "description": "A governed benchmark program for measuring connection quality, relationship coverage, and perspective usefulness."
+    },
+    {
+      "path": "/campaign-attribution",
+      "title": "Campaign attribution and journeys — Aether",
+      "description": "Connect campaigns, communications, touchpoints, journeys, conversions, and value without confusing source classification with campaign identity."
+    },
+    {
+      "path": "/connections",
+      "title": "Connections — Aether",
+      "description": "Aether connects application, business-system, social, campaign, communication, webhook, import, API, and agent evidence through a single relationship layer."
+    },
+    {
+      "path": "/contact",
+      "title": "Contact Aether",
+      "description": "Start an Aether product, pilot, developer, security, procurement, or proof conversation around the relationship question you need to answer."
+    },
+    {
+      "path": "/proof/customer-case-study",
+      "title": "Aether customer case study program",
+      "description": "A permissioned case study program for Aether customers and proof partners."
+    },
+    {
+      "path": "/proof/customer-outcomes",
+      "title": "Aether customer outcomes",
+      "description": "A structured way to document outcomes from Aether connection and relationship pilots."
+    },
+    {
+      "path": "/faq",
+      "title": "Frequently asked questions — Aether",
+      "description": "Answers about Aether connections, SDKs, relationships, perspectives, readiness, pricing, proof, and deployment."
+    },
+    {
+      "path": "/governance",
+      "title": "Governance and claims — Aether",
+      "description": "Aether separates live behavior, configured capability, beta, pilot, planned direction, evidence, inference, recommendation, approval, and outcome."
+    },
+    {
+      "path": "/how-it-works",
+      "title": "How Aether works — From connected evidence to accountable perspective",
+      "description": "Aether moves from connection to preserved evidence, relationship resolution, governed perspective, approved action, and observed outcome."
+    },
+    {
+      "path": "/identity-resolution",
+      "title": "Identity resolution — Aether",
+      "description": "Aether preserves source evidence and resolves tenant-scoped identities and relationships with confidence, uncertainty, and review states visible."
+    },
+    {
+      "path": "/intelligence-graph",
+      "title": "Intelligence graph — Aether",
+      "description": "Connect customer, commerce, campaign, communication, journey, attribution, and outcome evidence in a governed intelligence graph."
+    },
+    {
+      "path": "/perspectives",
+      "title": "Perspectives and relationships — Aether",
+      "description": "Aether preserves the relationships that make evidence useful and creates perspectives with provenance, confidence, uncertainty, authority, and outcomes visible."
+    },
+    {
+      "path": "/procurement",
+      "title": "Procurement and assurance — Aether",
+      "description": "Review Aether architecture, data flow, tenant boundaries, consent, retention, provenance, availability, support, and deployment conditions."
+    },
+    {
+      "path": "/product",
+      "title": "Aether product overview",
+      "description": "Aether connects evidence across applications, business systems, campaigns, communications, agents, and value flows to create governed relationship perspectives."
+    },
+    {
+      "path": "/profile-360",
+      "title": "Profile 360 — Aether",
+      "description": "Profile 360 brings identity, journeys, communications, value, relationships, and evidence state into one governed perspective."
+    },
+    {
+      "path": "/proof/methodology",
+      "title": "Aether proof methodology",
+      "description": "How Olympus Labs develops responsible proof for Aether deployments."
+    },
+    {
+      "path": "/proof-partner",
+      "title": "Become an Aether proof partner",
+      "description": "Invite an individual or team with a concrete relationship question to document a governed connection-to-perspective loop."
+    },
+    {
+      "path": "/proof/research-brief",
+      "title": "Aether research briefs",
+      "description": "Research briefs on connected evidence, relationship intelligence, and accountable agentic systems."
+    },
+    {
+      "path": "/start-pilot",
+      "title": "Start an Aether pilot",
+      "description": "Bring one relationship question, the systems that contain the evidence, and the outcome you want to make observable."
+    },
+    {
+      "path": "/status",
+      "title": "Aether service status",
+      "description": "Check Aether service availability, incidents, maintenance, and the difference between service health and provider readiness."
+    },
+    {
+      "path": "/stories",
+      "title": "Stories and proof — Aether",
+      "description": "See how Aether documents connection-to-perspective loops while distinguishing synthetic demonstrations, pilots, production results, and approved publication."
+    },
+    {
+      "path": "/solutions/agent-governance",
+      "title": "Agent relationship governance — Aether",
+      "description": "Preserve human-agent, agent-agent, and agent-human context, authority, handoffs, approvals, and outcomes with Aether."
+    },
+    {
+      "path": "/solutions/communications",
+      "title": "Communications intelligence — Aether",
+      "description": "Connect email, messages, campaigns, approvals, handoffs, journeys, and outcomes as relationship evidence in Aether."
+    },
+    {
+      "path": "/solutions/ecommerce",
+      "title": "E-commerce relationship intelligence — Aether",
+      "description": "Connect product, commerce, campaign, communication, identity, journey, attribution, and outcome evidence for e-commerce teams."
+    },
+    {
+      "path": "/solutions/financial-services",
+      "title": "Financial relationship intelligence — Aether",
+      "description": "Connect authorized financial, customer, communication, identity, and operational evidence with explicit provenance and governance."
+    },
+    {
+      "path": "/solutions/operations",
+      "title": "Operational relationship intelligence — Aether",
+      "description": "Connect operational events, decisions, workflows, agents, resources, and outcomes in one governed perspective."
+    },
+    {
+      "path": "/developers/api-reference",
+      "title": "Aether API reference",
+      "description": "Public API reference entry point for Aether connection, relationship, and perspective surfaces."
+    },
+    {
+      "path": "/developers/changelog",
+      "title": "Aether changelog",
+      "description": "Track changes to Aether connection, event, relationship, and perspective surfaces."
+    },
+    {
+      "path": "/developers/events",
+      "title": "Aether events and observations",
+      "description": "Understand the event contracts that carry evidence into Aether."
+    },
+    {
+      "path": "/developers/integrations",
+      "title": "Aether integrations",
+      "description": "Choose the connection paths needed to answer a relationship question in Aether."
+    },
+    {
+      "path": "/developers/quickstart/android",
+      "title": "Android quickstart — Aether",
+      "description": "Add the Aether Android connection path with consent, lifecycle, retry, and canonical event handling."
+    },
+    {
+      "path": "/developers/quickstart/backend",
+      "title": "Backend quickstart — Aether",
+      "description": "Send server-side observations to Aether with tenant scope, provenance, idempotency, and contract versioning preserved."
+    },
+    {
+      "path": "/developers/quickstart/electron",
+      "title": "Electron quickstart — Aether",
+      "description": "Connect an Electron application to Aether while keeping credentials, consent, and source context within the correct process boundary."
+    },
+    {
+      "path": "/developers/quickstart/ios",
+      "title": "iOS quickstart — Aether",
+      "description": "Add the Aether iOS connection path with consent-aware capture and verified event contracts."
+    },
+    {
+      "path": "/developers/quickstart/react-native",
+      "title": "React Native quickstart — Aether",
+      "description": "Add the Aether React Native path and verify native lifecycle, identity, consent, and event parity."
+    },
+    {
+      "path": "/developers/quickstart/rest",
+      "title": "REST quickstart — Aether",
+      "description": "Send a first governed observation to Aether through the REST API and verify the resulting evidence state."
+    },
+    {
+      "path": "/developers/quickstart/web",
+      "title": "Web quickstart — Aether",
+      "description": "Install the Aether Web SDK, apply consent, send a governed observation, and verify the first relationship perspective."
+    },
+    {
+      "path": "/developers/sdk/android",
+      "title": "Aether Android SDK",
+      "description": "Capture governed Android observations as one part of the Aether connection suite."
+    },
+    {
+      "path": "/developers/sdk/ios",
+      "title": "Aether iOS SDK",
+      "description": "Capture governed first-party mobile observations with the Aether iOS SDK."
+    },
+    {
+      "path": "/developers/sdk/react-native",
+      "title": "Aether React Native SDK",
+      "description": "Connect React Native product experiences to Aether with governed observations."
+    },
+    {
+      "path": "/developers/sdk/web",
+      "title": "Aether Web SDK",
+      "description": "Use the Web SDK as one governed connection path into Aether."
+    },
+    {
+      "path": "/developers/start-here",
+      "title": "Start here — Aether developers",
+      "description": "Choose the first Aether connection path and move from a relationship question to a governed observation and perspective."
+    },
+    {
+      "path": "/developers/troubleshooting",
+      "title": "Aether troubleshooting",
+      "description": "Diagnose connection, ingestion, identity, and perspective issues in Aether."
     }
   ]
 }

@@ -69,7 +69,16 @@ build status for each surface.
 | `app.olympuslabsml.com` | Protected Aether tenant application | Authenticated Aether tenants | `frontend/aether` | Existing |
 | `kyber.olympuslabsml.com` | Kyber — Olympus Labs' internal operator application | Olympus workforce only | `frontend/kyber` | Existing |
 | `docs.olympuslabsml.com` | Documentation | Public | `frontend/docs` | Existing |
-| `status.olympuslabsml.com` | Status | Public | — | Planned |
+| `status.olympuslabsml.com` | Status | Public | `frontend/status` | Code-complete and Amplify/Terraform-wired; live API status remains unverified until credentialed staging |
+
+The public web provisioning path is now part of the AWS deployment contract:
+`olympus-marketing`, `aether-marketing`, `docs`, `aether-app`, and `status` are
+separate Amplify applications. Staging uses their Amplify default domains;
+`production-lean` associates `www`, `aether`, `docs`, `app`, and `status` under
+`olympuslabsml.com` and exports the association CNAME targets for the
+authoritative Squarespace DNS. No credentialed AWS apply has run yet, so these
+are implemented targets rather than live-origin claims. Kyber remains outside
+this public set and has no public DNS record by default.
 
 The authentication routes belong to the **Aether public** surface
 (`aether.olympuslabsml.com`), not to the tenant origin. The public experience
@@ -259,15 +268,20 @@ Public web content follows the same truth standard as the product:
 | `frontend/shared` | React/ui layer and shared styles (`@aether/ui`) | npm workspaces |
 | `frontend/olympus-marketing` | Olympus Labs corporate shell (`@olympus/olympus-marketing`) | npm workspaces, `bump_version.py`, `config/test_suites.yaml` |
 | `frontend/aether-marketing` | Aether public shell + AuthLayout (`@aether/aether-marketing`) | npm workspaces, `bump_version.py`, `config/test_suites.yaml` |
+| `frontend/marketing` | Drive-sourced shared launch-pack content and renderer inputs for both public marketing shells | `frontend-aether-marketing` + `frontend-olympus-marketing` verification suites |
 | `frontend/aether` | Protected Aether tenant app | npm workspaces |
 | `frontend/kyber` | Kyber internal operator app | npm workspaces |
 | `frontend/docs` | Docs shell | npm workspaces |
+| `frontend/status` | Fail-closed public service-status shell (`status.olympuslabsml.com`) | npm workspaces, `config/test_suites.yaml` |
 
 The two marketing workspaces are npm workspace members, participate in the
 root `typecheck`/`test`/`build` gates, carry the platform version via
 `bump_version.py`, and are declared as test suites in
 `config/test_suites.yaml`. Their tests run under Vitest with the same jsdom
-setup and `@aether/shared` aliasing as the other frontend workspaces.
+setup and `@aether/shared` aliasing as the other frontend workspaces. The
+shared launch-pack content is an input to both suites, while the status shell
+has its own workspace test entry and remains fail-closed until a real health
+endpoint is configured.
 
 ## 8. Phase map
 

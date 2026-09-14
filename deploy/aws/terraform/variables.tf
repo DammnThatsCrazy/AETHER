@@ -420,13 +420,13 @@ variable "log_retention_days" {
 # Auth0
 # --------------------------------------------------------------------------
 
-# The Auth0 tenant domain and the Terraform M2M application's client id and
-# secret are NOT declared here, on purpose. A root variable is reproduced in
-# full in `terraform show -json` output regardless of `sensitive = true`, so
-# declaring the secret here put it in clear text in every plan artifact. The
-# auth0 provider takes AUTH0_DOMAIN / AUTH0_CLIENT_ID / AUTH0_CLIENT_SECRET
-# from its own environment, which the CI runner exports; TF_VAR_auth0_* names
-# are no longer read by anything. See modules/auth0/main.tf.
+# The Auth0 management client id and secret are NOT declared here, on purpose.
+# A root variable is reproduced in full in `terraform show -json` output
+# regardless of `sensitive = true`, so declaring either secret here would put it
+# in clear text in every plan artifact. The public tenant domain is safe to pass
+# as `auth0_domain` for the hosted SPA build; the Auth0 provider still takes
+# AUTH0_DOMAIN / AUTH0_CLIENT_ID / AUTH0_CLIENT_SECRET from its own environment.
+# See modules/auth0/main.tf.
 #
 # Do not "restore for convenience": there is no way to declare a root variable
 # that a plan JSON will not contain.
@@ -437,6 +437,11 @@ variable "auth0_api_audience" {
   default     = "https://api.aether.io"
 }
 
+variable "auth0_domain" {
+  type        = string
+  description = "Auth0 tenant domain injected into hosted SPA builds (the provider itself reads AUTH0_DOMAIN from the runner environment)."
+}
+
 variable "aether_app_url" {
   type        = string
   description = "Public URL of the Aether customer app (e.g. https://app.olympuslabsml.com)"
@@ -445,6 +450,12 @@ variable "aether_app_url" {
 variable "kyber_app_url" {
   type        = string
   description = "Public URL of the Kyber operator console (e.g. https://kyber.olympuslabsml.com)"
+}
+
+variable "api_cors_origins" {
+  type        = list(string)
+  description = "Optional explicit API CORS origin list. When empty, Terraform derives the canonical Aether, Kyber, and public Amplify origins."
+  default     = []
 }
 
 variable "enable_social_connections" {
@@ -476,10 +487,22 @@ variable "amplify_branch" {
   default     = "main"
 }
 
+variable "amplify_custom_domain_enabled" {
+  type        = bool
+  description = "Associate Amplify applications with the canonical public domain. Keep false for staging so staging uses Amplify default domains and cannot claim production DNS."
+  default     = false
+}
+
 variable "amplify_domain_name" {
   type        = string
   description = "Root domain for Amplify custom domains and Route 53 zone (e.g. olympuslabsml.com)."
   default     = "olympuslabsml.com"
+}
+
+variable "status_api_url" {
+  type        = string
+  description = "Public HTTPS health endpoint consumed by the status application. Leave empty until the target environment has a verified API hostname and certificate."
+  default     = ""
 }
 
 # --------------------------------------------------------------------------
@@ -488,7 +511,7 @@ variable "amplify_domain_name" {
 
 variable "squarespace_hosted_zone_enabled" {
   type        = bool
-  description = "Create a Route 53 hosted zone and Squarespace DNS records for the apex/www domain. Product subdomains are pointed at Amplify."
+  description = "Opt in to a Route 53 hosted zone and Squarespace-shaped DNS records. Keep false while Squarespace remains authoritative; add Amplify association targets there instead."
   default     = false
 }
 
@@ -501,12 +524,18 @@ variable "squarespace_verification_code" {
 
 variable "kyber_cname_target" {
   type        = string
-  description = "CNAME target for the kyber operator console subdomain. Leave empty to skip."
+  description = "Optional internal CNAME target for the Kyber operator console. It is ignored unless kyber_internal_dns_enabled is true."
   default     = ""
+}
+
+variable "kyber_internal_dns_enabled" {
+  type        = bool
+  description = "Explicitly enable the reviewed internal Kyber DNS record. Keep false so end users receive no public Kyber surface."
+  default     = false
 }
 
 variable "status_cname_target" {
   type        = string
-  description = "CNAME target for the status page subdomain. Leave empty to skip."
+  description = "Legacy external status CNAME target. The managed Amplify status app takes precedence when static frontends are enabled."
   default     = ""
 }

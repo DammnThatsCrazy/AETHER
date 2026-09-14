@@ -19,8 +19,11 @@ with the hosting/config contract.
 ## Build artifacts
 
 - Backend: `services/backend/Dockerfile`
-- Aether frontend: `frontend/aether/Dockerfile`
-- Kyber frontend: `frontend/kyber/Dockerfile`
+- Aether tenant frontend: `frontend/aether/Dockerfile`
+- Kyber operator frontend: `frontend/kyber/Dockerfile` (private artifact path)
+- Olympus Labs marketing: `frontend/olympus-marketing`
+- Aether marketing: `frontend/aether-marketing`
+- Public status: `frontend/status`
 - ML serving: `services/ml/docker/Dockerfile`
 
 `.github/workflows/deploy.yml` builds and pushes images to ECR; infrastructure is
@@ -62,8 +65,11 @@ env vars are absent; they are simply inactive.
 
 ## Health checks
 
-The backend exposes health under `/v1/health`; tenant-safe status is at
-`/v1/status`. Reliability service/pipeline/queue health is operator-only under
+The backend exposes liveness and structured component health under `/health` and
+`/v1/health`; readiness is `/ready` and `/v1/ready`. The public status app reads
+the verified `/health` payload and renders unknown/degraded/down component
+states without substituting tenant-specific feature readiness. Reliability
+service/pipeline/queue health remains operator-only under
 `/v1/admin/kyber/reliability/*`.
 
 ## Readiness summary

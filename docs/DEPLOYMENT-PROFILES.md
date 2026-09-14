@@ -14,14 +14,14 @@ source_hashes:
   "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
-  "deploy/aws/terraform/main.tf": "sha256:d49a3a87a2641c8cdd9390f1f0637572ba5961146b30eff37892aeee66c8131e"
+  "deploy/aws/terraform/main.tf": "sha256:37b68c5d17e0d510f83d7a8181b077cdab1d7c73a5365471394622f1ff6802cd"
   "deploy/aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
   "deploy/aws/terraform/modules/aurora/main.tf": "sha256:16c4beb8ccab1af164ff62f8aa2d515a5efc3f093b7878411f40aa14ce39e094"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "deploy/aws/terraform/modules/secrets/main.tf": "sha256:998303bfe6e5a0a24477933beeb650c02e5e43469d9cba6d0af84e27e50d8032"
   "deploy/aws/terraform/modules/secrets/rotation.tf": "sha256:bf7623169658a9272a007df782216956b750f30bee3c5d8095f708c44a9d2239"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
-  "deploy/aws/terraform/variables.tf": "sha256:7dfc485a37776610062b703a91e594b49e2d04c5d932592fca67adbda1076961"
+  "deploy/aws/terraform/variables.tf": "sha256:4890da151abf54a6493d26a0290e13fc88e4a0891bb801ce4361e5fba6ff4307"
   "scripts/release/check_profile_config.py": "sha256:b22ce319b10983826ced5efbe43ab57cd2e3c7463941fbd9a6c22eda9785d90e"
   "scripts/release/check_profile_parity.py": "sha256:0da55a725906bbca79c6f09c0032ad18ebeb9ae76165e8f86b472c58984dc03e"
 ---
@@ -240,6 +240,14 @@ staging apply policy can scope grants to staging resources. These tags and
 service conditions are part of the Terraform profile shape and must remain
 covered by the profile plan and cost/topology gates before promotion.
 
+The public web surfaces are five separate Amplify applications — Olympus
+marketing, Aether marketing, docs, the end-user app, and status. Staging uses
+their Amplify default domains; production-lean is the first profile that
+associates the reviewed `www`, `aether`, `docs`, `app`, and `status`
+subdomains under `olympuslabsml.com`. Kyber is not one of those public apps and
+has no public DNS route. The protected tenant and Kyber release archives remain
+private S3 artifacts for the staging rehearsal and internal operator path.
+
 The release pipeline creates `aether-backend` before Terraform can adopt the
 repository. It is therefore an intentional staging exception: that repository
 is immutable and AES-256 encrypted, while `aether-ml-serving`, `aether-kyber`,
@@ -252,7 +260,7 @@ delete/recreate plan.
 |---|---|
 | **Purpose** | Release rehearsal. Wakes for validation, proves a release, returns to zero. |
 | **Selection** | `terraform plan -var-file=profiles/staging.tfvars`, or `.github/workflows/staging-lifecycle.yml`, which dispatches `terraform-promote.yml` for every mutation. `environment = "staging"` is set explicitly; the root default is `production`. |
-| **Resource inventory** | Aurora Serverless v2 (`aurora_min_acu = 0`, max 2), DynamoDB cache, SNS → per-role SQS queues + DLQs, S3 object lake, S3 SPA origins + SSM pointers, ALB, Secrets/KMS, CloudWatch alarms, inline ML, Postgres graph. **Zero** MSK, ElastiCache, Neptune, ClickHouse, dedicated ML, frontend ECS, legacy RDS, NAT gateways, Elastic IPs and self-managed Prometheus/Grafana. Aurora and Postgres graph are gated by `skip_aurora` (default `false`); free-tier accounts set `skip_aurora = true` to defer both while validating the rest of the stack. Neither appears in the staging `required_resources` list for this reason. |
+| **Resource inventory** | Aurora Serverless v2 (`aurora_min_acu = 0`, max 2), DynamoDB cache, SNS → per-role SQS queues + DLQs, S3 object lake, private S3 SPA artifacts + SSM pointers, five Amplify public web apps, ALB, Secrets/KMS, CloudWatch alarms, inline ML, Postgres graph. **Zero** MSK, ElastiCache, Neptune, ClickHouse, dedicated ML, frontend ECS, legacy RDS, NAT gateways, Elastic IPs and self-managed Prometheus/Grafana. Aurora and Postgres graph are gated by `skip_aurora` (default `false`); free-tier accounts set `skip_aurora = true` to defer both while validating the rest of the stack. Neither appears in the staging `required_resources` list for this reason. |
 | **Runtime topology** | `execution_mode: consolidated`. Two always-on tasks when awake: `api` (1 vCPU / 2 GiB, max 2) and `lean-worker` (1 vCPU / 4 GiB, max 2) hosting all eight worker roles. `staging_state: asleep` drives every desired count **and every autoscaling floor** to zero. |
 | **Data behaviour** | `database`/`graph`/`analytics: aurora_postgres`/`postgres`, `cache: dynamodb`, `event: sns_sqs`, `object: s3`, `ml: inline`. Aurora auto-pauses at 0 ACU while asleep. |
 | **Network behaviour** | `network_egress_mode = "public_ip"` → `nat_mode = "none"`. Tasks carry a public IP on the task ENI for egress; inbound is governed entirely by the task security group, which accepts traffic only from the ALB. |
@@ -269,7 +277,7 @@ delete/recreate plan.
 |---|---|
 | **Purpose** | Founding tenant and early controlled production — the smallest footprint that runs the whole platform for a first paying customer. |
 | **Selection** | `terraform plan -var-file=profiles/production-lean.tfvars`. It is also the root default for `var.deployment_profile`. |
-| **Resource inventory** | Identical class list to `staging`, sized for production: Aurora Serverless v2 (`aurora_min_acu = 0.5`, max 4), DynamoDB cache, SNS/SQS + DLQs, S3 object lake, S3 SPA origins + SSM pointers, ALB, Secrets/KMS, CloudWatch alarms, inline ML, Postgres graph. **Zero** MSK, ElastiCache, Neptune, ClickHouse, dedicated ML, frontend ECS, legacy RDS, NAT gateways, Elastic IPs, Prometheus/Grafana. |
+| **Resource inventory** | Identical runtime class list to `staging`, sized for production: Aurora Serverless v2 (`aurora_min_acu = 0.5`, max 4), DynamoDB cache, SNS/SQS + DLQs, S3 object lake, private S3 tenant/Kyber artifacts + SSM pointers, five Amplify public web apps with the production custom-domain associations, ALB, Secrets/KMS, CloudWatch alarms, inline ML, Postgres graph. **Zero** MSK, ElastiCache, Neptune, ClickHouse, dedicated ML, frontend ECS, legacy RDS, NAT gateways, Elastic IPs, Prometheus/Grafana. |
 | **Runtime topology** | `execution_mode: consolidated`. Two always-on tasks: `api` (1 vCPU / 2 GiB, max 4) and `lean-worker` (2 vCPU / 8 GiB, max 4) hosting all eight worker roles. No Spot at any capacity, because the task hosts `outbox-relay`. |
 | **Data behaviour** | Aurora Postgres is the database, graph and analytics of record. DynamoDB is the cache. SNS/SQS is the event substrate. ML runs in-process (`remote_ml: false`), so the semantic classifier is a resident model in the `lean-worker` task. |
 | **Network behaviour** | `network_egress_mode = "public_ip"` → `nat_mode = "none"`. NAT is *forbidden unless explicit*: setting this variable to a NAT mode is the explicit opt-in and must be reviewed as a cost-policy exception. |
@@ -639,6 +647,7 @@ Externally blocked — recorded as blocked, never counted as done:
 
 ```bash
 make deployment-profile-gate          # every profile gate that runs without AWS credentials
+make resolved-feature-flags            # explicit staging and production-lean flag manifests
 make validate-profile-config          # profile matrix + posture schema
 make validate-cost-policy             # forbidden/required resource declarations
 make validate-cost-policy-terraform   # Terraform locals statically encode the policy

@@ -25,6 +25,7 @@ import { findSection } from "@aether-marketing/content/sections";
 import { buildIntegrationsHandoffUrl } from "@aether-marketing/lib/handoff";
 import { AETHER_DOCS_URL } from "@aether-marketing/lib/env";
 import { usePageMeta } from "@aether-marketing/lib/meta";
+import { getLaunchPackPage, launchPackHeading } from "../../../marketing/src/content-loader";
 
 /** Short display form for a real ConnectorCategory literal (marketing voice). */
 const ACRONYM_CATEGORY = new Set<string>(["crm"]);
@@ -64,12 +65,13 @@ function chipClass(pressed: boolean): string {
  * this page is the interactive rendering of that entry. */
 export function IntegrationsPage() {
   const section = findSection("/integrations");
+  const launchPack = getLaunchPackPage("Aether", "/integrations");
 
   usePageMeta(
     section !== undefined
       ? {
-          title: `${section.title} — Aether by Olympus Labs`,
-          description: section.description,
+          title: launchPack?.seoTitle ?? `${section.title} — Aether by Olympus Labs`,
+          description: launchPack?.seoDescription ?? section.description,
         }
       : { title: "Aether by Olympus Labs" },
   );
@@ -166,7 +168,9 @@ export function IntegrationsPage() {
   }
 
   const primaryCta: CtaLink =
-    section.cta !== undefined
+    launchPack?.primaryCta !== undefined
+      ? { label: launchPack.primaryCta, to: "/connections" }
+      : section.cta !== undefined
       ? {
           label: section.cta.label,
           to: section.cta.to,
@@ -182,8 +186,8 @@ export function IntegrationsPage() {
     <>
       <PageHero
         eyebrow={section.eyebrow}
-        title={section.title}
-        lead={section.lead}
+        title={launchPackHeading(launchPack) ?? section.title}
+        lead={launchPack?.seoDescription ?? section.lead}
       />
 
       {/* Interactive directory */}
@@ -375,7 +379,11 @@ export function IntegrationsPage() {
         title="Go deeper in the documentation"
         body="Aether’s documentation site carries the technical depth behind the platform — the event model, identity resolution, consent, connectors, and validation."
         primary={primaryCta}
-        secondary={{ label: "Start building", to: "/signup" }}
+        secondary={
+          launchPack?.secondaryCta !== undefined
+            ? { label: launchPack.secondaryCta, to: "/developers" }
+            : { label: "Start building", to: "/signup" }
+        }
       />
     </>
   );

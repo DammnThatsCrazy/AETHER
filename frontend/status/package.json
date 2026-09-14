@@ -1,0 +1,28 @@
+{
+  "name": "@olympus/status",
+  "version": "0.1.0-alpha.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "Aether public service status page (status.olympuslabsml.com).",
+  "scripts": {
+    "dev": "vite --port 5180",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 5180",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "^5.4.0",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.0"
+  }
+}
