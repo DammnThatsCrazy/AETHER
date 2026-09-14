@@ -22,7 +22,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:0a9fe3bc77d50431807c09679626ba57596d1a13985c71ff1cf7ab0dcb654a8a"
+  ".github/workflows/": "sha256:06500e9e4535222f1422b6f56747e4c554584f7cfeebd2a58a871f6f9a107cf7"
   "cicd/aether-cicd/README.md": "sha256:07bc236b744bd0c54bae8b6fa661beba9d3767a3300470814f071a119f8244ee"
   "cicd/aether-cicd/main.py": "sha256:8027fb1fcb5e4a1aeb6428224fe0ca9f7756df0aaca5f39e7e84bb6c9c85feb9"
   "cicd/aether-cicd/quality_gates/": "sha256:2cc72d40cd7c324e686271c5ea2c90c2ccb15c4ebe0435b0589844663dd2e436"
@@ -42,7 +42,9 @@ Internal reference for Aether's delivery pipeline.
 ## Current verification authority
 
 For an ordinary pull request, `.github/workflows/repo-consistency.yml` owns one
-blocking status: `verification / disposition`. The workflow classifies the
+blocking status: `verification / disposition`, started once when the PR is
+finalized with the `ready_for_review` event. Draft pushes are an accumulation
+phase and do not start hosted PR CI. The workflow classifies the
 changed paths with the Impact Graph, runs the universal-fast checks, selects
 the affected test suites and build workspaces, and publishes one machine-readable
 disposition. The old full `make ci-check` PR job has been retired after the
@@ -53,7 +55,7 @@ by `ci-runtime-report.yml`; its report remains `INSUFFICIENT_SAMPLES` until at
 least 20 completed adaptive PR authority runs are available, so local timing
 must not be presented as hosted timing evidence.
 
-`repo-health.yml` keeps documentation and PR-size signals advisory on pull requests
+`repo-health.yml` keeps documentation and PR-size signals advisory on finalized pull requests
 and runs a bounded contract/impact/durable-integration authority after merges to
 `main`. Its broad Python/backend/TypeScript/E2E/preflight coverage runs nightly or
 on explicit dispatch as regression assurance. The hardening
@@ -365,16 +367,16 @@ Two things get promoted, on two separate paths that must never be conflated: the
 | Workflow | Trigger | What it does | Applies Terraform |
 |---|---|---|---|
 | `deploy.yml` | push to `main`; `workflow_dispatch` for production | Builds the release once, deploys to staging on push; production promotion is manual and takes the staged run ID plus the approved `release.json` checksum. Registers one task-definition revision per declared service; no rebuild on promotion. **Not armed without `AWS_DEPLOY_ROLE_ARN`:** when the role is absent the build/deploy jobs skip and a `delivery-not-armed` job reports that nothing was built or deployed — that is NOT a claim that a release exists. The moment the role is wired, delivery runs exactly as before. | no |
-| `infrastructure.yml` | PR / push to `main` / dispatch on `deploy/aws/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the full credential set exists (ephemeral-class is deliberately excluded from remote-plan); plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
+| `infrastructure.yml` | PR finalization (`ready_for_review`) / push to `main` / dispatch on `deploy/aws/**` | Provider-mocked configuration plan for all six selectable profiles (four cloud + demo/preview ephemeral); OIDC remote plan per cloud profile when the full credential set exists (ephemeral-class is deliberately excluded from remote-plan); plan-policy and cost-model validation of the resulting plan JSON. | **no — never** |
 | `terraform-promote.yml` | `workflow_dispatch` only | Produces a reviewed, checksum-bound binary plan, and applies exactly that plan. Backend digests are always required; ML digests are required only for production-scale and enterprise-isolated, and are optional for staging, production-lean, demo, and preview when remote ML is disabled. | **yes — the only path** |
 | `staging-lifecycle.yml` | `workflow_dispatch` | Wake / validate / sleep / full rehearsal. Dispatches `terraform-promote.yml` for every mutation and independently re-verifies the reviewed plan first. Dispatching jobs retain `actions: write` and check out the workspace before invoking `gh`; read-only jobs cannot perform the handoff. `plan-wake` is plan-only and requires only the Terraform plan credentials; lifecycle credentials are required for inspection, wake, or sleep actions. A full rehearsal binds the delivery run and `release.json` to the intended merged-main SHA, arms the bounded lease before apply, re-assumes the lifecycle role after the protected promotion wait, preserves the original lease anchor and extension count when refreshing after readiness, revalidates the lease before every mutating phase, publishes and verifies the exact AETHER/Kyber SPA archives, and cleans only a secret-free, run-scoped registration tenant marker. | no (delegates) |
 | `staging-state-reconcile.yml` | `workflow_dispatch` with explicit staging import confirmation | Import-only reconciliation for an existing staging target group and/or the four reviewed Terraform ECR repositories. Requires an approved immutable backend digest, `IMPORT-STAGING`, exact target/repository validation, the reviewed staging ECR KMS key for KMS-encrypted repositories, all required root-module URL/certificate/alert inputs, and the Auth0 provider environment used by ordinary remote plans; those credentials remain runner environment variables and never enter Terraform state or plan variables. If a repository exists at one unambiguous legacy staging address, the workflow validates all import prerequisites and every candidate status before adopting it with a state-only move to the canonical module address; it records the complete adoption set before moving anything, rejects tainted or otherwise non-managed legacy instances, treats an already-canonical healthy entry as a verified retry no-op, and fails closed on ambiguous duplicate ownership or demo/preview ownership. It also has a separate, confirmation-gated `untaint_ecr_repository_names` path for repositories already at the canonical staging address whose reviewed before/after attributes are identical but were left tainted by an interrupted replacement; that path verifies the live repository against the Terraform-managed KMS key in staging state, uses Terraform's top-level `untaint` command, and always requires a fresh reviewed plan. Aurora and DynamoDB monitoring are enabled with static profile decisions, so an unrelated state import never derives Terraform resource cardinality from unresolved resource IDs. Temporary local state snapshots are removed in one exit cleanup path. A fresh reviewed plan is required after any state change. The pre-existing `aether-backend` repository is intentionally immutable AES-256 because ECR encryption cannot be changed after creation; the other staging repositories remain KMS-encrypted. It never deletes or applies infrastructure. | no (state import/taint repair only) |
 | `staging-ttl-guard.yml` | hourly schedule; dispatch | Enforces the staging awake lease. Runs no Terraform at all; it can scale ECS to zero and lower the ECS autoscaling floor, which can only reduce running compute. **Not armed without `AWS_STAGING_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or enforce the TTL, reports it is a NO-OP and exits green — staging may still be running and will NOT be guarded; that is NOT a claim that staging is asleep. The moment the role is wired it enforces exactly as before, fail-closed in both directions. | no |
 | `ephemeral-ttl-guard.yml` | hourly schedule; dispatch | Fail-closed TTL guard for the demo/preview ephemeral profiles. Reads the SSM lease at `/aether/{profile}/{env}/lifecycle/expires-at` (written by `ephemeral_env.py provision`) and ends the run red when the lease is missing or expired; enforcement is the operator-run `ephemeral_env.py teardown` (scale-to-zero + floor-zeroing + lease removal). Runs no Terraform. **Not armed without `AWS_EPHEMERAL_LIFECYCLE_ROLE_ARN`:** when the role is absent the guard has no credential to read the lease or trip the TTL, reports it is a NO-OP and exits green — demo/preview environments may still be running and will NOT be guarded; that is NOT a claim that demo/preview are asleep. The moment the role is wired it enforces exactly as before, fail-closed. | no |
 
-| `repo-consistency.yml` | PR / push to `main` | Classifies changed paths with the verification router, builds the Impact Graph-selected workspaces in dependency order, binds the selected workspace archive and any selected backend image into one immutable candidate, verifies and materializes that candidate in the consumer job, executes the universal and affected verification checks, and publishes the single blocking `verification / disposition` evidence. The broad `make ci-check` job is intentionally absent from the PR path after the completed selection observation window. | no |
+| `repo-consistency.yml` | PR finalization (`ready_for_review`) / push to `main` | Classifies changed paths with the verification router, builds the Impact Graph-selected workspaces in dependency order, binds the selected workspace archive and any selected backend image into one immutable candidate, verifies and materializes that candidate in the consumer job, executes the universal and affected verification checks, and publishes the single blocking `verification / disposition` evidence. Draft pushes do not start this workflow. The broad `make ci-check` job is intentionally absent from the PR path after the completed selection observation window. | no |
 | `production-status.yml` | 12-hourly schedule; dispatch | `scripts/production_status.py --strict` + readiness scorecard artifact. | no |
-| `production-equivalent-ci.yml` | PR / push / schedule / dispatch | Runs a cheap Impact Graph classifier for every event. The PR trigger is deliberately unfiltered so measurement repository changes cannot be missed; on PRs it provisions the Postgres + Redis real stack only for persistence-impacting backend/infrastructure changes, production-equivalent tests, or unresolved paths. Pushes to `main`, nightly runs, and explicit dispatch retain full real-stack coverage. The lane remains non-blocking and is not a required merge check. | no |
+| `production-equivalent-ci.yml` | PR finalization (`ready_for_review`) / push / schedule / dispatch | Runs a cheap Impact Graph classifier for every triggered event. On finalized PRs it provisions the Postgres + Redis real stack only for persistence-impacting backend/infrastructure changes, production-equivalent tests, or unresolved paths. Pushes to `main`, nightly runs, and explicit dispatch retain full real-stack coverage. The lane remains non-blocking and is not a required merge check. | no |
 
 The reviewed-promotion credential boundary is intentional: a `plan` action
 requires only the plan role and read-only planning inputs. The apply role is
@@ -403,7 +405,7 @@ it states that promotion is impossible until credentials exist.
 
 The two evidence layers it publishes are not interchangeable:
 
-1. every PR runs a provider-mocked configuration plan against the real root
+1. each finalized infrastructure-impact PR runs a provider-mocked configuration plan against the real root
    module, provider schemas and checked-in `profiles/*.tfvars`, publishing an
    immutable `terraform-configuration-plan-*` artifact — no remote state, no
    live provider API;
@@ -552,8 +554,8 @@ version in the manifest matches the git tag before publishing.
 
 In addition to the eight deploy-oriented stages above, a dedicated
 **Repo Consistency** workflow (`.github/workflows/repo-consistency.yml`)
-publishes the blocking `verification / disposition` status on every PR and
-push to `main`. It enforces:
+publishes the blocking `verification / disposition` status when a PR is
+finalized (`ready_for_review`) and on pushes to `main`. It enforces:
 
 - version alignment (`pyproject.toml` is canonical)
 - generated docs freshness (`docs/_generated/` diff check)
@@ -589,7 +591,13 @@ external services. The same routine runs locally via
 
 ## Smart contract static analysis
 
-`.github/workflows/smart-contract-analysis.yml` runs Slither static analysis on every push and PR that touches `contracts/smart-contracts/`. Requires Slither to be installed (CI installs it via pip). Results are uploaded as an artifact. The pre-audit checklist at `scripts/smart_contract_audit_prep.py` runs 9 checks (oracle role, reward enforcement, nonce protection, etc.) and must pass 9/9 before external audit.
+`.github/workflows/smart-contract-analysis.yml` runs Slither static analysis on
+pushes to `main`, manual dispatch, and PR finalization (`ready_for_review`)
+when `contracts/smart-contracts/` is touched. Draft pushes do not start it.
+Requires Slither to be installed (CI installs it via pip). Results are uploaded
+as an artifact. The pre-audit checklist at
+`scripts/smart_contract_audit_prep.py` runs 9 checks (oracle role, reward
+enforcement, nonce protection, etc.) and must pass 9/9 before external audit.
 
 ## Adding a real gate
 

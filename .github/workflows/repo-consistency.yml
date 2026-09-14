@@ -1,7 +1,10 @@
 name: Repo Consistency
 
 on:
+  # Keep PRs in draft while implementation accumulates. This is the only
+  # automatic PR event: finalization runs the single blocking authority once.
   pull_request:
+    types: [ready_for_review]
   push:
     branches: [main]
   workflow_dispatch:

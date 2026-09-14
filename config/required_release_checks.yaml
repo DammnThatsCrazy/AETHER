@@ -4,6 +4,8 @@ branch_protection:
   repository: origin
   branch: main
   verification_required_for_release: true
+  normal_pr_authority: verification-disposition
+  normal_pr_status: verification / disposition
   unavailable_action: >-
     A repository administrator must require every merge-blocking check on main
     (path-scoped checks block only when their paths are touched) and attach
@@ -13,7 +15,6 @@ checks:
     workflow: .github/workflows/sdk-release-validation.yml
     job: sdk-js
     applicability: [shared_contracts, web_sdk, react_native_sdk, sdk_metadata]
-    blocks_pr_merge_when_paths_touched: true
     blocks_sdk_release: true
     blocks_founding_tenant_release: true
     runner_class: ubuntu
@@ -22,7 +23,6 @@ checks:
     workflow: .github/workflows/sdk-release-validation.yml
     job: android
     applicability: [shared_contracts, android_sdk, sdk_metadata]
-    blocks_pr_merge_when_paths_touched: true
     blocks_sdk_release: true
     blocks_founding_tenant_release: true
     runner_class: ubuntu
@@ -31,7 +31,6 @@ checks:
     workflow: .github/workflows/sdk-release-validation.yml
     job: ios
     applicability: [shared_contracts, ios_sdk, react_native_sdk, sdk_metadata]
-    blocks_pr_merge_when_paths_touched: true
     blocks_sdk_release: true
     blocks_founding_tenant_release: true
     runner_class: macos
@@ -55,13 +54,13 @@ checks:
     workflow: .github/workflows/smart-contract-analysis.yml
     job: slither
     applicability: [smart_contracts]
-    blocks_pr_merge_when_paths_touched: true
+    supplementary_pr_evidence: true
     runner_class: ubuntu
     evidence_artifact: smart-contract-analysis-evidence
   - id: smart-contract-tests
     workflow: .github/workflows/smart-contract-analysis.yml
     job: contract-tests
     applicability: [smart_contracts]
-    blocks_pr_merge_when_paths_touched: true
+    supplementary_pr_evidence: true
     runner_class: ubuntu
     evidence_artifact: contract-tests-evidence

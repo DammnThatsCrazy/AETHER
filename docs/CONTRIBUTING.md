@@ -15,36 +15,44 @@ canonical_owner: platform@aether
 estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
-  "AGENTS.md": "sha256:d2ad2e71bb5aae9de1ca85fe6a5347a8988fbad77ab2bdce39abd89456195285"
+  "AGENTS.md": "sha256:122b4db9bed9f32963471c04f5c56dbf418af5751aaf0208a4afba563769467e"
   "Makefile": "sha256:17ca662ded4b105b7f8ac2de6d3aef9814409a36e5a051d0bc9de489bfe93a7e"
-  "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:5156c9da96f61a5894ae07f97e95202f52c4aa3f3223058dbe279637ba2475a9"
+  "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:3973482780754878fd56b1d7018d86bc1c48c9b4e2aa701a7ddb8336c3d0b924"
   "scripts/repo_doctor.py": "sha256:14356c17de95b40d64c74dd60616f7a86f39db7bcafc011305ce445e01a96eb4"
 ---
 
 # Contributing
 
-AETHER PRs are not merge-ready until the repository consistency contract passes locally or in the cloud-agent workspace. Local edits, diagnosis, and focused validation may use narrower checks; report those as local evidence rather than as PR completion.
+AETHER PRs are not merge-ready until the repository consistency contract passes locally or in the cloud-agent workspace. Keep implementation and blueprint work in a draft PR while changes accumulate. Local edits, diagnosis, and focused validation may use narrower checks; report those as local evidence rather than as PR completion.
 
 ## Required preflight
 
 When preparing or updating a PR:
 
-1. If docs, generator inputs, or contract inputs changed, run `make docs-generate`.
-2. Run `make verification-disposition BASE=<ref> EXECUTE=1` for the affected PR authority.
-3. For routing-only or workflow work, use `make bootstrap-ci-control` and
+1. During implementation, keep the PR draft and use focused checks only; do not
+   run aggregate gates or dispatch hosted PR CI for each intermediate push.
+2. Integrate the blueprint, complete clarification/review and gap remediation,
+   and update the ownership-required and authored documentation surfaces.
+3. If docs, generator inputs, or contract inputs changed, run `make docs-generate`.
+4. Review source-linked docs, then run `make docs-generate-changed` for only the
+   reviewed pages whose declared source bytes changed.
+5. For routing-only or workflow work, use `make bootstrap-ci-control` and
    `make verification-execution-plan BASE=<ref> OUTPUT=<plan.json>` to inspect
    the dependency-aware plan without installing the application runtime.
-4. Run `make validate-ci-execution-contracts` and `make validate-ci-performance-policy` when changing the adaptive CI plan, suite registry, evidence schemas, or latency policy.
-5. If strict docs drift reports source-linked pages, review each listed page against its declared `source_files`; update authored content where behavior changed, then run `make docs-generate-changed`.
-6. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
-7. Run `make ci-check` for broad local, trusted-main, nightly, or release evidence; it includes generator idempotency and is not a second blocking PR authority.
-8. Commit generated and synced outputs when preparing the PR or when a commit was requested.
-9. Do not hand-edit generated docs or bypass TypeScript/package export failures.
-10. Do not call a PR merge-ready until the affected disposition passes; report broad-gate results separately.
+6. Run `make validate-ci-execution-contracts` and `make validate-ci-performance-policy` when changing the adaptive CI plan, suite registry, evidence schemas, or latency policy.
+7. If strict docs drift reports source-linked pages, review each listed page against its declared `source_files` and update authored content where behavior changed.
+8. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
+9. Mark the completed PR ready for review; this starts the single hosted `verification / disposition` authority. Run `make verification-disposition BASE=<ref> EXECUTE=1` once for the final lane tip.
+10. Run `make ci-check` only for broad local, trusted-main, nightly, release, or explicitly requested evidence; it is not a second blocking PR authority.
+11. Commit generated and synced outputs when preparing the PR or when a commit was requested.
+12. Do not hand-edit generated docs or bypass TypeScript/package export failures.
+13. Do not call a PR merge-ready until the final disposition passes; report broad-gate results separately.
 
 The hosted normal-PR merge check is the stable `verification / disposition`
-status. The broad gate remains required local/trusted-main/nightly evidence and
-is not a second blocking PR authority.
+status, and it starts on the `ready_for_review` finalization event. The broad
+gate remains required local/trusted-main/nightly evidence and is not a second
+blocking PR authority. Specialized workflows may provide supplementary
+finalization evidence but do not independently block normal PR merges.
 
 `make docs-check` is intentionally documentation-scoped. Its adaptive worker
 provisions the backend/dev import surface required by source-backed generators,

@@ -528,6 +528,10 @@ the remote-plan credential set is absent, that job reports it is a NO-OP and
 passes green — the commit is explicitly **not** promotable — and re-arms,
 fail-closed, the moment the credentials are wired.
 
+The path-scoped provider-mocked plan runs on PR finalization
+(`ready_for_review`), matching pushes to `main`, or explicit dispatch. Draft
+PR pushes do not start `infrastructure.yml`.
+
 `.github/workflows/terraform-promote.yml` is the **sole apply path**:
 `workflow_dispatch`-only, per-profile GitHub environment
 (`staging-terraform`, `production-lean-terraform`,

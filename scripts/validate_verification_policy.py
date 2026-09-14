@@ -45,6 +45,14 @@ def validate(path: Path = POLICY) -> list[str]:
     escalations = normal.get("allowed_escalations")
     if not isinstance(escalations, list) or not set(escalations) <= LANES:
         errors.append("normal_pr.allowed_escalations must contain only known lanes")
+    if normal.get("finalization_event") != "ready_for_review":
+        errors.append("normal_pr.finalization_event must be ready_for_review")
+    if normal.get("draft_required_for_intermediate_work") is not True:
+        errors.append("normal_pr.draft_required_for_intermediate_work must be true")
+    if normal.get("blocking_workflow") != ".github/workflows/repo-consistency.yml":
+        errors.append(
+            "normal_pr.blocking_workflow must be .github/workflows/repo-consistency.yml"
+        )
 
     shadow = _mapping(top.get("shadow"), "shadow", errors)
     if shadow.get("enabled") not in (True, False):

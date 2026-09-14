@@ -572,7 +572,8 @@ make repo-doctor
 
 ### CI verification
 
-The following workflows run automatically on every PR that touches `packages/**`:
+The following workflows run automatically when a PR touching `packages/**` is
+finalized (`ready_for_review`); draft pushes remain an implementation phase:
 
 | Workflow | Coverage |
 |---|---|

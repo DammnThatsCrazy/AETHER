@@ -23,6 +23,16 @@ def _production_equivalent_workflow() -> dict:
     return yaml.safe_load(PRODUCTION_EQUIVALENT_WORKFLOW.read_text(encoding="utf-8"))
 
 
+def _triggers(document: dict) -> dict:
+    value = document.get("on") if "on" in document else document.get(True)
+    return value if isinstance(value, dict) else {}
+
+
+def test_pr_workflows_start_only_at_finalization() -> None:
+    for document in (_workflow(), _repo_health_workflow(), _production_equivalent_workflow()):
+        assert _triggers(document)["pull_request"]["types"] == ["ready_for_review"]
+
+
 def test_pr_workflow_has_explicit_adaptive_execution_stages() -> None:
     jobs = _workflow()["jobs"]
     assert {

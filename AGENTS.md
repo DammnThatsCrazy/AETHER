@@ -4,6 +4,32 @@ This repository uses `scripts/repo_doctor.py` and the root `Makefile` as the
 canonical consistency system. Agents must not use weaker commands as proof of
 PR merge-readiness or production readiness.
 
+## Verification cadence: accumulate, then finalize once
+
+Implementation, blueprint execution, architecture buildout, and review
+remediation are an accumulation phase. Keep the PR in draft while that work is
+in progress. Do not run `make verification-disposition`, `make ci-check`, or
+`make release-gate`, and do not dispatch hosted PR CI, for every intermediate
+slice or push. Focused local tests, type checks, lint, docs generation, and
+targeted validators are welcome for feedback, but they are not readiness proof.
+
+At finalization, the chief agent/orchestrator must integrate the completed
+blueprint, perform clarification and architecture review, close identified
+gaps, update ownership-required and authored documentation surfaces, regenerate
+generated/sync-managed docs, review source-linked docs, refresh only the
+reviewed source hashes, and run focused checks. Then mark the PR ready for
+review. The `ready_for_review` event starts the single normal PR authority,
+`.github/workflows/repo-consistency.yml`, whose terminal status is
+`verification / disposition`. Specialized PR workflows use that same
+finalization event for supplementary evidence; they are not independent merge
+blockers. A failed terminal authority may be rerun after a material fix.
+
+Exceptions are limited to security-critical analysis, migration or
+infrastructure plan validation, or an explicitly requested diagnostic; record
+the reason and keep the evidence scoped. Broad `make ci-check` and
+`make release-gate` remain for trusted-main, nightly, release, or explicitly
+requested evidence and must not become a second normal-PR authority.
+
 ## Required PR / Merge-Readiness Workflow
 
 This workflow applies when preparing a pull request or making a repository

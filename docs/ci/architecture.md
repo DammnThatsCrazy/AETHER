@@ -22,11 +22,13 @@ mechanics behind it.
 
 ## The single blocking PR authority
 
-Every pull request and every push to `main` triggers
-`.github/workflows/repo-consistency.yml` ("Repo Consistency"). Its terminal
-job, `publish-evidence`, is named **`verification / disposition`** — this is
-the one required status check for normal PRs. The workflow has four jobs that
-run in sequence:
+The completed change is finalized by marking the PR ready for review. That
+`ready_for_review` event, and pushes to `main`, trigger
+`.github/workflows/repo-consistency.yml` ("Repo Consistency"). Draft PR pushes
+are an accumulation phase and do not start hosted CI. Its terminal job,
+`publish-evidence`, is named **`verification / disposition`** — this is the one
+required status check for normal PRs. The workflow has four jobs that run in
+sequence:
 
 1. **`classify-change`** ("impact authority") — checks out full history,
    bootstraps the Python toolchain, and runs `scripts/check_router.py` to
@@ -66,8 +68,9 @@ dry-run — and is never evaluated on a normal PR or push.
 
 Aether is a large multi-language monorepo (Python backend, ML models,
 TypeScript frontend packages, smart contracts). Running every test suite on
-every PR would make the blocking gate too slow to be a real gate. The impact
-graph inverts this: `scripts/impact_graph.py` maps changed files to the
+every finalized PR would make the blocking gate too slow to be a real gate,
+and rerunning aggregate CI on each draft push wastes the implementation
+window. The impact graph inverts this: `scripts/impact_graph.py` maps changed files to the
 components, contracts, and deployables in `config/impact_graph.json`, and
 `scripts/check_router.py` uses that mapping to pick the minimum verification
 lane (`fast`, `pr`, `integration`, `regression`, or `release` — see
@@ -87,9 +90,9 @@ as the repo grows.
 
 | Scope | Workflow / job | Authority |
 |---|---|---|
-| Every PR, every push to `main` | `repo-consistency.yml` → `publish-evidence` (`verification / disposition`) | **Blocking.** The only required status check for normal PRs. |
-| Every PR, every push to `main` | `repo-health.yml` → `pr-size` | Advisory (`continue-on-error` on PRs). Warns above 600 meaningful changed lines; never blocks. |
-| Every PR, every push to `main` | `repo-health.yml` → `lint-docs` | Advisory on PRs (`continue-on-error`), but the same `make docs-check` is enforced as part of `verification-disposition`'s routing where docs are affected. On non-PR trusted events it still just reports. |
+| PR finalization (`ready_for_review`) and every push to `main` | `repo-consistency.yml` → `publish-evidence` (`verification / disposition`) | **Blocking.** The only required status check for normal PRs. |
+| PR finalization (`ready_for_review`) | `repo-health.yml` → `pr-size` | Advisory (`continue-on-error` on finalized PRs). Warns above 600 meaningful changed lines; never blocks. |
+| PR finalization (`ready_for_review`) | `repo-health.yml` → `lint-docs` | Advisory on finalized PRs (`continue-on-error`), but the same `make docs-check` is enforced as part of `verification-disposition`'s routing where docs are affected. On non-PR trusted events it still just reports. |
 | Push to `main` only | `repo-health.yml` → `main-integration` | Blocking for that job, but scoped to `push` on `main` — it is a post-merge integration authority, not a PR gate. It rebuilds the impact graph against the pre-merge SHA and runs `make integration-durable`. |
 | Push to `main` only | `repo-health.yml` → `docs-sync` | Write-capable auto-commit of regenerated `docs/_generated/**` when `main` has drifted. Runs with `contents: write`, deliberately never on PR-head code. |
 | Nightly (`schedule`) or manual `workflow_dispatch` | `repo-health.yml` → `python-tests`, `backend-tests`, `ml-tests`, `typescript`, `e2e-tenant`, `staging-preflight-dry-run`, aggregated by `validate` | Broad regression evidence (`make ci-check`-class checks plus full test trees). Not a PR blocker — this is what `make ci-check` documents as "broad local, trusted-main, nightly, or release evidence." |
@@ -98,9 +101,20 @@ as the repo grows.
 The practical rule, stated in both `AGENTS.md`/`CLAUDE.md` and
 `docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md`: `make
 verification-disposition BASE=<base> EXECUTE=1` is the only normal-PR
-authority; `make ci-check` is broad evidence you may run and report
-separately, never a second blocking gate; `make release-gate` applies only
-when the PR itself claims release readiness.
+authority and starts only after finalization; `make ci-check` is broad
+evidence you may run and report separately, never a second blocking gate;
+`make release-gate` applies only when the PR itself claims release readiness.
+
+### Draft-to-finalization protocol
+
+Keep architecture and engineering work in a draft PR while the blueprint is
+being executed. Integrate all slices, perform clarification and architecture
+review, remediate findings, update ownership-required surfaces and docs, and
+run focused local checks. Then mark the PR ready for review once. Specialized
+workflows may add finalization evidence, but only `verification / disposition`
+determines normal-PR mergeability. A failed terminal authority may be rerun
+after a material remediation; intermediate pushes do not create another CI
+cycle.
 
 ## `repo-consistency.yml` vs. `repo-health.yml`
 

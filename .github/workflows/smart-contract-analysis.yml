@@ -1,8 +1,8 @@
 name: Smart Contract Static Analysis
 
-# Runs Slither and the Hardhat contract test suite on every PR or push that
-# touches contracts/smart-contracts/** so audit-relevant issues are caught before they
-# reach main.
+# Runs Slither and the Hardhat contract test suite on PR finalization or push
+# to main when contracts/smart-contracts/** is touched. Draft pushes remain an
+# implementation phase and do not start hosted CI.
 #
 # Slither findings are uploaded as a SARIF artifact for reviewer triage.
 # Hard failure is reserved for HIGH / CRITICAL severity; MEDIUM and below
@@ -12,6 +12,7 @@ name: Smart Contract Static Analysis
 
 on:
   pull_request:
+    types: [ready_for_review]
     paths:
       - 'contracts/smart-contracts/**'
       - '.github/workflows/smart-contract-analysis.yml'
@@ -20,6 +21,7 @@ on:
       - main
     paths:
       - 'contracts/smart-contracts/**'
+  workflow_dispatch:
 
 permissions:
   contents: read

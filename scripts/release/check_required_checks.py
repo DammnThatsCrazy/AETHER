@@ -6,7 +6,9 @@ prevents a required SDK job from disappearing, losing the shared-contract
 trigger that makes cross-platform validation authoritative before merge, or
 claiming a universal/path-scoped PR block that its workflow cannot provide.
 Release-only checks are valid when their catalog flags describe release
-surfaces rather than pull-request mergeability.
+surfaces rather than pull-request mergeability. Normal PR mergeability has
+one authority, so specialized checks may run on PR finalization without being
+independent blocking statuses.
 """
 from __future__ import annotations
 
@@ -37,6 +39,7 @@ def validate(root: Path = ROOT) -> list[str]:
     if not branch.get("unavailable_action"):
         errors.append("branch protection must declare the action when GitHub evidence is unavailable")
     ids: set[str] = set()
+    pr_blocking_ids: list[str] = []
     workflows: dict[str, tuple[dict, str]] = {}
     for check in checks:
         check_id = str(check.get("id", ""))
@@ -50,9 +53,10 @@ def validate(root: Path = ROOT) -> list[str]:
             errors.append(f"{check_id}: unknown runner_class {check.get('runner_class')!r}")
         if not any(check.get(flag) is True for flag in (
             "blocks_pr_merge", "blocks_pr_merge_when_paths_touched",
-            "blocks_sdk_release", "blocks_founding_tenant_release"
+            "blocks_sdk_release", "blocks_founding_tenant_release",
+            "supplementary_pr_evidence"
         )):
-            errors.append(f"{check_id}: check does not block any release surface")
+            errors.append(f"{check_id}: check does not declare a release or supplementary surface")
         rel = str(check.get("workflow", ""))
         if rel not in workflows:
             path = root / rel
@@ -73,6 +77,8 @@ def validate(root: Path = ROOT) -> list[str]:
         # ordinary pull requests and are governed by their release flag instead.
         pr_blocking = any(check.get(flag) is True for flag in (
             "blocks_pr_merge", "blocks_pr_merge_when_paths_touched"))
+        if pr_blocking:
+            pr_blocking_ids.append(check_id)
         if pr_blocking and "pull_request:" not in text:
             errors.append(f"{check_id}: workflow is not triggered for pull requests")
         # Honest merge-blocker semantics: a workflow whose pull_request trigger
@@ -102,6 +108,25 @@ def validate(root: Path = ROOT) -> list[str]:
     conclusions = catalog.get("allowed_terminal_conclusions")
     if conclusions != ["success"]:
         errors.append("allowed_terminal_conclusions must be exactly [success]")
+
+    # Older fixture catalogs intentionally omit the normal-PR fields. When a
+    # catalog declares them, enforce exactly one authoritative merge blocker.
+    authority = branch.get("normal_pr_authority")
+    status = branch.get("normal_pr_status")
+    if authority is not None or status is not None:
+        if not isinstance(authority, str) or not authority:
+            errors.append("branch_protection.normal_pr_authority must be a non-empty check id")
+        elif authority not in ids:
+            errors.append(f"branch protection names unknown normal PR authority {authority!r}")
+        if status != "verification / disposition":
+            errors.append(
+                "branch_protection.normal_pr_status must be 'verification / disposition'"
+            )
+        if isinstance(authority, str) and pr_blocking_ids != [authority]:
+            errors.append(
+                "branch protection must declare exactly one PR merge blocker, "
+                f"{authority!r}; found {pr_blocking_ids!r}"
+            )
     return errors
 
 

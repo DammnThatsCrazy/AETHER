@@ -3,6 +3,20 @@
 Documentation is part of the repository contract surface, but source-linked
 documentation is content-addressed rather than commit-addressed.
 
+## Verification cadence
+
+Keep implementation and blueprint work in a draft PR while changes accumulate.
+Do not run `make verification-disposition`, `make ci-check`, `make release-gate`,
+or dispatch hosted PR CI for each intermediate slice. Focused checks and docs
+generation are allowed as local feedback only. After integration, clarification
+review, gap remediation, ownership updates, authored-doc review, generated-doc
+regeneration, and scoped source-hash refresh, mark the PR ready for review.
+That `ready_for_review` event starts the single normal PR authority;
+specialized workflows provide supplementary finalization evidence and do not
+create parallel merge blockers. Rerun the authority only after fixing a failed
+terminal result. Use broad gates only for trusted-main, nightly, release, or
+explicit diagnostic evidence.
+
 For pull requests and merge-readiness claims, follow the single canonical
 workflow in `AGENTS.md`. Apply the documentation steps below only when docs,
 generator inputs, contract inputs, or source-linked documentation are affected:
