@@ -22,12 +22,12 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:3c02598b77dddc806f35ad189252b76b4245465175311b7ac5b66f68ce618b7f"
+  ".github/workflows/": "sha256:b69cececd69dd51a9eff7a19535f6bd9d269d975c46741841f67e17caa0cfcc0"
   "cicd/aether-cicd/README.md": "sha256:07bc236b744bd0c54bae8b6fa661beba9d3767a3300470814f071a119f8244ee"
   "cicd/aether-cicd/main.py": "sha256:8027fb1fcb5e4a1aeb6428224fe0ca9f7756df0aaca5f39e7e84bb6c9c85feb9"
   "cicd/aether-cicd/quality_gates/": "sha256:2cc72d40cd7c324e686271c5ea2c90c2ccb15c4ebe0435b0589844663dd2e436"
   "cicd/aether-cicd/stages/": "sha256:961dd8ecca17f67988397b1f33515de8a88180ed70a7545fe05b324eb1bf555f"
-  "config/staging_apply_iam_policy.yaml": "sha256:86190e1e662c2f6cf7f009fc7820fc6f3516d061553953e7ab80051b30b8a198"
+  "config/staging_apply_iam_policy.yaml": "sha256:882b643aead03eb0835daa61f4599b0ad382398e57d9f08408912ce97f32c527"
   "deploy/aws/terraform/modules/aurora/main.tf": "sha256:c1c005d1f9662dc4dfcc72ca8fbaeda01f4b1c95ea020578c09d5d368516b863"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "deploy/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
@@ -132,6 +132,12 @@ mutation when a Free plan cannot support the reviewed Aurora topology. Its IAM
 manifest therefore includes the ECR scan, account-plan read, S3 bucket-level
 read, and ELB listener-attribute actions that those preflight checks and
 Terraform plan actually call.
+
+The remote plan credential set includes `TF_AMPLIFY_GITHUB_ACCESS_TOKEN` for
+the five GitHub-backed Amplify applications. The token is consumed only as a
+sensitive plan input; the apply job receives the reviewed binary plan and never
+re-plans. `TF_ALERT_EMAIL` is the actionable staging notification endpoint and
+is set to `team@olympuslabsml.com`.
 
 Reviewed Terraform promotion pins immutable digests and injects the staging
 apply-role ARN only for staging. Inline-ML profiles leave the ML digest empty;

@@ -29,12 +29,11 @@ aurora_max_acu = 2
 # The AWS account's free-tier guard permits one day of automated Aurora
 # backups. Longer retention is reserved for paid production profiles.
 aurora_backup_retention_days = 1
-# Express mode uses AWS-managed encryption instead of a customer-managed KMS
-# key, which is required for AWS Free-tier accounts.
-aurora_express_mode = true
-# The account is now paid. Keep Aurora Serverless v2 auto-paused and bounded
-# rather than skipping the real database from full application staging.
-skip_aurora = false
+# The account is paid, so full staging uses the customer-managed Aurora KMS
+# key and exercises the same encrypted database topology that production-lean
+# will receive. The bounded Serverless v2 profile still auto-pauses while idle.
+aurora_express_mode = false
+skip_aurora         = false
 
 # Staging uses Amplify default domains. Do not claim the production
 # olympuslabsml.com DNS family before the reviewed production promotion.

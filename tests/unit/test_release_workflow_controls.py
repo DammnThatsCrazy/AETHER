@@ -791,7 +791,7 @@ def test_promotion_cannot_proceed_when_remote_plan_credentials_are_missing():
         for name in probe_step["env"]
         if name not in {"AWS_INFRA_ROLE_ARN", "TF_BACKEND_IMAGE_DIGEST", "TF_ML_IMAGE_DIGEST"}
     }
-    assert len(shared) == 10
+    assert len(shared) == 11
 
     promote = _workflow_yaml(APPLY_WORKFLOW)
     guard = next(

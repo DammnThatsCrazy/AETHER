@@ -27,13 +27,13 @@ source_hashes:
   ".github/workflows/staging-lifecycle.yml": "sha256:38e9810399b549e10741393bd424dec755adb29a3aa7a350f9fe1c8ca8645007"
   ".github/workflows/staging-state-reconcile.yml": "sha256:b7dd5cef545fdf60ac882b917ddde4dcada633a4eb0f321759bc5fc5b3e7f38a"
   ".github/workflows/staging-ttl-guard.yml": "sha256:4fe2250c0ccb0f8486800c6e09c8f1adcf6c38371944e911269f103053f0f1da"
-  ".github/workflows/terraform-promote.yml": "sha256:f4df3b2fe853abe6605fbebcd9d85cf093c247251d6be971900804894749f1e9"
-  "config/staging_apply_iam_policy.yaml": "sha256:86190e1e662c2f6cf7f009fc7820fc6f3516d061553953e7ab80051b30b8a198"
+  ".github/workflows/terraform-promote.yml": "sha256:5c1f47d2408805475c6c07b3374597e3996c3c5bd077b94bf17edca33d533e2d"
+  "config/staging_apply_iam_policy.yaml": "sha256:882b643aead03eb0835daa61f4599b0ad382398e57d9f08408912ce97f32c527"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:84cc2d5a0cdb621f0dc2ba271fd9e66228e36a80cabf52133cf51d410a85f21e"
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:31003620ea911dee0c147f76394eed5653976828e5ccee98b7d7684bfbded2f9"
+  "deploy/aws/terraform/": "sha256:20703e349c9069ff03c0bbb13e188c905263c5418d7fd43593f17b70bc8bd752"
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:20998a03fdd484635cc80667220794fb1970be3f2e198ac067ec7c7bda12f2f1"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:08dff05b2a886af751d7e0b1c7886951b240b6a31f18ef14d26f73085ae59145"
   "scripts/release/verify_terraform_state_role.py": "sha256:80dce5faa3a69a530f24a72105f7b340bc52726906a641540ed7ef08fb6e46ac"
@@ -625,6 +625,14 @@ attached/effective permission. The verifier accepts the canonical backend pair
 and the explicitly reviewed, account-qualified staging pair already in use;
 both are still checked by IAM simulation against the assumed role. Plan-only
 runs do not use this write policy.
+
+The reviewed plan also requires `TF_AMPLIFY_GITHUB_ACCESS_TOKEN`, a
+repository-scoped GitHub credential used only to let Amplify create and update
+the monorepo-backed public web apps. It is supplied to the plan job as a
+sensitive Terraform input; the exact plan artifact is therefore secret-bearing
+and follows the existing short-lived reviewed-plan retention and checksum
+controls. The actionable alert endpoint is `TF_ALERT_EMAIL`, currently set to
+`team@olympuslabsml.com`.
 
 Every selectable apply profile also bootstraps the account-level ECS
 service-linked role before Terraform creates capacity providers. Each protected

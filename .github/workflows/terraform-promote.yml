@@ -73,6 +73,11 @@ jobs:
       TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
       TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
       TF_VAR_auth0_domain: ${{ secrets.TF_AUTH0_DOMAIN }}
+      # Amplify's GitHub-backed app creation requires a repository access
+      # token. It is intentionally supplied only to the plan job because the
+      # reviewed binary plan carries the exact app/branch configuration into
+      # the apply job.
+      TF_VAR_amplify_github_access_token: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
       # The auth0 provider reads these from its own environment, so the
       # credentials never become Terraform root variables and therefore never
       # enter the plan file. This is the structural fix for the plan-artifact
@@ -130,6 +135,7 @@ jobs:
           TF_AUTH0_DOMAIN: ${{ secrets.TF_AUTH0_DOMAIN }}
           TF_AUTH0_MANAGEMENT_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
           TF_AUTH0_MANAGEMENT_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
+          TF_AMPLIFY_GITHUB_ACCESS_TOKEN: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
           TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
           TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
         run: |
@@ -145,6 +151,7 @@ jobs:
             TF_AUTH0_DOMAIN \
             TF_AUTH0_MANAGEMENT_CLIENT_ID \
             TF_AUTH0_MANAGEMENT_CLIENT_SECRET \
+            TF_AMPLIFY_GITHUB_ACCESS_TOKEN \
             TF_AETHER_APP_URL \
             TF_KYBER_APP_URL
           do

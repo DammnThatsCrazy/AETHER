@@ -21,11 +21,11 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/staging-lifecycle.yml": "sha256:38e9810399b549e10741393bd424dec755adb29a3aa7a350f9fe1c8ca8645007"
   ".github/workflows/staging-ttl-guard.yml": "sha256:4fe2250c0ccb0f8486800c6e09c8f1adcf6c38371944e911269f103053f0f1da"
-  ".github/workflows/terraform-promote.yml": "sha256:f4df3b2fe853abe6605fbebcd9d85cf093c247251d6be971900804894749f1e9"
+  ".github/workflows/terraform-promote.yml": "sha256:5c1f47d2408805475c6c07b3374597e3996c3c5bd077b94bf17edca33d533e2d"
   "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
-  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:f843bf7f11e9acc9e75c345e02e916ecc5f429ea1225f975ad0ae7c908a10bf1"
+  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:e5d7497b37b76299734a889cdc756e9a0f952b90c6aededc7c7b6312cdb451f0"
   "deploy/aws/terraform/variables.tf": "sha256:4890da151abf54a6493d26a0290e13fc88e4a0891bb801ce4361e5fba6ff4307"
 ---
 
