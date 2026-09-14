@@ -686,6 +686,9 @@ def test_reviewed_iam_manifest_matches_checker() -> None:
     assert "ecr:ListTagsForResource" in {
         action for statement in statements for action in statement["actions"]
     }
+    assert "ecr:DescribeImages" in {
+        action for statement in statements for action in statement["actions"]
+    }
     assert "ecr:PutImageScanningConfiguration" in {
         action for statement in statements for action in statement["actions"]
     }
@@ -750,6 +753,7 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
         "ecr:TagResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "ecr:ListTagsForResource": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "ecr:DescribeRepositories": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
+        "ecr:DescribeImages": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "ecr:PutImageScanningConfiguration": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "ecr:GetLifecyclePolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",
         "ecr:PutLifecyclePolicy": "arn:aws:ecr:us-east-1:${account_id}:repository/aether-*",

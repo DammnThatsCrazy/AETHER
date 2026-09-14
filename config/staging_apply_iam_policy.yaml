@@ -28,6 +28,7 @@ statements:
   - sid: InspectStagingRepositories
     actions:
       - ecr:DescribeRepositories
+      - ecr:DescribeImages
     resource: arn:aws:ecr:us-east-1:${account_id}:repository/aether-*
     scope: staging-name-prefix
   - sid: ConfigureStagingRepositoryScanning

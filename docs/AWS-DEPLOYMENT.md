@@ -28,7 +28,7 @@ source_hashes:
   ".github/workflows/staging-state-reconcile.yml": "sha256:b7dd5cef545fdf60ac882b917ddde4dcada633a4eb0f321759bc5fc5b3e7f38a"
   ".github/workflows/staging-ttl-guard.yml": "sha256:4fe2250c0ccb0f8486800c6e09c8f1adcf6c38371944e911269f103053f0f1da"
   ".github/workflows/terraform-promote.yml": "sha256:f4df3b2fe853abe6605fbebcd9d85cf093c247251d6be971900804894749f1e9"
-  "config/staging_apply_iam_policy.yaml": "sha256:acc34d81c456090d4569faac727b6688604fc07c3bb36764f38c422f23d5004a"
+  "config/staging_apply_iam_policy.yaml": "sha256:077f7ec5ab4a05f950278c684035aeb3ae0ba3aec718eb8fa2b23068af65f71c"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:84cc2d5a0cdb621f0dc2ba271fd9e66228e36a80cabf52133cf51d410a85f21e"
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
@@ -76,6 +76,12 @@ checks. This avoids `EPIPE` races caused by piping Terraform through an
 early-exiting `grep -q` under `pipefail`, which could otherwise make an
 already-managed staging resource look absent and trigger a false import or
 taint-repair failure.
+
+The same staging role has narrowly scoped `ecr:DescribeImages` access on the
+`aether-*` repositories. The immutable delivery workflow uses it to distinguish
+an absent backend tag from a tag that another delivery has just published; the
+permission is required for both the preflight lookup and bounded recovery after
+an ECR immutable-tag publish race.
 
 The reviewed Terraform promotion writes a secret-free `reviewed.api-host`
 evidence file after an apply. This is the configured `domain_name` hostname

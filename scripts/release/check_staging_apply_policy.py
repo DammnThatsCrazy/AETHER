@@ -45,6 +45,7 @@ REQUIRED_ACTIONS = {
     "ecr:TagResource",
     "ecr:ListTagsForResource",
     "ecr:DescribeRepositories",
+    "ecr:DescribeImages",
     "ecr:PutImageScanningConfiguration",
     "ecr:DescribeImageScanFindings",
     "ecr:GetImageScanningConfiguration",
@@ -640,6 +641,7 @@ def main() -> int:
     # ECR
     for _ecr in (
         "ecr:TagResource", "ecr:ListTagsForResource", "ecr:DescribeRepositories",
+        "ecr:DescribeImages",
         "ecr:PutImageScanningConfiguration", "ecr:DescribeImageScanFindings",
         "ecr:GetImageScanningConfiguration",
         "ecr:GetLifecyclePolicy", "ecr:PutLifecyclePolicy",
