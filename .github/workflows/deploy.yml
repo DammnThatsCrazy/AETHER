@@ -64,11 +64,12 @@ jobs:
     # which only ever consumes an artifact from a staging build that already
     # passed through this same gate) until the test workflows for this exact
     # commit SHA have completed successfully. On main pushes, repo-health.yml
-    # exposes `Main integration authority` as the bounded integration signal;
-    # on explicit staging dispatches, its `validate` job is the aggregate gate
-    # for the scheduled Python/TypeScript/ML/e2e matrix. Poll the signal that
-    # actually exists for the triggering event rather than treating an
-    # intentionally skipped job as a failed verification.
+    # exposes `Main integration authority` as the bounded integration signal.
+    # Explicit staging dispatches do not themselves trigger repo-health's
+    # nightly/dispatch-only `validate` aggregate, so they reuse the successful
+    # main integration authority for this exact merged-main SHA. Poll the
+    # signal that actually exists for the triggering event rather than treating
+    # an intentionally skipped job as a failed verification.
     #
     # This is deliberately independent of GitHub branch protection: a direct
     # push to main (bypassing a PR) or an admin override would otherwise
@@ -90,9 +91,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
+          TARGET_ENV: ${{ inputs.environment }}
         run: |
           set -euo pipefail
-          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] || [ "${TARGET_ENV}" = "staging" ]; then
             required_checks=("Main integration authority")
           else
             required_checks=(validate)
