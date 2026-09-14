@@ -21,7 +21,9 @@ The machine-readable owner map is `docs/source-of-truth/repo_consistency_ownersh
 ## Verification authority cutover
 
 Normal pull requests have one blocking authority: `.github/workflows/repo-consistency.yml`
-publishes the stable `verification / disposition` status. It runs the universal-fast
+publishes the stable `verification / disposition` status when the completed PR
+is finalized with `ready_for_review`. Draft pushes are an accumulation phase and
+do not start hosted PR CI. It runs the universal-fast
 lane, the checks selected by the Impact Graph, and the affected build selection from
 `scripts/verification_disposition.py`. The legacy `make ci-check` PR execution was
 retired after the representative observation window; the command remains available
@@ -62,7 +64,7 @@ until they are registered.
 | universal ingress adapter registry / gateway (WS-B1) changed | `services/backend/services/ingestion/adapters/**` registry ↔ `services/backend/services/ingestion/gateway.py` ↔ Envelope-B vocabulary/registry ↔ Contract Spine canonical types/families consistent; ingress-adapter-registry + gateway unit tests, SOT + alignment docs |
 | ingestion replay + consumption normalization-spine convergence (WS-B4/B5) changed | replay runner + Kyber replay operator routes + `services/backend/services/ingestion/spine.py` ↔ `IngestReplayConfig`/`NormalizationSpineConfig` flag blocks and env examples ↔ the consumers that read through the spine (`workers.py` Bronze-writer replay-skip/original-time logic, semantic_intelligence + resolution consumers); `tests/unit/observation` (ingest-replay / replay-adapter / normalization-spine / replay-route-mount), SOT + alignment docs |
 | native iOS/Android event-type + consent-purpose regions changed (generator emitter, parity gate, or the region files) | regenerated `Aether.swift` / `Aether.kt` marker regions, `generate_contracts.py --check`, mobile-event key + purpose-value parity gate, `test_mobile_event_parity.py` + `test_native_event_codegen.py`, SOT docs |
-| workflow/check command changed | Makefile, workflows, docs, repo_doctor tests |
+| workflow/check command changed | Makefile, finalization-triggered workflows, docs, repo_doctor/cadence tests |
 | deprecated legacy ingestion/data-lake tree mutated (do-not-extend) | program acknowledgment docs (`docs/productization/sdk-universal-ingestion-alignment/**`), this md, canonical-ingestion-trees gate (`scripts/validate_canonical_ingestion_trees.py`) |
 | Aether/Kyber production data source changed | `scripts/validate_frontend_data_truth.py` source guardrail and explicit production-bundle scan |
 | deployment profile / Terraform topology changed | per-profile plan tests, plan-policy and cost-model gates, plan fixtures, delivery-topology validator, profile docs |
@@ -98,16 +100,19 @@ have in the absence of AWS credentials.
 
 ## Required local preflight
 
-Before opening or updating a PR:
+During implementation, keep the PR in draft and use only focused local checks
+for feedback. After integrating the blueprint, reviewing and remediating gaps,
+and updating required docs and derived surfaces, finalize the PR once. Then:
 
 1. If docs, generator inputs, or contract inputs changed, run `make docs-generate`.
-2. Run `make verification-disposition BASE=<ref> EXECUTE=1` as the normal PR authority.
-3. Commit all generated docs and sync outputs.
-4. Do not hand-edit generated docs.
-5. Do not bypass TypeScript/package export failures.
-6. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
-7. Run `make ci-check` for broad local, trusted-main, nightly, or release evidence; it is not a second blocking normal-PR authority.
-8. PR is not complete until the verification disposition passes.
+2. Review source-linked docs and run `make docs-generate-changed` only for the reviewed pages.
+3. Run `make verification-disposition BASE=<ref> EXECUTE=1` once as the normal PR authority.
+4. Commit all generated docs and sync outputs.
+5. Do not hand-edit generated docs.
+6. Do not bypass TypeScript/package export failures.
+7. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
+8. Run `make ci-check` for broad local, trusted-main, nightly, or release evidence; it is not a second blocking normal-PR authority.
+9. PR is not complete until the verification disposition passes.
 
 The full repo-doctor path runs `python scripts/validate_frontend_data_truth.py`
 before frontend builds, then runs the validator with `--build-bundles` to build

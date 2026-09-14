@@ -1,7 +1,10 @@
 name: Repo Health
 
 on:
+  # Draft PR pushes are an accumulation phase; advisory PR signals start only
+  # when the completed change is explicitly marked ready for review.
   pull_request:
+    types: [ready_for_review]
   push:
     branches:
       - main
@@ -14,9 +17,9 @@ permissions:
   pull-requests: read
 
 concurrency:
-  # PRs retain only the lightweight docs/size signals. Main gets bounded
-  # integration; broad regression runs nightly or on explicit dispatch and is
-  # never a second PR authority.
+  # Finalized PRs retain only the lightweight docs/size signals. Main gets
+  # bounded integration; broad regression runs nightly or on explicit dispatch
+  # and is never a second PR authority.
   group: repo-health-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
@@ -54,7 +57,7 @@ jobs:
   pr-size:
     # Warn (non-blocking) when a PR exceeds 600 meaningful lines changed.
     # Generated artifacts, lockfiles, and docs stamps are excluded from the count.
-    # Runs on PRs only; push events to main skip this check.
+    # Runs on finalized PRs only; draft pushes and pushes to main skip this check.
     if: github.event_name == 'pull_request'
     continue-on-error: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
@@ -80,7 +83,7 @@ jobs:
           fi
 
   lint-docs:
-    # Read-only advisory signal — runs on PRs and trusted non-PR events.
+    # Read-only advisory signal — runs on finalized PRs and trusted non-PR events.
     # Has no write permissions so that attacker-controlled scripts in a PR
     # cannot push to the repository even if they escape the validation steps.
     continue-on-error: ${{ github.event_name == 'pull_request' }}

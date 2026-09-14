@@ -504,7 +504,7 @@ applies Terraform.** The `apply-production-lean` job that auto-applied on every
 push to `main` has been **deleted**. What remains there:
 
 - a provider-mocked configuration plan for each of the six selectable profiles
-  on every PR, publishing an immutable `terraform-configuration-plan-*` artifact
+  on each finalized infrastructure-impact PR, publishing an immutable `terraform-configuration-plan-*` artifact
   (the two ephemeral-class profiles are included here and deliberately excluded
   from remote-plan);
 - an OIDC remote plan per cloud profile when the complete credential set is

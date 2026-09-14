@@ -152,9 +152,12 @@ def _enables_pipefail(run: str) -> bool:
     )
 
 
-def test_native_sdk_validation_runs_on_pull_requests():
+def test_native_sdk_validation_runs_on_pr_finalization():
     workflow = _workflow("sdk-release-validation.yml")
-    assert "github.event_name == 'push'" not in workflow
+    doc = _workflow_yaml("sdk-release-validation.yml")
+    assert _triggers(doc) == {"push", "pull_request", "workflow_dispatch"}
+    pull_request = doc.get("on", doc.get(True))["pull_request"]
+    assert pull_request["types"] == ["ready_for_review"]
     assert "gradle assembleRelease publishToMavenLocal" in workflow
     assert "xcodebuild test" in workflow
     assert "xcrun simctl list devices available -j" in workflow

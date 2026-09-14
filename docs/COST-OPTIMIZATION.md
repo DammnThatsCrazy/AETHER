@@ -405,7 +405,7 @@ side-effects, not budget alarms: `aurora_max_acu` (Aurora at ceiling ACU for
 
 | Trigger | Action | Owner |
 |---|---|---|
-| Every PR touching `docs/archive/legacy-architecture/aws-deployment/**` | Provider-mocked configuration plan for all four profiles; `terraform validate` and `terraform test` | CI, `infrastructure.yml` |
+| Every finalized PR touching `docs/archive/legacy-architecture/aws-deployment/**` | Provider-mocked configuration plan for all four profiles; `terraform validate` and `terraform test` | CI, `infrastructure.yml` |
 | Every credentialed remote plan | `check_terraform_plan_policy.py` + `check_cost_model.py`, immutable artifact retained 30 days | CI |
 | Every reviewed promotion (plan *and* apply) | Both validators re-run at the reviewed commit; apply never trusts the plan-time report | CI, `terraform-promote.yml` |
 | Price book `captured` date older than 90 days | Re-transcribe from the AWS price list pages, bump `captured`, diff the reference `cost-report.json` before merging | `platform@aether` |

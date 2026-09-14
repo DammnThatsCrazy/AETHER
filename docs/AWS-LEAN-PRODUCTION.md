@@ -23,7 +23,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
 source_hashes:
-  ".github/workflows/infrastructure.yml": "sha256:d3f365dc9d77933d491109d50a0bf45b3a42b450ef576e74f028a6a6ea41cdb0"
+  ".github/workflows/infrastructure.yml": "sha256:a9e205768ad22b1c32b612141643d200daaaaf24355fb25af820591d1c824427"
   ".github/workflows/terraform-promote.yml": "sha256:4fe31c78b7d0621cc5db6f35eaa239d30f11ce12e518e5dbee6d343110ed5197"
   "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
@@ -322,6 +322,9 @@ The job that used to auto-apply `production-lean` on every push to `main`
 (`apply-production-lean` in `infrastructure.yml`) has been **deleted**.
 `infrastructure.yml` is now plan-and-validate only, and says so at the top of
 the file.
+It runs its path-scoped provider-mocked plan on PR finalization
+(`ready_for_review`), on matching pushes to `main`, or by explicit dispatch;
+draft PR pushes do not start the workflow.
 
 ### Plan
 

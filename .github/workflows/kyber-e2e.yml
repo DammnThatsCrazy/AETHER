@@ -5,9 +5,8 @@ name: Kyber E2E
 #
 # Triggers:
 #   - Every push to main (guard main-branch regressions).
-#   - Pull requests that touch frontend/kyber/**, so frontend-only PRs
-#     are validated without forcing the full E2E suite to run on
-#     every unrelated change across the monorepo.
+#   - Finalized pull requests (ready_for_review) that touch frontend/kyber/**.
+#     Draft pushes remain an implementation phase and do not start hosted CI.
 #   - Manual dispatch via the Actions tab.
 on:
   push:
@@ -17,6 +16,7 @@ on:
       - 'packages/shared/**'
       - '.github/workflows/kyber-e2e.yml'
   pull_request:
+    types: [ready_for_review]
     paths:
       - 'frontend/kyber/**'
       - 'packages/shared/**'

@@ -3,6 +3,19 @@
 Claude must follow `AGENTS.md`. This file adds Claude-specific emphasis; it does
 not override it.
 
+## Verification cadence
+
+Implementation and architecture work is an accumulation phase. Keep the PR in
+draft and do not run aggregate gates or dispatch hosted PR CI for every
+intermediate push. Use focused local checks for feedback. Once the blueprint is
+integrated, reviewed, remediated, documented, regenerated, and scoped source
+hashes are refreshed, mark the PR ready for review; the `ready_for_review`
+event starts the single blocking `verification / disposition` authority.
+Specialized workflows run supplementary finalization evidence but are not
+parallel merge blockers. Rerun the terminal authority only after a material
+fix; reserve `make ci-check` and `make release-gate` for broad trusted-main,
+nightly, release, or explicitly requested evidence.
+
 ## Before making changes
 
 ```bash

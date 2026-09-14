@@ -573,8 +573,9 @@ that nothing in CI stands up today.
 ### Proposed architecture
 
 A **new, separate** CI lane — additive to, not a replacement for, the
-existing fast local-mode lane, which stays as the quick-feedback default
-for every PR:
+existing fast local-mode lane, which stays as the quick-feedback default for
+the finalization check; focused local feedback remains available while a PR is
+in draft:
 
 1. Stand up a bounded subset of `docker-compose.yml`'s services as GitHub
    Actions service containers (or via `docker compose up -d` in a CI job) —
@@ -630,8 +631,8 @@ claims of correctness independently checkable rather than asserted.
 
 - **Cost and wall-clock time**: real service containers materially lengthen
   CI runtime and infrastructure spend compared to in-memory dicts. This
-  must stay a parallel, non-blocking lane rather than gating every PR from
-  day one.
+  must stay a parallel, non-blocking lane rather than creating another
+  blocking status at PR finalization.
 - **New flakiness class**: container startup and real network behavior
   introduce flakiness that deterministic in-memory fallbacks do not have.
   Needs its own retry/quarantine policy before promotion to required, or

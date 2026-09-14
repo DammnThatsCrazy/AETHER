@@ -315,52 +315,18 @@ def _fixture_root(tmp_path: Path, merge_flag: str, workflow_text: str,
     return tmp_path
 
 
-def test_catalog_merge_block_scope_matches_workflow_path_filtering():
-    """Each check's merge-block flag must match how its workflow triggers.
-
-    A workflow whose pull_request trigger filters by paths does not run on
-    every PR, so it may only claim blocks_pr_merge_when_paths_touched —
-    claiming a universal block would deadlock PRs that never trigger it. An
-    unfiltered workflow runs on every PR and must claim the universal block,
-    not the path-scoped one. This mirrors the rule check_required_checks.py
-    enforces; the earlier form of this test asserted the path-scoped flag for
-    EVERY row, which was only true while the catalog contained nothing but the
-    three path-filtered SDK checks.
-    """
+def test_catalog_declares_one_normal_pr_merge_authority():
+    """Specialized finalization checks do not create parallel PR blockers."""
     catalog = yaml.safe_load((ROOT / "config/required_release_checks.yaml").read_text())
-    for row in catalog["checks"]:
-        workflow = yaml.safe_load((ROOT / row["workflow"]).read_text())
-        triggers = workflow.get("on") or workflow.get(True) or {}
-        pr_trigger = triggers.get("pull_request")
-        if "pull_request" not in triggers:
-            assert row.get("blocks_pr_merge") is not True, (
-                f"{row['id']}: release-only workflow cannot claim a universal "
-                "PR merge block"
-            )
-            assert row.get("blocks_pr_merge_when_paths_touched") is not True, (
-                f"{row['id']}: release-only workflow cannot claim a path-scoped "
-                "PR merge block"
-            )
-            continue
-        pr_paths = pr_trigger.get("paths") if isinstance(pr_trigger, dict) else None
-        if pr_paths:
-            assert row.get("blocks_pr_merge") is not True, (
-                f"{row['id']}: path-filtered workflow must not claim a "
-                "universal merge block"
-            )
-            assert row.get("blocks_pr_merge_when_paths_touched") is True, (
-                f"{row['id']}: path-filtered workflow must declare the "
-                "path-scoped merge block"
-            )
-        else:
-            assert row.get("blocks_pr_merge") is True, (
-                f"{row['id']}: unfiltered workflow runs on every PR and must "
-                "claim the universal merge block"
-            )
-            assert row.get("blocks_pr_merge_when_paths_touched") is not True, (
-                f"{row['id']}: unfiltered workflow cannot scope its block to "
-                "paths it does not filter by"
-            )
+    branch = catalog["branch_protection"]
+    assert branch["normal_pr_authority"] == "verification-disposition"
+    assert branch["normal_pr_status"] == "verification / disposition"
+    blockers = [
+        row["id"] for row in catalog["checks"]
+        if row.get("blocks_pr_merge") is True
+        or row.get("blocks_pr_merge_when_paths_touched") is True
+    ]
+    assert blockers == ["verification-disposition"]
 
 
 def test_validator_rejects_universal_merge_block_on_path_filtered_workflow(tmp_path):

@@ -7,6 +7,11 @@ normal_pr:
   universal_fast_lane: fast
   affected_lane: pr
   allowed_escalations: [integration, regression, release]
+  # Keep implementation PRs in draft while work accumulates. The normal PR
+  # authority starts once the completed change is explicitly finalized.
+  finalization_event: ready_for_review
+  draft_required_for_intermediate_work: true
+  blocking_workflow: .github/workflows/repo-consistency.yml
 
 shadow:
   # Retired after the representative hosted PR observation window completed

@@ -22,14 +22,14 @@ canonical_owner: platform@aether
 estimated_read_minutes: 8
 toc_depth: 3
 source_hashes:
-  ".github/workflows/repo-health.yml": "sha256:ef98cf4b425f4971ffecc72b641376366e61b09c9ffbdef74250bda231d165f3"
+  ".github/workflows/repo-health.yml": "sha256:624c173cc5db243ffebeb2284532a75f195d4918622160e586b7d90cb569f946"
   ".pre-commit-config.yaml": "sha256:e1c5169ee1d1f2923709f37a21c664cf898cb4c3b40ab908be2f9068dd7a0aca"
   "Makefile": "sha256:17ca662ded4b105b7f8ac2de6d3aef9814409a36e5a051d0bc9de489bfe93a7e"
   "scripts/docs_drift.py": "sha256:b6c0cd0a27f72b8c0d207d799f6daabdf0ed02e8bea17feaf6ccbfff43c1016a"
   "scripts/docs_extract/run_all.py": "sha256:404445eba05d12de88af585f79839b7496a1658411a110e606c46d5ed7e8c338"
   "scripts/docs_idempotency.py": "sha256:fe8628ef3a9b9d824645a5db062857754d2984b0f3f4d866b571df6232302f17"
   "scripts/docs_schema.json": "sha256:1a062b35ae5b18e85a10efedaa56708de3d9a332808cac699456ce6bb112fc74"
-  "scripts/sync_docs.py": "sha256:119da9cb34328fa778ce58e2f1302c8dac1b5de99cd2fce3fef9016c6a2bd531"
+  "scripts/sync_docs.py": "sha256:e427b9e6ba4448313e11c93635e66f05a823d4bd4cd13eb542a6d9027009d152"
   "scripts/validate_contracts.py": "sha256:f4cd7933434c30e454b5ae21533aa8a8ce9f33aa1907687d1bbcf047534bdabe"
   "scripts/validate_docs.py": "sha256:5c9efbc3c95a75267ccf69b353c6112a93bde9e16a8dc36c939d2b1d75c99d63"
   "scripts/validate_frontmatter.py": "sha256:1b4ba24575565584f7fc5e01c01a245ee4702f5220c85aa701bc86af2bdaa0c4"
@@ -197,11 +197,13 @@ before pushing.
 **CI** — documentation consistency is implemented by two workflows with
 different authority scopes:
 
-- `.github/workflows/repo-health.yml` — advisory docs/size signals on PRs and
+- `.github/workflows/repo-health.yml` — advisory docs/size signals on finalized
+  PRs (`ready_for_review`) and
   the trusted-main/nightly documentation runners. Its `docs-sync` write path is
   restricted to pushes to `main`.
 - `.github/workflows/repo-consistency.yml` — the normal PR authority named
-  `verification / disposition`; it runs the selected documentation check when
+  `verification / disposition`; it starts at PR finalization (`ready_for_review`)
+  and runs the selected documentation check when
   the Impact Graph requires it. Its full `make ci-check` execution is retired
   from PRs after the observation window, while the same broad command remains
   available for trusted-main/nightly/release evidence.
