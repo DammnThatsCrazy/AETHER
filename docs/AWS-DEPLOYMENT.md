@@ -28,12 +28,12 @@ source_hashes:
   ".github/workflows/staging-state-reconcile.yml": "sha256:b7dd5cef545fdf60ac882b917ddde4dcada633a4eb0f321759bc5fc5b3e7f38a"
   ".github/workflows/staging-ttl-guard.yml": "sha256:4fe2250c0ccb0f8486800c6e09c8f1adcf6c38371944e911269f103053f0f1da"
   ".github/workflows/terraform-promote.yml": "sha256:f4df3b2fe853abe6605fbebcd9d85cf093c247251d6be971900804894749f1e9"
-  "config/staging_apply_iam_policy.yaml": "sha256:077f7ec5ab4a05f950278c684035aeb3ae0ba3aec718eb8fa2b23068af65f71c"
+  "config/staging_apply_iam_policy.yaml": "sha256:86190e1e662c2f6cf7f009fc7820fc6f3516d061553953e7ab80051b30b8a198"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:84cc2d5a0cdb621f0dc2ba271fd9e66228e36a80cabf52133cf51d410a85f21e"
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:64a57d1766705e7295a6f22cb1eb2d2364cf75b5d184ee2c2be07c35530c04d0"
+  "deploy/aws/terraform/": "sha256:31003620ea911dee0c147f76394eed5653976828e5ccee98b7d7684bfbded2f9"
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:20998a03fdd484635cc80667220794fb1970be3f2e198ac067ec7c7bda12f2f1"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:08dff05b2a886af751d7e0b1c7886951b240b6a31f18ef14d26f73085ae59145"
   "scripts/release/verify_terraform_state_role.py": "sha256:80dce5faa3a69a530f24a72105f7b340bc52726906a641540ed7ef08fb6e46ac"
@@ -54,8 +54,9 @@ account-level ECS service-linked role bootstrap. Secrets, ECR, and Aurora CMKs c
 environment tag; the Secrets Manager and regional CloudWatch Logs service
 principals are constrained by caller account and encryption
 context rather than broad key access (Secrets Manager additionally uses
-ViaService; CloudWatch Logs omits it because the service calls KMS as its
-own principal where that condition key is absent). The pre-apply verifier compares the
+ViaService; CloudWatch Logs omits both `kms:ViaService` and
+`kms:CallerAccount` because it calls KMS as its own regional principal while
+creating encrypted log groups). The pre-apply verifier compares the
 attached policy statements with the reviewed staging manifest, including
 resource coverage, conditions, and explicit Deny statements, before any
 Terraform mutation.
@@ -383,6 +384,11 @@ leaves Squarespace authoritative by default; the Amplify association's DNS
 targets are exported for the controlled manual DNS change. The public status
 application consumes `status_api_url` only after the API hostname and CORS
 policy have been verified; an empty value renders an explicit unverified state.
+The staging apply contract grants `amplify:CreateApp` only at the API-required
+global scope and keeps existing-app, branch, and tag operations constrained to
+the generated staging Amplify app and branch ARN families. Custom-domain
+association permissions remain outside this staging contract because those
+associations are production-only.
 The Amplify applications and the private S3 artifacts are both gated by the
 same `enable_static_frontends` toggle, but they are separate delivery paths:
 Amplify serves the public web surfaces; S3 stores the protected tenant and Kyber
@@ -394,6 +400,11 @@ without a catch-all rewrite. Aether marketing has only the explicit
 threshold; the end-user app and docs portal use an index fallback because they
 resolve client routes at runtime. This keeps route-specific marketing metadata
 intact while preserving direct navigation for the two runtime-routed apps.
+
+The Aurora module pins the standard provisioned Aurora PostgreSQL 16.8 engine
+release. The repository previously used 16.4, but that exact standard engine
+version is not available in the staging account/region; the major-family
+parameter group remains `aurora-postgresql16`.
 
 ### Route 53 and Squarespace DNS
 

@@ -626,6 +626,11 @@ def test_staging_cmk_service_policy_and_environment_tags_are_present() -> None:
     assert 'identifiers = ["logs.${data.aws_region.current.name}.amazonaws.com"]' in secrets
     assert 'variable = "kms:EncryptionContext:aws:logs:arn"' in secrets
     assert 'variable = "kms:EncryptionContext:SecretARN"' in secrets
+    logs_start = secrets.index('sid       = "AllowCloudWatchLogsServiceUse"')
+    logs_end = secrets.index('\n  }', logs_start)
+    logs_policy = secrets[logs_start:logs_end]
+    assert 'variable = "kms:ViaService"' not in logs_policy
+    assert 'variable = "kms:CallerAccount"' not in logs_policy
     assert 'secret:aether/*' in secrets
     assert 'Environment = var.environment' in secrets
     for module in ("ecr", "aurora"):
@@ -710,8 +715,26 @@ def test_reviewed_iam_manifest_matches_checker() -> None:
         "iam:CreateRole",
         "events:PutRule",
         "logs:PutRetentionPolicy",
+        "amplify:CreateApp",
+        "amplify:TagResource",
     ):
         assert required in all_actions
+
+
+def test_staging_amplify_contract_is_scoped_to_apps_and_branches() -> None:
+    manifest = yaml.safe_load(POLICY.read_text(encoding="utf-8"))
+    statements = manifest["statements"]
+    apps = "arn:aws:amplify:us-east-1:${account_id}:apps/*"
+    branches = "arn:aws:amplify:us-east-1:${account_id}:apps/*/branches/*"
+    create = next(s for s in statements if s["sid"] == "CreateStagingAmplifyApps")
+    assert create["actions"] == ["amplify:CreateApp"]
+    assert create["resource"] == "*"
+    app_ops = next(s for s in statements if s["sid"] == "ManageStagingAmplifyApps")
+    assert app_ops["resource"] == apps
+    branch_ops = next(s for s in statements if s["sid"] == "ManageStagingAmplifyBranches")
+    assert branch_ops["resource"] == branches
+    tags = next(s for s in statements if s["sid"] == "TagStagingAmplifyResources")
+    assert tags["resource"] == [apps, branches]
 
 
 def test_passrole_resource_principal_pairs_are_not_swappable(tmp_path: Path) -> None:

@@ -91,8 +91,11 @@ resource "aws_rds_cluster_parameter_group" "this" {
 resource "aws_rds_cluster" "this" {
   cluster_identifier = "${lower(var.project)}-${var.environment}-aurora"
 
-  engine         = "aurora-postgresql"
-  engine_version = "16.4"
+  engine = "aurora-postgresql"
+  # 16.4 is no longer offered as a standard provisioned Aurora PostgreSQL
+  # version in the staging account/region. Keep the major-family parameter
+  # group while pinning to the currently available 16.8 release.
+  engine_version = "16.8"
   engine_mode    = "provisioned"
 
   database_name   = var.db_name
