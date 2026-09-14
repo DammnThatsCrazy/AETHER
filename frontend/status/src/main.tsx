@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
+import { resolveStatusConfig } from './config';
 
 type HealthState = 'operational' | 'degraded' | 'outage' | 'unknown';
 
@@ -23,7 +24,11 @@ interface HealthPayload {
   readonly components?: unknown;
 }
 
-const statusEndpoint = (import.meta.env.VITE_STATUS_API_URL as string | undefined)?.trim() ?? '';
+const statusConfig = resolveStatusConfig({
+  VITE_STATUS_API_URL: import.meta.env.VITE_STATUS_API_URL,
+  VITE_STATUS_DOCS_URL: import.meta.env.VITE_STATUS_DOCS_URL,
+  VITE_STATUS_AETHER_MARKETING_URL: import.meta.env.VITE_STATUS_AETHER_MARKETING_URL,
+});
 
 const COMPONENT_LABELS: Readonly<Record<string, string>> = {
   ingestion: 'Ingestion & processing',
@@ -127,7 +132,7 @@ async function classify(response: Response): Promise<HealthSnapshot> {
 }
 
 async function checkHealth(signal: AbortSignal): Promise<HealthSnapshot> {
-  if (!statusEndpoint) {
+  if (!statusConfig.statusApiUrl) {
     return {
       state: 'unknown',
       detail: 'The live monitoring source has not been connected to this status surface.',
@@ -136,7 +141,10 @@ async function checkHealth(signal: AbortSignal): Promise<HealthSnapshot> {
     };
   }
   try {
-    const response = await fetch(statusEndpoint, { signal, headers: { Accept: 'application/json' } });
+    const response = await fetch(statusConfig.statusApiUrl, {
+      signal,
+      headers: { Accept: 'application/json' },
+    });
     return classify(response);
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
@@ -234,8 +242,8 @@ function App() {
           features, and tenant-specific connectivity are separate states.
         </p>
         <nav className="links" aria-label="Status resources">
-          <a href="https://docs.olympuslabsml.com/operations/status">Status documentation</a>
-          <a href="https://aether.olympuslabsml.com/contact">Contact Aether</a>
+          <a href={`${statusConfig.docsUrl}/operations/status`}>Status documentation</a>
+          <a href={`${statusConfig.aetherMarketingUrl}/contact`}>Contact Aether</a>
         </nav>
         {snapshot.checkedAt && (
           <p className="checked">Last checked {new Date(snapshot.checkedAt).toLocaleString()}</p>

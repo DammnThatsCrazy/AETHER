@@ -253,6 +253,17 @@ run "staging_profile_plan" {
     error_message = "Amplify custom rules would rewrite a prerendered marketing or status surface, or omit the required client/auth fallback."
   }
 
+  # The status shell must stay inside the same environment while staging uses
+  # Amplify default domains. These branch variables are intentionally derived
+  # from the sibling Amplify apps rather than hard-coded production origins.
+  assert {
+    condition = alltrue([
+      contains(keys(aws_amplify_branch.main["status"].environment_variables), "VITE_STATUS_DOCS_URL"),
+      contains(keys(aws_amplify_branch.main["status"].environment_variables), "VITE_STATUS_AETHER_MARKETING_URL"),
+    ])
+    error_message = "The staging status branch is missing environment-local links to the docs and Aether marketing shells."
+  }
+
   # required_resources: credential_kms — the provider-credential envelope-
   # encryption CMK is provisioned in every cloud profile. A staging plan that
   # dropped it would run the AwsKmsEnvelopeCredentialCipher with no key.
