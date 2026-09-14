@@ -170,6 +170,12 @@ zero_cost_types:
   - aws_ecr_lifecycle_policy
   - aws_cloudfront_origin_access_control
   - aws_cloudfront_origin_access_identity
+  # Amplify app and branch records are free control-plane definitions. Build
+  # minutes, hosted storage, requests, and data transfer are usage-driven and
+  # are not fixed by the Terraform plan; they must be observed after staging
+  # publication rather than treated as a hidden fixed zero.
+  - aws_amplify_app
+  - aws_amplify_branch
   - aws_caller_identity
   - aws_region
   - aws_availability_zones

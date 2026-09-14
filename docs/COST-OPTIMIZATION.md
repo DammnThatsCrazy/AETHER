@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 16
 toc_depth: 3
 source_hashes:
-  "config/aws_price_book.yaml": "sha256:87fe0dc629d829c8d501dedd32b1f1797850692b406bd801c50436c6c3f49eb5"
+  "config/aws_price_book.yaml": "sha256:73dfdb9da4e62c9ef8fc4a1a4e4c818e7e341b2acfce496fcde24c845e510f80"
   "config/cost_exceptions.yaml": "sha256:029e003d3340de68c683a2f212edd3ceb13b6de01e5f6e70ddd44bdecda78ce2"
   "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
@@ -72,9 +72,12 @@ and the distinction is load-bearing:
   low/expected/high band, but never used as a pass/fail ceiling, because the
   plan cannot determine it.
 - **zero** — genuinely free control-plane objects (IAM, security groups, ALB
-  listeners, ECS task definitions). Enumerated explicitly in
-  `zero_cost_types` so that an *unrecognised* type stays a hard failure instead
-  of a $0 guess.
+  listeners, ECS task definitions, and Amplify app/branch records).
+  Enumerated explicitly in `zero_cost_types` so that an *unrecognised* type
+  stays a hard failure instead of a $0 guess. Amplify build minutes, hosted
+  storage, requests, and data transfer remain usage-driven operating costs;
+  they are not silently treated as a fixed zero and must be observed after
+  static publication.
 
 Only the fixed baseline is gated. The usage band is always reported alongside
 it so nobody mistakes the baseline for the bill.

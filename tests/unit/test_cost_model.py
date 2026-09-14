@@ -290,6 +290,25 @@ def test_fixed_and_variable_costs_are_separated(tmp_path: Path) -> None:
     assert band["low"] < band["expected"] < band["high"]
 
 
+def test_amplify_apps_and_branches_are_explicit_free_control_plane_records(
+    tmp_path: Path,
+) -> None:
+    """Amplify hosting usage is observed separately from free app/branch records."""
+    inv = _write_inventory(tmp_path, "staging", [
+        _resource("aws_amplify_app.frontend[\"aether-app\"]", "aws_amplify_app"),
+        _resource("aws_amplify_branch.main[\"aether-app\"]", "aws_amplify_branch"),
+    ])
+
+    assert _run(tmp_path, inv, profile="staging") == 0
+    model = _report(tmp_path)["model"]
+    assert {item["type"] for item in model["zero_items"]} == {
+        "aws_amplify_app",
+        "aws_amplify_branch",
+    }
+    assert model["fixed_monthly_usd"] == 0.0
+    assert model["unpriced"] == []
+
+
 def test_provisioned_dynamodb_is_priced_as_fixed_and_gated(tmp_path: Path) -> None:
     """PROVISIONED capacity is a standing commitment, so it must reach the gate.
 
