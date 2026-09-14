@@ -204,13 +204,18 @@ jobs:
         # AETHER_AUTH0_CLIENT_ID / KYBER_AUTH0_CLIENT_ID come from the
         # Terraform outputs aether_client_id / kyber_client_id.
         env:
-          VITE_AUTH0_DOMAIN: ${{ vars.AUTH0_DOMAIN }}
-          VITE_AUTH0_AUDIENCE: ${{ vars.AUTH0_AUDIENCE }}
+          # Keep optional repository variables as explicit overrides, but do
+          # not let an unconfigured variable silently produce a staging build
+          # with empty identity or API endpoints. The Terraform secret set is
+          # the canonical staging input already consumed by the reviewed
+          # infrastructure workflow.
+          VITE_AUTH0_DOMAIN: ${{ vars.AUTH0_DOMAIN || secrets.TF_AUTH0_DOMAIN }}
+          VITE_AUTH0_AUDIENCE: ${{ vars.AUTH0_AUDIENCE || 'https://api.aether.io' }}
           AETHER_AUTH0_CLIENT_ID: ${{ secrets.AETHER_AUTH0_CLIENT_ID }}
-          AETHER_API_BASE_URL: ${{ vars.AETHER_API_BASE_URL }}
+          AETHER_API_BASE_URL: ${{ vars.AETHER_API_BASE_URL || format('https://{0}', secrets.TF_DOMAIN_NAME) }}
           KYBER_AUTH0_CLIENT_ID: ${{ secrets.KYBER_AUTH0_CLIENT_ID }}
-          KYBER_API_BASE_URL: ${{ vars.KYBER_API_BASE_URL }}
-          KYBER_WS_BASE_URL: ${{ vars.KYBER_WS_BASE_URL }}
+          KYBER_API_BASE_URL: ${{ vars.KYBER_API_BASE_URL || format('https://{0}', secrets.TF_DOMAIN_NAME) }}
+          KYBER_WS_BASE_URL: ${{ vars.KYBER_WS_BASE_URL || format('wss://{0}', secrets.TF_DOMAIN_NAME) }}
         run: |
           set -euo pipefail
           npm ci
