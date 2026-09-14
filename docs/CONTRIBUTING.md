@@ -16,7 +16,7 @@ estimated_read_minutes: 3
 toc_depth: 3
 source_hashes:
   "AGENTS.md": "sha256:122b4db9bed9f32963471c04f5c56dbf418af5751aaf0208a4afba563769467e"
-  "Makefile": "sha256:17ca662ded4b105b7f8ac2de6d3aef9814409a36e5a051d0bc9de489bfe93a7e"
+  "Makefile": "sha256:2e442e568ec502a65c42dc22e3334219df59bc48998bb5f02a3c6f7edd5b9d1d"
   "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:3973482780754878fd56b1d7018d86bc1c48c9b4e2aa701a7ddb8336c3d0b924"
   "scripts/repo_doctor.py": "sha256:14356c17de95b40d64c74dd60616f7a86f39db7bcafc011305ce445e01a96eb4"
 ---
@@ -42,11 +42,12 @@ When preparing or updating a PR:
 6. Run `make validate-ci-execution-contracts` and `make validate-ci-performance-policy` when changing the adaptive CI plan, suite registry, evidence schemas, or latency policy.
 7. If strict docs drift reports source-linked pages, review each listed page against its declared `source_files` and update authored content where behavior changed.
 8. If backend routes, schemas, contracts, SDK public types, Profile 360, or Kyber surfaces changed, update the required ownership-map surfaces.
-9. Mark the completed PR ready for review; this starts the single hosted `verification / disposition` authority. Run `make verification-disposition BASE=<ref> EXECUTE=1` once for the final lane tip.
-10. Run `make ci-check` only for broad local, trusted-main, nightly, release, or explicitly requested evidence; it is not a second blocking PR authority.
-11. Commit generated and synced outputs when preparing the PR or when a commit was requested.
-12. Do not hand-edit generated docs or bypass TypeScript/package export failures.
-13. Do not call a PR merge-ready until the final disposition passes; report broad-gate results separately.
+9. For deployment-profile changes, run `make resolved-feature-flags` so staging and production-lean each have an explicit, reviewed flag resolution.
+10. Mark the completed PR ready for review; this starts the single hosted `verification / disposition` authority. Run `make verification-disposition BASE=<ref> EXECUTE=1` once for the final lane tip.
+11. Run `make ci-check` only for broad local, trusted-main, nightly, release, or explicitly requested evidence; it is not a second blocking PR authority.
+12. Commit generated and synced outputs when preparing the PR or when a commit was requested.
+13. Do not hand-edit generated docs or bypass TypeScript/package export failures.
+14. Do not call a PR merge-ready until the final disposition passes; report broad-gate results separately.
 
 The hosted normal-PR merge check is the stable `verification / disposition`
 status, and it starts on the `ready_for_review` finalization event. The broad

@@ -2,6 +2,7 @@ version: 1
 applications:
   - appRoot: frontend/olympus-marketing
     frontend:
+      buildPath: /
       phases:
         preBuild:
           commands:
@@ -18,6 +19,7 @@ applications:
           - node_modules/**/*
   - appRoot: frontend/aether-marketing
     frontend:
+      buildPath: /
       phases:
         preBuild:
           commands:
@@ -34,6 +36,7 @@ applications:
           - node_modules/**/*
   - appRoot: frontend/docs
     frontend:
+      buildPath: /
       phases:
         preBuild:
           commands:
@@ -48,8 +51,26 @@ applications:
       cache:
         paths:
           - node_modules/**/*
+  - appRoot: frontend/status
+    frontend:
+      buildPath: /
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - npm run build --workspace=frontend/status
+      artifacts:
+        baseDirectory: frontend/status/dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
   - appRoot: frontend/aether
     frontend:
+      buildPath: /
       phases:
         preBuild:
           commands:

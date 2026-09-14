@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import { AetherShell } from '@aether-marketing/components/aether-shell';
 import { AuthLayout } from '@aether-marketing/components/auth-layout';
 import { SECTIONS } from '@aether-marketing/content/sections';
@@ -16,6 +17,9 @@ import { SolutionsPage } from '@aether-marketing/pages/solutions-page';
 import { ForgotPasswordPage } from '@aether-marketing/pages/auth/forgot-password-page';
 import { LoginPage } from '@aether-marketing/pages/auth/login-page';
 import { SignupPage } from '@aether-marketing/pages/auth/signup-page';
+import { usePageMeta } from '@aether-marketing/lib/meta';
+import { LaunchPackPage } from '../../../marketing/src/LaunchPackPage';
+import { getLaunchPackPage } from '../../../marketing/src/content-loader';
 
 /**
  * Sections with a dedicated interactive/landing page. Every other top-level
@@ -29,6 +33,28 @@ const DEDICATED_PAGES: Readonly<Record<string, ComponentType>> = {
   '/pricing': PricingPage,
 };
 
+function LaunchPackContent({ page }: { readonly page: NonNullable<ReturnType<typeof getLaunchPackPage>> }) {
+  usePageMeta({ title: page.seoTitle, description: page.seoDescription });
+  return <LaunchPackPage page={page} />;
+}
+
+function LaunchPackRoute({
+  fallback,
+  preserveInteractive = false,
+}: {
+  readonly fallback: ReactNode;
+  readonly preserveInteractive?: boolean;
+}) {
+  const location = useLocation();
+  // The existing product shell calls the overview /platform; the external
+  // launch pack names the same canonical page /product. Keep the public URL
+  // stable while making the rendered copy come from the launch-pack source.
+  const packRoute = location.pathname === '/platform' ? '/product' : location.pathname;
+  const page = getLaunchPackPage('Aether', packRoute);
+  if (page !== undefined && !preserveInteractive) return <LaunchPackContent page={page} />;
+  return <>{fallback}</>;
+}
+
 /**
  * Aether public experience routes.
  *
@@ -40,15 +66,32 @@ export function AppRouter() {
   return (
     <Routes>
       <Route element={<AetherShell />}>
-        <Route index element={<HomePage />} />
+        <Route index element={<LaunchPackRoute fallback={<HomePage />} />} />
         {SECTIONS.map((section) => {
           const Page = DEDICATED_PAGES[section.slug] ?? SectionPage;
-          return <Route key={section.slug} path={section.slug} element={<Page />} />;
+          return (
+            <Route
+              key={section.slug}
+              path={section.slug}
+              element={
+                <LaunchPackRoute
+                  fallback={<Page />}
+                  preserveInteractive={DEDICATED_PAGES[section.slug] !== undefined}
+                />
+              }
+            />
+          );
         })}
         {/* Capability-family and solution deep routes */}
-        <Route path="/platform/:capabilitySlug" element={<CapabilityPage />} />
-        <Route path="/solutions/:solutionSlug" element={<SolutionPage />} />
-        <Route path="*" element={<NotFoundPage />} />
+        <Route
+          path="/platform/:capabilitySlug"
+          element={<LaunchPackRoute fallback={<CapabilityPage />} />}
+        />
+        <Route
+          path="/solutions/:solutionSlug"
+          element={<LaunchPackRoute fallback={<SolutionPage />} />}
+        />
+        <Route path="*" element={<LaunchPackRoute fallback={<NotFoundPage />} />} />
       </Route>
       <Route element={<AuthLayout />}>
         <Route path="login" element={<LoginPage />} />

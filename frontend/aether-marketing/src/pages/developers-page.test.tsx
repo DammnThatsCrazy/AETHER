@@ -18,7 +18,7 @@ describe('DevelopersPage', () => {
     renderDevelopersPage();
 
     expect(
-      screen.getByRole('heading', { level: 1, name: 'Integrate once. Resolve everywhere.' }),
+      screen.getByRole('heading', { level: 1, name: 'Start with the connection you already control.' }),
     ).toBeInTheDocument();
   });
 
@@ -62,7 +62,7 @@ describe('DevelopersPage', () => {
   it('points at the documentation as the canonical reference and offers sign-up through the threshold', () => {
     renderDevelopersPage();
 
-    const docsCta = screen.getByRole('link', { name: 'Read the technical documentation' });
+    const docsCta = screen.getByRole('link', { name: 'Open the developer docs' });
     expect(docsCta).toHaveAttribute('href', AETHER_DOCS_URL);
     expect(docsCta).toHaveAttribute('target', '_blank');
     expect(docsCta).toHaveAttribute('rel', 'noreferrer');
@@ -74,9 +74,9 @@ describe('DevelopersPage', () => {
     );
 
     // Sign-up routes through the public /signup threshold, not the app origin.
-    const startBuilding = screen.getByRole('link', { name: 'Start building' });
-    expect(startBuilding).toHaveAttribute('href', '/signup');
-    expect(startBuilding).not.toHaveAttribute('target');
+    const pilot = screen.getByRole('link', { name: 'Start with a pilot' });
+    expect(pilot).toHaveAttribute('href', '/start-pilot');
+    expect(pilot).not.toHaveAttribute('target');
   });
 
   it('still renders the /developers bullets from the SECTIONS entry', () => {

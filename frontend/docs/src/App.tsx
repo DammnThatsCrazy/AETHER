@@ -18,6 +18,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<DocIndex tier={tier} />} />
           <Route path="/doc/:slug" element={<DocViewer />} />
+          <Route path="/doc/*" element={<DocViewer />} />
           <Route path="/artifacts" element={<ArtifactsIndex />} />
           <Route path="/artifacts/events" element={<EventRegistry />} />
           <Route path="/artifacts/env" element={<EnvVars />} />

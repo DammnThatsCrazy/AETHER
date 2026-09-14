@@ -41,7 +41,7 @@ describe('Aether marketing shell', () => {
 
     // Editorial home present.
     expect(
-      screen.getByRole('heading', { level: 1, name: /one governed graph/i }),
+      screen.getByRole('heading', { level: 1, name: /connect the systems/i }),
     ).toBeInTheDocument();
   });
 

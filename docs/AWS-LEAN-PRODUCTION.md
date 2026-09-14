@@ -23,18 +23,18 @@ canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
 source_hashes:
-  ".github/workflows/infrastructure.yml": "sha256:a9e205768ad22b1c32b612141643d200daaaaf24355fb25af820591d1c824427"
-  ".github/workflows/terraform-promote.yml": "sha256:4fe31c78b7d0621cc5db6f35eaa239d30f11ce12e518e5dbee6d343110ed5197"
+  ".github/workflows/infrastructure.yml": "sha256:5712903afb313a689ad733d2b7d36ee38b07cb3e2f5af43a06d9b725190c150e"
+  ".github/workflows/terraform-promote.yml": "sha256:f4df3b2fe853abe6605fbebcd9d85cf093c247251d6be971900804894749f1e9"
   "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
   "deploy/aws/terraform/DECOMMISSION.md": "sha256:a37cb94abdcbc9472eb4881722289412f4adcc79fa75755946bbef0fc93b8dec"
-  "deploy/aws/terraform/main.tf": "sha256:d49a3a87a2641c8cdd9390f1f0637572ba5961146b30eff37892aeee66c8131e"
+  "deploy/aws/terraform/main.tf": "sha256:37b68c5d17e0d510f83d7a8181b077cdab1d7c73a5365471394622f1ff6802cd"
   "deploy/aws/terraform/moved.tf": "sha256:aec15de07e356364018e3bdf09fdb6196d252bdb4e0451212f5b6a27a7b26816"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
-  "deploy/aws/terraform/profiles/production-lean.tfvars": "sha256:d2a43c01989cfbbec8081b85356487df5d421cba5f2369671b6d67551a574e39"
-  "deploy/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:49de40c8e1b25e70be10484d3297f3056939cf40403caee11b51eb237a9110f7"
-  "deploy/aws/terraform/variables.tf": "sha256:7dfc485a37776610062b703a91e594b49e2d04c5d932592fca67adbda1076961"
+  "deploy/aws/terraform/profiles/production-lean.tfvars": "sha256:ba173dfc337349057b0d4f02d8be3e3c6d8d2ef92408e76b29166a881a5c13d2"
+  "deploy/aws/terraform/tests/profile_plan.tftest.hcl": "sha256:af7f5993e2927b8578dbf99becb5d82a8b66d143985c2f6311d7fd5a638a0966"
+  "deploy/aws/terraform/variables.tf": "sha256:4890da151abf54a6493d26a0290e13fc88e4a0891bb801ce4361e5fba6ff4307"
 ---
 
 # AWS Lean Production
@@ -60,7 +60,8 @@ cd "deploy/aws/terraform"
 terraform plan -var-file=profiles/production-lean.tfvars -out=tfplan
 ```
 
-`profiles/production-lean.tfvars` pins four things:
+`profiles/production-lean.tfvars` pins the lean runtime and the production web
+cutover controls:
 
 ```hcl
 deployment_profile  = "production-lean"
@@ -68,6 +69,13 @@ network_egress_mode = "public_ip"   # zero NAT Gateways
 aurora_min_acu      = 0.5           # always warm at a small floor
 aurora_max_acu      = 4
 log_retention_days  = 3             # short CloudWatch retention; bulk logs to S3
+amplify_custom_domain_enabled  = true
+amplify_domain_name             = "olympuslabsml.com"
+# Squarespace remains authoritative; add the Amplify association CNAME targets
+# there. Route 53 delegation is an explicit, separately reviewed DNS move.
+squarespace_hosted_zone_enabled = false
+status_api_url                  = "https://api.olympuslabsml.com/health"
+enable_tfmcp_in_lean             = false
 ```
 
 `backend_image_digest` and `ml_image_digest` have **no defaults**. Every plan
@@ -81,13 +89,14 @@ selection is therefore structural, not documentary: a `production-lean` plan
 ## Topology
 
 ```
-                    Route 53 / ACM
+                    Squarespace apex / Amplify custom domains
                           │
         ┌─────────────────┴──────────────────┐
         │                                    │
-  CloudFront + S3                      Application
-  (aether, kyber SPAs)                 Load Balancer
-  immutable static origins             (internet-facing)
+  Amplify public web apps              Application
+  Olympus / Aether / docs /             Load Balancer
+  app / status                          (internet-facing)
+  S3 private artifacts
                                              │
                                     ┌────────┴─────────┐
                                     │  ECS Fargate     │
@@ -116,8 +125,11 @@ selection is therefore structural, not documentary: a `production-lean` plan
     + analytics)
 ```
 
-Frontends are **immutable S3 origins behind a CDN**, never ECS-hosted
-containers. That is true at every profile, not just lean.
+Public Olympus, Aether, docs, app, and status pages are **Amplify-hosted
+applications**, never ECS-hosted containers. The protected tenant release and
+Kyber operator release are immutable encrypted S3 artifacts. Kyber remains
+internal-only: it has no public DNS record unless the explicit internal DNS
+control and target are supplied.
 
 ### Task counts
 

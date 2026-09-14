@@ -11,6 +11,7 @@ import {
 import { findSection } from './sections';
 import { CapabilityPage } from '../pages/capability-page';
 import { PlatformPage } from '../pages/platform-page';
+import { getLaunchPackPage, launchPackHeading } from '../../../marketing/src/content-loader';
 
 /**
  * Mount one routed page with the same route shape the integration agent will
@@ -124,7 +125,13 @@ describe('platform page', () => {
 
     renderPlatform();
 
-    expect(screen.getByRole('heading', { level: 1, name: section.title })).toBeInTheDocument();
+    const launchPack = getLaunchPackPage('Aether', '/product');
+    const expectedHeading = launchPackHeading(launchPack);
+    expect(expectedHeading).toBeDefined();
+    if (expectedHeading === undefined) return;
+    expect(
+      screen.getByRole('heading', { level: 1, name: expectedHeading }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { level: 2, name: 'Explore the capability families' }),
     ).toBeInTheDocument();

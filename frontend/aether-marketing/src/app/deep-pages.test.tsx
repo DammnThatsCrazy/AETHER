@@ -82,7 +82,7 @@ describe('dedicated interactive section pages', () => {
 
     expect(screen.getByRole('searchbox')).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { level: 1, name: integrations.title }),
+      screen.getByRole('heading', { level: 1, name: /connect the systems where the relationship happens/i }),
     ).toBeInTheDocument();
   });
 

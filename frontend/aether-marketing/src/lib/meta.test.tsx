@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AppRouter } from '@aether-marketing/app/router';
 import { AETHER_DOCS_URL, AETHER_MARKETING_URL } from '@aether-marketing/lib/env';
+import { getLaunchPackPage } from '../../../marketing/src/content-loader';
 
 function content(selector: string): string | null {
   return document.head.querySelector(selector)?.getAttribute('content') ?? null;
@@ -33,16 +34,18 @@ describe('per-route head meta', () => {
   it('sets the full home head: title, description, robots, canonical, and social tags', () => {
     renderAt('/');
 
-    expect(document.title).toBe('Aether — Relationship intelligence by Olympus Labs');
-    expect(content('meta[name="description"]')).toContain('governed graph');
+    const home = getLaunchPackPage('Aether', '/');
+    expect(home).toBeDefined();
+    expect(document.title).toBe(home?.seoTitle);
+    expect(content('meta[name="description"]')).toBe(home?.seoDescription);
     expect(content('meta[name="robots"]')).toBe('index,follow');
     expect(canonical()).toBe(`${AETHER_MARKETING_URL}/`);
     expect(content('meta[property="og:type"]')).toBe('website');
     expect(content('meta[property="og:site_name"]')).toBe('Aether by Olympus Labs');
     expect(content('meta[property="og:url"]')).toBe(`${AETHER_MARKETING_URL}/`);
-    expect(content('meta[property="og:title"]')).toBe('Aether — Relationship intelligence by Olympus Labs');
+    expect(content('meta[property="og:title"]')).toBe(home?.seoTitle);
     expect(content('meta[name="twitter:card"]')).toBe('summary');
-    expect(content('meta[name="twitter:title"]')).toBe('Aether — Relationship intelligence by Olympus Labs');
+    expect(content('meta[name="twitter:title"]')).toBe(home?.seoTitle);
     expect(content('meta[property="og:description"]')).not.toBeNull();
   });
 
@@ -51,9 +54,7 @@ describe('per-route head meta', () => {
 
     expect(canonical()).toBe(`${AETHER_MARKETING_URL}/platform`);
     expect(content('meta[name="robots"]')).toBe('index,follow');
-    expect(content('meta[property="og:title"]')).toBe(
-      'One governed graph across the activity that shapes outcomes — Aether by Olympus Labs',
-    );
+    expect(content('meta[property="og:title"]')).toBe('Aether product overview');
   });
 
   it('marks authentication threshold routes noindex with a marketing-root canonical', () => {
@@ -69,7 +70,7 @@ describe('per-route head meta', () => {
     expect(content('meta[name="robots"]')).toBe('noindex,nofollow');
 
     fireEvent.click(screen.getByRole('link', { name: 'Back to the Aether home page' }));
-    await screen.findByRole('heading', { name: /one governed graph/i });
+    await screen.findByRole('heading', { name: /connect the systems/i });
 
     expect(canonical()).toBe(`${AETHER_MARKETING_URL}/`);
     expect(content('meta[name="robots"]')).toBe('index,follow');
@@ -95,7 +96,7 @@ describe('per-route head meta', () => {
   it('opens an external section CTA in a new tab with noreferrer and keeps internal CTAs in the router', () => {
     renderAt('/developers');
     const main = within(screen.getByRole('main'));
-    const docsCta = main.getByRole('link', { name: 'Read the technical documentation' });
+    const docsCta = main.getByRole('link', { name: 'Open the developer docs' });
     expect(docsCta).toHaveAttribute('href', AETHER_DOCS_URL);
     expect(docsCta).toHaveAttribute('target', '_blank');
     expect(docsCta).toHaveAttribute('rel', 'noreferrer');
@@ -104,10 +105,10 @@ describe('per-route head meta', () => {
   it('keeps the default fallback band for sections without a custom CTA and suppresses the platform self-link', () => {
     renderAt('/platform');
     const main = within(screen.getByRole('main'));
-    const primary = main.getByRole('link', { name: 'Start building' });
-    expect(primary).toHaveAttribute('href', '/signup');
+    const primary = main.getByRole('link', { name: 'Explore the intelligence graph' });
+    expect(primary).toHaveAttribute('href', '/intelligence-graph');
     expect(primary).not.toHaveAttribute('target');
     expect(primary).not.toHaveAttribute('rel');
-    expect(main.queryByRole('link', { name: 'Explore the platform' })).toBeNull();
+    expect(main.getByRole('link', { name: 'Start a pilot' })).toHaveAttribute('href', '/start-pilot');
   });
 });

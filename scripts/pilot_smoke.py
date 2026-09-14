@@ -150,8 +150,8 @@ def cap_connectors(manifest) -> CheckResult:
 def cap_reconciliation(surface, controls, roles_text) -> CheckResult:
     recon = (ROOT / "config" / "reconciliation_expectations.json").is_file()
     ok = (_has_role(surface, "outbox-relay") and _has_role(surface, "materializer") and recon
-          and controls.get("EVENT_OUTBOX_RELAY_ENABLED") is True
-          and controls.get("OBJECT_STORAGE_EXTERNALIZATION_ENABLED") is True)
+          and controls.get("OUTBOX_RELAY_ENABLED") is True
+          and controls.get("STORAGE_EXTERNALIZATION_ENABLED") is True)
     return (passed("cap:reconciliation", "outbox-relay + materializer + reconciliation config + flags")
             if ok else failed("cap:reconciliation", "reconciliation/storage wiring missing"))
 

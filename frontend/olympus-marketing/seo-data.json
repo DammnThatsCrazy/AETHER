@@ -1,11 +1,11 @@
 {
-  "host": "https://olympuslabsml.com",
+  "host": "https://www.olympuslabsml.com",
   "robotsDisallow": [],
   "routes": [
     {
       "path": "/company",
-      "title": "A serious organization behind a long-term thesis — Olympus Labs",
-      "description": "Who Olympus Labs is, what it believes, and why it builds Aether."
+      "title": "About Olympus Labs",
+      "description": "Olympus Labs builds governed intelligence infrastructure for connected people, software, agents, organizations, and value flows."
     },
     {
       "path": "/products",
@@ -14,18 +14,18 @@
     },
     {
       "path": "/products/aether",
-      "title": "Aether — relationship intelligence by Olympus Labs — Olympus Labs",
-      "description": "Aether is Olympus Labs’ relationship intelligence platform."
+      "title": "Aether — The Olympus Labs product expression",
+      "description": "Aether turns the Olympus Labs infrastructure thesis into a customer-facing platform for connected evidence, relationships, perspectives, and outcomes."
     },
     {
       "path": "/research",
-      "title": "Systems thinking, published — Olympus Labs",
-      "description": "How Olympus Labs thinks about intelligence, governance, identity, and outcomes."
+      "title": "Research — Olympus Labs",
+      "description": "Olympus Labs researches how intelligence systems preserve context across human, software, agent, and value relationships."
     },
     {
       "path": "/principles",
-      "title": "The operating philosophy behind the platform — Olympus Labs",
-      "description": "Olympus Labs principles for building governed intelligence systems."
+      "title": "Olympus Labs principles",
+      "description": "The principles governing how Olympus Labs connects evidence, preserves relationships, and creates accountable perspective."
     },
     {
       "path": "/security",
@@ -39,13 +39,38 @@
     },
     {
       "path": "/contact",
-      "title": "Contact Olympus Labs — Olympus Labs",
-      "description": "Reach Olympus Labs and explore Aether."
+      "title": "Contact Olympus Labs",
+      "description": "Start a product, developer, security, procurement, research, or proof conversation with Olympus Labs."
     },
     {
       "path": "/legal",
       "title": "Legal and trust material — Olympus Labs",
       "description": "Olympus Labs legal notices."
+    },
+    {
+      "path": "/aether",
+      "title": "Aether — The Olympus Labs product expression",
+      "description": "Aether turns the Olympus Labs infrastructure thesis into a customer-facing platform for connected evidence, relationships, perspectives, and outcomes."
+    },
+    {
+      "path": "/manifesto",
+      "title": "The Olympus Labs manifesto",
+      "description": "Olympus Labs builds infrastructure that makes relationships between people, software, agents, and value flows legible and governable."
+    },
+    {
+      "path": "/resources",
+      "title": "Resources — Olympus Labs and Aether",
+      "description": "Explore the public vocabulary, connection model, proof standard, trust boundaries, and developer documentation behind Olympus Labs and Aether."
+    },
+    {
+      "path": "/stories",
+      "title": "Stories and proof — Olympus Labs",
+      "description": "Olympus Labs publishes connection-to-perspective stories with explicit evidence states, deployment context, and approval boundaries."
+    },
+    {
+      "path": "/why-olympus",
+      "title": "Why Olympus Labs — Governed relationship infrastructure",
+      "description": "Olympus Labs treats relationships, evidence, and accountable perspective as infrastructure rather than isolated dashboard features."
     }
   ]
 }

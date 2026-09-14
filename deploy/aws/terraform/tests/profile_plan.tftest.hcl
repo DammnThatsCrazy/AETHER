@@ -154,6 +154,7 @@ variables {
   alert_email          = "terraform-ci@aether.invalid"
   aether_app_url       = "https://app.ci.aether.invalid"
   kyber_app_url        = "https://kyber.ci.aether.invalid"
+  auth0_domain         = "tenant.ci.aether.invalid"
 }
 
 # ---------------------------------------------------------------------------
@@ -232,6 +233,24 @@ run "staging_profile_plan" {
       length(module.rds) == 0,
     ])
     error_message = "The staging plan provisions a cost-capped data store it must not."
+  }
+
+  # Public marketing shells are prerendered. Only the runtime-routed app and
+  # docs receive catch-all fallbacks; Aether marketing receives the three
+  # explicit auth-threshold rules and Olympus/status receive none.
+  assert {
+    condition = alltrue([
+      length(local.amplify_custom_rules["aether-app"]) == 1,
+      local.amplify_custom_rules["aether-app"][0].source == "/<*>",
+      length(local.amplify_custom_rules.docs) == 1,
+      length(local.amplify_custom_rules["aether-marketing"]) == 3,
+      local.amplify_custom_rules["aether-marketing"][0].source == "/login",
+      local.amplify_custom_rules["aether-marketing"][1].source == "/signup",
+      local.amplify_custom_rules["aether-marketing"][2].source == "/forgot-password",
+      length(lookup(local.amplify_custom_rules, "olympus-marketing", [])) == 0,
+      length(lookup(local.amplify_custom_rules, "status", [])) == 0,
+    ])
+    error_message = "Amplify custom rules would rewrite a prerendered marketing or status surface, or omit the required client/auth fallback."
   }
 
   # required_resources: credential_kms — the provider-credential envelope-

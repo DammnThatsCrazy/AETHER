@@ -28,7 +28,7 @@
         lifecycle-seed \
         design-partner-demo-up design-partner-demo-seed design-partner-demo-check design-partner-demo-down \
         temporal-integrity temporal-contract-parity mutation-gateway-check exploration-readiness \
-        production-status release-gate ops-readiness help \
+        production-status release-gate ops-readiness help resolved-feature-flags \
         validate-ci-control-toolchain validate-ci-performance-policy validate-ci-execution-contracts validate-execution-plan verification-execution-plan \
         validate-profile-config validate-profile-parity validate-cost-policy validate-cost-policy-terraform validate-delivery-topology \
         validate-route-registry validate-implementation-ledger validate-reference-packs \
@@ -975,6 +975,7 @@ collect-deployment-evidence: ## Materialise the release-evidence bundle with che
 	python scripts/release/collect_evidence.py --bundle-dir release-evidence
 
 deployment-profile-gate: ## Every deployment-profile gate that runs without AWS credentials
+	$(MAKE) resolved-feature-flags
 	$(MAKE) validate-profile-config
 	$(MAKE) validate-profile-parity
 	$(MAKE) validate-cost-policy
@@ -990,6 +991,9 @@ deployment-profile-gate: ## Every deployment-profile gate that runs without AWS 
 	$(MAKE) test-staging-lifecycle
 	$(MAKE) deployment-readiness-score
 	$(MAKE) validate-profile-doctor
+
+resolved-feature-flags: ## Validate explicit staging and production-lean feature-flag resolutions
+	$(VENV_PY) scripts/release/check_resolved_feature_flags.py --all
 
 validate-delivery-topology: ## Validate immutable delivery and profile-to-role topology
 	python scripts/release/check_delivery_topology.py

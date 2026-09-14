@@ -7,7 +7,11 @@ import type { DocFrontmatter } from '../lib/frontmatter';
 type DocModule = { default: ComponentType; frontmatter: DocFrontmatter };
 
 export default function DocViewer() {
-  const { slug = '' } = useParams<{ slug: string }>();
+  const params = useParams<{ slug?: string; '*': string }>();
+  // The index uses encoded slugs, while imported public markdown often links
+  // to the human-readable nested form (`/doc/product/how-it-works`). Support
+  // both forms so launch-pack cross-links work when copied into the docs site.
+  const slug = decodeURIComponent(params.slug ?? params['*'] ?? '');
   const [mod, setMod] = useState<DocModule | null>(null);
   const [error, setError] = useState<string | null>(null);
 

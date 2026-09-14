@@ -87,9 +87,9 @@ variable "aether_repo_ref" {
 }
 
 variable "tfmcp_auth_token" {
-  type      = string
+  type        = string
   description = "MCP auth token (32+ chars). Auto-generated if empty."
-  default   = ""
+  default     = ""
   sensitive   = true
   validation {
     condition     = var.tfmcp_auth_token == "" || length(var.tfmcp_auth_token) >= 32
@@ -98,9 +98,9 @@ variable "tfmcp_auth_token" {
 }
 
 variable "tfmcp_github_pat" {
-  type      = string
+  type        = string
   description = "GitHub PAT for cloning the Aether repo. Empty if public."
-  default   = ""
+  default     = ""
   sensitive   = true
 }
 

@@ -383,6 +383,7 @@ resource "aws_ecs_task_definition" "backend" {
         [
           { name = "APP_ENV", value = var.environment },
           { name = "AETHER_ENV", value = var.environment },
+          { name = "CORS_ORIGINS", value = var.api_cors_origins },
           { name = "PORT", value = "8000" },
           { name = "LOG_LEVEL", value = var.environment == "production" ? "INFO" : "DEBUG" },
           { name = "CACHE_BACKEND", value = var.cache_backend },

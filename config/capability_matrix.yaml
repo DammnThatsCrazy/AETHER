@@ -98,7 +98,7 @@ capabilities:
   - id: kafka
     route: null
     runtime_role: null
-    release_flag: EVENT_OUTBOX_RELAY_ENABLED
+    release_flag: OUTBOX_RELAY_ENABLED
     depends_on: []
     control_evidence: LEAN-FORBIDDEN-EXCLUSION
     states:
@@ -133,7 +133,7 @@ capabilities:
   - id: object_store
     route: null
     runtime_role: null
-    release_flag: OBJECT_STORAGE_EXTERNALIZATION_ENABLED
+    release_flag: STORAGE_EXTERNALIZATION_ENABLED
     depends_on: []
     control_evidence: LEAN-REQUIRED-PRESENCE
     states:
@@ -157,7 +157,7 @@ capabilities:
   - id: workers
     route: null
     runtime_role: lean-worker
-    release_flag: EVENT_OUTBOX_RELAY_ENABLED
+    release_flag: OUTBOX_RELAY_ENABLED
     depends_on: [postgres, kafka]
     control_evidence: LEAN-RUNTIME-TOPOLOGY
     states:

@@ -66,7 +66,7 @@ def validate() -> list[str]:
             errors.append(f"FT_ROLLOUT_HARDCODED_TENANT:{name}")
     flags = manifest["required_controls"]["feature_flags"]
     for flag in ("POLICY_ENFORCEMENT_ENABLED", "ROUTE_REGISTRY_ENFORCED",
-                 "KYBER_OPERATOR_GATE_ENFORCED", "SERVER_AUTHORITATIVE_CONSENT_ENABLED"):
+                 "KYBER_OPERATOR_GATE_ENFORCED", "AUTHORITATIVE_CONSENT_ENFORCEMENT_ENABLED"):
         if flags.get(flag) is not True:
             errors.append(f"FT_UNSAFE_FLAG:{flag}")
 

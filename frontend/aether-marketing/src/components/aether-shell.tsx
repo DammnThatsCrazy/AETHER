@@ -4,7 +4,7 @@ import { Button } from '@aether/ui';
 import { cn } from '@aether/ui';
 import { AetherMark, OlympusAttribution } from '@aether-marketing/components/brand-byline';
 import { PRIMARY_NAV } from '@aether-marketing/content/sections';
-import { AETHER_DOCS_URL, OLYMPUS_SITE_URL } from '@aether-marketing/lib/env';
+import { AETHER_DOCS_URL, AETHER_STATUS_URL, OLYMPUS_SITE_URL } from '@aether-marketing/lib/env';
 import { analyticsFromEnv, trackPageView } from '@aether-marketing/lib/analytics';
 
 function navClass({ isActive }: { readonly isActive: boolean }): string {
@@ -133,7 +133,7 @@ export function AetherShell() {
 
       <footer className="border-t border-border-default bg-surface-sunken">
         <div className="mkt-container py-12">
-          <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+          <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
             <div>
               <AetherMark size={22} />
               <p className="mt-4 max-w-xs text-sm leading-relaxed text-text-secondary">
@@ -147,7 +147,7 @@ export function AetherShell() {
               <FooterLink to="/integrations" label="Integrations" />
             </FooterColumn>
             <FooterColumn title="Company">
-              <FooterLink to="/company" label="About Olympus Labs" />
+              <FooterExternal to={OLYMPUS_SITE_URL} label="About Olympus Labs" />
               <FooterLink to="/security" label="Security" />
               <FooterLink to="/pricing" label="Pricing" />
               <FooterLink to="/resources" label="Resources" />
@@ -156,7 +156,12 @@ export function AetherShell() {
               <FooterLink to="/login" label="Aether sign in" />
               <FooterLink to="/signup" label="Start building" />
               <FooterExternal to={AETHER_DOCS_URL} label="Documentation" />
+              <FooterExternal to={AETHER_STATUS_URL} label="Status" />
               <FooterExternal to={OLYMPUS_SITE_URL} label="Olympus Labs" />
+            </FooterColumn>
+            <FooterColumn title="Legal">
+              <FooterLink to="/legal/privacy" label="Privacy and data use" />
+              <FooterLink to="/legal/terms" label="Terms and use" />
             </FooterColumn>
           </div>
           <div className="mt-10 flex flex-col gap-2 border-t border-border-default pt-6 text-xs text-text-muted md:flex-row md:items-center md:justify-between">

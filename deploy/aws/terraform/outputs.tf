@@ -196,3 +196,10 @@ output "amplify_default_domains" {
   description = "Amplify default domains keyed by frontend name — use for verification before custom domains"
   value       = { for k, v in aws_amplify_app.frontend : k => v.default_domain }
 }
+
+output "amplify_custom_domain_dns_records" {
+  description = "DNS targets returned by Amplify custom-domain associations; add these CNAMEs at the authoritative DNS provider"
+  value = var.amplify_custom_domain_enabled ? {
+    for k, v in aws_amplify_domain_association.frontend : k => try(one(v.sub_domain).dns_record, "")
+  } : {}
+}

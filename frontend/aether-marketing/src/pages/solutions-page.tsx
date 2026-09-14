@@ -4,6 +4,7 @@ import { CtaBand, PageHero } from '@aether-marketing/components/marketing-sectio
 import { findSection } from '@aether-marketing/content/sections';
 import { SOLUTIONS } from '@aether-marketing/content/solutions';
 import { usePageMeta } from '@aether-marketing/lib/meta';
+import { getLaunchPackPage, launchPackHeading } from '../../../marketing/src/content-loader';
 
 /**
  * The /solutions landing page: hero from the SECTIONS entry, an explorer grid of
@@ -12,10 +13,14 @@ import { usePageMeta } from '@aether-marketing/lib/meta';
  */
 export function SolutionsPage() {
   const section = findSection('/solutions');
+  const launchPack = getLaunchPackPage('Aether', '/solutions');
 
   usePageMeta(
     section !== undefined
-      ? { title: `${section.title} — Aether by Olympus Labs`, description: section.description }
+      ? {
+          title: launchPack?.seoTitle ?? `${section.title} — Aether by Olympus Labs`,
+          description: launchPack?.seoDescription ?? section.description,
+        }
       : { title: 'Aether by Olympus Labs' },
   );
 
@@ -35,7 +40,11 @@ export function SolutionsPage() {
 
   return (
     <>
-      <PageHero eyebrow={section.eyebrow} title={section.title} lead={section.lead} />
+      <PageHero
+        eyebrow={section.eyebrow}
+        title={launchPackHeading(launchPack) ?? section.title}
+        lead={launchPack?.seoDescription ?? section.lead}
+      />
 
       {/* Explorer grid of the solution shapes */}
       <section className="border-b border-border-default">
@@ -98,8 +107,8 @@ export function SolutionsPage() {
       <CtaBand
         title="Keep exploring Aether"
         body="The platform and its solution pages are sections of one governed whole — resolve, understand, act, and measure under shared governance."
-        primary={{ label: 'Explore the platform', to: '/platform' }}
-        secondary={{ label: 'Start building', to: '/signup' }}
+        primary={{ label: launchPack?.primaryCta ?? 'Explore the platform', to: '/solutions' }}
+        secondary={{ label: launchPack?.secondaryCta ?? 'Start building', to: '/start-pilot' }}
       />
     </>
   );

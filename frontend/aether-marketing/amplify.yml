@@ -1,7 +1,7 @@
 version: 1
 # Standalone Amplify Hosting build spec for this app deployed on its own
 # (Amplify app root = frontend/aether-marketing). For the monorepo multi-app
-# setup where one Amplify app builds all four frontends from the repo root,
+# setup where one Amplify app builds the frontend surfaces from the repo root,
 # use the root-level /amplify.yml instead — this file mirrors that app's
 # aether-marketing entry so either deployment shape works unmodified.
 frontend:

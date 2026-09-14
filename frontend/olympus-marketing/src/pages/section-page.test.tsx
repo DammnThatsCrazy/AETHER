@@ -28,17 +28,18 @@ describe('SectionPage', () => {
     unmount();
   });
 
-  it('renders the real support channels and frames the status page as planned on the contact page', () => {
+  it('renders the real support channels and links the public status page on the contact page', () => {
     const { unmount } = renderAt('/contact');
 
     expect(screen.getByRole('link', { name: /Documentation and support/ })).toHaveAttribute(
       'href',
       'https://docs.olympuslabsml.com',
     );
-    // The status origin is a planned surface (deploy contract §7); marketing
-    // must not present it as live, so no status link is rendered.
-    expect(screen.queryByRole('link', { name: /Service status/ })).toBeNull();
-    expect(screen.getByText(/public status page for the Aether platform is in planning/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Service status/ })).toHaveAttribute(
+      'href',
+      'https://status.olympuslabsml.com',
+    );
+    expect(screen.getByText(/public status page for the Aether platform is available/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Product sign-in/ })).toHaveAttribute('href', 'https://app.olympuslabsml.com');
 
     const explore = screen.getByRole('link', { name: 'Explore Aether' });
@@ -48,13 +49,15 @@ describe('SectionPage', () => {
     unmount();
   });
 
-  it('suppresses the CTA band and links trust surfaces (status framed as planned) on the legal page', () => {
+  it('suppresses the CTA band and links trust surfaces including status on the legal page', () => {
     const { unmount } = renderAt('/legal');
 
     expect(screen.queryByText('Explore the platform Olympus Labs builds.')).toBeNull();
     expect(screen.queryByRole('link', { name: 'Explore Aether' })).toBeNull();
-    expect(screen.queryByRole('link', { name: /Service status/ })).toBeNull();
-    expect(screen.getByText(/a public status page for the platform is in planning/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Service status/ })).toHaveAttribute(
+      'href',
+      'https://status.olympuslabsml.com',
+    );
     unmount();
   });
 

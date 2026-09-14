@@ -10,7 +10,7 @@
  * real public surfaces this site can actually stand behind.
  */
 
-import { AETHER_APP_URL, AETHER_DOCS_URL, AETHER_MARKETING_URL } from '../lib/env';
+import { AETHER_APP_URL, AETHER_DOCS_URL, AETHER_MARKETING_URL, AETHER_STATUS_URL } from '../lib/env';
 
 export interface SectionCta {
   readonly label: string;
@@ -192,12 +192,13 @@ export const SECTIONS: readonly SectionCopy[] = [
     lead: 'The fastest path depends on what you need. If your organization uses Aether, product support and documentation are the direct channel; if you are evaluating the platform, the public Aether site is the front door. The real surfaces Olympus Labs maintains are listed on this page.',
     paragraphs: [
       'For customers and partners using Aether, the documentation site and the in-product support surfaces are the direct channel for setup, integration, and troubleshooting, and they are maintained by the platform team. Product sign-in is on the application origin; documentation is where behavior is defined and questions get answered.',
-      'A public status page for the Aether platform is in planning and is not yet published. Until it is live, direct an availability question or a suspected incident to the support and documentation surfaces on this page rather than to a surface that does not yet exist.',
+      'The public status page for the Aether platform is available at the status origin below. It reports only what the connected monitor can verify; provider readiness, tenant-specific configuration, and planned features remain separate states.',
       'For company, research, partnership, and press interest, the clearest public starting point is the Aether site and the surfaces linked from these pages. Olympus Labs publishes only the channels it actually maintains and monitors; if a channel is not listed here, it is not a channel we ask you to use.',
     ],
     links: [
       { heading: 'Product sign-in', text: 'Aether users sign in on the application origin.', to: AETHER_APP_URL, external: true },
       { heading: 'Documentation and support', text: 'Setup, integration, and troubleshooting material for the platform.', to: AETHER_DOCS_URL, external: true },
+      { heading: 'Service status', text: 'Current service availability, incidents, and maintenance when the monitor is connected.', to: AETHER_STATUS_URL, external: true },
     ],
     cta: { label: 'Explore Aether', to: AETHER_MARKETING_URL, external: true },
   },
@@ -211,11 +212,14 @@ export const SECTIONS: readonly SectionCopy[] = [
     paragraphs: [
       'This page is the single place where Olympus Labs publishes legal and trust material that governs its public properties — the corporate site, the Aether public site, and the Aether application. Material appears here when it is current and in force; nothing on this page is boilerplate, and nothing is published before it is real.',
       'Olympus Labs keeps its legal writing in the same voice as the rest of the company: plain, specific, and free of claims the product cannot support. Where a notice applies to a single property, it is scoped to that property; corporate-wide notices are collected here so there is one address for trust material rather than a scattering of pages.',
-      'The most current operational and trust surfaces live where the product is used and documented: the Aether documentation and public site carry the security and platform material the product references, and a public status page for the platform is in planning. Legal notices that govern a specific surface are presented at the point of acceptance on that surface as the product family ships.',
+      'The most current operational and trust surfaces live where the product is used and documented: the Aether documentation and public site carry the security and platform material the product references, while the public status page reports monitored availability separately. Legal notices that govern a specific surface are presented at the point of acceptance on that surface as the product family ships.',
     ],
     links: [
+      { heading: 'Privacy and data use', text: 'The current privacy boundary for Olympus Labs and Aether.', to: '/legal/privacy' },
+      { heading: 'Terms and use boundary', text: 'The terms that govern use of the public platform surfaces.', to: '/legal/terms' },
       { heading: 'Aether documentation', text: 'Platform behavior, setup, and trust material maintained with the product.', to: AETHER_DOCS_URL, external: true },
       { heading: 'Aether public site', text: 'The public Aether platform and its security surfaces.', to: AETHER_MARKETING_URL, external: true },
+      { heading: 'Service status', text: 'Monitored availability is published separately from legal and feature readiness.', to: AETHER_STATUS_URL, external: true },
     ],
   },
 ];

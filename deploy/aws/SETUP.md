@@ -126,7 +126,7 @@ Record the bucket and table names — they become the `TF_STATE_BUCKET` and
    ```
 
    At minimum set: `deployment_profile`, `domain_name`, `acm_certificate_arn`,
-   `alert_email`, `aether_app_url`, `kyber_app_url`. The profile file
+   `alert_email`, `auth0_domain`, `aether_app_url`, `kyber_app_url`. The profile file
    (`profiles/<profile>.tfvars`) supplies the cost/shape toggles.
 
 2. **Wire CI** for the sole apply path,

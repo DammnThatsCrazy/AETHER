@@ -69,7 +69,16 @@ build status for each surface.
 | `app.olympuslabsml.com` | Protected Aether tenant application | Authenticated Aether tenants | `frontend/aether` | Existing |
 | `kyber.olympuslabsml.com` | Kyber — Olympus Labs' internal operator application | Olympus workforce only | `frontend/kyber` | Existing |
 | `docs.olympuslabsml.com` | Documentation | Public | `frontend/docs` | Existing |
-| `status.olympuslabsml.com` | Status | Public | — | Planned |
+| `status.olympuslabsml.com` | Status | Public | `frontend/status` | Code-complete and Amplify/Terraform-wired; live API status remains unverified until credentialed staging |
+
+The public web provisioning path is now part of the AWS deployment contract:
+`olympus-marketing`, `aether-marketing`, `docs`, `aether-app`, and `status` are
+separate Amplify applications. Staging uses their Amplify default domains;
+`production-lean` associates `www`, `aether`, `docs`, `app`, and `status` under
+`olympuslabsml.com` and exports the association CNAME targets for the
+authoritative Squarespace DNS. No credentialed AWS apply has run yet, so these
+are implemented targets rather than live-origin claims. Kyber remains outside
+this public set and has no public DNS record by default.
 
 The authentication routes belong to the **Aether public** surface
 (`aether.olympuslabsml.com`), not to the tenant origin. The public experience

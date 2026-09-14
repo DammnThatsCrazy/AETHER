@@ -426,6 +426,11 @@ module "ecs" {
   graph_backend     = local.graph_backend
   analytics_backend = local.analytics_backend
 
+  # The status page is a browser client of /health, so its production origin
+  # must be present in the same canonical CORS list as the tenant application.
+  # Operators can override the derived list for a non-canonical staging host.
+  api_cors_origins = join(",", local.api_cors_origins)
+
   # Resource gating, so IAM policies and alarms only cover what exists.
   enable_elasticache  = local.enable_elasticache
   enable_msk          = local.enable_msk
@@ -601,7 +606,8 @@ module "ml_drift_lambda" {
 # object — so a credential held as a Terraform variable is a credential in
 # every plan artifact. The provider reads AUTH0_DOMAIN, AUTH0_CLIENT_ID and
 # AUTH0_CLIENT_SECRET from the runner's environment instead; see
-# modules/auth0/main.tf. Nothing here needs them, so nothing here holds them.
+# modules/auth0/main.tf. The non-secret tenant domain is used only to configure
+# the hosted Aether SPA.
 module "auth0" {
   source = "./modules/auth0"
 
@@ -626,6 +632,19 @@ module "auth0" {
 # ---------------------------------------------------------------------------
 
 locals {
+  public_amplify_origins = var.amplify_custom_domain_enabled && var.amplify_domain_name != "" ? [
+    "https://www.${var.amplify_domain_name}",
+    "https://aether.${var.amplify_domain_name}",
+    "https://docs.${var.amplify_domain_name}",
+    "https://app.${var.amplify_domain_name}",
+    "https://status.${var.amplify_domain_name}",
+  ] : []
+  api_cors_origins = distinct(compact(concat(
+    var.api_cors_origins,
+    [var.aether_app_url, var.kyber_app_url],
+    local.public_amplify_origins,
+  )))
+
   # Required in every deployable profile (config/runtime_deployment.yaml sets
   # static_frontends: true for all four). Gated anyway so the required-resource
   # side of the cost policy is enforced by the same mechanism as the forbidden
@@ -681,12 +700,19 @@ resource "aws_ssm_parameter" "static_frontend_bucket" {
 # 11. AWS Amplify Hosting — product frontend surfaces
 # Each app builds from the monorepo root with an app-specific appRoot in
 # amplify.yml. Custom domains use the canonical olympuslabsml.com family.
-# The apex/www domain is served by Squarespace (section 12), not Amplify.
+# Squarespace remains the registrar/DNS and apex redirect surface; Amplify
+# hosts the canonical Olympus, Aether, docs, app, and status applications.
 # Gated by the same enable_static_frontends toggle used for S3 origins.
 # ---------------------------------------------------------------------------
 
 locals {
   amplify_apps = local.enable_static_frontends ? {
+    olympus-marketing = {
+      name        = "${var.project}-${var.environment}-olympus-marketing"
+      app_root    = "frontend/olympus-marketing"
+      description = "Olympus Labs corporate marketing site"
+      subdomain   = "www"
+    }
     aether-marketing = {
       name        = "${var.project}-${var.environment}-aether-marketing"
       app_root    = "frontend/aether-marketing"
@@ -705,7 +731,32 @@ locals {
       description = "Aether customer application dashboard"
       subdomain   = "app"
     }
+    status = {
+      name        = "${var.project}-${var.environment}-status"
+      app_root    = "frontend/status"
+      description = "Aether public service status page"
+      subdomain   = "status"
+    }
   } : {}
+
+  # Marketing routes are prerendered and must be served as files. The two
+  # client-routed applications need an index fallback, while the Aether
+  # marketing auth threshold gets only the three explicit hand-off routes.
+  # Keeping these rules per-app prevents a blanket rewrite from replacing
+  # prerendered marketing shells and their route-specific metadata.
+  amplify_custom_rules = {
+    "aether-app" = [
+      { source = "/<*>", target = "/index.html", status = "200" },
+    ]
+    docs = [
+      { source = "/<*>", target = "/index.html", status = "200" },
+    ]
+    "aether-marketing" = [
+      { source = "/login", target = "/index.html", status = "200" },
+      { source = "/signup", target = "/index.html", status = "200" },
+      { source = "/forgot-password", target = "/index.html", status = "200" },
+    ]
+  }
 }
 
 resource "aws_amplify_app" "frontend" {
@@ -721,6 +772,7 @@ resource "aws_amplify_app" "frontend" {
     applications:
       - appRoot: ${each.value.app_root}
         frontend:
+          buildPath: /
           phases:
             preBuild:
               commands:
@@ -737,19 +789,37 @@ resource "aws_amplify_app" "frontend" {
               - node_modules/**/*
   YAML
 
-  environment_variables = {
-    AETHER_ENV = var.environment
-    _LIVE_UPDATES = jsonencode([
-      { pkg = "node", type = "nvm", version = "20" }
-    ])
-  }
+  environment_variables = merge(
+    {
+      AETHER_ENV = var.environment
+      _LIVE_UPDATES = jsonencode([
+        { pkg = "node", type = "nvm", version = "20" }
+      ])
+    },
+    each.key == "aether-app" ? {
+      VITE_AETHER_ENV         = var.environment
+      VITE_API_BASE_URL       = "https://${var.domain_name}"
+      VITE_AETHER_ENDPOINT    = "https://${var.domain_name}"
+      VITE_AUTH0_DOMAIN       = var.auth0_domain
+      VITE_AUTH0_CLIENT_ID    = module.auth0.aether_client_id
+      VITE_AUTH0_AUDIENCE     = var.auth0_api_audience
+      VITE_AUTH0_REDIRECT_URI = "${var.aether_app_url}/callback"
+      VITE_AUTH0_LOGOUT_URI   = "${var.aether_app_url}/login"
+    } : {},
+    each.key == "status" ? {
+      VITE_STATUS_API_URL = var.status_api_url
+    } : {},
+  )
 
   platform = "WEB"
 
-  custom_rule {
-    source = "/<*>"
-    target = "/index.html"
-    status = "200"
+  dynamic "custom_rule" {
+    for_each = lookup(local.amplify_custom_rules, each.key, [])
+    content {
+      source = custom_rule.value.source
+      target = custom_rule.value.target
+      status = custom_rule.value.status
+    }
   }
 
   tags = {
@@ -769,7 +839,16 @@ resource "aws_amplify_branch" "main" {
   stage     = var.environment == "production" ? "PRODUCTION" : "DEVELOPMENT"
 
   environment_variables = {
-    AETHER_ENV = var.environment
+    AETHER_ENV              = var.environment
+    VITE_STATUS_API_URL     = each.key == "status" ? var.status_api_url : ""
+    VITE_AETHER_ENV         = each.key == "aether-app" ? var.environment : ""
+    VITE_API_BASE_URL       = each.key == "aether-app" ? "https://${var.domain_name}" : ""
+    VITE_AETHER_ENDPOINT    = each.key == "aether-app" ? "https://${var.domain_name}" : ""
+    VITE_AUTH0_DOMAIN       = each.key == "aether-app" ? var.auth0_domain : ""
+    VITE_AUTH0_CLIENT_ID    = each.key == "aether-app" ? module.auth0.aether_client_id : ""
+    VITE_AUTH0_AUDIENCE     = each.key == "aether-app" ? var.auth0_api_audience : ""
+    VITE_AUTH0_REDIRECT_URI = each.key == "aether-app" ? "${var.aether_app_url}/callback" : ""
+    VITE_AUTH0_LOGOUT_URI   = each.key == "aether-app" ? "${var.aether_app_url}/login" : ""
   }
 
   tags = {
@@ -781,15 +860,15 @@ resource "aws_amplify_branch" "main" {
 resource "aws_amplify_domain_association" "frontend" {
   for_each = {
     for k, v in local.amplify_apps : k => v
-    if var.amplify_domain_name != ""
+    if var.amplify_custom_domain_enabled && var.amplify_domain_name != ""
   }
 
   app_id      = aws_amplify_app.frontend[each.key].id
-  domain_name = "${each.value.subdomain}.${var.amplify_domain_name}"
+  domain_name = var.amplify_domain_name
 
   sub_domain {
     branch_name = aws_amplify_branch.main[each.key].branch_name
-    prefix      = ""
+    prefix      = each.value.subdomain
   }
 }
 
@@ -816,9 +895,11 @@ resource "aws_ssm_parameter" "amplify_default_domain" {
 }
 
 # ---------------------------------------------------------------------------
-# 12. Squarespace Marketing Site — DNS for apex/www domain
-# The Olympus Labs corporate marketing site is hosted on Squarespace.
-# Product subdomains (app, docs, aether, kyber) stay on Amplify/AWS.
+# 12. Squarespace DNS — apex redirect and product subdomains
+# Squarespace remains the registrar/DNS provider and owns the apex redirect
+# surface. Amplify owns the canonical Olympus, Aether, docs, app, and status
+# applications; Kyber has no public DNS record unless explicitly enabled for
+# an internal routing target.
 # Requires a Route 53 hosted zone for the production domain.
 # ---------------------------------------------------------------------------
 
@@ -857,7 +938,7 @@ resource "aws_route53_record" "squarespace_apex" {
 
 # www → Squarespace (CNAME)
 resource "aws_route53_record" "squarespace_www" {
-  count   = var.squarespace_hosted_zone_enabled ? 1 : 0
+  count   = var.squarespace_hosted_zone_enabled && !contains(keys(local.amplify_apps), "olympus-marketing") ? 1 : 0
   zone_id = local.hosted_zone_id
   name    = "www.${var.amplify_domain_name}"
   type    = "CNAME"
@@ -876,8 +957,10 @@ resource "aws_route53_record" "squarespace_verify" {
 }
 
 # ---------------------------------------------------------------------------
-# 13. Product subdomain DNS records
-# Point product subdomains to their Amplify default domains.
+# 13. Product subdomain DNS records (Route 53 opt-in)
+# When Route 53 is explicitly delegated, point product subdomains at the DNS
+# targets returned by each Amplify custom-domain association. The app default
+# domain is only a fallback for the transitional non-associated shape.
 # ---------------------------------------------------------------------------
 
 resource "aws_route53_record" "amplify_subdomain" {
@@ -886,7 +969,7 @@ resource "aws_route53_record" "amplify_subdomain" {
   name     = "${each.value.subdomain}.${var.amplify_domain_name}"
   type     = "CNAME"
   ttl      = 3600
-  records  = [aws_amplify_app.frontend[each.key].default_domain]
+  records  = [try(one(aws_amplify_domain_association.frontend[each.key].sub_domain).dns_record, aws_amplify_app.frontend[each.key].default_domain)]
 }
 
 # API subdomain → ALB (wired directly — the ALB is in this root module)
@@ -901,7 +984,9 @@ resource "aws_route53_record" "api" {
 
 # Kyber operator console subdomain
 resource "aws_route53_record" "kyber" {
-  count   = var.squarespace_hosted_zone_enabled && var.kyber_cname_target != "" ? 1 : 0
+  # Kyber is a workforce-only surface. No public DNS record is created unless
+  # the operator explicitly enables an internal routing target.
+  count   = var.squarespace_hosted_zone_enabled && var.kyber_internal_dns_enabled && var.kyber_cname_target != "" ? 1 : 0
   zone_id = local.hosted_zone_id
   name    = "kyber.${var.amplify_domain_name}"
   type    = "CNAME"
@@ -911,7 +996,7 @@ resource "aws_route53_record" "kyber" {
 
 # Status page subdomain
 resource "aws_route53_record" "status" {
-  count   = var.squarespace_hosted_zone_enabled && var.status_cname_target != "" ? 1 : 0
+  count   = var.squarespace_hosted_zone_enabled && !contains(keys(local.amplify_apps), "status") && var.status_cname_target != "" ? 1 : 0
   zone_id = local.hosted_zone_id
   name    = "status.${var.amplify_domain_name}"
   type    = "CNAME"

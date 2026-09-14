@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CAPABILITIES } from '../content/capabilities';
 import { SECTIONS } from '../content/sections';
 import { SOLUTIONS } from '../content/solutions';
+import { getLaunchPackPage, launchPackRoutes } from '../../../marketing/src/content-loader';
 import seoData from '../../seo-data.json';
 
 /**
@@ -43,30 +44,30 @@ describe('seo-data.json parity with the content model', () => {
     expect(SEO.host.endsWith('/')).toBe(false);
   });
 
-  it('carries exactly one route per top-level section and per capability and solution deep page', () => {
+  it('carries every rendered legacy and launch-pack route exactly once', () => {
     const topLevelPaths = SECTIONS.map((section) => section.slug);
     const capabilityPaths = CAPABILITIES.map((capability) => `/platform/${capability.slug}`);
     const solutionPaths = SOLUTIONS.map((solution) => `/solutions/${solution.slug}`);
-    const expectedPaths = [...topLevelPaths, ...capabilityPaths, ...solutionPaths];
-    // 8 top-level sections + 11 capability deep pages + 8 solution deep pages.
-    const expectedLength = SECTIONS.length + CAPABILITIES.length + SOLUTIONS.length;
-    expect(expectedLength).toBe(27);
+    const expectedPaths = new Set(
+      [...topLevelPaths, ...capabilityPaths, ...solutionPaths, ...launchPackRoutes('Aether')].filter(
+        (path) => path !== '/',
+      ),
+    );
 
-    expect(SEO.routes).toHaveLength(expectedLength);
+    expect(SEO.routes).toHaveLength(expectedPaths.size);
     const routePaths = SEO.routes.map((route) => route.path);
-    expect(new Set(routePaths).size).toBe(expectedLength);
-    // The manifest path set equals the union of the three content collections —
-    // every rendered content page is present and nothing extraneous is listed.
-    expect(new Set(routePaths)).toEqual(new Set(expectedPaths));
+    expect(new Set(routePaths)).toEqual(expectedPaths);
   });
 
-  it('matches each route head to the exact title and description its content renders', () => {
+  it('matches each legacy or launch-pack route head to the exact copy it renders', () => {
     for (const section of SECTIONS) {
       const route = routeFor(section.slug);
       expect(route, `no seo-data route for ${section.slug}`).toBeDefined();
       if (route === undefined) continue;
-      expect(route.title).toBe(`${section.title} — ${SUFFIX}`);
-      expect(route.description).toBe(section.description);
+      const packRoute = section.slug === '/platform' ? '/product' : section.slug;
+      const packPage = getLaunchPackPage('Aether', packRoute);
+      expect(route.title).toBe(packPage?.seoTitle ?? `${section.title} — ${SUFFIX}`);
+      expect(route.description).toBe(packPage?.seoDescription ?? section.description);
     }
 
     for (const capability of CAPABILITIES) {
@@ -74,8 +75,9 @@ describe('seo-data.json parity with the content model', () => {
       const route = routeFor(path);
       expect(route, `no seo-data route for ${path}`).toBeDefined();
       if (route === undefined) continue;
-      expect(route.title).toBe(`${capability.title} — ${SUFFIX}`);
-      expect(route.description).toBe(capability.description);
+      const packPage = getLaunchPackPage('Aether', path);
+      expect(route.title).toBe(packPage?.seoTitle ?? `${capability.title} — ${SUFFIX}`);
+      expect(route.description).toBe(packPage?.seoDescription ?? capability.description);
     }
 
     for (const solution of SOLUTIONS) {
@@ -83,8 +85,9 @@ describe('seo-data.json parity with the content model', () => {
       const route = routeFor(path);
       expect(route, `no seo-data route for ${path}`).toBeDefined();
       if (route === undefined) continue;
-      expect(route.title).toBe(`${solution.title} — ${SUFFIX}`);
-      expect(route.description).toBe(solution.description);
+      const packPage = getLaunchPackPage('Aether', path);
+      expect(route.title).toBe(packPage?.seoTitle ?? `${solution.title} — ${SUFFIX}`);
+      expect(route.description).toBe(packPage?.seoDescription ?? solution.description);
     }
   });
 

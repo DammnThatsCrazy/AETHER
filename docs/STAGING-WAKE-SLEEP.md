@@ -21,12 +21,12 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/staging-lifecycle.yml": "sha256:38e9810399b549e10741393bd424dec755adb29a3aa7a350f9fe1c8ca8645007"
   ".github/workflows/staging-ttl-guard.yml": "sha256:4fe2250c0ccb0f8486800c6e09c8f1adcf6c38371944e911269f103053f0f1da"
-  ".github/workflows/terraform-promote.yml": "sha256:4fe31c78b7d0621cc5db6f35eaa239d30f11ce12e518e5dbee6d343110ed5197"
+  ".github/workflows/terraform-promote.yml": "sha256:f4df3b2fe853abe6605fbebcd9d85cf093c247251d6be971900804894749f1e9"
   "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
-  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:2e642c5ba9dd8a8dfe65670d0d9eaf88543cb84e0e440ae752b508fc551c37ad"
-  "deploy/aws/terraform/variables.tf": "sha256:7dfc485a37776610062b703a91e594b49e2d04c5d932592fca67adbda1076961"
+  "deploy/aws/terraform/profiles/staging.tfvars": "sha256:f843bf7f11e9acc9e75c345e02e916ecc5f429ea1225f975ad0ae7c908a10bf1"
+  "deploy/aws/terraform/variables.tf": "sha256:4890da151abf54a6493d26a0290e13fc88e4a0891bb801ce4361e5fba6ff4307"
 ---
 
 # Staging Wake / Sleep
@@ -297,13 +297,17 @@ Steps, in order, with what each proves:
    `backend_image.uri`. Staging is proven to be running the exact artifact
    under review, not a rebuild of it.
 2. **Static publication.** The lease is revalidated with at least five minutes
-   remaining, then the approved `aether_spa` and `kyber_spa` archives are
-   unpacked and synchronized into their staging S3 origins with `aws s3 sync
-   --delete`. `index.html` is uploaded with no-cache headers, every object is
-   read back, and the bucket contents are compared byte-for-byte with the
-   release artifact. This is a real staging mutation: it requires the scoped
-   S3 write permission and fails closed if the lease expires or publication
-   differs from the approved digest.
+   remaining, then the approved protected tenant `aether_spa` and internal
+   `kyber_spa` archives are unpacked and synchronized into their staging S3
+   origins with `aws s3 sync --delete`. `index.html` is uploaded with no-cache
+   headers, every object is read back, and the bucket contents are compared
+   byte-for-byte with the release artifact. This is a real staging mutation:
+   it requires the scoped S3 write permission and fails closed if the lease
+   expires or publication differs from the approved digest. The public
+   Olympus, Aether, docs, app, and status shells are separate Amplify apps;
+   they build from the checked-in monorepo branch and are verified at their
+   Amplify default domains during staging rather than being copied into these
+   private S3 origins.
 3. **Migrations.** A one-off Fargate task is launched from the
    `AETHER-staging-backend` task definition with `RUN_MIGRATIONS=1`
    (`alembic upgrade head`), awaited with `aws ecs wait tasks-stopped`, and
@@ -312,9 +316,14 @@ Steps, in order, with what each proves:
    On a `public_ip` profile the run-task network configuration needs
    `assignPublicIp=ENABLED` — there is no NAT to egress through.
 4. **Readiness and frontend availability.** `/v1/health` and `/v1/ready` must
-   both return 200. For each of `aether` and `kyber`, the static bucket name is
-   read from SSM (`/aether/staging/AETHER_STATIC_BUCKET`,
-   `/aether/staging/KYBER_STATIC_BUCKET`) and `index.html` must exist.
+   both return 200. For each of the protected `aether` and `kyber` artifacts,
+   the static bucket name is read from SSM
+   (`/aether/staging/AETHER_STATIC_BUCKET`,
+   `/aether/staging/KYBER_STATIC_BUCKET`) and `index.html` must exist. The
+   five public Amplify apps must also expose their staging default domains;
+   the run records those domains and checks the Olympus, Aether, docs, app, and
+   status shells over HTTPS. Staging intentionally does not attach the
+   production custom domain or a production status API URL.
    Before apply, the promotion workflow verifies that every ECS-mounted
    Secrets Manager name has an `AWSCURRENT` version. Terraform creates the
    encrypted secret stubs but never invents their values; bootstrap or import

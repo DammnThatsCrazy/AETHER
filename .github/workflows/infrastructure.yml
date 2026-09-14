@@ -203,6 +203,7 @@ jobs:
       TF_VAR_acm_certificate_arn: ${{ secrets.TF_ACM_CERTIFICATE_ARN }}
       TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
       TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
+      TF_VAR_auth0_domain: ${{ secrets.TF_AUTH0_DOMAIN }}
       # The auth0 provider reads these from its own environment, so the
       # credentials never become Terraform root variables and therefore never
       # enter the plan file. This is the structural fix for the plan-artifact

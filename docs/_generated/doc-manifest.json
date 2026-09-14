@@ -8027,6 +8027,514 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/public/README.md",
+      "title": "Olympus Labs + Aether Public Content",
+      "slug": "public",
+      "section": "home",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer",
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 3,
+      "toc_depth": 3,
+      "canonical_owner": "strategy@olympus"
+    },
+    {
+      "path": "docs/public/aether/how-it-works.md",
+      "title": "How Aether Works",
+      "slug": "product/how-it-works",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer",
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "strategy@olympus"
+    },
+    {
+      "path": "docs/public/aether/integrations.md",
+      "title": "Connections and Integrations",
+      "slug": "product/connections",
+      "section": "connectors",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-junior",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "integrations@aether"
+    },
+    {
+      "path": "docs/public/aether/manifesto.md",
+      "title": "The Aether Manifesto",
+      "slug": "product/manifesto",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "strategy@olympus"
+    },
+    {
+      "path": "docs/public/aether/perspectives.md",
+      "title": "Perspectives and Relationships",
+      "slug": "product/perspectives",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer",
+        "architect",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "product@aether"
+    },
+    {
+      "path": "docs/public/aether/pricing.md",
+      "title": "Aether Pricing and Packages",
+      "slug": "product/pricing",
+      "section": "enterprise",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "revenue@olympus"
+    },
+    {
+      "path": "docs/public/aether/product.md",
+      "title": "Aether Product Overview",
+      "slug": "product/overview",
+      "section": "concepts",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "strategy@olympus"
+    },
+    {
+      "path": "docs/public/aether/security-and-trust.md",
+      "title": "Aether Security and Trust",
+      "slug": "product/security-and-trust",
+      "section": "security",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "security",
+        "compliance",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "security@aether"
+    },
+    {
+      "path": "docs/public/case-studies/README.md",
+      "title": "Aether Stories and Proof",
+      "slug": "stories",
+      "section": "examples",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "marketing@olympus"
+    },
+    {
+      "path": "docs/public/case-studies/proof-partner.md",
+      "title": "Become an Aether Proof Partner",
+      "slug": "stories/proof-partner",
+      "section": "examples",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 3,
+      "toc_depth": 3,
+      "canonical_owner": "marketing@olympus"
+    },
+    {
+      "path": "docs/public/case-studies/synthetic-relationship-loop.md",
+      "title": "Synthetic Proof: A Connection-to-Perspective Loop",
+      "slug": "stories/synthetic-relationship-loop",
+      "section": "examples",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "marketing@olympus"
+    },
+    {
+      "path": "docs/public/compliance/privacy.md",
+      "title": "Aether Privacy and Data Use",
+      "slug": "compliance/privacy",
+      "section": "compliance",
+      "visibility": "P",
+      "audience": [
+        "security",
+        "compliance",
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "security@aether"
+    },
+    {
+      "path": "docs/public/compliance/terms.md",
+      "title": "Aether Terms and Use Boundary",
+      "slug": "compliance/terms",
+      "section": "compliance",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer",
+        "security",
+        "compliance"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "legal@olympus"
+    },
+    {
+      "path": "docs/public/developers/README.md",
+      "title": "Aether Developers",
+      "slug": "developers",
+      "section": "developer",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "sdk@aether"
+    },
+    {
+      "path": "docs/public/developers/connection-model.md",
+      "title": "Connection Model",
+      "slug": "developers/connection-model",
+      "section": "developer",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "sdk@aether"
+    },
+    {
+      "path": "docs/public/developers/events-and-consent.md",
+      "title": "Events and Consent",
+      "slug": "developers/events-and-consent",
+      "section": "developer",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "architect",
+        "security",
+        "compliance"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/public/developers/identity-and-relationships.md",
+      "title": "Identity and Relationships",
+      "slug": "developers/identity-and-relationships",
+      "section": "developer",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 6,
+      "toc_depth": 3,
+      "canonical_owner": "identity@aether"
+    },
+    {
+      "path": "docs/public/developers/security-and-privacy.md",
+      "title": "Developer Security and Privacy",
+      "slug": "developers/security-and-privacy",
+      "section": "developer",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect",
+        "security",
+        "compliance"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "security@aether"
+    },
+    {
+      "path": "docs/public/olympus/aether.md",
+      "title": "Olympus Labs and Aether",
+      "slug": "company/aether",
+      "section": "home",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 3,
+      "toc_depth": 3,
+      "canonical_owner": "strategy@olympus"
+    },
+    {
+      "path": "docs/public/olympus/company.md",
+      "title": "About Olympus Labs",
+      "slug": "company/about",
+      "section": "home",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 3,
+      "toc_depth": 3,
+      "canonical_owner": "strategy@olympus"
+    },
+    {
+      "path": "docs/public/olympus/contact.md",
+      "title": "Contact Olympus Labs",
+      "slug": "company/contact",
+      "section": "home",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 2,
+      "toc_depth": 2,
+      "canonical_owner": "strategy@olympus"
+    },
+    {
+      "path": "docs/public/olympus/manifesto.md",
+      "title": "The Olympus Labs Manifesto",
+      "slug": "company/manifesto",
+      "section": "home",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "strategy@olympus"
+    },
+    {
+      "path": "docs/public/olympus/principles.md",
+      "title": "Olympus Labs Principles",
+      "slug": "company/principles",
+      "section": "home",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer",
+        "architect",
+        "security"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "strategy@olympus"
+    },
+    {
+      "path": "docs/public/olympus/research.md",
+      "title": "Olympus Labs Research Direction",
+      "slug": "company/research",
+      "section": "ai",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer",
+        "architect",
+        "ai"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "strategy@olympus"
+    },
+    {
+      "path": "docs/public/olympus/why-olympus.md",
+      "title": "Why Olympus Labs",
+      "slug": "company/why-olympus",
+      "section": "home",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer",
+        "architect"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 3,
+      "toc_depth": 3,
+      "canonical_owner": "strategy@olympus"
+    },
+    {
+      "path": "docs/public/operations/status.md",
+      "title": "Aether Service Status",
+      "slug": "operations/status",
+      "section": "operations",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "dev-senior",
+        "ops",
+        "security"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 2,
+      "toc_depth": 2,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/public/resources/glossary.md",
+      "title": "Aether Public Glossary",
+      "slug": "glossary/aether",
+      "section": "glossary",
+      "visibility": "P",
+      "audience": [
+        "exec",
+        "buyer",
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "stable",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "strategy@olympus"
+    },
+    {
+      "path": "docs/public/trust/availability.md",
+      "title": "Aether Availability and Readiness",
+      "slug": "security/availability",
+      "section": "security",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "security",
+        "compliance",
+        "architect",
+        "ops"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 4,
+      "toc_depth": 3,
+      "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/public/trust/procurement.md",
+      "title": "Aether Procurement and Assurance",
+      "slug": "enterprise/procurement",
+      "section": "enterprise",
+      "visibility": "P",
+      "audience": [
+        "buyer",
+        "security",
+        "compliance",
+        "architect",
+        "exec"
+      ],
+      "status": "beta",
+      "since_version": "8.12.0",
+      "estimated_read_minutes": 5,
+      "toc_depth": 3,
+      "canonical_owner": "security@aether"
+    },
+    {
       "path": "docs/quickstart/node-sdk.md",
       "title": "Getting Started with the Node SDK",
       "slug": "quickstart/node-sdk",

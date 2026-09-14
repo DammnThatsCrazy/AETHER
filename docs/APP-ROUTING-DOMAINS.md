@@ -12,22 +12,33 @@ estimated_read_minutes: 3
 
 # App Routing & Domains
 
-Recommended (configurable) subdomain layout. All app→API wiring is env-driven
-(`VITE_API_BASE_URL`, app-specific `VITE_*_ENV`); nothing is hardcoded.
+Canonical public layout for the first release. All app→API wiring is
+env-driven (`VITE_API_BASE_URL`, app-specific `VITE_*_ENV`); the checked-in
+production defaults match these domains and staging overrides them through
+Amplify/Terraform variables.
 
 | Subdomain | Surface | Notes |
 | --- | --- | --- |
-| `app.[domain]` | Aether tenant app | `VITE_AETHER_ENV=production` |
-| `kyber.[domain]` or `internal.[domain]` | Kyber operator console | Operator-gated; not public |
+| `www.olympuslabsml.com` | Olympus Labs marketing website | Corporate/company, research, resources, and contact |
+| `aether.olympuslabsml.com` | Aether marketing shell | Product, connections, perspectives, trust, developers, proof, and pilot paths |
+| `app.olympuslabsml.com` | Aether tenant app | `VITE_AETHER_ENV=production`; authenticated customer surface |
+| `kyber.olympuslabsml.com` | Kyber operator console | No public DNS or public marketing link by default; internal routing only |
 | `demo.[domain]` | Demo App | Synthetic, closed demo (`VITE_DEMO_ENV`) |
-| `api.[domain]` | Backend API | `/v1/*`, `/v1/health`, `/openapi.json` |
-| `docs.[domain]` | Docs site | Built from `frontend/docs` (tiered P/C/I) |
-| `status.[domain]` | Status page | Backed by tenant-safe `/v1/status` |
+| `api.olympuslabsml.com` | Backend API | `/v1/*`, `/health`, `/ready`, `/openapi.json` |
+| `docs.olympuslabsml.com` | Public documentation | Built from `frontend/docs` (tiered P/C/I) |
+| `status.olympuslabsml.com` | Public status page | Reads the verified API `/health` payload and reports component states |
 
 ## Config
 
-- Set each frontend's `VITE_API_BASE_URL` to `https://api.[domain]`.
-- Set `CORS_ORIGINS` (backend) to the app/demo/docs origins.
+- Set the tenant app's `VITE_API_BASE_URL` and `VITE_AETHER_ENDPOINT` to
+  `https://api.olympuslabsml.com` in production. Terraform injects those values
+  into the Amplify `aether-app` build.
+- Set `CORS_ORIGINS` (backend) to the exact Aether, status, and approved
+  operator origins. Terraform derives the canonical production list and accepts
+  an explicit staging override.
+- Set the status app's `VITE_STATUS_API_URL` only after the API certificate,
+  DNS, and CORS path have been verified. An empty value must remain visibly
+  unverified, not green.
 - `AETHER_DEMO_APP_URL`, app/kyber URLs are env-driven for cross-links.
 
 See [Domain & DNS Readiness](DOMAIN-DNS-READINESS.md) and

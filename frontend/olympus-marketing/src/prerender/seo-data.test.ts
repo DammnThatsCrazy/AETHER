@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SECTIONS } from '../content/sections';
+import { getLaunchPackPage, launchPackRoutes } from '../../../marketing/src/content-loader';
 import seoData from '../../seo-data.json';
 
 /**
@@ -30,22 +31,26 @@ describe('seo-data.json parity with the content model', () => {
     expect(SEO.host.endsWith('/')).toBe(false);
   });
 
-  it('carries one route per section slug and nothing else', () => {
-    expect(SEO.routes).toHaveLength(SECTIONS.length);
+  it('carries every rendered section and launch-pack route exactly once', () => {
+    const expectedPaths = new Set(
+      [...SECTIONS.map((section) => section.slug), ...launchPackRoutes('Olympus Labs')].filter(
+        (path) => path !== '/',
+      ),
+    );
     const routePaths = SEO.routes.map((route) => route.path);
-    expect(new Set(routePaths).size).toBe(SECTIONS.length);
-    for (const section of SECTIONS) {
-      expect(routePaths).toContain(section.slug);
-    }
+    expect(SEO.routes).toHaveLength(expectedPaths.size);
+    expect(new Set(routePaths)).toEqual(expectedPaths);
   });
 
-  it('matches each route head to the exact title and description its section renders', () => {
+  it('matches each legacy or launch-pack route head to the exact copy it renders', () => {
     for (const section of SECTIONS) {
       const route = SEO.routes.find((candidate) => candidate.path === section.slug);
       expect(route, `no seo-data route for ${section.slug}`).toBeDefined();
       if (route === undefined) continue;
-      expect(route.title).toBe(`${section.title} — ${SUFFIX}`);
-      expect(route.description).toBe(section.description);
+      const packRoute = section.slug === '/products/aether' ? '/aether' : section.slug;
+      const packPage = getLaunchPackPage('Olympus Labs', packRoute);
+      expect(route.title).toBe(packPage?.seoTitle ?? `${section.title} — ${SUFFIX}`);
+      expect(route.description).toBe(packPage?.seoDescription ?? section.description);
     }
   });
 

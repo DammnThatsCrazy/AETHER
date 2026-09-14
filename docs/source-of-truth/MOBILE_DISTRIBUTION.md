@@ -66,8 +66,8 @@ not a scaffold defect). It never claims a "compiled" artifact.
 
 | Value | Current | Meaning |
 |---|---|---|
-| `min_supported` | `8.10.0` | below this the app is out of support |
-| `latest` | `8.12.0` | pinned to the platform version (`pyproject.toml` / app `package.json`, enforced by `scripts/check_version_consistency.py`) |
+| `min_supported` | `0.0.9` | below this the app is out of support |
+| `latest` | `0.1.0` | the mobile gateway's current support-policy ceiling; the app packages in this checkout are `0.1.0-alpha.0` |
 
 `upgrade_policy_for(app_version)` derives the policy:
 
@@ -115,6 +115,12 @@ release authority.
 
 ## Release workflow (design-partner demo)
 
+The first external SDK publication target is `1.0.0-alpha.0`. That target is
+separate from the mobile application train: the SDK workflow may publish the
+shared, Web, and conditionally React Native libraries, while both mobile apps
+remain development/design-partner artifacts. Mobile application feature flags
+stay off in both resolved release manifests.
+
 For the local/automated demo path:
 
 ```make
@@ -132,6 +138,8 @@ enabled, allow-listed tenant) and never overwrites non-seeded records.
 
 | Capability | State |
 |---|---|
+| Mobile apps in the first production release | `excluded` — Aether and Kyber remain design-partner/dev only; mobile feature flags are explicitly off |
+| React Native SDK | `conditional` — eligible only when the SDK conformance, typecheck, alignment, and hosted native compile gates pass |
 | iOS-simulator / Android-emulator compile | `externally_blocked` — needs macOS + Xcode + Android SDK + Expo toolchain; defined to run in hosted (macOS) CI |
 | Store submission (App Store / Play review) | `externally_blocked` — developer accounts + signing; no claim of a submitted or live build |
 | Live push / email sends | `externally_blocked` — provider credentials; provider-shaped fakes fail closed outside local/dev |
