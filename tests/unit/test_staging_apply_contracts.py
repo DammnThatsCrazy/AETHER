@@ -885,6 +885,7 @@ def test_staging_apply_manifest_covers_provider_failures_with_scoped_resources()
     lambda_mgmt = next(s for s in statements if s["sid"] == "ManageStagingLambdaFunctions")
     assert set(lambda_mgmt["resource"]) == _staging_lambda_fns
     assert "lambda:CreateFunction" in lambda_mgmt["actions"]
+    assert "lambda:ListVersionsByFunction" in lambda_mgmt["actions"]
     assert "lambda:DeleteFunction" in lambda_mgmt["actions"]
     iam_role_mgmt = next(s for s in statements if s["sid"] == "ManageStagingLambdaRoles")
     assert set(iam_role_mgmt["resource"]) == _staging_lambda_roles

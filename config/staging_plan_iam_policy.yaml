@@ -234,6 +234,7 @@ statements:
     actions:
       - lambda:GetFunction
       - lambda:GetFunctionCodeSigningConfig
+      - lambda:ListVersionsByFunction
       - lambda:GetPolicy
       - lambda:ListTags
       - lambda:GetFunctionConfiguration

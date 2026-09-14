@@ -126,8 +126,10 @@ Record the bucket and table names — they become the `TF_STATE_BUCKET` and
    ```
 
    At minimum set: `deployment_profile`, `domain_name`, `acm_certificate_arn`,
-   `alert_email`, `auth0_domain`, `aether_app_url`, `kyber_app_url`. The profile file
-   (`profiles/<profile>.tfvars`) supplies the cost/shape toggles.
+   `alert_email`, `auth0_domain`, `aether_app_url`, `kyber_app_url`, and the
+   repository-scoped `TF_AMPLIFY_GITHUB_ACCESS_TOKEN` used by the five public
+   Amplify apps. The profile file (`profiles/<profile>.tfvars`) supplies the
+   cost/shape toggles.
 
 2. **Wire CI** for the sole apply path,
    [`.github/workflows/terraform-promote.yml`](../../.github/workflows/terraform-promote.yml).
