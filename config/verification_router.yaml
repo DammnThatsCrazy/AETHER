@@ -131,6 +131,8 @@ domains:
       frontend/demo/**: [frontend-demo]
       frontend/aether-marketing/**: [frontend-aether-marketing]
       frontend/olympus-marketing/**: [frontend-olympus-marketing]
+      frontend/marketing/**: [frontend-aether-marketing, frontend-olympus-marketing]
+      frontend/status/**: [frontend-status]
     minimum_lane: pr
   sdk:
     owner: sdk
