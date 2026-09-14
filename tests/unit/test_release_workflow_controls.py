@@ -256,11 +256,13 @@ def test_deploy_verifies_source_run_identity_before_trusting_artifacts():
 
 def test_deploy_polls_the_authority_that_exists_for_each_trigger():
     workflow = _workflow("deploy.yml")
-    assert 'if [ "${GITHUB_EVENT_NAME}" = "push" ]; then' in workflow
+    assert 'if [ "${GITHUB_EVENT_NAME}" = "push" ] || [ "${TARGET_ENV}" = "staging" ]; then' in workflow
+    assert '[ "${TARGET_ENV}" = "staging" ]' in workflow
     assert 'required_checks=("Main integration authority")' in workflow
     assert "required_checks=(validate)" in workflow
-    # A main push intentionally skips Repo Health's nightly/dispatch aggregate
-    # `validate` job, so polling it would fail closed before delivery can run.
+    # A staging dispatch does not trigger Repo Health's nightly/dispatch
+    # aggregate `validate`, so it must reuse the merged-main authority instead
+    # of failing closed on a legitimately skipped check.
     assert "intentionally skipped job as a failed verification" in workflow
     assert "timeout-minutes: 35" in workflow
     assert "deadline=$((SECONDS + 2040))" in workflow
