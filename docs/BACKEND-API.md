@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:f9bcc6f432c48e2713b90f4a13f82c30bdda0d6b09114198a97efbe56b456237"
+  "services/backend/services/": "sha256:c6ffd17a5c34e74c223808505c5f1c73211b281c1e4b96757c6a5574dc5c726c"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -161,7 +161,7 @@ permission gate beyond authentication.
 |---|---|---|
 | `/v1/me` | GET | Caller profile + plan summary and server-owned graph scope |
 | `/v1/me/api-keys` | GET | List caller's API keys (paginated; honours `limit` + `cursor`) |
-| `/v1/me/api-keys` | POST | Create a new API key (self-service) |
+| `/v1/me/api-keys` | POST | Create a new API key (self-service). Body: `name`; optional `permissions` + `platform`; and `key_class` (`secret`, the default, or `publishable`) with `site_ids` required when the class is publishable |
 | `/v1/me/api-keys/{key_id}` | PATCH | Rename an existing API key |
 | `/v1/me/api-keys/{key_id}` | DELETE | Revoke an API key |
 | `/v1/me/account` | DELETE | Self-service account deletion (GDPR Article 17) |
@@ -259,6 +259,31 @@ operators can verify cleanup.
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/sdk/identity/resolve` | POST | Cross-device wallet identity resolution. SDKs call this on init when `autoResumeJourney: true` and fire `onJourneyResumed` with the returned `ResolvedIdentity` if the backend matches a prior session. |
+
+### SDK distribution (`/v1/sdk/sites/*`, API key required)
+
+Registers the properties a tenant installs the SDK on, serves the install
+snippet for each, and mints the publishable key bound to a site. Reads are open
+to any authenticated member of the tenant; every write requires the `write`
+permission, because a site is a credential boundary rather than a preference:
+a publishable key travels in page HTML, so the site is the only thing confining
+it to one property.
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/v1/sdk/sites` | GET | List the tenant's sites (`limit`, `include_revoked`) |
+| `/v1/sdk/sites` | POST | Register a site: `name`, `origins[]` (the install origins), `environment` |
+| `/v1/sdk/sites/{site_id}` | GET | One site plus the keys bound to it and whether it is installable |
+| `/v1/sdk/sites/{site_id}` | PATCH | Rename, re-scope origins, change environment, or revoke |
+| `/v1/sdk/sites/{site_id}` | DELETE | Remove the site; refused with 409 while a publishable key is still bound to it |
+| `/v1/sdk/sites/{site_id}/install` | GET | The install page: snippet with a placeholder key, bound keys, loader URL, and the first-signal expectation |
+| `/v1/sdk/sites/{site_id}/keys` | POST | Mint a publishable key bound to this site; the only response that returns the raw key and a pasteable snippet |
+
+Origins are normalized on write (bare hosts read as `https`, wildcards refused,
+default ports stripped); a non-`https` origin is rejected off localhost.
+Revoking a site stops it being handed out for new installs but does not
+invalidate keys already bound to it — those are revoked separately through
+`/v1/me/api-keys/{key_id}`.
 
 ## Billing Endpoints
 

@@ -14,7 +14,7 @@ source_hashes:
   "packages/shared/acquisition-evidence.ts": "sha256:9f4b8011f9a596a08969cbf5ef1b14f8212715e00e8d6f920f23f48f09c5f855"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/events.ts": "sha256:07628f50a0561ff5eb9ced333d6120a92182f94724eda2675172b354b6387494"
-  "packages/web/src/index.ts": "sha256:99dff7a812de9fbb77dd70ad3719d90989b8660ae3071154c213efc65e939ba0"
+  "packages/web/src/index.ts": "sha256:bc4d8dacd06821812479addcda2a0281bb104adba7090e58a63a24b32ba233cd"
   "packages/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
 ---
 
@@ -456,6 +456,7 @@ Reward lifecycle event types emitted by the platform:
 ```typescript
 interface AetherConfig {
   apiKey: string;                          // Required
+  siteId?: string;                         // Site this install is bound to
   environment?: 'production' | 'staging' | 'development';
   appVersion?: string;                     // Host app version (fleet heartbeats)
   application?: {                          // Canonical envelope: emitting product

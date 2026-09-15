@@ -23,7 +23,7 @@ source_files:
   - services/backend/config/settings.py
   - packages/shared/managed-integrations.ts
 source_hashes:
-  "config/route_registry.yaml": "sha256:6b8f41cc17fa5919a30b07427889e998111c2b0196a37d07c2a7c0664721864f"
+  "config/route_registry.yaml": "sha256:16179d30f4db41a633b3874b3ff9bdc61e61278438c54b62b4364b9c9838aa8a"
   "packages/shared/managed-integrations.ts": "sha256:59ae532137ef2c00b41432f7b47baae4057147749719bff78e2b087f581571b2"
   "services/backend/alembic/versions/20260906_rcp_admission.py": "sha256:b57dc1a0b7a5e8d06e9ec985ff04f3dd0e705d6e4d66d7de419d960407759908"
   "services/backend/alembic/versions/20260906_rcp_change_sets.py": "sha256:7becb857318edc7ccd267ed951c0a5cfbc291282c307df663f7d8b9277bf6bc7"
@@ -35,7 +35,7 @@ source_hashes:
   "services/backend/alembic/versions/20260906_rcp_simulation.py": "sha256:9365aeced6274ca792563a9d8931a54e387e4cced758bfeec7114adc6e932838"
   "services/backend/alembic/versions/20260906_rcp_source_authority.py": "sha256:b3506114be9179b6592dbc08dfc616de066aea4856d274db16f46cf0f8c17422"
   "services/backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
-  "services/backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
+  "services/backend/main.py": "sha256:146abcd2a0af5653e96f1c1eb9e5fe1fef6e32790758636cbde4d6d24c5c592e"
   "services/backend/services/kyber/access/": "sha256:518b962e1ac1c2d7a4edd9bcfc7882007ab2caf058dd85120946401cf9fbe841"
   "services/backend/services/managed_integrations/": "sha256:34f17bb2a61cf13704798d359cea1f4a2e7a79850f6bb97e777a30d9c002be04"
 ---

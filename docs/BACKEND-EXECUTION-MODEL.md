@@ -18,7 +18,7 @@ estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
   "services/backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
-  "services/backend/main.py": "sha256:42ffa227050af4287d54aa7302e32f211db956b99e7cc95db4384b8906eff28e"
+  "services/backend/main.py": "sha256:146abcd2a0af5653e96f1c1eb9e5fe1fef6e32790758636cbde4d6d24c5c592e"
   "services/backend/services/runtime/consumer_specs.py": "sha256:8bf1562bea9dcd96bd4ebe71790af816339c70ff829266b16a3142ba68bbd8a2"
   "services/backend/services/runtime/roles.py": "sha256:e2743b371d47f1224fa99e3d41a93cbb8c702ee61d0c967b53ee0f3684557da7"
   "services/backend/services/runtime/run_role.py": "sha256:a5b8af9c057dd8c34d97cdeadf5da94d55e4e31bb25827a088ba1ca3b3bacb7c"
