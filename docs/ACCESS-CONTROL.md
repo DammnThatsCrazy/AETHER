@@ -19,7 +19,7 @@ to `PermissionGrant`s and evaluates `domain × action × scope` access checks.
   `tenant_viewer`, `tenant_billing_admin`, `tenant_security_admin`,
   `olympus_operator`, `olympus_support`, `olympus_admin`, `olympus_security`,
   `olympus_revops`, `auditor`.
-- 16 domains, 8 actions (`read`/`write`/`approve`/`dispatch`/`export`/`configure`/`delete`/`admin`).
+- 20 domains, 8 actions (`read`/`write`/`approve`/`dispatch`/`export`/`configure`/`delete`/`admin`).
 - 4 scopes: `own_tenant`, `assigned_tenant`, `all_tenants_aggregate`,
   `all_tenants_admin`. Aggregate scope can authorize aggregate views only — never
   a single tenant's private records.
