@@ -525,6 +525,17 @@ async def ingest_events(
                 "Ingestion temporarily unavailable — please retry"
             )
 
+    # ── Install-signal projection (fire-and-forget, non-blocking) ──────────
+    # After Bronze durability for the same reason: the install verifier reads
+    # back the loader's own sdk_loaded / sdk_initialized / sdk_init_failed
+    # events, and it must not be able to report a site healthy on evidence that
+    # ingestion itself has not durably accepted. A projection failure never
+    # fails the request (see schedule_install_projection).
+    if accepted_raw:
+        from services.sdk_distribution.install_verifier import schedule_install_projection
+
+        schedule_install_projection(tenant_id, accepted_raw)
+
     # ── Identity resolution (fire-and-forget, non-blocking) ────────────────
     # Run after Bronze durability is confirmed. Resolution errors never fail
     # ingestion — events are already durable and recoverable via recompute.
@@ -799,6 +810,22 @@ async def _ingest_batch_v2(
                 await record_event_outcome(
                     tenant.tenant_id, deployment_id, "accepted"
                 )
+
+        # Install-signal projection, on the same terms as the V1 spine: after
+        # durability, off the request path, never failing ingestion. Only rows
+        # the bulk reported as accepted — a duplicate is a replay of a signal
+        # already projected, and counting it again would inflate the record.
+        accepted_payloads = [
+            candidate.payload
+            for candidate, status in zip(candidates, bulk.statuses)
+            if status == "accepted"
+        ]
+        if accepted_payloads:
+            from services.sdk_distribution.install_verifier import (
+                schedule_install_projection,
+            )
+
+            schedule_install_projection(tenant.tenant_id, accepted_payloads)
 
     n_accepted = sum(1 for r in results if r.status == "accepted")
     n_duplicates = sum(1 for r in results if r.status == "duplicate")

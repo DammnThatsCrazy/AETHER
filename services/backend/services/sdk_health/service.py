@@ -276,8 +276,13 @@ class SDKHealthService:
     # ── Fleet Status ──────────────────────────────────────────────────────
 
     async def get_fleet_status(self, tenant_id: str) -> SDKFleetStatus:
-        """Compute fleet-level health summary for all SDK instances in a tenant."""
-        installations = await self._installations.list_for_tenant(tenant_id)
+        """Compute fleet-level health summary for all SDK instances in a tenant.
+
+        Site-install rows are excluded: a registered site produces one-shot
+        install signals and never a heartbeat, so counting it here would report
+        every healthy site install as a silent SDK.
+        """
+        installations = await self._installations.list_fleet_for_tenant(tenant_id)
 
         platforms: dict[str, int] = {}
         versions: dict[str, int] = {}
@@ -320,8 +325,12 @@ class SDKHealthService:
         )
 
     async def detect_silent_sdks(self, tenant_id: str) -> list[dict[str, Any]]:
-        """Return SDK IDs that have not sent a heartbeat within the silence threshold."""
-        installations = await self._installations.list_for_tenant(tenant_id)
+        """Return SDK IDs that have not sent a heartbeat within the silence threshold.
+
+        Fleet members only — see ``get_fleet_status`` for why site installs are
+        not members.
+        """
+        installations = await self._installations.list_fleet_for_tenant(tenant_id)
         silent = []
         for hb_raw in installations:
             if hb_raw.get("disabled") or hb_raw.get("uninstalled"):

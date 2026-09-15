@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:c6ffd17a5c34e74c223808505c5f1c73211b281c1e4b96757c6a5574dc5c726c"
+  "services/backend/services/": "sha256:3810fe646f04c35b070f226d649c92f1c71d49bc7ef13fca545c7291ce186201"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -278,12 +278,42 @@ it to one property.
 | `/v1/sdk/sites/{site_id}` | DELETE | Remove the site; refused with 409 while a publishable key is still bound to it |
 | `/v1/sdk/sites/{site_id}/install` | GET | The install page: snippet with a placeholder key, bound keys, loader URL, and the first-signal expectation |
 | `/v1/sdk/sites/{site_id}/keys` | POST | Mint a publishable key bound to this site; the only response that returns the raw key and a pasteable snippet |
+| `/v1/sdk/sites/{site_id}/heartbeat` | GET | The install verifier: whether the pasted snippet actually came up, and what it reported |
+| `/v1/sdk/sites/{site_id}/live` | GET | The cheap liveness read for a polling dashboard (`live`, `state`, `last_signal`, `age_seconds`) |
 
 Origins are normalized on write (bare hosts read as `https`, wildcards refused,
 default ports stripped); a non-`https` origin is rejected off localhost.
 Revoking a site stops it being handed out for new installs but does not
 invalidate keys already bound to it — those are revoked separately through
 `/v1/me/api-keys/{key_id}`.
+
+#### Verifying that an install came up
+
+An install that delivers nothing looks exactly like an install that was never
+pasted, so the loader reports its own milestones — `sdk_loaded` when the bundle
+ran, `sdk_initialized` when the SDK accepted its config, `sdk_init_failed` when
+it did not — and these ride the ordinary `/v1/batch` contract as `core`-family
+events. Nothing is reported through a separate "did you install it" endpoint:
+the verifier reads back accepted ingestion, so it cannot call an install healthy
+on evidence ingestion itself rejected.
+
+`/heartbeat` answers from those signals alone. `state` is one of `loaded` (the
+loader ran, the SDK did not come up), `live` (both ran), `failed`, or
+`awaiting_first_signal` — the last being a site with no signals at all, which is
+the absence the endpoint exists to make legible rather than a status to invent.
+`reason` and `warnings` are reported from `sdk_init_failed` only while the
+failure is still current: a later success clears them, because a site reported
+broken forever is a site nobody reads. The response also carries
+`compatibility_tier` and `drift_status` (`current` / `behind` / `ahead` /
+`unknown`) for the version the loader reported against the shipped one, so a
+cache serving an unexpected bundle is distinguishable from a healthy install.
+`age_seconds` is reported rather than thresholded: these are one-shot install
+signals, not heartbeats, and an install from months ago is still a correct one.
+
+Site installs never send heartbeats, so they are not fleet members and do not
+appear in `/v1/diagnostics/sdk/fleet` or the silent-SDK detector. A verifier
+read is per-site and expects its first signal within 60 seconds of the snippet
+being pasted.
 
 ## Billing Endpoints
 

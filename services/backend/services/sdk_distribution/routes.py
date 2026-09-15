@@ -40,6 +40,12 @@ from shared.logger.logger import get_logger, metrics
 from shared.observability import trace_request, emit_latency
 
 from services.me.key_issuance import mint_api_key
+from services.sdk_distribution.install_verifier import (
+    FIRST_SIGNAL_WINDOW_SECONDS,
+    SIGNAL_ORDER,
+    STATE_LIVE,
+    describe_site_install,
+)
 from services.sdk_distribution.sites import (
     STATUS_ACTIVE,
     STATUS_REVOKED,
@@ -119,6 +125,19 @@ async def _load_site(tenant_id: str, site_id: str) -> dict:
     if record is None:
         raise NotFoundError(f"Site {site_id}")
     return record
+
+
+async def _site_install(tenant_id: str, site_id: str) -> dict:
+    """The site's install record, read through the verifier's own view.
+
+    A site that was registered but never installed has no record; that is a
+    normal answer rather than an error, so the reader gets the same shape
+    either way and does not have to special-case the absence.
+    """
+    from repositories.sdk_repos import SDKInstallationRepository
+
+    record = await SDKInstallationRepository().get(tenant_id, site_id)
+    return describe_site_install(record)
 
 
 async def _keys_bound_to(tenant_id: str, site_id: str) -> list[dict]:
@@ -326,9 +345,66 @@ async def get_install(site_id: str, request: Request):
         "mint_url": f"/v1/sdk/sites/{site_id}/keys",
         "verify": {
             "endpoint": f"/v1/sdk/sites/{site_id}/heartbeat",
-            "expect_first_signal_within_seconds": 60,
-            "signals": ["sdk_loaded", "sdk_initialized", "sdk_init_failed"],
+            "live_endpoint": f"/v1/sdk/sites/{site_id}/live",
+            "expect_first_signal_within_seconds": FIRST_SIGNAL_WINDOW_SECONDS,
+            "signals": list(SIGNAL_ORDER),
         },
+    }).to_dict()
+
+
+@router.get("/sites/{site_id}/heartbeat")
+async def get_site_heartbeat(site_id: str, request: Request):
+    """Has this site's snippet actually come up? The install verifier.
+
+    The answer is derived from the loader's own milestone events, accepted
+    through the ordinary ingestion path — never from a separate "did you
+    install it" endpoint, which would report success on evidence ingestion
+    never saw.
+
+    A site with no signals is reported as ``awaiting_first_signal``, not as
+    failed: "we have not seen it yet" and "we saw it break" are different
+    facts, and only the second one means the operator has something to fix.
+    """
+    ctx = trace_request(request, service="sdk_distribution")
+    tenant = _tenant(request)
+    record = await _load_site(tenant.tenant_id, site_id)
+    install = await _site_install(tenant.tenant_id, site_id)
+
+    emit_latency("sdk_site_heartbeat_fetched", ctx.elapsed_ms())
+    return APIResponse(data={
+        "site_id": site_id,
+        "site_name": record.get("name"),
+        "site_status": record.get("status"),
+        "install": install,
+        "loader_url": LOADER_URL,
+        "expect_first_signal_within_seconds": FIRST_SIGNAL_WINDOW_SECONDS,
+        "signals": list(SIGNAL_ORDER),
+    }).to_dict()
+
+
+@router.get("/sites/{site_id}/live")
+async def get_site_live(site_id: str, request: Request):
+    """The cheap liveness read for a polling dashboard.
+
+    Separate from ``/heartbeat`` because the two are read at different rates:
+    a dashboard polls this one and renders a badge, and a human opens the
+    other when the badge is wrong. Keeping the poll small is the whole point of
+    the split.
+    """
+    ctx = trace_request(request, service="sdk_distribution")
+    tenant = _tenant(request)
+    record = await _load_site(tenant.tenant_id, site_id)
+    install = await _site_install(tenant.tenant_id, site_id)
+
+    emit_latency("sdk_site_live_fetched", ctx.elapsed_ms())
+    return APIResponse(data={
+        "site_id": site_id,
+        "live": install["state"] == STATE_LIVE,
+        "state": install["state"],
+        "last_signal": install["last_signal"],
+        "last_signal_at": install["last_signal_at"],
+        "age_seconds": install["age_seconds"],
+        "site_status": record.get("status"),
     }).to_dict()
 
 

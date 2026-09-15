@@ -40,6 +40,18 @@ version_patterns = {
     'packages/web/src/index.ts': [f"SDK_VERSION = '{VERSION}'"],
     'packages/web/src/core/event-queue.ts': [f"SDK_VERSION = '{VERSION}'"],
     'packages/web/src/health/sdk-health-agent.ts': [f"SDK_VERSION = '{VERSION}'"],
+    # The loader is bundled separately from the SDK and carries its own copy,
+    # for the same reason heartbeat.ts carries its own CONTRACT_SCHEMA_VERSION.
+    # It is the version the install verifier reads back off an install signal
+    # and compares against the shipped one, so a drift here would not fail a
+    # build — it would quietly reclassify every tenant's install.
+    'packages/web/src/loader/bootstrap.ts': [f"LOADER_VERSION = '{VERSION}'"],
+    # The backend mirror of the same fact. It is not a second version authority
+    # (pyproject.toml / package.json remain the source); it is the copy the
+    # verifier compares against, pinned here so it cannot drift from them.
+    'services/backend/services/sdk_distribution/versions.py': [
+        f'CANONICAL_SDK_VERSION = "{VERSION}"'
+    ],
 }
 for rel, needles in version_patterns.items():
     body = text(rel)
