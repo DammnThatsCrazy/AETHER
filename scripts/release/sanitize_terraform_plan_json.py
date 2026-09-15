@@ -65,6 +65,7 @@ import json
 import os
 import sys
 from typing import Any
+from urllib.parse import quote
 
 # Root variables whose VALUE a downstream consumer actually reads. Everything
 # else keeps its name and loses its value.
@@ -98,9 +99,23 @@ def by_mask(value: Any, mask: Any) -> Any:
 
 
 def by_literal(node: Any, secrets: frozenset[str]) -> Any:
-    """Replace every string equal to a known secret, at any depth."""
+    """Replace known secrets wherever they occur in string values.
+
+    Providers may copy a sensitive root-variable value into a larger string
+    (for example, a connection value or an encoded provider argument) without
+    preserving Terraform's sensitivity mask. Exact-value replacement is not
+    enough for that shape, so replace secret substrings too. Dictionary keys
+    are intentionally left untouched: a secret emitted as a key remains a
+    fail-closed condition in the final scan rather than being silently hidden.
+    """
     if isinstance(node, str):
-        return REDACTED if node in secrets else node
+        clean = node
+        # Replace longer forms first so a shorter secret cannot leave a
+        # remainder that defeats the final fail-closed scan.
+        for secret in sorted(secrets, key=len, reverse=True):
+            if secret:
+                clean = clean.replace(secret, REDACTED)
+        return clean
     if isinstance(node, dict):
         return {k: by_literal(v, secrets) for k, v in node.items()}
     if isinstance(node, list):
@@ -138,6 +153,10 @@ def secret_values(plan: dict[str, Any], environ: dict[str, str]) -> frozenset[st
         from_env = environ.get(f"TF_VAR_{name}")
         if from_env:
             values.add(from_env)
+    # A provider may URL-encode a token before carrying it into a resource
+    # argument. Keep the encoded spelling in the scrub set as well, without
+    # ever printing either form.
+    values.update(quote(value, safe="") for value in tuple(values) if value)
     return frozenset(values)
 
 

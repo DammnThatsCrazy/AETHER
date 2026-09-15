@@ -1126,6 +1126,29 @@ def test_the_sanitiser_scrubs_secret_values_out_of_resources_too():
     assert clean["resource_changes"][0]["change"]["after"]["value"] != CANARY
 
 
+def test_the_sanitiser_scrubs_embedded_and_url_encoded_secret_values():
+    """Provider-expanded strings cannot carry a sensitive token through."""
+    token = "ghp_CANARY+/value"
+    plan = _plan_with_secret(token)
+    plan["planned_values"]["root_module"]["resources"][0]["values"] = {
+        "name": "/amplify/app",
+        "connection": f"https://example.invalid/{token}/checkout",
+        "encoded": "https%3A%2F%2Fexample.invalid%2Fghp_CANARY%2B%2Fvalue",
+    }
+    plan["configuration"]["root_module"]["variables"] = {
+        "amplify_github_access_token": {"sensitive": True},
+    }
+    plan["variables"] = {
+        "amplify_github_access_token": {"value": token},
+    }
+
+    clean = _sanitiser().sanitize(plan, environ={})
+    blob = json.dumps(clean)
+    assert token not in blob
+    assert "ghp_CANARY%2B%2Fvalue" not in blob
+    assert "__REDACTED_SENSITIVE__" in blob
+
+
 def test_the_sanitiser_also_scrubs_the_value_supplied_through_the_environment():
     """The plan is produced from TF_VAR_*; that value must not survive either."""
     plan = _plan_with_secret()
