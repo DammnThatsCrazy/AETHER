@@ -42,6 +42,9 @@ WHAT ELSE IT REDACTS
   * resource attributes Terraform itself marks sensitive, via the
     `before_sensitive` / `after_sensitive` masks on each resource change and the
     `sensitive_values` mask on each planned value;
+  * provider attributes whose names are intrinsically credential-bearing (for
+    example `access_token` and `client_secret`), even when a provider returns a
+    transformed value without carrying Terraform's sensitivity mask;
   * any literal occurrence anywhere in the document of a value belonging to a
     root variable declared `sensitive = true` -- a secret copied into a resource
     argument is still a secret.
@@ -83,6 +86,22 @@ KEEP_TOP_LEVEL = frozenset({
 
 REDACTED = "__REDACTED_SENSITIVE__"
 
+# Some providers do not preserve Terraform's sensitivity mask when they echo a
+# credential into a resource attribute. These names are credential-bearing by
+# definition, so their values must not be published even when the provider has
+# transformed the original root-variable value and literal matching cannot
+# identify it. Keys remain visible for review; only their values are replaced.
+SENSITIVE_ATTRIBUTE_NAMES = frozenset({
+    "access_token",
+    "client_secret",
+    "client_secret_value",
+    "oauth_token",
+    "password",
+    "private_key",
+    "secret",
+    "token",
+})
+
 
 def by_mask(value: Any, mask: Any) -> Any:
     """Apply one of Terraform's own sensitivity masks, which mirror the value."""
@@ -121,6 +140,27 @@ def by_literal(node: Any, secrets: frozenset[str]) -> Any:
         return {k: by_literal(v, secrets) for k, v in node.items()}
     if isinstance(node, list):
         return [by_literal(item, secrets) for item in node]
+    return node
+
+
+def by_sensitive_attribute_name(node: Any) -> Any:
+    """Redact values under provider fields that are credentials by definition.
+
+    This is deliberately independent from literal matching and Terraform's
+    masks. A provider can normalize, hash, or otherwise transform a secret
+    before returning it in plan JSON, leaving neither the original literal nor
+    a sensitivity mask for the other sanitizers to find.
+    """
+    if isinstance(node, dict):
+        clean: dict[Any, Any] = {}
+        for key, value in node.items():
+            if isinstance(key, str) and key.lower() in SENSITIVE_ATTRIBUTE_NAMES:
+                clean[key] = REDACTED if value is not None else value
+            else:
+                clean[key] = by_sensitive_attribute_name(value)
+        return clean
+    if isinstance(node, list):
+        return [by_sensitive_attribute_name(item) for item in node]
     return node
 
 
@@ -192,6 +232,7 @@ def sanitize(plan: dict[str, Any], environ: dict[str, str] | None = None) -> dic
             if mask and isinstance(detail.get(side), (dict, list)):
                 detail[side] = by_mask(detail[side], mask)
 
+    clean = by_sensitive_attribute_name(clean)
     clean = by_literal(clean, secrets)
 
     # Fail closed: a surviving secret must stop the job, not ship in an artifact.

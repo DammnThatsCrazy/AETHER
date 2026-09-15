@@ -1168,6 +1168,48 @@ def test_the_sanitiser_scrubs_embedded_secret_values_supplied_by_environment():
     assert "ghp_ENV_CANARY%2b%2fvalue" not in json.dumps(clean)
 
 
+def test_the_sanitiser_scrubs_provider_derived_credential_attributes():
+    """Credential-shaped provider output is redacted without literal matching."""
+    token = "ghp_PROVIDER_CANARY+/value"
+    plan = _plan_with_secret(token)
+    plan["configuration"]["root_module"]["variables"] = {
+        "amplify_github_access_token": {"sensitive": True},
+    }
+    plan["variables"] = {
+        "amplify_github_access_token": {"value": token},
+    }
+    transformed = "provider-derived-token-that-is-not-the-root-value"
+    planned_resource = {
+        "address": "aws_amplify_app.marketing",
+        "type": "aws_amplify_app",
+        "name": "marketing",
+        "values": {"access_token": transformed},
+        # Simulate a provider that failed to carry the mask into its output.
+        "sensitive_values": {"access_token": False},
+    }
+    plan["planned_values"]["root_module"]["resources"] = [planned_resource]
+    plan["resource_changes"] = [{
+        "address": "aws_amplify_app.marketing",
+        "type": "aws_amplify_app",
+        "name": "marketing",
+        "mode": "managed",
+        "change": {
+            "actions": ["create"],
+            "before": None,
+            "after": {"access_token": transformed},
+            "after_sensitive": {"access_token": False},
+        },
+    }]
+
+    clean = _sanitiser().sanitize(plan, environ={})
+    assert clean["planned_values"]["root_module"]["resources"][0]["values"]["access_token"] == (
+        "__REDACTED_SENSITIVE__"
+    )
+    assert clean["resource_changes"][0]["change"]["after"]["access_token"] == (
+        "__REDACTED_SENSITIVE__"
+    )
+
+
 def test_the_sanitiser_also_scrubs_the_value_supplied_through_the_environment():
     """The plan is produced from TF_VAR_*; that value must not survive either."""
     plan = _plan_with_secret()

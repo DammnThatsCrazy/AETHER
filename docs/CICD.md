@@ -519,8 +519,11 @@ local Terraform binary.
 (`tests/unit/test_release_workflow_controls.py`) is the structural guard on all
 of the above: no automatic apply, no false-green, reviewed-plan integrity.
 The reviewed-plan sanitizer also removes sensitive root-variable values when a
-provider embeds or URL-encodes them inside a larger resource string, while
-retaining only the values consumed by the plan policy gate.
+provider embeds or URL-encodes them inside a larger resource string, and
+redacts intrinsically credential-bearing provider fields such as
+`access_token` even when a provider transforms the value without preserving
+Terraform's sensitivity mask. It retains only the values consumed by the plan
+policy gate.
 
 ### Frontend visual-system guardrail
 
