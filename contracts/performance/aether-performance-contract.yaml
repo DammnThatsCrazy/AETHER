@@ -1,0 +1,72 @@
+version: 1
+name: aether_responsiveness_time_to_value_contract
+
+frontend:
+  lcp_p75_ms: 2500
+  inp_p75_ms: 200
+  cls_p75: 0.1
+  route_transition_warm_p95_ms: 300
+  route_transition_cold_p95_ms: 1000
+  shell_visible_p95_ms: 500
+  dashboard_first_content_p95_ms: 1500
+  graph_canvas_first_render_p95_ms: 1500
+  timeline_first_render_p95_ms: 1200
+
+interaction:
+  button_feedback_p95_ms: 100
+  tab_switch_p95_ms: 100
+  filter_toggle_p95_ms: 150
+  lens_toggle_visual_p95_ms: 200
+  timeline_scrub_p95_ms: 200
+  graph_node_hover_p95_ms: 100
+  graph_node_expand_p95_ms: 300
+
+sdk:
+  first_event_ack_p95_ms: 1000
+  first_heartbeat_visible_p50_ms: 5000
+  first_heartbeat_visible_p95_ms: 15000
+  sdk_health_update_p95_ms: 2000
+
+provider:
+  oauth_return_connected_state_p95_ms: 2000
+  provider_metadata_visible_p95_ms: 5000
+  first_sample_record_visible_p95_ms: 60000
+  sync_progress_update_interval_ms: 5000
+
+graph:
+  first_graph_stub_p50_ms: 10000
+  first_graph_stub_p95_ms: 30000
+  first_node_visible_p95_ms: 30000
+  first_edge_visible_p95_ms: 45000
+  graph_projection_refresh_p95_ms: 2000
+  graph_hydration_status_update_p95_ms: 3000
+
+queries:
+  cached_query_p95_ms: 750
+  indexed_graph_query_p95_ms: 1500
+  analytical_query_first_result_p95_ms: 1000
+  heavy_query_background_handoff_p95_ms: 1000
+
+lenses:
+  lens_toggle_visual_p95_ms: 200
+  cached_lens_projection_p95_ms: 750
+  uncached_lens_first_result_p95_ms: 1500
+  full_lens_hydration_background: true
+
+timeline:
+  pan_feedback_p95_ms: 200
+  zoom_feedback_p95_ms: 300
+  grain_change_p95_ms: 750
+  large_range_first_result_p95_ms: 1000
+
+readiness:
+  performance_required_for_ready: true
+  degraded_if_p95_budget_exceeded: true
+  blocked_if_no_progress_visibility: true
+
+ci:
+  fail_on_contract_regression: true
+  fail_on_bundle_size_regression: true
+  fail_on_route_budget_regression: true
+  fail_on_sdk_heartbeat_regression: true
+  fail_on_graph_projection_regression: true
