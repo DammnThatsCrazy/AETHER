@@ -155,6 +155,10 @@ variables {
   aether_app_url       = "https://app.ci.aether.invalid"
   kyber_app_url        = "https://kyber.ci.aether.invalid"
   auth0_domain         = "tenant.ci.aether.invalid"
+  # Provider-mocked plans still validate the AWS Amplify schema. This is a
+  # test-only shape value; hosted plans must provide the encrypted repository
+  # token and fail closed when it is absent or a placeholder.
+  amplify_github_access_token = "github-ci-mock-token"
 }
 
 # ---------------------------------------------------------------------------
