@@ -23,8 +23,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 20
 toc_depth: 3
 source_hashes:
-  ".github/workflows/infrastructure.yml": "sha256:658c62a23276d5895ef84fa3619fbba58e07fab4627e41fee2d0b7e23fe5b295"
-  ".github/workflows/terraform-promote.yml": "sha256:5c1f47d2408805475c6c07b3374597e3996c3c5bd077b94bf17edca33d533e2d"
+  ".github/workflows/infrastructure.yml": "sha256:89bc9fb6a292a9213f05ca104eab6f3e4e44345d09b18e156f04e5c0fca09192"
+  ".github/workflows/terraform-promote.yml": "sha256:3fc186834561d6a29429ff20f3530891292b996b18c18866fc39399b925f885e"
   "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
@@ -348,8 +348,13 @@ gh workflow run terraform-promote.yml \
   -f ml_image_digest=sha256:<64hex>
 ```
 
-The plan job fails closed on an incomplete remote-plan credential set, then
-produces an **immutable reviewed plan** consisting of 14 artifacts:
+The plan job fails closed on an incomplete remote-plan credential set, while
+treating `TF_AMPLIFY_GITHUB_ACCESS_TOKEN` as optional for this public AETHER
+repository. Terraform receives `null` for anonymous Amplify repository
+checkout; a private repository must provide a repository-scoped token. The
+historical placeholder value `-` is normalized to unset and is never passed to
+Terraform. The job then produces an **immutable reviewed plan** consisting of
+14 artifacts:
 
 | Artifact | Records |
 |---|---|
