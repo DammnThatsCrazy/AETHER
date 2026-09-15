@@ -1244,6 +1244,7 @@ def test_the_sanitiser_fails_closed_rather_than_writing_a_leaky_plan():
     except SystemExit as exc:
         raised = True
         assert "still carries a sensitive" in str(exc)
+        assert "planned_values.root_module.resources" in str(exc)
     assert raised, "sanitisation returned a document that still holds the secret"
 
 
