@@ -66,6 +66,11 @@ for rel in sdk_files:
 # Contract schema-version drift: the web SDK bundles standalone and carries a
 # CONTRACT_SCHEMA_VERSION literal that must match packages/shared/schema-version.ts
 # (the server SDK imports the shared constant directly, so only web is checked).
+#
+# Every standalone-bundled surface that repeats the literal must be listed here.
+# The loader is bundled separately from the SDK (it is the artifact a page
+# downloads first) and stamps the envelope on its install signals, so it carries
+# its own copy — one that drifted unnoticed until this list existed.
 schema_version_match = re.search(
     r"CONTRACT_SCHEMA_VERSION = '([^']+)'", text('packages/shared/schema-version.ts')
 )
@@ -73,11 +78,15 @@ if not schema_version_match:
     fail('packages/shared/schema-version.ts missing CONTRACT_SCHEMA_VERSION')
 else:
     contract_schema_version = schema_version_match.group(1)
-    if f"CONTRACT_SCHEMA_VERSION = '{contract_schema_version}'" not in text('packages/web/src/index.ts'):
-        fail(
-            f'packages/web/src/index.ts CONTRACT_SCHEMA_VERSION literal drifted from '
-            f'shared schema-version.ts ({contract_schema_version})'
-        )
+    for rel in [
+        'packages/web/src/index.ts',
+        'packages/web/src/loader/heartbeat.ts',
+    ]:
+        if f"CONTRACT_SCHEMA_VERSION = '{contract_schema_version}'" not in text(rel):
+            fail(
+                f'{rel} CONTRACT_SCHEMA_VERSION literal drifted from '
+                f'shared schema-version.ts ({contract_schema_version})'
+            )
 
 # Canonical event registry and consent map sync (by name)
 events_ts = text('packages/shared/events.ts')

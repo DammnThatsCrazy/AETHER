@@ -39,6 +39,11 @@ export interface InstallSignalEvent {
             name: string;
             version: string;
         };
+        surface: string;
+        schemaVersion: string;
+        sequence: {
+            event: number;
+        };
     };
 }
 /**

@@ -19,6 +19,16 @@
 
 import type { InstallMode } from './auto-init';
 
+/**
+ * Mirrors CONTRACT_SCHEMA_VERSION in packages/shared/schema-version.ts.
+ *
+ * The loader bundles standalone (it is the first thing a page downloads and
+ * must carry no dependencies), so it repeats the literal rather than importing
+ * it. scripts/validate_sdk_release_alignment.py holds this copy and the SDK's
+ * copy in packages/web/src/index.ts to the shared value.
+ */
+const CONTRACT_SCHEMA_VERSION = '1.0.0';
+
 /** Canonical event types emitted at each install milestone. */
 export type InstallSignal = 'sdk_loaded' | 'sdk_initialized' | 'sdk_init_failed';
 
@@ -61,7 +71,12 @@ export interface InstallSignalEvent {
   sessionId: string;
   anonymousId: string;
   properties: Record<string, unknown>;
-  context: { library: { name: string; version: string } };
+  context: {
+    library: { name: string; version: string };
+    surface: string;
+    schemaVersion: string;
+    sequence: { event: number };
+  };
 }
 
 function defaultRandomId(): string {
@@ -104,7 +119,22 @@ export function buildSignalEvent(input: InstallSignalInput): InstallSignalEvent 
     sessionId: `install_${marker}`,
     anonymousId: `install_${marker}`,
     properties,
-    context: { library: { name: '@aether/sdk', version: input.loaderVersion } },
+    // The canonical envelope, stamped exactly as the SDK stamps it on its own
+    // events (src/index.ts). This is not decoration: every sdk_* signal is a
+    // `core`-family event, and `core` is release-critical, so with
+    // envelope_required_fields_enforced on (the default in staging and
+    // production) an event missing any of these three is rejected per-event
+    // with `envelope_missing:<field>`. Without them the install verifier would
+    // go silent in precisely the two environments it exists to serve.
+    //
+    // `sequence` is 0 because a signal is one-shot: it opens and closes its own
+    // `install_<marker>` session in the same request.
+    context: {
+      library: { name: '@aether/sdk', version: input.loaderVersion },
+      surface: 'web',
+      schemaVersion: CONTRACT_SCHEMA_VERSION,
+      sequence: { event: 0 },
+    },
   };
 }
 

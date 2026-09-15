@@ -62,6 +62,28 @@ describe('install signal', () => {
       expect(event.context.library).toEqual({ name: '@aether/sdk', version: '0.1.0-alpha.0' });
     });
 
+    it('stamps the canonical envelope the release-critical core family requires', () => {
+      // sdk_* signals are `core`-family, and `core` is release-critical: with
+      // envelope_required_fields_enforced on (default in staging/production),
+      // an event missing any of these is rejected per-event with
+      // `envelope_missing:<field>`. Without this stamping the install verifier
+      // goes silent in exactly the environments it exists to serve.
+      const event = buildSignalEvent(input({ signal: 'sdk_init_failed' }));
+
+      expect(event.context.surface).toBe('web');
+      expect(event.context.schemaVersion).toBe('1.0.0');
+      // One-shot: the signal opens and closes its own session in one request.
+      expect(event.context.sequence).toEqual({ event: 0 });
+    });
+
+    it('keeps the schema version in step with the shared contract', () => {
+      // The loader bundles standalone and repeats this literal instead of
+      // importing it; scripts/validate_sdk_release_alignment.py holds the copy
+      // to packages/shared/schema-version.ts. Pinned here too so a bump that
+      // misses the loader fails in the SDK's own suite rather than only in CI.
+      expect(buildSignalEvent(input()).context.schemaVersion).toBe('1.0.0');
+    });
+
     it('produces distinct markers by default', () => {
       const a = buildSignalEvent(input({ randomId: undefined }));
       const b = buildSignalEvent(input({ randomId: undefined }));
