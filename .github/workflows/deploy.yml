@@ -40,6 +40,10 @@ jobs:
     # as before. If this job ever fails, its output is empty, every gated job
     # is skipped, and the run ends red on this job's own failure — the armed
     # state is never silently assumed.
+    # Bind the guard to the same target environment as the deployment job so
+    # environment-scoped AWS_DEPLOY_ROLE_ARN is visible before the guard
+    # decides whether build/deploy may run.
+    environment: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
