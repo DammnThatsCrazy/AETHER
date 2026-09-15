@@ -305,6 +305,9 @@ def test_deploy_gates_build_and_deploy_on_delivery_armed_output():
     doc = _workflow_yaml("deploy.yml")
 
     armed = doc["jobs"]["delivery-armed"]
+    assert armed["environment"] == (
+        "${{ github.event_name == 'push' && 'staging' || inputs.environment }}"
+    )
     assert armed["outputs"] == {"armed": "${{ steps.check.outputs.armed }}"}
     check = next(s for s in armed["steps"] if s.get("id") == "check")
     assert check["env"]["AWS_DEPLOY_ROLE_ARN"] == "${{ secrets.AWS_DEPLOY_ROLE_ARN }}"
