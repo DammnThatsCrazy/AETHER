@@ -1,8 +1,12 @@
-"""Optional Rights Authority HTTP surface (blueprint §17 tenant surface).
+"""Rights Authority HTTP surface (blueprint §17 tenant surface).
 
-NOT wired into ``main.py``. Integrator: mount
-``services.rights_authority.routes:router`` (prefix ``/v1/rights``). Additive
-only — matches the original ``services/dsr_propagation`` pattern.
+Mounted into ``main.py`` (prefix ``/v1/rights``) and inert until an operator
+activates a rollout phase (§13 gate below). Additive only — matches the
+original ``services/dsr_propagation`` pattern.
+
+Each handler is gated on a granular ``rights.*`` grant (``permissions.py``)
+rather than the bare ``read`` / ``write`` word, with the legacy single-word
+scope preserved as an alias so pre-existing tenant sessions keep working.
 
 Only the *authoritative* seams are exposed:
 * ``POST /v1/rights/decisions/effective`` — resolve a durable
@@ -23,27 +27,59 @@ later integration phase.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from shared.auth.auth import TenantContext
-from shared.common.common import APIResponse
+from shared.common.common import AetherError, APIResponse
 from shared.decorators import require_permission
 from shared.logger.logger import get_logger
 from services.security.request_context import tenant_actor
 
+from .permissions import require_rights
+
 logger = get_logger("aether.rights_irrl.routes")
 router = APIRouter(prefix="/v1/rights", tags=["Rights Authority"])
 
-# Baseline tenant permissions. Read/resolve surfaces use ``read``; the §66
-# revocation is a destructive mutation and requires the established ``write``
-# scope (never ``read``), so a read-only principal cannot revoke rights. Real
-# Kyber/tenant capability wiring is a later phase (the resolver/revocation
-# pipeline additionally enforce their own tenant-scoped checks server-side).
-_RIGHTS_READ_PERMISSION = "read"
-_RIGHTS_WRITE_PERMISSION = "write"
+# Granular rights grants (permissions.py). Each handler requires the dotted id
+# for the operation it performs; the legacy bare scope it used to require is
+# preserved as an alias, so an already-granted tenant session keeps working.
+# The resolver/revocation pipeline additionally enforce their own tenant-scoped
+# checks server-side.
+_RIGHTS_RESOLVE_GRANT = "rights.decision.resolve"
+_RIGHTS_DECISION_READ_GRANT = "rights.decision.read"
+_RIGHTS_REVOCATION_GRANT = "rights.revocation.run"
+
+
+def _requires_rights(*grants: str) -> Callable[..., Awaitable[TenantContext]]:
+    """FastAPI dependency: authenticate the API key, then require any of the
+    granular ``rights.*`` grants — or the legacy alias of each, so a caller
+    holding only ``read`` / ``write`` is still admitted to exactly the
+    operations those words used to reach (``permissions.py``).
+
+    Authentication and the legacy→granular translation both stay server-side.
+    Denials surface as the same 403 the previous ``require_permission`` call
+    raised; ``Role.ADMIN`` short-circuits as before.
+    """
+    authenticate = require_permission(None)
+
+    async def _dependency(
+        tenant: TenantContext = Depends(authenticate),
+    ) -> TenantContext:
+        try:
+            require_rights(tenant, *grants)
+        except AetherError as exc:
+            raise HTTPException(status_code=exc.code.value, detail=exc.message)
+        return tenant
+
+    return _dependency
+
+
+_resolve_dependency = _requires_rights(_RIGHTS_RESOLVE_GRANT)
+_decision_read_dependency = _requires_rights(_RIGHTS_DECISION_READ_GRANT)
+_revocation_dependency = _requires_rights(_RIGHTS_REVOCATION_GRANT)
 
 
 class EffectiveRightsResolveRequest(BaseModel):
@@ -120,17 +156,18 @@ def _ensure_active() -> None:
 async def resolve_effective_decision(
     body: EffectiveRightsResolveRequest,
     request: Request,
-    _tenant: TenantContext = Depends(require_permission(_RIGHTS_READ_PERMISSION)),
+    _tenant: TenantContext = Depends(_resolve_dependency),
 ) -> dict:
     """Resolve (and durably record) the effective rights decision for a use.
 
-    Permission posture: this is deliberately a ``read``-scoped operation even
-    though it persists a durable ``RightsDecision``. Resolving effective rights
-    is a *read-class query* — it reports governed state and changes nothing —
-    and blueprint §17 requires every resolution to be durably recorded for the
-    tenant audit ledger. Gating it under ``write`` would make the surface's
-    primary query unusable for read-only principals. Destructive operations
-    (``POST /v1/rights/revocations``) DO require the ``write`` scope.
+    Permission posture: this requires ``rights.decision.resolve``, a
+    *read-class* grant (aliased by the legacy ``read`` scope) even though it
+    persists a durable ``RightsDecision``. Resolving effective rights reports
+    governed state and changes nothing, and blueprint §17 requires every
+    resolution to be durably recorded for the tenant audit ledger. Gating it
+    under the revocation grant would make the surface's primary query unusable
+    for read-only principals. Destructive operations (``POST
+    /v1/rights/revocations``) require ``rights.revocation.run``.
     """
     _ensure_active()
     _same_tenant_or_403(request, body.tenant_id)
@@ -176,9 +213,11 @@ async def resolve_effective_decision(
 async def get_decision(
     decision_id: str,
     request: Request,
-    _tenant: TenantContext = Depends(require_permission(_RIGHTS_READ_PERMISSION)),
+    _tenant: TenantContext = Depends(_decision_read_dependency),
 ) -> dict:
     """Tenant-scoped read of a durable RightsDecision (404 on unknown/cross-tenant).
+
+    Requires ``rights.decision.read`` (aliased by the legacy ``read`` scope).
 
     Ownership boundary is the TENANT, not the actor — the durable decision store
     is a tenant decision *ledger*. ``RightsDecision`` records carry no actor
@@ -207,10 +246,12 @@ async def get_decision(
 async def run_revocation(
     body: RevocationRequest,
     request: Request,
-    _tenant: TenantContext = Depends(require_permission(_RIGHTS_WRITE_PERMISSION)),
+    _tenant: TenantContext = Depends(_revocation_dependency),
 ) -> dict:
     """Run the §66 revocation pipeline.
 
+    Requires ``rights.revocation.run`` (aliased by the legacy ``write`` scope —
+    never by ``read``), so a read-only principal cannot revoke rights.
     Ownership is verified server-side at two layers: this route requires
     ``body.tenant_id`` to equal the authenticated caller's tenant, and the
     pipeline's Step-0 guard loads the grant by id and refuses any grant that is

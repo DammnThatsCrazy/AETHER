@@ -32,6 +32,10 @@ GovernanceDomain = Literal[
     'outcomes', 'playbooks', 'integrations', 'audit_exports', 'billing',
     'onboarding', 'customer_success', 'kyber_admin', 'security', 'governance',
     'reliability', 'data_quality', 'data_exchange',
+    # Rights Authority tenant surface (blueprint §17; /v1/rights). Granular
+    # rights.* grants are enforced at the route edge; this domain registration
+    # is what makes the coarse read/write role grants real authorization.
+    'rights',
     # Kyber operating-plane domains. `kyber_workforce` covers operator identity,
     # devices and role administration; `kyber_tenant` covers scoped tenant
     # inspection (Tenant Mirror + raw tenant reads); `kyber_command` covers the
