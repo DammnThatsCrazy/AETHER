@@ -851,6 +851,16 @@ def main(argv: Sequence[str] | None = None) -> None:
         ),
     )
     run(
+        [sys.executable, "scripts/validate_sdk_cdn_manifest.py"],
+        name="SDK CDN manifest (release pipeline wiring, version derivation, cache policy)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "keep the publish-cdn job running the manifest generator and layout verifier, "
+            "derive CDN paths from packages/web/package.json, and preserve the dry_run guard"
+        ),
+    )
+    run(
         [sys.executable, "scripts/validate_consistency_ownership.py"],
         name="Source-of-truth ownership map enforcement",
         results=results,

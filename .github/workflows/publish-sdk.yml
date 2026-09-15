@@ -228,6 +228,131 @@ jobs:
           npm pack --workspace=packages/web --dry-run
           npm pack --workspace=packages/react-native --dry-run
 
+  # ── CDN ──────────────────────────────────────────────────────────────────
+  # Publishes the loader bootstrap, version-pinned bundles, and the web
+  # manifest to the SDK CDN bucket, then invalidates only the two short-cache
+  # paths. Versioned bundles are immutable and are never invalidated.
+  #
+  # The layout is fully validated before any upload: a manifest whose hashes do
+  # not match the bytes it points at would make every client reject the bundle,
+  # which surfaces as a silent install failure rather than a build error.
+  publish-cdn:
+    name: Publish CDN SDK assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [validate, publish-npm]
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CDN_BUCKET: ${{ vars.AETHER_SDK_CDN_BUCKET || 'cdn.aether.network' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Download bumped files
+        uses: actions/download-artifact@v4
+        with:
+          name: version-bumped
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build @aether/shared
+        run: npm run build --workspace=packages/shared
+
+      - name: Build @aether/web
+        run: npm run build --workspace=packages/web
+
+      - name: Verify web SDK package artifacts
+        run: npm run verify:artifacts --workspace=packages/web
+
+      - name: Generate CDN manifest and release layout
+        run: node scripts/release/generate-sdk-cdn-manifest.mjs
+
+      - name: Verify CDN layout
+        run: node scripts/release/verify-cdn-layout.mjs
+
+      - name: Record CDN release evidence
+        run: |
+          mkdir -p release-evidence
+          cp artifacts/sdk/cdn/sdk/manifests/web/latest.json release-evidence/sdk-cdn-manifest.json
+          printf '{"sha":"%s","job":"publish-cdn","dry_run":%s}\n' \
+            "$GITHUB_SHA" "${{ inputs.dry_run }}" > release-evidence/sdk-cdn.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdk-cdn-release-evidence
+          path: |
+            release-evidence/sdk-cdn-manifest.json
+            release-evidence/sdk-cdn.json
+
+      - name: Dry run summary (CDN)
+        if: ${{ inputs.dry_run }}
+        run: |
+          echo "DRY RUN — CDN layout validated, nothing uploaded:"
+          find artifacts/sdk/cdn -type f | sort
+
+      - name: Require AWS credentials
+        if: ${{ !inputs.dry_run }}
+        env:
+          CDN_ROLE_ARN: ${{ secrets.AWS_CDN_ROLE_ARN }}
+          CDN_DISTRIBUTION_ID: ${{ secrets.AETHER_SDK_CLOUDFRONT_DISTRIBUTION_ID }}
+        run: |
+          set -euo pipefail
+          missing=0
+          [[ -n "$CDN_ROLE_ARN" ]]          || { echo "::error::secret AWS_CDN_ROLE_ARN is not set"; missing=1; }
+          [[ -n "$CDN_DISTRIBUTION_ID" ]]   || { echo "::error::secret AETHER_SDK_CLOUDFRONT_DISTRIBUTION_ID is not set"; missing=1; }
+          exit "$missing"
+
+      - name: Configure AWS credentials
+        if: ${{ !inputs.dry_run }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CDN_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Upload versioned CDN assets
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          # No --delete: versioned prefixes are immutable and accumulate so
+          # that pinned installs keep resolving after a new release.
+          aws s3 sync artifacts/sdk/cdn/ "s3://${CDN_BUCKET}/" \
+            --exclude "v1.js" \
+            --exclude "sdk/manifests/*" \
+            --cache-control "public, max-age=31536000, immutable"
+
+      - name: Upload stable bootstrap
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          aws s3 cp artifacts/sdk/cdn/v1.js "s3://${CDN_BUCKET}/v1.js" \
+            --cache-control "public, max-age=300, must-revalidate"
+
+      - name: Upload CDN manifest
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          aws s3 cp artifacts/sdk/cdn/sdk/manifests/web/latest.json \
+            "s3://${CDN_BUCKET}/sdk/manifests/web/latest.json" \
+            --cache-control "public, max-age=60, must-revalidate"
+
+      - name: Invalidate short-cache CDN paths
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          # Only the two mutable paths. Versioned bundles are immutable and
+          # invalidating them would be a no-op that costs money.
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ secrets.AETHER_SDK_CLOUDFRONT_DISTRIBUTION_ID }}" \
+            --paths "/v1.js" "/sdk/manifests/web/latest.json"
+
   # ── CocoaPods ────────────────────────────────────────────────────────────
   # Depends on `tag` so the sdk/v{version} tag exists when pod trunk push
   # fetches and validates the podspec source URL.
@@ -325,7 +450,9 @@ jobs:
     name: GitHub Release
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [validate, tag, publish-npm, publish-cocoapods, publish-android]
+    # publish-cdn is a hard dependency: the release notes below advertise CDN
+    # URLs, so shipping them without the assets would publish dead links.
+    needs: [validate, tag, publish-npm, publish-cdn, publish-cocoapods, publish-android]
     if: ${{ !inputs.dry_run }}
     permissions:
       contents: write
@@ -345,6 +472,14 @@ jobs:
           echo "$NOTES"    >> "$GITHUB_OUTPUT"
           echo "EOF"       >> "$GITHUB_OUTPUT"
 
+      # No integrity= attribute is advertised on the stable /v1.js snippet, and
+      # that is deliberate: v1.js is a mutable, short-cached URL whose bytes
+      # change whenever the loader is released, so a pinned SRI hash would break
+      # every installed snippet on the next publish. Bundle integrity is instead
+      # enforced at runtime — aether-loader.ts verifies the SDK bundle against
+      # downloads.sdkBundleHash from the manifest before evaluating it. SRI is
+      # published in the manifest (integrity.sri) for callers who pin the
+      # immutable versioned bundle instead.
       - name: Create GitHub Release
         uses: actions/github-script@v7
         env:
@@ -358,6 +493,16 @@ jobs:
             const major   = version.split('.')[0];
             const body = [
               notes,
+              '',
+              '**Web — one script tag (CDN)**',
+              '```html',
+              '<script async src="https://cdn.aether.network/v1.js"',
+              '  data-key="pk_live_..." data-site="site_..." data-autocapture="safe"></script>',
+              '```',
+              'Stable loader: https://cdn.aether.network/v1.js',
+              `Version-pinned bundle: https://cdn.aether.network/sdk/${version}/web/aether.umd.js`,
+              `Major-version loader: https://cdn.aether.network/sdk/v${major}/loader.js`,
+              'Version manifest: https://cdn.aether.network/sdk/manifests/web/latest.json',
               '',
               '**Install**',
               '```',
