@@ -101,6 +101,7 @@ REQUIRED_ACTIONS = {
     "kms:GenerateDataKey",
     "kms:Decrypt",
     "kms:GetKeyRotationStatus",
+    "kms:EnableKeyRotation",
     "kms:ScheduleKeyDeletion",
     # EC2 / VPC
     "ec2:GetSecurityGroupsForVpc",
@@ -301,6 +302,7 @@ REQUIRED_ACTIONS = {
     "lambda:GetPolicy",
     "lambda:ListTags",
     "lambda:GetFunctionConfiguration",
+    "lambda:InvokeFunction",
     # EventBridge
     "events:ListTargetsByRule",
     "events:PutRule",
@@ -327,6 +329,9 @@ _LAMBDA_MANAGEMENT_ACTIONS = {
     "lambda:GetPolicy",
     "lambda:ListTags",
     "lambda:GetFunctionConfiguration",
+}
+_LAMBDA_INVOCATION_ACTIONS = {
+    "lambda:InvokeFunction",
 }
 _IAM_ROLE_MANAGEMENT_ACTIONS = {
     "iam:CreateRole",
@@ -724,6 +729,7 @@ def main() -> int:
     ):
         expected_resources[_kms] = _KMS_KEY
     expected_resources["kms:GetKeyRotationStatus"] = "*"
+    expected_resources["kms:EnableKeyRotation"] = _KMS_KEY
     expected_resources["kms:ScheduleKeyDeletion"] = "*"
 
     # EC2 / VPC — all require '*'
@@ -898,6 +904,9 @@ def main() -> int:
     expected_resources["lambda:TagResource"] = "exact-staging-lambda-bindings"
     for action in _LAMBDA_MANAGEMENT_ACTIONS:
         expected_resources[action] = "exact-staging-lambda-bindings"
+    expected_resources["lambda:InvokeFunction"] = (
+        "arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation"
+    )
     for action in _IAM_ROLE_MANAGEMENT_ACTIONS:
         expected_resources[action] = "exact-staging-role-management-bindings"
 
@@ -943,6 +952,9 @@ def main() -> int:
         elif action in _LAMBDA_MANAGEMENT_ACTIONS:
             if len(matching) != 1 or set(matching[0].get("resource") or []) != _LAMBDA_FN_ARNS:
                 fail(f"{action} must cover exactly the staging Lambda functions")
+        elif action in _LAMBDA_INVOCATION_ACTIONS:
+            if len(matching) != 1 or matching[0].get("resource") != expected:
+                fail("lambda:InvokeFunction must cover only the staging secret-rotation function")
         elif action in _IAM_ROLE_MANAGEMENT_ACTIONS:
             role_sets = {frozenset(s.get("resource") or []) for s in matching}
             if role_sets != {frozenset(_LAMBDA_ROLE_ARNS), frozenset(_INFRA_ROLE_ARNS)}:
@@ -950,6 +962,9 @@ def main() -> int:
         elif action == "kms:CreateGrant":
             if len(matching) != 1 or matching[0].get("resource") != expected or (matching[0].get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
                 fail("kms:CreateGrant must be limited to staging-tagged keys")
+        elif action == "kms:EnableKeyRotation":
+            if len(matching) != 1 or matching[0].get("resource") != expected or (matching[0].get("conditions") or {}).get("aws:ResourceTag/Environment") != "staging":
+                fail("kms:EnableKeyRotation must be limited to staging-tagged keys")
         elif action == "kms:TagResource":
             if len(matching) != 2 or any(s.get("resource") != expected for s in matching):
                 fail(f"{action} has an unexpected resource scope")

@@ -22,12 +22,12 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:8360faafb7270f0441e73246743415bd46fcd29a07da1d39f2938f0b601f2a01"
+  ".github/workflows/": "sha256:6471c3a51546066ec81ad8007bde86a1b35c1f5226c463af759dffa9ecfdda7e"
   "cicd/aether-cicd/README.md": "sha256:07bc236b744bd0c54bae8b6fa661beba9d3767a3300470814f071a119f8244ee"
   "cicd/aether-cicd/main.py": "sha256:8027fb1fcb5e4a1aeb6428224fe0ca9f7756df0aaca5f39e7e84bb6c9c85feb9"
   "cicd/aether-cicd/quality_gates/": "sha256:2cc72d40cd7c324e686271c5ea2c90c2ccb15c4ebe0435b0589844663dd2e436"
   "cicd/aether-cicd/stages/": "sha256:961dd8ecca17f67988397b1f33515de8a88180ed70a7545fe05b324eb1bf555f"
-  "config/staging_apply_iam_policy.yaml": "sha256:882b643aead03eb0835daa61f4599b0ad382398e57d9f08408912ce97f32c527"
+  "config/staging_apply_iam_policy.yaml": "sha256:a8da8625cb23db18a6fa320521286d9d6292a2115fcb5f22985f283196c5178d"
   "deploy/aws/terraform/modules/aurora/main.tf": "sha256:c1c005d1f9662dc4dfcc72ca8fbaeda01f4b1c95ea020578c09d5d368516b863"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "deploy/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
@@ -133,14 +133,13 @@ manifest therefore includes the ECR scan, account-plan read, S3 bucket-level
 read, and ELB listener-attribute actions that those preflight checks and
 Terraform plan actually call.
 
-The remote plan supports an optional `TF_AMPLIFY_GITHUB_ACCESS_TOKEN` for the
-five GitHub-backed Amplify applications. Because the current AETHER repository
-is public, the workflow permits the secret to be absent and Terraform passes
-`null` to Amplify for anonymous repository checkout. A private repository must
-provide a repository-scoped token. The historical placeholder value `-` is
-normalized to unset for the public repository and is never passed to Terraform.
-When a real token is supplied, it is consumed only as a sensitive plan input;
-the apply job receives the reviewed binary plan and never re-plans.
+The remote plan requires `TF_AMPLIFY_GITHUB_ACCESS_TOKEN` for the five
+GitHub-backed Amplify applications. AWS Amplify requires a repository access
+token for public and private repositories alike. The workflow rejects an
+absent value, the historical placeholder `-`, and values containing whitespace
+before it assumes AWS credentials; a real token is consumed only as a sensitive
+plan input. The apply job receives the reviewed binary plan and never
+re-plans.
 `TF_ALERT_EMAIL` is the actionable staging notification endpoint and is set to
 `team@olympuslabsml.com`.
 
