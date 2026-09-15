@@ -1,7 +1,7 @@
 <!-- DO NOT EDIT — generated from packages/shared/contracts/event-registry.json -->
 <!-- Run: python scripts/generate_contracts.py -->
 
-# Aether Event Registry (403 types, contract v0.1.0-alpha.0)
+# Aether Event Registry (416 types, contract v0.1.0-alpha.0)
 
 | Event Type | Family | Required Purposes | Privacy Class | Retention Class | Description |
 |---|---|---|---|---|---|
@@ -12,6 +12,17 @@
 | `error` | `core` | analytics | behavioral | standard_90d | Client-side error capture |
 | `performance` | `core` | analytics | behavioral | standard_90d | Web Vitals and performance metrics |
 | `experiment` | `core` | marketing | behavioral | standard_180d | Experiment variant exposure |
+| `sdk_loaded` | `core` | analytics | behavioral | standard_30d | SDK bundle fetched from the CDN and evaluated by the loader |
+| `sdk_initialized` | `core` | analytics | behavioral | standard_30d | SDK completed initialization with a valid configuration |
+| `sdk_init_failed` | `core` | analytics | behavioral | standard_30d | SDK initialization failed (invalid key, site, or configuration) |
+| `sdk_config_loaded` | `core` | analytics | behavioral | standard_30d | Remote SDK configuration or version manifest fetched successfully |
+| `sdk_config_failed` | `core` | analytics | behavioral | standard_30d | Remote SDK configuration or version manifest fetch failed |
+| `sdk_batch_sent` | `core` | analytics | behavioral | standard_30d | Event batch dispatched to /v1/batch |
+| `sdk_batch_accepted` | `core` | analytics | behavioral | standard_30d | Event batch accepted by /v1/batch |
+| `sdk_batch_rejected` | `core` | analytics | behavioral | standard_30d | Event batch rejected by /v1/batch (validation, consent, or key error) |
+| `sdk_version_deprecated` | `core` | analytics | behavioral | standard_30d | Client SDK version is deprecated but still served |
+| `sdk_version_unsupported` | `core` | analytics | behavioral | standard_30d | Client SDK version is no longer supported by the ingestion tier |
+| `session_started` | `core` | analytics | behavioral | standard_90d | Session began — a new session id was minted by the session manager |
 | `journey_started` | `journey` | analytics | behavioral | standard_90d | Journey lifecycle start |
 | `journey_paused` | `journey` | analytics | behavioral | standard_90d | Journey paused by user or system |
 | `journey_resumed` | `journey` | analytics | behavioral | standard_90d | Journey resumed from paused state |
@@ -225,6 +236,8 @@
 | `rate_limit_observed` | `server` | analytics | behavioral | standard_90d | Rate limit encountered |
 | `dependency_failure_observed` | `server` | analytics | behavioral | standard_90d | External dependency failure observed |
 | `export_completed` | `server` | analytics | behavioral | standard_90d | Data export completed |
+| `sdk_heartbeat_received` | `server` | analytics | behavioral | standard_30d | First accepted ingestion observed for an SDK installation (server-observed) |
+| `sdk_heartbeat_failed` | `server` | analytics | behavioral | standard_30d | SDK heartbeat could not be established (server-observed) |
 | `signup_started` | `identity_lc` | analytics | identity | standard_90d | Signup flow started |
 | `signup_completed` | `identity_lc` | analytics | identity | standard_90d | Signup completed |
 | `login_succeeded` | `identity_lc` | analytics | identity | standard_90d | Login succeeded |

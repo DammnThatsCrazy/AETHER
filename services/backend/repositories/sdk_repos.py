@@ -6,9 +6,31 @@ from typing import Optional
 
 from repositories.repos import BaseRepository
 
+#: Marks a row in ``sdk_installations`` as a registered site's install
+#: handshake rather than an installed SDK. Owned here because this module owns
+#: the table's row shapes; ``services/sdk_distribution`` writes it and the
+#: fleet reads below exclude it.
+SITE_INSTALL_RECORD_TYPE = "site_install"
+
 
 class SDKInstallationRepository(BaseRepository):
-    """Authoritative installation registry; heartbeat caches are not inventory."""
+    """Authoritative installation registry; heartbeat caches are not inventory.
+
+    Two kinds of row share this table, because both answer "an SDK is deployed
+    somewhere for this tenant":
+
+      * **fleet** rows — an installed SDK, keyed by the installation id the SDK
+        generates, carrying heartbeats and health scores;
+      * **site install** rows — a registered site's install handshake, keyed by
+        the public ``site_id`` (see ``services/sdk_distribution``), carrying
+        which loader milestones were observed.
+
+    Only the first kind belongs in fleet health. A site install has no
+    heartbeat by design — its signals are one-shot, at install time — so
+    counting it would report every correctly installed site as a silent SDK.
+    ``list_for_tenant`` is therefore the raw read, and fleet callers use
+    ``list_fleet_for_tenant``.
+    """
 
     def __init__(self) -> None:
         super().__init__("sdk_installations")
@@ -29,6 +51,21 @@ class SDKInstallationRepository(BaseRepository):
 
     async def list_for_tenant(self, tenant_id: str, limit: int = 1000) -> list[dict]:
         return await self.find_many(filters={"tenant_id": tenant_id}, limit=limit)
+
+    async def list_fleet_for_tenant(self, tenant_id: str, limit: int = 1000) -> list[dict]:
+        """Installed SDKs only — site-install rows are not fleet members.
+
+        Filtered here rather than in the query because ``find_many``'s filters
+        are JSONB text equality and cannot express "record_type is absent or is
+        not site_install" over rows written before the field existed. Rows with
+        no ``record_type`` are legacy fleet installations and must stay counted.
+        """
+        records = await self.list_for_tenant(tenant_id, limit=limit)
+        return [
+            r
+            for r in records
+            if r.get("record_type") != SITE_INSTALL_RECORD_TYPE
+        ]
 
 
 class SDKManifestVersionRepository(BaseRepository):

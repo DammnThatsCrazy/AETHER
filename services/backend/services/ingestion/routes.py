@@ -122,6 +122,11 @@ async def ingest_single_event(
         granted_consents=frozenset(),
         sent_at=None,
         producer=producer,
+        # These aliases are admitted for publishable keys (the route policy
+        # allows any /v1/ingest* path), so the same site confinement has to
+        # apply here — otherwise a key bound to one site could forge install
+        # signals for another by posting to the deprecated path instead.
+        declared_site=getattr(request, "headers", {}).get("X-Aether-Site"),
     )
     result = resp.events[0]
     return APIResponse(
@@ -187,6 +192,11 @@ async def ingest_batch_events(
         granted_consents=frozenset(),
         sent_at=None,
         producer=producer,
+        # These aliases are admitted for publishable keys (the route policy
+        # allows any /v1/ingest* path), so the same site confinement has to
+        # apply here — otherwise a key bound to one site could forge install
+        # signals for another by posting to the deprecated path instead.
+        declared_site=getattr(request, "headers", {}).get("X-Aether-Site"),
     )
     accepted_event_ids = [r.id for r in resp.events if r.status == "accepted"]
     return APIResponse(

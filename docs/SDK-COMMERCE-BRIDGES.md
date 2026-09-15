@@ -13,7 +13,7 @@ toc_depth: 3
 source_hashes:
   "packages/shared/commerce-bridge.ts": "sha256:b052f7b3df53c934250acaefebefedaf49d9a06d3062d8c75617f308372ed665"
   "packages/shared/commerce.ts": "sha256:1ecb0f87838e148ddeaeab7458ea7762350f451361eecf9925ba1c09ded0d32d"
-  "packages/shared/contracts/event-registry.json": "sha256:7ae978eb7fb11c55e324fc61365baa83e63a976d2b458d101019a1fa2cf431ba"
+  "packages/shared/contracts/event-registry.json": "sha256:29f3cdefd685a1ec296a96e9f705830ef09efd7865f67a1a6c1f2e4685e17c89"
   "packages/web/src/bridges/": "sha256:3ceea9d41cd65bfc6442fc6c7809165e4bf651b3625edde1a5cdeebe755c74ba"
   "packages/web/src/modules/commerce-detection.ts": "sha256:14f48bd32335bd9069aec1927d38e4eaaa33274a496f523acfd17ab770934751"
   "services/backend/shared/commerce_contracts/order.py": "sha256:186c38a97cbc2579bf461b5221f6bd96db126a8d967d0c064b3981f5d4b22893"

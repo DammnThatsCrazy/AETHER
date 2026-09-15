@@ -11,6 +11,9 @@ build/
 # But keep build JS artifacts ignored (only .d.ts is committed)
 packages/web/dist/**/*.js
 packages/web/dist/**/*.js.map
+# Same for the ESM loader bundle (.mjs is not matched by the .js rules above)
+packages/web/dist/**/*.mjs
+packages/web/dist/**/*.mjs.map
 .gradle/
 contracts/smart-contracts/artifacts/
 contracts/smart-contracts/cache/

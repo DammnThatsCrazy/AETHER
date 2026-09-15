@@ -34,10 +34,10 @@ interface SDKManifest {
  * AetherLoader — CDN Auto-Loader
  *
  * Loads the latest Aether SDK bundle from CDN with intelligent caching.
- * Place at a stable, never-changing URL: cdn.aether.network/sdk/v5/loader.js
+ * Place at a stable, never-changing URL: https://cdn.aether.network/v1.js
  *
  * Usage:
- *   <script src="https://cdn.aether.network/sdk/v5/loader.js"></script>
+ *   <script src="https://cdn.aether.network/v1.js"></script>
  *   <script>
  *     AetherLoader.load().then(aether => aether.init({ apiKey: 'your-key' }));
  *   </script>

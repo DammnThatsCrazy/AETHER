@@ -238,6 +238,23 @@ def classify_sdk_version(version: Optional[str], name: Optional[str] = None) -> 
     return UNCLASSIFIED_BAND
 
 
+def compare_sdk_versions(left: Optional[str], right: Optional[str]) -> Optional[int]:
+    """Order two reported versions: -1, 0, 1 — or None when either won't parse.
+
+    Exposed so callers that need "newer or older than the shipped version"
+    (the install verifier's drift status) reuse this module's one parser. A
+    second parser would agree with this one until the day it silently did not,
+    and the disagreement would show up as a fleet reported as up to date.
+    """
+    a = _parse_version(left)
+    b = _parse_version(right)
+    if a is None or b is None:
+        return None
+    if a < b:
+        return -1
+    return 0 if a == b else 1
+
+
 def _utc_today_iso() -> str:
     return date.fromtimestamp(datetime.now(timezone.utc).timestamp()).isoformat()
 

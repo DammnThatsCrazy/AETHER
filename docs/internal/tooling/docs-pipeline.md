@@ -24,7 +24,7 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/repo-health.yml": "sha256:624c173cc5db243ffebeb2284532a75f195d4918622160e586b7d90cb569f946"
   ".pre-commit-config.yaml": "sha256:e1c5169ee1d1f2923709f37a21c664cf898cb4c3b40ab908be2f9068dd7a0aca"
-  "Makefile": "sha256:2e442e568ec502a65c42dc22e3334219df59bc48998bb5f02a3c6f7edd5b9d1d"
+  "Makefile": "sha256:0e48896e53bb44e0f6a81db0581d1a3df23063aabbfb94029b7dcbe464778afd"
   "scripts/docs_drift.py": "sha256:b6c0cd0a27f72b8c0d207d799f6daabdf0ed02e8bea17feaf6ccbfff43c1016a"
   "scripts/docs_extract/run_all.py": "sha256:404445eba05d12de88af585f79839b7496a1658411a110e606c46d5ed7e8c338"
   "scripts/docs_idempotency.py": "sha256:fe8628ef3a9b9d824645a5db062857754d2984b0f3f4d866b571df6232302f17"

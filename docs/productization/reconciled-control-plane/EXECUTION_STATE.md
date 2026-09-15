@@ -138,6 +138,42 @@ caveat).
   (`8ecd55be`), and the canonical gate re-run on the final tree: **78 gates /
   0 failed at `8ecd55be`**, all PR #609 leaf checks green.
 
+## Consuming lane — SDK distribution layer (site installs)
+
+**Delivered on `feat/sdk-distribution-layer`.** The SDK distribution layer
+adopted the plane rather than extending it: a registered site becomes a
+managed integration the plane can observe and admit. Nothing about the plane's
+own state changed — see the boundary immediately below.
+
+| Deliverable | Evidence |
+|---|---|
+| `observed_from_site_install` — install state → CP-12 availability, runtime-reported provenance, `failed` → `degraded` | `tests/unit/reconciled_control/test_sensors.py` (7 site-install cases: no record, `awaiting_first_signal`, `failed`, `live`, unrecognized state, reported age, drift-status agreement) |
+| `sdk_distribution/control_plane.py` — `register_site_install` (register + §16 admission) and `site_install_observation` | `tests/unit/test_sdk_control_plane_integration.py` (12 cases: flag-OFF writes nothing, identity refused not guessed, channel honoured, re-registration is one row, store failure swallowed) |
+| Registration wired at site creation, not first signal (a site that never installs has nothing to project) | `services/backend/services/sdk_distribution/routes.py` |
+| `failed` recognized as reconcilable drift | `reconciler.py` `_UNHEALTHY_STATUSES` + the drift-agreement case in the sensor tests |
+| Seam gate | `scripts/validate_sdk_control_plane_seam.py`, registered in `repo_doctor` (install-state vocabulary both directions, every field read off a described install, one version authority, plane mutation path unreached); 8/8 injection cases caught during authoring |
+
+### Honest boundaries (this lane)
+
+- **The spine row does not move.** `reconciled_control_plane` remains
+  `implementationState: "pending"`, `ownsCanonicalTruth: false`,
+  `graphMutationPolicy: "read_only"`, all 14 conformance items `open`. This
+  lane registers integrations through the plane's existing §16 admission; it
+  does not close a conformance item and must not be read as progress against
+  one.
+- **Observe and register only (CP-08).** The distribution layer never
+  reconciles, plans, or mutates. The seam gate fails if
+  `control_plane.py` reaches `actuators`/`executor`/`change_planning`/
+  `rollout`/`scheduler`/`simulation`, and a second clause fails if the plane
+  itself imports `services.sdk_distribution` — the dependency runs one way.
+- **No production activation.** Every call is gated by
+  `reconciled_control.enabled` (default OFF) and returns `None` when the plane
+  is off. No readiness claim is made for the plane or for the distribution
+  layer beyond what `scripts/production_status.py` supports.
+- **No new production claim for the SDK area.** `scripts/production_status.py`
+  carries no RCP area; SDKs remain `4/5 release-ready (minor gaps)`. This
+  section records mechanism and boundary only.
+
 ## Lane status
 
 Phase commits on this lane: Phase 0 `b0658b5d`, Phase 1 `7a3ae88f`, Phase 2

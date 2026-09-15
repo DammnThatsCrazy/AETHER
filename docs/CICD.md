@@ -22,7 +22,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:6471c3a51546066ec81ad8007bde86a1b35c1f5226c463af759dffa9ecfdda7e"
+  ".github/workflows/": "sha256:960f0dc79fc14926ca8f00c0a86565d3dbeb9c728cdc82efeedef76218e4a52b"
   "cicd/aether-cicd/README.md": "sha256:07bc236b744bd0c54bae8b6fa661beba9d3767a3300470814f071a119f8244ee"
   "cicd/aether-cicd/main.py": "sha256:8027fb1fcb5e4a1aeb6428224fe0ca9f7756df0aaca5f39e7e84bb6c9c85feb9"
   "cicd/aether-cicd/quality_gates/": "sha256:2cc72d40cd7c324e686271c5ea2c90c2ccb15c4ebe0435b0589844663dd2e436"
@@ -566,18 +566,44 @@ release-only evidence, and is validated by `make validate-required-release-check
 
 ## SDK release
 
-When a `release/*` branch is merged to `main`, the SDK release sub-pipeline fires
-alongside the service deploy:
+SDK publication is a manual `workflow_dispatch` run of
+`.github/workflows/publish-sdk.yml`, which takes an explicit version string,
+bumps every package manifest, and then fans out per registry:
 
-| Platform | Registry | Trigger |
-|----------|----------|---------|
-| Web (`packages/web`) | npm (`@aether/web`) | Version bump in `package.json` |
-| iOS (`packages/ios`) | CocoaPods (`AetherSDK`) | Version bump in `AetherSDK.podspec` |
-| Android (`packages/android`) | Maven Central (`network.aether:sdk`) | Version bump in `build.gradle` |
-| React Native (`packages/react-native`) | npm (`@aether/react-native`) | Version bump in `package.json` |
+| Platform | Registry | Job | Version authority |
+| --- | --- | --- | --- |
+| Web (`packages/web`) | npm (`@aether/web`) | `publish-npm` | `packages/web/package.json` |
+| React Native (`packages/react-native`) | npm (`@aether/react-native`) | `publish-npm` | `packages/react-native/package.json` |
+| iOS (`packages/ios`) | CocoaPods (`AetherSDK`) | `publish-cocoapods` | `AetherSDK.podspec` |
+| Android (`packages/android`) | GitHub Packages, Maven (`com.aether:sdk-android`) | `publish-android` | `gradle.properties` |
+| Web CDN (`packages/web`) | `cdn.aether.network` | `publish-cdn` | `packages/web/package.json` |
 
-The release script (`cicd/aether-cicd/scripts/release_sdk.py`) validates that the
-version in the manifest matches the git tag before publishing.
+`publish-cdn` runs after `publish-npm`, because npm is the registry of record and
+the CDN is a delivery mirror of the same build. It derives the CDN layout and the
+version manifests from `packages/web/package.json` — never a hand-written
+version — via `scripts/release/generate-sdk-cdn-manifest.mjs`, then validates the
+staged tree with `scripts/release/verify-cdn-layout.mjs` before uploading
+anything. The upload is fail-closed on the `AWS_CDN_ROLE_ARN` and
+`AETHER_SDK_CLOUDFRONT_DISTRIBUTION_ID` secrets.
+
+Cache policy is split by mutability: `v1.js` (max-age 300) and
+`sdk/manifests/web/latest.json` (max-age 60) are mutable and are the only two
+paths invalidated on release; version-pinned bundles and loaders under
+`sdk/<version>/` and `sdk/v<major>/` are immutable and long-cached, so pinned
+installs keep resolving after a newer release.
+
+Two hash formats are published deliberately and must not be unified:
+`downloads.*Hash` is a bare hex SHA-256, which is what `aether-loader.ts`
+computes and compares byte-for-byte before evaluating a fetched bundle, while
+`integrity.sri` is `sha384-<base64>` Subresource Integrity for callers pinning
+the immutable versioned bundle. The stable `/v1.js` snippet deliberately
+advertises no `integrity` attribute: its bytes change on every loader release, so
+a pinned hash would break every installed snippet.
+
+`.github/workflows/sdk-release-validation.yml` runs the distribution wiring gates
+(`scripts/validate_sdk_distribution_artifacts.py`, `npm run verify:artifacts
+--workspace=packages/web`, and the loader artifact presence check) on SDK-scoped
+pull requests.
 
 ## Hotfix procedure
 

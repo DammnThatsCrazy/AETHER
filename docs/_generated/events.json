@@ -85,6 +85,72 @@
       "section_comment": "core"
     },
     {
+      "name": "sdk_loaded",
+      "family": "core",
+      "consent_purpose": "analytics",
+      "section_comment": "core"
+    },
+    {
+      "name": "sdk_initialized",
+      "family": "core",
+      "consent_purpose": "analytics",
+      "section_comment": "core"
+    },
+    {
+      "name": "sdk_init_failed",
+      "family": "core",
+      "consent_purpose": "analytics",
+      "section_comment": "core"
+    },
+    {
+      "name": "sdk_config_loaded",
+      "family": "core",
+      "consent_purpose": "analytics",
+      "section_comment": "core"
+    },
+    {
+      "name": "sdk_config_failed",
+      "family": "core",
+      "consent_purpose": "analytics",
+      "section_comment": "core"
+    },
+    {
+      "name": "sdk_batch_sent",
+      "family": "core",
+      "consent_purpose": "analytics",
+      "section_comment": "core"
+    },
+    {
+      "name": "sdk_batch_accepted",
+      "family": "core",
+      "consent_purpose": "analytics",
+      "section_comment": "core"
+    },
+    {
+      "name": "sdk_batch_rejected",
+      "family": "core",
+      "consent_purpose": "analytics",
+      "section_comment": "core"
+    },
+    {
+      "name": "sdk_version_deprecated",
+      "family": "core",
+      "consent_purpose": "analytics",
+      "section_comment": "core"
+    },
+    {
+      "name": "sdk_version_unsupported",
+      "family": "core",
+      "consent_purpose": "analytics",
+      "section_comment": "core"
+    },
+    {
+      "name": "session_started",
+      "family": "core",
+      "consent_purpose": "analytics",
+      "section_comment": "core"
+    },
+    {
       "name": "journey_started",
       "family": "journey",
       "consent_purpose": "analytics",
@@ -1394,6 +1460,18 @@
     },
     {
       "name": "export_completed",
+      "family": "server",
+      "consent_purpose": "analytics",
+      "section_comment": "server"
+    },
+    {
+      "name": "sdk_heartbeat_received",
+      "family": "server",
+      "consent_purpose": "analytics",
+      "section_comment": "server"
+    },
+    {
+      "name": "sdk_heartbeat_failed",
       "family": "server",
       "consent_purpose": "analytics",
       "section_comment": "server"

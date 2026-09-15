@@ -12,7 +12,11 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 const SDK_VERSION = pkg.version;
 
 export default {
-  input: 'src/loader/aether-loader.ts',
+  // The CDN entry is the bootstrap, not the loader class: a snippet must work
+  // with no follow-up JS, so the tag itself has to install the stub, read the
+  // data-* attributes, and load + init the SDK. The AetherLoader class is
+  // still exported for callers who want to drive loading themselves.
+  input: 'src/loader/bootstrap.ts',
   output: [
     {
       file: 'dist/loader.js',
@@ -20,14 +24,14 @@ export default {
       name: 'AetherLoader',
       exports: 'named',
       sourcemap: true,
-      banner: `/* Aether SDK Loader v${SDK_VERSION} — cdn.aether.network/sdk/v${SDK_VERSION.split('.')[0]}/loader.js */`,
+      banner: `/* Aether SDK Loader v${SDK_VERSION} — https://cdn.aether.network/v1.js */`,
       plugins: [terser()],
     },
     {
       file: 'dist/loader.mjs',
       format: 'esm',
       sourcemap: true,
-      banner: `/* Aether SDK Loader v${SDK_VERSION} — cdn.aether.network/sdk/v${SDK_VERSION.split('.')[0]}/loader.mjs */`,
+      banner: `/* Aether SDK Loader v${SDK_VERSION} — https://cdn.aether.network/sdk/v${SDK_VERSION.split('.')[0]}/loader.mjs */`,
       plugins: [terser()],
     },
   ],

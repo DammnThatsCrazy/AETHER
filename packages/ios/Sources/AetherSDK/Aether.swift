@@ -168,6 +168,17 @@ public enum AetherEventType: String, Codable, CaseIterable {
     case error
     case performance
     case experiment
+    case sdk_loaded
+    case sdk_initialized
+    case sdk_init_failed
+    case sdk_config_loaded
+    case sdk_config_failed
+    case sdk_batch_sent
+    case sdk_batch_accepted
+    case sdk_batch_rejected
+    case sdk_version_deprecated
+    case sdk_version_unsupported
+    case session_started
     // journey
     case journey_started
     case journey_paused
@@ -402,6 +413,8 @@ public enum AetherEventType: String, Codable, CaseIterable {
     case rate_limit_observed
     case dependency_failure_observed
     case export_completed
+    case sdk_heartbeat_received
+    case sdk_heartbeat_failed
     // identity_lc
     case signup_started
     case signup_completed
@@ -869,6 +882,17 @@ public final class Aether: NSObject {
         .error: "analytics",
         .performance: "analytics",
         .experiment: "marketing",
+        .sdk_loaded: "analytics",
+        .sdk_initialized: "analytics",
+        .sdk_init_failed: "analytics",
+        .sdk_config_loaded: "analytics",
+        .sdk_config_failed: "analytics",
+        .sdk_batch_sent: "analytics",
+        .sdk_batch_accepted: "analytics",
+        .sdk_batch_rejected: "analytics",
+        .sdk_version_deprecated: "analytics",
+        .sdk_version_unsupported: "analytics",
+        .session_started: "analytics",
         // journey
         .journey_started: "analytics",
         .journey_paused: "analytics",
@@ -1103,6 +1127,8 @@ public final class Aether: NSObject {
         .rate_limit_observed: "analytics",
         .dependency_failure_observed: "analytics",
         .export_completed: "analytics",
+        .sdk_heartbeat_received: "analytics",
+        .sdk_heartbeat_failed: "analytics",
         // identity_lc
         .signup_started: "analytics",
         .signup_completed: "analytics",

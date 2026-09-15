@@ -13,8 +13,8 @@ toc_depth: 3
 source_hashes:
   "packages/shared/acquisition-evidence.ts": "sha256:9f4b8011f9a596a08969cbf5ef1b14f8212715e00e8d6f920f23f48f09c5f855"
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
-  "packages/shared/events.ts": "sha256:96f08a92d2a10b3555264bd76dc1e59c78ae3de63fe99665c13189201ad5c120"
-  "packages/web/src/index.ts": "sha256:99dff7a812de9fbb77dd70ad3719d90989b8660ae3071154c213efc65e939ba0"
+  "packages/shared/events.ts": "sha256:07628f50a0561ff5eb9ced333d6120a92182f94724eda2675172b354b6387494"
+  "packages/web/src/index.ts": "sha256:bc4d8dacd06821812479addcda2a0281bb104adba7090e58a63a24b32ba233cd"
   "packages/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
 ---
 
@@ -22,21 +22,53 @@ source_hashes:
 
 ## Installation
 
-```html
-<!-- CDN (recommended) -->
-<script src="https://cdn.aether.io/sdk/v8/aether.min.js"></script>
+The recommended install is one tag. Register a site and mint a publishable key
+for it (**Settings → SDK Sites**), then paste the snippet the platform renders:
 
-<!-- Or via npm -->
+```html
+<script src="https://cdn.aether.network/v1.js"
+        data-key="pk_your_publishable_key"
+        data-site="site_your_site_id"
+        async></script>
+```
+
+That tag is the whole install. The loader is a standalone script at a stable
+URL, so it reads the attributes and brings up the SDK itself — there is no
+follow-up `init()` call to forget, because an install that half-happened still
+looks like traffic that stopped. Use a **publishable** key (`pk_…`) here and
+nowhere else: it travels in page HTML, and the site is the only thing confining
+it to one property. A secret key works in that tag right up until someone reads
+it out of View Source, which is why the loader warns when one is pasted.
+
+The tag itself carries no `integrity` attribute, deliberately. `v1.js` is the
+one URL in the install that must not move when the SDK does — pinning a hash to
+it would break every customer page on the next release. The loader verifies
+instead at the step that matters: it resolves the SDK bundle through the signed
+release manifest and checks the fetched bytes against the manifest's
+`sha256` before evaluating them, refusing a bundle that does not match.
+
+To confirm the tag came up rather than assuming it did, read back the install
+verifier for the site — `GET /v1/sdk/sites/{site_id}/heartbeat` reports the
+loader's own milestones and reaches `live` only when the SDK accepted its
+config. A publishing pipeline that would rather not hand-edit HTML can install
+from npm instead:
+
+```bash
 npm install @aether/web
 ```
 
 ## Quick Start
 
+Once installed, the SDK is initialised for you by the tag. To configure it from
+JavaScript instead — an npm install, or attributes you would rather compute —
+call `init()` yourself:
+
 ```typescript
 import aether from '@aether/web';
 
 aether.init({
-  apiKey: 'your-api-key',
+  apiKey: 'pk_your_publishable_key',
+  siteId: 'site_your_site_id',
   environment: 'production',
   modules: {
     walletTracking: true,
@@ -456,6 +488,7 @@ Reward lifecycle event types emitted by the platform:
 ```typescript
 interface AetherConfig {
   apiKey: string;                          // Required
+  siteId?: string;                         // Site this install is bound to
   environment?: 'production' | 'staging' | 'development';
   appVersion?: string;                     // Host app version (fleet heartbeats)
   application?: {                          // Canonical envelope: emitting product

@@ -150,34 +150,36 @@ export function DevelopersPage() {
         </div>
       </section>
 
-      {/* Illustrative quickstart shape */}
+      {/* Quickstart — the real web SDK install path */}
       <section aria-labelledby="quickstart-heading" className="border-b border-border-default bg-surface-sunken">
         <div className="mkt-container py-16 md:py-20">
           <div className="flex flex-wrap items-center gap-3">
             <Eyebrow>Quickstart</Eyebrow>
-            <AvailabilityBadge status="coming-soon" label="Illustrative — not a published API" />
+            <AvailabilityBadge status="preview" />
           </div>
           <h2 id="quickstart-heading" className="mkt-h2 mt-4 max-w-2xl">
-            The shape a first integration takes
+            One tag to a first event
           </h2>
           <p className="mkt-body mt-4 max-w-2xl text-text-secondary">
-            This is a sketch of what sending a first event is expected to look like, written to orient a reader —
-            it is not a published SDK artifact, install command, or API. The documentation site is the canonical
-            reference once an SDK ships; nothing below should be copied into production code today.
+            Register a site, mint a publishable key for it, and paste the tag into your page. The loader installs a
+            capture stub synchronously, reads the attributes, and brings the SDK up itself — so code that runs on
+            the next line is already being captured, and there is no follow-up call to forget.
           </p>
           <pre className="mt-8 overflow-x-auto rounded-md border border-border-default bg-surface-base p-6 text-sm leading-relaxed text-text-primary">
-            <code>{`import Aether from '@aether/sdk'; // illustrative — package not yet published
-
-Aether.init({ writeKey: process.env.AETHER_WRITE_KEY });
-
-Aether.track('order_completed', {
-  userId: 'user_123',
-  properties: { amount: 42.0, currency: 'USD' },
-});`}</code>
+            <code>{`<script src="https://cdn.aether.network/v1.js"
+        data-key="pk_your_publishable_key"
+        data-site="site_your_site_id"
+        async></script>`}</code>
           </pre>
           <p className="mt-4 text-sm leading-relaxed text-text-secondary">
+            Use a <strong className="font-medium text-text-primary">publishable</strong> key here. It is visible in
+            your page source by design, and its site binding is what confines it to one property — the loader warns
+            if a server-side secret key is pasted in instead. To confirm the install came up rather than assuming it
+            did, read <code className="text-text-primary">GET /v1/sdk/sites/{'{site_id}'}/heartbeat</code>.
+          </p>
+          <p className="mt-4 text-sm leading-relaxed text-text-secondary">
             Once identity resolves, the same event is readable from the graph as part of that person's journey —
-            see the <a href={AETHER_DOCS_URL} target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2 mkt-motion-color hover:text-text-primary">documentation site</a> for the event model that actually governs validation today.
+            see the <a href={AETHER_DOCS_URL} target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2 mkt-motion-color hover:text-text-primary">documentation site</a> for the install guide and the event model that governs validation today.
           </p>
         </div>
       </section>

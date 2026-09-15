@@ -348,6 +348,7 @@ from services.events.routes import router as events_router
 from services.sdk.routes import router as sdk_router
 from services.journeys.routes import admin_router as journey_health_router
 from services.sdk_health.routes import router as sdk_health_router
+from services.sdk_distribution.routes import router as sdk_distribution_router
 from services.sdk_drift.routes import router as sdk_drift_router
 from services.sdk_config.routes import router as sdk_config_router
 from services.noesis.routes import router as noesis_router
@@ -1034,6 +1035,7 @@ def create_app() -> FastAPI:
     logger.info("Canonical Measurement: 6 routers mounted")
     app.include_router(imports_router)                   # /v1/imports: upload/analyze/map/validate/templates
     app.include_router(imports_kyber_router)             # /v1/kyber/imports: operator timeline/detail/requeue
+    app.include_router(sdk_distribution_router)  # SDK sites: install snippets + publishable install keys
     app.include_router(sdk_health_router)   # SDK health monitoring: heartbeats + fleet status
     app.include_router(sdk_drift_router)    # SDK drift detection: schema, stale, replay storm
     app.include_router(sdk_config_router)   # SDK remote config: signed manifests + rollouts

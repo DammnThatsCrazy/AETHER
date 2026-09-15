@@ -64,7 +64,7 @@ def test_header_carries_all_six_metadata_columns(gen, event_reg):
 def test_one_row_per_registry_event_in_registry_order(gen, event_reg):
     md = gen.gen_event_table_md(event_reg)
     _, _, rows = _parse_table(md)
-    assert len(rows) == len(event_reg["events"]) == 403
+    assert len(rows) == len(event_reg["events"]) == 416
     # type token extracted from each row (strip a trailing *(deprecated)* marker)
     types = []
     for row in rows:
@@ -76,7 +76,7 @@ def test_one_row_per_registry_event_in_registry_order(gen, event_reg):
 
 def test_every_row_reproduces_privacy_and_retention_from_the_spine(gen, event_reg):
     """Privacy class + retention class are the load-bearing WS-A7 columns: each
-    must be present and exactly match the registry for all 403 events."""
+    must be present and exactly match the registry for all 416 events."""
     md = gen.gen_event_table_md(event_reg)
     _, _, rows = _parse_table(md)
     assert len(rows) == len(event_reg["events"])

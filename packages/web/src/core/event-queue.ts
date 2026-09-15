@@ -57,6 +57,13 @@ class AmbiguousDeliveryError extends Error {
 interface QueueConfig {
   endpoint: string;
   apiKey: string;
+  /**
+   * Site this install is bound to. Sent as `X-Aether-Site` on every batch —
+   * including the unload path — because the backend refuses a publishable
+   * credential that declares no site. Present whenever the config came from
+   * the snippet (see types.ts AetherConfig.siteId).
+   */
+  siteId?: string;
   batchSize: number;
   flushInterval: number;
   maxQueueSize: number;
@@ -159,6 +166,7 @@ export class EventQueue {
       headers: config.headers ?? {},
       endpoint: config.endpoint,
       apiKey: config.apiKey,
+      siteId: config.siteId,
       onError: config.onError,
       onAttempt: config.onAttempt,
       onBatchResult: config.onBatchResult,
@@ -287,6 +295,7 @@ export class EventQueue {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.config.apiKey}`,
         'X-Aether-SDK': 'web',
+        ...(this.config.siteId ? { 'X-Aether-Site': this.config.siteId } : {}),
         ...this.config.headers,
       },
       body: payload,
@@ -385,6 +394,7 @@ export class EventQueue {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.config.apiKey}`,
           'X-Aether-SDK': 'web',
+          ...(this.config.siteId ? { 'X-Aether-Site': this.config.siteId } : {}),
           ...this.config.headers,
         },
         body: payload,

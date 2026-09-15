@@ -1,7 +1,8 @@
 // =============================================================================
-// Aether SDK — CDN AUTO-LOADER v5.0
-// Lightweight (~3KB) loader at stable URL that dynamically loads the latest SDK
-// URL: cdn.aether.network/sdk/v5/loader.js
+// Aether SDK — CDN AUTO-LOADER
+// Lightweight loader at the stable URL that dynamically loads the latest SDK
+// Stable URL:    https://cdn.aether.network/v1.js
+// Versioned URL: https://cdn.aether.network/sdk/v<major>/loader.js
 // =============================================================================
 
 interface LoaderConfig {
@@ -49,10 +50,10 @@ const DEFAULT_TIMEOUT = 10000; // 10 seconds
  * AetherLoader — CDN Auto-Loader
  *
  * Loads the latest Aether SDK bundle from CDN with intelligent caching.
- * Place at a stable, never-changing URL: cdn.aether.network/sdk/v5/loader.js
+ * Place at a stable, never-changing URL: https://cdn.aether.network/v1.js
  *
  * Usage:
- *   <script src="https://cdn.aether.network/sdk/v5/loader.js"></script>
+ *   <script src="https://cdn.aether.network/v1.js"></script>
  *   <script>
  *     AetherLoader.load().then(aether => aether.init({ apiKey: 'your-key' }));
  *   </script>

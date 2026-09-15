@@ -35,6 +35,7 @@ from shared.context.request_context import (
 from shared.auth.auth import (
     APIKeyTier, APIKeyValidator, JWTHandler, PlanTier, Role, TenantContext,
     legacy_tier_to_plan,
+    CREDENTIAL_CLASS_PUBLISHABLE,
 )
 from shared.logger.logger import get_logger, set_request_context, metrics
 from shared.plans.catalog import PLAN_CATALOG
@@ -1068,9 +1069,37 @@ def _evaluate_route_policy(request: Request, path: str, context) -> Optional[Aet
                 return ForbiddenError(reason)
 
         credential_class = getattr(context, "credential_class", "legacy")
-        if credential_class == "public_ingest_identifier":
+        if credential_class in ("public_ingest_identifier", CREDENTIAL_CLASS_PUBLISHABLE):
             if path not in ("/v1/batch", "/v1/track") and not path.startswith("/v1/ingest"):
                 return ForbiddenError("ROUTE_POLICY_INGEST_IDENTIFIER_SCOPE")
+        if credential_class == CREDENTIAL_CLASS_PUBLISHABLE:
+            # A publishable key ships in public HTML, so it is confined above to
+            # ingestion and additionally bound to the sites it was issued for.
+            # Without this, a key copied off one customer's page could be
+            # replayed to write events attributed to another of the tenant's
+            # sites.
+            #
+            # The site must be DECLARED, and a request that declares none is
+            # refused rather than admitted. An optional check is not a check:
+            # the caller chooses whether to send the header, so treating its
+            # absence as "not applicable" would let anyone holding a copied key
+            # write for every site the tenant owns by simply omitting it. The
+            # SDK sends the site on every batch (core/event-queue.ts) and the
+            # loader sends it on install signals (loader/heartbeat.ts), so the
+            # header is present on all legitimate traffic from this class.
+            bound_sites = getattr(context, "site_ids", None)
+            if not bound_sites:
+                # The mint path refuses to issue an unbound publishable key, so
+                # reaching here means the binding was lost in transit — a cache
+                # entry written without it, or a record edited out of band.
+                # That is a reason to fail closed, not to grant tenant-wide
+                # reach to a credential the public can read.
+                return ForbiddenError("ROUTE_POLICY_SITE_UNBOUND")
+            declared_site = getattr(request, "headers", {}).get("X-Aether-Site")
+            if not declared_site:
+                return ForbiddenError("ROUTE_POLICY_SITE_UNDECLARED")
+            if declared_site not in bound_sites:
+                return ForbiddenError("ROUTE_POLICY_SITE_MISMATCH")
         if credential_class == "service_credential" and not context.permissions:
             return ForbiddenError("ROUTE_POLICY_SERVICE_SCOPE_REQUIRED")
 

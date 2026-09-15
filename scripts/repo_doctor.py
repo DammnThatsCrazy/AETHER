@@ -841,6 +841,71 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="align SDK versions/endpoints/public exports/docs, then rerun validation",
     )
     run(
+        [sys.executable, "scripts/validate_sdk_distribution_artifacts.py"],
+        name="SDK distribution artifacts (@aether/web build wiring and declared outputs)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "wire every rollup config into the package build, keep package.json entry points "
+            "pointing at declared outputs, and guard new exports in verify-web-sdk-package.mjs"
+        ),
+    )
+    run(
+        [sys.executable, "scripts/validate_sdk_quickstart_snippet.py"],
+        name="SDK quickstart snippet (server-rendered attributes vs loader vocabulary)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "keep every data-* attribute the snippet builder can emit in the loader's "
+            "ATTRIBUTE_MAP, and keep LOADER_URL on the URL the shipping bundle advertises"
+        ),
+    )
+    run(
+        [sys.executable, "scripts/validate_sdk_cdn_manifest.py"],
+        name="SDK CDN manifest (release pipeline wiring, version derivation, cache policy)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "keep the publish-cdn job running the manifest generator and layout verifier, "
+            "derive CDN paths from packages/web/package.json, and preserve the dry_run guard"
+        ),
+    )
+    run(
+        [sys.executable, "scripts/validate_sdk_distribution_domains.py"],
+        name="SDK distribution domains (loader URL, API origin, install examples)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "keep the loader URL and the API origin on separate hosts, keep the loader "
+            "path unversioned, and update every install example so the tag a developer "
+            "copies names the canonical loader"
+        ),
+    )
+    run(
+        [sys.executable, "scripts/validate_sdk_first_heartbeat_contract.py"],
+        name="SDK first-heartbeat contract (loader signals vs install verifier)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "keep the loader's InstallSignal union and the verifier's INSTALL_SIGNAL_TYPES "
+            "in agreement, keep every property the verifier reads in the loader's signal "
+            "payload, and keep the verifier's read endpoints registered"
+        ),
+    )
+    run(
+        [sys.executable, "scripts/validate_sdk_control_plane_seam.py"],
+        name="SDK control-plane seam (install states, observed fields, layering)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "keep the install verifier's STATE_* vocabulary and the control plane's "
+            "SITE_STATE_* vocabulary in agreement, keep every field the plane reads off a "
+            "described install published by describe_site_install, keep both sides "
+            "classifying through the one SDK version-band authority, and keep the "
+            "distribution layer out of the plane's mutation path"
+        ),
+    )
+    run(
         [sys.executable, "scripts/validate_consistency_ownership.py"],
         name="Source-of-truth ownership map enforcement",
         results=results,

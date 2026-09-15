@@ -304,6 +304,10 @@ async def ingest_batch(
     # The V1 path below is left entirely unchanged for every other tenant.
     request_privacy = RequestPrivacySignals.from_headers(getattr(request, "headers", {}))
     server_context = _build_server_context(request, tenant.tenant_id)
+    # The site this request authenticated as. Already validated against the
+    # credential's binding by the route policy; carried through so the install
+    # projection can refuse a signal whose body names a different site.
+    declared_site = getattr(request, "headers", {}).get("X-Aether-Site")
     iv2 = settings.ingestion_v2
     if iv2.enabled or tenant.tenant_id in iv2.canary_tenants:
         return await _ingest_batch_v2(
@@ -311,6 +315,7 @@ async def ingest_batch(
             tenant=tenant,
             request_privacy=request_privacy,
             server_context=server_context,
+            declared_site=declared_site,
         )
 
     response = await ingest_events(
@@ -321,6 +326,7 @@ async def ingest_batch(
         granted_consents=frozenset(body.consents or []),
         sent_at=body.sentAt,
         producer=producer,
+        declared_site=declared_site,
     )
     # The /v1/batch handler keeps returning the plain BatchResponse dict
     # (ingest_events returns the model); ingest_events is the shared spine the
@@ -346,6 +352,7 @@ async def ingest_events(
     granted_consents: frozenset[str],
     sent_at: str | None,          # None → temporal enforcement uses received_at
     producer: EventProducer,
+    declared_site: str | None = None,
 ) -> BatchResponse:
     """Canonical V1 ingestion spine over a sequence of SDK events.
 
@@ -525,6 +532,17 @@ async def ingest_events(
                 "Ingestion temporarily unavailable — please retry"
             )
 
+    # ── Install-signal projection (fire-and-forget, non-blocking) ──────────
+    # After Bronze durability for the same reason: the install verifier reads
+    # back the loader's own sdk_loaded / sdk_initialized / sdk_init_failed
+    # events, and it must not be able to report a site healthy on evidence that
+    # ingestion itself has not durably accepted. A projection failure never
+    # fails the request (see schedule_install_projection).
+    if accepted_raw:
+        from services.sdk_distribution.install_verifier import schedule_install_projection
+
+        schedule_install_projection(tenant_id, accepted_raw, declared_site)
+
     # ── Identity resolution (fire-and-forget, non-blocking) ────────────────
     # Run after Bronze durability is confirmed. Resolution errors never fail
     # ingestion — events are already durable and recoverable via recompute.
@@ -661,6 +679,7 @@ async def _ingest_batch_v2(
     tenant,
     request_privacy: RequestPrivacySignals = RequestPrivacySignals(),
     server_context: Optional[dict] = None,
+    declared_site: Optional[str] = None,
 ) -> dict:
     """Transactional /v1/batch path.
 
@@ -799,6 +818,24 @@ async def _ingest_batch_v2(
                 await record_event_outcome(
                     tenant.tenant_id, deployment_id, "accepted"
                 )
+
+        # Install-signal projection, on the same terms as the V1 spine: after
+        # durability, off the request path, never failing ingestion. Only rows
+        # the bulk reported as accepted — a duplicate is a replay of a signal
+        # already projected, and counting it again would inflate the record.
+        accepted_payloads = [
+            candidate.payload
+            for candidate, status in zip(candidates, bulk.statuses)
+            if status == "accepted"
+        ]
+        if accepted_payloads:
+            from services.sdk_distribution.install_verifier import (
+                schedule_install_projection,
+            )
+
+            schedule_install_projection(
+                tenant.tenant_id, accepted_payloads, declared_site
+            )
 
     n_accepted = sum(1 for r in results if r.status == "accepted")
     n_duplicates = sum(1 for r in results if r.status == "duplicate")

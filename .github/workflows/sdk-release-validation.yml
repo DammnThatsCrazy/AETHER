@@ -68,6 +68,20 @@ jobs:
           npm pack --workspace=packages/shared --dry-run
           npm pack --workspace=packages/web --dry-run
           npm pack --workspace=packages/react-native --dry-run
+      - name: Distribution wiring gate
+        run: python scripts/validate_sdk_distribution_artifacts.py
+      - name: Verify web SDK package artifacts
+        # Guards the tarball npm would actually publish: every declared artifact
+        # present and non-empty, entry points resolvable, bundles within budget.
+        run: npm run verify:artifacts --workspace=packages/web
+      - name: Verify CDN loader artifacts
+        # Explicit belt-and-braces check. The verifier above asserts the same
+        # files, but these fail loudly and early if the verifier itself regresses.
+        run: |
+          test -f packages/web/dist/loader.js
+          test -f packages/web/dist/loader.mjs
+          test -f packages/web/dist/aether.umd.js
+          test -f packages/web/dist/aether.esm.js
       - name: Record JS release evidence
         run: |
           mkdir -p release-evidence

@@ -30,6 +30,17 @@ export interface ResolvedIdentity {
 export interface AetherConfig {
   /** API key from the Aether dashboard (required) */
   apiKey: string;
+  /**
+   * The site this install is bound to, from the snippet's `data-site`.
+   *
+   * Sent as `X-Aether-Site` on every batch. A publishable key is public — it
+   * ships in page HTML — so the site is the only thing confining it to one
+   * property: the backend refuses a publishable credential whose request
+   * declares no site, or a site the key was not issued for. Omitting it does
+   * not widen access, it loses it. Set automatically by the CDN loader; set it
+   * yourself when initialising from npm.
+   */
+  siteId?: string;
   /** Deployment environment */
   environment?: 'production' | 'staging' | 'development';
   /** Host application version, reported in SDK fleet heartbeats */

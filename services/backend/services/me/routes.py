@@ -19,18 +19,27 @@ Endpoints:
 
 from __future__ import annotations
 
-import hashlib
-import uuid
 from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, ForbiddenError, NotFoundError, ServiceUnavailableError
+from shared.auth.auth import (
+    KEY_CLASS_PUBLISHABLE,
+    KEY_CLASS_SECRET,
+)
+from shared.common.common import (
+    APIResponse,
+    BadRequestError,
+    ForbiddenError,
+    NotFoundError,
+    ServiceUnavailableError,
+)
 from shared.logger.logger import get_logger, metrics
 from repositories.repos import APIKeyRepository
 from services.client_sync.emitter import enqueue_sync_change
+from services.me.key_issuance import mint_api_key
 
 logger = get_logger("aether.service.me")
 router = APIRouter(prefix="/v1/me", tags=["Me"])
@@ -48,6 +57,18 @@ class APIKeyCreateRequest(BaseModel):
         default=None,
         description="Optional SDK platform this key is intended for "
         "(web|ios|android|react-native|node|other).",
+    )
+    key_class: str = Field(
+        default=KEY_CLASS_SECRET,
+        pattern=f"^({KEY_CLASS_SECRET}|{KEY_CLASS_PUBLISHABLE})$",
+        description="'secret' for server-side use (default), or 'publishable' "
+        "for a key that ships in page HTML via the CDN loader.",
+    )
+    site_ids: list[str] | None = Field(
+        default=None,
+        description="Sites a publishable key is bound to. Required for "
+        "publishable keys: a publicly readable key must not be usable "
+        "against the tenant's other sites.",
     )
 
 
@@ -230,50 +251,34 @@ async def create_my_api_key(body: APIKeyCreateRequest, request: Request):
     # Validate permissions
     invalid = [p for p in body.permissions if p not in _VALID_PERMISSIONS]
     if invalid:
-        from shared.common.common import BadRequestError
         raise BadRequestError(f"Invalid permissions: {invalid}. Valid: {sorted(_VALID_PERMISSIONS)}")
 
     # Validate optional platform tag
     if body.platform is not None and body.platform not in _VALID_PLATFORMS:
-        from shared.common.common import BadRequestError
         raise BadRequestError(
             f"Invalid platform: {body.platform!r}. Valid: {sorted(_VALID_PLATFORMS)}"
         )
 
-    raw_key = f"ak_{uuid.uuid4().hex[:24]}"
-    hashed = hashlib.sha256(raw_key.encode()).hexdigest()
+    issued = await mint_api_key(
+        tenant=tenant,
+        name=body.name,
+        key_class=body.key_class,
+        requested_permissions=body.permissions,
+        site_ids=body.site_ids,
+        platform=body.platform,
+        repo=_key_repo,
+    )
 
-    record = await _key_repo.insert(hashed[:12], {
-        "tenant_id": tenant.tenant_id,
-        "name": body.name,
-        "tier": tenant.api_key_tier.value,
-        "permissions": body.permissions,
-        "platform": body.platform,
-        "key_hash": hashed,
-        "last_used_at": None,
-    })
-
-    # Register in auth cache for immediate use
-    try:
-        from dependencies.providers import get_registry
-        registry = get_registry()
-        await registry.api_key_validator.register_api_key(
-            api_key=raw_key,
-            tenant_id=tenant.tenant_id,
-            role="editor",
-            tier=tenant.api_key_tier.value,
-            permissions=body.permissions,
-        )
-    except Exception as e:
-        logger.warning(f"Failed to register key in auth cache: {e}")
-
-    metrics.increment("api_keys_created_self_service")
-    logger.info(f"API key created (self-service): tenant={tenant.tenant_id} name={body.name!r}")
     return APIResponse(data={
-        "api_key": raw_key,
-        "id": record["id"],
+        "api_key": issued["raw_key"],
+        "id": issued["record"]["id"],
         "name": body.name,
-        "permissions": body.permissions,
+        # The resolved grant, not what was requested: reporting the request
+        # would tell a publishable-key caller their key holds permissions it
+        # was deliberately never issued.
+        "permissions": issued["permissions"],
+        "key_class": body.key_class,
+        "site_ids": issued["site_ids"],
         "platform": body.platform,
         "message": "Store this key securely — it will not be shown again.",
     }).to_dict()

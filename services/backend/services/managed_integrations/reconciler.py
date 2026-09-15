@@ -54,6 +54,14 @@ _ACTIONABLE_DRIFT_TYPES = frozenset(
 # is fail-closed — reconciliation must stop, not guess.
 _FAIL_CLOSED_PROVIDER_STATES = frozenset({"credential_missing", "credential_waiting"})
 
+# Observed health statuses that are drift. ``silent`` is the fleet health agent
+# going quiet; ``unhealthy``/``degraded`` are its verdicts; ``failed`` is a site
+# install whose loader reported ``sdk_init_failed`` — the install is present and
+# broken, which is the most actionable state a managed integration can be in.
+# Recognizing only the fleet's three would make the one install an operator most
+# needs to see the one that reconciles as ``match``.
+_UNHEALTHY_STATUSES = frozenset({"degraded", "unhealthy", "silent", "failed"})
+
 DEFAULT_FRESHNESS_WINDOW_SECONDS = 300  # mirrors the SDK-health silent threshold
 
 
@@ -210,7 +218,7 @@ def _remaining_drift(
                 last_seen_at=now,
             )
         )
-    if observed.health_status in ("degraded", "unhealthy", "silent"):
+    if observed.health_status in _UNHEALTHY_STATUSES:
         drift.append(
             DriftRecord(
                 drift_id=_drift_id(),
