@@ -55,10 +55,13 @@
 
 ### 6. GitHub
 
-- [ ] GitHub personal access token with `repo` scope (for Amplify to pull code)
+- [ ] If the Amplify-backed repository is private, create a repository-scoped
+  GitHub token for Amplify to pull code
   - Create at: github.com → Settings → Developer Settings → Personal Access Tokens
-  - Scope: `repo` (full control of private repositories)
-  - This goes into `amplify_github_access_token` terraform variable
+  - Scope: the minimum repository-read access required by the private repository
+  - This goes into the `amplify_github_access_token` Terraform variable
+  - Public repositories may leave this unset; Terraform passes `null` and
+    Amplify uses anonymous repository checkout
 
 ## Deployment profile
 

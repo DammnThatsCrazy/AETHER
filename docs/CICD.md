@@ -22,7 +22,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:98bfe9377a97e5c2a07505159b15ef5fdd7f88210b35acd0d19e93761899251f"
+  ".github/workflows/": "sha256:8360faafb7270f0441e73246743415bd46fcd29a07da1d39f2938f0b601f2a01"
   "cicd/aether-cicd/README.md": "sha256:07bc236b744bd0c54bae8b6fa661beba9d3767a3300470814f071a119f8244ee"
   "cicd/aether-cicd/main.py": "sha256:8027fb1fcb5e4a1aeb6428224fe0ca9f7756df0aaca5f39e7e84bb6c9c85feb9"
   "cicd/aether-cicd/quality_gates/": "sha256:2cc72d40cd7c324e686271c5ea2c90c2ccb15c4ebe0435b0589844663dd2e436"
@@ -133,11 +133,16 @@ manifest therefore includes the ECR scan, account-plan read, S3 bucket-level
 read, and ELB listener-attribute actions that those preflight checks and
 Terraform plan actually call.
 
-The remote plan credential set includes `TF_AMPLIFY_GITHUB_ACCESS_TOKEN` for
-the five GitHub-backed Amplify applications. The token is consumed only as a
-sensitive plan input; the apply job receives the reviewed binary plan and never
-re-plans. `TF_ALERT_EMAIL` is the actionable staging notification endpoint and
-is set to `team@olympuslabsml.com`.
+The remote plan supports an optional `TF_AMPLIFY_GITHUB_ACCESS_TOKEN` for the
+five GitHub-backed Amplify applications. Because the current AETHER repository
+is public, the workflow permits the secret to be absent and Terraform passes
+`null` to Amplify for anonymous repository checkout. A private repository must
+provide a repository-scoped token. The historical placeholder value `-` is
+normalized to unset for the public repository and is never passed to Terraform.
+When a real token is supplied, it is consumed only as a sensitive plan input;
+the apply job receives the reviewed binary plan and never re-plans.
+`TF_ALERT_EMAIL` is the actionable staging notification endpoint and is set to
+`team@olympuslabsml.com`.
 
 Reviewed Terraform promotion pins immutable digests and injects the staging
 apply-role ARN only for staging. Inline-ML profiles leave the ML digest empty;
