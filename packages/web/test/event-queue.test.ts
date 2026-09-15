@@ -496,6 +496,57 @@ describe('EventQueue', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Site declaration
+  //
+  // A publishable key is public — it ships in page HTML — so the site is the
+  // only thing confining it to one property, and the backend refuses a
+  // publishable credential that declares none. Omitting this header therefore
+  // does not widen access, it loses it: the install would deliver nothing.
+  // -------------------------------------------------------------------------
+
+  describe('site declaration', () => {
+    function captureHeaders() {
+      const seen: Array<Record<string, string>> = [];
+      globalThis.fetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
+        seen.push((init?.headers ?? {}) as Record<string, string>);
+        return { ok: true, status: 200 } as Response;
+      }) as unknown as typeof fetch;
+      return seen;
+    }
+
+    it('declares the site on every batch', async () => {
+      const seen = captureHeaders();
+      const q = makeQueue({ siteId: 'site_1' });
+      q.enqueue(makeTrackEvent());
+      await q.flush();
+
+      expect(seen).toHaveLength(1);
+      expect(seen[0]['X-Aether-Site']).toBe('site_1');
+      q.destroy();
+    });
+
+    it('omits the header rather than sending an empty site', async () => {
+      const seen = captureHeaders();
+      const q = makeQueue();
+      q.enqueue(makeTrackEvent());
+      await q.flush();
+
+      expect(seen[0]).not.toHaveProperty('X-Aether-Site');
+      q.destroy();
+    });
+
+    it('declares it on the unload path too, which is a separate fetch', async () => {
+      const seen = captureHeaders();
+      const q = makeQueue({ siteId: 'site_1' });
+      q.enqueue(makeTrackEvent());
+      q.destroy();
+
+      const unload = seen[seen.length - 1];
+      expect(unload['X-Aether-Site']).toBe('site_1');
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Offline persistence on unload (persist BEFORE clearing)
   // -------------------------------------------------------------------------
 

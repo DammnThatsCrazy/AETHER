@@ -3,6 +3,13 @@ export type { BatchHealth } from '../types';
 interface QueueConfig {
     endpoint: string;
     apiKey: string;
+    /**
+     * Site this install is bound to. Sent as `X-Aether-Site` on every batch —
+     * including the unload path — because the backend refuses a publishable
+     * credential that declares no site. Present whenever the config came from
+     * the snippet (see types.ts AetherConfig.siteId).
+     */
+    siteId?: string;
     batchSize: number;
     flushInterval: number;
     maxQueueSize: number;

@@ -40,7 +40,7 @@ from shared.auth.auth import (  # noqa: E402
     PUBLISHABLE_KEY_PERMISSIONS,
     _build_context_from_key_data,
 )
-from services.me.routes import resolve_key_grant  # noqa: E402
+from services.me.key_issuance import generate_raw_key, resolve_key_grant  # noqa: E402
 
 
 # ── What a publishable key is issued with ────────────────────────────────────
@@ -82,6 +82,20 @@ def test_secret_key_keeps_the_callers_permissions_and_no_site_binding():
 def test_secret_key_is_the_default_class():
     assert KEY_CLASS_SECRET == "secret"
     assert KEY_CLASS_SECRET != KEY_CLASS_PUBLISHABLE
+
+
+def test_the_credential_itself_states_which_class_it_is():
+    """A secret key pasted into a snippet works perfectly until someone reads
+    it out of View Source, so the mistake is silent. The prefix is what lets
+    the loader warn about it at all."""
+    assert generate_raw_key(KEY_CLASS_PUBLISHABLE).startswith("pk_")
+    assert generate_raw_key(KEY_CLASS_SECRET).startswith("ak_")
+
+
+def test_an_unknown_class_does_not_mint_a_publishable_key():
+    """The prefix follows the class, and an unrecognised class is not
+    publishable — so a typo cannot produce a credential that looks public."""
+    assert generate_raw_key("publishable-ish").startswith("ak_")
 
 
 # ── What a publishable key resolves to at request time ───────────────────────

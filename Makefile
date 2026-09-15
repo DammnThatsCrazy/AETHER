@@ -818,6 +818,7 @@ release-gate: ## Full release gate: repo consistency (CI mode) + strict producti
 	$(GATE_PY) scripts/release/check_route_registry.py
 	$(GATE_PY) scripts/release/check_storage_policies.py
 	$(GATE_PY) scripts/validate_sdk_release_alignment.py
+	$(GATE_PY) scripts/validate_sdk_quickstart_snippet.py
 	$(GATE_PY) scripts/release/sdk_conformance.py --quiet
 	$(GATE_PY) scripts/release/check_required_checks.py
 	$(MAKE) security-release-check

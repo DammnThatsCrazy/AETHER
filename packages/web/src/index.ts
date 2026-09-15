@@ -850,6 +850,10 @@ class AetherSDK implements AetherSDKInterface {
     this.eventQueue = new EventQueue({
       endpoint,
       apiKey: config.apiKey,
+      // Travels as X-Aether-Site on every batch. The backend refuses a
+      // publishable credential that declares no site, so dropping it here
+      // would make a snippet install deliver nothing.
+      siteId: config.siteId,
       batchSize: config.advanced?.batchSize ?? 10,
       flushInterval: config.advanced?.flushInterval ?? 5000,
       maxQueueSize: config.advanced?.maxQueueSize ?? 100,

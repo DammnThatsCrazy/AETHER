@@ -19,8 +19,6 @@ Endpoints:
 
 from __future__ import annotations
 
-import hashlib
-import uuid
 from datetime import date, timedelta
 from typing import Optional
 
@@ -30,7 +28,6 @@ from pydantic import BaseModel, Field
 from shared.auth.auth import (
     KEY_CLASS_PUBLISHABLE,
     KEY_CLASS_SECRET,
-    PUBLISHABLE_KEY_PERMISSIONS,
 )
 from shared.common.common import (
     APIResponse,
@@ -42,6 +39,7 @@ from shared.common.common import (
 from shared.logger.logger import get_logger, metrics
 from repositories.repos import APIKeyRepository
 from services.client_sync.emitter import enqueue_sync_change
+from services.me.key_issuance import mint_api_key
 
 logger = get_logger("aether.service.me")
 router = APIRouter(prefix="/v1/me", tags=["Me"])
@@ -245,32 +243,6 @@ async def list_my_api_keys(
     }).to_dict()
 
 
-def resolve_key_grant(
-    key_class: str, permissions: list[str], site_ids: list[str] | None
-) -> tuple[list[str], list[str] | None]:
-    """Decide what a requested key is actually issued with.
-
-    Split out of the handler because it is the authorization decision, not
-    request plumbing — it is the rule that keeps a publishable key from being
-    issued with authority or reach it must never have, so it is worth testing
-    without a live app. Returns ``(permissions, site_ids)``.
-
-    A publishable key is public by construction: it ships in page HTML. So it
-    is issued only with the ingestion authority it needs, and only bound to
-    named sites. Refusing an unscoped publishable key is what makes the binding
-    meaningful — permitting one would make it tenant-wide.
-    """
-    if key_class != KEY_CLASS_PUBLISHABLE:
-        return list(permissions), None
-
-    if not site_ids:
-        raise BadRequestError(
-            "site_ids is required for a publishable key: bind it to the "
-            "sites its snippet is installed on."
-        )
-    return list(PUBLISHABLE_KEY_PERMISSIONS), list(site_ids)
-
-
 @router.post("/api-keys")
 async def create_my_api_key(body: APIKeyCreateRequest, request: Request):
     """Create a new API key scoped to the calling tenant."""
@@ -287,55 +259,26 @@ async def create_my_api_key(body: APIKeyCreateRequest, request: Request):
             f"Invalid platform: {body.platform!r}. Valid: {sorted(_VALID_PLATFORMS)}"
         )
 
-    permissions, site_ids = resolve_key_grant(body.key_class, body.permissions, body.site_ids)
+    issued = await mint_api_key(
+        tenant=tenant,
+        name=body.name,
+        key_class=body.key_class,
+        requested_permissions=body.permissions,
+        site_ids=body.site_ids,
+        platform=body.platform,
+        repo=_key_repo,
+    )
 
-    raw_key = f"ak_{uuid.uuid4().hex[:24]}"
-    hashed = hashlib.sha256(raw_key.encode()).hexdigest()
-
-    record = await _key_repo.insert(hashed[:12], {
-        "tenant_id": tenant.tenant_id,
-        "name": body.name,
-        "tier": tenant.api_key_tier.value,
-        "permissions": permissions,
-        "platform": body.platform,
-        "key_class": body.key_class,
-        "site_ids": site_ids,
-        "key_hash": hashed,
-        "last_used_at": None,
-    })
-
-    # Register in auth cache for immediate use
-    try:
-        from dependencies.providers import get_registry
-        registry = get_registry()
-        await registry.api_key_validator.register_api_key(
-            api_key=raw_key,
-            tenant_id=tenant.tenant_id,
-            role="editor",
-            tier=tenant.api_key_tier.value,
-            # The resolved list, not body.permissions: validate_async reads the
-            # cache before the durable record, so caching the requested
-            # permissions would give a publishable key the narrow default here
-            # and silently strip the ingest authority its record grants.
-            permissions=permissions,
-            key_class=body.key_class,
-            site_ids=site_ids,
-        )
-    except Exception as e:
-        logger.warning(f"Failed to register key in auth cache: {e}")
-
-    metrics.increment("api_keys_created_self_service")
-    logger.info(f"API key created (self-service): tenant={tenant.tenant_id} name={body.name!r}")
     return APIResponse(data={
-        "api_key": raw_key,
-        "id": record["id"],
+        "api_key": issued["raw_key"],
+        "id": issued["record"]["id"],
         "name": body.name,
         # The resolved grant, not what was requested: reporting the request
         # would tell a publishable-key caller their key holds permissions it
         # was deliberately never issued.
-        "permissions": record["permissions"],
+        "permissions": issued["permissions"],
         "key_class": body.key_class,
-        "site_ids": site_ids,
+        "site_ids": issued["site_ids"],
         "platform": body.platform,
         "message": "Store this key securely — it will not be shown again.",
     }).to_dict()

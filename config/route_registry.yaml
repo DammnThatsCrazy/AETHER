@@ -46,6 +46,11 @@ sensitive_domains:
   - billing
   - me
   - referral-links
+  # SDK site management registers a property and mints the publishable key that
+  # installs on it. The key is public the moment it is issued and the site
+  # binding is the only thing confining it, so `sdk` is a credential domain
+  # like `me`, not a configuration one.
+  - sdk
   - tenant
   - tenants
   - traffic
@@ -175,6 +180,7 @@ known_prefixes:
   - /v1/rights
   - /v1/risk360
   - /v1/rwa
+  - /v1/sdk
   - /v1/security
   - /v1/semantic
   - /v1/signals

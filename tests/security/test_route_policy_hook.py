@@ -148,6 +148,7 @@ _PUBLISHABLE = TenantContext(
 def test_publishable_key_is_confined_to_ingestion():
     ingest_request = _req()
     ingest_request.method = "POST"
+    ingest_request.headers = {"X-Aether-Site": "site_a"}
     with _route_flags(policy_enforcement_enabled=True, route_registry_enforced=True):
         assert _hook()(ingest_request, "/v1/batch", _PUBLISHABLE) is None
         # Same key, same permissions, but off the ingestion surface.
@@ -172,16 +173,39 @@ def test_publishable_key_may_write_for_its_own_site():
         assert _hook()(request, "/v1/batch", _PUBLISHABLE) is None
 
 
-def test_publishable_key_without_a_declared_site_is_not_rejected_here():
-    """An undeclared site is scoped at attribution time, not refused at the edge.
+def test_publishable_key_without_a_declared_site_is_rejected():
+    """An optional check is not a check.
 
-    The SDK's own batches do not carry X-Aether-Site, so rejecting an absent
-    header would break the install path this key exists to serve.
+    The caller decides whether to send X-Aether-Site, so treating its absence
+    as "not applicable" would let anyone holding a key copied off one page
+    write for every site the tenant owns by simply omitting the header. The
+    SDK sends the site on every batch, so legitimate traffic always declares.
     """
     request = _req()
     request.method = "POST"
     with _route_flags(policy_enforcement_enabled=True, route_registry_enforced=True):
+        assert _is_denial(_hook()(request, "/v1/batch", _PUBLISHABLE))
+        # And declaring a site it *was* issued for still works, so the refusal
+        # above is about the missing declaration rather than the request shape.
+        request.headers = {"X-Aether-Site": "site_a"}
         assert _hook()(request, "/v1/batch", _PUBLISHABLE) is None
+
+
+def test_unbound_publishable_credential_fails_closed():
+    """The mint path never issues an unbound publishable key, so one reaching
+    the edge means the binding was lost. Granting it tenant-wide reach then
+    would hand a publicly readable credential everything it was confined from."""
+    unbound = TenantContext(
+        tenant_id="t",
+        credential_class=CREDENTIAL_CLASS_PUBLISHABLE,
+        permissions=PUBLISHABLE_KEY_PERMISSIONS,
+        site_ids=None,
+    )
+    request = _req()
+    request.method = "POST"
+    request.headers = {"X-Aether-Site": "site_a"}
+    with _route_flags(policy_enforcement_enabled=True, route_registry_enforced=True):
+        assert _is_denial(_hook()(request, "/v1/batch", unbound))
 
 
 def test_site_binding_does_not_constrain_a_secret_key():

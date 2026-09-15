@@ -851,6 +851,16 @@ def main(argv: Sequence[str] | None = None) -> None:
         ),
     )
     run(
+        [sys.executable, "scripts/validate_sdk_quickstart_snippet.py"],
+        name="SDK quickstart snippet (server-rendered attributes vs loader vocabulary)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "keep every data-* attribute the snippet builder can emit in the loader's "
+            "ATTRIBUTE_MAP, and keep LOADER_URL on the URL the shipping bundle advertises"
+        ),
+    )
+    run(
         [sys.executable, "scripts/validate_sdk_cdn_manifest.py"],
         name="SDK CDN manifest (release pipeline wiring, version derivation, cache policy)",
         results=results,
