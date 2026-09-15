@@ -19,6 +19,17 @@ member data subject under the population's declared ``consent_purpose`` —
 fail-closed, never merely a tenant ``write`` permission. Joining is gated;
 leaving is always honored (a subject may exit a cohort regardless of current
 grant state), so a leave is never blocked by a revoked receipt.
+
+Rights propagation (blueprint §11 / §17 Phase 3) rides the same boundary: a
+join first asks the Rights Authority propagation producer
+(``services.rights_authority.propagation.propagate_rights``) for the governing
+``RightsDecision`` of writing this membership into the tenant graph, and stamps
+the returned durable ``rdec_...`` id onto the ``MEMBER_OF`` intent. With
+``RIGHTS_AUTHORITY_ROLLOUT`` unset/``off`` the producer returns ``None`` before
+it touches the resolver, so the intent carries no ref and the write is
+byte-identical to its pre-propagation behaviour. The producer is not a second
+consent gate: ``assert_membership_allowed`` remains the authority on the member
+data subject, and the rights gate is consulted after it.
 """
 
 from __future__ import annotations
@@ -27,6 +38,11 @@ import hashlib
 from typing import Optional
 
 from services.consent.authority import evaluate_consent
+from services.rights_authority.propagation import (
+    RightsPropagationDenied,
+    propagate_rights,
+    stamp_intent,
+)
 from shared.common.common import utc_now
 from shared.graph.graph import Edge, EdgeType, GraphClient
 from shared.graph.mutation_gateway import GraphMutationGateway
@@ -60,6 +76,31 @@ class MembershipConsentDeniedError(Exception):
         self.reason_code = reason_code
         self.entity_id = entity_id
         self.purpose = purpose
+
+
+class MembershipRightsDeniedError(Exception):
+    """A governed membership write was refused by the rights-propagation gate.
+
+    Raised only when the Rights Authority rollout is in ``enforce`` and the
+    governing ``RightsDecision`` for this membership write is a denial — the
+    propagation producer's :class:`RightsPropagationDenied` re-raised with the
+    membership context (population/entity) a caller needs to render a typed
+    refusal. It mirrors :class:`MembershipConsentDeniedError` deliberately: the
+    rights gate sits beside the consent gate at the same write boundary.
+    """
+
+    def __init__(
+        self,
+        reason_codes: list[str],
+        *,
+        entity_id: str,
+        population_id: str,
+    ) -> None:
+        reasons = "|".join(reason_codes) or "denied"
+        super().__init__(f"Membership denied by rights authority: {reasons}")
+        self.reason_codes = list(reason_codes)
+        self.entity_id = entity_id
+        self.population_id = population_id
 
 
 def _membership_row_id(population_id: str, entity_id: str) -> str:
@@ -121,6 +162,60 @@ class PopulationMembershipGovernor:
                 purpose=purpose,
             )
 
+    # ── rights propagation (blueprint §11 / §17 Phase 3) ─────────────────────
+
+    async def resolve_membership_rights(
+        self,
+        *,
+        population: dict,
+        entity_id: str,
+        tenant_id: str,
+        actor_id: str,
+    ):
+        """Resolve the governing ``RightsDecision`` for one membership write.
+
+        Returns the propagation result, or ``None`` when the Rights Authority
+        rollout gate is off (nothing is resolved, recorded or stamped — the
+        write is byte-identical to its pre-propagation behaviour).
+
+        ``source_id`` is the population's DECLARED provenance
+        (``population["source_tag"]``), falling back to the population's own id
+        when it declares none. The request's ``source_tag`` metadata is
+        deliberately NOT consulted: the rights question is a property of the
+        governed object's declared ancestry, never of a caller-supplied string
+        on the write being authorized. A source the grant store does not know
+        resolves to a ``no_grant`` denial rather than an implicit allow — the
+        correct fail-closed answer for a write whose data ancestry cannot be
+        named.
+
+        Under ``RIGHTS_AUTHORITY_ROLLOUT=enforce`` a denied decision binds and
+        is re-raised as :class:`MembershipRightsDeniedError`; in ``shadow`` /
+        ``warn`` the denial is returned for the caller to surface without
+        blocking.
+        """
+        population_id = str(population.get("id") or "")
+        purpose = str(
+            population.get("consent_purpose") or DEFAULT_CONSENT_PURPOSE
+        ).strip() or DEFAULT_CONSENT_PURPOSE
+        source_id = str(population.get("source_tag") or population_id)
+        try:
+            return await propagate_rights(
+                tenant_id=tenant_id,
+                source_id=source_id,
+                actor=actor_id,
+                actor_role=MEMBER_EDGE_ROLE,
+                purpose=purpose,
+                artifact_ref=f"population:{population_id}",
+                artifact_class=str(population.get("population_type") or ""),
+                subject_ref=entity_id,
+            )
+        except RightsPropagationDenied as exc:
+            raise MembershipRightsDeniedError(
+                exc.reason_codes,
+                entity_id=entity_id,
+                population_id=population_id,
+            ) from exc
+
     # ── writes ────────────────────────────────────────────────────────────────
 
     async def add_membership(
@@ -145,6 +240,12 @@ class PopulationMembershipGovernor:
         Returns the materialised membership row. Re-joining an active member is
         idempotent (the gateway dedups an identical edge write); re-joining a
         member who left starts a new membership episode on the ledger.
+
+        The write also carries its governing rights decision when the Rights
+        Authority rollout gate is active: :meth:`resolve_membership_rights` runs
+        the authoritative resolver and its durable ``rdec_...`` id is stamped
+        onto the intent's ``rights_decision_ref``. With the gate off (the
+        default) no ref is resolved or stamped.
         """
         await self.assert_membership_allowed(
             population=population, entity_id=entity_id, tenant_id=tenant_id
@@ -153,34 +254,44 @@ class PopulationMembershipGovernor:
         definition_version = str(population.get("definition_version") or "1")
         evidence_refs = evidence_refs or []
 
+        propagation = await self.resolve_membership_rights(
+            population=population,
+            entity_id=entity_id,
+            tenant_id=tenant_id,
+            actor_id=actor_id,
+        )
+
         outcome = await self._gateway.apply(
-            edge_intent(
-                Edge(
-                    edge_type=EdgeType.MEMBER_OF,
-                    from_vertex_id=entity_id,
-                    to_vertex_id=population_id,
-                    properties={
-                        "tenant_id": tenant_id,
-                        "role": MEMBER_EDGE_ROLE,
-                        "membership_state": MembershipState.ACTIVE.value,
-                        "definition_version": definition_version,
-                        "membership_basis": basis.value,
-                        "population_type": population.get("population_type", ""),
-                        "confidence": str(confidence),
-                        "reason": reason,
-                        "source_tag": source_tag,
-                        "evidence_refs": list(evidence_refs),
-                    },
+            stamp_intent(
+                edge_intent(
+                    Edge(
+                        edge_type=EdgeType.MEMBER_OF,
+                        from_vertex_id=entity_id,
+                        to_vertex_id=population_id,
+                        properties={
+                            "tenant_id": tenant_id,
+                            "role": MEMBER_EDGE_ROLE,
+                            "membership_state": MembershipState.ACTIVE.value,
+                            "definition_version": definition_version,
+                            "membership_basis": basis.value,
+                            "population_type": population.get("population_type", ""),
+                            "confidence": str(confidence),
+                            "reason": reason,
+                            "source_tag": source_tag,
+                            "evidence_refs": list(evidence_refs),
+                        },
+                    ),
+                    operation="edge_created",
+                    tenant_id=tenant_id,
+                    actor_kind="human",
+                    actor_id=actor_id,
+                    subject_kind="entity",
+                    subject_id=entity_id,
+                    confidence=confidence,
+                    evidence_refs=evidence_refs,
+                    source_event_id=source_event_id,
                 ),
-                operation="edge_created",
-                tenant_id=tenant_id,
-                actor_kind="human",
-                actor_id=actor_id,
-                subject_kind="entity",
-                subject_id=entity_id,
-                confidence=confidence,
-                evidence_refs=evidence_refs,
-                source_event_id=source_event_id,
+                propagation,
             )
         )
 
@@ -309,6 +420,7 @@ class PopulationMembershipGovernor:
 __all__ = [
     "DEFAULT_CONSENT_PURPOSE",
     "MembershipConsentDeniedError",
+    "MembershipRightsDeniedError",
     "PopulationMembershipGovernor",
     "MEMBER_EDGE_ACTOR",
     "MEMBER_EDGE_ROLE",

@@ -1,34 +1,29 @@
-"""Rights Authority → spine/graph propagation SEAM (no producer shipped).
+"""Rights Authority → spine/graph propagation SEAM (called by the producer).
 
-This is a producer **seam**, not a fake producer. The Rights Authority already
-produces a durable, immutable :class:`RightsDecision`; this module exposes the
-narrow surface a future spine/graph producer calls so that resolved decision
+The Rights Authority produces a durable, immutable :class:`RightsDecision`; this
+module exposes the narrow surface the spine/graph PROPAGATION PRODUCER
+(``services/rights_authority/propagation.py``) calls so that resolved decision
 can ride cross-spine artifacts:
 
 - :func:`rights_envelope_fields` — returns the ``SpineEnvelope`` field values
-  the Rights Authority would supply for one decision (``rights_decision_ref``
-  plus an optional :class:`~services.operational_intelligence.models.EvidenceRef`
+  the Rights Authority supplies for one decision (``rights_decision_ref`` plus
+  an optional :class:`~services.operational_intelligence.models.EvidenceRef`
   describing the decision record), given the decision and the artifact/subject
   context of the governed material interaction.
 - :func:`apply_rights_ref` — sets ``SpineEnvelope.rights_decision_ref`` on an
-  envelope. A future producer calls it; this seam never calls it itself.
+  envelope. This seam never calls it itself; the producer does.
 
-Architectural boundary (do NOT cross it here):
-- ``SpineEnvelope.rights_decision_ref`` remains present-but-unpopulated: it is
-  still listed in ``SPINE_ENVELOPE_UNPOPULATED_FIELDS``
-  (``shared/spine/spine_envelope.py``), the hand-authored TS twin
-  (``packages/shared/spine-envelope.ts``) keeps ``@unpopulated``, and
-  ``tests/unit/test_spine_envelope_parity.py`` keeps asserting the no-producer
-  set. Shipping a REAL producer — which moves ``rights_decision_ref`` OUT of
-  ``SPINE_ENVELOPE_UNPOPULATED_FIELDS``, updates the TS twin, updates the
-  parity test, and starts publishing populated envelopes — belongs to the spine
-  producer program (``RIGHTS_AUTHORITY_BLUEPRINT.md`` §11 and §17 Phase 3).
-  Until then, calling :func:`apply_rights_ref` in shipped production code would
-  CLAIM a producer that does not exist, so nothing here is auto-wired.
-- The graph-propagation companion seam (carrying ``rights_decision_ref`` on the
-  gateway write path) lives in ``shared/graph/mutation_gateway.py``
-  (``MutationIntent.rights_decision_ref`` → versioned fact-payload annotation);
-  it also does not claim a SpineEnvelope producer.
+Architectural boundary:
+- ``SpineEnvelope.rights_decision_ref`` is no longer present-but-unpopulated: it
+  LEFT ``SPINE_ENVELOPE_UNPOPULATED_FIELDS`` (``shared/spine/spine_envelope.py``)
+  and lost its ``@unpopulated`` tag in the hand-authored TS twin
+  (``packages/shared/spine-envelope.ts``) when the propagation producer shipped
+  (blueprint §11 and §17 Phase 3). The field is still ``null`` on every
+  interaction no rights gate ran for — the seam does not populate it by itself,
+  and neither does anything here get auto-wired.
+- The graph companion is ``Propagation→MutationIntent.rights_decision_ref`` →
+  ``MutationRecord.rights_decision_ref`` → ``graph_mutation_ledger``, via the
+  same producer.
 
 Everything in this module is deterministic, env-safe, and additive.
 """
@@ -40,7 +35,7 @@ from typing import Iterable, Optional, Tuple
 
 from services.operational_intelligence.models import EntityRef, EvidenceRef
 from services.rights_authority.contracts import RightsDecision
-from shared.spine.spine_envelope import SPINE_ENVELOPE_UNPOPULATED_FIELDS, SpineEnvelope
+from shared.spine.spine_envelope import SpineEnvelope
 
 __all__ = [
     "RightsEnvelopeFields",
@@ -131,11 +126,10 @@ def rights_envelope_fields(
 def apply_rights_ref(envelope: SpineEnvelope, decision_id: str) -> SpineEnvelope:
     """Set ``envelope.rights_decision_ref = decision_id`` and return the envelope.
 
-    Intended to be called by the future spine producer once it exists (see the
-    module docstring and :data:`SPINE_ENVELOPE_UNPOPULATED_FIELDS` — shipping a
-    producer that populates this field is the spine producer program's
-    boundary, not this seam's). Fails closed on an empty/whitespace ref so a
-    producer can never stamp an empty governance reference onto an envelope.
+    Intended to be called by the spine producer
+    (:mod:`services.rights_authority.propagation`) once it has resolved a
+    decision. Fails closed on an empty/whitespace ref so a producer can never
+    stamp an empty governance reference onto an envelope.
     """
     if not decision_id or not decision_id.strip():
         raise ValueError("rights_decision_ref must be a non-empty rdec_... identity")

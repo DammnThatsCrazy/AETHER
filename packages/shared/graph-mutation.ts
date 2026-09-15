@@ -99,6 +99,7 @@ export interface MutationRecord {
   model_refs?: string[] | null;
   policy_refs?: string[] | null;
   consent_refs?: string[] | null;
+  rights_decision_ref?: string | null;
   before_version_id?: string | null;
   after_version_id?: string | null;
   change_set_id?: string | null;

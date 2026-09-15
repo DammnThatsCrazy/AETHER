@@ -11,9 +11,11 @@
 // calls for (tenant_id, request_id, scope_ref, subject_refs, as_of, valid_time,
 // identity_watermark, data_watermark, policy_ref, consent_decision_ref,
 // rights_decision_ref, evidence_refs, quality, contract_versions, model_refs,
-// lineage_refs). Fields with no producer yet (identity_watermark,
-// rights_decision_ref) are declared present-but-unpopulated (@unpopulated); no
-// producer is claimed until one ships. Nothing is re-defined."
+// lineage_refs). Fields with no producer yet (identity_watermark) are declared
+// present-but-unpopulated (@unpopulated); no producer is claimed until one
+// ships. rights_decision_ref LEFT that set when the rights-propagation producer
+// shipped (services/backend/services/rights_authority/propagation.py, blueprint
+// §11/§17 Phase 3). Nothing is re-defined."
 //
 // Composition rule honored here: the fields below REUSE the canonical
 // primitives where the ADR field maps onto one (EntityRef → subject_refs,
@@ -114,13 +116,13 @@ export interface SpineEnvelope {
    */
   consent_decision_ref: string | null;
   /**
-   * @unpopulated
-   * Present-but-unpopulated. No producer until the IRRL naming overlay ships
-   * (SPINE_P0_PHASES phase 5; ADR-011 D4) — `RightsDecision` exists today only
-   * as declared IRRL vocabulary over existing machinery (`DataRightsGrant`,
-   * `ConsentPolicyDecision`); no IRRL rights-decision id is produced until that
-   * overlay is enforced. Honest resting state: `null`. ADR-011 D3;
-   * SPINE_P0_ARCHITECTURE.md §6.
+   * Durable `RightsDecision` id (`rdec_...`, services/rights_authority) that
+   * governs this interaction. Producer: the rights-propagation composer
+   * (`services/backend/services/rights_authority/propagation.py`), which
+   * resolves the decision through the authoritative `EffectiveRightsResolver`
+   * and stamps its `decision_id` here — never a fabricated or unresolved ref.
+   * Still `null` on interactions no rights gate runs for. Blueprint §11/§17
+   * Phase 3; ADR-011 D3.
    */
   rights_decision_ref: string | null;
   /** Supporting evidence for the envelope's claims. Reuses `EvidenceRef` (operational-intelligence.ts). */
@@ -146,4 +148,4 @@ export interface SpineEnvelope {
  * unpopulated (`@unpopulated`) on the interface; the parity test asserts this
  * set matches the Python twin (`shared/spine/spine_envelope.py`) exactly.
  */
-export const spineEnvelopeUnpopulatedFields = ['identity_watermark', 'rights_decision_ref'] as const;
+export const spineEnvelopeUnpopulatedFields = ['identity_watermark'] as const;
