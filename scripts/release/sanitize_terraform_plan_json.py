@@ -65,6 +65,7 @@ import json
 import os
 import sys
 from typing import Any
+from urllib.parse import unquote
 
 # Root variables whose VALUE a downstream consumer actually reads. Everything
 # else keeps its name and loses its value.
@@ -98,9 +99,24 @@ def by_mask(value: Any, mask: Any) -> Any:
 
 
 def by_literal(node: Any, secrets: frozenset[str]) -> Any:
-    """Replace every string equal to a known secret, at any depth."""
+    """Replace known secrets wherever they occur in string values.
+
+    Providers may copy a sensitive root-variable value into a larger string
+    (for example, a connection value or an encoded provider argument) without
+    preserving Terraform's sensitivity mask. Exact-value replacement is not
+    enough for that shape, so replace secret substrings too. Dictionary keys
+    are intentionally left untouched: a secret emitted as a key remains a
+    fail-closed condition in the final scan rather than being silently hidden.
+    """
     if isinstance(node, str):
-        return REDACTED if node in secrets else node
+        decoded = unquote(node)
+        for secret in sorted(secrets, key=len, reverse=True):
+            # Percent-escape hex digits are case-insensitive. Decoding the
+            # candidate string before matching catches both `%2F` and `%2f`
+            # without changing non-secret values that remain in the plan.
+            if secret and (secret in node or secret in decoded):
+                return REDACTED
+        return node
     if isinstance(node, dict):
         return {k: by_literal(v, secrets) for k, v in node.items()}
     if isinstance(node, list):
@@ -180,8 +196,9 @@ def sanitize(plan: dict[str, Any], environ: dict[str, str] | None = None) -> dic
 
     # Fail closed: a surviving secret must stop the job, not ship in an artifact.
     blob = json.dumps(clean)
+    decoded_blob = unquote(blob)
     for secret in secrets:
-        if secret in blob:
+        if secret in blob or secret in decoded_blob:
             raise SystemExit(
                 "::error::plan JSON still carries a sensitive variable value after "
                 "sanitisation; refusing to write a publishable plan"

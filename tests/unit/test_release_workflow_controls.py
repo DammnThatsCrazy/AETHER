@@ -1126,6 +1126,48 @@ def test_the_sanitiser_scrubs_secret_values_out_of_resources_too():
     assert clean["resource_changes"][0]["change"]["after"]["value"] != CANARY
 
 
+def test_the_sanitiser_scrubs_embedded_and_url_encoded_secret_values():
+    """Provider-expanded strings cannot carry a sensitive token through."""
+    token = "ghp_CANARY+/value"
+    plan = _plan_with_secret(token)
+    plan["planned_values"]["root_module"]["resources"][0]["values"] = {
+        "name": "/amplify/app",
+        "connection": f"https://example.invalid/{token}/checkout",
+        "encoded": "https%3a%2f%2fexample.invalid%2fghp_CANARY%2b%2fvalue",
+    }
+    plan["configuration"]["root_module"]["variables"] = {
+        "amplify_github_access_token": {"sensitive": True},
+    }
+    plan["variables"] = {
+        "amplify_github_access_token": {"value": token},
+    }
+
+    clean = _sanitiser().sanitize(plan, environ={})
+    blob = json.dumps(clean)
+    assert token not in blob
+    assert "ghp_CANARY%2b%2fvalue" not in blob
+    assert "__REDACTED_SENSITIVE__" in blob
+
+
+def test_the_sanitiser_scrubs_embedded_secret_values_supplied_by_environment():
+    """The hosted TF_VAR path is protected even when the plan omits the value."""
+    token = "ghp_ENV_CANARY+/value"
+    plan = _plan_with_secret()
+    plan["variables"] = {}
+    plan["configuration"]["root_module"]["variables"] = {
+        "amplify_github_access_token": {"sensitive": True},
+    }
+    plan["planned_values"]["root_module"]["resources"][0]["values"] = {
+        "connection": "https://example.invalid/ghp_ENV_CANARY%2b%2fvalue/checkout",
+    }
+
+    clean = _sanitiser().sanitize(
+        plan, environ={"TF_VAR_amplify_github_access_token": token}
+    )
+    assert token not in json.dumps(clean)
+    assert "ghp_ENV_CANARY%2b%2fvalue" not in json.dumps(clean)
+
+
 def test_the_sanitiser_also_scrubs_the_value_supplied_through_the_environment():
     """The plan is produced from TF_VAR_*; that value must not survive either."""
     plan = _plan_with_secret()
