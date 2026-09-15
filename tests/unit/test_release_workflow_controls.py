@@ -1196,7 +1196,7 @@ def test_the_sanitiser_scrubs_embedded_secret_values_supplied_by_environment():
 
 def test_the_sanitiser_scrubs_provider_derived_credential_attributes():
     """Credential-shaped provider output is redacted without literal matching."""
-    token = "ghp_PROVIDER_CANARY+/value"
+    token = "provider-token-" + "CANARY+/value"
     plan = _plan_with_secret(token)
     plan["configuration"]["root_module"]["variables"] = {
         "amplify_github_access_token": {"sensitive": True},
