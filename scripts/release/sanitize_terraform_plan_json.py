@@ -65,7 +65,7 @@ import json
 import os
 import sys
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import unquote
 
 # Root variables whose VALUE a downstream consumer actually reads. Everything
 # else keeps its name and loses its value.
@@ -109,13 +109,14 @@ def by_literal(node: Any, secrets: frozenset[str]) -> Any:
     fail-closed condition in the final scan rather than being silently hidden.
     """
     if isinstance(node, str):
-        clean = node
-        # Replace longer forms first so a shorter secret cannot leave a
-        # remainder that defeats the final fail-closed scan.
+        decoded = unquote(node)
         for secret in sorted(secrets, key=len, reverse=True):
-            if secret:
-                clean = clean.replace(secret, REDACTED)
-        return clean
+            # Percent-escape hex digits are case-insensitive. Decoding the
+            # candidate string before matching catches both `%2F` and `%2f`
+            # without changing non-secret values that remain in the plan.
+            if secret and (secret in node or secret in decoded):
+                return REDACTED
+        return node
     if isinstance(node, dict):
         return {k: by_literal(v, secrets) for k, v in node.items()}
     if isinstance(node, list):
@@ -153,10 +154,6 @@ def secret_values(plan: dict[str, Any], environ: dict[str, str]) -> frozenset[st
         from_env = environ.get(f"TF_VAR_{name}")
         if from_env:
             values.add(from_env)
-    # A provider may URL-encode a token before carrying it into a resource
-    # argument. Keep the encoded spelling in the scrub set as well, without
-    # ever printing either form.
-    values.update(quote(value, safe="") for value in tuple(values) if value)
     return frozenset(values)
 
 
@@ -199,8 +196,9 @@ def sanitize(plan: dict[str, Any], environ: dict[str, str] | None = None) -> dic
 
     # Fail closed: a surviving secret must stop the job, not ship in an artifact.
     blob = json.dumps(clean)
+    decoded_blob = unquote(blob)
     for secret in secrets:
-        if secret in blob:
+        if secret in blob or secret in decoded_blob:
             raise SystemExit(
                 "::error::plan JSON still carries a sensitive variable value after "
                 "sanitisation; refusing to write a publishable plan"
