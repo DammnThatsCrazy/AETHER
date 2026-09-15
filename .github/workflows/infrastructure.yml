@@ -51,7 +51,6 @@ jobs:
           TF_AUTH0_MANAGEMENT_CLIENT_ID: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_ID }}
           TF_AUTH0_MANAGEMENT_CLIENT_SECRET: ${{ secrets.TF_AUTH0_MANAGEMENT_CLIENT_SECRET }}
           TF_AMPLIFY_GITHUB_ACCESS_TOKEN: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
-          GH_TOKEN: ${{ github.token }}
           TF_AETHER_APP_URL: ${{ secrets.TF_AETHER_APP_URL }}
           TF_KYBER_APP_URL: ${{ secrets.TF_KYBER_APP_URL }}
           TF_BACKEND_IMAGE_DIGEST: ${{ secrets.TF_BACKEND_IMAGE_DIGEST }}
@@ -69,6 +68,7 @@ jobs:
             TF_AUTH0_DOMAIN \
             TF_AUTH0_MANAGEMENT_CLIENT_ID \
             TF_AUTH0_MANAGEMENT_CLIENT_SECRET \
+            TF_AMPLIFY_GITHUB_ACCESS_TOKEN \
             TF_AETHER_APP_URL \
             TF_KYBER_APP_URL \
             TF_BACKEND_IMAGE_DIGEST \
@@ -81,12 +81,11 @@ jobs:
             fi
           done
 
-          repo_visibility="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.visibility')"
           amplify_token="${TF_AMPLIFY_GITHUB_ACCESS_TOKEN:-}"
-          if [ "$repo_visibility" != 'public' ] && { [ -z "$amplify_token" ] || [ "$amplify_token" = '-' ]; }; then
+          if [ -z "$amplify_token" ] || [ "$amplify_token" = '-' ]; then
             missing+=(TF_AMPLIFY_GITHUB_ACCESS_TOKEN)
-          elif [ "$repo_visibility" = 'public' ] && [ "$amplify_token" = '-' ]; then
-            echo '::notice::TF_AMPLIFY_GITHUB_ACCESS_TOKEN is the placeholder value "-"; public Amplify apps will use anonymous repository checkout.'
+          elif [[ "$amplify_token" =~ [[:space:]] ]]; then
+            missing+=(TF_AMPLIFY_GITHUB_ACCESS_TOKEN)
           fi
 
           if [ "${#missing[@]}" -eq 0 ]; then
@@ -214,9 +213,8 @@ jobs:
       TF_VAR_domain_name: ${{ secrets.TF_DOMAIN_NAME }}
       TF_VAR_alert_email: ${{ secrets.TF_ALERT_EMAIL }}
       TF_VAR_auth0_domain: ${{ secrets.TF_AUTH0_DOMAIN }}
-      # The optional Amplify checkout token is normalized by the step below.
-      # Public repositories use anonymous checkout; private repositories must
-      # provide a repository-scoped token.
+      # AWS Amplify requires a repository access token for every GitHub-backed
+      # app, including apps sourced from a public repository.
       TF_AMPLIFY_GITHUB_ACCESS_TOKEN: ${{ secrets.TF_AMPLIFY_GITHUB_ACCESS_TOKEN }}
       # The auth0 provider reads these from its own environment, so the
       # credentials never become Terraform root variables and therefore never
@@ -259,20 +257,17 @@ jobs:
           set -euo pipefail
           python -m pip install --disable-pip-version-check pyyaml
 
-      - name: Normalize optional Amplify checkout token
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Validate Amplify checkout token
         run: |
           set -euo pipefail
-          repo_visibility="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.visibility')"
           amplify_token="${TF_AMPLIFY_GITHUB_ACCESS_TOKEN:-}"
-          if [ "$repo_visibility" != 'public' ] && { [ -z "$amplify_token" ] || [ "$amplify_token" = '-' ]; }; then
-            echo '::error::A private GitHub repository requires TF_AMPLIFY_GITHUB_ACCESS_TOKEN for Amplify-backed apps.'
+          if [ -z "$amplify_token" ] || [ "$amplify_token" = '-' ]; then
+            echo '::error::TF_AMPLIFY_GITHUB_ACCESS_TOKEN must be a real GitHub repository token; AWS Amplify requires one for public and private repositories.'
             exit 1
           fi
-          if [ "$repo_visibility" = 'public' ] && [ "$amplify_token" = '-' ]; then
-            echo '::notice::TF_AMPLIFY_GITHUB_ACCESS_TOKEN is the placeholder value "-"; public Amplify apps will use anonymous repository checkout.'
-            amplify_token=''
+          if [[ "$amplify_token" =~ [[:space:]] ]]; then
+            echo '::error::TF_AMPLIFY_GITHUB_ACCESS_TOKEN contains whitespace and cannot be passed to AWS Amplify.'
+            exit 1
           fi
           printf 'TF_VAR_amplify_github_access_token=%s\n' "$amplify_token" >> "$GITHUB_ENV"
 

@@ -765,7 +765,10 @@ resource "aws_amplify_app" "frontend" {
   name       = each.value.name
   repository = var.amplify_github_repository
 
-  access_token = var.amplify_github_access_token != "" ? var.amplify_github_access_token : null
+  # AWS Amplify CreateApp requires a repository token for both public and
+  # private GitHub repositories. The hosted workflow fails closed before AWS
+  # credentials are assumed when this value is absent or a placeholder.
+  access_token = var.amplify_github_access_token
 
   build_spec = <<-YAML
     version: 1

@@ -471,7 +471,7 @@ variable "enable_social_connections" {
 variable "amplify_github_access_token" {
   type        = string
   sensitive   = true
-  description = "GitHub personal access token for Amplify to access the repository. Must have `repo` scope."
+  description = "GitHub repository access token required by AWS Amplify for every GitHub-backed app, including public repositories. Must have the minimum repository-read access required by the repository."
   default     = ""
 }
 

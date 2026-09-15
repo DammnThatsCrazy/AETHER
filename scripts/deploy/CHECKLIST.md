@@ -55,13 +55,13 @@
 
 ### 6. GitHub
 
-- [ ] If the Amplify-backed repository is private, create a repository-scoped
-  GitHub token for Amplify to pull code
+- [ ] Create a repository-scoped GitHub token for Amplify to pull code
   - Create at: github.com → Settings → Developer Settings → Personal Access Tokens
   - Scope: the minimum repository-read access required by the private repository
   - This goes into the `amplify_github_access_token` Terraform variable
-  - Public repositories may leave this unset; Terraform passes `null` and
-    Amplify uses anonymous repository checkout
+  - AWS Amplify requires this token for public and private GitHub repositories;
+    the staging workflow rejects the historical `-` placeholder before AWS
+    credentials are assumed
 
 ## Deployment profile
 

@@ -794,14 +794,13 @@ def test_promotion_cannot_proceed_when_remote_plan_credentials_are_missing():
         for name in probe_step["env"]
         if name not in {
             "AWS_INFRA_ROLE_ARN",
-            "GH_TOKEN",
             "TF_BACKEND_IMAGE_DIGEST",
             "TF_ML_IMAGE_DIGEST",
         }
     }
     assert len(shared) == 11
     assert "TF_AMPLIFY_GITHUB_ACCESS_TOKEN" in probe_step["env"]
-    assert "TF_AMPLIFY_GITHUB_ACCESS_TOKEN \\\n" not in probe_step["run"]
+    assert "TF_AMPLIFY_GITHUB_ACCESS_TOKEN \\\n" in probe_step["run"]
 
     promote = _workflow_yaml(APPLY_WORKFLOW)
     guard = next(
@@ -820,9 +819,9 @@ def test_promotion_cannot_proceed_when_remote_plan_credentials_are_missing():
     assert "AWS_TERRAFORM_APPLY_ROLE_ARN \\\n" not in guard["run"]
     assert guard["run"].count("AWS_TERRAFORM_APPLY_ROLE_ARN") == 2
     assert '"${{ inputs.action }}" = "apply"' in guard["run"]
-    assert 'gh api "repos/${GITHUB_REPOSITORY}" --jq' in guard["run"]
+    assert "gh api" not in guard["run"]
     assert "TF_VAR_amplify_github_access_token" in guard["run"]
-    assert "TF_AMPLIFY_GITHUB_ACCESS_TOKEN \\\n" not in guard["run"]
+    assert "TF_AMPLIFY_GITHUB_ACCESS_TOKEN \\\n" in guard["run"]
     # The guard runs before any AWS credential is assumed or plan is produced.
     names = [s.get("name", "") for s in _steps(promote, "plan")]
     uses = [str(s.get("uses", "")) for s in _steps(promote, "plan")]
@@ -832,19 +831,17 @@ def test_promotion_cannot_proceed_when_remote_plan_credentials_are_missing():
     assert guard_index < aws_index < plan_index
 
 
-def test_public_repository_allows_anonymous_amplify_checkout():
-    """A public repo does not need a placeholder token to provision Amplify."""
+def test_amplify_checkout_token_is_required_for_public_and_private_repositories():
+    """Amplify requires a real repository token regardless of visibility."""
     infra = _workflow_yaml("infrastructure.yml")
     readiness = _steps(infra, "remote-plan-readiness")
     probe = next(step for step in readiness if step.get("id") == "credentials")
-    assert "gh api \"repos/${GITHUB_REPOSITORY}\" --jq" in probe["run"]
-    assert "repo_visibility" in probe["run"]
+    assert "TF_AMPLIFY_GITHUB_ACCESS_TOKEN" in probe["run"]
+    assert "amplify_token" in probe["run"]
     remote_plan = _steps(infra, "remote-plan")
-    normalize = next(
-        step for step in remote_plan if step.get("name") == "Normalize optional Amplify checkout token"
-    )
-    assert "amplify_token=''" in normalize["run"]
-    assert "TF_VAR_amplify_github_access_token" in normalize["run"]
+    validate = next(step for step in remote_plan if step.get("name") == "Validate Amplify checkout token")
+    assert "AWS Amplify requires one for public and private repositories" in validate["run"]
+    assert "TF_VAR_amplify_github_access_token" in validate["run"]
     assert "TF_VAR_amplify_github_access_token" not in infra["jobs"]["remote-plan"]["env"]
 
 

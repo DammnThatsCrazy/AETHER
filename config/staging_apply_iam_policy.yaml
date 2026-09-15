@@ -146,6 +146,13 @@ statements:
     scope: staging-kms-resource-tag
     conditions:
       aws:ResourceTag/Environment: staging
+  - sid: EnableStagingKeyRotation
+    actions:
+      - kms:EnableKeyRotation
+    resource: arn:aws:kms:us-east-1:${account_id}:key/*
+    scope: staging-kms-resource-tag
+    conditions:
+      aws:ResourceTag/Environment: staging
   - sid: ReadStagingBucketEncryption
     actions:
       - s3:GetEncryptionConfiguration
@@ -339,6 +346,11 @@ statements:
       - arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-ml-drift
       - arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation
     scope: staging-name-prefix
+  - sid: InvokeStagingSecretRotationLambda
+    actions:
+      - lambda:InvokeFunction
+    resource: arn:aws:lambda:us-east-1:${account_id}:function:AETHER-staging-secret-rotation
+    scope: staging-secret-rotation-function
   - sid: ManageStagingLambdaRoles
     actions:
       - iam:CreateRole
