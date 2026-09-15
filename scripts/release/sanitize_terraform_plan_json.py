@@ -143,6 +143,46 @@ def by_literal(node: Any, secrets: frozenset[str]) -> Any:
     return node
 
 
+def secret_paths(node: Any, secrets: frozenset[str], path: str = "$", limit: int = 20) -> list[str]:
+    """Return safe structural paths for surviving secrets, never the values.
+
+    The final scan is intentionally fail-closed. When a provider places a
+    secret in an unusual JSON position, the path makes the remediation
+    actionable without echoing the secret into the workflow log.
+    """
+    found: list[str] = []
+
+    def contains_secret(value: str) -> bool:
+        decoded = unquote(value)
+        return any(secret and (secret in value or secret in decoded) for secret in secrets)
+
+    def walk(value: Any, current: str) -> None:
+        if len(found) >= limit:
+            return
+        if isinstance(value, str):
+            if contains_secret(value):
+                found.append(current)
+            return
+        if isinstance(value, dict):
+            for key, child in value.items():
+                key_path = f"{current}.{key}" if isinstance(key, str) else f"{current}[key]"
+                if isinstance(key, str) and contains_secret(key):
+                    found.append(f"{key_path} (key)")
+                    if len(found) >= limit:
+                        return
+                walk(child, key_path)
+                if len(found) >= limit:
+                    return
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                walk(child, f"{current}[{index}]")
+                if len(found) >= limit:
+                    return
+
+    walk(node, path)
+    return found
+
+
 def by_sensitive_attribute_name(node: Any) -> Any:
     """Redact values under provider fields that are credentials by definition.
 
@@ -240,9 +280,11 @@ def sanitize(plan: dict[str, Any], environ: dict[str, str] | None = None) -> dic
     decoded_blob = unquote(blob)
     for secret in secrets:
         if secret in blob or secret in decoded_blob:
+            paths = secret_paths(clean, secrets)
+            location = "; ".join(paths) if paths else "unknown structural path"
             raise SystemExit(
                 "::error::plan JSON still carries a sensitive variable value after "
-                "sanitisation; refusing to write a publishable plan"
+                f"sanitisation at {location}; refusing to write a publishable plan"
             )
     return clean
 
