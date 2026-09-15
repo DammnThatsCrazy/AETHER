@@ -27,7 +27,18 @@ from typing import Optional
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
-from shared.common.common import APIResponse, ForbiddenError, NotFoundError, ServiceUnavailableError
+from shared.auth.auth import (
+    KEY_CLASS_PUBLISHABLE,
+    KEY_CLASS_SECRET,
+    PUBLISHABLE_KEY_PERMISSIONS,
+)
+from shared.common.common import (
+    APIResponse,
+    BadRequestError,
+    ForbiddenError,
+    NotFoundError,
+    ServiceUnavailableError,
+)
 from shared.logger.logger import get_logger, metrics
 from repositories.repos import APIKeyRepository
 from services.client_sync.emitter import enqueue_sync_change
@@ -48,6 +59,18 @@ class APIKeyCreateRequest(BaseModel):
         default=None,
         description="Optional SDK platform this key is intended for "
         "(web|ios|android|react-native|node|other).",
+    )
+    key_class: str = Field(
+        default=KEY_CLASS_SECRET,
+        pattern=f"^({KEY_CLASS_SECRET}|{KEY_CLASS_PUBLISHABLE})$",
+        description="'secret' for server-side use (default), or 'publishable' "
+        "for a key that ships in page HTML via the CDN loader.",
+    )
+    site_ids: list[str] | None = Field(
+        default=None,
+        description="Sites a publishable key is bound to. Required for "
+        "publishable keys: a publicly readable key must not be usable "
+        "against the tenant's other sites.",
     )
 
 
@@ -222,6 +245,32 @@ async def list_my_api_keys(
     }).to_dict()
 
 
+def resolve_key_grant(
+    key_class: str, permissions: list[str], site_ids: list[str] | None
+) -> tuple[list[str], list[str] | None]:
+    """Decide what a requested key is actually issued with.
+
+    Split out of the handler because it is the authorization decision, not
+    request plumbing — it is the rule that keeps a publishable key from being
+    issued with authority or reach it must never have, so it is worth testing
+    without a live app. Returns ``(permissions, site_ids)``.
+
+    A publishable key is public by construction: it ships in page HTML. So it
+    is issued only with the ingestion authority it needs, and only bound to
+    named sites. Refusing an unscoped publishable key is what makes the binding
+    meaningful — permitting one would make it tenant-wide.
+    """
+    if key_class != KEY_CLASS_PUBLISHABLE:
+        return list(permissions), None
+
+    if not site_ids:
+        raise BadRequestError(
+            "site_ids is required for a publishable key: bind it to the "
+            "sites its snippet is installed on."
+        )
+    return list(PUBLISHABLE_KEY_PERMISSIONS), list(site_ids)
+
+
 @router.post("/api-keys")
 async def create_my_api_key(body: APIKeyCreateRequest, request: Request):
     """Create a new API key scoped to the calling tenant."""
@@ -230,15 +279,15 @@ async def create_my_api_key(body: APIKeyCreateRequest, request: Request):
     # Validate permissions
     invalid = [p for p in body.permissions if p not in _VALID_PERMISSIONS]
     if invalid:
-        from shared.common.common import BadRequestError
         raise BadRequestError(f"Invalid permissions: {invalid}. Valid: {sorted(_VALID_PERMISSIONS)}")
 
     # Validate optional platform tag
     if body.platform is not None and body.platform not in _VALID_PLATFORMS:
-        from shared.common.common import BadRequestError
         raise BadRequestError(
             f"Invalid platform: {body.platform!r}. Valid: {sorted(_VALID_PLATFORMS)}"
         )
+
+    permissions, site_ids = resolve_key_grant(body.key_class, body.permissions, body.site_ids)
 
     raw_key = f"ak_{uuid.uuid4().hex[:24]}"
     hashed = hashlib.sha256(raw_key.encode()).hexdigest()
@@ -247,8 +296,10 @@ async def create_my_api_key(body: APIKeyCreateRequest, request: Request):
         "tenant_id": tenant.tenant_id,
         "name": body.name,
         "tier": tenant.api_key_tier.value,
-        "permissions": body.permissions,
+        "permissions": permissions,
         "platform": body.platform,
+        "key_class": body.key_class,
+        "site_ids": site_ids,
         "key_hash": hashed,
         "last_used_at": None,
     })
@@ -262,7 +313,13 @@ async def create_my_api_key(body: APIKeyCreateRequest, request: Request):
             tenant_id=tenant.tenant_id,
             role="editor",
             tier=tenant.api_key_tier.value,
-            permissions=body.permissions,
+            # The resolved list, not body.permissions: validate_async reads the
+            # cache before the durable record, so caching the requested
+            # permissions would give a publishable key the narrow default here
+            # and silently strip the ingest authority its record grants.
+            permissions=permissions,
+            key_class=body.key_class,
+            site_ids=site_ids,
         )
     except Exception as e:
         logger.warning(f"Failed to register key in auth cache: {e}")
@@ -273,7 +330,12 @@ async def create_my_api_key(body: APIKeyCreateRequest, request: Request):
         "api_key": raw_key,
         "id": record["id"],
         "name": body.name,
-        "permissions": body.permissions,
+        # The resolved grant, not what was requested: reporting the request
+        # would tell a publishable-key caller their key holds permissions it
+        # was deliberately never issued.
+        "permissions": record["permissions"],
+        "key_class": body.key_class,
+        "site_ids": site_ids,
         "platform": body.platform,
         "message": "Store this key securely — it will not be shown again.",
     }).to_dict()

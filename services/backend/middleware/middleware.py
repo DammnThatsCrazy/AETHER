@@ -35,6 +35,7 @@ from shared.context.request_context import (
 from shared.auth.auth import (
     APIKeyTier, APIKeyValidator, JWTHandler, PlanTier, Role, TenantContext,
     legacy_tier_to_plan,
+    CREDENTIAL_CLASS_PUBLISHABLE,
 )
 from shared.logger.logger import get_logger, set_request_context, metrics
 from shared.plans.catalog import PLAN_CATALOG
@@ -1068,9 +1069,21 @@ def _evaluate_route_policy(request: Request, path: str, context) -> Optional[Aet
                 return ForbiddenError(reason)
 
         credential_class = getattr(context, "credential_class", "legacy")
-        if credential_class == "public_ingest_identifier":
+        if credential_class in ("public_ingest_identifier", CREDENTIAL_CLASS_PUBLISHABLE):
             if path not in ("/v1/batch", "/v1/track") and not path.startswith("/v1/ingest"):
                 return ForbiddenError("ROUTE_POLICY_INGEST_IDENTIFIER_SCOPE")
+        if credential_class == CREDENTIAL_CLASS_PUBLISHABLE:
+            # A publishable key ships in public HTML, so it is confined above to
+            # ingestion and additionally bound to the sites it was issued for.
+            # Without this, a key copied off one customer's page could be
+            # replayed to write events attributed to another of the tenant's
+            # sites. Only enforced when the request declares a site: a caller
+            # that declares none is scoped by its key's sites at attribution
+            # time, not rejected here.
+            bound_sites = getattr(context, "site_ids", None)
+            declared_site = getattr(request, "headers", {}).get("X-Aether-Site")
+            if bound_sites and declared_site and declared_site not in bound_sites:
+                return ForbiddenError("ROUTE_POLICY_SITE_MISMATCH")
         if credential_class == "service_credential" and not context.permissions:
             return ForbiddenError("ROUTE_POLICY_SERVICE_SCOPE_REQUIRED")
 

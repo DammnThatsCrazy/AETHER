@@ -22,6 +22,35 @@ from config.settings import settings
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# API KEY CLASSES
+#
+# A secret key is the historical credential: held server-side, used by a
+# tenant's own backend, allowed anywhere its permissions reach. A publishable
+# key is the opposite by construction — it ships inside a page's HTML for the
+# CDN loader, so it is public the moment it is issued. The two therefore need
+# different authority, and the difference is enforced by credential class at
+# the route-policy boundary rather than by permission list alone (a permission
+# list is data; a class is a policy the boundary always applies).
+# ═══════════════════════════════════════════════════════════════════════════
+
+KEY_CLASS_SECRET = "secret"
+KEY_CLASS_PUBLISHABLE = "publishable"
+
+# The credential class a publishable key resolves to. Distinct from the
+# trust-plane's "public_ingest_identifier": both are confined to ingestion, but
+# they are different credentials with different lifecycles (that one is a
+# registered public identifier; this one is an api_keys record), and collapsing
+# them would make one revocable only by revoking the other.
+CREDENTIAL_CLASS_PUBLISHABLE = "publishable_key"
+
+# POST /v1/batch is guarded at two layers — the route-policy boundary requires
+# `ingest` and the handler requires `write` — so a publishable key is minted
+# with both. Issuing it the narrower ["ingest"] would pass the boundary and
+# then 403 inside the handler.
+PUBLISHABLE_KEY_PERMISSIONS = ["ingest", "write"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # TENANT / USER CONTEXT
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -83,6 +112,12 @@ class TenantContext:
     organization_id: Optional[str] = None
     organization_status: str = "active"
     membership_status: str = "active"
+    # Sites a publishable key is bound to. Publishable keys ship in a page's
+    # HTML and are therefore public; binding one to specific sites means a key
+    # copied off one customer's page cannot be replayed to write events for
+    # another. None means unscoped, which is only reachable for non-publishable
+    # credentials — the mint path refuses to issue an unscoped publishable key.
+    site_ids: Optional[list[str]] = None
 
     def has_permission(self, permission: str) -> bool:
         if self.role == Role.ADMIN:
@@ -341,6 +376,8 @@ class APIKeyValidator:
         role: str = "viewer",
         tier: str = "free",
         permissions: Optional[list[str]] = None,
+        key_class: str = KEY_CLASS_SECRET,
+        site_ids: Optional[list[str]] = None,
     ) -> str:
         """Register a new API key. Returns the key hash for reference."""
         key_hash = self.hash_key(api_key)
@@ -349,6 +386,12 @@ class APIKeyValidator:
             "role": role,
             "tier": tier,
             "permissions": permissions or ["read"],
+            # Cached, not merely stored: validate_async resolves the credential
+            # class and site binding from this entry on the fast path, so a
+            # publishable key that omitted them here would be cached as an
+            # unconfined legacy key for the entry's whole TTL.
+            "key_class": key_class,
+            "site_ids": list(site_ids) if site_ids else None,
             "created_at": utc_now(),
         }
         if self._cache:
@@ -430,6 +473,8 @@ async def _lookup_api_key_from_db(key_hash: str) -> Optional[dict]:
             "tier": tier_safe,
             "plan_tier": record.get("plan_tier"),
             "permissions": record.get("permissions", []),
+            "key_class": record.get("key_class", KEY_CLASS_SECRET),
+            "site_ids": record.get("site_ids"),
         }
     except Exception:
         return None
@@ -451,6 +496,14 @@ async def _update_last_used_at(key_hash: str) -> None:
 
 def _build_context_from_key_data(key_data: dict) -> TenantContext:
     api_key_tier = APIKeyTier(key_data.get("tier", "free"))
+    # A publishable key is a distinct credential class, not just a key with
+    # fewer permissions: it rides in public HTML, so the route-policy boundary
+    # confines it to ingestion paths rather than trusting its permission list
+    # alone. Anything unrecognised stays "legacy", the strictest default.
+    key_class = key_data.get("key_class", KEY_CLASS_SECRET)
+    credential_class = (
+        CREDENTIAL_CLASS_PUBLISHABLE if key_class == KEY_CLASS_PUBLISHABLE else "legacy"
+    )
     # plan_tier is preferred (alpha-omega). Fall back to legacy tier mapping.
     plan_raw = key_data.get("plan_tier")
     if plan_raw:
@@ -460,12 +513,15 @@ def _build_context_from_key_data(key_data: dict) -> TenantContext:
             plan_tier = legacy_tier_to_plan(api_key_tier)
     else:
         plan_tier = legacy_tier_to_plan(api_key_tier)
+    site_ids = key_data.get("site_ids")
     return TenantContext(
         tenant_id=key_data["tenant_id"],
         role=Role(key_data.get("role", "viewer")),
         api_key_tier=api_key_tier,
         plan_tier=plan_tier,
         permissions=key_data.get("permissions", []),
+        credential_class=credential_class,
+        site_ids=list(site_ids) if site_ids else None,
     )
 
 
