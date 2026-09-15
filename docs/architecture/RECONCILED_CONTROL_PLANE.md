@@ -8,6 +8,8 @@ status: experimental
 since_version: "0.1.0"
 source_files:
   - services/backend/services/managed_integrations/
+  - services/backend/services/sdk_distribution/control_plane.py
+  - scripts/validate_sdk_control_plane_seam.py
   - services/backend/services/kyber/access/
   - services/backend/alembic/versions/20260906_rcp_managed_integrations.py
   - services/backend/alembic/versions/20260906_rcp_change_sets.py
@@ -25,6 +27,7 @@ source_files:
 source_hashes:
   "config/route_registry.yaml": "sha256:16179d30f4db41a633b3874b3ff9bdc61e61278438c54b62b4364b9c9838aa8a"
   "packages/shared/managed-integrations.ts": "sha256:59ae532137ef2c00b41432f7b47baae4057147749719bff78e2b087f581571b2"
+  "scripts/validate_sdk_control_plane_seam.py": "sha256:a6c971b14dd26ef11626bfcf748461e6f6a8d73424906068615291ceca48fbe7"
   "services/backend/alembic/versions/20260906_rcp_admission.py": "sha256:b57dc1a0b7a5e8d06e9ec985ff04f3dd0e705d6e4d66d7de419d960407759908"
   "services/backend/alembic/versions/20260906_rcp_change_sets.py": "sha256:7becb857318edc7ccd267ed951c0a5cfbc291282c307df663f7d8b9277bf6bc7"
   "services/backend/alembic/versions/20260906_rcp_execution.py": "sha256:fe60187d99dbf2b67a883a5e6155b6a67c2ab5ee954552d762d5e4239ed528a6"
@@ -37,7 +40,8 @@ source_hashes:
   "services/backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
   "services/backend/main.py": "sha256:146abcd2a0af5653e96f1c1eb9e5fe1fef6e32790758636cbde4d6d24c5c592e"
   "services/backend/services/kyber/access/": "sha256:518b962e1ac1c2d7a4edd9bcfc7882007ab2caf058dd85120946401cf9fbe841"
-  "services/backend/services/managed_integrations/": "sha256:34f17bb2a61cf13704798d359cea1f4a2e7a79850f6bb97e777a30d9c002be04"
+  "services/backend/services/managed_integrations/": "sha256:2cd3baa469ef31e1e5e3c607d58578facf059d7089c49c4d027d92c1c05fcd24"
+  "services/backend/services/sdk_distribution/control_plane.py": "sha256:593c4d57a8d4370951b86034077150fec0018783c15ed3ac8afa3a3a28f008c1"
 ---
 
 # Reconciled Control Plane — Architecture (§0–40 lane)
@@ -240,3 +244,74 @@ registered. Tenancy is enforced in repository SQL.
 7. Unknowns are never coerced: an unmapped §30 behavior, an unknown drift
    type, or missing evidence resolves to `review`/`unknown`/`not_observable`
    — never to a fabricated token.
+
+## SDK site installs as managed integrations
+
+The plane's observed-state adapters read *installed SDKs* — health agents that
+send recurring heartbeats and scores. A **site install** is a different thing:
+one property a tenant pasted the one-tag snippet onto, which reports its install
+handshake exactly once. It had no adapter, so it had no representation: a site
+whose loader was blocked by a CSP header, or whose bundle never resolved, looked
+to the plane precisely like a tenant who had never installed anything.
+
+That is the same ambiguity the SDK distribution layer's install verifier exists
+to remove, one layer down — and the two are now joined at one seam:
+
+```text
+services/sdk_distribution/            services/managed_integrations/
+  install_verifier.py                   sensors.py
+    describe_site_install() ─────────▶    observed_from_site_install()
+      (the read view of a site's            (the observed-state snapshot:
+       install handshake)                     availability, runtime version,
+                                              health, source identity)
+  control_plane.py
+    register_site_install() ─────────▶    repository.register() + admission.admit()
+      (a registered site becomes a          (the §6 registration row and the
+       managed integration)                  §16 admission walk)
+```
+
+**The dependency runs one way.** The plane owns `ObservedStateSnapshot`, the
+§6 kind vocabulary and the §16 admission lifecycle; nothing under
+`services/managed_integrations` imports the SDK distribution layer. That is what
+lets the plane be reasoned about — and shipped — without an SDK install path
+existing, and `scripts/validate_sdk_control_plane_seam.py` fails if the edge is
+ever reversed.
+
+**Registration is at site creation, not at first install signal.** A site that
+never installs is the one worth seeing, and a site with no handshake has nothing
+to project — registering on first signal would leave exactly the broken installs
+outside the plane's view.
+
+**The CP-12 mapping is the point.** Four states, and the distinctions between
+them are the whole reason the verifier exists:
+
+| Site install state | Availability | Provenance | Why |
+|---|---|---|---|
+| no record / `awaiting_first_signal` | `missing` | `unknown` | Registered, never observed. The absence *is* the finding; nothing is inferred from the silence. |
+| `loaded` / `live` | `available` | `runtime_reported` | The handshake ran, and the loader reported it. |
+| `failed` | `degraded` | `runtime_reported` | The record exists and says the install is broken. `missing` would hand the reconciler "nothing to reconcile" for the one install that most needs a ChangeSet. |
+| anything unrecognized | `unknown` | `unknown` | Ambiguity resolves to `unknown`, never to the nearest label. |
+
+**One version authority.** The distribution layer derives a site's
+`drift_status` and `compatibility_tier` from its `loader_version` through
+`sdk_version_tiers`; the plane reconciles the same field, classified through the
+same module. A second classifier would agree until the day it silently did not,
+and the disagreement would surface as the plane calling an install out of
+support that the install page calls supported.
+
+**The handshake's age is reported, never thresholded.** `sensors` sets
+`observed_at` to when the snapshot was assembled and carries the handshake's own
+instant in `last_successful_observation_at`. These are one-shot install signals,
+not heartbeats: a site installed a year ago is still correctly installed, and
+calling its record stale would invent a health problem out of a working
+integration.
+
+**Boundaries held.** The distribution layer observes and registers; it never
+builds a ChangeSet, drives an actuator, or plans a rollout — the seam gate keeps
+it out of the mutation path (CP-08). Registration writes into the plane's
+stores, so it is gated on the plane's master switch: with
+`AETHER_RECONCILED_CONTROL_PLANE_ENABLED` unset (the default) a tenant
+installing the SDK accumulates no control-plane rows. And the registration call
+swallows its own failures, because it runs on a path where the site record is
+already durable and a plane store must not turn a working install into a 5xx.
+

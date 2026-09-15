@@ -893,6 +893,19 @@ def main(argv: Sequence[str] | None = None) -> None:
         ),
     )
     run(
+        [sys.executable, "scripts/validate_sdk_control_plane_seam.py"],
+        name="SDK control-plane seam (install states, observed fields, layering)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "keep the install verifier's STATE_* vocabulary and the control plane's "
+            "SITE_STATE_* vocabulary in agreement, keep every field the plane reads off a "
+            "described install published by describe_site_install, keep both sides "
+            "classifying through the one SDK version-band authority, and keep the "
+            "distribution layer out of the plane's mutation path"
+        ),
+    )
+    run(
         [sys.executable, "scripts/validate_consistency_ownership.py"],
         name="Source-of-truth ownership map enforcement",
         results=results,

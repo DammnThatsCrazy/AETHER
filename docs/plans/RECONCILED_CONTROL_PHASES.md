@@ -201,6 +201,38 @@ capability declaration" caveat closes here).
 
 ---
 
+## Consuming lane — SDK distribution layer (site installs)
+
+Not an RCP phase: the SDK distribution layer is a **consumer** of the plane, and
+this section records the seam it was given rather than extending the §0–40
+build. It is listed here because the ownership map for
+`reconciled_control_plane` requires the plane's ledger to move when the plane's
+observed-state vocabulary does.
+
+| Deliverable | Spec anchor | Status |
+|---|---|---|
+| `observed_from_site_install` — a site install as an observed-state snapshot (CP-12 availability, runtime-reported provenance) | §24, §15, CP-12 | ✅ implemented |
+| `sdk_distribution/control_plane.py` — register + admit a site through the §16 admission lifecycle, and compose the observation | §16, §6 | ✅ implemented |
+| `failed` install state recognized as reconcilable drift (not laundered into an existing health token) | §32, §33 | ✅ implemented |
+| `scripts/validate_sdk_control_plane_seam.py` — pins the install-state vocabulary, the fields read off a described install, the single SDK version authority, and the one-way dependency | — | ✅ registered in `repo_doctor` |
+| Tests: CP-12 mapping per install state, failed-is-degraded-not-missing, age reported not thresholded, flag-OFF writes nothing, refused identity, swallowed failure | — | ✅ targeted tests pass |
+
+### What this lane does **not** change
+
+- **The spine row does not move.** `reconciled_control_plane` stays
+  `implementationState: "pending"`, `ownsCanonicalTruth: false`,
+  `graphMutationPolicy: "read_only"`, all 14 conformance items `open`. A
+  consumer registering integrations is not the plane reaching a conformance
+  milestone.
+- **No new authority.** The distribution layer observes and registers; it never
+  reconciles, plans, or mutates (CP-08). The seam gate fails if it reaches the
+  plane's mutation path.
+- **The plane remains default OFF.** Every call on this seam is gated by
+  `reconciled_control.enabled` and returns `None` when the flag is off, so a
+  deploy that has not adopted the plane writes no control-plane rows.
+
+---
+
 ## Cross-cutting (holds every phase)
 
 - **Contracts first.** Each phase lands TS↔Python contract twins + parity tests

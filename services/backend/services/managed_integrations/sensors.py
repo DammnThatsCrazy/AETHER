@@ -13,6 +13,15 @@ The adapters are pure functions over already-fetched records so unit tests can
 drive them with fixtures and no live store. (Thin live fetch helpers that read
 the real authorities under ``AETHER_ENV!=local`` are added in the phase that
 plumbs a scheduler; Phase 0 reconciles what a caller hands it.)
+
+Two SDK authorities are observed here, and they are different questions.
+``observed_from_sdk_health`` reads an *installed SDK* — the health agent's
+heartbeats and scores, which recur. ``observed_from_site_install`` reads a
+*site's install handshake* — the one-shot loader milestones the SDK distribution
+layer records on ``sdk_installations`` when a snippet first runs. A site whose
+handshake never arrived has no record, and "no record" is a CP-12 ``missing``,
+never a fabricated drift: the control plane's job on a silent site is to say so,
+not to guess.
 """
 
 from __future__ import annotations
@@ -143,6 +152,122 @@ def observed_from_sdk_health(
         last_successful_observation_at=(
             _iso(_pick(score.get("last_heartbeat_at"), hb.get("reported_at")))
         ),
+    )
+
+
+# ── site installs (SDK distribution layer) ───────────────────────────────────
+
+# The install states the SDK distribution layer reports through
+# ``install_verifier.describe_site_install``. Spelled here rather than imported,
+# because the control plane is the lower layer: the SDK distribution layer
+# depends on the control plane's vocabulary, never the other way round. The two
+# spellings are held together by ``scripts/validate_sdk_control_plane_seam.py``,
+# which fails when they diverge — without it, a rename on either side would
+# classify every site install as ``unknown`` forever with no error anywhere.
+SITE_STATE_LOADED = "loaded"
+SITE_STATE_LIVE = "live"
+SITE_STATE_FAILED = "failed"
+SITE_STATE_AWAITING = "awaiting_first_signal"
+
+#: States that report the *absence* of an observation rather than a state an
+#: install is in. ``awaiting_first_signal`` is the described view of a site with
+#: no stored record at all, so it resolves exactly as an absent record does.
+SITE_STATES_UNOBSERVED: frozenset[str] = frozenset({SITE_STATE_AWAITING})
+
+#: Install state -> CP-12 availability. ``failed`` is ``degraded`` and never
+#: ``missing``: the record exists and says the install is broken, which is
+#: evidence. Reporting it as ``missing`` would hand the reconciler "nothing to
+#: reconcile" for the one install that most needs a ChangeSet.
+_SITE_STATE_AVAILABILITY: dict[str, str] = {
+    SITE_STATE_LOADED: "available",
+    SITE_STATE_LIVE: "available",
+    SITE_STATE_FAILED: "degraded",
+}
+
+
+def observed_from_site_install(
+    *,
+    managed_integration_ref: str,
+    tenant_id: str,
+    environment_id: str,
+    site_install: Optional[Mapping[str, object]] = None,
+    site_id: Optional[str] = None,
+    observed_at: Optional[datetime] = None,
+) -> ObservedStateSnapshot:
+    """Assemble an observed snapshot from a site's SDK install handshake.
+
+    ``site_install`` is the read view the SDK distribution layer publishes for
+    one registered site — ``install_verifier.describe_site_install`` — and
+    ``site_id`` is the public site it belongs to (read off the record when
+    omitted). There is no health score and no heartbeat to consult here, unlike
+    ``observed_from_sdk_health``: the loader's milestones are one-shot, so the
+    install record *is* the observation.
+
+    ``observed_at`` is when this snapshot is assembled, not when the install
+    fired — the same convention the fleet adapter uses. The age of the
+    underlying handshake is reported through ``last_successful_observation_at``,
+    which is what an operator wants, and it must not be confused with freshness:
+    a site installed last year is still correctly installed, and calling its
+    record stale would invent a health problem out of a working integration.
+    """
+    observed_at = observed_at or _utc_now()
+    record = dict(site_install or {})
+    # Identity comes from the caller, never from the record: the caller is the
+    # one that looked the site up, and reading the identity back out of the
+    # install record would let a stale or mismatched record attribute one site's
+    # handshake to another.
+    resolved_site = str(site_id) if site_id else None
+    state = str(record.get("state") or "")
+
+    def _snapshot(*, provenance: str, availability: str) -> ObservedStateSnapshot:
+        return ObservedStateSnapshot(
+            observed_state_id=f"rcobs_{managed_integration_ref[:12]}",
+            managed_integration_ref=managed_integration_ref,
+            tenant_id=tenant_id,
+            environment_id=environment_id,
+            observed_at=observed_at,
+            received_at=_utc_now(),
+            provenance=provenance,  # type: ignore[arg-type]
+            availability=availability,  # type: ignore[arg-type]
+            reported_source_identity=resolved_site,
+        )
+
+    if not record or state in SITE_STATES_UNOBSERVED:
+        # Registered, never observed. Provenance stays ``unknown`` — nothing
+        # reported anything — and the identity is still carried, so an operator
+        # can see *which* site is silent rather than only that one is.
+        return _snapshot(provenance="unknown", availability="missing")
+
+    availability = _SITE_STATE_AVAILABILITY.get(state)
+    if availability is None:
+        # A state this adapter does not recognize is not evidence of anything.
+        # CP-12 resolves ambiguity to ``unknown`` rather than to the nearest
+        # label, so a renamed or future state cannot be silently read as healthy.
+        return _snapshot(provenance="unknown", availability="unknown")
+
+    # ``loader_version`` rather than ``sdk_version``: it is the field the
+    # distribution layer itself derives ``drift_status`` and
+    # ``compatibility_tier`` from, and the control plane's version diff has to
+    # read the same field or the install page and the reconcile verdict would
+    # disagree about which side of the desired version a site is on.
+    runtime_version = _pick(record.get("loader_version"))
+    return ObservedStateSnapshot(
+        observed_state_id=f"rcobs_{managed_integration_ref[:12]}",
+        managed_integration_ref=managed_integration_ref,
+        tenant_id=tenant_id,
+        environment_id=environment_id,
+        observed_at=observed_at,
+        received_at=_utc_now(),
+        provenance="runtime_reported",
+        availability=availability,  # type: ignore[arg-type]
+        runtime_version=str(runtime_version) if runtime_version else None,
+        health_status=state,
+        # Names the durable authority record this snapshot was read from, so a
+        # reconcile run points at evidence rather than at an assertion. Not the
+        # fleet's ``sdk_health:`` ref — a site install has no health agent.
+        health_ref=f"sdk_site_install:{resolved_site}" if resolved_site else None,
+        reported_source_identity=resolved_site,
+        last_successful_observation_at=_iso(record.get("last_signal_at")),
     )
 
 

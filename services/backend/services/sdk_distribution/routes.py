@@ -40,6 +40,7 @@ from shared.logger.logger import get_logger, metrics
 from shared.observability import trace_request, emit_latency
 
 from services.me.key_issuance import mint_api_key
+from services.sdk_distribution.control_plane import register_site_install
 from services.sdk_distribution.install_verifier import (
     FIRST_SIGNAL_WINDOW_SECONDS,
     SIGNAL_ORDER,
@@ -214,6 +215,14 @@ async def create_site(body: SiteCreateRequest, request: Request):
     logger.info(
         f"SDK site registered: tenant={tenant.tenant_id} site={record['id']}"
     )
+    # Hand the site to the Reconciled Control Plane, when the plane is on. A
+    # site is registered here rather than on its first install signal because
+    # the site that never installs is the one worth seeing: a site with no
+    # handshake has nothing to project, so registering at first signal would
+    # leave exactly the broken installs outside the plane's view. Never raises,
+    # and returns None with the plane off (the default), so site creation does
+    # not depend on a plane this deploy may not run.
+    await register_site_install(record)
     emit_latency("sdk_site_registered", ctx.elapsed_ms())
     return APIResponse(data={"site": record}).to_dict()
 
