@@ -9,7 +9,7 @@ since_version: 0.1.0
 source_files: [services/backend/services/x402/, services/backend/services/agent/, packages/shared/events.ts, packages/shared/agentic-observability.ts]
 source_hashes:
   "packages/shared/agentic-observability.ts": "sha256:b7619ae635280e2673b8632192005e24d7f2fdfbd4bbcb8f773b2efb5be6850e"
-  "packages/shared/events.ts": "sha256:96f08a92d2a10b3555264bd76dc1e59c78ae3de63fe99665c13189201ad5c120"
+  "packages/shared/events.ts": "sha256:07628f50a0561ff5eb9ced333d6120a92182f94724eda2675172b354b6387494"
   "services/backend/services/agent/": "sha256:f256a85e04a557c38202158cdc1766ddd5da63f7221fcbd80701efe151fac799"
   "services/backend/services/x402/": "sha256:2c0d22c36af95a3f6e2bc5da01fb55a68f0be36bfac9a1bf0e87df2bc95dd87c"
 ---

@@ -9,12 +9,12 @@ since_version: 0.1.0
 source_files: [packages/shared/contracts/event-registry.json]
 canonical_owner: platform@aether
 source_hashes:
-  "packages/shared/contracts/event-registry.json": "sha256:7ae978eb7fb11c55e324fc61365baa83e63a976d2b458d101019a1fa2cf431ba"
+  "packages/shared/contracts/event-registry.json": "sha256:29f3cdefd685a1ec296a96e9f705830ef09efd7865f67a1a6c1f2e4685e17c89"
 ---
 
 # Canonical Event Model
 
-403 events across 25 families in
+416 events across 25 families in
 `packages/shared/contracts/event-registry.json` (single source of truth;
 `scripts/generate_contracts.py` emits TS/Python/doc artifacts). The
 economic-interoperability families:

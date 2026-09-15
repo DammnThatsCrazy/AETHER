@@ -21,6 +21,17 @@ export type EventType =
   | 'error'
   | 'performance'
   | 'experiment'
+  | 'sdk_loaded'
+  | 'sdk_initialized'
+  | 'sdk_init_failed'
+  | 'sdk_config_loaded'
+  | 'sdk_config_failed'
+  | 'sdk_batch_sent'
+  | 'sdk_batch_accepted'
+  | 'sdk_batch_rejected'
+  | 'sdk_version_deprecated'
+  | 'sdk_version_unsupported'
+  | 'session_started'
   // journey
   | 'journey_started'
   | 'journey_paused'
@@ -255,6 +266,8 @@ export type EventType =
   | 'rate_limit_observed'
   | 'dependency_failure_observed'
   | 'export_completed'
+  | 'sdk_heartbeat_received'
+  | 'sdk_heartbeat_failed'
   // identity_lc
   | 'signup_started'
   | 'signup_completed'
@@ -480,6 +493,17 @@ export const EVENT_FAMILY: Record<EventType, EventFamily> = {
   error: 'core',
   performance: 'core',
   experiment: 'core',
+  sdk_loaded: 'core',
+  sdk_initialized: 'core',
+  sdk_init_failed: 'core',
+  sdk_config_loaded: 'core',
+  sdk_config_failed: 'core',
+  sdk_batch_sent: 'core',
+  sdk_batch_accepted: 'core',
+  sdk_batch_rejected: 'core',
+  sdk_version_deprecated: 'core',
+  sdk_version_unsupported: 'core',
+  session_started: 'core',
   journey_started: 'journey',
   journey_paused: 'journey',
   journey_resumed: 'journey',
@@ -693,6 +717,8 @@ export const EVENT_FAMILY: Record<EventType, EventFamily> = {
   rate_limit_observed: 'server',
   dependency_failure_observed: 'server',
   export_completed: 'server',
+  sdk_heartbeat_received: 'server',
+  sdk_heartbeat_failed: 'server',
   signup_started: 'identity_lc',
   signup_completed: 'identity_lc',
   login_succeeded: 'identity_lc',
@@ -890,6 +916,17 @@ export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {
   error: 'analytics',
   performance: 'analytics',
   experiment: 'marketing',
+  sdk_loaded: 'analytics',
+  sdk_initialized: 'analytics',
+  sdk_init_failed: 'analytics',
+  sdk_config_loaded: 'analytics',
+  sdk_config_failed: 'analytics',
+  sdk_batch_sent: 'analytics',
+  sdk_batch_accepted: 'analytics',
+  sdk_batch_rejected: 'analytics',
+  sdk_version_deprecated: 'analytics',
+  sdk_version_unsupported: 'analytics',
+  session_started: 'analytics',
   journey_started: 'analytics',
   journey_paused: 'analytics',
   journey_resumed: 'analytics',
@@ -1103,6 +1140,8 @@ export const EVENT_CONSENT_PURPOSE: Record<EventType, string> = {
   rate_limit_observed: 'analytics',
   dependency_failure_observed: 'analytics',
   export_completed: 'analytics',
+  sdk_heartbeat_received: 'analytics',
+  sdk_heartbeat_failed: 'analytics',
   signup_started: 'analytics',
   signup_completed: 'analytics',
   login_succeeded: 'analytics',
@@ -1328,6 +1367,17 @@ export const EVENT_FIELD_TRUST: Partial<Record<EventType, Record<string, FieldTr
   error: { "userId": { trustClass: 'CLIENT_HINT' }, "properties": { trustClass: 'SOURCE_ASSERTED' } },
   performance: { "userId": { trustClass: 'CLIENT_HINT' }, "properties": { trustClass: 'SOURCE_ASSERTED' }, "context.page.url": { trustClass: 'OBSERVED' } },
   experiment: { "userId": { trustClass: 'CLIENT_HINT' }, "properties": { trustClass: 'SOURCE_ASSERTED' }, "context.page.url": { trustClass: 'OBSERVED' } },
+  sdk_loaded: { "properties": { trustClass: 'SOURCE_ASSERTED' } },
+  sdk_initialized: { "properties": { trustClass: 'SOURCE_ASSERTED' } },
+  sdk_init_failed: { "properties": { trustClass: 'SOURCE_ASSERTED' } },
+  sdk_config_loaded: { "properties": { trustClass: 'SOURCE_ASSERTED' } },
+  sdk_config_failed: { "properties": { trustClass: 'SOURCE_ASSERTED' } },
+  sdk_batch_sent: { "properties": { trustClass: 'SOURCE_ASSERTED' } },
+  sdk_batch_accepted: { "properties": { trustClass: 'SOURCE_ASSERTED' } },
+  sdk_batch_rejected: { "properties": { trustClass: 'SOURCE_ASSERTED' } },
+  sdk_version_deprecated: { "properties": { trustClass: 'SOURCE_ASSERTED' } },
+  sdk_version_unsupported: { "properties": { trustClass: 'SOURCE_ASSERTED' } },
+  session_started: { "properties": { trustClass: 'SOURCE_ASSERTED' } },
   journey_started: { "properties": { trustClass: 'SOURCE_ASSERTED' }, "userId": { trustClass: 'CLIENT_HINT' } },
   journey_paused: { "properties": { trustClass: 'SOURCE_ASSERTED' }, "userId": { trustClass: 'CLIENT_HINT' } },
   journey_resumed: { "properties": { trustClass: 'SOURCE_ASSERTED' }, "userId": { trustClass: 'CLIENT_HINT' } },
@@ -1423,6 +1473,8 @@ export const EVENT_FIELD_TRUST: Partial<Record<EventType, Record<string, FieldTr
   action_succeeded: { "userId": { trustClass: 'CLIENT_HINT' }, "properties": { trustClass: 'SOURCE_ASSERTED' } },
   action_failed: { "userId": { trustClass: 'CLIENT_HINT' }, "properties": { trustClass: 'SOURCE_ASSERTED' } },
   action_cancelled: { "userId": { trustClass: 'CLIENT_HINT' }, "properties": { trustClass: 'SOURCE_ASSERTED' } },
+  sdk_heartbeat_received: { "properties": { trustClass: 'SOURCE_ASSERTED' } },
+  sdk_heartbeat_failed: { "properties": { trustClass: 'SOURCE_ASSERTED' } },
   signup_started: { "properties": { trustClass: 'SOURCE_ASSERTED' }, "userId": { trustClass: 'CLIENT_HINT' } },
   signup_completed: { "properties": { trustClass: 'SOURCE_ASSERTED' }, "userId": { trustClass: 'CLIENT_HINT' } },
   login_succeeded: { "properties": { trustClass: 'SOURCE_ASSERTED' }, "userId": { trustClass: 'CLIENT_HINT' } },
@@ -1459,6 +1511,17 @@ export const EVENT_SEMANTIC_LEVEL: Record<EventType, SemanticLevel> = {
   error: 'A',
   performance: 'A',
   experiment: 'A',
+  sdk_loaded: 'A',
+  sdk_initialized: 'A',
+  sdk_init_failed: 'A',
+  sdk_config_loaded: 'A',
+  sdk_config_failed: 'A',
+  sdk_batch_sent: 'A',
+  sdk_batch_accepted: 'A',
+  sdk_batch_rejected: 'A',
+  sdk_version_deprecated: 'A',
+  sdk_version_unsupported: 'A',
+  session_started: 'A',
   journey_started: 'B',
   journey_paused: 'B',
   journey_resumed: 'B',
@@ -1672,6 +1735,8 @@ export const EVENT_SEMANTIC_LEVEL: Record<EventType, SemanticLevel> = {
   rate_limit_observed: 'B',
   dependency_failure_observed: 'B',
   export_completed: 'B',
+  sdk_heartbeat_received: 'A',
+  sdk_heartbeat_failed: 'A',
   signup_started: 'B',
   signup_completed: 'B',
   login_succeeded: 'B',
@@ -1880,6 +1945,17 @@ export const SDK_EMITTABLE_EVENT_TYPES: readonly EventType[] = [
   'error',
   'performance',
   'experiment',
+  'sdk_loaded',
+  'sdk_initialized',
+  'sdk_init_failed',
+  'sdk_config_loaded',
+  'sdk_config_failed',
+  'sdk_batch_sent',
+  'sdk_batch_accepted',
+  'sdk_batch_rejected',
+  'sdk_version_deprecated',
+  'sdk_version_unsupported',
+  'session_started',
   'journey_started',
   'journey_paused',
   'journey_resumed',

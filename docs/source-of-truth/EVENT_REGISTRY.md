@@ -10,7 +10,7 @@ since_version: 0.1.0
 # Event Registry
 
 **Canonical source of truth:** `packages/shared/contracts/event-registry.json`  
-(403 event types across 25 families, contract v8.12.0, schema v2.2.0)  
+(416 event types across 25 families, contract v0.1.0-alpha.0, schema v2.2.0)  
 **Generated artifacts:** `packages/shared/events.ts` (TypeScript — `EventType`,
 `EventFamily`, `EVENT_FAMILY`, `EVENT_CONSENT_PURPOSE`, field-trust / semantic-level
 maps) and
@@ -19,23 +19,24 @@ maps) and
 (`Aether.swift` / `Aether.kt`) and the web consent map.  
 **Regenerate with:** `python scripts/generate_contracts.py`  
 **Authoritative per-event reference:** `docs/_generated/event-registry-table.md`
-— every one of the 403 types with **Family | Required Purposes | Privacy Class |
+— every one of the 416 types with **Family | Required Purposes | Privacy Class |
 Retention Class | Description** (deprecated events are marked).
 
 Every `EventType` the SDK is permitted to emit must appear in the JSON registry.
 Emitting anything outside this list will be dropped by the backend validator.
-Of the 403 types, 399 are `active` and 4 are `deprecated` (kept for backward
-compatibility); 153 are client-SDK-emittable (`sdkEmitable: true`), the rest are
-backend / observation-plane events (see [Families](#event-families-contract-v8120)).
+Of the 416 types, 412 are `active` and 4 are `deprecated` (kept for backward
+compatibility); 164 are client-SDK-emittable (`sdkEmitable: true`), the rest are
+backend / observation-plane events (see
+[Families](#event-families-contract-v010-alpha0)).
 
-## Event families (contract v8.12.0)
+## Event families (contract v0.1.0-alpha.0)
 
 `Count` is registry events; `SDK` is how many of them are `sdkEmitable: true`;
 `Consent` is the required purpose(s) on the family's events.
 
 | Family | Count | SDK | Consent | Covers |
 |---|---|---|---|---|
-| `core` | 7 | 7 | analytics (`experiment` → marketing) | track, page, screen, heartbeat, error, performance, experiment |
+| `core` | 18 | 18 | analytics (`experiment` → marketing) | track, page, screen, heartbeat, error, performance, experiment, session_started, `sdk_*` install lifecycle |
 | `journey` | 15 | 12 | analytics | journey lifecycle + navigation/attribution (deep link, QR/NFC, app clip, install attribution) |
 | `identity` | 1 | 1 | analytics | identify |
 | `consent` | 1 | 1 | — (always allowed) | consent grant/revoke |
@@ -50,7 +51,7 @@ backend / observation-plane events (see [Families](#event-families-contract-v812
 | `ecommerce` | 23 | 23 | commerce | product / cart / checkout / order / subscription / invoice |
 | `friction` | 12 | 12 | analytics | dead/rage click, form, scroll depth, backtrack |
 | `interaction` | 12 | 12 | analytics | surface/UI interaction, feature + action lifecycle |
-| `server` | 11 | — | analytics | API / webhook / job / connector observation |
+| `server` | 13 | — | analytics | API / webhook / job / connector observation, SDK heartbeat receipt |
 | `identity_lc` | 15 | 15 | analytics | signup / login / logout / MFA / device / account recovery |
 | `web3_lc` | 8 | — | web3 | on-chain transaction lifecycle observation |
 | `comms` | 23 | — | marketing (email, unsubscribe) + analytics (notification, message, support) | notification / email / message / support-case delivery |
@@ -66,7 +67,7 @@ Two of the "SDK-emittable" families are only partially client-emittable:
 are backend-derived (`sdkEmitable: false`), as is `reward_action_queued` (reward
 actions are queued by the backend). The generated table is authoritative for the
 full per-type metadata — required purposes, privacy class, retention class, and
-status — on every one of the 403 events; do not hand-maintain that enumeration
+status — on every one of the 416 events; do not hand-maintain that enumeration
 in prose.
 
 Privacy classes in use: `behavioral`, `identity`, `governance`, `financial`,
@@ -112,7 +113,7 @@ behavior.
 
 | Family | Types | Consent |
 |---|---|---|
-| `core` | `track` (`aether.track()`), `page` (+SPA hooks), `screen`, `heartbeat`, `error`, `performance` → `analytics`; `experiment` → `marketing` | analytics / marketing |
+| `core` | `track` (`aether.track()`), `page` (+SPA hooks), `screen`, `heartbeat`, `error`, `performance`, `session_started`, `sdk_*` → `analytics`; `experiment` → `marketing` | analytics / marketing |
 | `identity` | `identify` (`aether.hydrateIdentity()`) | analytics |
 | `consent` | `consent` (`aether.consent.grant/revoke`) | always allowed |
 | `commerce` | `conversion`, `payment_initiated/completed/failed`, `approval_requested/resolved`, `entitlement_granted/revoked`, `access_granted/denied` | commerce |
@@ -122,6 +123,35 @@ All `payment_*` events carry a `rail` field so a single code path handles fiat /
 stripe / invoice / onchain / x402 / internal_credit. `conversion` is gated on
 `marketing`, not `commerce` — a click is a marketing observation, never a
 commerce fact on its own.
+
+## SDK install observability (family: `core` + `server`)
+
+These events make an SDK install self-reporting, so "is the SDK working on my
+site?" is answerable from the event stream instead of inferred from an absence
+of traffic. They do not replace the canonical analytics events above:
+`page_viewed` / `route_changed` / `error_observed` / `performance_observed` /
+`link_clicked` are **not** separate types — they are the existing `page`,
+`error`, `performance`, and `interaction_observed` events.
+
+Client-emitted (`family: core`, `sdkEmitable: true`, `analytics`):
+
+| Group | Types |
+|---|---|
+| Load / init | `sdk_loaded`, `sdk_initialized`, `sdk_init_failed` |
+| Remote config / version manifest | `sdk_config_loaded`, `sdk_config_failed` |
+| Transport | `sdk_batch_sent`, `sdk_batch_accepted`, `sdk_batch_rejected` |
+| Compatibility | `sdk_version_deprecated`, `sdk_version_unsupported` |
+| Session | `session_started` |
+
+Server-observed (`family: server`, `sdkEmitable: false`): `sdk_heartbeat_received`,
+`sdk_heartbeat_failed`. The heartbeat is derived server-side from the first
+accepted ingestion for an installation — a client never reports its own
+heartbeat, so a broken or blocked SDK still shows as silent rather than falsely
+healthy.
+
+All carry `privacyClass: behavioral` and `retentionClass: standard_30d`, except
+`session_started` (`standard_90d`). Emitting them requires `analytics` consent
+like the rest of the `core` family.
 
 ## Agent (family: `agent`) — agent / financial_activity
 

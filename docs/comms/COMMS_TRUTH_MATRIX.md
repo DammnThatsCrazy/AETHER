@@ -8,11 +8,11 @@ status: experimental
 since_version: 0.1.0
 source_files: [services/backend/services/silver/dispatcher.py, services/backend/services/silver/projectors/touchpoint_projector.py, services/backend/services/measurement/silver_adapters.py, services/backend/services/integrations/connectors/adapters.py, packages/shared/contracts/event-registry.json]
 source_hashes:
+  "packages/shared/contracts/event-registry.json": "sha256:29f3cdefd685a1ec296a96e9f705830ef09efd7865f67a1a6c1f2e4685e17c89"
   "services/backend/services/integrations/connectors/adapters.py": "sha256:dc1b09adfa1eecb2690e47cfdf364b7efaa04ec0e8664f46a513eaf0f7213459"
   "services/backend/services/measurement/silver_adapters.py": "sha256:1488ee3e52430dcc49ac07a280b54f1297434c8d79bfe1c084e4aa3fd862be92"
   "services/backend/services/silver/dispatcher.py": "sha256:ea6279d0a1242887281ced91e1cb05bc8d94eb4c978f10a6e8615fb4d565f98f"
   "services/backend/services/silver/projectors/touchpoint_projector.py": "sha256:2bb148c4ac0e5a2584d19227c70823c9211194d33f3246b8d543bfeb9ecd85b6"
-  "packages/shared/contracts/event-registry.json": "sha256:7ae978eb7fb11c55e324fc61365baa83e63a976d2b458d101019a1fa2cf431ba"
 ---
 
 # Communications Intelligence — Repository Truth Matrix (Phase 0)
