@@ -22,7 +22,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:6471c3a51546066ec81ad8007bde86a1b35c1f5226c463af759dffa9ecfdda7e"
+  ".github/workflows/": "sha256:960f0dc79fc14926ca8f00c0a86565d3dbeb9c728cdc82efeedef76218e4a52b"
   "cicd/aether-cicd/README.md": "sha256:07bc236b744bd0c54bae8b6fa661beba9d3767a3300470814f071a119f8244ee"
   "cicd/aether-cicd/main.py": "sha256:8027fb1fcb5e4a1aeb6428224fe0ca9f7756df0aaca5f39e7e84bb6c9c85feb9"
   "cicd/aether-cicd/quality_gates/": "sha256:2cc72d40cd7c324e686271c5ea2c90c2ccb15c4ebe0435b0589844663dd2e436"
