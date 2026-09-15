@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:3810fe646f04c35b070f226d649c92f1c71d49bc7ef13fca545c7291ce186201"
+  "services/backend/services/": "sha256:49df01db74bd3450661418228a30fafa04ee26b5e1a9740a37a1d8f3c7084f5b"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -309,6 +309,14 @@ broken forever is a site nobody reads. The response also carries
 cache serving an unexpected bundle is distinguishable from a healthy install.
 `age_seconds` is reported rather than thresholded: these are one-shot install
 signals, not heartbeats, and an install from months ago is still a correct one.
+
+A signal is attributed to the site the *request* authenticated as, not the one
+its body claims. The body's `siteId` is written by the caller, and a publishable
+key is public in page HTML, so a signal naming any other site is refused and
+counted as `sdk_install_signal_site_mismatch_total` rather than projected —
+without that, a key copied off one page could report install state for another
+of the tenant's sites. Requests authenticating with a secret key declare no site
+and are not confined; those credentials are tenant-wide already.
 
 Site installs never send heartbeats, so they are not fleet members and do not
 appear in `/v1/diagnostics/sdk/fleet` or the silent-SDK detector. A verifier

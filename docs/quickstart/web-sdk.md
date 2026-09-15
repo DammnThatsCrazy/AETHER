@@ -22,27 +22,40 @@ minutes.
 
 ## Install
 
+Register a site in **Settings → SDK Sites** and mint a publishable key for it,
+then paste the tag the platform renders:
+
+```html
+<script src="https://cdn.aether.network/v1.js"
+        data-key="pk_YOUR_PUBLISHABLE_KEY"
+        data-site="site_YOUR_SITE_ID"
+        async></script>
+```
+
+That is the whole install — the loader reads the attributes and initialises the
+SDK itself, so there is no second step to forget. Use a **publishable** key
+(`pk_…`) in page HTML and nowhere else; it is visible to anyone who views
+source, and the site binding is what confines it to one property. The loader
+warns if a secret key is pasted there instead.
+
+Prefer a build-time dependency? Install from npm:
+
 ```bash
 npm install @aether/web
 ```
 
-A CDN build is also available if you'd rather not add a build-time
-dependency:
-
-```html
-<script src="https://cdn.aether.io/sdk/v8/aether.min.js"></script>
-```
-
 ## Initialize
 
-Create a write-scoped API key in **Settings → API Keys**, then initialize the
-SDK as early as possible on the page — typically in your app's entry point:
+The tag above initialises the SDK for you. If you installed from npm — or want
+to configure the SDK from JavaScript rather than attributes — call `init()`
+yourself, as early as possible on the page:
 
 ```typescript
 import aether from '@aether/web';
 
 aether.init({
-  apiKey: 'YOUR_WRITE_KEY',
+  apiKey: 'pk_YOUR_PUBLISHABLE_KEY',
+  siteId: 'site_YOUR_SITE_ID',
   environment: 'production',
   modules: {
     ecommerce: true,
@@ -56,11 +69,14 @@ aether.init({
 });
 ```
 
-`init()` requires only `apiKey`. Everything else — page-view tracking,
-auto-discovery of clicks, performance metrics — is on by default; pass
-`modules: { <name>: false }` to disable a module, or `true` to opt into an
-off-by-default one (`heatmaps`, `funnels`, `featureFlags`, wallet tracking for
-each supported chain family).
+`init()` requires `apiKey`, plus `siteId` whenever that key is publishable —
+a publishable key is scoped to the sites it was minted for, and a batch that
+does not declare one is refused rather than accepted tenant-wide. The tag
+install sets both attributes for you, so this only comes up on the npm path.
+Everything else — page-view tracking, auto-discovery of clicks, performance
+metrics — is on by default; pass `modules: { <name>: false }` to disable a
+module, or `true` to opt into an off-by-default one (`heatmaps`, `funnels`,
+`featureFlags`, wallet tracking for each supported chain family).
 
 The SDK fires an initial `page` event automatically and re-fires on every SPA
 route change — no manual `pageView()` call is required for a standard React,

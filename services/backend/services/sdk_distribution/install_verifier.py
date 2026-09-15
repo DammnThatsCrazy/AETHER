@@ -195,7 +195,9 @@ def _status_after(last: dict[str, Any], signals: dict) -> str:
 
 
 async def record_install_signals(
-    tenant_id: str, normalized_events: Sequence[dict[str, Any]]
+    tenant_id: str,
+    normalized_events: Sequence[dict[str, Any]],
+    declared_site: Optional[str] = None,
 ) -> int:
     """Project a batch's install signals onto their sites. Returns how many sites.
 
@@ -203,12 +205,41 @@ async def record_install_signals(
     must not become a failed request for a tenant whose events are already
     safe. The cost of a lost projection is one stale verifier reading, against
     the cost of a 503 on real ingestion.
+
+    ``declared_site`` is the site the request authenticated as, already checked
+    against the credential's binding by the route policy. A signal naming a
+    different site is refused rather than projected, and this is load-bearing:
+    ``properties.siteId`` comes from the event body, which the caller writes. A
+    publishable key is public in page HTML, so without this check a key copied
+    off one customer's page could report install state for another of the
+    tenant's sites — turning the one field that exists to be trustworthy into
+    one any page's reader can forge. When no site was declared the credential is
+    tenant-wide by design (a secret key), and no confinement applies.
     """
     facts: dict[str, list[dict[str, Any]]] = {}
+    mismatched = 0
     for normalized in normalized_events:
         fact = install_signal(normalized)
-        if fact is not None:
-            facts.setdefault(fact["site_id"], []).append(fact)
+        if fact is None:
+            continue
+        if declared_site and fact["site_id"] != declared_site:
+            mismatched += 1
+            continue
+        facts.setdefault(fact["site_id"], []).append(fact)
+
+    if mismatched:
+        logger.warning(
+            "Install signal(s) named a site the request did not authenticate as: "
+            "tenant=%s declared=%s refused=%d",
+            tenant_id,
+            declared_site,
+            mismatched,
+        )
+        metrics.increment(
+            "sdk_install_signal_site_mismatch_total",
+            value=mismatched,
+            labels={"tenant_id": tenant_id},
+        )
 
     if not facts:
         # The overwhelmingly common case: an ordinary batch of tenant events.
@@ -330,9 +361,15 @@ def _age_seconds(occurred_at: Optional[str], now) -> Optional[float]:
 
 
 def schedule_install_projection(
-    tenant_id: str, normalized_events: Sequence[dict[str, Any]]
+    tenant_id: str,
+    normalized_events: Sequence[dict[str, Any]],
+    declared_site: Optional[str] = None,
 ) -> Optional["asyncio.Task"]:
     """Run ``record_install_signals`` off the request path. Returns the task, or None.
+
+    ``declared_site`` is threaded through from the request rather than read here,
+    because the request is gone by the time the task runs — see
+    ``record_install_signals`` for what it confines.
 
     Fire-and-forget, for the same reason identity resolution is: the events are
     already durable in Bronze by the time this is called, so making the tenant's
@@ -356,6 +393,8 @@ def schedule_install_projection(
         if exc:  # pragma: no cover - record_install_signals swallows its own
             logger.error("Install projection task failed tenant=%s: %s", tenant, exc)
 
-    task = asyncio.create_task(record_install_signals(tenant_id, normalized_events))
+    task = asyncio.create_task(
+        record_install_signals(tenant_id, normalized_events, declared_site)
+    )
     task.add_done_callback(_log_task_exc)
     return task

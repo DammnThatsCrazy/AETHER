@@ -18,7 +18,7 @@ source_hashes:
   "AGENTS.md": "sha256:122b4db9bed9f32963471c04f5c56dbf418af5751aaf0208a4afba563769467e"
   "Makefile": "sha256:0e48896e53bb44e0f6a81db0581d1a3df23063aabbfb94029b7dcbe464778afd"
   "docs/source-of-truth/REPO_CONSISTENCY_OWNERSHIP.md": "sha256:3973482780754878fd56b1d7018d86bc1c48c9b4e2aa701a7ddb8336c3d0b924"
-  "scripts/repo_doctor.py": "sha256:9216777e24fccb1a21a6d5b0c3c322bca22a8ab57e5e8e5f0d0bd5adb10d120c"
+  "scripts/repo_doctor.py": "sha256:db62eabbc9f022a623e73afb328e6b3887be6ed410bef3be4eeef955d32841e8"
 ---
 
 # Contributing

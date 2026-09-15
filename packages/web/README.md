@@ -1,7 +1,7 @@
 # @aether/web
 
 <!-- Badges -->
-![Version](https://img.shields.io/badge/version-8.7.1-blue)
+![Version](https://img.shields.io/badge/version-0.1.0--alpha.0-blue)
 ![Contract](https://img.shields.io/badge/contract-unified--hybrid--v1-brightgreen)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6)
 ![Build](https://img.shields.io/badge/build-Rollup-EC4A3F)
@@ -60,25 +60,44 @@ yarn add @aether/web
 pnpm add @aether/web
 ```
 
-### CDN (UMD -- static version)
+### CDN (recommended -- one tag, no build step)
+
+Register a site in **Settings → SDK Sites**, mint a publishable key for it, and
+paste the tag the platform renders:
 
 ```html
-<script src="https://cdn.aether.network/sdk/v8/aether.umd.js"></script>
-<script>
-  const aether = Aether.default;
-  aether.init({ apiKey: 'your-key' });
-</script>
+<script src="https://cdn.aether.network/v1.js"
+        data-key="pk_your_publishable_key"
+        data-site="site_your_site_id"
+        async></script>
 ```
 
-### CDN Auto-Loader (recommended)
+That is the whole install. The loader (~3KB) installs a capture stub
+synchronously, reads the attributes, fetches the SDK bundle, initialises it, and
+replays everything the stub captured — so there is no follow-up `init()` call to
+forget, and code running on the next line after the tag is still captured.
 
-Use the auto-loader for zero-maintenance SDK updates. The loader (~3KB) caches the full SDK bundle in localStorage and automatically fetches new versions in the background:
+`v1.js` is a stable URL: it does not change when the SDK does, so the tag never
+needs re-editing. The loader resolves the current bundle through the signed
+release manifest and verifies the fetched bytes against its `sha256` before
+evaluating them.
+
+Use a **publishable** key (`pk_…`) here and nowhere else. It is visible in page
+HTML, and its site binding is what confines it to one property. A secret key
+(`ak_…`) belongs on your server; the loader warns if one is pasted into a tag.
+
+To confirm the tag came up, read `GET /v1/sdk/sites/{site_id}/heartbeat`.
+
+### Driving the loader yourself
+
+The `AetherLoader` class is still exported for callers who want to resolve and
+install the bundle under their own control:
 
 ```html
-<script src="https://cdn.aether.network/sdk/v8/loader.js"></script>
+<script src="https://cdn.aether.network/v1.js"></script>
 <script>
   AetherLoader.load().then(aether => {
-    aether.init({ apiKey: 'your-key' });
+    aether.init({ apiKey: 'pk_your_publishable_key', siteId: 'site_your_site_id' });
   });
 </script>
 ```
@@ -88,7 +107,7 @@ Use the auto-loader for zero-maintenance SDK updates. The loader (~3KB) caches t
 | Option | Default | Description |
 |---|---|---|
 | `cacheTTL` | `3600000` (1 hour) | How long to use the cached bundle before checking for updates (ms) |
-| `version` | `'latest'` | Pin to a specific version (e.g. `'5.1.0'`) or use `'latest'` |
+| `version` | `'latest'` | Pin to a specific version (e.g. `'0.1.0'`) or use `'latest'` |
 | `timeout` | `10000` | Network timeout for fetching the SDK bundle (ms) |
 | `onReady` | -- | Callback invoked when the SDK is loaded: `(sdk) => void` |
 | `onError` | -- | Callback invoked on load failure: `(error) => void` |
@@ -108,7 +127,8 @@ import aether from '@aether/web';
 
 // Initialize with your API key
 aether.init({
-  apiKey: 'your-api-key',
+  apiKey: 'pk_your_publishable_key',
+  siteId: 'site_your_site_id',
   environment: 'production',
 });
 
@@ -132,13 +152,17 @@ aether.conversion('purchase', 49.99, { orderId: 'ORD-456' });
 
 ## Configuration
 
-Pass an `AetherConfig` object to `aether.init()`. Only `apiKey` is required.
+Pass an `AetherConfig` object to `aether.init()`. `apiKey` is required, and
+`siteId` is required alongside it whenever that key is publishable — a
+publishable key is scoped to the sites it was minted for, and a batch that does
+not declare one is refused rather than accepted tenant-wide.
 
 ```typescript
 aether.init({
-  apiKey: 'your-api-key',
+  apiKey: 'pk_your_publishable_key',
+  siteId: 'site_your_site_id',     // required alongside a publishable key
   environment: 'production',       // 'production' | 'staging' | 'development'
-  endpoint: 'https://api.aether.network', // custom endpoint
+  endpoint: 'https://api.aether.io', // custom endpoint
   debug: false,
 
   modules: {

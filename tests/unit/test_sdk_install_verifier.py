@@ -48,6 +48,7 @@ from services.sdk_distribution.install_verifier import (  # noqa: E402
     STATE_LOADED,
     describe_site_install,
     install_signal,
+    record_install_signals,
     merge_site_install,
     schedule_install_projection,
 )
@@ -170,6 +171,27 @@ def test_a_later_failure_does_not_erase_what_the_load_reported():
 
     assert failed["install_mode"] == "cdn_auto"
     assert failed["loader_version"] == LOADER_VERSION
+
+
+def test_a_signal_for_a_site_the_request_did_not_authenticate_as_is_refused():
+    """`properties.siteId` is written by the caller, so it cannot be the only
+    thing deciding which site a signal belongs to.
+
+    A publishable key ships in page HTML. Without this, a key copied off one
+    customer's page could post a signal naming a *different* site of the same
+    tenant and forge that site's install state — reporting a broken install as
+    live, or a working one as failed. The request's declared site is validated
+    against the credential's binding by the route policy before it gets here, so
+    it is the trustworthy half of the pair.
+    """
+    other = _event(SIGNAL_LOADED, siteId="some_other_site")
+
+    assert _run(record_install_signals("t1", [other], declared_site=SITE)) == 0
+    assert _run(record_install_signals("t1", [other], declared_site="some_other_site")) == 1
+
+    # No declared site means a tenant-wide credential (a secret key), which is
+    # already authorised for every site the tenant owns.
+    assert _run(record_install_signals("t1", [other])) == 1
 
 
 def test_a_site_that_never_signalled_says_so():

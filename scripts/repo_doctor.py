@@ -871,6 +871,28 @@ def main(argv: Sequence[str] | None = None) -> None:
         ),
     )
     run(
+        [sys.executable, "scripts/validate_sdk_distribution_domains.py"],
+        name="SDK distribution domains (loader URL, API origin, install examples)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "keep the loader URL and the API origin on separate hosts, keep the loader "
+            "path unversioned, and update every install example so the tag a developer "
+            "copies names the canonical loader"
+        ),
+    )
+    run(
+        [sys.executable, "scripts/validate_sdk_first_heartbeat_contract.py"],
+        name="SDK first-heartbeat contract (loader signals vs install verifier)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "keep the loader's InstallSignal union and the verifier's INSTALL_SIGNAL_TYPES "
+            "in agreement, keep every property the verifier reads in the loader's signal "
+            "payload, and keep the verifier's read endpoints registered"
+        ),
+    )
+    run(
         [sys.executable, "scripts/validate_consistency_ownership.py"],
         name="Source-of-truth ownership map enforcement",
         results=results,
