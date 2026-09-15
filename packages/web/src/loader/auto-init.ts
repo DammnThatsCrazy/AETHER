@@ -29,7 +29,12 @@ export interface AutoInitConfig {
 }
 
 export const DEFAULT_AUTO_INIT: Omit<AutoInitConfig, 'sdkKey' | 'siteId'> = {
-  endpoint: 'https://api.aether.network',
+  // Canonical ingestion host, shared with the SDK's own DEFAULT_ENDPOINT
+  // (src/index.ts) and the other SDKs. The CDN lives on a different domain
+  // (cdn.aether.network) — do not "unify" these two; they are separate
+  // origins by design, and the API host is bedrock in
+  // docs/productization/sdk-universal-ingestion-alignment/TARGET_ARCHITECTURE.md.
+  endpoint: 'https://api.aether.io',
   autocapture: 'safe',
   consentMode: 'deferred',
   debug: false,
