@@ -841,6 +841,16 @@ def main(argv: Sequence[str] | None = None) -> None:
         remediation="align SDK versions/endpoints/public exports/docs, then rerun validation",
     )
     run(
+        [sys.executable, "scripts/validate_sdk_distribution_artifacts.py"],
+        name="SDK distribution artifacts (@aether/web build wiring and declared outputs)",
+        results=results,
+        stop_on_failure=stop,
+        remediation=(
+            "wire every rollup config into the package build, keep package.json entry points "
+            "pointing at declared outputs, and guard new exports in verify-web-sdk-package.mjs"
+        ),
+    )
+    run(
         [sys.executable, "scripts/validate_consistency_ownership.py"],
         name="Source-of-truth ownership map enforcement",
         results=results,

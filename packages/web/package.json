@@ -32,7 +32,9 @@
     "src"
   ],
   "scripts": {
-    "build": "rollup -c rollup.config.mjs && tsc --emitDeclarationOnly",
+    "build": "rollup -c rollup.config.mjs && rollup -c rollup.loader.mjs && tsc --emitDeclarationOnly",
+    "verify:artifacts": "node scripts/verify-web-sdk-package.mjs",
+    "prepack": "npm run build && npm run verify:artifacts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit"
