@@ -40,12 +40,13 @@ This example is a minimal Expo/React Native app that mirrors the proof harness i
 
 ## Environment
 
-Create two env files:
+Create two env files (or copy the `.example` templates):
 
 - **`.env.local`** — local development keys and endpoint.
 - **`.env.staging`** — staging keys and endpoint.
 
-These are consumed by the SDK config at init time. See the `.env.local` and `.env.staging` files in this directory for the expected keys.
+- **`.env.local`** — local development keys and endpoint (see `.env.local.example`).
+- **`.env.staging`** — staging keys and endpoint (see `.env.staging.example`).
 
 ## Related
 

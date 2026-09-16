@@ -45,6 +45,8 @@ class HeartbeatRequest(BaseModel):
     wallet_connected: bool = Field(default=False)
     config_version: str = Field(default="0")
     rollout_cohort: str = Field(default="default")
+    manifest_status: str = Field(default="healthy")
+    dropped_event_counts: dict[str, int] = Field(default_factory=dict)
 
 
 @router.post("/heartbeat")
@@ -75,6 +77,8 @@ async def ingest_heartbeat(body: HeartbeatRequest, request: Request):
         wallet_connected=body.wallet_connected,
         config_version=body.config_version,
         rollout_cohort=body.rollout_cohort,
+        manifest_status=body.manifest_status,
+        dropped_event_counts=body.dropped_event_counts,
     )
 
     svc = get_sdk_health_service()

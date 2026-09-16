@@ -1,3 +1,12 @@
+---
+title: Responsiveness Spine
+slug: responsiveness-spine/readme
+section: architecture
+visibility: P
+audience: [dev-senior, architect]
+status: beta
+---
+
 # Responsiveness & Time-to-Value Spine
 
 > **Slice 6 of 6 — documentation.** Mirrors `services/backend/services/responsiveness/` and the integration instrumentation already committed on `feature/responsiveness-spine`.

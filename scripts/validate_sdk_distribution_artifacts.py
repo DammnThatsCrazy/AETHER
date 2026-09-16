@@ -153,8 +153,16 @@ else:
             f'{", ".join(sorted(unguarded))}'
         )
 
-# --- 6. No stale CDN major paths left in SDK source -------------------------
-for rel in [f'{WEB}/src/loader/aether-loader.ts', f'{WEB}/rollup.loader.mjs', f'{WEB}/README.md']:
+# --- 6. No stale CDN major paths left in SDK source or CICD -------------------------
+# The CICD tree (manifest_publisher.py, sdk_release.py) is the legacy distribution
+# layer. It must not hold a stale sdk/v5/loader.js path any more than the web
+# package does — both sides publish to the same canonical origin.
+cicd_python = [
+    'cicd/aether-cicd/stages/sdk/manifest_publisher.py',
+    'cicd/aether-cicd/stages/sdk/sdk_release.py',
+    'cicd/aether-cicd/README.md',
+]
+for rel in [f'{WEB}/src/loader/aether-loader.ts', f'{WEB}/rollup.loader.mjs', f'{WEB}/README.md'] + cicd_python:
     body = text(rel)
     for stale in re.findall(r'sdk/v(\d+)/loader\.(?:js|mjs)', body):
         if stale == '5':

@@ -1,3 +1,12 @@
+---
+title: Activation Milestones
+slug: responsiveness-spine/activation-milestones
+section: architecture
+visibility: P
+audience: [dev-senior, architect]
+status: beta
+---
+
 # Activation Milestones — Responsiveness & Time-to-Value Spine
 
 > Domain detail for `ActivationMilestone` (models.py) and the instrumentation that records it.

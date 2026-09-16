@@ -44,6 +44,7 @@ async def get_manifest(
     sdk_id: str = "",
     sdk_version: str = "",
     cohort: str = "default",
+    site_id: str = "",
 ):
     """
     Return the active signed manifest for this SDK instance.
@@ -51,11 +52,28 @@ async def get_manifest(
     SDK clients call this endpoint on startup and after re-initialization.
     The manifest includes feature flags, endpoint overrides, schema version,
     and the minimum supported SDK version.
+
+    Publishable keys (pk_*) may call this endpoint. The response is scoped to
+    the site declared in the site_id parameter (or the X-Aether-Site header),
+    ensuring a copied key cannot discover another site's configuration.
     """
     ctx = trace_request(request, service="sdk_config")
     tenant = request.state.tenant
 
     svc = get_sdk_config_service()
+
+    # Resolve site scope for publishable keys
+    declared_site = site_id or request.headers.get("X-Aether-Site", "")
+    credential_class = getattr(tenant, "credential_class", "legacy")
+    if credential_class == "publishable_key" and declared_site:
+        # Publishable keys are site-scoped — only return manifest if the
+        # declared site is among the key's bound sites.
+        bound_sites = getattr(tenant, "site_ids", None) or []
+        if declared_site not in bound_sites:
+            emit_latency("sdk_manifest_forbidden_site", ctx.elapsed_ms())
+            from shared.common.common import ForbiddenError
+            raise ForbiddenError("ROUTE_POLICY_SITE_MISMATCH")
+
     manifest = await svc.get_manifest(
         tenant_id=tenant.tenant_id,
         sdk_id=sdk_id,

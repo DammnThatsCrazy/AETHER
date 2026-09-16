@@ -58,9 +58,12 @@ console.log('[server-node] SDK initialized');
 /** Step 1 — heartbeat: proves the server SDK is live and the backend is reachable. */
 async function stepHeartbeat() {
   console.log('[journey] → heartbeat');
-  sdk.observe('heartbeat', {
-    source: 'examples-server-node',
-    sdkVersion: '0.1.0-alpha.0',
+  sdk.track({
+    type: 'heartbeat',
+    properties: {
+      source: 'examples-server-node',
+      sdkVersion: '0.1.0-alpha.0',
+    },
   });
   console.log('[journey] ✓ heartbeat queued');
 }
@@ -68,11 +71,15 @@ async function stepHeartbeat() {
 /** Step 2 — track a custom event: general-purpose behavioral signal. */
 async function stepTrackEvent() {
   console.log('[journey] → track event');
-  sdk.observe('api_request_observed', {
-    source: 'examples-server-node',
-    endpoint: '/api/v1/users',
-    method: 'GET',
-    status: 200,
+  sdk.track({
+    type: 'api_request_observed',
+    properties: {
+      source: 'examples-server-node',
+      method: 'GET',
+      path: '/api/v1/users',
+      statusCode: 200,
+      durationMs: 42,
+    },
   });
   console.log('[journey] ✓ event queued');
 }
@@ -80,14 +87,17 @@ async function stepTrackEvent() {
 /** Step 3 — commerce event: revenue-bearing signal for Kyber/Aether visibility. */
 async function stepCommerce() {
   console.log('[journey] → commerce event');
-  sdk.observe('order_completed', {
-    source: 'examples-server-node',
-    revenue: 29.99,
-    currency: 'USD',
-    orderId: `ord_${Date.now()}`,
-    items: [
-      { sku: 'SKU-001', name: 'Demo Product', price: 29.99, quantity: 1 },
-    ],
+  sdk.track({
+    type: 'order_completed',
+    properties: {
+      source: 'examples-server-node',
+      revenue: 29.99,
+      currency: 'USD',
+      orderId: `ord_${Date.now()}`,
+      items: [
+        { sku: 'SKU-001', name: 'Demo Product', price: 29.99, quantity: 1 },
+      ],
+    },
   });
   console.log('[journey] ✓ commerce event queued — $29.99 USD');
 }

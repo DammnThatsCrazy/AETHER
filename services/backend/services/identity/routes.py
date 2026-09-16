@@ -41,6 +41,7 @@ from repositories.repos import IdentityRepository
 
 from .audit import IdentityAuditWriter
 from .conflicts import IdentityConflictManager
+from .explainability import AdminIdentityService, IdentityExplainabilityService
 from .exceptions import CrossTenantError, UnauthorizedOperatorAction
 from .graph_writer import IdentityGraphWriter
 from .metrics import IdentityMetrics
@@ -48,6 +49,8 @@ from .repository import IdentityResolutionRepository
 from .resolver import IdentityResolutionService
 from .schemas import (
     IdentityConflictResponse,
+    IdentityDecisionDetailsResponse,
+    IdentityExplanationResponse,
     IdentityFragmentSplitRequest,
     IdentityFragmentSplitResponse,
     IdentityGraphResponse,
@@ -557,6 +560,197 @@ async def identity_health(request: Request) -> dict:
         blocked_fingerprint_only=health_data.get("blocked_fingerprint_only", 0),
         tenant_id=tenant.tenant_id,
     ).model_dump()).to_dict()
+
+
+# ── Profile Identity Explainability (PR 8, blueprint §13.2) ─────────────────────
+
+router_admin = APIRouter(prefix="/v1/admin/identity", tags=["Identity Admin"])
+
+
+def _get_explainability_service() -> IdentityExplainabilityService:
+    return IdentityExplainabilityService()
+
+
+def _get_admin_identity_service() -> AdminIdentityService:
+    return AdminIdentityService(
+        resolver=_get_resolver(),
+        graph_versioner=None,  # GraphVersioner wired via merge_ledger in PR 4
+    )
+
+
+@router.get("/profiles/{pid}/identity/explanation", response_model=IdentityExplanationResponse)
+async def get_profile_identity_explanation(
+    pid: str,
+    request: Request,
+    explainability: IdentityExplainabilityService = Depends(_get_explainability_service),
+) -> dict:
+    """Explain why a profile exists: sources, evidence, confidence, graph version.
+
+    Returns the §13.2 explainability payload. Gated by
+    ``identity_explainability_enabled``.
+    """
+    from config.settings import settings
+
+    if not getattr(settings, "identity_explainability_enabled", False):
+        raise NotFoundError("Identity explainability is not enabled for this environment")
+
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+
+    explanation = await explainability.get_profile_identity_explanation(
+        profile_id=pid,
+        tenant_id=tenant.tenant_id,
+    )
+    return APIResponse(data=IdentityExplanationResponse(**explanation).model_dump()).to_dict()
+
+
+@router.get("/profiles/{pid}/identity/decision/{decision_id}")
+async def get_decision_details(
+    pid: str,
+    decision_id: str,
+    request: Request,
+    explainability: IdentityExplainabilityService = Depends(_get_explainability_service),
+) -> dict:
+    """Return full decision details with evidence for a decision_id."""
+    from config.settings import settings
+
+    if not getattr(settings, "identity_explainability_enabled", False):
+        raise NotFoundError("Identity explainability is not enabled for this environment")
+
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+
+    details = await explainability.get_decision_details(
+        decision_id=decision_id,
+        tenant_id=tenant.tenant_id,
+    )
+    return APIResponse(data=IdentityDecisionDetailsResponse(**details).model_dump()).to_dict()
+
+
+# ── Admin identity operations (PR 8 admin endpoints) ───────────────────────────
+
+
+@router_admin.post("/merge", response_model=AdminIdentityMergeResponse)
+async def admin_manual_merge(
+    body: AdminIdentityMergeRequest,
+    request: Request,
+    admin_service: AdminIdentityService = Depends(_get_admin_identity_service),
+) -> dict:
+    """Operator manual merge with confirmation token and stale-version rejection."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+
+    # Confirm the tenant_id in the body matches the auth context.
+    if body.tenant_id != tenant.tenant_id:
+        raise CrossTenantError(
+            f"Request tenant_id={body.tenant_id} does not match auth tenant={tenant.tenant_id}"
+        )
+
+    result = await admin_service.manual_merge(
+        tenant_id=tenant.tenant_id,
+        source_entity_id=body.source_entity_id,
+        canonical_entity_id=body.canonical_entity_id,
+        reason=body.reason,
+        operator_id=body.operator_id,
+        confirmation_token=body.confirmation_token,
+        expected_graph_version=body.expected_graph_version,
+    )
+    return APIResponse(data=AdminIdentityMergeResponse(**result).model_dump()).to_dict()
+
+
+@router_admin.post("/split", response_model=AdminIdentitySplitResponse)
+async def admin_manual_split(
+    body: AdminIdentitySplitRequest,
+    request: Request,
+    admin_service: AdminIdentityService = Depends(_get_admin_identity_service),
+) -> dict:
+    """Operator manual split with confirmation token and stale-version rejection."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+
+    if body.tenant_id != tenant.tenant_id:
+        raise CrossTenantError(
+            f"Request tenant_id={body.tenant_id} does not match auth tenant={tenant.tenant_id}"
+        )
+
+    result = await admin_service.manual_split(
+        tenant_id=tenant.tenant_id,
+        source_canonical_profile=body.source_canonical_profile,
+        target_split_plan=body.target_split_plan.model_dump(),
+        source_identities_to_move=body.source_identities_to_move,
+        reason=body.reason,
+        operator_id=body.operator_id,
+        confirmation_token=body.confirmation_token,
+        expected_graph_version=body.expected_graph_version,
+    )
+    return APIResponse(data=AdminIdentitySplitResponse(**result).model_dump()).to_dict()
+
+
+@router_admin.post("/reconcile", response_model=AdminIdentityReconcileResponse)
+async def admin_reconcile(
+    body: AdminIdentityReconcileRequest,
+    request: Request,
+    admin_service: AdminIdentityService = Depends(_get_admin_identity_service),
+) -> dict:
+    """Re-run identity resolution after connector reimport, policy update, SDK
+    behavior changes, manual data correction, or DSR/suppression."""
+    tenant = request.state.tenant
+    tenant.require_permission("write")
+
+    if body.tenant_id != tenant.tenant_id:
+        raise CrossTenantError(
+            f"Request tenant_id={body.tenant_id} does not match auth tenant={tenant.tenant_id}"
+        )
+
+    result = await admin_service.reconcile(
+        tenant_id=tenant.tenant_id,
+        trigger_type=body.trigger_type,
+        trigger_id=body.trigger_id,
+        identifier_type=body.identifier_type,
+        identifier_hash=body.identifier_hash,
+        entity_id=body.entity_id,
+        reason=body.reason,
+    )
+    return APIResponse(data=AdminIdentityReconcileResponse(**result).model_dump()).to_dict()
+
+
+@router_admin.get("/review-queue", response_model=AdminIdentityReviewQueueResponse)
+async def admin_review_queue(
+    request: Request,
+    limit: int = Query(50, ge=1, le=200),
+    admin_service: AdminIdentityService = Depends(_get_admin_identity_service),
+) -> dict:
+    """Open conflicts/reviews with candidate A/B, matching + conflicting evidence,
+    recommended action, confidence, risk level, affected projections, and approve/
+    reject controls."""
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+
+    entries = await admin_service.review_queue(tenant.tenant_id, limit=limit)
+    # Wrap each entry in the typed model for consistency.
+    typed = [ReviewQueueEntry(**e) for e in entries]
+    return APIResponse(
+        data=AdminIdentityReviewQueueResponse(entries=typed, total=len(typed)).model_dump()
+    ).to_dict()
+
+
+@router_admin.get("/activation-status", response_model=ActivationStatusResponse)
+async def admin_activation_status(
+    request: Request,
+    admin_service: AdminIdentityService = Depends(_get_admin_identity_service),
+) -> dict:
+    """Tenant activation dashboard data: historical data status, SDK status,
+    resolution counts, conflict counts, projection restatement status."""
+    from config.settings import settings
+
+    if not getattr(settings, "tenant_identity_activation_dashboard_enabled", False):
+        raise NotFoundError("Tenant activation dashboard is not enabled for this environment")
+
+    tenant = request.state.tenant
+    tenant.require_permission("read")
+
+    status = await admin_service.activation_status(tenant.tenant_id)
+    return APIResponse(data=ActivationStatusResponse(**status).model_dump()).to_dict()
 
 
 # ── Legacy profile routes (backwards-compatible) ──────────────────────────────

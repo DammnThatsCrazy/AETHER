@@ -124,3 +124,6 @@ release-evidence/
 
 # Local Python virtualenv (toolchain isolation from system dist-packages)
 .venv/
+
+# FPS SDK keys (secrets — never commit)
+.proof-keys.json

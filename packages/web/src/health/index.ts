@@ -4,4 +4,7 @@ export type {
   SDKHeartbeatPayload,
   SDKManifest,
   ManifestUpdateCallback,
+  Diagnostics,
+  DroppedEventCounts,
+  DroppedEventReason,
 } from './sdk-health-agent';

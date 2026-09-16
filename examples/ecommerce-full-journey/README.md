@@ -46,8 +46,8 @@ The on-page DebugPanel shows the SDK state, consent state, queue size, and last 
 
 ## Environment
 
-- **`.env.local`** — local dev: `http://localhost:8000`.
-- **`.env.staging`** — staging: `https://staging.aether.so`.
+- **`.env.local`** — local development: `http://localhost:8000` (see `.env.local.example`).
+- **`.env.staging`** — staging: `https://staging.aether.so` (see `.env.staging.example`).
 
 ## Files
 

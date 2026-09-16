@@ -4539,6 +4539,18 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/blueprints/SDK_PRODUCTIZATION_CLOSE_OUT_AND_CERTIFICATION_BLUEPRINT.md",
+      "title": "SDK Productization Close-Out Blueprint",
+      "slug": "blueprints/sdk-close-out",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
       "path": "docs/blueprints/communication360.md",
       "title": "Communication360 Vertical Slice Blueprint",
       "slug": "blueprints/communication360",
@@ -8790,6 +8802,18 @@
       "canonical_owner": "ml@aether"
     },
     {
+      "path": "docs/reports/SDK_CERTIFICATION_REPORT.md",
+      "title": "SDK Certification Report",
+      "slug": "reports/sdk-certification",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
       "path": "docs/reports/SDK_PRODUCTION_READINESS_AUDIT.md",
       "title": "SDK Production Readiness Audit",
       "slug": "sdk/production-readiness-audit",
@@ -8815,6 +8839,90 @@
       ],
       "status": "stable",
       "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/responsiveness-spine/README.md",
+      "title": "Responsiveness Spine",
+      "slug": "responsiveness-spine/readme",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/responsiveness-spine/activation-milestones.md",
+      "title": "Activation Milestones",
+      "slug": "responsiveness-spine/activation-milestones",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/responsiveness-spine/endpoints.md",
+      "title": "Endpoints",
+      "slug": "responsiveness-spine/endpoints",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/responsiveness-spine/frontend-integration.md",
+      "title": "Frontend Integration",
+      "slug": "responsiveness-spine/frontend-integration",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/responsiveness-spine/integration-guide.md",
+      "title": "Integration Guide",
+      "slug": "responsiveness-spine/integration-guide",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/responsiveness-spine/performance-budget.md",
+      "title": "Performance Budget",
+      "slug": "responsiveness-spine/performance-budget",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/responsiveness-spine/surface-readiness.md",
+      "title": "Surface Readiness",
+      "slug": "responsiveness-spine/surface-readiness",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
     },
     {
       "path": "docs/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",

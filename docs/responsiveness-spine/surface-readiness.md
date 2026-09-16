@@ -1,3 +1,12 @@
+---
+title: Surface Readiness
+slug: responsiveness-spine/surface-readiness
+section: architecture
+visibility: P
+audience: [dev-senior, architect]
+status: beta
+---
+
 # Surface Readiness — Responsiveness & Time-to-Value Spine
 
 > Domain detail for `SurfaceReadiness` (models.py) and the `derive_surface_readiness()` logic (service.py).

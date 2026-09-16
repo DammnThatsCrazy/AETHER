@@ -1,3 +1,12 @@
+---
+title: Performance Budget
+slug: responsiveness-spine/performance-budget
+section: architecture
+visibility: P
+audience: [dev-senior, architect]
+status: beta
+---
+
 # Responsiveness & Time-to-Value — Performance Budget
 
 > Source of truth: `contracts/performance/aether-performance-contract.yaml` (version 1)

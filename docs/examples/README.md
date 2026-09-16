@@ -36,10 +36,10 @@ Every example proves the following sequence:
 
 ## Local and Staging Modes
 
-Each example has two environment files:
+Create two env files (or copy the `.example` templates):
 
-- **`.env.local`** — local development: uses `http://localhost:8000` as the ingestion endpoint and a placeholder API key.
-- **`.env.staging`** — staging: uses the staging ingestion endpoint with a placeholder staging key.
+- **`.env.local`** — local development: uses `http://localhost:8000` as the ingestion endpoint and a placeholder API key (see `.env.local.example`).
+- **`.env.staging`** — staging: uses the staging ingestion endpoint with a placeholder staging key (see `.env.staging.example`).
 
 Switch between modes by using the appropriate env file (or by setting the corresponding environment variables in your shell/CI).
 

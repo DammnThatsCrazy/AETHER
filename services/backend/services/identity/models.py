@@ -131,6 +131,63 @@ class AssuranceLevel(str, Enum):
     AUTHORITATIVE = "authoritative"
 
 
+# ── Identity continuity enums (blueprint §5) ──────────────────────────────────────
+
+class ConfidenceBand(str, Enum):
+    """Confidence band from blueprint §8.2 — drives merge action."""
+    VERY_HIGH = "very_high"    # >= 0.97 — auto-merge if no veto
+    HIGH = "high"              # 0.90 - 0.969 — auto-merge for deterministic evidence
+    MEDIUM = "medium"          # 0.70 - 0.899 — manual review
+    LOW = "low"                # 0.30 - 0.699 — provisional / association only
+    BLOCKED = "blocked"        # any veto — no merge
+
+
+class DecisionType(str, Enum):
+    """Identity decision type from blueprint §5.6."""
+    AUTO_RESOLVE = "auto_resolve"
+    AUTO_MERGE = "auto_merge"
+    MANUAL_MERGE = "manual_merge"
+    BLOCK_MERGE = "block_merge"
+    REVIEW_REQUIRED = "review_required"
+    CREATE_PROVISIONAL = "create_provisional"
+    SPLIT_CANDIDATE = "split_candidate"
+    MANUAL_SPLIT = "manual_split"
+    AUTO_SPLIT = "auto_split"
+    SUPPRESS = "suppress"
+    DELETE = "delete"
+
+
+class VetoType(str, Enum):
+    """Hard veto types from blueprint §8.3."""
+    CROSS_TENANT = "cross_tenant"
+    DELETED_SUPPRESSED_IDENTITY = "deleted_suppressed_identity"
+    REVOKED_CONSENT = "revoked_consent"
+    ENTITY_TYPE_MISMATCH = "entity_type_mismatch"
+    AGENT_PERSON_MERGE_ATTEMPT = "agent_person_merge_attempt"
+    ACCOUNT_PERSON_MERGE_ATTEMPT = "account_person_merge_attempt"
+    CONFLICTING_VERIFIED_EMAIL = "conflicting_verified_email"
+    CONFLICTING_AUTHENTICATED_USER = "conflicting_authenticated_user"
+    SHARED_DEVICE = "shared_device"
+    SHARED_INBOX = "shared_inbox"
+    PROVIDER_NAMESPACE_COLLISION = "provider_namespace_collision"
+    SIMULTANEOUS_CONTRADICTORY_SESSIONS = "simultaneous_contradictory_sessions"
+    MANUAL_DO_NOT_MERGE = "manual_do_not_merge"
+
+
+class ProjectionType(str, Enum):
+    """Projection types from blueprint §11.1."""
+    PROFILE_360 = "profile_360"
+    JOURNEY = "journey"
+    CAMPAIGN_360 = "campaign_360"
+    COMMUNICATIONS_360 = "communications_360"
+    VALUE = "value"
+    SIGNALS = "signals"
+    SYNDICATES = "syndicates"
+    AGENT_360 = "agent_360"
+    EXECUTION_360 = "execution_360"
+    ACCOUNT_360 = "account_360"
+
+
 # ── Reason codes ──────────────────────────────────────────────────────────────
 
 REASON_SAME_USER_ID = "same_user_id"
@@ -349,6 +406,168 @@ class IdentityResolutionAuditRecord:
     consent_snapshot: Optional[dict]
     created_at: str
 
+
+
+# ── Identity continuity dataclasses (blueprint §5) ──────────────────────────────
+
+@dataclass
+class IdentityEvidenceSummary:
+    """A summary of one piece of evidence for/against a decision."""
+    evidence_type: str
+    description: str
+    source: str = ""
+    confidence_contribution: float = 0.0
+
+
+@dataclass
+class IdentityVeto:
+    """A hard veto that blocks auto-merge (blueprint §8.3)."""
+    veto_type: VetoType
+    reason: str
+    severity: str = "blocked"
+    details: dict = field(default_factory=dict)
+
+
+@dataclass
+class SourceIdentityRecord:
+    """Source-scoped identity (blueprint §5.2)."""
+    id: str
+    tenant_id: str
+    source_system_id: str
+    source_kind: str
+    source_namespace: str
+    external_id: Optional[str] = None
+    anonymous_id: Optional[str] = None
+    user_id: Optional[str] = None
+    device_id: Optional[str] = None
+    installation_id: Optional[str] = None
+    session_id: Optional[str] = None
+    account_id: Optional[str] = None
+    agent_id: Optional[str] = None
+    runtime_id: Optional[str] = None
+    canonical_entity_id: Optional[str] = None
+    status: str = "unresolved"
+    first_seen_at: str = ""
+    last_seen_at: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass
+class IdentityClaimRecord:
+    """Identity claim evidence (blueprint §5.3)."""
+    id: str
+    tenant_id: str
+    source_identity_id: str
+    claim_type: str
+    normalized_value: str
+    raw_value: Optional[str] = None
+    verification_status: str = "unknown"
+    confidence_hint: Optional[float] = None
+    occurred_at: Optional[str] = None
+    ingested_at: str = ""
+    expires_at: Optional[str] = None
+    pii_classification: str = "none"
+    status: str = "active"
+    created_at: str = ""
+
+
+@dataclass
+class CanonicalEntityRecord:
+    """Canonical profile target (blueprint §5.4)."""
+    id: str
+    tenant_id: str
+    entity_type: str = "person"
+    status: str = "active"
+    current_identity_graph_version: str = ""
+    created_from: str = "import"
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass
+class IdentityEdgeRecord:
+    """Identity graph edge (blueprint §5.5)."""
+    id: str
+    tenant_id: str
+    from_type: str
+    from_id: str
+    to_type: str
+    to_id: str
+    edge_type: str
+    confidence: float = 0.0
+    decision_id: str = ""
+    graph_version: str = ""
+    effective_from: str = ""
+    effective_to: Optional[str] = None
+    status: str = "active"
+    created_at: str = ""
+
+
+@dataclass
+class IdentityDecisionRecord:
+    """Auditable identity decision (blueprint §5.6)."""
+    id: str
+    tenant_id: str
+    decision_type: DecisionType
+    candidate_source_identity_ids: list = field(default_factory=list)
+    candidate_canonical_entity_ids: list = field(default_factory=list)
+    selected_canonical_entity_id: Optional[str] = None
+    confidence: float = 0.0
+    confidence_band: ConfidenceBand = ConfidenceBand.LOW
+    positive_evidence: list = field(default_factory=list)
+    negative_evidence: list = field(default_factory=list)
+    vetoes: list = field(default_factory=list)
+    policy_version: str = ""
+    graph_version_before: Optional[str] = None
+    graph_version_after: Optional[str] = None
+    explanation: str = ""
+    decided_by: str = "system"
+    decided_at: str = ""
+
+
+@dataclass
+class IdentityConflictRecord:
+    """Identity conflict (blueprint §5.7)."""
+    id: str
+    tenant_id: str
+    conflict_type: str
+    involved_source_identity_ids: list = field(default_factory=list)
+    involved_canonical_entity_ids: list = field(default_factory=list)
+    severity: str = "low"
+    recommended_action: str = "review"
+    status: str = "open"
+    created_at: str = ""
+    resolved_at: Optional[str] = None
+
+
+@dataclass
+class IdentityGraphVersionRecord:
+    """Identity graph version (blueprint §5.8)."""
+    id: str
+    tenant_id: str
+    previous_version_id: Optional[str] = None
+    version_number: int = 1
+    reason: str = "initial_import"
+    decision_ids: list = field(default_factory=list)
+    created_at: str = ""
+
+
+@dataclass
+class ProjectionRestatementJobRecord:
+    """Projection restatement job (blueprint §5.9)."""
+    id: str
+    tenant_id: str
+    trigger_decision_id: str = ""
+    graph_version_before: str = ""
+    graph_version_after: str = ""
+    affected_canonical_entity_ids: list = field(default_factory=list)
+    projections: list = field(default_factory=list)
+    status: str = "queued"
+    error: Optional[str] = None
+    created_at: str = ""
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
 
 # ── Identity assurance / verification records ──────────────────────────────────
 

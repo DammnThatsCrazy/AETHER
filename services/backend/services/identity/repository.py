@@ -32,6 +32,8 @@ from .models import (
     IdentitySplitEvent,
     MergeDecision,
     SubjectStatus,
+    ProjectionRestatementJobRecord,
+    SourceIdentityRecord,
 )
 
 
@@ -87,6 +89,15 @@ class _IdentitySuppressionStore(BaseRepository):
         super().__init__("identity_suppression_rules")
 
 
+class _SourceIdentityStore(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("source_identities")
+
+class _IdentityClaimStore(BaseRepository):
+    def __init__(self) -> None:
+        super().__init__("identity_claims")
+
+
 # ── Main repository facade ────────────────────────────────────────────────────
 
 class IdentityResolutionRepository:
@@ -103,6 +114,8 @@ class IdentityResolutionRepository:
         self._conflicts = _IdentityConflictStore()
         self._audit = _IdentityAuditStore()
         self._suppressions = _IdentitySuppressionStore()
+        self._source_identities = _SourceIdentityStore()
+        self._claims = _IdentityClaimStore()
 
     # ── Subjects ──────────────────────────────────────────────────────────
 
@@ -918,6 +931,127 @@ class IdentityResolutionRepository:
             return True
         except Exception:
             return False
+
+    async def create_source_identity(self, record: SourceIdentityRecord) -> dict:
+        """Create a source identity record."""
+        source_id = str(uuid.uuid4())
+        return await self._source_identities.insert(source_id, {
+            "id": source_id,
+            "tenant_id": record.tenant_id,
+            "source_system_id": record.source_system_id,
+            "source_kind": record.source_kind,
+            "source_namespace": record.source_namespace,
+            "external_id": record.external_id,
+            "anonymous_id": record.anonymous_id,
+            "user_id": record.user_id,
+            "device_id": record.device_id,
+            "installation_id": record.installation_id,
+            "session_id": record.session_id,
+            "account_id": record.account_id,
+            "agent_id": record.agent_id,
+            "runtime_id": record.runtime_id,
+            "canonical_entity_id": record.canonical_entity_id,
+            "status": "unresolved",
+            "first_seen_at": record.created_at,
+            "last_seen_at": record.created_at,
+            "created_at": record.created_at,
+            "updated_at": record.created_at,
+        })
+
+    async def update_source_identity(self, record: SourceIdentityRecord) -> dict:
+        """Update an existing source identity record (full identifier merge)."""
+        row = await self._source_identities.find_by_id(record.id)
+        if row is None:
+            return await self.create_source_identity(record)
+        # Merge all identifiers (idempotent upsert)
+        if record.user_id:
+            row["user_id"] = record.user_id
+        if record.external_id:
+            row["external_id"] = record.external_id
+        if record.device_id:
+            row["device_id"] = record.device_id
+        if record.installation_id:
+            row["installation_id"] = record.installation_id
+        if record.session_id:
+            row["session_id"] = record.session_id
+        if record.account_id:
+            row["account_id"] = record.account_id
+        if record.agent_id:
+            row["agent_id"] = record.agent_id
+        if record.runtime_id:
+            row["runtime_id"] = record.runtime_id
+        if record.anonymous_id:
+            row["anonymous_id"] = record.anonymous_id
+        row["last_seen_at"] = record.last_seen_at
+        row["updated_at"] = record.updated_at
+        if record.canonical_entity_id:
+            row["canonical_entity_id"] = record.canonical_entity_id
+        row["status"] = record.status
+        return await self._source_identities.update(record.id, row)
+
+    async def get_source_identity(self, source_identity_id: str) -> Optional[dict]:
+        """Get a source identity by ID."""
+        return await self._source_identities.find_by_id(source_identity_id)
+
+    async def find_source_identity_by_identifier(
+        self, tenant_id: str, identifier_type: str, identifier_value: str
+    ) -> Optional[dict]:
+        """Find a source identity by any identifier type value."""
+        filters = {"tenant_id": tenant_id}
+        filters[identifier_type] = identifier_value
+        rows = await self._source_identities.find_many(filters=filters, limit=1)
+        return rows[0] if rows else None
+
+    async def get_claims_for_source(self, source_identity_id: str) -> list[dict]:
+        """Get all claims for a source identity."""
+        filters = {"source_identity_id": source_identity_id}
+        return await self._claims.find_many(filters=filters)
+
+    async def find_claim(
+        self, tenant_id: str, source_identity_id: str, claim_type: str, normalized_value: str
+    ) -> Optional[dict]:
+        """Find an existing claim by source + type + value."""
+        filters = {
+            "tenant_id": tenant_id,
+            "source_identity_id": source_identity_id,
+            "claim_type": claim_type,
+            "normalized_value": normalized_value,
+        }
+        rows = await self._claims.find_many(filters=filters, limit=1)
+        return rows[0] if rows else None
+
+    async def create_claim(self, record: IdentityClaimRecord) -> dict:
+        """Create an identity claim record."""
+        claim_id = str(uuid.uuid4())
+        return await self._claims.insert(claim_id, {
+            "id": claim_id,
+            "tenant_id": record.tenant_id,
+            "source_identity_id": record.source_identity_id,
+            "claim_type": record.claim_type,
+            "normalized_value": record.normalized_value,
+            "raw_value": record.raw_value,
+            "verification_status": record.verification_status,
+            "confidence_hint": record.confidence_hint,
+            "occurred_at": record.occurred_at,
+            "ingested_at": record.ingested_at,
+            "expires_at": record.expires_at,
+            "pii_classification": record.pii_classification,
+            "status": record.status,
+            "created_at": record.created_at,
+            "updated_at": record.created_at,
+        })
+
+    async def update_claim(self, record: IdentityClaimRecord) -> dict:
+        """Update an existing claim record."""
+        row = await self._claims.find_by_id(record.id)
+        if row is None:
+            return await self.create_claim(record)
+        row["status"] = record.status
+        row["verification_status"] = record.verification_status
+        row["confidence_hint"] = record.confidence_hint
+        row["expires_at"] = record.expires_at
+        row["updated_at"] = record.updated_at
+        return await self._claims.update(record.id, row)
 
     # ── Health / metrics helpers ──────────────────────────────────────────
 

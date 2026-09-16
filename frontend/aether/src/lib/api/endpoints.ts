@@ -674,6 +674,42 @@ export const api = {
 
     graphNeighborhood: (userId: string) =>
       restClient.get(`/v1/identity/profiles/${userId}/graph`, wrap(unknownSchema)).then(r => r.data),
+
+    /** §13.2 explainability payload for a canonical profile. */
+    explanation: (profileId: string) =>
+      restClient.get(`/v1/profiles/${profileId}/identity/explanation`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Full decision details with evidence for a decision_id. */
+    decisionDetail: (decisionId: string, tenantId: string) =>
+      restClient.get(`/v1/profiles/decision/${decisionId}?tenant_id=${tenantId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Admin: list open conflicts/reviews with candidate A/B, evidence, recommended action. */
+    reviewQueue: (tenantId: string, limit = 50) =>
+      restClient.get(`/v1/admin/identity/review-queue?limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Admin: approve a conflict/review. */
+    approveConflict: (conflictId: string, tenantId: string) =>
+      restClient.post(`/v1/admin/identity/review-queue/${conflictId}/approve`, wrap(unknownSchema), { tenant_id: tenantId }).then(r => r.data),
+
+    /** Admin: reject a conflict/review with a reason. */
+    rejectConflict: (conflictId: string, tenantId: string, body: { reason: string }) =>
+      restClient.post(`/v1/admin/identity/review-queue/${conflictId}/reject`, wrap(unknownSchema), { ...body, tenant_id: tenantId }).then(r => r.data),
+
+    /** Admin: tenant activation dashboard data. */
+    activationStatus: (tenantId: string) =>
+      restClient.get(`/v1/admin/identity/activation-status?tenant_id=${tenantId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Admin: merge/split audit log. */
+    mergeSplitAudit: (tenantId: string, limit = 50) =>
+      restClient.get(`/v1/admin/identity/audit?tenant_id=${tenantId}&limit=${limit}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Admin: SDK health per platform. */
+    sdkHealth: (tenantId: string) =>
+      restClient.get(`/v1/admin/identity/sdk-health?tenant_id=${tenantId}`, wrap(unknownSchema)).then(r => r.data),
+
+    /** Admin: single conflict detail. */
+    conflictDetail: (conflictId: string, tenantId: string) =>
+      restClient.get(`/v1/admin/identity/review-queue/${conflictId}?tenant_id=${tenantId}`, wrap(unknownSchema)).then(r => r.data),
   },
 
   // ── Resolution (identity cluster — read-only for tenants) ─────────────────
