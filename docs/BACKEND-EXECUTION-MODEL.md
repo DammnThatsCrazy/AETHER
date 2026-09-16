@@ -17,12 +17,12 @@ canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  "services/backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
+  "services/backend/config/settings.py": "sha256:486abbaa3ec3e1dce4e257f8e50efe45cfd98d8a3ad99b88863ab2f0884b1748"
   "services/backend/main.py": "sha256:146abcd2a0af5653e96f1c1eb9e5fe1fef6e32790758636cbde4d6d24c5c592e"
   "services/backend/services/runtime/consumer_specs.py": "sha256:8bf1562bea9dcd96bd4ebe71790af816339c70ff829266b16a3142ba68bbd8a2"
-  "services/backend/services/runtime/roles.py": "sha256:e2743b371d47f1224fa99e3d41a93cbb8c702ee61d0c967b53ee0f3684557da7"
+  "services/backend/services/runtime/roles.py": "sha256:9d1787f19ddc91d640098ff3e992b4cc1cfaf410bcc49c79e41ed3c5810dc48a"
   "services/backend/services/runtime/run_role.py": "sha256:a5b8af9c057dd8c34d97cdeadf5da94d55e4e31bb25827a088ba1ca3b3bacb7c"
-  "services/backend/services/runtime/specs.py": "sha256:8fdd1c725e45177be4a164ad2dbf18faa5207ef7a9c5dddd4fcd8d62d02090b5"
+  "services/backend/services/runtime/specs.py": "sha256:999c9da733093cce92d1af9192ea112ffdbbb9307c9698b80a18f2c1700f3a06"
 ---
 
 # Backend Execution Model
@@ -45,7 +45,7 @@ API process no longer starts every worker, consumer, and cron in-request.
 | `measurement-worker` | Identity merge/split journey rebuild and attribution restatement consumers. |
 | `semantic-worker` | Semantic classification + identity-restatement consumers plus the `semantic_reconciler` (Gold recompute sweep, gated by `settings.semantic.reconciler_enabled`), `semantic_retention` (Silver tombstone / Gold delete sweep, gated by `settings.semantic.retention_enabled`), and `semantic_graph_projector` (per-tenant Gold relationship-state projection into the intelligence graph via the canonical mutation gateway, gated by `settings.semantic.graph_projector_enabled`) loop workers. |
 | `materializer` | Artifact materialization sweeps (export expiry, payment-rail sync, object-backed Bronze compaction + scheduled storage reconciler — FT-8, gated by the `settings.storage_plane` flags — and x402 settlement reconciliation, which advances verified PENDING settlements to on-chain finality, gated by the commerce control plane). |
-| `maintenance` | Cross-cutting crons/sweepers (retention — including the flag-gated FT-8 storage-lifecycle retention pass, billing overage, SLA, jobs — plus the reward-plane/credential sweeps: stale reward-budget reservation release, reward DLQ depth gauge, expired credential rotation-overlap tombstoning, and the opt-in ledger chain verifier). Also the Reconciled Control Plane continuous-reconcile scheduler (`reconciled_control_scheduler` — one periodic §32/§35 reconcile→plan→execute loop that rides `maintenance` rather than justifying a runtime role of its own; gated on the plane master switch AND its scheduler kill-switch, both default OFF, so it stays idle until flipped). |
+| `maintenance` | Cross-cutting crons/sweepers (retention — including the flag-gated FT-8 storage-lifecycle retention pass, billing overage, SLA, jobs — plus the reward-plane/credential sweeps: stale reward-budget reservation release, reward DLQ depth gauge, expired credential rotation-overlap tombstoning, and the opt-in ledger chain verifier). Also the Reconciled Control Plane continuous-reconcile scheduler (`reconciled_control_scheduler` — one periodic §32/§35 reconcile→plan→execute loop that rides `maintenance` rather than justifying a runtime role of its own; gated on the plane master switch AND its scheduler kill-switch, both default OFF, so it stays idle until flipped). Also the Rights Authority retention deletion executor (`rights_deletion_executor` — one periodic sweep that executes the pending `delete_at_expiry` impact rows the retention seam only schedules; default OFF). |
 
 The canonical role set lives in `config/settings.py::RUNTIME_ROLES`; the
 role → loop-worker mapping lives in `services/backend/services/runtime/roles.py`; canonical
@@ -172,6 +172,28 @@ component report (`services/backend/services/gateway/component_status.py`) folds
 worker roles into the `rewards`, `commerce`, and `provider_credentials`
 component statuses, so an unsupervised or failed loop is observable rather than
 silent.
+
+## Rights Authority retention deletion executor
+
+**`rights_deletion_executor`** (`maintenance`, WorkerSpec in
+`services/backend/services/runtime/specs.py`) closes the other half of the
+Rights Authority retention seam: `services/backend/services/rights_authority/retention.py`
+computes an expiry and persists a **pending** `delete_at_expiry` impact item but
+deletes nothing, so this periodic sweep
+(`services/backend/services/rights_authority/deletion_executor.py`) claims those
+rows and deletes through a registered deletion adapter. Deletion is
+irreversible, so it requires **all three** gates, re-read every pass: rollout
+`RIGHTS_AUTHORITY_ROLLOUT=enforce`, the opt-in
+`RIGHTS_AUTHORITY_DELETION_EXECUTOR_ENABLED` (default OFF, under
+`settings.rights_authority`), and a registered adapter for the row's
+`component_type`. Only the `raw_object` byte-plane dimension has a real,
+tenant-scoped delete path today; the other eight cascade dimensions are
+unsupported and their rows stay `pending`. The row is flipped `in_progress`
+*before* the bytes are removed and `complete` only after the adapter reports
+them gone, so a crash never leaves bytes silently missing under a row that still
+advertises them. Interval: `RIGHTS_DELETION_EXECUTOR_INTERVAL_SECONDS` (default
+3600). Not `required=True`: a stalled sweep leaves rows pending and surfaced,
+and must never abort a fresh process's startup.
 
 ## Production fail-closed rules
 

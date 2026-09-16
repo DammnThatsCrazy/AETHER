@@ -16,10 +16,13 @@ Python mirrors of ``packages/shared/entities.ts`` and
 Field parity invariant: ``SPINE_ENVELOPE_FIELDS`` is the ordered canonical field
 set and MUST equal, field-for-field and in order, the ``SpineEnvelope``
 interface body in the TS twin and the fields of :class:`SpineEnvelope` below.
-Fields with no producer yet (``identity_watermark``, ``rights_decision_ref``)
-are declared present-but-unpopulated and listed in
-``SPINE_ENVELOPE_UNPOPULATED_FIELDS``; no producer is claimed until one ships
-(ADR-011 D3; SPINE_P0_ARCHITECTURE.md §6).
+Fields with no producer yet (``identity_watermark``) are declared
+present-but-unpopulated and listed in ``SPINE_ENVELOPE_UNPOPULATED_FIELDS``; no
+producer is claimed until one ships (ADR-011 D3; SPINE_P0_ARCHITECTURE.md §6).
+``rights_decision_ref`` LEFT that set when the rights-propagation producer
+shipped (``services/rights_authority/propagation.py``, blueprint §11/§17
+Phase 3): a governed write now stamps the durable ``rdec_...`` identity of the
+``RightsDecision`` that authorized it.
 """
 
 from __future__ import annotations
@@ -56,9 +59,10 @@ SPINE_ENVELOPE_FIELDS: tuple[str, ...] = (
 
 # No-producer fields declared present-but-unpopulated (@unpopulated in the TS
 # twin). Mirror of the ``spineEnvelopeUnpopulatedFields`` const.
+# ``rights_decision_ref`` was removed from this set when the rights-propagation
+# producer shipped (services/rights_authority/propagation.py).
 SPINE_ENVELOPE_UNPOPULATED_FIELDS: frozenset[str] = frozenset({
     "identity_watermark",
-    "rights_decision_ref",
 })
 
 # ── Quality / availability statement (ADR-011 D3; SPINE_P0_ARCHITECTURE §6) ──
@@ -109,7 +113,9 @@ class SpineEnvelope(BaseModel):
     # ── Policy / consent / rights refs ──
     policy_ref: Optional[str] = None
     consent_decision_ref: Optional[str] = None
-    rights_decision_ref: Optional[str] = None  # @unpopulated — no producer yet
+    # Producer ships: rights_authority.propagation stamps the durable
+    # ``rdec_...`` decision id of the governing RightsDecision.
+    rights_decision_ref: Optional[str] = None
     # ── Evidence / quality / versions / lineage ──
     evidence_refs: list[EvidenceRef]
     quality: SpineEnvelopeQuality

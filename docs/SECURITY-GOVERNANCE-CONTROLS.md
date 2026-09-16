@@ -11,10 +11,10 @@ related: [compliance, reliability/operations, reliability/incident-response]
 canonical_owner: platform@aether
 estimated_read_minutes: 6
 source_hashes:
-  services/backend/services/governance/routes.py: sha256:ba2ab1b509221205ffba6b31cb346cde1dc4d24b6395f6397a95e677b0c5c24b
-  services/backend/services/reliability/service.py: sha256:04c7f243fe9140a842de8d89997097e1e9e4ebf16c294b56040e06bd246a27bb
-  services/backend/services/security/access_control.py: sha256:cc0456da6c2de55fd6d09ae2e3a9b9abd20c99e507e398163ddd2f030853e6e2
-  services/backend/services/security/policy_engine.py: sha256:a0ec68cf5e7fb524e02ca0c6fef0332462282b01c9db2161e1eed7eedb70c713
+  "services/backend/services/governance/routes.py": "sha256:ba2ab1b509221205ffba6b31cb346cde1dc4d24b6395f6397a95e677b0c5c24b"
+  "services/backend/services/reliability/service.py": "sha256:04c7f243fe9140a842de8d89997097e1e9e4ebf16c294b56040e06bd246a27bb"
+  "services/backend/services/security/access_control.py": "sha256:3e5f52376cae80e8e109bc580939800220dde88abe18e3efea46c5f643d000ef"
+  "services/backend/services/security/policy_engine.py": "sha256:a0ec68cf5e7fb524e02ca0c6fef0332462282b01c9db2161e1eed7eedb70c713"
 ---
 
 # Security, Compliance & Governance Controls
@@ -54,7 +54,12 @@ government buyers run a security review against demonstrable controls. It answer
 The control plane lives in `services/backend/services/security/` (backend) and is additive: it
 **wraps**, never removes, existing `require_permission(...)` checks and OODA
 approval flows. Shared contracts are in `packages/shared/security-governance.ts`
-and `services/backend/services/security/contracts.py`.
+and `services/backend/services/security/contracts.py`. Access is evaluated as
+`domain × action × scope` against the `GovernanceDomain` vocabulary in
+`contracts.py`, expanded to `ALL_DOMAINS` in `access_control.py`; the Rights
+Authority tenant surface registers a `rights` domain there so its granular
+`rights.*` grants (and the legacy `read` / `write` aliases) resolve against real
+role authority rather than being edge-only checks.
 
 ```
 Request → existing auth/tenant context
@@ -152,7 +157,14 @@ For the full compliance posture see [COMPLIANCE.md](COMPLIANCE.md).
 ## Known gaps (honest)
 
 - No external certification/attestation is claimed or implied.
-- Retention enforcement is declarative; automated retention sweeps are planned.
+- Retention enforcement is declarative at this control plane. One automated
+  retention sweep now exists — the Rights Authority retention deletion executor
+  (`services/backend/services/rights_authority/deletion_executor.py`, worker
+  `rights_deletion_executor`), which executes the pending `delete_at_expiry`
+  rows the retention seam schedules — but it is **opt-in** (`RIGHTS_AUTHORITY_DELETION_EXECUTOR_ENABLED`,
+  default OFF, additionally gated on `RIGHTS_AUTHORITY_ROLLOUT=enforce` and a
+  registered adapter), covers only the `raw_object` byte-plane dimension, and
+  the remaining cascade dimensions have no delete path.
 - Audit-ledger chaining is best-effort within the JSONB store; an external WORM
   sink is planned.
 - Operator role provisioning/federation lives in the existing auth layer and is

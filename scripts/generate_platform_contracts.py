@@ -1034,6 +1034,7 @@ _MUTATION_RECORD_FIELDS: tuple[tuple[str, str, bool], ...] = (
     ("model_refs", "string[]", False),
     ("policy_refs", "string[]", False),
     ("consent_refs", "string[]", False),
+    ("rights_decision_ref", "string", False),
     ("before_version_id", "string", False),
     ("after_version_id", "string", False),
     ("change_set_id", "string", False),

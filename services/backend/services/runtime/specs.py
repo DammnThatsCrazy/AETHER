@@ -244,6 +244,24 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
 
         return build_export_expiry_sweep_coro()
 
+    def _rights_deletion_executor() -> Coroutine[Any, Any, None]:
+        """Execute the deletions the Rights Authority retention seam schedules.
+
+        The retention seam (``services.rights_authority.retention``) computes an
+        expiry and persists a pending ``delete_at_expiry`` impact item but never
+        deletes anything. This loop is the missing other half: it sweeps those
+        pending rows and deletes through a registered deletion adapter. Gated on
+        ``settings.rights_authority.deletion_executor_enabled`` (default OFF) AND
+        on the rights rollout phase being ``enforce`` AND on an adapter existing
+        for the row's ``component_type`` — all three are re-read every pass, so
+        the loop goes inert the moment any gate closes.
+        """
+        from services.rights_authority.deletion_executor import (
+            build_rights_deletion_executor_coro,
+        )
+
+        return build_rights_deletion_executor_coro()
+
     def _event_outbox_relay() -> Coroutine[Any, Any, None]:
         from services.ingestion.outbox_relay import build_event_outbox_relay_coro
 
@@ -552,6 +570,20 @@ def build_worker_specs(*, registry: Any, settings: Any) -> list[WorkerSpec]:
         WorkerSpec(
             name="export_expiry_sweep",
             factory=_export_expiry_sweep,
+        ),
+        # Rights Authority retention DELETION EXECUTOR: the sweep that actually
+        # deletes artifacts whose retention expiry has passed (before it, only
+        # pending rows were ever produced and nothing acted on them). Deletion is
+        # irreversible, so it is OFF by default and requires an explicit opt-in
+        # flag PLUS rollout=enforce PLUS a registered adapter for the dimension.
+        # Not required=True: a stalled sweep leaves rows pending and surfaced, it
+        # must never abort a fresh process's startup.
+        WorkerSpec(
+            name="rights_deletion_executor",
+            factory=_rights_deletion_executor,
+            enabled=lambda: bool(
+                settings.rights_authority.deletion_executor_enabled
+            ),
         ),
         # Payment Rail Observability: periodic provider-truth pull + staleness
         # reconciliation + card-linked Gold materialization. Gated on the

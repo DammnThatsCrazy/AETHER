@@ -8,7 +8,24 @@ Versions before `1.0.0` are private alpha, beta, or release-candidate milestones
 
 ### Added
 
-- Pending changes not yet assigned to a pre-release version.
+- SDK distribution layer: `@aether/web` build artifacts are emitted and guarded on the publish surface, and a CDN release pipeline (`.github/workflows/publish-sdk.yml`) ships verified manifests with a derived version.
+- Publishable (`pk_`) API keys — a site-scoped, ingestion-only key class alongside the existing secret (`ak_`) class, so a key in page HTML cannot reach the rest of the API.
+- One-tag SDK install: quickstart collapses to a single auto-init script tag that is a real install path, with the canonical envelope stamped on the signals it emits.
+- Install observability: the `sdk_*` event family (loaded / initialized / failed) is registered in the contract registry, and an install verifier reports whether a pasted install came up — distinguishing an install that failed from one that never ran.
+- Site registry (`sdk_sites`) and site-scoped install records, so an install signal is confined to the site the request authenticated as.
+- Reconciled Control Plane seam: a site install is observed as a managed integration and admitted through the §16 lifecycle, so an install the loader could not bring up reconciles as drift instead of as nothing to reconcile.
+
+### Changed
+
+- Loader URL and API origin are canonicalized (`https://cdn.aether.network/v1.js`, `https://api.aether.io`) and enforced by a domain gate. The two origins remain deliberately separate.
+- A failed site install observes as `degraded`, never `missing`: the record exists and says the install is broken, which is evidence.
+- `loader_version` is the version the control plane reconciles against, the same field the distribution layer derives `drift_status` from.
+
+### Fixed
+
+- `bump_version.py` validated SDK/native version constants it never rewrote, so a platform bump failed the check and named a command that could not fix it. The remediation now names the SDK release script for those surfaces, and `bump-sdk-version.sh` plus the release workflow carry the loader and backend constants.
+
+Note: the Reconciled Control Plane spine remains `pending` with all 14 conformance items open; nothing in this entry moves it, and every control-plane capability stays flag-gated off (`AETHER_RECONCILED_CONTROL_*`).
 
 ## [0.1.0-alpha.0] - 2026-09-09
 

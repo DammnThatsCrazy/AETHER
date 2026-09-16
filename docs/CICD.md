@@ -22,7 +22,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:960f0dc79fc14926ca8f00c0a86565d3dbeb9c728cdc82efeedef76218e4a52b"
+  ".github/workflows/": "sha256:88ed07cc41efefdd3bf4c71817fe80cd1594300f52485798ac27ded49f355673"
   "cicd/aether-cicd/README.md": "sha256:07bc236b744bd0c54bae8b6fa661beba9d3767a3300470814f071a119f8244ee"
   "cicd/aether-cicd/main.py": "sha256:8027fb1fcb5e4a1aeb6428224fe0ca9f7756df0aaca5f39e7e84bb6c9c85feb9"
   "cicd/aether-cicd/quality_gates/": "sha256:2cc72d40cd7c324e686271c5ea2c90c2ccb15c4ebe0435b0589844663dd2e436"
@@ -569,6 +569,17 @@ release-only evidence, and is validated by `make validate-required-release-check
 SDK publication is a manual `workflow_dispatch` run of
 `.github/workflows/publish-sdk.yml`, which takes an explicit version string,
 bumps every package manifest, and then fans out per registry:
+
+The bump covers more than manifests: `scripts/bump-sdk-version.sh` rewrites the
+SDK runtime constants (web, React Native, Android, iOS), the loader's own
+`LOADER_VERSION` in `packages/web/src/loader/bootstrap.ts`, and the backend
+mirror `CANONICAL_SDK_VERSION` in
+`services/backend/services/sdk_distribution/versions.py`. The loader and backend
+copies exist because each is bundled or deployed separately from the package
+manifests, and the release then runs `scripts/validate_sdk_release_alignment.py`,
+which pins all of them against the canonical version. That check runs under
+`set -euo pipefail`, so a bump that missed any surface fails the release rather
+than publishing a mislabelled install.
 
 | Platform | Registry | Job | Version authority |
 | --- | --- | --- | --- |

@@ -6,8 +6,9 @@ lifecycle / lineage / storage authorities into durable, tenant-scoped
 intelligence, learning/model-training eligibility, disclosure, retention and
 revocation — always fail closed (blueprint §1.5 / §13).
 
-Additive only: ``routes.py`` is an optional HTTP router for an integrator to
-mount (see its docstring); nothing here is auto-wired into ``main.py``.
+``routes.py`` is the tenant HTTP surface: it is mounted in ``main.py`` and is
+inert — every handler answers 503 — until ``RIGHTS_AUTHORITY_ROLLOUT`` activates
+a phase. See its docstring.
 """
 
 from __future__ import annotations
@@ -19,6 +20,19 @@ from .contracts import (
     RightsDecisionRequest,
     RightsImpact,
     RightsLineage,
+)
+from .deletion_adapters import (
+    DeletionAdapter,
+    DeletionAdapterRegistry,
+    DeletionResult,
+    ObjectStoreDeletionAdapter,
+    deletion_adapter_registry,
+)
+from .deletion_executor import (
+    DeletionGateDecision,
+    build_rights_deletion_executor_coro,
+    deletion_gates,
+    sweep_pending_deletions,
 )
 from .envelope import (
     apply_rights_ref,
@@ -61,6 +75,17 @@ from .olympus import (
     filter_graph_of_graphs_query,
     olympus_internal_authority,
     olympus_purpose_allowlist,
+)
+from .permissions import RIGHTS_PERMISSIONS, require_rights
+from .propagation import (
+    DECISION_REF_PREFIX,
+    DESTINATION_TENANT_INTERNAL,
+    USE_WRITE_TENANT_GRAPH,
+    RightsPropagation,
+    RightsPropagationDenied,
+    propagate_rights,
+    stamp_envelope,
+    stamp_intent,
 )
 from .repositories import (
     rights_decision_repository,
@@ -105,6 +130,28 @@ __all__ = [
     "rights_envelope_fields",
     "decision_evidence_ref",
     "apply_rights_ref",
+    # propagation producer (blueprint §11 / §17 Phase 3)
+    "propagate_rights",
+    "stamp_intent",
+    "stamp_envelope",
+    "RightsPropagation",
+    "RightsPropagationDenied",
+    "USE_WRITE_TENANT_GRAPH",
+    "DESTINATION_TENANT_INTERNAL",
+    "DECISION_REF_PREFIX",
+    # grant catalog (tenant surface authority)
+    "RIGHTS_PERMISSIONS",
+    "require_rights",
+    # retention deletion executor
+    "sweep_pending_deletions",
+    "deletion_gates",
+    "DeletionGateDecision",
+    "build_rights_deletion_executor_coro",
+    "DeletionAdapter",
+    "DeletionAdapterRegistry",
+    "DeletionResult",
+    "ObjectStoreDeletionAdapter",
+    "deletion_adapter_registry",
     # rollout / activation
     "RolloutMode",
     "current_mode",

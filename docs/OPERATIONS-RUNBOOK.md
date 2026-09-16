@@ -16,7 +16,7 @@ estimated_read_minutes: 12
 toc_depth: 3
 source_hashes:
   "deploy/legacy-staging/bootstrap.sh": "sha256:8aa69b5c9860daa7ef94f94eb622f04c4babedb373aed096667419f774a7e1ae"
-  "services/backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
+  "services/backend/config/settings.py": "sha256:486abbaa3ec3e1dce4e257f8e50efe45cfd98d8a3ad99b88863ab2f0884b1748"
   "services/backend/main.py": "sha256:146abcd2a0af5653e96f1c1eb9e5fe1fef6e32790758636cbde4d6d24c5c592e"
   "services/backend/services/provider_runtime/": "sha256:81502394ca09ea802ea90662dc6f23c1918a0ece952a2bfdac68187007f2c8fa"
 ---
@@ -729,7 +729,32 @@ is the expected default, not an incident.
 pre-enforcement phases and `enforce` engages the resolver's consent seam and
 the §66 revocation pipeline end-to-end.
 
-**Scoping.** Routes enforce the canonical read/write scopes and the caller's
-tenant server-side; unknown or cross-tenant decision reads and grant revocations
-return `404`. Endpoint reference: `docs/BACKEND-API.md` (the "Rights Authority"
-section).
+**Scoping.** Routes enforce the granular `rights.*` grants (with the legacy
+`read`/`write` scopes preserved as aliases) and the caller's tenant server-side;
+unknown or cross-tenant decision reads and grant revocations return `404`.
+Endpoint reference: `docs/BACKEND-API.md` (the "Rights Authority" section).
+
+### Retention deletion executor — `RIGHTS_AUTHORITY_DELETION_EXECUTOR_ENABLED`
+
+The Rights Authority retention seam schedules deletions; it never performed
+them. The supervised `rights_deletion_executor` sweep
+(`maintenance` role) now executes them, and it stays **OFF** until an operator
+opts in explicitly — deletion is irreversible.
+
+| Env var | Default | Effect |
+| --- | --- | --- |
+| `RIGHTS_AUTHORITY_DELETION_EXECUTOR_ENABLED` | `false` | Opt-in for the deletion sweep (`settings.rights_authority.deletion_executor_enabled`). Read at call time, so unsetting it stops the next sweep without a restart. |
+| `RIGHTS_DELETION_EXECUTOR_INTERVAL_SECONDS` | `3600` | Sweep interval; an unset or non-positive value falls back to `3600`. |
+
+The flag is **one of three** gates — all must hold or the row is left `pending`
+and nothing is deleted (no partial or best-effort path): the rights rollout
+phase must be `enforce` (`RIGHTS_AUTHORITY_ROLLOUT=enforce`), the flag must be
+set, and the row's `component_type` must have a registered deletion adapter.
+Only the `raw_object` byte-plane dimension is executable today; the other eight
+cascade dimensions are explicitly unsupported and are reported as such rather
+than stubbed to a fake success. Per-row safety preconditions on top of the gates
+(due instant provable, artifact provably in the row's own tenant scope, no
+active storage legal hold) all fail closed. A sweep reports counters
+(`rows_scanned`, `deleted`, `already_absent`, `gate_blocked`, `not_due`,
+`held`, `refused_out_of_scope`, `blocked`) rather than what it attempted; rows
+that could not be deleted stay in a state that still surfaces them.

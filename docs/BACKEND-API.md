@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:2da98a0079fa17ddc8b703d960aa907ef86acaa7a8558d296862e66f497f559b"
+  "services/backend/services/": "sha256:d34e156e822be8c23c4110ab4aac5e66a6924b3ad7f4c0c1758b7de2719b76e9"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -4044,12 +4044,23 @@ consent seam (the server consent authority behind `services/backend/services/con
 and the §66 revocation pipeline therefore remain fail-closed at the mutation
 boundary until `enforce`.
 
-**Authorization:** routes enforce the canonical read/write scopes and the
-caller's tenant server-side. The actor whose rights are resolved is the
-**authenticated caller** (derived from `tenant_actor`), never a
+**Authorization:** each handler is gated on a **granular `rights.*` grant**
+(`services/backend/services/rights_authority/permissions.py`), not the bare
+single-word scope: `rights.decision.resolve` (effective-rights resolution),
+`rights.decision.read` (tenant-scoped decision read), and
+`rights.revocation.run` (the §66 revocation pipeline). The legacy single-word
+scopes are preserved as *aliases* — `read` confers
+`rights.decision.resolve` / `rights.decision.read`, `write` confers
+`rights.revocation.run` — so an already-granted tenant session keeps working and
+nothing previously reachable became unreachable. `Role.ADMIN` still
+short-circuits. The `rights` RBAC domain is registered in `ALL_DOMAINS` /
+`GovernanceDomain` / `packages/shared/security-governance.ts`, so the dotted
+grants resolve against real role authority rather than being edge cosmetics.
+Routes also enforce the caller's tenant server-side. The actor whose rights are
+resolved is the **authenticated caller** (derived from `tenant_actor`), never a
 client-supplied identity. The durable decision store is a tenant-scoped
 **ledger** — tenant (not actor) is the ownership boundary — so a read-only
-principal can resolve/read while only the `write` scope can revoke.
+principal can resolve/read while only a revocation grant can revoke.
 Cross-tenant body/route mismatches are refused server-side (403) before any
 resolver/pipeline work; unknown or cross-tenant records read as 404. The
 Generalization Gateway is deliberately **not** exposed over HTTP: its
@@ -4058,9 +4069,9 @@ data-profiling evidence, never client-asserted.
 
 ### POST `/v1/rights/decisions/effective` — resolve + durably record an effective-rights decision
 
-Permission `read` (a read-class query that changes nothing; the §17 decision is
-recorded for the tenant audit ledger as a side effect). Rollout gate: `503`
-when `off`.
+Grant `rights.decision.resolve` (a read-class query that changes nothing; the
+§17 decision is recorded for the tenant audit ledger as a side effect). Legacy
+alias: `read`. Rollout gate: `503` when `off`.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -4081,15 +4092,15 @@ Errors: `503` rollout `off`; `403` cross-tenant; `422` validation (a list
 
 ### GET `/v1/rights/decisions/{decision_id}` — tenant-scoped decision-ledger read
 
-Permission `read`. Rollout gate: `503` when `off`. The record must belong to
-the caller's tenant; unknown or cross-tenant records read as `404` (the store
-is tenant-isolated and the route checks tenant equality server-side). Returns
-the full durable `RightsDecision` row.
+Grant `rights.decision.read`. Legacy alias: `read`. Rollout gate: `503` when
+`off`. The record must belong to the caller's tenant; unknown or cross-tenant
+records read as `404` (the store is tenant-isolated and the route checks tenant
+equality server-side). Returns the full durable `RightsDecision` row.
 
 ### POST `/v1/rights/revocations` — run the §66 revocation pipeline
 
-Permission `write` (a destructive mutation — never `read`). Rollout gate: `503`
-when `off`.
+Grant `rights.revocation.run` (a destructive mutation — aliased by `write`,
+never by `read`). Rollout gate: `503` when `off`.
 
 | Field | Type | Notes |
 |---|---|---|

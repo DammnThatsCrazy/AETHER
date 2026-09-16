@@ -20,11 +20,16 @@ DDL parity
 ----------
 The alembic ``versions`` directory is not an importable package and
 ``alembic`` itself is not a runtime backend dependency, so the DDL constants
-below are duplicated VERBATIM from
-``alembic/versions/20260729_graph_mutation_ledger.py``.
+below are duplicated VERBATIM from their migrations:
+``alembic/versions/20260729_graph_mutation_ledger.py`` creates the tables, and
+``alembic/versions/20260914_graph_mutation_rights_ref.py`` adds the
+``rights_decision_ref`` column (a later, additive migration — the historical
+migration is never edited in place).
 ``tests/unit/graph_gateway/test_ledger_ddl_parity.py`` AST-extracts the
-migration's constants and asserts exact string equality — when changing
-table shape, edit the migration first, then mirror it here.
+migrations' constants and asserts exact string equality — when changing table
+shape, edit (or add) the migration first, then mirror it here. A fresh database
+therefore ends up with the same shape whether it was migrated or auto-created:
+``GRAPH_MUTATION_LEDGER_DDL`` + ``GRAPH_MUTATION_LEDGER_RIGHTS_REF_DDL``.
 
 Backend selection mirrors repositories/repos.py:
 - ``get_pool()`` returns None (AETHER_ENV=local without DATABASE_URL) →
@@ -85,6 +90,15 @@ CREATE TABLE IF NOT EXISTS graph_mutation_ledger (
     change_set_id TEXT,
     schema_version TEXT
 )
+"""
+
+# Additive column, duplicated verbatim from alembic migration
+# 20260914_graph_mutation_rights_ref.py (parity-tested). The ledger's base DDL
+# above stays byte-identical to its own historical migration, so a migrated
+# database and an auto-created one converge on this same composed shape.
+GRAPH_MUTATION_LEDGER_RIGHTS_REF_DDL = """
+ALTER TABLE graph_mutation_ledger
+    ADD COLUMN IF NOT EXISTS rights_decision_ref TEXT
 """
 
 GRAPH_FACT_VERSIONS_DDL = """
@@ -241,11 +255,11 @@ INSERT INTO graph_mutation_ledger (
     valid_from, valid_to, recorded_at, superseded_at,
     correlation_id, causation_id, source_event_id, idempotency_key,
     reason_code, causality_class, confidence,
-    evidence_refs, model_refs, policy_refs, consent_refs,
+    evidence_refs, model_refs, policy_refs, consent_refs, rights_decision_ref,
     before_version_id, after_version_id, change_set_id, schema_version
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-    $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
+    $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29
 )
 ON CONFLICT (tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL
 DO NOTHING
@@ -286,7 +300,15 @@ class GraphMutationLedgerRepository:
         if self._schema_ensured or pool is None:
             self._schema_ensured = True
             return
-        for ddl in (GRAPH_MUTATION_LEDGER_DDL, GRAPH_FACT_VERSIONS_DDL, GRAPH_CHECKPOINTS_DDL):
+        for ddl in (
+            GRAPH_MUTATION_LEDGER_DDL,
+            # Additive column: the base CREATE above stays byte-identical to its
+            # historical migration, so a migrated database and an auto-created
+            # one converge on the same composed shape.
+            GRAPH_MUTATION_LEDGER_RIGHTS_REF_DDL,
+            GRAPH_FACT_VERSIONS_DDL,
+            GRAPH_CHECKPOINTS_DDL,
+        ):
             await pool.execute(ddl)
         for index_ddl in GRAPH_LEDGER_INDEXES:
             await pool.execute(index_ddl)
@@ -464,6 +486,7 @@ class GraphMutationLedgerRepository:
                         json.dumps(record.model_refs) if record.model_refs is not None else None,
                         json.dumps(record.policy_refs) if record.policy_refs is not None else None,
                         json.dumps(record.consent_refs) if record.consent_refs is not None else None,
+                        record.rights_decision_ref,
                         before_version_id,
                         after_version_id,
                         record.change_set_id,
@@ -680,6 +703,7 @@ class GraphMutationLedgerRepository:
 
 __all__ = [
     "GRAPH_MUTATION_LEDGER_DDL",
+    "GRAPH_MUTATION_LEDGER_RIGHTS_REF_DDL",
     "GRAPH_FACT_VERSIONS_DDL",
     "GRAPH_CHECKPOINTS_DDL",
     "GRAPH_LEDGER_INDEXES",
