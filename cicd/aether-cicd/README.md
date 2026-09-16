@@ -142,15 +142,7 @@ Independent workflow for updating OTA data modules (chain registry, DeFi protoco
 **Triggers:** `workflow_dispatch` (manual) or push to `packages/web/src/web3/chains/**`, `packages/web/src/web3/defi/protocol-registry.ts`, `packages/web/src/web3/wallet/**`.
 
 **CDN structure:**
-```
-s3://cdn.aether.network/sdk/
-  v5/loader.js                           # Stable auto-loader
-  manifests/{web,ios,android,react-native}/latest.json
-  data/chain-registry/{version}.json + latest.json
-  data/protocol-registry/{version}.json + latest.json
-  data/wallet-labels/{version}.json + latest.json
-  data/wallet-classification/{version}.json + latest.json
-```
+```\ns3://cdn.aether.network/\n  v1.js                              # Stable auto-loader (canonical)\n  manifests/{web,ios,android,react-native}/latest.json\n  data/chain-registry/{version}.json + latest.json\n  data/protocol-registry/{version}.json + latest.json\n  data/wallet-labels/{version}.json + latest.json\n  data/wallet-classification/{version}.json + latest.json\n```
 
 ---
 
@@ -208,24 +200,14 @@ demo ----o----o----o--------------> demo environment (sales/BD)
 
 The SDK release system (`stages/sdk/sdk_release.py`) manages the full lifecycle for all four platform SDKs. The release pipeline now also includes OTA data module publishing (`stages/sdk/data_module_publisher.py`) and manifest generation (`stages/sdk/manifest_publisher.py`).
 
-| Platform     | Package Name                | Registry                          | Build Tool   |
-| ------------ | --------------------------- | --------------------------------- | ------------ |
-| Web          | `@aether/sdk`               | npm + CDN (cdn.aether.network)    | esbuild      |
-| iOS          | `AetherSDK`                 | CocoaPods + Swift Package Manager | xcodebuild   |
-| Android      | `com.aether:aether-android` | Maven Central                     | gradle       |
-| React Native | `@aether/react-native`      | npm                               | metro        |
+**Canonical CDN loader:** `https://cdn.aether.network/v1.js` — a stable URL that does not change with SDK versions, so customer HTML never needs re-editing. The `v1.js` loader fetches the current SDK bundle and manifest at runtime.
 
-### Release Features
-
-- **Semantic versioning** -- patch, minor, major bumps with pre-release tags (alpha, beta, rc)
-- **Automatic changelogs** -- generated from commit history per platform
-- **Dry-run mode** -- validate the full release flow without publishing
-- **Parallel coordination** -- release multiple platforms concurrently
-- **Rollback-safe** -- version commits only occur after successful publish
-- **CDN auto-loader** -- builds and uploads the lightweight SDK loader to stable CDN URL
-- **OTA data modules** -- extracts, publishes, and verifies data modules for all platforms
-- **SDK manifests** -- generates per-platform manifest JSON for OTA update checks
-- **Notification integration** -- Slack alerts on release success or failure
+|| Platform     | Package Name                | Registry                          | Build Tool   |
+|| ------------ | --------------------------- | --------------------------------- | ------------ |
+|| Web          | `@aether/sdk`               | npm + CDN (cdn.aether.network)    | esbuild      |
+|| iOS          | `AetherSDK`                 | CocoaPods + Swift Package Manager | xcodebuild   |
+|| Android      | `com.aether:aether-android` | Maven Central                     | gradle       |
+|| React Native | `@aether/react-native`      | npm                               | metro        |
 
 ---
 
