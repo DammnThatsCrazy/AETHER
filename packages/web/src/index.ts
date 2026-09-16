@@ -392,7 +392,30 @@ class AetherSDK implements AetherSDKInterface {
   }
 
   async flush(): Promise<void> {
-    await this.eventQueue?.flush();
+    if (!this.eventQueue) return;
+    this.healthAgent?.setLastFlushStatus('flushing');
+    try {
+      await this.eventQueue.flush();
+      this.healthAgent?.setLastFlushStatus('success');
+    } catch {
+      this.healthAgent?.setLastFlushStatus('failed');
+      throw;
+    }
+  }
+
+  /** Return current dropped-event diagnostics (blueprint §3.5). */
+  getDiagnostics(): Diagnostics | null {
+    return this.healthAgent?.getDiagnostics() ?? null;
+  }
+
+  /** Return the current event queue depth. */
+  getQueueDepth(): number {
+    return this.eventQueue?.size ?? 0;
+  }
+
+  /** Return the last flush result status. */
+  getLastFlushStatus(): SDKHealthAgent['lastFlushStatus'] | null {
+    return this.healthAgent?.getLastFlushStatus() ?? null;
   }
 
   destroy(): void {
@@ -1386,4 +1409,4 @@ export { AetherSDK };
 export type { AetherConfig, AetherSDKInterface, ResolvedIdentity, JourneyPayload, CurrentJourney, JourneyStatus, JourneyLifecycleEventType, AcquisitionEvidence, CampaignContext } from './types';
 // AcquisitionEvidence and CampaignContext were added in the campaign registry milestone.
 export { SDKHealthAgent } from './health';
-export type { SDKHealthAgentConfig, SDKHeartbeatPayload, SDKManifest, ManifestUpdateCallback } from './health';
+export type { SDKHealthAgentConfig, SDKHeartbeatPayload, SDKManifest, ManifestUpdateCallback, Diagnostics, DroppedEventCounts, DroppedEventReason } from './health';

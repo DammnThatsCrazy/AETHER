@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "examples-react-native",
+    "slug": "examples-react-native",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0a0a"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.aether.examples.reactnative"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0a0a"
+      },
+      "package": "com.aether.examples.reactnative"
+    },
+    "plugins": []
+  }
+}
