@@ -46,6 +46,7 @@ from services.jobs.service import (
     job_status_topic_attr,
     publish_platform_topic,
 )
+from services.responsiveness.service import get_responsiveness_service
 
 logger = get_logger("aether.service.jobs.worker")
 

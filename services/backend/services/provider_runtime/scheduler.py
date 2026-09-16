@@ -40,6 +40,7 @@ from services.provider_runtime.errors import (
     ProviderNotInstalled,
     ProviderPullFailed,
 )
+from services.responsiveness.service import get_responsiveness_service
 from services.provider_runtime.metering import meter as _default_meter
 from services.provider_runtime.rate_limit import RateLimitCoordinator
 from services.provider_runtime.retry import RetryCoordinator
@@ -257,6 +258,8 @@ class PullScheduler:
         events_published = 0
         last_cursor: Optional[str] = cursor
         terminal: Optional[ProviderPullFailed] = None
+        _first_sample_emitted = False
+        _sync_started_at = datetime.now(timezone.utc).isoformat()
 
         try:
             while True:
@@ -305,6 +308,24 @@ class PullScheduler:
                             f"provider={provider_identity}: {exc}"
                         )
                 events_published += len(events)
+
+                # Responsiveness spine: first-sample milestone (progressive provider sync).
+                if not _first_sample_emitted and events:
+                    _first_sample_emitted = True
+                    try:
+                        await get_responsiveness_service().update_provider_sync_state(
+                            tenant_id=tenant_id,
+                            provider_id=provider_identity,
+                            connection_id=connection_id,
+                            status="sampling",
+                            connected_at=_sync_started_at,
+                            first_sample_record_at=datetime.now(timezone.utc).isoformat(),
+                            records_sampled=len(events),
+                            records_discovered=records_received,
+                            progress_percent=min(100.0, (page / max(1, self.MAX_PAGES)) * 100),
+                        )
+                    except Exception:
+                        pass
 
                 last_cursor = batch.next_cursor or last_cursor
                 if not batch.has_more:

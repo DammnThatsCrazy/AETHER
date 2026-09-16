@@ -81,6 +81,7 @@ from shared.logger.logger import get_logger, metrics
 from . import reducers
 from .repositories.base_fact_repo import SemanticFactRepository
 from .repositories.review_queue_repo import SemanticReviewQueueRepository
+from services.responsiveness.service import get_responsiveness_service
 
 logger = get_logger("aether.semantic.graph_projector")
 
@@ -689,6 +690,19 @@ async def project_tenant(
         metrics.increment(
             "semantic_graph_vertices_projected_total", report.vertices_projected
         )
+    # Responsiveness spine: record graph hydration progress after each tenant sweep.
+    try:
+        await get_responsiveness_service().update_graph_hydration_state(
+            tenant_id=tenant_id,
+            graph_version="current",
+            status="hydrating_surfaces" if report.projected else "building_projections",
+            raw_events_count=report.relationships_seen,
+            edge_count=report.projected,
+            projected_edge_count=report.projected,
+            hydration_progress_percent=None,
+        )
+    except Exception as exc:
+        logger.warning("responsiveness graph_hydration_state update failed: %s", exc)
     return report
 
 
@@ -803,9 +817,31 @@ async def project_once() -> list[ProjectionReport]:
                 exc_info=True,
             )
             report = ProjectionReport(tenant_id=tenant_id, failed=1, errors=[str(exc)])
+            # Responsiveness spine: a failed tenant sweep is still a hydration signal.
+            try:
+                await get_responsiveness_service().update_graph_hydration_state(
+                    tenant_id=tenant_id,
+                    graph_version="current",
+                    status="degraded",
+                    degraded_reasons=[f"projector sweep failed: {exc}"],
+                )
+            except Exception:
+                pass
         if report.failed:
             logger.warning("semantic graph projector partial: %s", report.to_dict())
         reports.append(report)
+        # Responsiveness spine: first-graph milestones (first node/edge seen).
+        try:
+            if report.projected > 0 or report.vertices_projected > 0:
+                await get_responsiveness_service().mark_graph_stub_visible(
+                    tenant_id, "current"
+                )
+                await get_responsiveness_service().mark_first_value(
+                    tenant_id, "graph_node",
+                    occurred_at=utc_now().isoformat(),
+                )
+        except Exception:
+            pass
     return reports
 
 

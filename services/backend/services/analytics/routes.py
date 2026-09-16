@@ -25,6 +25,7 @@ from shared.observability import trace_request, emit_latency, record_graphql_que
 from shared.store import get_store
 from dependencies.providers import get_cache, get_registry
 from repositories.repos import AnalyticsRepository
+from services.responsiveness.service import get_responsiveness_service
 
 logger = get_logger("aether.service.analytics")
 router = APIRouter(prefix="/v1/analytics", tags=["Analytics"])
@@ -71,19 +72,48 @@ async def query_events(
 ):
     """Query events with filters. Cached in Redis for 5 minutes."""
     tenant = request.state.tenant
-    results = await repo.query_events(
-        tenant.tenant_id,
-        query.model_dump(exclude_none=True),
-        limit=query.limit,
-    )
-    return PaginatedResponse(
-        data=results,
-        pagination=PaginationMeta(
-            total=len(results),
+    query_id = str(_uuid.uuid4())
+    submitted_at = utc_now()
+    try:
+        results = await repo.query_events(
+            tenant.tenant_id,
+            query.model_dump(exclude_none=True),
             limit=query.limit,
-            has_more=len(results) == query.limit,
-        ),
-    ).to_dict()
+        )
+        completed_at = utc_now()
+        total_ms = (completed_at - submitted_at).total_seconds() * 1000
+        lane = "cached" if False else "indexed_graph"  # Redis cache path = cached in budget terms
+        await get_responsiveness_service().record_query(
+            tenant_id=tenant.tenant_id,
+            query_id=query_id,
+            lane=lane,
+            status="complete",
+            first_result_latency_ms=total_ms,
+            total_latency_ms=total_ms,
+            cache_hit=True,
+            completed_at=completed_at.isoformat(),
+        )
+        return PaginatedResponse(
+            data=results,
+            pagination=PaginationMeta(
+                total=len(results),
+                limit=query.limit,
+                has_more=len(results) == query.limit,
+            ),
+        ).to_dict()
+    except Exception as exc:
+        completed_at = utc_now()
+        total_ms = (completed_at - submitted_at).total_seconds() * 1000
+        await get_responsiveness_service().record_query(
+            tenant_id=tenant.tenant_id,
+            query_id=query_id,
+            lane="analytical",
+            status="failed",
+            total_latency_ms=total_ms,
+            completed_at=completed_at.isoformat(),
+            failure_reason=str(exc),
+        )
+        raise
 
 
 @router.get("/events/{event_id}")

@@ -73,6 +73,7 @@ from services.ingestion.validation import (
 # Capability-family metering seam (§7): durable evidence + meter for
 # reconciliation at the canonical ingestion choke point.
 from services.metering_evidence.families import meter_family_usage  # noqa: E402
+from services.responsiveness.service import get_responsiveness_service
 
 logger = get_logger("aether.service.ingestion.batch")
 router = APIRouter(prefix="/v1", tags=["Ingestion"])
@@ -653,6 +654,25 @@ async def ingest_events(
                 tenant_id=tenant_id, event_id=_res.id, stage="bronze",
                 status="accepted", path="sdk",
             )
+
+    # Responsiveness spine: record the real first-event ACK (fast path).
+    # Called after the WS-E funnel so the record reflects the real validated
+    # disposition, and before the response is returned so the SDK sees the
+    # heartbeat in the dashboard on its next poll. Best-effort: a failure here
+    # never breaks ingestion (the spine is observability, not a data path).
+    try:
+        ack_dt = utc_now()
+        ack_latency_ms = (ack_dt - received_dt).total_seconds() * 1000
+        await get_responsiveness_service().record_first_event_ack(
+            tenant_id=tenant_id,
+            event_id=results[0].id if results else batch_id,
+            batch_id=batch_id,
+            received_at=received_at,
+            ack_latency_ms=ack_latency_ms,
+            environment=settings.env.value,
+        )
+    except Exception as exc:
+        logger.warning("responsiveness first_event_ack failed: %s", exc)
 
     # Family seam: durable meter + evidence for accepted ingestion only
     # (advisory — no entitlement gate; metering never breaks the request).
