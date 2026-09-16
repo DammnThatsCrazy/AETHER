@@ -37,5 +37,15 @@ perl -0pi -e "s/version: '[^']+'/version: '$VERSION'/g" "$ROOT/packages/react-na
 perl -0pi -e "s/VERSION = \"[^\"]+\"/VERSION = \"$VERSION\"/g" "$ROOT/packages/android/src/main/java/com/aether/sdk/Aether.kt"
 perl -0pi -e "s/v[0-9]+\.[0-9]+\.[0-9]+\)/v$VERSION\)/g; s/version: \"[^\"]+\"/version: \"$VERSION\"/g" "$ROOT/packages/ios/Sources/AetherSDK/Aether.swift"
 
+# The loader carries its own copy of the version (it is bundled separately from
+# the SDK), and the backend carries the mirror the install verifier reads back.
+# Both are pinned by validate_sdk_release_alignment.py below, so a bump that
+# skipped them would fail closed rather than ship a mislabelled install — but
+# the release could not complete unattended, which is why they are listed here.
+perl -0pi -e "s/LOADER_VERSION = '[^']+'/LOADER_VERSION = '$VERSION'/g" \
+  "$ROOT/packages/web/src/loader/bootstrap.ts"
+perl -0pi -e "s/CANONICAL_SDK_VERSION = \"[^\"]+\"/CANONICAL_SDK_VERSION = \"$VERSION\"/g" \
+  "$ROOT/services/backend/services/sdk_distribution/versions.py"
+
 python "$ROOT/scripts/validate_sdk_release_alignment.py"
 echo "Done. SDK release metadata set to $VERSION."
