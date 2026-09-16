@@ -172,11 +172,14 @@ def generate_manifest(
     # Web platform gets SDK bundle download URLs
     if platform == "web":
         manifest["downloads"] = {
-            "sdkBundleUrl": f"{cdn_base}/sdk/{sdk_version}/aether-sdk.esm.min.js",
+            "loaderUrl": f"{cdn_base}/v1.js",
+            "sdkBundleUrl": f"{cdn_base}/v1.js",
             "sdkBundleHash": "",  # populated during release from actual artifact
             "sdkBundleSize": 0,
         }
         # Try to resolve actual bundle hash if the file exists locally
+        # Build artifact path for hash/size resolution — not a public install URL;
+        # the canonical loader the browser fetches is {cdn_base}/v1.js (see loaderUrl/sdkBundleUrl above).
         local_bundle = "packages/web/dist/aether-sdk.esm.min.js"
         if os.path.isfile(local_bundle):
             manifest["downloads"]["sdkBundleHash"] = f"sha256:{_sha256_file(local_bundle)}"

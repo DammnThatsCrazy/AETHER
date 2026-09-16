@@ -109,6 +109,13 @@ jobs:
           test -f docs/reports/SDK_PRODUCTION_READINESS_AUDIT.md ||
           (echo "ERROR: Audit doc missing" && exit 1)
 
+      - name: Legacy CDN path scan in docs
+        run: |
+          if grep -rEn --include='*.md' 'sdk/v5/loader\.js|aether-sdk\.esm\.min\.js|aether-sdk\.umd\.js' docs/; then
+            echo "ERROR: Legacy CDN paths found in docs — these must reference only v1.js" && exit 1
+          fi
+          echo "OK: No legacy CDN paths in docs"
+
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 30

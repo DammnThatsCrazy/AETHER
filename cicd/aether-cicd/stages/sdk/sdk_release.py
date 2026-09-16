@@ -154,16 +154,14 @@ def release_web_sdk(
         ("Version bump",     f"cd packages/web && npm version {new_version} --no-git-tag-version || true"),
         ("Build ESM",        "cd packages/web && npx esbuild src/index.ts --bundle --format=esm --outfile=dist/aether-sdk.esm.js || true"),
         ("Build UMD",        "cd packages/web && npx esbuild src/index.ts --bundle --format=iife --global-name=Aether --outfile=dist/aether-sdk.umd.js || true"),
-        ("Minify",           "cd packages/web && npx esbuild dist/aether-sdk.esm.js --minify --outfile=dist/aether-sdk.esm.min.js || true"),
+        ("Minify",           "cd packages/web && npx esbuild dist/aether-sdk.esm.js --minify --outfile=dist/aether-sdk.esm.min.js || true"),  # build artifact; canonical loader is v1.js
         ("Build Loader",     "cd packages/web && npx rollup -c rollup.loader.mjs || true"),
         ("Type declarations","cd packages/web && npx tsc --emitDeclarationOnly --outDir dist/types || true"),
         ("Test",             "cd packages/web && npx jest --ci || true"),
         ("Changelog",        "npx conventional-changelog -p angular -i CHANGELOG.md -s --commit-path packages/web || true"),
         ("Publish npm",      f"cd packages/web && npm publish --access public {npm_tag} || true"),
-        ("Upload CDN",       f"aws s3 sync packages/web/dist/ s3://cdn.aether.network/sdk/{new_version}/ --acl public-read || true"),
-        ("CDN latest",       "aws s3 sync packages/web/dist/ s3://cdn.aether.network/sdk/latest/ --acl public-read || true"),
-        ("Upload Loader",    "aws s3 cp packages/web/dist/loader.js s3://cdn.aether.network/sdk/v5/loader.js --acl public-read || true"),
-        ("Upload Loader ESM","aws s3 cp packages/web/dist/loader.mjs s3://cdn.aether.network/sdk/v5/loader.mjs --acl public-read || true"),
+        ("Upload CDN",       f"aws s3 sync packages/web/dist/ s3://cdn.aether.network/ --acl public-read || true"),
+        ("CDN latest",       "aws s3 sync packages/web/dist/ s3://cdn.aether.network/latest/ --acl public-read || true"),
         ("Extract data modules", "cd packages/web && python ../../cicd/aether-cicd/stages/sdk/data_module_publisher.py || true"),
         ("Publish manifests", f"python cicd/aether-cicd/stages/sdk/manifest_publisher.py --version {new_version} || true"),
         ("Git tag",          f"git tag sdk-web-v{new_version} && git push origin sdk-web-v{new_version} || true"),
@@ -179,8 +177,7 @@ def release_web_sdk(
     ]
     ctx.published_to = [
         f"npm: @aether/sdk@{new_version}",
-        f"CDN: https://cdn.aether.network/sdk/{new_version}/aether-sdk.esm.min.js",
-        "Loader: https://cdn.aether.network/sdk/v5/loader.js",
+        f"CDN: https://cdn.aether.network/v1.js",
         "Manifests: https://cdn.aether.network/sdk/manifests/{platform}/latest.json",
     ]
     ctx.success = success
