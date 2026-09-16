@@ -8,8 +8,8 @@ Direct graph writers migrating onto the canonical
 the ~30 migrated writer packages while preserving the identity-writer pattern
 proof: the Edge / Vertex object is passed through **unchanged** (so ``off`` mode
 projects exactly what the writer wrote today), and the ledger metadata — actor,
-subject, causality class, evidence — travels on the intent, where it only
-materialises in ``shadow`` / ``enforce`` modes.
+subject, causality class, evidence, the governing rights ref — travels on the
+intent, where it only materialises in ``shadow`` / ``enforce`` modes.
 
 None of these builders mutate the passed Edge / Vertex properties. Fields that
 are ``None`` are simply omitted from the ledger record.
@@ -48,6 +48,7 @@ def edge_intent(
     confidence: Optional[float] = None,
     evidence_refs: Optional[list[str]] = None,
     consent_refs: Optional[list[str]] = None,
+    rights_decision_ref: Optional[str] = None,
     correlation_id: Optional[str] = None,
     valid_from: Optional[str] = None,
     valid_to: Optional[str] = None,
@@ -62,6 +63,12 @@ def edge_intent(
     but omits it here gets that same actor_kind on the ledger record and CIS
     context, instead of a hardcoded ``"system"`` that would disagree with the
     projected edge.
+
+    ``rights_decision_ref`` is an opt-in passthrough: a caller that has already
+    resolved a governing ``RightsDecision`` (see
+    ``services.rights_authority.propagation``) hands its durable ``rdec_...``
+    id over here, and it lands on the ledger record. Left as ``None`` — the
+    default — the intent carries no rights ref and the write is unchanged.
     """
     props = edge.properties or {}
     return MutationIntent(
@@ -82,6 +89,7 @@ def edge_intent(
         confidence=confidence if confidence is not None else _confidence(props),
         evidence_refs=evidence_refs,
         consent_refs=consent_refs,
+        rights_decision_ref=rights_decision_ref,
         correlation_id=correlation_id,
         valid_from=valid_from,
         valid_to=valid_to,
@@ -100,6 +108,7 @@ def vertex_intent(
     source_event_id: Optional[str] = None,
     causality_class: str = "observed_sequence",
     reason_code: Optional[str] = None,
+    rights_decision_ref: Optional[str] = None,
     correlation_id: Optional[str] = None,
 ) -> MutationIntent:
     """Express one vertex write as a gateway intent.
@@ -108,6 +117,9 @@ def vertex_intent(
     ``node_created`` projects via ``add_vertex`` (matching a direct
     ``add_vertex`` call); every other node operation (e.g. ``node_versioned``)
     projects via ``upsert_vertex`` (matching a direct ``upsert_vertex`` call).
+
+    ``rights_decision_ref`` is the same opt-in passthrough as in
+    :func:`edge_intent`; ``None`` (the default) leaves the write unchanged.
     """
     props = vertex.properties or {}
     return MutationIntent(
@@ -121,6 +133,7 @@ def vertex_intent(
         source_event_id=source_event_id,
         causality_class=causality_class,
         reason_code=reason_code,
+        rights_decision_ref=rights_decision_ref,
         correlation_id=correlation_id,
     )
 
@@ -140,6 +153,7 @@ def revocation_intent(
     reason_code: Optional[str] = None,
     causality_class: str = "declared_reason",
     source_event_id: Optional[str] = None,
+    rights_decision_ref: Optional[str] = None,
     correlation_id: Optional[str] = None,
 ) -> MutationIntent:
     """Express one soft-revoke as a gateway intent (never a hard delete).
@@ -148,6 +162,9 @@ def revocation_intent(
     (``edge_expired`` / ``edge_tombstoned`` / ``identity_split``); regardless,
     the gateway projects it through ``GraphClient.revoke_edge`` and replay
     treats it as a revocation.
+
+    ``rights_decision_ref`` is the same opt-in passthrough as in
+    :func:`edge_intent`; ``None`` (the default) leaves the write unchanged.
     """
     return MutationIntent(
         operation=operation,
@@ -165,6 +182,7 @@ def revocation_intent(
         reason_code=reason_code if reason_code is not None else reason,
         causality_class=causality_class,
         source_event_id=source_event_id,
+        rights_decision_ref=rights_decision_ref,
         correlation_id=correlation_id,
     )
 

@@ -50,6 +50,11 @@ class MutationRecord(BaseModel):
     model_refs: Optional[list[str]] = None
     policy_refs: Optional[list[str]] = None
     consent_refs: Optional[list[str]] = None
+    # Durable ``rdec_...`` id of the RightsDecision governing this mutation
+    # (blueprint §11: "Graph mutation MutationIntent/MutationRecord gain a
+    # rights ref"). Set from ``MutationIntent.rights_decision_ref``; ``None``
+    # for every write that ran outside a rights gate.
+    rights_decision_ref: Optional[str] = None
     before_version_id: Optional[str] = None
     after_version_id: Optional[str] = None
     change_set_id: Optional[str] = None

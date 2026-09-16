@@ -125,9 +125,14 @@ calls for (`tenant_id`, `request_id`, `scope_ref`, `subject_refs`, `as_of`,
 `valid_time`, `identity_watermark`, `data_watermark`, `policy_ref`,
 `consent_decision_ref`, `rights_decision_ref`, `evidence_refs`, `quality`,
 `contract_versions`, `model_refs`, `lineage_refs`). Fields with no producer yet
-(`identity_watermark`, `rights_decision_ref`) are declared present-but-unpopulated
-(`@unpopulated`); no producer is claimed until one ships. Nothing is
-re-defined.
+(`identity_watermark`, and `rights_decision_ref` as filed) are declared
+present-but-unpopulated (`@unpopulated`); no producer is claimed until one
+ships. `rights_decision_ref` **left** that set on 2026-09-14, when the
+rights-propagation producer
+(`services/backend/services/rights_authority/propagation.py`) shipped and a
+governed write began stamping the durable `rdec_...` identity of the
+`RightsDecision` that authorized it; `identity_watermark` remains
+`@unpopulated`. Nothing is re-defined.
 
 ### D4 — IRRL is a naming overlay, not a new runtime
 

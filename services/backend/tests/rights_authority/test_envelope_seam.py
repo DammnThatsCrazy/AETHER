@@ -1,11 +1,11 @@
-"""Rights Authority → spine/graph envelope SEAM (producer seam, not a producer).
+"""Rights Authority → spine/graph envelope SEAM (called by the producer).
 
-Exercises ``services/rights_authority/envelope.py``: the field surface a future
-spine producer calls so a resolved ``RightsDecision`` can ride a
-``SpineEnvelope``. These tests deliberately construct a ``SpineEnvelope``
-directly and call the seam — they do NOT claim a producer exists, and they
-assert the parity surface (``SPINE_ENVELOPE_UNPOPULATED_FIELDS`` still contains
-``rights_decision_ref``) is untouched by this integration item.
+Exercises ``services/rights_authority/envelope.py``: the field surface the
+propagation producer (``services/rights_authority/propagation.py``) calls so a
+resolved ``RightsDecision`` can ride a ``SpineEnvelope``. These tests
+deliberately construct a ``SpineEnvelope`` directly and call the seam — they do
+NOT claim the seam itself populates anything; the producer round trip is covered
+by ``test_propagation_producer.py``.
 """
 
 from __future__ import annotations
@@ -150,7 +150,7 @@ def test_apply_rights_ref_fails_closed_on_empty_ref() -> None:
 
 
 def test_envelope_carries_both_ref_and_decision_evidence() -> None:
-    """A future producer merges the seam's outputs into a real envelope."""
+    """The propagation producer merges the seam's outputs into a real envelope."""
     decision = _decision(decision_id="rdec_delta")
     envelope = _bare_envelope()
 
@@ -163,17 +163,26 @@ def test_envelope_carries_both_ref_and_decision_evidence() -> None:
     assert [e.id for e in envelope.evidence_refs] == ["rdec_delta"]
 
 
-# ── Parity surface must stay untouched (this item ships a seam, not a producer)
+# ── Parity surface: the producer now ships, so the field left the no-producer set
 
-def test_seam_does_not_claim_a_producer() -> None:
-    """A fresh SpineEnvelope still has no rights ref, and the no-producer set
-    still lists ``rights_decision_ref`` — this integration item only exposes
-    the seam; moving the field out of the unpopulated set + updating the TS
-    twin + the parity test belongs to the real spine producer program."""
-    assert "rights_decision_ref" in SPINE_ENVELOPE_UNPOPULATED_FIELDS
+
+def test_producer_shipped_so_field_is_out_of_the_unpopulated_set() -> None:
+    """The propagation producer exists, so ``rights_decision_ref`` is no longer
+    ``@unpopulated``: it is out of the Python no-producer set and the TS twin
+    (``packages/shared/spine-envelope.ts``) carries a producer reference instead
+    of the ``@unpopulated`` tag. The seam itself still populates nothing on its
+    own — a fresh ``SpineEnvelope`` has no rights ref until a producer stamps
+    one (see ``test_propagation_producer.py``)."""
+    assert "rights_decision_ref" not in SPINE_ENVELOPE_UNPOPULATED_FIELDS
+    # At least one field is still honestly declared no-producer, so the set's
+    # purpose survives (identity_watermark has no producer yet).
+    assert SPINE_ENVELOPE_UNPOPULATED_FIELDS
     envelope = _bare_envelope()
     assert envelope.rights_decision_ref is None
-    # None of the seam entry points mutate the shared parity constant.
+    # No seam entry point populates the field by itself; only a real decision
+    # ref passed in by a caller does.
     rights_envelope_fields(_decision())
+    assert envelope.rights_decision_ref is None
     apply_rights_ref(envelope, "rdec_epsilon")
-    assert "rights_decision_ref" in SPINE_ENVELOPE_UNPOPULATED_FIELDS
+    assert envelope.rights_decision_ref == "rdec_epsilon"
+    assert "rights_decision_ref" not in SPINE_ENVELOPE_UNPOPULATED_FIELDS

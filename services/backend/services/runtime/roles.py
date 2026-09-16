@@ -229,6 +229,14 @@ ROLE_TO_SPEC_NAMES: dict[str, frozenset[str]] = {
             # Flag-gated OFF by default; idle until both the plane master
             # switch and the scheduler kill-switch are live.
             "reconciled_control_scheduler",
+            # Rights Authority retention DELETION EXECUTOR: executes the
+            # deletions the retention seam only ever scheduled. A single
+            # low-frequency periodic sweep, so it rides maintenance like the
+            # other sweeps rather than justifying a runtime role of its own.
+            # Opt-in (default OFF) and additionally gated on the rights rollout
+            # phase being ``enforce`` plus a registered deletion adapter for the
+            # row's cascade dimension.
+            "rights_deletion_executor",
         }
     ),
 }

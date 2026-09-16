@@ -1,17 +1,19 @@
-"""GraphMutationGateway rights-decision-ref seam (backward compatible).
+"""GraphMutationGateway rights-decision-ref propagation.
 
-The gateway write path gained an additive, optional ``MutationIntent
+The gateway write path carries an additive, optional ``MutationIntent
 .rights_decision_ref`` that surfaces a governing Rights Authority decision ref
 on the versioned fact payload annotation — never on the projected edge/vertex.
-These tests pin two properties:
+These tests pin three properties:
 
 1. **Backward compatibility** — existing writes that leave the field ``None``
    produce a fact payload byte-identical to before (no ``rights_decision_ref``
    key), in every mode.
 2. **Propagation** — when the field IS set, the ref rides the durable fact
-   payload while graph topology stays untouched and the typed MutationRecord /
-   ledger columns are unchanged (promoting the ref onto MutationRecord + the
-   ledger DDL is the spine producer program's boundary).
+   payload while graph topology stays untouched.
+3. **Ledger column** — the same ref is copied onto the typed
+   ``MutationRecord.rights_decision_ref`` (and therefore the
+   ``graph_mutation_ledger`` column), so the append-only audit trail keeps the
+   governing decision, not just the versioned payload.
 """
 
 from __future__ import annotations
@@ -101,6 +103,7 @@ async def test_write_without_rights_ref_is_unchanged(mode) -> None:
     payload = rows[0]["payload"]
     # No rights_decision_ref key is injected when the caller did not set it.
     assert "rights_decision_ref" not in payload
+    assert rows[0].get("rights_decision_ref") is None
     assert payload["kind"] == "edge"
     assert payload["edge_type"] == "SAME_AS"
     assert len(await client.get_edges("entity_a")) == 1
@@ -152,6 +155,9 @@ async def test_rights_decision_ref_rides_fact_payload_annotation(mode) -> None:
     rows = await ledger.list_records(TENANT)
     assert len(rows) == 1
     assert rows[0]["payload"]["rights_decision_ref"] == "rdec_governs_1"
+    # The same ref is on the ledger row itself (the promoted MutationRecord /
+    # ledger column), so the append-only record keeps the governing decision.
+    assert rows[0]["rights_decision_ref"] == "rdec_governs_1"
 
     # Graph topology is untouched: the ref is governance metadata on the
     # mutation, never a property on the projected edge or the ledger fact props.

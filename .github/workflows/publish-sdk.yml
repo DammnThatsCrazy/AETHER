@@ -86,6 +86,8 @@ jobs:
             packages/react-native/aether-react-native.podspec
             packages/android/gradle.properties
             packages/ios/AetherSDK.podspec
+            packages/web/src/loader/bootstrap.ts
+            services/backend/services/sdk_distribution/versions.py
 
   # ── Tag (must precede CocoaPods — podspec source URL requires the tag) ────
   tag:
@@ -125,6 +127,7 @@ jobs:
                   packages/react-native/aether-react-native.podspec \
                   packages/android/gradle.properties \
                   packages/ios/AetherSDK.podspec \
+                  services/backend/services/sdk_distribution/versions.py \
                   packages/web/src packages/react-native/src packages/android/src packages/ios/Sources
           git commit -m "chore(sdk): bump version to $VERSION"
 

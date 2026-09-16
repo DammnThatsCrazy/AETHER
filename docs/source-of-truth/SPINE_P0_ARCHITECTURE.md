@@ -61,8 +61,8 @@ it is the glossary that later docs must reuse, never fork.
 | Contract Spine | Truth Kernel canonical-schema layer: `packages/shared/*.ts` contracts, `packages/shared/contracts/*.json` registries, Pydantic mirrors, unbypassable generation/validation gates (`scripts/generate_contracts.py`, `scripts/generate_platform_contracts.py`, `scripts/validate_contracts.py`, `scripts/repo_doctor.py --ci`) | EXISTS |
 | Spine Composition Registry / spine-registry | Canonical machine-readable registry: `packages/shared/contracts/spine-registry.json` (34 governed rows — 25 `implemented`, 7 `in_flight`, 2 declared `pending`), validated by `scripts/validate_spine_registry.py` on every `make ci-check`; the projection plane now derives its `SPINE_INDEX` (32 resolved) / `PENDING_SPINE_INDEX` (2) from it | EXISTS (Phase 2; the kernel) |
 | Spine Composition Kernel (envelope · adapters · lifecycle · conformance · mutation policy · evidence · temporal · readiness) | Registry + common envelope + lifecycle/mutation-policy/conformance vocabulary composed inside the contract spine: `spine-registry.json`, `validate_spine_registry.py`, `spine-envelope.ts` + mirror, generated TS/PY/MD twins | PARTIAL — kernel machinery shipped (Phases 2–6); per-spine conformance not yet verified |
-| Common spine envelope | `packages/shared/spine-envelope.ts` + backend mirror (`shared/spine/spine_envelope.py`) composing canonical primitives; `identity_watermark` / `rights_decision_ref` declared `@unpopulated` (no producer yet) | PARTIAL (Phase 3) |
-| IRRL / Rights Runtime (`DataRightsEnvelope`, `UseAuthority`, `DerivationClass`, `RetentionPolicy`, `Generalization Gateway`, `RightsDecision`) | Rights machinery under existing non-IRRL names: `services/backend/services/integrations/data_rights` (`DataRightsGrant`, `model_training_allowed`), `services/backend/services/policy` (`ConsentPolicyDecision`), `services/backend/services/dsr_propagation`, `services/backend/services/storage_lifecycle`, source-of-truth ledger `DATA_RIGHTS_LEDGER.md` — mapped onto IRRL terms by the naming overlay (`docs/source-of-truth/IRRL_NAMING_OVERLAY.md`); `rights_irrl` + `irrl_naming_overlay` governed rows reference, never fork, these registries | PARTIAL — machinery + naming overlay shipped (Phase 5); envelope rights fields `@unpopulated` |
+| Common spine envelope | `packages/shared/spine-envelope.ts` + backend mirror (`shared/spine/spine_envelope.py`) composing canonical primitives; `identity_watermark` declared `@unpopulated` (no producer yet); `rights_decision_ref` left that set on 2026-09-14 when the rights-propagation producer shipped | PARTIAL (Phase 3) |
+| IRRL / Rights Runtime (`DataRightsEnvelope`, `UseAuthority`, `DerivationClass`, `RetentionPolicy`, `Generalization Gateway`, `RightsDecision`) | Rights machinery under existing non-IRRL names: `services/backend/services/integrations/data_rights` (`DataRightsGrant`, `model_training_allowed`), `services/backend/services/policy` (`ConsentPolicyDecision`), `services/backend/services/dsr_propagation`, `services/backend/services/storage_lifecycle`, source-of-truth ledger `DATA_RIGHTS_LEDGER.md` — mapped onto IRRL terms by the naming overlay (`docs/source-of-truth/IRRL_NAMING_OVERLAY.md`); `rights_irrl` + `irrl_naming_overlay` governed rows reference, never fork, these registries | PARTIAL — machinery + naming overlay shipped (Phase 5); envelope `rights_decision_ref` produced since 2026-09-14, `identity_watermark` still `@unpopulated` |
 | Universal Provider Runtime | Provider-runtime machinery; universal provider runtime (ADR-009/ADR-008 precedents); connector normalization + SDK alignment | EXISTS |
 | Identity Resolution | Identity-resolution authorities (`EntityRef` / unresolved state) | EXISTS |
 | Temporal Kernel | Temporal kernel + bitemporal ledger; event/ingestion/valid/system time, watermark, replayable history | EXISTS |
@@ -98,8 +98,10 @@ each landed behind a green `make ci-check`:
   spine envelope + lifecycle / graph-mutation-policy / conformance vocabulary
   composed inside the contract spine, with generated TS/PY/MD twins;
 - the **common spine envelope** (`packages/shared/spine-envelope.ts` + backend
-  mirror), with `identity_watermark` and `rights_decision_ref` declared
-  `@unpopulated`;
+  mirror), with `identity_watermark` declared `@unpopulated` (`rights_decision_ref`
+  held that status at this filing and left it on 2026-09-14, when the
+  rights-propagation producer shipped — see
+  [SPINE_REGISTRY_STATUS.md](./SPINE_REGISTRY_STATUS.md));
 - the **IRRL naming overlay** (`docs/source-of-truth/IRRL_NAMING_OVERLAY.md`)
   mapping the existing rights machinery onto IRRL terms;
 - the **14-item spine conformance contract**, in-registry per row and enforced
@@ -112,8 +114,9 @@ made anywhere):
 
 - verified per-row conformance evidence (every non-program row's 14 checks are
   `open`);
-- envelope producers for `identity_watermark` / `rights_decision_ref`
-  (`@unpopulated`);
+- an envelope producer for `identity_watermark` (`@unpopulated`) — the other
+  no-producer field, `rights_decision_ref`, gained one on 2026-09-14
+  (`services/backend/services/rights_authority/propagation.py`);
 - the two spines the registry marks `pending` (`journey_continuity`,
   `reconciled_control_plane`) as implemented capabilities — and, for the three
   projection spines re-formalized `pending` → `implemented` on the 2026-09-05
@@ -145,7 +148,7 @@ phase that ships it.
 | spine-registry | One canonical machine-readable registry of spine identity/owner/ports/deps/mutation policy/lifecycle/readiness/conformance; references, never re-defines, owning registries | `intelligence-projection-registry.json` shape + `SPINE_INDEX` | Phase 2 |
 | Common spine envelope (`SpineEnvelope`) | One governed envelope every cross-spine interaction resolves to; composes canonical primitives | scattered envelope fields (`as_of`, `graph_watermark`, `subject_refs`, `scope_ref`, `data_watermark`) | Phase 3 |
 | `identity_watermark` | Watermark asserting identity-resolution freshness/position on the envelope; no producer yet | temporal `watermark` semantics | Phase 3 (`@unpopulated`) |
-| `rights_decision_ref` | Reference to the IRRL rights decision governing the interaction; no producer yet | `ConsentPolicyDecision` refs | Phase 3 (`@unpopulated`) |
+| `rights_decision_ref` | Reference to the IRRL rights decision governing the interaction; produced since 2026-09-14 by the rights-propagation composer (`services/backend/services/rights_authority/propagation.py`), which stamps the durable `rdec_...` id of the authoritative `RightsDecision` | `ConsentPolicyDecision` refs | Phase 3 (`@unpopulated` as filed; producer shipped 2026-09-14) |
 | `@unpopulated` | Envelope-field annotation: present in the contract, declared without a producer; no producer may be claimed until one ships | projection `sectionStates` absent-declared states | Phase 3 |
 | IRRL | Information Rights, Retention & Learning — the first-class contractual rights spine | `DATA_RIGHTS_LEDGER.md`, `DataRightsGrant`, `ConsentPolicyDecision` | Phase 5 (naming overlay) |
 | `DataRightsEnvelope`, `UseAuthority`, `DerivationClass`, `RetentionPolicy`, `Generalization Gateway`, `RightsDecision` | IRRL vocabulary mapped onto the existing rights machinery | `services/backend/services/integrations/data_rights`, `services/backend/services/policy`, `services/backend/services/storage_lifecycle` | Phase 5 (naming overlay) |

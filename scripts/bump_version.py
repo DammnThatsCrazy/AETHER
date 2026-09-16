@@ -284,6 +284,17 @@ def check_version_alignment() -> int:
         ROOT / "packages" / "android" / "gradle.properties": [f"sdkVersion={canonical}"],
         ROOT / "packages" / "web" / "src" / "index.ts": [f"SDK_VERSION = '{canonical}'"],
         ROOT / "packages" / "shared" / "sdk-version.ts": [f"SDK_VERSION = '{canonical}'"],
+        # The loader is bundled separately from the SDK and carries its own copy
+        # of the version, for the same reason heartbeat.ts carries its own
+        # CONTRACT_SCHEMA_VERSION. It is the version the install verifier reads
+        # back off an install signal and compares against the shipped one, so
+        # drift here would not fail a build — it would quietly reclassify every
+        # tenant's install.
+        ROOT / "packages" / "web" / "src" / "loader" / "bootstrap.ts": [f"LOADER_VERSION = '{canonical}'"],
+        # The backend mirror of the same fact. Not a second version authority
+        # (pyproject.toml remains the source); it is the copy the verifier
+        # compares against, pinned here so it cannot drift from it.
+        ROOT / "services" / "backend" / "services" / "sdk_distribution" / "versions.py": [f'CANONICAL_SDK_VERSION = "{canonical}"'],
     }
     print("Checking SDK/native version constants...")
     for path, needles in native_expectations.items():
@@ -300,7 +311,14 @@ def check_version_alignment() -> int:
         print("Version alignment check failed:")
         for error in errors:
             print(f"  - {error}")
-        print(f"\nFix with: python scripts/bump_version.py {canonical}")
+        # Two commands, because two sets of surfaces. This check spans both the
+        # platform surfaces bump_version.py rewrites and the SDK/native surfaces
+        # it only reads — packages/shared/sdk-version.ts, the podspecs,
+        # gradle.properties, and the loader/backend constants it does not touch.
+        # Naming only bump_version.py here sent anyone whose failure was an SDK
+        # surface to a command that could not fix it.
+        print(f"\nFix platform surfaces with: python scripts/bump_version.py {canonical}")
+        print(f"Fix SDK/native surfaces with: bash scripts/bump-sdk-version.sh {canonical}")
         return 1
     print("Version alignment check passed: pyproject.toml, package metadata, docs metadata, and SDK constants are synchronized.")
     return 0

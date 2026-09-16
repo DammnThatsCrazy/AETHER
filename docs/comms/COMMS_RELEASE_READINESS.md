@@ -8,7 +8,7 @@ status: experimental
 since_version: 0.1.0
 source_files: [services/backend/config/settings.py, tests/integration/test_comms_golden_scenario.py]
 source_hashes:
-  "services/backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
+  "services/backend/config/settings.py": "sha256:486abbaa3ec3e1dce4e257f8e50efe45cfd98d8a3ad99b88863ab2f0884b1748"
   "tests/integration/test_comms_golden_scenario.py": "sha256:a26db2d8632f089933adf8df5d15d2a20756b33e6f4f3e082d384e8d5dd831ff"
 ---
 

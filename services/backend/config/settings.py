@@ -1281,6 +1281,27 @@ class DataExchangeConfig:
 
 
 # ---------------------------------------------------------------------------
+# Rights Authority (IRRL) — activation toggles for the rights execution seams.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class RightsAuthorityConfig:
+    """Rights Authority execution toggles (fail-closed; all OFF by default).
+
+    ``deletion_executor_enabled`` is the explicit opt-in for the retention
+    DELETION EXECUTOR (``services.rights_authority.deletion_executor``), the
+    sweep that finally performs the deletions the retention seam schedules. It
+    is one of three gates: the sweep also requires the rights rollout phase to
+    be ``enforce`` (``RIGHTS_AUTHORITY_ROLLOUT``) AND a registered deletion
+    adapter for the row's ``component_type``. Deletion is irreversible, so the
+    default is OFF and an unset/invalid value never activates it.
+    """
+    deletion_executor_enabled: bool = _env_bool(
+        "RIGHTS_AUTHORITY_DELETION_EXECUTOR_ENABLED", False
+    )
+
+
+# ---------------------------------------------------------------------------
 # Reconciled Control Plane (managed-integration desired/observed reconciliation)
 # ---------------------------------------------------------------------------
 
@@ -2174,6 +2195,12 @@ class Settings:
 
     # Data Exchange Plane (governed tenant import/export layer; all OFF in M0)
     data_exchange: DataExchangeConfig = field(default_factory=DataExchangeConfig)
+
+    # Rights Authority (IRRL) execution toggles — the retention deletion
+    # executor stays OFF until an operator opts in explicitly.
+    rights_authority: RightsAuthorityConfig = field(
+        default_factory=RightsAuthorityConfig
+    )
 
     # Reconciled Control Plane (managed-integration desired/observed reconcile;
     # all OFF in Phase 0 — no live reconcile trigger or actuator)

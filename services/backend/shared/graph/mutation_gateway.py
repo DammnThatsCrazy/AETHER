@@ -29,13 +29,14 @@ Determinism substrate: :func:`replay_ledger` applies ledger rows to a fresh
 :func:`current_graph_digest` computes the same digest over a live
 GraphClient for ledger-vs-projection parity checks (``graph_checkpoints``).
 
-Rights propagation seam: :class:`MutationIntent` may optionally carry a
-governing ``rights_decision_ref`` (the durable ``rdec_...`` identity of the
-Rights Authority :class:`RightsDecision` that governs the write). When set it
-is surfaced on the versioned fact payload annotation — never on the projected
-edge/vertex nor on the typed ``MutationRecord`` ledger model — so a resolved
-rights decision can ride graph mutations while existing writers (which leave it
-``None``) stay byte-identical. See
+Rights propagation: :class:`MutationIntent` may optionally carry a governing
+``rights_decision_ref`` (the durable ``rdec_...`` identity of the Rights
+Authority :class:`RightsDecision` that governs the write). When set it is
+surfaced both on the versioned fact payload annotation and on the typed
+``MutationRecord.rights_decision_ref`` ledger column — never on the projected
+edge/vertex — so a resolved rights decision can ride graph mutations while
+existing writers (which leave it ``None``) stay byte-identical. The producer
+that fills it is ``services/rights_authority/propagation.py``. See
 ``docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md`` §11 / §17 Phase 3.
 """
 
@@ -160,15 +161,15 @@ class MutationIntent:
     policy_refs: Optional[list[str]] = None
     consent_refs: Optional[list[str]] = None
     change_set_id: Optional[str] = None
-    # Governing rights-decision ref (Rights Authority seam, blueprint §11):
-    # the durable ``rdec_...`` identity whose RightsDecision governs this write.
-    # Additive + optional — ``None`` leaves the write byte-identical to today,
-    # and the ref is only surfaced on the gateway's own write surface (the
-    # versioned fact payload), never on the projected edge/vertex or the typed
-    # MutationRecord ledger model. Promoting it onto MutationRecord + the
-    # ledger DDL is the spine producer program's boundary (graph-mutation.ts is
-    # a generated twin; see docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md
-    # §11 / §17 Phase 3).
+    # Governing rights-decision ref (Rights Authority, blueprint §11): the
+    # durable ``rdec_...`` identity whose RightsDecision governs this write.
+    # Additive + optional — ``None`` leaves the write byte-identical to today.
+    # When set, the ref is surfaced twice: on the gateway's own write surface
+    # (the versioned fact payload annotation) and on the typed MutationRecord
+    # ledger column ``rights_decision_ref``, which the propagation producer
+    # (``services/rights_authority/propagation.py``) fills from the
+    # authoritative resolver. See
+    # docs/source-of-truth/RIGHTS_AUTHORITY_BLUEPRINT.md §11 / §17 Phase 3.
     rights_decision_ref: Optional[str] = None
 
 
@@ -524,6 +525,7 @@ class GraphMutationGateway:
             model_refs=intent.model_refs,
             policy_refs=intent.policy_refs,
             consent_refs=intent.consent_refs,
+            rights_decision_ref=intent.rights_decision_ref,
             change_set_id=intent.change_set_id,
             schema_version=GATEWAY_SCHEMA_VERSION,
         )
@@ -583,8 +585,8 @@ class GraphMutationGateway:
         When the intent carries a governing ``rights_decision_ref`` it is
         surfaced as a top-level payload annotation so the decision can ride the
         graph mutation's durable version history without touching the projected
-        edge/vertex (graph topology is unchanged) or the typed
-        ``MutationRecord`` ledger model (its TS twin is generated). Replay and
+        edge/vertex (graph topology is unchanged). The same ref also lands on
+        the typed ``MutationRecord`` ledger column of the same name. Replay and
         digest parity ignore the annotation, so a ref never alters graph state.
         """
         payload: dict[str, Any]

@@ -14,7 +14,7 @@ reviewed_source_commits:
   - {'commit': '0efa07cb', 'reason': 'Reviewed graph traversal hardening: temporal path queries reconstruct only valid source-to-target paths, shortest and K-shortest expansion respects the total hop budget, and equal-cost candidates have a deterministic tie-break.'}
 source_hashes:
   "docs/source-of-truth/GRAPH_ALIGNMENT.md": "sha256:fb84c894efabe18943ceb0689d16729a2ce19ddca77a84c96fa4a626d82304d2"
-  "services/backend/shared/graph/": "sha256:117acb310735fddef6cf42abed9d904224f81ad3737e0b52b82f6c0bc2820a49"
+  "services/backend/shared/graph/": "sha256:85a5e7ed09a891e245435faa1f0802bd009da594acbdfd0a840e082b1ab97bd8"
 ---
 # Unified On-Chain Intelligence Graph v0.1.0-alpha.0
 
@@ -114,6 +114,21 @@ rebuildable. Consent/policy is evaluated at the write boundary itself
 (population360 P3.2, server-authoritative `services.consent.authority`), and a
 data-subject erasure runs governed leaves through this same path (see
 [DSR Cascade](#dsr-cascade-art-17-erasure)).
+
+Membership joins also carry their **governing rights decision**: the governor
+asks the Rights Authority propagation producer
+(`services/backend/services/rights_authority/propagation.py`) for the
+`RightsDecision` authorizing this write into the tenant graph and stamps its
+durable `rdec_...` id onto the intent's `rights_decision_ref`, which the
+gateway copies onto `MutationRecord.rights_decision_ref` — landing in the
+append-only `graph_mutation_ledger.rights_decision_ref` column (additive
+alembic migration `20260914_graph_mutation_rights_ref`; the historical
+migration is not edited in place). With `RIGHTS_AUTHORITY_ROLLOUT` unset or
+`off` (the default) the producer returns before touching the resolver, so
+nothing is stamped and the write stays byte-identical to its pre-propagation
+behaviour; the ref is `NULL` on every row written outside a rights gate. This
+sits *beside*, never above, the consent gate: `assert_membership_allowed`
+remains the authority on the member data subject.
 
 A fourth, governed surface carries **canonical location facts as typed graph
 edges** (geographic360 G4.2). The location primitive resolves through a single
