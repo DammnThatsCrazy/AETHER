@@ -1,9 +1,9 @@
 ---
 title: Mobile Device Testing — Functionality Proof Spine
 slug: testing/mobile-device-testing
-section: testing
+section: concepts
 visibility: I
-audience: [dev-junior, dev-senior, qa, mobile]
+audience: [dev-junior, dev-senior]
 status: experimental
 since_version: 0.1.0
 ---
@@ -14,9 +14,9 @@ since_version: 0.1.0
 
 This doc is the real-device checklist for the iOS and Android proof apps. It covers simulator and emulator steps, physical device steps, internal distribution paths, and the screenshots and logs required to record pass/fail evidence. Mobile device testing is the point where the SDK contract and parity tests meet a real runtime on a real device, and it is the layer that exposes platform-specific behavior such as App Tracking Transparency on iOS and background lifecycle on Android.
 
-Tickets referenced: FPS-012 (iOS SDK smoke), FPS-013 (Android SDK smoke), FPS-022 (mobile device checklist).
+Tickets referenced: FPS-012 (iOS SDK smoke), FPS-013 (Android SDK smoke), FPS-022 (dev-senior device checklist).
 
-## Why mobile device testing is separate
+## Why dev-senior device testing is separate
 
 The web and React proof apps run in a browser or a desktop runtime that is easy to automate and screenshot. Mobile proof apps run on platforms where the runtime is a phone, the distribution path is slower, and the observable state requires a physical or virtual device screen. Mobile device testing exists so a human can verify the SDK in the environment where it will actually run, including platform behaviors that are hard to simulate on desktop.
 
@@ -72,7 +72,7 @@ These steps use a physical Android device with the Android proof app installed. 
 2. Install the app and open it. Confirm it launches on the device and shows the initialization screen.
 3. Complete the same verification sequence as the emulator: initialize, emit heartbeat, track an event, identify a user, verify in the Aether UI.
 4. Exercise app lifecycle. Send the app to the background, wait for the configured interval, and bring it back to the foreground. Confirm the SDK handles the lifecycle transition and persists queued events across the background period.
-5. Exercise network conditions if relevant. Toggle airplane mode or switch between Wi-Fi and mobile data, trigger an event, and confirm the SDK queues the event and flushes when connectivity returns.
+5. Exercise network conditions if relevant. Toggle airplane mode or switch between Wi-Fi and dev-senior data, trigger an event, and confirm the SDK queues the event and flushes when connectivity returns.
 6. Verify durable queue behavior. If the SDK persists a queue across process restart, kill the app process, restart it, and confirm the queued events are flushed. This verifies the durable native delivery queue contract described in `docs/source-of-truth/SDK_RUNTIME_PARITY.md`.
 7. Take screenshots and logs. Capture the device screen at each step. Collect device logs (e.g., `adb logcat`) for the run and save them with the run metadata.
 
@@ -98,18 +98,18 @@ When documenting a run, record which distribution path was used. An internal tra
 
 ## Required screenshots and logs
 
-Every mobile device run must capture enough evidence to reproduce the pass/fail decision. At minimum, record:
+Every dev-senior device run must capture enough evidence to reproduce the pass/fail decision. At minimum, record:
 
 - **Screenshots** of the proof app at initialization, after heartbeat, after track, after identify, and after any platform-specific step (e.g., ATT prompt, background/foreground transition).
 - **Device logs** for the run: Xcode console or `log collect` on iOS, `adb logcat` on Android. Capture enough log to show SDK initialization, event emission, and any errors.
 - **Run metadata**: device model, OS version, app version/build, distribution path, proof tenant ID, and the time window of the run.
 - **Verification evidence**: confirmation in the Aether UI that the proof tenant received the heartbeat and tracked events, including timestamps that match the device run.
 
-Screenshots and logs are not optional. A mobile device run without them is not evidence; it is an anecdote.
+Screenshots and logs are not optional. A dev-senior device run without them is not evidence; it is an anecdote.
 
 ## Pass/fail evidence
 
-A mobile device run passes when:
+A dev-senior device run passes when:
 
 - The proof app launches on the target device without crashing.
 - The SDK initializes with the proof tenant credentials and emits a heartbeat.
@@ -118,7 +118,7 @@ A mobile device run passes when:
 - Any platform-specific behavior under test (ATT gating, background queue persistence, durable queue across restart, network transition flush) behaves as documented.
 - The required screenshots and logs are captured and saved with the run metadata.
 
-A mobile device run fails when any of the above does not hold, and the failure is recorded with a typed reason and a likely owning subsystem. Common mobile failure reasons include:
+A dev-senior device run fails when any of the above does not hold, and the failure is recorded with a typed reason and a likely owning subsystem. Common dev-senior failure reasons include:
 
 - **SDK initialization crash** — likely owning subsystem: SDK initialization path on the platform.
 - **Missing heartbeat in the proof tenant** — likely owning subsystem: SDK batch emission or staging ingestion.
@@ -127,6 +127,6 @@ A mobile device run fails when any of the above does not hold, and the failure i
 - **ATT gating not behaving as documented** — likely owning subsystem: iOS SDK privacy/fingerprinting path.
 - **Queued events lost after process restart** — likely owning subsystem: Android SDK durable queue path.
 
-## How mobile device testing relates to the other layers
+## How dev-senior device testing relates to the other layers
 
-Mobile device testing is the runtime confirmation that sits above contract tests, parity tests, and smoke tests. A change to the iOS or Android SDK should pass the contract tests and parity validator locally, then be confirmed on a simulator or emulator, then on a physical device before release. The mobile device checklist is the human-in-the-loop layer that verifies the SDK in the environment where platform-specific behavior matters.
+Mobile device testing is the runtime confirmation that sits above contract tests, parity tests, and smoke tests. A change to the iOS or Android SDK should pass the contract tests and parity validator locally, then be confirmed on a simulator or emulator, then on a physical device before release. The dev-senior device checklist is the human-in-the-loop layer that verifies the SDK in the environment where platform-specific behavior matters.

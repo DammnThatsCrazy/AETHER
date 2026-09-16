@@ -1,3 +1,12 @@
+---
+title: Identity Continuity Fixtures
+slug: blueprints/identity-continuity/fixtures
+section: blueprints
+visibility: P
+audience: [dev-senior, architect]
+status: beta
+---
+
 # Identity Continuity & Late Binding Runtime — Fixtures
 
 **Blueprint:** §17-§18  

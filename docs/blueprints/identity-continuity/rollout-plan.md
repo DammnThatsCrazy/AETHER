@@ -1,3 +1,12 @@
+---
+title: Identity Continuity Rollout Plan
+slug: blueprints/identity-continuity/rollout-plan
+section: blueprints
+visibility: P
+audience: [dev-senior, architect]
+status: beta
+---
+
 # Identity Continuity & Late Binding Runtime — Rollout Plan
 
 **Branch:** `feature/functionality-proof-spine`  

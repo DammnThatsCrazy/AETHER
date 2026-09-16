@@ -1,9 +1,9 @@
 ---
 title: Functionality Proof Spine — Overview
 slug: proof/functionality-proof-spine
-section: testing
+section: concepts
 visibility: I
-audience: [dev-junior, dev-senior, qa, ops, architect]
+audience: [dev-junior, dev-senior, ops, architect]
 status: experimental
 since_version: 0.1.0
 ---

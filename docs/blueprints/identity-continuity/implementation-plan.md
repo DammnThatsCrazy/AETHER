@@ -1,3 +1,12 @@
+---
+title: Identity Continuity Implementation Plan
+slug: blueprints/identity-continuity/implementation-plan
+section: blueprints
+visibility: P
+audience: [dev-senior, architect]
+status: beta
+---
+
 # Identity Continuity & Late Binding Runtime — Implementation Plan
 
 **Mapped against Aether repo (DammnThatsCrazy/AETHER)**

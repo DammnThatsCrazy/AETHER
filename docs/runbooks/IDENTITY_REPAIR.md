@@ -11,10 +11,10 @@ estimated_read_minutes: 8
 toc_depth: 2
 source_files: [services/backend/services/identity/resolver.py, services/backend/services/identity/redirects.py, services/backend/services/identity/graph_reconciliation.py, services/backend/services/identity/reconciliation_routes.py]
 source_hashes:
-  services/backend/services/identity/graph_reconciliation.py: sha256:5a3635cc5fd3efc2abf2f1c55687dfc4e4e396cd4af7671f3531598dd9d7a29a
-  services/backend/services/identity/reconciliation_routes.py: sha256:3ec51df67337edbc420bc50a6d9f8fccbe61b42164ec966ca45ff2c9ceabca76
-  services/backend/services/identity/redirects.py: sha256:1944d336dd223513fe98d4b145856fa03a19ff1f2b3475e1dc95f7f597d72ae0
-  services/backend/services/identity/resolver.py: sha256:389be4ab1dcba465941e91babaa172ded20f99eac51af3f5860be9c1942d2e8a
+  "services/backend/services/identity/graph_reconciliation.py": "sha256:5a3635cc5fd3efc2abf2f1c55687dfc4e4e396cd4af7671f3531598dd9d7a29a"
+  "services/backend/services/identity/reconciliation_routes.py": "sha256:3ec51df67337edbc420bc50a6d9f8fccbe61b42164ec966ca45ff2c9ceabca76"
+  "services/backend/services/identity/redirects.py": "sha256:1944d336dd223513fe98d4b145856fa03a19ff1f2b3475e1dc95f7f597d72ae0"
+  "services/backend/services/identity/resolver.py": "sha256:670d254629efc25517bf6d63dae8bb308cf3a5df06f5fc48bb9ddf28e92bc7d5"
 ---
 
 # Runbook — Identity Repair

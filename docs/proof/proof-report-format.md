@@ -1,9 +1,9 @@
 ---
 title: Proof Report Format
 slug: proof/proof-report-format
-section: testing
+section: concepts
 visibility: I
-audience: [dev-junior, dev-senior, qa, ops, release]
+audience: [dev-junior, dev-senior, ops]
 status: experimental
 since_version: 0.1.0
 ---
@@ -12,7 +12,7 @@ since_version: 0.1.0
 
 ## Purpose
 
-The proof report is the structured record of a Functionality Proof Spine run. It records the result of every check and flow, the evidence that supports each result, and the typed failures and blockers where applicable. The report is the artifact that feeds the release readiness decision, and it is the artifact that makes a proof run reproducible and reviewable.
+The proof report is the structured record of a Functionality Proof Spine run. It records the result of every check and flow, the evidence that supports each result, and the typed failures and blockers where applicable. The report is the artifact that feeds the dev-senior readiness decision, and it is the artifact that makes a proof run reproducible and reviewable.
 
 The report format is defined here so that every proof run produces a report that can be read, compared, and audited. A report that does not follow this format is not a proof report; it is a log.
 
@@ -20,7 +20,7 @@ The report format is defined here so that every proof run produces a report that
 
 Every proof report must contain these sections, in this order:
 
-1. **Run metadata.** The tenant ID, workspace, environment, run timestamp, platform list, and release candidate identifier (if applicable).
+1. **Run metadata.** The tenant ID, workspace, environment, run timestamp, platform list, and dev-senior candidate identifier (if applicable).
 2. **Smoke check results.** The result of each smoke check, with `PASS`, `FAIL`, `BLOCKED`, or `NOT_APPLICABLE` for each.
 3. **E2E flow results.** The result of each of the seven E2E flows, with `PASS`, `FAIL`, `BLOCKED`, or `NOT_APPLICABLE` for each.
 4. **Mobile device results.** The result of the mobile device checklist for each platform in scope, with `PASS`, `FAIL`, `BLOCKED`, or `NOT_APPLICABLE` for each.
@@ -162,6 +162,6 @@ The report output location is not a choice. It is the location the proof runner 
 
 ## How the report format relates to the rest of the proof spine
 
-The report format is the end of the proof spine. Every check, flow, and mobile device result is recorded in the report, and the report is the input to the release readiness aggregation. A proof run that does not produce a report in this format has not completed the proof spine, because there is no artifact to review or aggregate.
+The report format is the end of the proof spine. Every check, flow, and mobile device result is recorded in the report, and the report is the input to the dev-senior readiness aggregation. A proof run that does not produce a report in this format has not completed the proof spine, because there is no artifact to review or aggregate.
 
 A change to the report format, the reason codes, or the likely owning subsystems should be reflected in this doc first. A new reason code or a new owning subsystem should be documented here before it is used in a report.

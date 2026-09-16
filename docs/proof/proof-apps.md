@@ -1,9 +1,9 @@
 ---
 title: Proof Apps
 slug: proof/proof-apps
-section: testing
+section: concepts
 visibility: I
-audience: [dev-junior, dev-senior, qa, mobile]
+audience: [dev-junior, dev-senior]
 status: experimental
 since_version: 0.1.0
 ---
@@ -93,6 +93,6 @@ If any of these does not hold, the proof app fails for that platform, and the fa
 
 ## How proof apps relate to the rest of the proof spine
 
-Proof apps are the runtime confirmation that the SDK's contract tests and parity tests hold up in a real runtime with a real UI. A change to an SDK should pass the contract tests and parity validator locally, then be confirmed in the proof app before it is pointed at staging. The proof app is also the app that the staging smoke test and the mobile device checklist exercise, so it is the bridge between local verification and staging verification.
+Proof apps are the runtime confirmation that the SDK's contract tests and parity tests hold up in a real runtime with a real UI. A change to an SDK should pass the contract tests and parity validator locally, then be confirmed in the proof app before it is pointed at staging. The proof app is also the app that the staging smoke test and the dev-senior device checklist exercise, so it is the bridge between local verification and staging verification.
 
 A proof app that does not expose the required controls or show the required visible state cannot be used in a proof run, because there is nothing to verify. A proof app that crashes on the required actions cannot be used in a proof run, because the behaviors cannot be proven.

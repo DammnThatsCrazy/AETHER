@@ -1,9 +1,9 @@
 ---
 title: E2E Testing — Functionality Proof Spine
 slug: testing/e2e-testing
-section: testing
+section: concepts
 visibility: I
-audience: [dev-junior, dev-senior, qa, ops]
+audience: [dev-junior, dev-senior, ops]
 status: experimental
 since_version: 0.1.0
 ---

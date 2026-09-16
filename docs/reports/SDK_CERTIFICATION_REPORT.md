@@ -1,16 +1,7 @@
----
-title: SDK Certification Report
-slug: reports/sdk-certification
-section: architecture
-visibility: P
-audience: [dev-senior, architect]
-status: beta
----
-
 # SDK Certification Report
 
-**Generated:** 2026-09-16T22:39:29.636Z
-**Commit SHA:** 450285978ec334f88f1903b7cf65b6d251d90c2c
+**Generated:** 2026-09-16T22:43:52.767Z
+**Commit SHA:** ce6aa39f749e85ddb3c90e92363d9a9afbf6d9cc
 **Repository:** AETHER (https://github.com/DammnThatsCrazy/AETHER)
 
 ---
@@ -64,7 +55,7 @@ The following table answers all 14 blueprint questions for each SDK platform:
 | Passing (release-supported) | 4 |
 | Partial | 1 |
 | Failing | 0 |
-| Generated at | 2026-09-16T22:39:29.636Z |
+| Generated at | 2026-09-16T22:43:52.767Z |
 
 ---
 

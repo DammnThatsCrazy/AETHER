@@ -1,9 +1,9 @@
 ---
 title: Proof Fixtures
 slug: proof/proof-fixtures
-section: testing
+section: concepts
 visibility: I
-audience: [dev-junior, dev-senior, qa]
+audience: [dev-junior, dev-senior]
 status: experimental
 since_version: 0.1.0
 ---

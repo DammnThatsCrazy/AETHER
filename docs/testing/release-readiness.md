@@ -1,9 +1,9 @@
 ---
 title: Release Readiness — Functionality Proof Spine
 slug: testing/release-readiness
-section: testing
+section: concepts
 visibility: I
-audience: [dev-senior, qa, ops, release]
+audience: [dev-senior, ops]
 status: experimental
 since_version: 0.1.0
 ---

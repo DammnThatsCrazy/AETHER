@@ -1,3 +1,12 @@
+---
+title: Identity Continuity Proof Plan
+slug: blueprints/identity-continuity/proof-plan
+section: blueprints
+visibility: P
+audience: [dev-senior, architect]
+status: beta
+---
+
 # Identity Continuity — Proof Plan
 
 **Blueprint:** Identity Continuity & Late Binding Runtime (blueprint §§17–18, §22; implementation-plan §Iota)

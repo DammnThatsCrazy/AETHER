@@ -3,16 +3,16 @@ title: Verify iOS SDK Installation — Aether
 slug: developers/sdk/ios/verify-installation
 section: developer
 visibility: P
-audience: [dev-junior, dev-senior, mobile]
+audience: [dev-junior, dev-senior]
 status: experimental
 since_version: 0.1.0
 ---
 
 # Verify iOS SDK Installation
 
-This guide walks through installing the Aether iOS SDK, adding your key, initializing, emitting a heartbeat, tracking a screen view, identifying a user, and verifying the result in the Aether UI. It is the practical companion to the [iOS SDK reference](/docs/sdks/ios.md) and the [Mobile Device Testing](/docs/testing/mobile-device-testing.md) checklist.
+This guide walks through installing the Aether iOS SDK, adding your key, initializing, emitting a heartbeat, tracking a screen view, identifying a user, and verifying the result in the Aether UI. It is the practical companion to the [iOS SDK reference](/docs/sdks/ios.md) and the [Mobile Device Testing](/docs/testing/dev-senior-device-testing.md) checklist.
 
-Related tickets: FPS-012 (iOS SDK smoke), FPS-022 (mobile device checklist), FPS-028 (connector activation E2E where iOS is in scope).
+Related tickets: FPS-012 (iOS SDK smoke), FPS-022 (dev-senior device checklist), FPS-028 (connector activation E2E where iOS is in scope).
 
 ## Install the SDK
 
@@ -123,7 +123,7 @@ After emitting a heartbeat and tracking a screen view, verify that the proof ten
 4. Confirm the tracked screen view is present with the expected type and properties.
 5. If you identified a user, confirm the identity hint is associated with the events.
 
-The verification path for a proof run is described in [Mobile Device Testing](/docs/testing/mobile-device-testing.md) and the E2E flows where iOS is in scope. A heartbeat or event that is not visible in the Aether UI is a reportable failure with the appropriate reason code and likely owning subsystem.
+The verification path for a proof run is described in [Mobile Device Testing](/docs/testing/dev-senior-device-testing.md) and the E2E flows where iOS is in scope. A heartbeat or event that is not visible in the Aether UI is a reportable failure with the appropriate reason code and likely owning subsystem.
 
 ## App Store privacy and ATT
 
@@ -153,6 +153,6 @@ For the full heartbeat troubleshooting table, see [Verify Heartbeat](/docs/devel
 - [Install the SDK](/docs/developer/install-the-sdk.md)
 - [Send Your First Event](/docs/developer/send-first-event.md)
 - [Verify Heartbeat](/docs/developer/verify-heartbeat.md)
-- [Mobile Device Testing](/docs/testing/mobile-device-testing.md)
+- [Mobile Device Testing](/docs/testing/dev-senior-device-testing.md)
 - [SDK Testing](/docs/testing/sdk-testing.md)
 - [iOS SDK Smoke](/docs/testing/staging-smoke-testing.md)

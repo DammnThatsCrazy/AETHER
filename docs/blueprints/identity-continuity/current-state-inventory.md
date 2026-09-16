@@ -1,3 +1,12 @@
+---
+title: Identity Continuity Current State Inventory
+slug: blueprints/identity-continuity/current-state-inventory
+section: blueprints
+visibility: P
+audience: [dev-senior, architect]
+status: beta
+---
+
 # Identity Continuity — Current State Inventory
 
 **Blueprint:** Identity Continuity & Late Binding Runtime (blueprint §21, PR 9/Iota)
