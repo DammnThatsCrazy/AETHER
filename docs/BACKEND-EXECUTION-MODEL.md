@@ -17,7 +17,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 6
 toc_depth: 3
 source_hashes:
-  "services/backend/config/settings.py": "sha256:1dac0c351e1240d830e3da23f9e8755081206a95d69627a7cee576f174a712b3"
+  "services/backend/config/settings.py": "sha256:486abbaa3ec3e1dce4e257f8e50efe45cfd98d8a3ad99b88863ab2f0884b1748"
   "services/backend/main.py": "sha256:146abcd2a0af5653e96f1c1eb9e5fe1fef6e32790758636cbde4d6d24c5c592e"
   "services/backend/services/runtime/consumer_specs.py": "sha256:8bf1562bea9dcd96bd4ebe71790af816339c70ff829266b16a3142ba68bbd8a2"
   "services/backend/services/runtime/roles.py": "sha256:9d1787f19ddc91d640098ff3e992b4cc1cfaf410bcc49c79e41ed3c5810dc48a"

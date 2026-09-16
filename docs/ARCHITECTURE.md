@@ -17,7 +17,7 @@ reviewed_source_commits:
   - commit: "5bfb9394"
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
-  "packages/shared/": "sha256:a2a6ca505d0f1643edd5fbc72bfdc5e6c2f4d725c3d8fbc1c5ded4989ed6cbb2"
+  "packages/shared/": "sha256:d867738310579c117a13ba99c0a2ba4310af7c00b3f71384288f1a5423784794"
   "services/backend/main.py": "sha256:146abcd2a0af5653e96f1c1eb9e5fe1fef6e32790758636cbde4d6d24c5c592e"
   "services/backend/middleware/middleware.py": "sha256:e3ee0320a3cd814594c00323eb142e4ab497a1bb9199204642134461b36e3091"
 ---
