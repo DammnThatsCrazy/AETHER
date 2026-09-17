@@ -196,7 +196,7 @@ jobs:
         run: pnpm install
 
       - name: Run contract tests (FAIL FAST — blocks merge on failure)
-        run: pnpm test:contracts
+        run: pnpm --filter '@aether/proof-contracts' run test
 
   # -------------------------------------------------------------------
   # sdk — SDK-specific tests for packages/web (@aether/web).
@@ -226,7 +226,7 @@ jobs:
         run: pnpm install
 
       - name: Run SDK tests
-        run: pnpm test:sdk
+        run: pnpm --filter '@aether/web' run test
 
   # -------------------------------------------------------------------
   # smoke-web — Smoke test the web SDK sample apps (web-next + web-script-tag)
@@ -332,7 +332,7 @@ jobs:
         run: pnpm install
 
       - name: Run connector fixture tests
-        run: pnpm test:connectors:fixtures
+        run: pnpm --filter '@aether/proof-fixtures' run test
 
   # -------------------------------------------------------------------
   # integration — Full integration tests across services. Blocks merge
@@ -362,7 +362,7 @@ jobs:
         run: pnpm install
 
       - name: Run integration tests
-        run: pnpm test:integration
+        run: pnpm --filter '@aether/proof-runner' run test
 
   # -------------------------------------------------------------------
   # graph — Graph/analytics pipeline tests. Blocks merge if graph
@@ -392,7 +392,7 @@ jobs:
         run: pnpm install
 
       - name: Run graph tests
-        run: pnpm test:graph
+        run: pnpm --filter '@aether/proof-runner' run test
 
   # -------------------------------------------------------------------
   # e2e — End-to-end browser tests (Playwright/Cypress via frontend/kyber).
