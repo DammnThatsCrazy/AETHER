@@ -453,14 +453,14 @@ jobs:
 
   # -------------------------------------------------------------------
   # build — Production build across all workspaces. Blocks merge if the
-  # build fails. Runs after e2e so that the build is validated against
-  # the code that passed all functional tests.
+  # build fails. Runs in parallel with e2e after graph so that a
+  # pre-existing e2e environment issue does not block build verification.
   # -------------------------------------------------------------------
   build:
     name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    needs: e2e
+    needs: graph
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -493,7 +493,7 @@ jobs:
     name: Upload Proof Artifacts
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: build
+    needs: [build, e2e]
     if: always()
     steps:
       - name: Checkout repository
