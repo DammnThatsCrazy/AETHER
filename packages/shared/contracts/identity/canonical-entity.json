@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractVersion": "1.0.0",
+  "description": "Canonical field registry for canonical_entity — the canonical profile target. A person and an agent do not merge. A person and an account do not merge. A device and a person do not merge. They relate through graph edges.",
+  "envelope_required_fields": [
+    "id",
+    "tenant_id",
+    "entity_type",
+    "status",
+    "current_identity_graph_version",
+    "created_from",
+    "created_at",
+    "updated_at"
+  ],
+  "blocks": [
+    {
+      "name": "canonical_entity",
+      "kind": "object",
+      "required": true,
+      "description": "The canonical profile target — the resolved identity representation.",
+      "fields": [
+        { "name": "id", "type": "string", "required": true },
+        { "name": "tenant_id", "type": "string", "required": true },
+        { "name": "entity_type", "type": "enum", "required": true, "values": ["person", "organization", "account", "agent", "runtime", "device", "household", "unknown"], "description": "Entity type — determines merge eligibility." },
+        { "name": "status", "type": "enum", "required": true, "values": ["active", "provisional", "conflicted", "suppressed", "deleted", "merged", "split"], "description": "Canonical entity lifecycle status." },
+        { "name": "current_identity_graph_version", "type": "string", "required": true, "description": "Current identity graph version for this entity." },
+        { "name": "created_from", "type": "enum", "required": true, "values": ["import", "connector", "sdk", "api", "manual", "agent_runtime"], "description": "How this canonical entity was originally created." },
+        { "name": "created_at", "type": "iso8601", "required": true },
+        { "name": "updated_at", "type": "iso8601", "required": true }
+      ]
+    }
+  ]
+}

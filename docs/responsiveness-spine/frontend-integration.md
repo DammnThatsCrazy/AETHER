@@ -1,3 +1,12 @@
+---
+title: Frontend Integration
+slug: responsiveness-spine/frontend-integration
+section: architecture
+visibility: P
+audience: [dev-senior, architect]
+status: beta
+---
+
 # Responsiveness & Time-to-Value — Frontend Integration
 
 > How frontend aether and Kyber consume the Responsiveness & Time-to-Value spine.

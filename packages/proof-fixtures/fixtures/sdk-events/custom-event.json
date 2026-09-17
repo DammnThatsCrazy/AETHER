@@ -1,0 +1,33 @@
+{
+  "tenant_id": "aether-proof-tenant",
+  "workspace_id": "proof-lab",
+  "platform_id": "web",
+  "environment": "staging",
+  "event_type": "track",
+  "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+  "session": { "session_id": "sess_abc123" },
+  "device": { "device_id": "dev_web_001", "platform": "web" },
+  "identity": { "anonymous_id": "anon_001", "user_id": "user_001" },
+  "timestamp": "2024-09-11T12:02:00.000Z",
+  "properties": {
+    "event_name": "button_clicked",
+    "button_id": "cta-signup",
+    "button_text": "Sign Up Free",
+    "page_path": "/demo",
+    "element_class": "btn-primary",
+    "click_coordinates": { "x": 340, "y": 180 }
+  },
+  "context": {
+    "page": {
+      "url": "https://example.com/demo",
+      "path": "/demo",
+      "title": "Demo Page"
+    }
+  },
+  "source": {
+    "platform": "web",
+    "data_type": "event",
+    "sdk": "@aether/web",
+    "environment": "staging"
+  }
+}

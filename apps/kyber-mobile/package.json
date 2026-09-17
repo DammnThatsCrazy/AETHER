@@ -12,8 +12,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aether/mobile-core": "^0.1.0-alpha.0",
-    "@aether/mobile-ui": "^0.1.0-alpha.0",
+    "@aether/mobile-core": "workspace:*",
+    "@aether/mobile-ui": "workspace:*",
     "expo": "^51.0.0",
     "expo-crypto": "^13.0.0",
     "expo-secure-store": "^13.0.0",

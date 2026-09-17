@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractVersion": "1.0.0",
+  "description": "Canonical field registry for source_system — an origin of identity evidence. Every ingestion source (CSV, connector, SDK, API, agent_runtime, manual) registers as a source_system before its identities are resolved. Tenant-scoped: tenant_id is part of every identity namespace.",
+  "envelope_required_fields": [
+    "id",
+    "tenant_id",
+    "kind",
+    "namespace",
+    "display_name",
+    "trust_level"
+  ],
+  "blocks": [
+    {
+      "name": "source_system",
+      "kind": "object",
+      "required": true,
+      "description": "A registered origin of identity evidence for a tenant.",
+      "fields": [
+        { "name": "id", "type": "string", "required": true, "description": "Unique source system identifier (tenant-scoped)." },
+        { "name": "tenant_id", "type": "string", "required": true, "description": "Owning tenant. Hard boundary — no cross-tenant source systems." },
+        { "name": "kind", "type": "enum", "required": true, "values": ["csv", "connector", "sdk", "api", "mobile_sdk", "web_sdk", "agent_runtime", "manual"], "description": "Origin kind." },
+        { "name": "provider", "type": "string", "required": false, "description": "Optional provider name (shopify, stripe, hubspot, mailchimp, salesforce, etc.)." },
+        { "name": "namespace", "type": "string", "required": true, "description": "Source namespace — e.g. tenant_001:shopify, tenant_001:web_sdk:marketing_site." },
+        { "name": "display_name", "type": "string", "required": true, "description": "Human-readable name for UI/explanation." },
+        { "name": "trust_level", "type": "enum", "required": true, "values": ["low", "medium", "high", "verified"], "description": "Trust level of this source for identity evidence." },
+        { "name": "created_at", "type": "iso8601", "required": true },
+        { "name": "updated_at", "type": "iso8601", "required": true }
+      ]
+    }
+  ]
+}

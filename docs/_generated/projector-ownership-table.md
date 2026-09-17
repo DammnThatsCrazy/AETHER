@@ -46,7 +46,7 @@ These projectors also emit canonical activity for the listed event types but con
 
 | Projector | Event types |
 |---|---|
-| `TouchpointProjector` | `ad_click`, `click`, `impression`, `landing`, `page_view`, `pageview`, `search_performed`, `session_start`, `session_started` |
+| `TouchpointProjector` | `ad_click`, `click`, `impression`, `landing`, `page_view`, `pageview`, `search_performed`, `session_start` |
 | `RevenueProjector` | `payment_intent_created`, `payment_succeeded` |
 | `AgentExecutionProjector` | `agent_handoff_observed`, `agent_step_observed`, `agent_tool_call_observed`, `agentic_session_abandoned`, `agentic_session_completed`, `agentic_session_started` |
 | `Web3TransactionProjector` | `transaction_confirmed`, `transaction_failed`, `transaction_initiated`, `transaction_submitted`, `wallet_connected`, `wallet_disconnected` |

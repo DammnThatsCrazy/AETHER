@@ -1,0 +1,15 @@
+{
+  "user_id": "cus_123",
+  "email": "payer@example.com",
+  "name": "Stripe Payer",
+  "identity_sources": ["stripe"],
+  "attributes": {
+    "account_id": "acct_1234567890",
+    "platform": "stripe",
+    "first_payment": "2025-01-15T10:30:00.000Z"
+  },
+  "lifetime_value": 99.99,
+  "last_active": "2025-01-15T10:30:00.000Z",
+  "total_events": 1,
+  "engagement_score": 0.7
+}

@@ -346,6 +346,7 @@ from services.readiness_graph.routes import (
 from services.metering_evidence.routes import router as metering_evidence_router
 from services.events.routes import router as events_router
 from services.sdk.routes import router as sdk_router
+from services.sdk.lifecycle_routes import router_lifecycle as sdk_lifecycle_router
 from services.journeys.routes import admin_router as journey_health_router
 from services.sdk_health.routes import router as sdk_health_router
 from services.sdk_distribution.routes import router as sdk_distribution_router
@@ -1011,6 +1012,7 @@ def create_app() -> FastAPI:
     app.include_router(events_router)
     app.include_router(user_agents_router)  # Profile 360: user/org-owned agents (always-on)
     app.include_router(sdk_router)          # SDK utilities: cross-device identity resolution
+    app.include_router(sdk_lifecycle_router)  # SDK lifecycle: heartbeat/identify/alias/reset/consent (SourceIdentityRegistry wired)
     # /v1/journeys is owned solely by the persisted measurement journey
     # authority (measurement_journeys_router, mounted below). The in-memory
     # stitcher router was retired from mounting here — registered first, it

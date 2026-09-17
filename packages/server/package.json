@@ -26,10 +26,10 @@
     "registry": "https://registry.npmjs.org"
   },
   "peerDependencies": {
-    "@aether/shared": ">=0.1.0-alpha.0"
+    "@aether/shared": "workspace:*"
   },
   "devDependencies": {
-    "@aether/shared": "^0.1.0-alpha.0",
+    "@aether/shared": "workspace:*",
     "@vitest/coverage-v8": "^1.6.0",
     "vitest": "^1.6.0",
     "typescript": "^5.4.0"

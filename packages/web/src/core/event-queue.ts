@@ -13,6 +13,31 @@ const QUEUE_STORAGE_KEY = 'event_queue';
 const MAX_STORED_EVENTS = 1000;
 const SDK_VERSION = '0.1.0-alpha.0'; // synchronized by scripts/bump-sdk-version.sh and scripts/validate_sdk_release_alignment.py
 
+export type DroppedEventReason =
+  | 'consent_denied'
+  | 'schema_invalid'
+  | 'queue_full'
+  | 'offline_expired'
+  | 'retry_exhausted'
+  | 'manifest_blocked'
+  | 'unsupported_sdk_version'
+  | 'payload_too_large'
+  | 'auth_failed'
+  | 'shutdown_unflushed';
+
+interface DroppedEventCounts {
+  consent_denied: number;
+  schema_invalid: number;
+  queue_full: number;
+  offline_expired: number;
+  retry_exhausted: number;
+  manifest_blocked: number;
+  unsupported_sdk_version: number;
+  payload_too_large: number;
+  auth_failed: number;
+  shutdown_unflushed: number;
+}
+
 /**
  * A non-retryable ingestion failure (a non-429 4xx): the batch is malformed or
  * rejected and will never succeed on retry, so it is dropped (with onError)
@@ -156,6 +181,19 @@ export class EventQueue {
   private isFlushing = false;
   private isDestroyed = false;
   private consent: ConsentState | null = null;
+  private droppedCounts: DroppedEventCounts = {
+    consent_denied: 0,
+    schema_invalid: 0,
+    queue_full: 0,
+    offline_expired: 0,
+    retry_exhausted: 0,
+    manifest_blocked: 0,
+    unsupported_sdk_version: 0,
+    payload_too_large: 0,
+    auth_failed: 0,
+    shutdown_unflushed: 0,
+  };
+  private lastFlushStatus: 'pending' | 'flushing' | 'success' | 'failed' | 'no_events' = 'no_events';
 
   constructor(config: Omit<Partial<QueueConfig>, 'retry'> & Pick<QueueConfig, 'endpoint' | 'apiKey'> & { retry?: RetryConfig }) {
     this.config = {
@@ -187,16 +225,59 @@ export class EventQueue {
       : event;
     this.queue.push(safe);
     if (this.queue.length >= this.config.batchSize) this.flush();
-    if (this.queue.length >= this.config.maxQueueSize) this.flush();
+    if (this.queue.length >= this.config.maxQueueSize) {
+      this.droppedCounts.queue_full++;
+      this.flush();
+    }
   }
 
-  async flush(): Promise<void> {
-    if (this.isFlushing || this.queue.length === 0 || this.isDestroyed) return;
+  /**
+   * Public API: get diagnostics including dropped-event counts by reason.
+   */
+  getDiagnostics(): {
+    droppedEvents: DroppedEventCounts;
+    queueDepth: number;
+    lastFlushStatus: 'pending' | 'flushing' | 'success' | 'failed' | 'no_events';
+  } {
+    return {
+      droppedEvents: { ...this.droppedCounts },
+      queueDepth: this.queue.length,
+      lastFlushStatus: this.lastFlushStatus,
+    };
+  }
 
+  /**
+   * Public API: get current queue depth.
+   */
+  getQueueDepth(): number {
+    return this.queue.length;
+  }
+
+  /**
+   * Public API: get last flush status.
+   */
+  getLastFlushStatus(): 'pending' | 'flushing' | 'success' | 'failed' | 'no_events' {
+    return this.lastFlushStatus;
+  }
+
+  /**
+   * Public API: flush the queue immediately.
+   */
+  async flush(): Promise<void> {
+    if (this.isFlushing || this.queue.length === 0 || this.isDestroyed) {
+      if (this.queue.length === 0) this.lastFlushStatus = 'no_events';
+      return;
+    }
+    this.lastFlushStatus = 'flushing';
     this.isFlushing = true;
     const batch = this.queue.splice(0, this.config.batchSize);
     const allowedEvents = this.filterByConsent(batch);
     const droppedByConsent = batch.length - allowedEvents.length;
+
+    // Consent filtering is intentional — surfaced as its own counter
+    if (droppedByConsent > 0) {
+      this.droppedCounts.consent_denied += droppedByConsent;
+    }
 
     // Consent filtering is intentional, not an ingestion failure — it is surfaced
     // as its own `dropped_by_consent` health counter, never as a send failure.
@@ -208,6 +289,7 @@ export class EventQueue {
         dropped_by_consent: droppedByConsent,
         queue_depth: this.queue.length,
       });
+      this.lastFlushStatus = 'no_events';
       this.isFlushing = false;
       return;
     }
@@ -224,22 +306,18 @@ export class EventQueue {
         queue_depth: this.queue.length,
       });
       this.persistQueue();
+      this.lastFlushStatus = 'success';
     } catch (error) {
       this.config.onAttempt?.(Date.now() - start, false);
       if (error instanceof TerminalIngestError) {
-        // Poison batch: drop it (surfaced via onError) rather than unshifting to
-        // the head, so one permanently-rejected batch can't block the queue.
         this.persistQueue();
         this.config.onError?.(error, allowedEvents);
+        this.lastFlushStatus = 'failed';
       } else {
-        // Transient failure (5xx exhausted, rate-limit, network) OR an
-        // AmbiguousDeliveryError (2xx with no parseable counters — unconfirmed,
-        // not rejected): return the batch to the head so the next flush
-        // retries it. Stable per-event ids make the backend dedup a resend of
-        // an already-delivered batch, so retrying here can't double-write.
         this.queue.unshift(...allowedEvents);
         this.persistQueue();
         this.config.onError?.(error as Error, allowedEvents);
+        this.lastFlushStatus = 'pending';
       }
     } finally {
       this.isFlushing = false;

@@ -20,10 +20,10 @@ estimated_read_minutes: 14
 toc_depth: 3
 source_hashes:
   "services/backend/config/settings.py": "sha256:486abbaa3ec3e1dce4e257f8e50efe45cfd98d8a3ad99b88863ab2f0884b1748"
-  "services/backend/main.py": "sha256:146abcd2a0af5653e96f1c1eb9e5fe1fef6e32790758636cbde4d6d24c5c592e"
-  "services/backend/services/provider_runtime/": "sha256:81502394ca09ea802ea90662dc6f23c1918a0ece952a2bfdac68187007f2c8fa"
-  "services/backend/services/providers/": "sha256:a31117bea28b5b23d4d83c72c12e32f364e05a51e14d9b0f5470d6a3d4d2e36d"
-  "services/backend/services/providers/shopify/": "sha256:c0a12ddb85d4fd9590fe6559c1921a494ef73cf74575a876a56445d13dbd61b9"
+  "services/backend/main.py": "sha256:7f7f8efc68276c89f61cd6c02079f60869959da6b0c5788b46ab8c06aa7eb32d"
+  "services/backend/services/provider_runtime/": "sha256:b2a3e39e1032cbb1b93e8e546f6ce97541c978d183f96460afcc08aead164154"
+  "services/backend/services/providers/": "sha256:e4a113fc52d5bf6e6feac5a599fdaf2c9ddc2e08a84187d32e0c616efef09826"
+  "services/backend/services/providers/shopify/": "sha256:45f4980bfcd718f18a7e17806771102c20431d356244325b58ad1a0a6ba430ca"
   "services/backend/shared/commerce_contracts/": "sha256:b2bce635d1c6472fdf0bdccd842098fb601a8a72362521d82fe582f1d536b013"
   "services/backend/shared/integration_contracts/": "sha256:ef4cb78f58482052f180f54b494bcc90a4dcea3777dfbb0e901a1f214fb1e683"
   "services/backend/shared/rate_limit/feature_gate.py": "sha256:504bb343941c6e95bd41b525afaff46a5068e568f88d5c88859e050b503797bc"

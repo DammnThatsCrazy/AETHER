@@ -17,9 +17,9 @@
     "demo:status": "npm --prefix ../.. run demo:status"
   },
   "dependencies": {
-    "@aether/shared": "*",
-    "@aether/ui": "*",
-    "@aether/web": "*",
+    "@aether/shared": "workspace:*",
+    "@aether/ui": "workspace:*",
+    "@aether/web": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

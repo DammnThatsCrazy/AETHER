@@ -1,0 +1,52 @@
+{
+  "workspace_id": "workspace-001",
+  "normalized_campaigns": [
+    {
+      "campaign_id": "camp-001",
+      "name": "Welcome Series",
+      "campaign_type": "onboarding",
+      "status": "active",
+      "created_at": "2025-01-01T00:00:00.000Z",
+      "channels": ["email", "push"],
+      "audience": { "segment_id": "seg-new-users" },
+      "metrics": {
+        "impressions": 1000,
+        "clicks": 450,
+        "conversions": 85,
+        "revenue": 6375.00,
+        "open_rate": 0.459,
+        "click_through_rate": 0.204
+      },
+      "utm": {
+        "source": "welcome",
+        "medium": "email",
+        "campaign": "welcome_series"
+      }
+    },
+    {
+      "campaign_id": "camp-002",
+      "name": "Summer Sale",
+      "campaign_type": "promotional",
+      "status": "paused",
+      "created_at": "2025-01-05T00:00:00.000Z",
+      "updated_at": "2025-01-15T00:00:00.000Z",
+      "channels": ["email", "sms", "push"],
+      "audience": { "segment_id": "seg-active-users" },
+      "description": "Summer promotional campaign",
+      "budget": { "currency": "USD", "total_amount": 10000 },
+      "metrics": {
+        "impressions": 5000,
+        "clicks": 2100,
+        "conversions": 350,
+        "revenue": 28000.00,
+        "open_rate": 0.42,
+        "click_through_rate": 0.42
+      },
+      "utm": {
+        "source": "summer",
+        "medium": "email",
+        "campaign": "summer_sale"
+      }
+    }
+  ]
+}

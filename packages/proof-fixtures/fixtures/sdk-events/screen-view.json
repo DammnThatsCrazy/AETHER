@@ -1,0 +1,40 @@
+{
+  "tenant_id": "aether-proof-tenant",
+  "workspace_id": "proof-lab",
+  "platform_id": "mobile",
+  "environment": "staging",
+  "event_type": "screen",
+  "sdk": { "name": "@aether/ios", "version": "0.1.0-alpha.0" },
+  "session": { "session_id": "sess_mobile_001" },
+  "device": { "device_id": "dev_ios_001", "platform": "ios" },
+  "identity": { "anonymous_id": "anon_mobile_001", "user_id": "user_002" },
+  "timestamp": "2024-09-11T12:01:00.000Z",
+  "properties": {
+    "screen_name": "HomeScreen",
+    "screen_class": "MainViewController",
+    "previous_screen": "OnboardingScreen",
+    "screen_duration_ms": 45000,
+    "orientation": "portrait",
+    "app_version": "1.2.3",
+    "os_version": "17.5"
+  },
+  "context": {
+    "application": {
+      "name": "Acme Mobile App",
+      "version": "1.2.3",
+      "build_number": "45"
+    },
+    "device": {
+      "device_id": "dev_ios_001",
+      "platform": "ios",
+      "model": "iPhone 15",
+      "os_version": "17.5"
+    }
+  },
+  "source": {
+    "platform": "mobile",
+    "data_type": "event",
+    "sdk": "@aether/ios",
+    "environment": "staging"
+  }
+}

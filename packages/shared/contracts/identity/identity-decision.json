@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractVersion": "1.0.0",
+  "description": "Canonical field registry for identity_decision — every resolver outcome creates this record. Merges are decisions, not side effects. Every merge must create an auditable decision record: who/what decided, which evidence was used, which policy was applied, which confidence score was assigned, which graph version resulted, which projections were restated.",
+  "envelope_required_fields": [
+    "id",
+    "tenant_id",
+    "decision_type",
+    "candidate_source_identity_ids",
+    "candidate_canonical_entity_ids",
+    "confidence",
+    "confidence_band",
+    "policy_version",
+    "explanation",
+    "decided_by",
+    "decided_at"
+  ],
+  "blocks": [
+    {
+      "name": "identity_decision",
+      "kind": "object",
+      "required": true,
+      "description": "An auditable identity resolution decision.",
+      "fields": [
+        { "name": "id", "type": "string", "required": true },
+        { "name": "tenant_id", "type": "string", "required": true },
+        { "name": "decision_type", "type": "enum", "required": true, "values": ["auto_resolve", "auto_merge", "manual_merge", "block_merge", "review_required", "create_provisional", "split_candidate", "manual_split", "auto_split", "suppress", "delete"], "description": "Type of identity decision." },
+        { "name": "candidate_source_identity_ids", "type": "array", "required": true, "item_type": "string", "description": "Source identities considered." },
+        { "name": "candidate_canonical_entity_ids", "type": "array", "required": true, "item_type": "string", "description": "Canonical entities considered." },
+        { "name": "selected_canonical_entity_id", "type": "string", "required": false, "description": "Selected canonical entity, if any." },
+        { "name": "confidence", "type": "number", "required": true, "description": "Confidence score (0.0-1.0)." },
+        { "name": "confidence_band", "type": "enum", "required": true, "values": ["very_high", "high", "medium", "low", "blocked"], "description": "Confidence band — drives action." },
+        { "name": "positive_evidence", "type": "array", "required": true, "item_type": "object", "description": "List of positive evidence summaries." },
+        { "name": "negative_evidence", "type": "array", "required": true, "item_type": "object", "description": "List of negative evidence summaries." },
+        { "name": "vetoes", "type": "array", "required": true, "item_type": "object", "description": "List of applied vetoes." },
+        { "name": "policy_version", "type": "string", "required": true, "description": "Policy version used for this decision." },
+        { "name": "graph_version_before", "type": "string", "required": false, "description": "Graph version before this decision." },
+        { "name": "graph_version_after", "type": "string", "required": false, "description": "Graph version after this decision." },
+        { "name": "explanation", "type": "string", "required": true, "description": "Human-readable explanation of the decision." },
+        { "name": "decided_by", "type": "enum", "required": true, "values": ["system", "operator", "tenant_admin"], "description": "Who made this decision." },
+        { "name": "decided_at", "type": "iso8601", "required": true }
+      ]
+    }
+  ]
+}

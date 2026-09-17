@@ -287,3 +287,165 @@ class IdentityHealthResponse(BaseModel):
     resolver_error_rate: float = 0.0
     graph_write_error_rate: float = 0.0
     tenant_id: Optional[str] = None
+
+
+# ── Explainability request/response shapes (PR 8, blueprint §13.2) ──────────
+
+
+class IdentityExplanationRequest(BaseModel):
+    profile_id: str = Field(..., min_length=1)
+
+
+class SourceIdentityEntry(BaseModel):
+    source_identity_id: str
+    source: str
+    source_platform: str
+    source_event_id: str
+    alias_type: str
+    confidence: float
+    first_seen_at: str
+    last_seen_at: str
+    alias_display_value_redacted: str
+
+
+class EvidenceEntry(BaseModel):
+    signal: str
+    status: str
+    reason_codes: list[str] = Field(default_factory=list)
+    source_events: list[str] = Field(default_factory=list)
+    source_connectors: list[str] = Field(default_factory=list)
+    decision_type: str
+
+
+class IdentityExplanationResponse(BaseModel):
+    """§13.2 explainability payload — shape must match blueprint section 13.2 exactly."""
+
+    canonical_entity_id: str
+    confidence: float
+    confidence_band: str
+    source_identities: list[SourceIdentityEntry] = Field(default_factory=list)
+    positive_evidence: list[EvidenceEntry] = Field(default_factory=list)
+    negative_evidence: list[EvidenceEntry] = Field(default_factory=list)
+    ignored_evidence: list[EvidenceEntry] = Field(default_factory=list)
+    graph_version: str
+    resolution_decision_summary: str
+
+
+class IdentityDecisionDetailsResponse(BaseModel):
+    decision_id: str
+    found: bool
+    tenant_id: str
+    entity_id: str = ""
+    subject_entity_id: str = ""
+    decision_type: str = ""
+    signals_used: list[str] = Field(default_factory=list)
+    signals_excluded: list[str] = Field(default_factory=list)
+    source_events: list[str] = Field(default_factory=list)
+    source_connectors: list[str] = Field(default_factory=list)
+    consent_snapshot_hash: str = ""
+    policy_decision_id: Optional[str] = None
+    confidence_score: float = 0.0
+    confidence_tier: str = ""
+    merge_policy_version: str = ""
+    operator_id: str = ""
+    review_status: str = ""
+    created_at: str = ""
+
+
+# ── Admin identity operation request/response shapes ─────────────────────────────
+
+
+class AdminIdentityMergeRequest(BaseModel):
+    tenant_id: str = Field(..., min_length=1)
+    source_entity_id: str = Field(..., min_length=1)
+    canonical_entity_id: str = Field(..., min_length=1)
+    reason: str = Field(..., min_length=1)
+    operator_id: str = Field(..., min_length=1)
+    confirmation_token: str = Field(..., min_length=1)
+    expected_graph_version: str = Field(..., min_length=1)
+
+
+class AdminIdentityMergeResponse(BaseModel):
+    merged: bool
+    canonical_entity_id: Optional[str] = None
+    graph_version_after: Optional[str] = None
+    decision_id: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    error: Optional[str] = None
+
+
+class AdminIdentitySplitTargetPlan(BaseModel):
+    mode: str = Field(..., min_length=1)
+    target_entity_id: Optional[str] = None
+    source_merge_event_id: Optional[str] = None
+
+
+class AdminIdentitySplitRequest(BaseModel):
+    tenant_id: str = Field(..., min_length=1)
+    source_canonical_profile: str = Field(..., min_length=1)
+    target_split_plan: AdminIdentitySplitTargetPlan
+    source_identities_to_move: list[str] = Field(default_factory=list)
+    reason: str = Field(..., min_length=1)
+    operator_id: str = Field(..., min_length=1)
+    confirmation_token: str = Field(..., min_length=1)
+    expected_graph_version: str = Field(..., min_length=1)
+
+
+class AdminIdentitySplitResponse(BaseModel):
+    split: bool
+    resulting_entity_ids: list[str] = Field(default_factory=list)
+    split_event_id: Optional[str] = None
+    graph_version_after: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    error: Optional[str] = None
+
+
+class AdminIdentityReconcileRequest(BaseModel):
+    tenant_id: str = Field(..., min_length=1)
+    trigger_type: str = Field(..., min_length=1)
+    trigger_id: str = Field(..., min_length=1)
+    identifier_type: Optional[str] = None
+    identifier_hash: Optional[str] = None
+    entity_id: Optional[str] = None
+    reason: str = Field("reconcile", min_length=1)
+
+
+class AdminIdentityReconcileResponse(BaseModel):
+    status: str
+    tenant_id: str
+    trigger_type: str
+    trigger_id: str
+    affected_entity_ids: list[str] = Field(default_factory=list)
+    decisions: list[dict] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class ReviewQueueEntry(BaseModel):
+    conflict_id: str
+    tenant_id: str
+    candidate_a: dict
+    candidate_b: dict
+    matching_evidence: list[dict] = Field(default_factory=list)
+    conflicting_evidence: list[dict] = Field(default_factory=list)
+    recommended_action: str
+    confidence: float
+    risk_level: str
+    affected_projections: list[str] = Field(default_factory=list)
+    created_at: str
+    status: str
+
+
+class AdminIdentityReviewQueueResponse(BaseModel):
+    entries: list[ReviewQueueEntry] = Field(default_factory=list)
+    total: int = 0
+    status: str = "ok"
+
+
+class ActivationStatusResponse(BaseModel):
+    tenant_id: str
+    historical_data_status: str
+    sdk_status: str
+    resolution_counts: dict = Field(default_factory=dict)
+    conflict_counts: dict = Field(default_factory=dict)
+    projection_restatement_status: str
+    computed_at: str

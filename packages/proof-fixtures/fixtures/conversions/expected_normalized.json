@@ -1,0 +1,15 @@
+{
+  "workspace_id": "workspace-001",
+  "normalized_conversions": [
+    {
+      "conversion_id": "conv-001",
+      "event_type": "purchase",
+      "timestamp": "2025-01-15T10:30:00.000Z",
+      "value": 49.99,
+      "currency": "USD",
+      "user_id": "user-1",
+      "campaign_id": "camp-001",
+      "attribution_model": "last_touch"
+    }
+  ]
+}

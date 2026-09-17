@@ -13,9 +13,9 @@ source_hashes:
   "packages/shared/consent.ts": "sha256:2fe8548fdcebf03d9285e4d1418319a542dba204819186bc884d154d17bc1b40"
   "packages/shared/events.ts": "sha256:07628f50a0561ff5eb9ced333d6120a92182f94724eda2675172b354b6387494"
   "packages/shared/sdk-version.ts": "sha256:3301384a8b98d5ecf06981a00d56439479fc72b218e07b5ebc061cd52d7b98b8"
-  "packages/web/src/core/event-queue.ts": "sha256:45c4327ea08260f7c925446c0e5b5b74353567d595c9703d04db56aeb7706ac0"
-  "packages/web/src/health/sdk-health-agent.ts": "sha256:def031696eae340167d7e18cbdb4c4e79bf705231dea28272a260d1ecfdc1504"
-  "packages/web/src/index.ts": "sha256:bc4d8dacd06821812479addcda2a0281bb104adba7090e58a63a24b32ba233cd"
+  "packages/web/src/core/event-queue.ts": "sha256:051105933fa4b11add2ab8d5548a18400bcb5f592b8b70dd42197363f885121d"
+  "packages/web/src/health/sdk-health-agent.ts": "sha256:3cca664a5ca1b53a50bed15af670685bdc22840451a95d330dda572345348c20"
+  "packages/web/src/index.ts": "sha256:a7c850464612259a5e4fb9d760d0e5018c61f89f5447ebe4957fa28a93d591be"
 ---
 
 # Aether SDK Production Readiness Audit

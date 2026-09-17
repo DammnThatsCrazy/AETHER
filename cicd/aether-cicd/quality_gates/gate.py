@@ -27,9 +27,9 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from config.pipeline_config import QualityThresholds, QUALITY_THRESHOLDS
+from config.pipeline_config import QUALITY_THRESHOLDS, QualityThresholds
 
 
 class GateStatus(str, Enum):
@@ -44,7 +44,7 @@ class GateResult:
     stage: str
     status: GateStatus
     reason: str = ""
-    metrics: Dict[str, Any] = field(default_factory=dict)
+    metrics: dict[str, Any] = field(default_factory=dict)
     timestamp: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -53,7 +53,7 @@ class GateResult:
     def passed(self) -> bool:
         return self.status in (GateStatus.PASSED, GateStatus.WARNING, GateStatus.SKIPPED)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "stage": self.stage,
             "status": self.status.value,
@@ -69,9 +69,9 @@ class GateResult:
 class QualityGate:
     """Central quality gate checker for all pipeline stages."""
 
-    def __init__(self, thresholds: Optional[QualityThresholds] = None) -> None:
+    def __init__(self, thresholds: QualityThresholds | None = None) -> None:
         self.t = thresholds or QUALITY_THRESHOLDS
-        self._results: List[GateResult] = []
+        self._results: list[GateResult] = []
 
     # -- CI Stage Gates -------------------------------------------------------
 
@@ -101,7 +101,7 @@ class QualityGate:
         self, coverage: float, failures: int, total: int = 0,
     ) -> GateResult:
         """Stage 3: >90% coverage, zero failures."""
-        reasons: List[str] = []
+        reasons: list[str] = []
         if failures > 0:
             reasons.append(f"{failures} test(s) failed")
         if coverage < self.t.min_unit_test_coverage:
@@ -142,7 +142,7 @@ class QualityGate:
         secrets_found: int = 0,
     ) -> GateResult:
         """Stage 5: Zero critical/high vulnerabilities, zero secrets."""
-        reasons: List[str] = []
+        reasons: list[str] = []
         if critical > 0:
             reasons.append(f"{critical} critical vulnerability(ies)")
         if high > 0:
@@ -179,7 +179,7 @@ class QualityGate:
         build_time_seconds: float = 0,
     ) -> GateResult:
         """Stage 6: Successful build, image size within budget."""
-        reasons: List[str] = []
+        reasons: list[str] = []
         if not success:
             reasons.append("Build failed")
         if image_size_mb > self.t.max_docker_image_size_mb:
@@ -260,7 +260,7 @@ class QualityGate:
         rps: float = 0,
     ) -> GateResult:
         """Stage 8: P99 < 200ms, no memory leaks."""
-        reasons: List[str] = []
+        reasons: list[str] = []
         if p99_latency_ms > self.t.max_p99_latency_ms:
             reasons.append(
                 f"P99 latency {p99_latency_ms:.0f}ms > {self.t.max_p99_latency_ms}ms"
@@ -285,7 +285,7 @@ class QualityGate:
 
     def check_canary(self, error_rate_pct: float, p99_latency_ms: float) -> GateResult:
         """CD Stage 3-4: Canary metrics within thresholds."""
-        reasons: List[str] = []
+        reasons: list[str] = []
         if error_rate_pct > self.t.max_canary_error_rate_pct:
             reasons.append(
                 f"Error rate {error_rate_pct:.2f}% > {self.t.max_canary_error_rate_pct}%"
@@ -338,14 +338,14 @@ class QualityGate:
         return all(r.passed for r in self._results)
 
     @property
-    def results(self) -> List[GateResult]:
+    def results(self) -> list[GateResult]:
         return list(self._results)
 
     @property
-    def failed_gates(self) -> List[GateResult]:
+    def failed_gates(self) -> list[GateResult]:
         return [r for r in self._results if r.status == GateStatus.FAILED]
 
-    def summary(self) -> Dict[str, Any]:
+    def summary(self) -> dict[str, Any]:
         return {
             "total_gates": len(self._results),
             "passed": sum(1 for r in self._results if r.status == GateStatus.PASSED),

@@ -1,0 +1,59 @@
+{
+  "platform": "email",
+  "provider": "sendgrid",
+  "normalized_messages": [
+    {
+      "message_id": "msg-1",
+      "sender": "noreply@example.com",
+      "recipient": "user@example.com",
+      "subject": "Welcome!",
+      "event_type": "delivered",
+      "timestamp": "2025-01-15T10:30:00.000Z",
+      "delivered_at": "2025-01-15T10:30:05.000Z",
+      "campaign_id": "camp-001",
+      "template_id": "tpl_welcome_001",
+      "source": {
+        "platform": "email",
+        "data_type": "communication",
+        "platform_id": "sendgrid",
+        "environment": "staging"
+      }
+    },
+    {
+      "message_id": "msg-2",
+      "sender": "noreply@example.com",
+      "recipient": "user@example.com",
+      "subject": "Getting Started",
+      "event_type": "opened",
+      "timestamp": "2025-01-15T10:35:00.000Z",
+      "opened_at": "2025-01-15T10:35:00.000Z",
+      "campaign_id": "camp-001",
+      "template_id": "tpl_guide_001",
+      "source": {
+        "platform": "email",
+        "data_type": "communication",
+        "platform_id": "sendgrid",
+        "environment": "staging"
+      }
+    },
+    {
+      "message_id": "msg-3",
+      "sender": "noreply@example.com",
+      "recipient": "bounce@example.com",
+      "subject": "Welcome!",
+      "event_type": "bounced",
+      "timestamp": "2025-01-15T10:40:00.000Z",
+      "bounced_at": "2025-01-15T10:40:00.000Z",
+      "reason": "hard_bounce",
+      "status_code": "5.1.1",
+      "campaign_id": "camp-001",
+      "template_id": "tpl_welcome_001",
+      "source": {
+        "platform": "email",
+        "data_type": "communication",
+        "platform_id": "sendgrid",
+        "environment": "staging"
+      }
+    }
+  ]
+}

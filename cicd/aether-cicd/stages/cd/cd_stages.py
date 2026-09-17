@@ -24,14 +24,16 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any
 
 from config.pipeline_config import (
-    QUALITY_THRESHOLDS, REPO_SERVICES, Environment,
+    QUALITY_THRESHOLDS,
+    REPO_SERVICES,
+    Environment,
 )
 from quality_gates.gate import QualityGate
-from shared.runner import run_cmd, log
 from shared.notifier import Notifier, NotifyEvent
+from shared.runner import log, run_cmd
 
 
 @dataclass
@@ -41,14 +43,14 @@ class DeploymentContext:
     version: str
     commit_sha: str
     triggered_by: str = "ci"
-    services: List[str] = field(default_factory=lambda: list(REPO_SERVICES.keys()))
+    services: list[str] = field(default_factory=lambda: list(REPO_SERVICES.keys()))
     ecr_registry: str = ""
     aws_region: str = "us-east-1"
     current_traffic_pct: int = 0
     rollback_triggered: bool = False
     rollback_reason: str = ""
-    stage_results: List[Dict[str, Any]] = field(default_factory=list)
-    previous_task_definitions: Dict[str, str] = field(default_factory=dict)
+    stage_results: list[dict[str, Any]] = field(default_factory=list)
+    previous_task_definitions: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.ecr_registry:
@@ -202,7 +204,6 @@ def stage_canary_deploy(ctx: DeploymentContext) -> bool:
 
     for svc_path in ctx.services:
         svc_name = ctx._svc_name(svc_path)
-        image = f"{ctx.ecr_registry}/aether-{svc_name}:{ctx.version}"
 
         log(f"Canary deploy {svc_name} at {canary_pct}% traffic", stage="CD3")
 

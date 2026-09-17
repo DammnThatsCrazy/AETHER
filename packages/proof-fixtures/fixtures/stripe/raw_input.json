@@ -1,0 +1,32 @@
+{
+  "platform": "stripe",
+  "account_id": "acct_1234567890",
+  "events": [
+    {
+      "id": "evt_1",
+      "type": "checkout.session.completed",
+      "created": "2025-01-15T10:30:00.000Z",
+      "data": {
+        "object": {
+          "amount_total": 9999,
+          "currency": "usd",
+          "customer": "cus_123",
+          "customer_email": "payer@example.com"
+        }
+      }
+    },
+    {
+      "id": "evt_2",
+      "type": "customer.created",
+      "created": "2025-01-15T09:30:00.000Z",
+      "data": {
+        "object": {
+          "id": "cus_123",
+          "email": "payer@example.com",
+          "name": "Jane Payer",
+          "phone": "+1-555-0100"
+        }
+      }
+    }
+  ]
+}

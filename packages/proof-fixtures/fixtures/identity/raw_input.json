@@ -1,0 +1,21 @@
+{
+  "workspace_id": "workspace-001",
+  "identities": [
+    {
+      "user_id": "user-1",
+      "email": "user@example.com",
+      "source": "auth0",
+      "verified": true,
+      "created_at": "2025-01-01T00:00:00Z",
+      "attributes": { "plan": "pro", "locale": "en-US" }
+    },
+    {
+      "user_id": "user-2",
+      "email": "visitor@example.com",
+      "source": "website",
+      "verified": false,
+      "created_at": "2025-01-10T00:00:00Z",
+      "attributes": { "plan": "free", "locale": "en-US" }
+    }
+  ]
+}

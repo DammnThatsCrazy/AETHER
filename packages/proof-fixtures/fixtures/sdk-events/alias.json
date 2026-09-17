@@ -1,0 +1,27 @@
+{
+  "tenant_id": "aether-proof-tenant",
+  "workspace_id": "proof-lab",
+  "platform_id": "web",
+  "environment": "staging",
+  "event_type": "alias",
+  "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+  "session": { "session_id": "sess_alias_001" },
+  "device": { "device_id": "dev_web_002", "platform": "web" },
+  "identity": { "anonymous_id": "anon_alias_001", "user_id": "user_003" },
+  "timestamp": "2024-09-11T12:06:00.000Z",
+  "properties": {
+    "previous_anonymous_id": "anon_old_001",
+    "new_user_id": "user_003",
+    "merge_reason": "login_auth",
+    "previous_identity": {
+      "anonymous_id": "anon_old_001",
+      "user_id": null
+    }
+  },
+  "source": {
+    "platform": "web",
+    "data_type": "identity",
+    "sdk": "@aether/web",
+    "environment": "staging"
+  }
+}

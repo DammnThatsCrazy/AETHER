@@ -1,0 +1,17 @@
+{
+  "_fixture_version": 1,
+  "scenario": "Cross-tenant isolation",
+  "blueprint_ref": "\u00a76.1, \u00a78.3 CROSS_TENANT",
+  "description": "Tenant is hard boundary; aliases are tenant-scoped and cross-tenant merge attempts are blocked.",
+  "tenants": [
+    "tenant_cross_a",
+    "tenant_cross_b"
+  ],
+  "email": "cross@example.com",
+  "expected": {
+    "cross_tenant_decision": "blocked",
+    "cross_tenant_tier": "blocked",
+    "alias_isolation": true
+  },
+  "invariant": "cross_tenant_block"
+}

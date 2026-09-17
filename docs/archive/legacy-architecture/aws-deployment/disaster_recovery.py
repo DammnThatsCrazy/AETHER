@@ -200,7 +200,7 @@ def validate_recovery(ctx: RecoveryContext) -> bool:
         "ml_models": "curl -sf https://api.aether.network/v1/ml/models",
         "websocket": "curl -sf https://ws.aether.network",
         "dashboard": "curl -sf https://dashboard.aether.network",
-        "cdn_sdk": "curl -sf https://cdn.aether.network/sdk/latest/aether-sdk.esm.min.js",
+        "cdn_sdk": "curl -sf https://cdn.aether.network/sdk/latest/aether-sdk.esm.min.js",  # LEGACY: pre-v1.js convention; retained in archive only
     }
 
     passed = 0

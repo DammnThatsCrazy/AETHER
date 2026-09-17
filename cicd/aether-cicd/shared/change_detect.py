@@ -11,13 +11,11 @@ Usage:
 
 from __future__ import annotations
 
-from typing import List, Optional, Set
-
-from shared.runner import run_cmd, log
 from config.pipeline_config import CHANGE_DETECTION_CONFIG
+from shared.runner import log, run_cmd
 
 
-def _git_changed_files(base_ref: str = "origin/develop") -> List[str]:
+def _git_changed_files(base_ref: str = "origin/develop") -> list[str]:
     """Get list of files changed relative to base_ref using git diff."""
     result = run_cmd(f"git diff --name-only {base_ref}...HEAD", timeout=30)
     if not result.success:
@@ -28,9 +26,9 @@ def _git_changed_files(base_ref: str = "origin/develop") -> List[str]:
 
 
 def detect_changed_services(
-    base_ref: Optional[str] = None,
-    changed_files: Optional[List[str]] = None,
-) -> Set[str]:
+    base_ref: str | None = None,
+    changed_files: list[str] | None = None,
+) -> set[str]:
     """
     Determine which services were affected by recent changes.
 
@@ -71,7 +69,7 @@ def detect_changed_services(
                 return set(config.service_path_map.values())
 
     # Map changed files to affected services
-    affected: Set[str] = set()
+    affected: set[str] = set()
     for f in files:
         for path_prefix, svc_name in config.service_path_map.items():
             if f.startswith(path_prefix):

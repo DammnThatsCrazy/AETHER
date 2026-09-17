@@ -1,0 +1,19 @@
+[
+  {
+    "communication_id": "comm-lens-001",
+    "type": "email",
+    "channel": "email",
+    "campaign_id": "camp-001",
+    "recipient": "user@example.com",
+    "subject": "Welcome!",
+    "status": "delivered",
+    "timestamp": "2025-01-15T10:30:00.000Z",
+    "delivered_at": "2025-01-15T10:30:05.000Z",
+    "opened_at": "2025-01-15T10:30:15.000Z",
+    "source": {
+      "platform": "email",
+      "data_type": "communication",
+      "environment": "staging"
+    }
+  }
+]

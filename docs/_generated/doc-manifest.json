@@ -4539,6 +4539,18 @@
       "canonical_owner": "platform@aether"
     },
     {
+      "path": "docs/blueprints/SDK_PRODUCTIZATION_CLOSE_OUT_AND_CERTIFICATION_BLUEPRINT.md",
+      "title": "SDK Productization Close-Out Blueprint",
+      "slug": "blueprints/sdk-close-out",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
       "path": "docs/blueprints/communication360.md",
       "title": "Communication360 Vertical Slice Blueprint",
       "slug": "blueprints/communication360",
@@ -4601,6 +4613,66 @@
       "estimated_read_minutes": 8,
       "toc_depth": 3,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/blueprints/identity-continuity/current-state-inventory.md",
+      "title": "Identity Continuity Current State Inventory",
+      "slug": "blueprints/identity-continuity/current-state-inventory",
+      "section": "blueprints",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/blueprints/identity-continuity/fixtures.md",
+      "title": "Identity Continuity Fixtures",
+      "slug": "blueprints/identity-continuity/fixtures",
+      "section": "blueprints",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/blueprints/identity-continuity/implementation-plan.md",
+      "title": "Identity Continuity Implementation Plan",
+      "slug": "blueprints/identity-continuity/implementation-plan",
+      "section": "blueprints",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/blueprints/identity-continuity/proof-plan.md",
+      "title": "Identity Continuity Proof Plan",
+      "slug": "blueprints/identity-continuity/proof-plan",
+      "section": "blueprints",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/blueprints/identity-continuity/rollout-plan.md",
+      "title": "Identity Continuity Rollout Plan",
+      "slug": "blueprints/identity-continuity/rollout-plan",
+      "section": "blueprints",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
     },
     {
       "path": "docs/blueprints/infrastructure360.md",
@@ -6206,6 +6278,58 @@
       "path": "docs/developer/verify-heartbeat.md",
       "title": "Verify Heartbeat",
       "slug": "verify-heartbeat",
+      "section": "developer",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/developers/sdk/android/verify-installation.md",
+      "title": "Verify Android SDK Installation — Aether",
+      "slug": "developers/sdk/android/verify-installation",
+      "section": "developer",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/developers/sdk/ios/verify-installation.md",
+      "title": "Verify iOS SDK Installation — Aether",
+      "slug": "developers/sdk/ios/verify-installation",
+      "section": "developer",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/developers/sdk/react/verify-installation.md",
+      "title": "Verify React SDK Installation — Aether",
+      "slug": "developers/sdk/react/verify-installation",
+      "section": "developer",
+      "visibility": "P",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/developers/sdk/web/verify-installation.md",
+      "title": "Verify Web SDK Installation — Aether",
+      "slug": "developers/sdk/web/verify-installation",
       "section": "developer",
       "visibility": "P",
       "audience": [
@@ -8027,6 +8151,75 @@
       "since_version": "0.1.0"
     },
     {
+      "path": "docs/proof/functionality-proof-spine.md",
+      "title": "Functionality Proof Spine — Overview",
+      "slug": "proof/functionality-proof-spine",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "ops",
+        "architect"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/proof/proof-apps.md",
+      "title": "Proof Apps",
+      "slug": "proof/proof-apps",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/proof/proof-fixtures.md",
+      "title": "Proof Fixtures",
+      "slug": "proof/proof-fixtures",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/proof/proof-report-format.md",
+      "title": "Proof Report Format",
+      "slug": "proof/proof-report-format",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/proof/proof-tenant.md",
+      "title": "Proof Tenant Specification",
+      "slug": "proof/proof-tenant",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
       "path": "docs/public/README.md",
       "title": "Olympus Labs + Aether Public Content",
       "slug": "public",
@@ -8790,6 +8983,18 @@
       "canonical_owner": "ml@aether"
     },
     {
+      "path": "docs/reports/SDK_CERTIFICATION_REPORT.md",
+      "title": "SDK Certification Report",
+      "slug": "reports/sdk-certification-report",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
       "path": "docs/reports/SDK_PRODUCTION_READINESS_AUDIT.md",
       "title": "SDK Production Readiness Audit",
       "slug": "sdk/production-readiness-audit",
@@ -8815,6 +9020,90 @@
       ],
       "status": "stable",
       "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/responsiveness-spine/README.md",
+      "title": "Responsiveness Spine",
+      "slug": "responsiveness-spine/readme",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/responsiveness-spine/activation-milestones.md",
+      "title": "Activation Milestones",
+      "slug": "responsiveness-spine/activation-milestones",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/responsiveness-spine/endpoints.md",
+      "title": "Endpoints",
+      "slug": "responsiveness-spine/endpoints",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/responsiveness-spine/frontend-integration.md",
+      "title": "Frontend Integration",
+      "slug": "responsiveness-spine/frontend-integration",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/responsiveness-spine/integration-guide.md",
+      "title": "Integration Guide",
+      "slug": "responsiveness-spine/integration-guide",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/responsiveness-spine/performance-budget.md",
+      "title": "Performance Budget",
+      "slug": "responsiveness-spine/performance-budget",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
+    },
+    {
+      "path": "docs/responsiveness-spine/surface-readiness.md",
+      "title": "Surface Readiness",
+      "slug": "responsiveness-spine/surface-readiness",
+      "section": "architecture",
+      "visibility": "P",
+      "audience": [
+        "dev-senior",
+        "architect"
+      ],
+      "status": "beta"
     },
     {
       "path": "docs/runbooks/AGENT_RUNTIME_MUTATION_REVIEW_RUNBOOK.md",
@@ -11490,6 +11779,100 @@
       "since_version": "0.1.0",
       "estimated_read_minutes": 15,
       "canonical_owner": "platform@aether"
+    },
+    {
+      "path": "docs/testing/README.md",
+      "title": "Testing Index — Functionality Proof Spine",
+      "slug": "testing/index",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/testing/connector-testing.md",
+      "title": "Connector Testing — Functionality Proof Spine",
+      "slug": "testing/connector-testing",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/testing/e2e-testing.md",
+      "title": "E2E Testing — Functionality Proof Spine",
+      "slug": "testing/e2e-testing",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/testing/mobile-device-testing.md",
+      "title": "Mobile Device Testing — Functionality Proof Spine",
+      "slug": "testing/mobile-device-testing",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/testing/release-readiness.md",
+      "title": "Release Readiness — Functionality Proof Spine",
+      "slug": "testing/release-readiness",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/testing/sdk-testing.md",
+      "title": "SDK Testing — Functionality Proof Spine",
+      "slug": "testing/sdk-testing",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
+    },
+    {
+      "path": "docs/testing/staging-smoke-testing.md",
+      "title": "Staging Smoke Testing — Functionality Proof Spine",
+      "slug": "testing/staging-smoke-testing",
+      "section": "concepts",
+      "visibility": "I",
+      "audience": [
+        "dev-junior",
+        "dev-senior",
+        "ops"
+      ],
+      "status": "experimental",
+      "since_version": "0.1.0"
     },
     {
       "path": "docs/tutorials/shopify-integration.md",

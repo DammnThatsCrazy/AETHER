@@ -1,0 +1,25 @@
+[
+  {
+    "node_id": "node-user-email-1",
+    "type": "user",
+    "properties": {
+      "user_id": "user-email-1",
+      "email": "user@example.com",
+      "platform": "email",
+      "provider": "sendgrid"
+    },
+    "created_at": "2025-01-15T10:30:00.000Z"
+  },
+  {
+    "node_id": "node-message-1",
+    "type": "communication",
+    "properties": {
+      "message_id": "msg-1",
+      "sender": "noreply@example.com",
+      "subject": "Welcome!",
+      "event_type": "delivered",
+      "platform": "email"
+    },
+    "created_at": "2025-01-15T10:30:00.000Z"
+  }
+]

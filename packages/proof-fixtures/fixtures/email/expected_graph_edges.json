@@ -1,0 +1,9 @@
+[
+  {
+    "edge_id": "edge-user-email-msg",
+    "source": "node-user-email-1",
+    "target": "node-message-1",
+    "relation": "received",
+    "created_at": "2025-01-15T10:30:00.000Z"
+  }
+]

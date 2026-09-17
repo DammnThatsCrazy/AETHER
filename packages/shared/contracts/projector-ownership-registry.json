@@ -178,8 +178,7 @@
         "page_view",
         "pageview",
         "search_performed",
-        "session_start",
-        "session_started"
+        "session_start"
       ]
     },
     {

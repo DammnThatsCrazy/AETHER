@@ -1,3 +1,12 @@
+---
+title: Integration Guide
+slug: responsiveness-spine/integration-guide
+section: architecture
+visibility: P
+audience: [dev-senior, architect]
+status: beta
+---
+
 # Responsiveness & Time-to-Value — Integration Guide
 
 > How the spine integrates with existing Aether subsystems. Every integration is best-effort: a failure in the spine never breaks the primary data path.

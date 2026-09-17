@@ -1,0 +1,8 @@
+{
+  "campaign_id": "camp-shopify-default",
+  "name": "Shopify Organic",
+  "campaign_type": "organic",
+  "status": "active",
+  "created_at": "2025-01-15T10:30:00.000Z",
+  "channels": ["web"]
+}

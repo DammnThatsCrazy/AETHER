@@ -1087,19 +1087,27 @@ def _evaluate_route_policy(request: Request, path: str, context) -> Optional[Aet
             # SDK sends the site on every batch (core/event-queue.ts) and the
             # loader sends it on install signals (loader/heartbeat.ts), so the
             # header is present on all legitimate traffic from this class.
-            bound_sites = getattr(context, "site_ids", None)
-            if not bound_sites:
-                # The mint path refuses to issue an unbound publishable key, so
-                # reaching here means the binding was lost in transit — a cache
-                # entry written without it, or a record edited out of band.
-                # That is a reason to fail closed, not to grant tenant-wide
-                # reach to a credential the public can read.
-                return ForbiddenError("ROUTE_POLICY_SITE_UNBOUND")
-            declared_site = getattr(request, "headers", {}).get("X-Aether-Site")
-            if not declared_site:
-                return ForbiddenError("ROUTE_POLICY_SITE_UNDECLARED")
-            if declared_site not in bound_sites:
-                return ForbiddenError("ROUTE_POLICY_SITE_MISMATCH")
+            #
+            # Except: the SDK manifest endpoint is safe for publishable keys —
+            # it returns only public-safe configuration (schema version, feature
+            # flags, endpoints, rollout). It carries no tenant secret, no private
+            # key, no internal route, no admin feature, no billing or provider
+            # credential, no graph or user data. Grant it to publishable keys so
+            # the SDK can fetch its manifest without falling back to local defaults.
+            if not path.startswith("/v1/config/sdk/manifest"):
+                bound_sites = getattr(context, "site_ids", None)
+                if not bound_sites:
+                    # The mint path refuses to issue an unbound publishable key, so
+                    # reaching here means the binding was lost in transit — a cache
+                    # entry written without it, or a record edited out of band.
+                    # That is a reason to fail closed, not to grant tenant-wide
+                    # reach to a credential the public can read.
+                    return ForbiddenError("ROUTE_POLICY_SITE_UNBOUND")
+                declared_site = getattr(request, "headers", {}).get("X-Aether-Site")
+                if not declared_site:
+                    return ForbiddenError("ROUTE_POLICY_SITE_UNDECLARED")
+                if declared_site not in bound_sites:
+                    return ForbiddenError("ROUTE_POLICY_SITE_MISMATCH")
         if credential_class == "service_credential" and not context.permissions:
             return ForbiddenError("ROUTE_POLICY_SERVICE_SCOPE_REQUIRED")
 

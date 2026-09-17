@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractVersion": "1.0.0",
+  "description": "Canonical field registry for identity_edge — relationships between identities and canonical entities. Edges are versioned and tenant-scoped. Edge types include: resolves_to, aliases, associated_with, controlled_by, member_of, belongs_to_account, uses_device, used_by_agent, same_as_candidate, conflicts_with, split_from, merged_into.",
+  "envelope_required_fields": [
+    "id",
+    "tenant_id",
+    "from_type",
+    "from_id",
+    "to_type",
+    "to_id",
+    "edge_type",
+    "confidence",
+    "decision_id",
+    "graph_version",
+    "effective_from",
+    "status",
+    "created_at"
+  ],
+  "blocks": [
+    {
+      "name": "identity_edge",
+      "kind": "object",
+      "required": true,
+      "description": "A relationship edge in the identity graph.",
+      "fields": [
+        { "name": "id", "type": "string", "required": true },
+        { "name": "tenant_id", "type": "string", "required": true },
+        { "name": "from_type", "type": "enum", "required": true, "values": ["source_identity", "canonical_entity", "identity_claim"], "description": "Source type of the edge." },
+        { "name": "from_id", "type": "string", "required": true },
+        { "name": "to_type", "type": "enum", "required": true, "values": ["canonical_entity", "source_identity", "identity_claim"], "description": "Target type of the edge." },
+        { "name": "to_id", "type": "string", "required": true },
+        { "name": "edge_type", "type": "enum", "required": true, "values": ["resolves_to", "aliases", "associated_with", "controlled_by", "member_of", "belongs_to_account", "uses_device", "used_by_agent", "same_as_candidate", "conflicts_with", "split_from", "merged_into"], "description": "Type of identity edge." },
+        { "name": "confidence", "type": "number", "required": true, "description": "Confidence score (0.0-1.0) for this edge." },
+        { "name": "decision_id", "type": "string", "required": true, "description": "Identity decision that created this edge." },
+        { "name": "graph_version", "type": "string", "required": true, "description": "Graph version at edge creation." },
+        { "name": "effective_from", "type": "iso8601", "required": true },
+        { "name": "effective_to", "type": "iso8601", "required": false, "description": "When the edge was reversed/expired." },
+        { "name": "status", "type": "enum", "required": true, "values": ["active", "inactive", "suppressed", "reversed"], "description": "Edge lifecycle status." },
+        { "name": "created_at", "type": "iso8601", "required": true }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractVersion": "1.0.0",
+  "description": "Canonical field registry for identity_conflict — created when evidence suggests profiles may be incorrectly merged or should not be merged. Includes conflict types like conflicting_verified_email, conflicting_authenticated_user, shared_device, shared_email, cross_entity_type, consent_veto, deleted_identity, provider_disagreement, multi_person_profile, agent_person_merge_attempt, account_person_merge_attempt.",
+  "envelope_required_fields": [
+    "id",
+    "tenant_id",
+    "conflict_type",
+    "involved_source_identity_ids",
+    "involved_canonical_entity_ids",
+    "severity",
+    "recommended_action",
+    "status",
+    "created_at"
+  ],
+  "blocks": [
+    {
+      "name": "identity_conflict",
+      "kind": "object",
+      "required": true,
+      "description": "A detected identity conflict requiring review or action.",
+      "fields": [
+        { "name": "id", "type": "string", "required": true },
+        { "name": "tenant_id", "type": "string", "required": true },
+        { "name": "conflict_type", "type": "enum", "required": true, "values": ["conflicting_verified_email", "conflicting_authenticated_user", "shared_device", "shared_email", "cross_entity_type", "consent_veto", "deleted_identity", "provider_disagreement", "multi_person_profile", "agent_person_merge_attempt", "account_person_merge_attempt"], "description": "Type of identity conflict." },
+        { "name": "involved_source_identity_ids", "type": "array", "required": true, "item_type": "string", "description": "Source identities involved in the conflict." },
+        { "name": "involved_canonical_entity_ids", "type": "array", "required": true, "item_type": "string", "description": "Canonical entities involved in the conflict." },
+        { "name": "severity", "type": "enum", "required": true, "values": ["low", "medium", "high", "critical"], "description": "Conflict severity." },
+        { "name": "recommended_action", "type": "enum", "required": true, "values": ["ignore", "review", "block_merge", "split_candidate", "suppress", "manual_resolution"], "description": "Recommended action for this conflict." },
+        { "name": "status", "type": "enum", "required": true, "values": ["open", "resolved", "ignored", "suppressed"], "description": "Conflict lifecycle status." },
+        { "name": "created_at", "type": "iso8601", "required": true },
+        { "name": "resolved_at", "type": "iso8601", "required": false, "description": "When the conflict was resolved." }
+      ]
+    }
+  ]
+}

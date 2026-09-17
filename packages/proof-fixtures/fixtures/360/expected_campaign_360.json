@@ -1,0 +1,19 @@
+{
+  "campaign_id": "camp-001",
+  "name": "Welcome Series",
+  "status": "active",
+  "channels": ["email", "push"],
+  "created_at": "2025-01-01T00:00:00.000Z",
+  "metrics": {
+    "sent": 1000,
+    "delivered": 980,
+    "opened": 450,
+    "clicked": 200,
+    "converted": 85
+  },
+  "performance": {
+    "open_rate": 0.459,
+    "click_rate": 0.204,
+    "conversion_rate": 0.087
+  }
+}

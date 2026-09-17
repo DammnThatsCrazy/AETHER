@@ -1,0 +1,752 @@
+{
+  "_comment": "Canonical First-Value Journey Fixture — PR D: Cross-Platform Payload Snapshot Parity. Blueprint §3.4. Represents the full instrumentation journey from manifest fetch through graph projection, emitted identically across all SDK platforms (Web, React Native, iOS, Android, Server) through platform-idiomatic APIs and normalized into the same canonical envelope.",
+  "_fixture_version": 1,
+  "_fixtureName": "canonicalFirstValueJourney",
+  "journey": {
+    "journey_id": "journey-first-value-001",
+    "journey_name": "First Value Journey",
+    "journey_type": "activation",
+    "description": "Onboarding journey from SDK init through first purchase and graph projection",
+    "steps": [
+      { "step": 1, "name": "manifest_fetched", "event_type": "sdk_config_loaded" },
+      { "step": 2, "name": "sdk_initialized", "event_type": "sdk_initialized" },
+      { "step": 3, "name": "heartbeat_sent", "event_type": "heartbeat" },
+      { "step": 4, "name": "anonymous_session_started", "event_type": "session_started" },
+      { "step": 5, "name": "screen_or_page_viewed", "event_type": "page" },
+      { "step": 6, "name": "product_viewed", "event_type": "product_viewed" },
+      { "step": 7, "name": "cart_item_added", "event_type": "cart_item_added" },
+      { "step": 8, "name": "checkout_started", "event_type": "checkout_started" },
+      { "step": 9, "name": "identify_called", "event_type": "identify" },
+      { "step": 10, "name": "payment_succeeded", "event_type": "payment_completed" },
+      { "step": 11, "name": "order_completed", "event_type": "order_completed" },
+      { "step": 12, "name": "journey_completed", "event_type": "journey_completed" },
+      { "step": 13, "name": "flush_confirmed", "event_type": "sdk_batch_accepted" },
+      { "step": 14, "name": "graph_projection_ready", "event_type": "graph_projection_ready" }
+    ]
+  },
+  "tenant": {
+    "tenant_id": "aether-proof-tenant",
+    "workspace_id": "proof-lab",
+    "environment": "staging",
+    "consent_purpose": "analytics",
+    "consent_version": "1.0",
+    "consent_granted_at": "2024-09-11T11:55:00.000Z"
+  },
+  "schema": {
+    "schema_hash": "sha256:canonical-first-value-journey-v1-2024-09-11",
+    "schema_version": "1.0.0",
+    "envelope_format": "event-envelope-v2",
+    "canonical_event_types": [
+      "sdk_config_loaded",
+      "sdk_initialized",
+      "heartbeat",
+      "session_started",
+      "page",
+      "product_viewed",
+      "cart_item_added",
+      "checkout_started",
+      "identify",
+      "payment_completed",
+      "order_completed",
+      "journey_completed",
+      "sdk_batch_accepted",
+      "graph_projection_ready"
+    ]
+  },
+  "identity": {
+    "anonymous_id": "anon_first_value_001",
+    "user_id": "user_first_value_001",
+    "transition": {
+      "type": "anonymous_to_identified",
+      "anonymous_id_persistent": true,
+      "user_id_appears_at_step": 9,
+      "identify_event_index": 8,
+      "pre_identify_events": [0, 1, 2, 3, 4, 5, 6, 7],
+      "post_identify_events": [8, 9, 10, 11, 12, 13]
+    }
+  },
+  "idempotency": {
+    "mode": "idempotent_per_event_id",
+    "event_id_format": "fvj-{step}-{timestamp}-{anonymous_id}",
+    "idempotency_key_format": "fk-{event_type}:{anonymous_id}:{timestamp}",
+    "duplicate_detection": "event_id_dedup",
+    "retry_behavior": "retry_with_same_idempotency_key"
+  },
+  "dropped_event_diagnostics": {
+    "model": "dropped_event_log",
+    "dropped_events": [],
+    "diagnostic_fields": [
+      "event_id",
+      "event_type",
+      "dropped_at",
+      "drop_reason",
+      "platform_id",
+      "retry_count"
+    ]
+  },
+  "source": {
+    "platform": "web",
+    "data_type": "journey",
+    "sdk": "@aether/web",
+    "environment": "staging",
+    "surface": "marketing_site"
+  },
+  "events": [
+    {
+      "step": 0,
+      "event_type": "sdk_config_loaded",
+      "timestamp": "2024-09-11T11:55:00.000Z",
+      "event_id": "fvj-0-2024-09-11T11:55:00-anon_first_value_001",
+      "idempotency_key": "fk-sdk_config_loaded:anon_first_value_001:2024-09-11T11:55:00",
+      "tenant_id": "aether-proof-tenant",
+      "workspace_id": "proof-lab",
+      "platform_id": "web",
+      "environment": "staging",
+      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "session": { "session_id": "sess_fvj_001" },
+      "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
+      "identity": { "anonymous_id": "anon_first_value_001" },
+      "properties": {
+        "config_version": "1.0.0",
+        "manifest_version": "2.1.0",
+        "feature_flags": { "journeys": true, "commerce": true, "graph_projection": true },
+        "consent_payload_version": "1.0",
+        "loaded_from": "cdn",
+        "fetch_duration_ms": 42
+      },
+      "source": {
+        "platform": "web",
+        "data_type": "config",
+        "sdk": "@aether/web",
+        "environment": "staging",
+        "surface": "marketing_site"
+      },
+      "consent": {
+        "purpose": "analytics",
+        "status": "granted",
+        "version": "1.0",
+        "granted_at": "2024-09-11T11:55:00.000Z"
+      }
+    },
+    {
+      "step": 1,
+      "event_type": "sdk_initialized",
+      "timestamp": "2024-09-11T11:55:01.000Z",
+      "event_id": "fvj-1-2024-09-11T11:55:01-anon_first_value_001",
+      "idempotency_key": "fk-sdk_initialized:anon_first_value_001:2024-09-11T11:55:01",
+      "tenant_id": "aether-proof-tenant",
+      "workspace_id": "proof-lab",
+      "platform_id": "web",
+      "environment": "staging",
+      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "session": { "session_id": "sess_fvj_001" },
+      "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
+      "identity": { "anonymous_id": "anon_first_value_001" },
+      "properties": {
+        "initialization_duration_ms": 187,
+        "api_key_present": true,
+        "config_valid": true,
+        "auto_track_page": true,
+        "heartbeat_interval_ms": 30000,
+        "flush_interval_ms": 5000,
+        "max_queue_size": 1000
+      },
+      "source": {
+        "platform": "web",
+        "data_type": "event",
+        "sdk": "@aether/web",
+        "environment": "staging",
+        "surface": "marketing_site"
+      },
+      "consent": {
+        "purpose": "analytics",
+        "status": "granted",
+        "version": "1.0",
+        "granted_at": "2024-09-11T11:55:00.000Z"
+      }
+    },
+    {
+      "step": 2,
+      "event_type": "heartbeat",
+      "timestamp": "2024-09-11T11:55:30.000Z",
+      "event_id": "fvj-2-2024-09-11T11:55:30-anon_first_value_001",
+      "idempotency_key": "fk-heartbeat:anon_first_value_001:2024-09-11T11:55:30",
+      "tenant_id": "aether-proof-tenant",
+      "workspace_id": "proof-lab",
+      "platform_id": "web",
+      "environment": "staging",
+      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "session": { "session_id": "sess_fvj_001" },
+      "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
+      "identity": { "anonymous_id": "anon_first_value_001" },
+      "properties": {
+        "status": "alive",
+        "uptime_ms": 30000,
+        "memory_mb": 48,
+        "cpu_percent": 3.1
+      },
+      "source": {
+        "platform": "web",
+        "data_type": "event",
+        "sdk": "@aether/web",
+        "environment": "staging",
+        "surface": "marketing_site"
+      },
+      "consent": {
+        "purpose": "analytics",
+        "status": "granted",
+        "version": "1.0",
+        "granted_at": "2024-09-11T11:55:00.000Z"
+      }
+    },
+    {
+      "step": 3,
+      "event_type": "session_started",
+      "timestamp": "2024-09-11T11:55:31.000Z",
+      "event_id": "fvj-3-2024-09-11T11:55:31-anon_first_value_001",
+      "idempotency_key": "fk-session_started:anon_first_value_001:2024-09-11T11:55:31",
+      "tenant_id": "aether-proof-tenant",
+      "workspace_id": "proof-lab",
+      "platform_id": "web",
+      "environment": "staging",
+      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "session": { "session_id": "sess_fvj_001" },
+      "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
+      "identity": { "anonymous_id": "anon_first_value_001" },
+      "properties": {
+        "referrer": "https://google.com",
+        "entry_point": "organic_search",
+        "initial_url": "https://example.com/demo",
+        "initial_path": "/demo",
+        "campaign_id": "camp_fvj_001",
+        "campaign_name": "First Value Journey"
+      },
+      "source": {
+        "platform": "web",
+        "data_type": "event",
+        "sdk": "@aether/web",
+        "environment": "staging",
+        "surface": "marketing_site"
+      },
+      "consent": {
+        "purpose": "analytics",
+        "status": "granted",
+        "version": "1.0",
+        "granted_at": "2024-09-11T11:55:00.000Z"
+      }
+    },
+    {
+      "step": 4,
+      "event_type": "page",
+      "timestamp": "2024-09-11T11:55:35.000Z",
+      "event_id": "fvj-4-2024-09-11T11:55:35-anon_first_value_001",
+      "idempotency_key": "fk-page:anon_first_value_001:2024-09-11T11:55:35",
+      "tenant_id": "aether-proof-tenant",
+      "workspace_id": "proof-lab",
+      "platform_id": "web",
+      "environment": "staging",
+      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "session": { "session_id": "sess_fvj_001" },
+      "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
+      "identity": { "anonymous_id": "anon_first_value_001" },
+      "properties": {
+        "url": "https://example.com/demo",
+        "path": "/demo",
+        "referrer": "https://google.com",
+        "title": "Demo Page",
+        "screen_width": 1920,
+        "screen_height": 1080,
+        "viewport_width": 1920,
+        "viewport_height": 960
+      },
+      "context": {
+        "page": {
+          "url": "https://example.com/demo",
+          "path": "/demo",
+          "referrer": "https://google.com",
+          "title": "Demo Page"
+        },
+        "device": {
+          "device_id": "dev_web_fvj_001",
+          "platform": "web",
+          "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+        }
+      },
+      "source": {
+        "platform": "web",
+        "data_type": "event",
+        "sdk": "@aether/web",
+        "environment": "staging",
+        "surface": "marketing_site"
+      },
+      "consent": {
+        "purpose": "analytics",
+        "status": "granted",
+        "version": "1.0",
+        "granted_at": "2024-09-11T11:55:00.000Z"
+      }
+    },
+    {
+      "step": 5,
+      "event_type": "product_viewed",
+      "timestamp": "2024-09-11T11:56:00.000Z",
+      "event_id": "fvj-5-2024-09-11T11:56:00-anon_first_value_001",
+      "idempotency_key": "fk-product_viewed:anon_first_value_001:2024-09-11T11:56:00",
+      "tenant_id": "aether-proof-tenant",
+      "workspace_id": "proof-lab",
+      "platform_id": "web",
+      "environment": "staging",
+      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "session": { "session_id": "sess_fvj_001" },
+      "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
+      "identity": { "anonymous_id": "anon_first_value_001" },
+      "properties": {
+        "product_id": "prod_fvj_001",
+        "product_name": "Aether Demo Widget",
+        "product_category": "widgets",
+        "product_price": 25.00,
+        "product_currency": "usd",
+        "product_sku": "DW-001",
+        "variant_id": "var_fvj_001",
+        "variant_name": "Blue / Small",
+        "page_url": "https://example.com/products/demo-widget",
+        "page_path": "/products/demo-widget",
+        "referrer": "https://example.com/demo",
+        "position_in_listing": 1,
+        "listing_viewed": true
+      },
+      "source": {
+        "platform": "web",
+        "data_type": "event",
+        "sdk": "@aether/web",
+        "environment": "staging",
+        "surface": "marketing_site"
+      },
+      "consent": {
+        "purpose": "commerce",
+        "status": "granted",
+        "version": "1.0",
+        "granted_at": "2024-09-11T11:55:00.000Z"
+      }
+    },
+    {
+      "step": 6,
+      "event_type": "cart_item_added",
+      "timestamp": "2024-09-11T11:56:30.000Z",
+      "event_id": "fvj-6-2024-09-11T11:56:30-anon_first_value_001",
+      "idempotency_key": "fk-cart_item_added:anon_first_value_001:2024-09-11T11:56:30",
+      "tenant_id": "aether-proof-tenant",
+      "workspace_id": "proof-lab",
+      "platform_id": "web",
+      "environment": "staging",
+      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "session": { "session_id": "sess_fvj_001" },
+      "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
+      "identity": { "anonymous_id": "anon_first_value_001" },
+      "properties": {
+        "cart_id": "cart_fvj_001",
+        "product_id": "prod_fvj_001",
+        "product_name": "Aether Demo Widget",
+        "variant_id": "var_fvj_001",
+        "variant_name": "Blue / Small",
+        "quantity": 2,
+        "unit_price": 25.00,
+        "total_price": 50.00,
+        "currency": "usd",
+        "sku": "DW-001",
+        "cart_total_after": 50.00,
+        "cart_item_count": 1,
+        "coupon_applied": null
+      },
+      "source": {
+        "platform": "web",
+        "data_type": "event",
+        "sdk": "@aether/web",
+        "environment": "staging",
+        "surface": "marketing_site"
+      },
+      "consent": {
+        "purpose": "commerce",
+        "status": "granted",
+        "version": "1.0",
+        "granted_at": "2024-09-11T11:55:00.000Z"
+      }
+    },
+    {
+      "step": 7,
+      "event_type": "checkout_started",
+      "timestamp": "2024-09-11T11:57:00.000Z",
+      "event_id": "fvj-7-2024-09-11T11:57:00-anon_first_value_001",
+      "idempotency_key": "fk-checkout_started:anon_first_value_001:2024-09-11T11:57:00",
+      "tenant_id": "aether-proof-tenant",
+      "workspace_id": "proof-lab",
+      "platform_id": "web",
+      "environment": "staging",
+      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "session": { "session_id": "sess_fvj_001" },
+      "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
+      "identity": { "anonymous_id": "anon_first_value_001" },
+      "properties": {
+        "checkout_id": "checkout_fvj_001",
+        "cart_id": "cart_fvj_001",
+        "cart_total": 50.00,
+        "currency": "usd",
+        "items_count": 1,
+        "items": [
+          { "product_id": "prod_fvj_001", "name": "Aether Demo Widget", "quantity": 2, "price": 25.00 }
+        ],
+        "checkout_step": "cart_review",
+        "transaction_id": null,
+        "payment_method": null
+      },
+      "source": {
+        "platform": "web",
+        "data_type": "event",
+        "sdk": "@aether/web",
+        "environment": "staging",
+        "surface": "marketing_site"
+      },
+      "consent": {
+        "purpose": "commerce",
+        "status": "granted",
+        "version": "1.0",
+        "granted_at": "2024-09-11T11:55:00.000Z"
+      }
+    },
+    {
+      "step": 8,
+      "event_type": "identify",
+      "timestamp": "2024-09-11T11:57:30.000Z",
+      "event_id": "fvj-8-2024-09-11T11:57:30-anon_first_value_001",
+      "idempotency_key": "fk-identify:anon_first_value_001:2024-09-11T11:57:30",
+      "tenant_id": "aether-proof-tenant",
+      "workspace_id": "proof-lab",
+      "platform_id": "web",
+      "environment": "staging",
+      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "session": { "session_id": "sess_fvj_001" },
+      "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
+      "identity": { "anonymous_id": "anon_first_value_001", "user_id": "user_first_value_001" },
+      "properties": {
+        "traits": {
+          "email": "firstvalue@example.com",
+          "plan": "premium",
+          "name": "First Value User",
+          "company": "Aether Demo Inc",
+          "job_title": "Product Lead",
+          "phone": "+1-555-0100",
+          "locale": "en-US",
+          "timezone": "America/Los_Angeles"
+        },
+        "identification_method": "hydrateIdentity",
+        "previous_anonymous_id": "anon_first_value_001",
+        "merge_reason": "login_auth"
+      },
+      "source": {
+        "platform": "web",
+        "data_type": "identity",
+        "sdk": "@aether/web",
+        "environment": "staging",
+        "surface": "marketing_site"
+      },
+      "consent": {
+        "purpose": "analytics",
+        "status": "granted",
+        "version": "1.0",
+        "granted_at": "2024-09-11T11:55:00.000Z"
+      }
+    },
+    {
+      "step": 9,
+      "event_type": "payment_completed",
+      "timestamp": "2024-09-11T11:58:00.000Z",
+      "event_id": "fvj-9-2024-09-11T11:58:00-anon_first_value_001",
+      "idempotency_key": "fk-payment_completed:anon_first_value_001:2024-09-11T11:58:00",
+      "tenant_id": "aether-proof-tenant",
+      "workspace_id": "proof-lab",
+      "platform_id": "web",
+      "environment": "staging",
+      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "session": { "session_id": "sess_fvj_001" },
+      "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
+      "identity": { "anonymous_id": "anon_first_value_001", "user_id": "user_first_value_001" },
+      "properties": {
+        "payment_id": "pay_fvj_001",
+        "payment_provider": "stripe",
+        "payment_method": "card",
+        "amount": 5000,
+        "currency": "usd",
+        "status": "succeeded",
+        "customer_id": "cus_fvj_001",
+        "receipt_email": "firstvalue@example.com",
+        "receipt_number": "re_fvj_001",
+        "fees": 150,
+        "net": 4850,
+        "created": "2024-09-11T11:57:55.000Z",
+        "paid": "2024-09-11T11:58:00.000Z",
+        "external_ref": "ch_fvj_001",
+        "descriptor": "AETHER DEMO"
+      },
+      "source": {
+        "platform": "web",
+        "data_type": "event",
+        "sdk": "@aether/web",
+        "environment": "staging",
+        "surface": "marketing_site"
+      },
+      "consent": {
+        "purpose": "commerce",
+        "status": "granted",
+        "version": "1.0",
+        "granted_at": "2024-09-11T11:55:00.000Z"
+      }
+    },
+    {
+      "step": 10,
+      "event_type": "order_completed",
+      "timestamp": "2024-09-11T11:58:05.000Z",
+      "event_id": "fvj-10-2024-09-11T11:58:05-anon_first_value_001",
+      "idempotency_key": "fk-order_completed:anon_first_value_001:2024-09-11T11:58:05",
+      "tenant_id": "aether-proof-tenant",
+      "workspace_id": "proof-lab",
+      "platform_id": "web",
+      "environment": "staging",
+      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "session": { "session_id": "sess_fvj_001" },
+      "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
+      "identity": { "anonymous_id": "anon_first_value_001", "user_id": "user_first_value_001" },
+      "properties": {
+        "order_id": "order_fvj_001",
+        "order_number": "#FVJ-001",
+        "total_price": 50.00,
+        "total_discounted": 0.00,
+        "subtotal_price": 50.00,
+        "total_tax": 0.00,
+        "total_shipping": 0.00,
+        "currency": "usd",
+        "status": "closed",
+        "financial_status": "paid",
+        "fulfillment_status": "unfulfilled",
+        "customer_id": "user_first_value_001",
+        "customer_email": "firstvalue@example.com",
+        "customer_name": "First Value User",
+        "line_items": [
+          {
+            "id": "line_fvj_001",
+            "product_id": "prod_fvj_001",
+            "variant_id": "var_fvj_001",
+            "title": "Aether Demo Widget",
+            "variant_title": "Blue / Small",
+            "quantity": 2,
+            "price": 25.00,
+            "total_discount": 0.00
+          }
+        ],
+        "payment_id": "pay_fvj_001",
+        "payment_provider": "stripe",
+        "shipping_address": {
+          "address1": "123 Demo St",
+          "city": "San Francisco",
+          "province": "California",
+          "country": "United States",
+          "zip": "94105"
+        },
+        "billing_address": {
+          "address1": "123 Demo St",
+          "city": "San Francisco",
+          "province": "California",
+          "country": "United States",
+          "zip": "94105"
+        },
+        "created_at": "2024-09-11T11:57:55.000Z",
+        "updated_at": "2024-09-11T11:58:05.000Z",
+        "completed_at": "2024-09-11T11:58:05.000Z"
+      },
+      "source": {
+        "platform": "web",
+        "data_type": "event",
+        "sdk": "@aether/web",
+        "environment": "staging",
+        "surface": "marketing_site"
+      },
+      "consent": {
+        "purpose": "commerce",
+        "status": "granted",
+        "version": "1.0",
+        "granted_at": "2024-09-11T11:55:00.000Z"
+      }
+    },
+    {
+      "step": 11,
+      "event_type": "journey_completed",
+      "timestamp": "2024-09-11T11:58:10.000Z",
+      "event_id": "fvj-11-2024-09-11T11:58:10-anon_first_value_001",
+      "idempotency_key": "fk-journey_completed:anon_first_value_001:2024-09-11T11:58:10",
+      "tenant_id": "aether-proof-tenant",
+      "workspace_id": "proof-lab",
+      "platform_id": "web",
+      "environment": "staging",
+      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "session": { "session_id": "sess_fvj_001" },
+      "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
+      "identity": { "anonymous_id": "anon_first_value_001", "user_id": "user_first_value_001" },
+      "properties": {
+        "journey_id": "journey-first-value-001",
+        "journey_name": "First Value Journey",
+        "journey_type": "activation",
+        "steps_completed": 12,
+        "total_steps": 12,
+        "conversion_achieved": true,
+        "time_to_complete_ms": 1890000,
+        "first_value_event": "order_completed",
+        "first_purchase_value": 50.00,
+        "first_purchase_currency": "usd",
+        "steps": [
+          { "step": 1, "name": "manifest_fetched", "completed_at": "2024-09-11T11:55:00.000Z" },
+          { "step": 2, "name": "sdk_initialized", "completed_at": "2024-09-11T11:55:01.000Z" },
+          { "step": 3, "name": "heartbeat_sent", "completed_at": "2024-09-11T11:55:30.000Z" },
+          { "step": 4, "name": "anonymous_session_started", "completed_at": "2024-09-11T11:55:31.000Z" },
+          { "step": 5, "name": "screen_or_page_viewed", "completed_at": "2024-09-11T11:55:35.000Z" },
+          { "step": 6, "name": "product_viewed", "completed_at": "2024-09-11T11:56:00.000Z" },
+          { "step": 7, "name": "cart_item_added", "completed_at": "2024-09-11T11:56:30.000Z" },
+          { "step": 8, "name": "checkout_started", "completed_at": "2024-09-11T11:57:00.000Z" },
+          { "step": 9, "name": "identify_called", "completed_at": "2024-09-11T11:57:30.000Z" },
+          { "step": 10, "name": "payment_succeeded", "completed_at": "2024-09-11T11:58:00.000Z" },
+          { "step": 11, "name": "order_completed", "completed_at": "2024-09-11T11:58:05.000Z" },
+          { "step": 12, "name": "journey_completed", "completed_at": "2024-09-11T11:58:10.000Z" }
+        ]
+      },
+      "source": {
+        "platform": "web",
+        "data_type": "event",
+        "sdk": "@aether/web",
+        "environment": "staging",
+        "surface": "marketing_site"
+      },
+      "consent": {
+        "purpose": "analytics",
+        "status": "granted",
+        "version": "1.0",
+        "granted_at": "2024-09-11T11:55:00.000Z"
+      }
+    },
+    {
+      "step": 12,
+      "event_type": "sdk_batch_accepted",
+      "timestamp": "2024-09-11T11:58:15.000Z",
+      "event_id": "fvj-12-2024-09-11T11:58:15-anon_first_value_001",
+      "idempotency_key": "fk-sdk_batch_accepted:anon_first_value_001:2024-09-11T11:58:15",
+      "tenant_id": "aether-proof-tenant",
+      "workspace_id": "proof-lab",
+      "platform_id": "web",
+      "environment": "staging",
+      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "session": { "session_id": "sess_fvj_001" },
+      "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
+      "identity": { "anonymous_id": "anon_first_value_001", "user_id": "user_first_value_001" },
+      "properties": {
+        "batch_id": "batch_fvj_001",
+        "accepted_event_ids": [
+          "fvj-0-2024-09-11T11:55:00-anon_first_value_001",
+          "fvj-1-2024-09-11T11:55:01-anon_first_value_001",
+          "fvj-2-2024-09-11T11:55:30-anon_first_value_001",
+          "fvj-3-2024-09-11T11:55:31-anon_first_value_001",
+          "fvj-4-2024-09-11T11:55:35-anon_first_value_001",
+          "fvj-5-2024-09-11T11:56:00-anon_first_value_001",
+          "fvj-6-2024-09-11T11:56:30-anon_first_value_001",
+          "fvj-7-2024-09-11T11:57:00-anon_first_value_001",
+          "fvj-8-2024-09-11T11:57:30-anon_first_value_001",
+          "fvj-9-2024-09-11T11:58:00-anon_first_value_001",
+          "fvj-10-2024-09-11T11:58:05-anon_first_value_001",
+          "fvj-11-2024-09-11T11:58:10-anon_first_value_001"
+        ],
+        "rejected_event_ids": [],
+        "total_accepted": 12,
+        "total_rejected": 0,
+        "processing_started_at": "2024-09-11T11:58:11.000Z",
+        "processing_completed_at": "2024-09-11T11:58:15.000Z",
+        "processing_duration_ms": 4,
+        "flush_reason": "manual_flush",
+        "previous_batch_status": "queued"
+      },
+      "source": {
+        "platform": "web",
+        "data_type": "event",
+        "sdk": "@aether/web",
+        "environment": "staging",
+        "surface": "marketing_site"
+      },
+      "consent": {
+        "purpose": "analytics",
+        "status": "granted",
+        "version": "1.0",
+        "granted_at": "2024-09-11T11:55:00.000Z"
+      }
+    },
+    {
+      "step": 13,
+      "event_type": "graph_projection_ready",
+      "timestamp": "2024-09-11T11:58:20.000Z",
+      "event_id": "fvj-13-2024-09-11T11:58:20-anon_first_value_001",
+      "idempotency_key": "fk-graph_projection_ready:anon_first_value_001:2024-09-11T11:58:20",
+      "tenant_id": "aether-proof-tenant",
+      "workspace_id": "proof-lab",
+      "platform_id": "web",
+      "environment": "staging",
+      "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+      "session": { "session_id": "sess_fvj_001" },
+      "device": { "device_id": "dev_web_fvj_001", "platform": "web" },
+      "identity": { "anonymous_id": "anon_first_value_001", "user_id": "user_first_value_001" },
+      "properties": {
+        "projection_id": "proj_fvj_001",
+        "projection_type": "first_value_journey",
+        "journey_id": "journey-first-value-001",
+        "user_id": "user_first_value_001",
+        "anonymous_id": "anon_first_value_001",
+        "projection_status": "ready",
+        "projected_at": "2024-09-11T11:58:20.000Z",
+        "computed_at": "2024-09-11T11:58:18.000Z",
+        "computation_duration_ms": 2,
+        "nodes_projected": [
+          { "node_id": "node-user-first_value_001", "type": "user", "labels": ["user", "identified", "first_value"] },
+          { "node_id": "node-session-sess_fvj_001", "type": "session", "labels": ["session", "web"] },
+          { "node_id": "node-order-order_fvj_001", "type": "order", "labels": ["order", "completed", "first_purchase"] },
+          { "node_id": "node-payment-pay_fvj_001", "type": "payment", "labels": ["payment", "succeeded"] },
+          { "node_id": "node-journey-journey-first-value-001", "type": "journey", "labels": ["journey", "activation", "completed"] }
+        ],
+        "edges_projected": [
+          { "edge_id": "edge-user-session", "source": "node-user-first_value_001", "target": "node-session-sess_fvj_001", "relation": "initiated" },
+          { "edge_id": "edge-session-order", "source": "node-session-sess_fvj_001", "target": "node-order-order_fvj_001", "relation": "generated" },
+          { "edge_id": "edge-order-payment", "source": "node-order-order_fvj_001", "target": "node-payment-pay_fvj_001", "relation": "paid_with" },
+          { "edge_id": "edge-user-journey", "source": "node-user-first_value_001", "target": "node-journey-journey-first-value-001", "relation": "completed" }
+        ],
+        "value_projection": {
+          "first_purchase_value": 50.00,
+          "first_purchase_currency": "usd",
+          "lifetime_value": 50.00,
+          "projected_ltv_12m": 600.00
+        },
+        "identity_resolution": {
+          "anonymous_id": "anon_first_value_001",
+          "user_id": "user_first_value_001",
+          "resolution_method": "identify_hydrate",
+          "resolution_confidence": 0.95,
+          "traits_merged": ["email", "name", "plan"]
+        }
+      },
+      "source": {
+        "platform": "web",
+        "data_type": "event",
+        "sdk": "@aether/web",
+        "environment": "staging",
+        "surface": "marketing_site"
+      },
+      "consent": {
+        "purpose": "analytics",
+        "status": "granted",
+        "version": "1.0",
+        "granted_at": "2024-09-11T11:55:00.000Z"
+      }
+    }
+  ]
+}

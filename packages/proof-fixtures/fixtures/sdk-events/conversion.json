@@ -1,0 +1,34 @@
+{
+  "tenant_id": "aether-proof-tenant",
+  "workspace_id": "proof-lab",
+  "platform_id": "shopify",
+  "environment": "staging",
+  "event_type": "order_completed",
+  "sdk": { "name": "@aether/shopify", "version": "0.1.0-alpha.0" },
+  "session": { "session_id": "sess_shop_001" },
+  "device": { "device_id": "dev_mobile_001", "platform": "ios" },
+  "identity": { "anonymous_id": "anon_shop_001", "user_id": "user_003" },
+  "timestamp": "2024-09-11T12:10:00.000Z",
+  "properties": {
+    "order_id": "shop_ord_001",
+    "revenue": 75.00,
+    "currency": "usd",
+    "products": [
+      { "id": "shop_prod_001", "name": "Demo Widget", "price": 25.00, "quantity": 3 }
+    ],
+    "coupon": "WELCOME10",
+    "tax": 5.00,
+    "shipping": 5.00,
+    "subtotal": 75.00,
+    "total_discount": 5.00,
+    "payment_method": "credit_card",
+    "financial_status": "paid",
+    "fulfillment_status": "fulfilled"
+  },
+  "source": {
+    "platform": "shopify",
+    "data_type": "conversion",
+    "sdk": "@aether/shopify",
+    "environment": "staging"
+  }
+}

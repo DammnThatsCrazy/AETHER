@@ -124,3 +124,12 @@ release-evidence/
 
 # Local Python virtualenv (toolchain isolation from system dist-packages)
 .venv/
+
+# FPS SDK keys (secrets — never commit)
+.proof-keys.json
+
+# Scratch + throwaway (excluded from PR)
+tmp/
+Smart Contracts/
+.claude/settings.json
+scripts/fix_logger_kwargs.py

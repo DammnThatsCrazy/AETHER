@@ -1,0 +1,23 @@
+{
+  "_fixture_version": 1,
+  "scenario": "Projection restatement after identity change",
+  "blueprint_ref": "\u00a711",
+  "description": "Merge/split increments graph version and queues restatement for profile_360, journey, campaign_360, etc. Raw data never rewritten.",
+  "tenant_id": "tenant_projection_restatement",
+  "decision": {
+    "type": "auto_merge",
+    "confidence_band": "very_high",
+    "graph_before": "v1",
+    "graph_after": "v2"
+  },
+  "expected": {
+    "restatement_queued": true,
+    "projections": [
+      "profile_360",
+      "journey",
+      "value"
+    ],
+    "graph_version_incremented": true
+  },
+  "invariant": "graph_version_and_restatement_on_merge"
+}

@@ -1,0 +1,30 @@
+{
+  "workspace_id": "workspace-001",
+  "lens_name": "user_behavior_lens",
+  "metrics": {
+    "total_events": 2,
+    "unique_users": 1,
+    "average_session_duration_ms": 60000,
+    "conversion_rate": 0
+  },
+  "top_events": [
+    {
+      "event_type": "pageview",
+      "count": 1
+    },
+    {
+      "event_type": "click",
+      "count": 1
+    }
+  ],
+  "segments": [
+    {
+      "segment_id": "seg-desktop-users",
+      "user_count": 1,
+      "key_properties": {
+        "device_type": "desktop"
+      }
+    }
+  ],
+  "computed_at": "2025-01-15T10:31:00.000Z"
+}

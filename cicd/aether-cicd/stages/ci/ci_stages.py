@@ -25,22 +25,21 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
-from typing import List, Optional, Set
 
 from config.pipeline_config import REPO_SERVICES
-from quality_gates.gate import QualityGate, GateResult
-from shared.runner import run_cmd, log
+from quality_gates.gate import GateResult, QualityGate
 from shared.parsers import (
-    parse_ruff_json,
+    parse_docker_image_size,
+    parse_gitleaks_json,
     parse_jest_coverage,
+    parse_k6_json,
     parse_pytest_coverage,
     parse_pytest_results,
+    parse_ruff_json,
     parse_snyk_json,
     parse_trivy_json,
-    parse_gitleaks_json,
-    parse_k6_json,
-    parse_docker_image_size,
 )
+from shared.runner import log, run_cmd
 
 
 @dataclass
@@ -50,7 +49,7 @@ class StageResult:
     exit_code: int
     duration_seconds: float
     output: str
-    gate_result: Optional[GateResult] = None
+    gate_result: GateResult | None = None
 
     @property
     def passed(self) -> bool:
@@ -71,7 +70,7 @@ def stage_lint(gate: QualityGate, workdir: str = ".") -> StageResult:
     print("\n-- Stage 1: Lint " + "-" * 44)
 
     total_errors = 0
-    outputs: List[str] = []
+    outputs: list[str] = []
 
     # ESLint for TypeScript
     log("Running ESLint...", stage="LINT")
@@ -145,7 +144,7 @@ def stage_type_check(gate: QualityGate, workdir: str = ".") -> StageResult:
     print("\n-- Stage 2: Type Check " + "-" * 38)
 
     total_errors = 0
-    outputs: List[str] = []
+    outputs: list[str] = []
 
     log("Running TypeScript type check...", stage="TYPE")
     tsc_result = run_cmd(
@@ -187,7 +186,7 @@ def stage_unit_test(gate: QualityGate, workdir: str = ".") -> StageResult:
     """
     print("\n-- Stage 3: Unit Test " + "-" * 39)
 
-    outputs: List[str] = []
+    outputs: list[str] = []
 
     # Jest
     log("Running Jest...", stage="UNIT")
@@ -244,7 +243,7 @@ def stage_integration_test(gate: QualityGate, workdir: str = ".") -> StageResult
     """
     print("\n-- Stage 4: Integration Test " + "-" * 32)
 
-    outputs: List[str] = []
+    outputs: list[str] = []
     cmds = [
         ("localstack up",   "docker compose -f docker-compose.test.yml up -d localstack 2>&1 || true"),
         ("node contracts",  "npx jest --config jest.integration.config.js --ci 2>&1 || true"),
@@ -283,7 +282,7 @@ def stage_security_scan(gate: QualityGate, workdir: str = ".") -> StageResult:
     """
     print("\n-- Stage 5: Security Scan " + "-" * 35)
 
-    outputs: List[str] = []
+    outputs: list[str] = []
 
     # Snyk
     log("Running Snyk...", stage="SEC")
@@ -350,7 +349,7 @@ def stage_build(
     gate: QualityGate,
     workdir: str = ".",
     tag: str = "latest",
-    affected_services: Optional[Set[str]] = None,
+    affected_services: set[str] | None = None,
 ) -> StageResult:
     """
     Compile, bundle, containerize, and sign all artifacts.
@@ -362,11 +361,11 @@ def stage_build(
     print("\n-- Stage 6: Build " + "-" * 42)
     ecr_registry = os.environ.get("ECR_REGISTRY", "111111111111.dkr.ecr.us-east-1.amazonaws.com")
 
-    outputs: List[str] = []
+    outputs: list[str] = []
     max_image_size_mb = 0.0
     total_build_time = 0.0
 
-    for svc_path, meta in REPO_SERVICES.items():
+    for svc_path in REPO_SERVICES:
         svc_name = svc_path.split("/")[-1]
 
         # Skip if change detection says this service wasn't affected
@@ -435,7 +434,7 @@ def stage_e2e_test(gate: QualityGate, workdir: str = ".") -> StageResult:
     print("\n-- Stage 7: E2E Test " + "-" * 40)
     staging_url = os.environ.get("STAGING_URL", "https://staging.olympuslabsml.com")
 
-    outputs: List[str] = []
+    outputs: list[str] = []
 
     log("Running Playwright...", stage="E2E")
     pw_result = run_cmd(
@@ -478,7 +477,7 @@ def stage_performance_test(gate: QualityGate, workdir: str = ".") -> StageResult
     print("\n-- Stage 8: Performance Test " + "-" * 32)
     staging_url = os.environ.get("STAGING_URL", "https://staging.olympuslabsml.com")
 
-    outputs: List[str] = []
+    outputs: list[str] = []
 
     log("Running k6 load test...", stage="PERF")
     k6_result = run_cmd(
@@ -519,7 +518,7 @@ def stage_performance_test(gate: QualityGate, workdir: str = ".") -> StageResult
 def run_full_ci(
     workdir: str = ".",
     fail_fast: bool = True,
-    affected_services: Optional[Set[str]] = None,
+    affected_services: set[str] | None = None,
 ) -> tuple:
     """
     Execute all 8 CI stages in sequence.
@@ -530,7 +529,7 @@ def run_full_ci(
         affected_services: If provided, only build/test these services.
     """
     gate = QualityGate()
-    stages: List[tuple] = [
+    stages: list[tuple] = [
         ("lint",             lambda: stage_lint(gate, workdir)),
         ("type_check",       lambda: stage_type_check(gate, workdir)),
         ("unit_test",        lambda: stage_unit_test(gate, workdir)),
@@ -541,7 +540,7 @@ def run_full_ci(
         ("performance_test", lambda: stage_performance_test(gate, workdir)),
     ]
 
-    results: List[StageResult] = []
+    results: list[StageResult] = []
     for stage_name, stage_fn in stages:
         start = time.time()
         result = stage_fn()

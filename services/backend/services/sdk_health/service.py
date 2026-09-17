@@ -57,6 +57,8 @@ class SDKHeartbeat:
     wallet_connected: bool = False
     config_version: str = "0"
     rollout_cohort: str = "default"
+    manifest_status: str = "healthy"
+    dropped_event_counts: dict[str, int] = field(default_factory=dict)
     reported_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )

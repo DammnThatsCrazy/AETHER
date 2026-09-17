@@ -1,0 +1,41 @@
+{
+  "_fixture_version": 1,
+  "scenario": "C \u2014 Bad merge split repair",
+  "blueprint_ref": "\u00a710, \u00a75.6",
+  "description": "A bad auto-merge is split without deleting raw records; graph version increments and projections restate.",
+  "tenant_id": "tenant_bad_merge_split",
+  "steps": [
+    {
+      "order": 1,
+      "action": "auto_merge",
+      "from": "person_a",
+      "into": "person_merged_bad",
+      "graph_version": "v1"
+    },
+    {
+      "order": 2,
+      "action": "operator_flag_bad_merge",
+      "conflict_type": "bad_merge"
+    },
+    {
+      "order": 3,
+      "action": "create_split_candidate",
+      "source": "person_merged_bad",
+      "targets": [
+        "person_a",
+        "person_b"
+      ]
+    },
+    {
+      "order": 4,
+      "action": "approve_split",
+      "graph_version_after": "v2"
+    }
+  ],
+  "expected": {
+    "split_candidate_created": true,
+    "graph_version_incremented": true,
+    "raw_records_preserved": true
+  },
+  "invariant": "split_repairs_bad_merge_without_deleting_raw"
+}

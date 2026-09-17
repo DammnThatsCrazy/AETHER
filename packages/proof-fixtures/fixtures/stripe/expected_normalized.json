@@ -1,0 +1,38 @@
+{
+  "platform": "stripe",
+  "account_id": "acct_1234567890",
+  "normalized_events": [
+    {
+      "event_id": "evt_1",
+      "event_type": "checkout.session.completed",
+      "timestamp": "2025-01-15T10:30:00.000Z",
+      "amount_cents": 9999,
+      "currency": "usd",
+      "customer_id": "cus_123",
+      "customer_email": "payer@example.com",
+      "status": "succeeded",
+      "payment_type": "one-time",
+      "source": {
+        "platform": "stripe",
+        "data_type": "commerce",
+        "platform_id": "acct_1234567890",
+        "environment": "staging"
+      }
+    },
+    {
+      "event_id": "evt_2",
+      "event_type": "customer.created",
+      "timestamp": "2025-01-15T09:30:00.000Z",
+      "customer_id": "cus_123",
+      "customer_email": "payer@example.com",
+      "customer_name": "Jane Payer",
+      "customer_phone": "+1-555-0100",
+      "source": {
+        "platform": "stripe",
+        "data_type": "identity",
+        "platform_id": "acct_1234567890",
+        "environment": "staging"
+      }
+    }
+  ]
+}

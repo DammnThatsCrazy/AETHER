@@ -1,0 +1,16 @@
+{
+  "user_id": "cust-1",
+  "email": "buyer@example.com",
+  "name": "Shopify Buyer",
+  "identity_sources": ["shopify"],
+  "attributes": {
+    "shop_id": "shop-001",
+    "platform": "shopify",
+    "first_order": "2025-01-15T10:30:00.000Z",
+    "last_order": "2025-01-15T10:30:00.000Z"
+  },
+  "lifetime_value": 49.99,
+  "last_active": "2025-01-15T10:30:00.000Z",
+  "total_events": 1,
+  "engagement_score": 0.6
+}

@@ -1,0 +1,44 @@
+{
+  "platform": "shopify",
+  "shop_id": "shop-001",
+  "normalized_orders": [
+    {
+      "order_id": "order-1001",
+      "customer_id": "cust-1",
+      "customer_email": "buyer@example.com",
+      "total_value": 49.99,
+      "currency": "USD",
+      "timestamp": "2025-01-15T10:30:00.000Z",
+      "status": "closed",
+      "financial_status": "paid",
+      "items": [
+        { "product_id": "prod-1", "name": "Widget", "quantity": 2, "unit_price": 24.99 }
+      ],
+      "source": {
+        "platform": "shopify",
+        "data_type": "commerce",
+        "platform_id": "shop-001",
+        "environment": "staging"
+      }
+    },
+    {
+      "order_id": "order-1002",
+      "customer_id": "cust-1",
+      "customer_email": "buyer@example.com",
+      "total_value": 99.99,
+      "currency": "USD",
+      "timestamp": "2025-01-14T15:00:00.000Z",
+      "status": "closed",
+      "financial_status": "paid",
+      "items": [
+        { "product_id": "prod-2", "name": "Gadget", "quantity": 1, "unit_price": 99.99 }
+      ],
+      "source": {
+        "platform": "shopify",
+        "data_type": "commerce",
+        "platform_id": "shop-001",
+        "environment": "staging"
+      }
+    }
+  ]
+}

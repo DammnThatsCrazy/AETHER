@@ -29,10 +29,10 @@ source_hashes:
   "services/backend/services/providers/amazon/": "sha256:47421acb9e29d0fd5d8f6414edb2c86b03c35ccfd226b6027abe0ecc31e6c882"
   "services/backend/services/providers/ebay/": "sha256:7b1986d902e2fe6e488798464e95abadc2f6a78838e1bb53798a6b1244c1d318"
   "services/backend/services/providers/etsy/": "sha256:a554214cb6b6058580328f5d94a0ad59d382ed14c27be1a42b2d330c2d170026"
-  "services/backend/services/providers/shopify/": "sha256:c0a12ddb85d4fd9590fe6559c1921a494ef73cf74575a876a56445d13dbd61b9"
+  "services/backend/services/providers/shopify/": "sha256:45f4980bfcd718f18a7e17806771102c20431d356244325b58ad1a0a6ba430ca"
   "services/backend/services/providers/tiktok/": "sha256:7c3e216b87d697b8c9b977cab6fc97a1fc338a529da59686c68c4836327af306"
   "services/backend/services/providers/walmart/": "sha256:46b1e19cd84c539069b862d86299e45e2af952a0140fa8234e07fad3f3673bc1"
-  "services/backend/services/providers/woocommerce/": "sha256:ae6a2fe8ce2c2b1038e4f146db36a8c6c805cb31ddb59a5ff200cd8075f70732"
+  "services/backend/services/providers/woocommerce/": "sha256:2fa57e2e7e797edffe9083feb1462cefb2307de233feed57e60352719805fe4f"
   "services/backend/shared/integration_contracts/catalog.py": "sha256:895abcded4185c421d1e84cb3e711b5c88abd963daf3260373c0f54a50c4a03c"
   "services/backend/shared/integration_contracts/migration.py": "sha256:1254c727afc3841b7803a4cecaa9a528049ff6df29086e10246c50844c293df7"
 ---

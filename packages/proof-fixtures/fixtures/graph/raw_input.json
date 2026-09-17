@@ -1,0 +1,132 @@
+{
+  "workspace_id": "workspace-001",
+  "nodes": [
+    {
+      "node_id": "node-user-1",
+      "type": "user",
+      "labels": ["user", "premium"],
+      "properties": { "user_id": "user-1", "email": "user@example.com", "plan": "pro" },
+      "created_at": "2025-01-01T00:00:00.000Z",
+      "updated_at": "2025-01-15T10:31:00.000Z",
+      "confidence": 0.95,
+      "source": "auth0"
+    },
+    {
+      "node_id": "node-user-2",
+      "type": "user",
+      "labels": ["user", "free"],
+      "properties": { "user_id": "user-2", "email": "visitor@example.com", "plan": "free" },
+      "created_at": "2025-01-10T00:00:00.000Z",
+      "updated_at": "2025-01-15T10:31:00.000Z",
+      "confidence": 0.6,
+      "source": "website"
+    },
+    {
+      "node_id": "node-session-1",
+      "type": "session",
+      "labels": ["session", "web"],
+      "properties": { "session_id": "sess-abc123", "device": "desktop", "sdk": "web-v2" },
+      "created_at": "2025-01-15T10:30:00.000Z",
+      "source": "web-v2"
+    },
+    {
+      "node_id": "node-event-1",
+      "type": "event",
+      "labels": ["event", "pageview"],
+      "properties": { "event_type": "pageview", "sdk": "web-v2", "url": "https://example.com/home", "path": "/home" },
+      "created_at": "2025-01-15T10:30:00.000Z",
+      "source": "web-v2"
+    },
+    {
+      "node_id": "node-event-2",
+      "type": "event",
+      "labels": ["event", "click"],
+      "properties": { "event_type": "click", "sdk": "web-v2", "element": "button#submit", "text": "Submit" },
+      "created_at": "2025-01-15T10:31:00.000Z",
+      "source": "web-v2"
+    },
+    {
+      "node_id": "node-campaign-1",
+      "type": "campaign",
+      "labels": ["campaign", "onboarding"],
+      "properties": { "campaign_id": "camp-001", "name": "Welcome Series", "type": "onboarding" },
+      "created_at": "2025-01-01T00:00:00.000Z",
+      "source": "marketing"
+    },
+    {
+      "node_id": "node-conversion-1",
+      "type": "conversion",
+      "labels": ["conversion", "purchase"],
+      "properties": { "conversion_id": "conv-001", "event_type": "purchase", "value": 49.99, "currency": "USD" },
+      "created_at": "2025-01-14T15:00:00.000Z",
+      "source": "shopify"
+    },
+    {
+      "node_id": "node-communication-1",
+      "type": "communication",
+      "labels": ["communication", "email"],
+      "properties": { "communication_id": "comm-001", "type": "email", "subject": "Welcome!", "status": "delivered" },
+      "created_at": "2025-01-15T10:30:00.000Z",
+      "source": "sendgrid"
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "edge-user-session",
+      "source": "node-user-1",
+      "target": "node-session-1",
+      "relation": "initiated",
+      "label": "session_start",
+      "created_at": "2025-01-15T10:30:00.000Z",
+      "weight": 1.0,
+      "confidence": 0.95
+    },
+    {
+      "edge_id": "edge-session-event-1",
+      "source": "node-session-1",
+      "target": "node-event-1",
+      "relation": "generated",
+      "label": "page_view",
+      "created_at": "2025-01-15T10:30:00.000Z",
+      "weight": 1.0
+    },
+    {
+      "edge_id": "edge-session-event-2",
+      "source": "node-session-1",
+      "target": "node-event-2",
+      "relation": "generated",
+      "label": "click",
+      "created_at": "2025-01-15T10:31:00.000Z",
+      "weight": 1.0
+    },
+    {
+      "edge_id": "edge-user-campaign",
+      "source": "node-user-1",
+      "target": "node-campaign-1",
+      "relation": "enrolled",
+      "label": "campaign_enrollment",
+      "created_at": "2025-01-15T10:30:00.000Z",
+      "weight": 0.8
+    },
+    {
+      "edge_id": "edge-campaign-conversion",
+      "source": "node-campaign-1",
+      "target": "node-conversion-1",
+      "relation": "attributed",
+      "label": "last_touch_attribution",
+      "created_at": "2025-01-14T15:05:00.000Z",
+      "weight": 0.75,
+      "confidence": 0.9,
+      "properties": { "model": "last_touch", "credit": 1.0 }
+    },
+    {
+      "edge_id": "edge-user-communication",
+      "source": "node-user-1",
+      "target": "node-communication-1",
+      "relation": "received",
+      "label": "email_received",
+      "created_at": "2025-01-15T10:30:00.000Z",
+      "weight": 1.0
+    }
+  ]
+}

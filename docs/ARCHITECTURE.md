@@ -17,9 +17,9 @@ reviewed_source_commits:
   - commit: "5bfb9394"
     reason: "Reviewed the shared action-runtime contract hardening: approval level/scope remain enforced while tenant and decision identity stay outer-context bound, and execution-step targets must match the canonical scoped target set."
 source_hashes:
-  "packages/shared/": "sha256:d867738310579c117a13ba99c0a2ba4310af7c00b3f71384288f1a5423784794"
-  "services/backend/main.py": "sha256:146abcd2a0af5653e96f1c1eb9e5fe1fef6e32790758636cbde4d6d24c5c592e"
-  "services/backend/middleware/middleware.py": "sha256:e3ee0320a3cd814594c00323eb142e4ab497a1bb9199204642134461b36e3091"
+  "packages/shared/": "sha256:319a83c25e37fa5aacc0032655e5f8a37d4ba9629e1f10401a1726f8a60d47df"
+  "services/backend/main.py": "sha256:7f7f8efc68276c89f61cd6c02079f60869959da6b0c5788b46ab8c06aa7eb32d"
+  "services/backend/middleware/middleware.py": "sha256:c12b53ada8326e45252d90ce7060914c7961ae549f0f0d8e2bdf50daca42c553"
 ---
 # Aether vNext — Architecture Guide
 

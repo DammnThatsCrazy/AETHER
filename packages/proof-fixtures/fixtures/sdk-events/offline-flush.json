@@ -1,0 +1,30 @@
+{
+  "tenant_id": "aether-proof-tenant",
+  "workspace_id": "proof-lab",
+  "platform_id": "mobile",
+  "environment": "staging",
+  "event_type": "sdk_batch_accepted",
+  "sdk": { "name": "@aether/ios", "version": "0.1.0-alpha.0" },
+  "session": { "session_id": "sess_offline_flush_001" },
+  "device": { "device_id": "dev_ios_001", "platform": "ios" },
+  "identity": { "anonymous_id": "anon_flush_001", "user_id": "user_004" },
+  "timestamp": "2024-09-11T12:26:00.000Z",
+  "properties": {
+    "batch_id": "batch_offline_001",
+    "accepted_event_ids": ["q_001", "q_002", "q_003"],
+    "rejected_event_ids": [],
+    "total_accepted": 3,
+    "total_rejected": 0,
+    "processing_started_at": "2024-09-11T12:26:00.000Z",
+    "processing_completed_at": "2024-09-11T12:26:05.000Z",
+    "processing_duration_ms": 5,
+    "flush_reason": "back_online",
+    "previous_batch_status": "queued"
+  },
+  "source": {
+    "platform": "mobile",
+    "data_type": "event",
+    "sdk": "@aether/ios",
+    "environment": "staging"
+  }
+}

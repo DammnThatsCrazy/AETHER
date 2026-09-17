@@ -1,5 +1,11 @@
 [
   {
+    "path": "Smart Contracts",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
     "path": "apps",
     "role": "house",
     "owner": "platform@aether",
@@ -184,6 +190,12 @@
     "disposition": "un-deployed TypeScript duplicate of the canonical Python monolith (services/backend). Kept only by version-sync, runtime-fallback, and temporal-integrity coupling; physical removal deferred to a later phase. Do not extend."
   },
   {
+    "path": "examples",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
+  },
+  {
     "path": "frontend",
     "role": "house",
     "owner": "platform@aether",
@@ -218,6 +230,12 @@
     "role": "house",
     "owner": "platform@aether",
     "note": "repository validation, generation, release, docs, and contract tooling."
+  },
+  {
+    "path": "sdk-fixtures",
+    "role": "house",
+    "owner": "platform@aether",
+    "note": "monorepo house directory; route new work into canonical trees."
   },
   {
     "path": "security",

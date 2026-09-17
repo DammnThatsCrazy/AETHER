@@ -66,6 +66,8 @@ export interface SDKHeartbeatPayload {
   wallet_connected: boolean;
   config_version: string;
   rollout_cohort: string;
+  manifest_status: ManifestStatus;
+  dropped_event_counts: DroppedEventCounts;
 }
 
 export interface SDKManifest {
@@ -78,9 +80,45 @@ export interface SDKManifest {
   flags: Record<string, unknown>;
   published_at: string;
   signature: string;
+  /** Manifest fetch status for diagnostics */
+  status?: 'healthy' | 'forbidden' | 'expired' | 'signature_invalid' | 'unavailable';
 }
 
 export type ManifestUpdateCallback = (manifest: SDKManifest) => void;
+
+export type ManifestStatus = SDKManifest['status'];
+
+export type DroppedEventReason =
+  | 'consent_denied'
+  | 'schema_invalid'
+  | 'queue_full'
+  | 'offline_expired'
+  | 'retry_exhausted'
+  | 'manifest_blocked'
+  | 'unsupported_sdk_version'
+  | 'payload_too_large'
+  | 'auth_failed'
+  | 'shutdown_unflushed';
+
+export interface DroppedEventCounts {
+  consent_denied: number;
+  schema_invalid: number;
+  queue_full: number;
+  offline_expired: number;
+  retry_exhausted: number;
+  manifest_blocked: number;
+  unsupported_sdk_version: number;
+  payload_too_large: number;
+  auth_failed: number;
+  shutdown_unflushed: number;
+}
+
+export interface Diagnostics {
+  droppedEvents: DroppedEventCounts;
+  queueDepth: number;
+  lastFlushStatus: 'pending' | 'flushing' | 'success' | 'failed' | 'no_events';
+  manifestStatus: ManifestStatus;
+}
 
 // ---------------------------------------------------------------------------
 // Internal counters (module-level, reset-safe)
@@ -113,6 +151,20 @@ export class SDKHealthAgent {
   private currentManifest: SDKManifest | null = null;
   private manifestCallbacks: ManifestUpdateCallback[] = [];
   private isRunning = false;
+  private manifestStatus: ManifestStatus = 'healthy';
+  private droppedCounts: DroppedEventCounts = {
+    consent_denied: 0,
+    schema_invalid: 0,
+    queue_full: 0,
+    offline_expired: 0,
+    retry_exhausted: 0,
+    manifest_blocked: 0,
+    unsupported_sdk_version: 0,
+    payload_too_large: 0,
+    auth_failed: 0,
+    shutdown_unflushed: 0,
+  };
+  private lastFlushStatus: Diagnostics['lastFlushStatus'] = 'no_events';
 
   constructor(config: SDKHealthAgentConfig, eventQueue: EventQueue) {
     this.config = {
@@ -169,8 +221,11 @@ export class SDKHealthAgent {
   }
 
   /** Record a dropped event (called by EventQueue on consent filter / error). */
-  recordDroppedEvent(): void {
+  recordDroppedEvent(reason: DroppedEventReason = 'consent_denied'): void {
     this.metrics.droppedEvents++;
+    if (reason in this.droppedCounts) {
+      this.droppedCounts[reason as keyof DroppedEventCounts]++;
+    }
   }
 
   /** Record a successful event dispatch. */
@@ -185,6 +240,36 @@ export class SDKHealthAgent {
     const failed = this.metrics.retryCount;
     this.metrics.lastSuccessRate =
       total > 0 ? Math.max(0, (total - failed - dropped) / total) : 1.0;
+  }
+
+  /** Set the manifest fetch status for diagnostics. */
+  setManifestStatus(status: ManifestStatus): void {
+    this.manifestStatus = status;
+  }
+
+  /** Set the last flush status. */
+  setLastFlushStatus(status: Diagnostics['lastFlushStatus']): void {
+    this.lastFlushStatus = status;
+  }
+
+  /** Return current diagnostics for the SDK. */
+  getDiagnostics(): Diagnostics {
+    return {
+      droppedEvents: { ...this.droppedCounts },
+      queueDepth: this.eventQueue.size,
+      lastFlushStatus: this.lastFlushStatus,
+      manifestStatus: this.manifestStatus,
+    };
+  }
+
+  /** Return the current queue depth. */
+  getQueueDepth(): number {
+    return this.eventQueue.size;
+  }
+
+  /** Return the last flush status. */
+  getLastFlushStatus(): Diagnostics['lastFlushStatus'] {
+    return this.lastFlushStatus;
   }
 
   // ── Heartbeat Emission ─────────────────────────────────────────────────
@@ -243,9 +328,18 @@ export class SDKHealthAgent {
         },
       });
 
-      if (!resp.ok) return null;
+      if (!resp.ok) {
+        // Track manifest fetch failure reasons for diagnostics
+        this.setManifestStatus('unavailable');
+        if (resp.status === 403) {
+          this.setManifestStatus('forbidden');
+        } else if (resp.status === 401) {
+          this.setManifestStatus('forbidden');
+        }
+        return null;
+      }
 
-      const body = await resp.json() as { data: SDKManifest };
+      const body = await resp.json() as { data: SDKManifest; error?: string };
       const manifest = body.data;
 
       if (!manifest) return null;
@@ -254,6 +348,7 @@ export class SDKHealthAgent {
       if (this.config.signingSecret && manifest.signature) {
         const valid = await this.verifyManifestSignature(manifest);
         if (!valid) {
+          this.setManifestStatus('signature_invalid');
           console.warn('[Aether SDK] Manifest signature verification failed — ignoring update');
           return null;
         }
@@ -302,6 +397,8 @@ export class SDKHealthAgent {
       wallet_connected: dynamic.walletConnected,
       config_version: this.config.configVersion,
       rollout_cohort: this.config.rolloutCohort,
+      manifest_status: this.manifestStatus,
+      dropped_event_counts: { ...this.droppedCounts },
     };
   }
 

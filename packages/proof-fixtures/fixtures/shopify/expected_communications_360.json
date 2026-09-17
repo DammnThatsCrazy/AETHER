@@ -1,0 +1,19 @@
+[
+  {
+    "communication_id": "comm-shopify-001",
+    "type": "email",
+    "channel": "email",
+    "campaign_id": "camp-order-confirm",
+    "recipient": "buyer@example.com",
+    "subject": "Order Confirmation #1001",
+    "status": "delivered",
+    "timestamp": "2025-01-15T10:30:05.000Z",
+    "delivered_at": "2025-01-15T10:30:07.000Z",
+    "source": {
+      "platform": "shopify",
+      "data_type": "communication",
+      "platform_id": "shop-001",
+      "environment": "staging"
+    }
+  }
+]

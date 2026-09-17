@@ -1,0 +1,104 @@
+{
+  "workspace_id": "workspace-001",
+  "profile_360": {
+    "user_id": "user-1",
+    "email": "user@example.com",
+    "name": "Jane User",
+    "phone": "+1-555-0100",
+    "identity_sources": ["auth0", "shopify", "stripe"],
+    "attributes": {
+      "plan": "pro",
+      "locale": "en-US",
+      "created_at": "2025-01-01T00:00:00Z",
+      "title": "Engineering Lead",
+      "company": "Acme Corp"
+    },
+    "lifetime_value": 359.88,
+    "last_active": "2025-01-15T10:31:00.000Z",
+    "total_events": 150,
+    "engagement_score": 0.78,
+    "device_count": 2,
+    "session_count": 35,
+    "is_merged": true,
+    "created_at": "2025-01-01T00:00:00.000Z",
+    "updated_at": "2025-01-15T10:31:00.000Z",
+    "evidence": [
+      {
+        "user_id": "user-1",
+        "email": "user@example.com",
+        "source": "auth0",
+        "verified": true,
+        "first_seen": "2025-01-01T00:00:00.000Z",
+        "last_seen": "2025-01-15T10:31:00.000Z",
+        "confidence": 0.95,
+        "channel": "web"
+      },
+      {
+        "user_id": "user-1",
+        "email": "user@example.com",
+        "source": "shopify",
+        "verified": true,
+        "first_seen": "2025-01-05T00:00:00.000Z",
+        "last_seen": "2025-01-14T15:00:00.000Z",
+        "confidence": 0.99,
+        "channel": "commerce"
+      }
+    ]
+  },
+  "campaign_360": {
+    "campaign_id": "camp-001",
+    "name": "Welcome Series",
+    "status": "active",
+    "channels": ["email", "push"],
+    "created_at": "2025-01-01T00:00:00.000Z",
+    "metrics": {
+      "sent": 1000,
+      "delivered": 980,
+      "opened": 450,
+      "clicked": 200,
+      "converted": 85
+    },
+    "performance": {
+      "open_rate": 0.459,
+      "click_rate": 0.204,
+      "conversion_rate": 0.087
+    }
+  },
+  "communications_360": [
+    {
+      "communication_id": "comm-001",
+      "type": "email",
+      "campaign_id": "camp-001",
+      "recipient": "user@example.com",
+      "recipient_id": "user-1",
+      "subject": "Welcome!",
+      "status": "delivered",
+      "timestamp": "2025-01-15T10:30:00.000Z",
+      "delivered_at": "2025-01-15T10:30:05.000Z",
+      "opened_at": "2025-01-15T10:30:15.000Z",
+      "template": { "template_id": "tpl_welcome_001", "template_name": "Welcome Email" },
+      "source": {
+        "platform": "email",
+        "data_type": "communication",
+        "environment": "staging"
+      }
+    },
+    {
+      "communication_id": "comm-002",
+      "type": "push",
+      "campaign_id": "camp-001",
+      "recipient": "user@example.com",
+      "recipient_id": "user-1",
+      "subject": "Getting Started",
+      "status": "delivered",
+      "timestamp": "2025-01-15T11:00:00.000Z",
+      "delivered_at": "2025-01-15T11:00:02.000Z",
+      "template": { "template_id": "tpl_push_001", "template_name": "Welcome Push" },
+      "source": {
+        "platform": "mobile",
+        "data_type": "communication",
+        "environment": "staging"
+      }
+    }
+  ]
+}
