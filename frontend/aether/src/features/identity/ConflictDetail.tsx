@@ -74,7 +74,7 @@ export const ConflictDetail: FC = () => {
   const tenantId = user?.id ?? '';
 
   const { data, isLoading, error, refetch } = useQuery<ConflictDetailData>({
-    key: ['identity-conflict-detail', conflictId, tenantId],
+    key: `identity-conflict-detail:${conflictId}:${tenantId}`,
     fetcher: () => fetchConflictDetail(conflictId ?? '', tenantId),
     enabled: !!conflictId && !!tenantId,
     staleTime: STALE,
@@ -231,10 +231,10 @@ export const ConflictDetail: FC = () => {
                   <div className="ml-auto flex gap-2">
                     <button
                       className="rounded bg-theme-success px-4 py-1.5 text-xs font-medium text-white disabled:opacity-50"
-                      disabled={approveMutation.isPaused}
+                      disabled={approveMutation.isLoading}
                       onClick={() => approveMutation.mutate(data.conflict_id)}
                     >
-                      {approveMutation.isPaused ? '...' : 'Approve'}
+                      {approveMutation.isLoading ? '...' : 'Approve'}
                     </button>
                     <button
                       className="rounded border border-surface-border bg-surface-elevated px-4 py-1.5 text-xs font-medium text-text-primary hover:bg-surface-accent"
@@ -249,6 +249,7 @@ export const ConflictDetail: FC = () => {
                 </div>
               </div>
             )}
+          </div>
         </main>
       </div>
     </RequireAuth>

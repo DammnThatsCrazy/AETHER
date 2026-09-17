@@ -48,7 +48,7 @@ importers:
   apps/aether-mobile:
     dependencies:
       '@aether/mobile-core':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/mobile-core
       expo:
         specifier: ^51.0.0
@@ -76,10 +76,10 @@ importers:
   apps/kyber-mobile:
     dependencies:
       '@aether/mobile-core':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/mobile-core
       '@aether/mobile-ui':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/mobile-ui
       expo:
         specifier: ^51.0.0
@@ -107,7 +107,7 @@ importers:
   apps/proof-android:
     dependencies:
       '@aether/react-native':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/react-native
       expo:
         specifier: ^51.0.0
@@ -132,7 +132,7 @@ importers:
   apps/proof-connectors:
     dependencies:
       '@aether/web':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/web
       react:
         specifier: ^19.0.0
@@ -166,7 +166,7 @@ importers:
   apps/proof-ios:
     dependencies:
       '@aether/react-native':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/react-native
       expo:
         specifier: ^51.0.0
@@ -191,7 +191,7 @@ importers:
   apps/proof-react:
     dependencies:
       '@aether/web':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/web
       react:
         specifier: ^19.0.0
@@ -225,7 +225,7 @@ importers:
   apps/proof-web:
     dependencies:
       '@aether/web':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/web
       react:
         specifier: ^19.0.0
@@ -259,13 +259,13 @@ importers:
   frontend/aether:
     dependencies:
       '@aether/shared':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/shared
       '@aether/ui':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../shared
       '@aether/web':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/web
       '@tanstack/react-virtual':
         specifier: ^3.10.0
@@ -347,13 +347,13 @@ importers:
   frontend/aether-marketing:
     dependencies:
       '@aether/shared':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/shared
       '@aether/ui':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../shared
       '@olympus/brand':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/brand
       react:
         specifier: ^19.0.0
@@ -408,13 +408,13 @@ importers:
   frontend/demo:
     dependencies:
       '@aether/shared':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/shared
       '@aether/ui':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../shared
       '@aether/web':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/web
       react:
         specifier: ^19.0.0
@@ -512,13 +512,13 @@ importers:
   frontend/kyber:
     dependencies:
       '@aether/shared':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/shared
       '@aether/ui':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../shared
       '@aether/web':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/web
       clsx:
         specifier: ^2.1.0
@@ -627,10 +627,10 @@ importers:
   frontend/olympus-marketing:
     dependencies:
       '@aether/ui':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../shared
       '@olympus/brand':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/brand
       react:
         specifier: ^19.0.0
@@ -685,10 +685,10 @@ importers:
   frontend/shared:
     dependencies:
       '@aether/shared':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/shared
       '@olympus/brand':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../../packages/brand
       clsx:
         specifier: ^2.1.0
@@ -765,7 +765,7 @@ importers:
   packages/mobile-core:
     dependencies:
       '@aether/shared':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../shared
     devDependencies:
       typescript:
@@ -793,7 +793,7 @@ importers:
   packages/proof-contracts:
     dependencies:
       '@aether/shared':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../shared
     devDependencies:
       typescript:
@@ -806,11 +806,11 @@ importers:
   packages/proof-fixtures:
     dependencies:
       '@aether/shared':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../shared
     devDependencies:
       '@aether/proof-contracts':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../proof-contracts
       typescript:
         specifier: ^5.4.0
@@ -822,13 +822,13 @@ importers:
   packages/proof-reporting:
     dependencies:
       '@aether/proof-contracts':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../proof-contracts
       '@aether/proof-runner':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../proof-runner
       '@aether/shared':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../shared
     devDependencies:
       typescript:
@@ -841,10 +841,10 @@ importers:
   packages/proof-runner:
     dependencies:
       '@aether/proof-contracts':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../proof-contracts
       '@aether/shared':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../shared
     devDependencies:
       typescript:
@@ -857,7 +857,7 @@ importers:
   packages/react-native:
     dependencies:
       '@aether/shared':
-        specifier: workspace:*
+        specifier: ^0.1.0-alpha.0
         version: link:../shared
       '@react-native-async-storage/async-storage':
         specifier: '>=1.0.0'
@@ -879,7 +879,7 @@ importers:
   packages/server:
     devDependencies:
       '@aether/shared':
-        specifier: workspace:*
+        specifier: '*'
         version: link:../shared
       '@vitest/coverage-v8':
         specifier: ^1.6.0
@@ -906,7 +906,7 @@ importers:
   packages/web:
     dependencies:
       '@aether/shared':
-        specifier: workspace:*
+        specifier: ^0.1.0-alpha.0
         version: link:../shared
       react:
         specifier: '>=18.0.0'

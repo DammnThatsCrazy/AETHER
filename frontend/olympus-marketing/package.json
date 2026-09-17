@@ -15,8 +15,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@aether/ui": "workspace:*",
-    "@olympus/brand": "workspace:*",
+    "@aether/ui": "*",
+    "@olympus/brand": "*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.18.2"

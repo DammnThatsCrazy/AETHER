@@ -20,9 +20,9 @@
     "health": "tsx src/lib/health/startup-check.ts"
   },
   "dependencies": {
-    "@aether/shared": "workspace:*",
-    "@aether/ui": "workspace:*",
-    "@aether/web": "workspace:*",
+    "@aether/shared": "*",
+    "@aether/ui": "*",
+    "@aether/web": "*",
     "clsx": "^2.1.0",
     "cytoscape": "^3.30.0",
     "date-fns": "^4.1.0",

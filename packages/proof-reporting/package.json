@@ -1,7 +1,7 @@
 {
   "name": "@aether/proof-reporting",
   "version": "0.1.0-alpha.0",
-  "description": "Aether Functionality Proof \u2014 report generators for proof results",
+  "description": "Aether Functionality Proof — report generators for proof results",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "source": "./src/index.ts",
@@ -23,14 +23,14 @@
   },
   "license": "UNLICENSED",
   "dependencies": {
-    "@aether/shared": "workspace:*",
-    "@aether/proof-contracts": "workspace:*",
-    "@aether/proof-runner": "workspace:*"
+    "@aether/shared": "*",
+    "@aether/proof-contracts": "*",
+    "@aether/proof-runner": "*"
   },
   "devDependencies": {
-    "@aether/shared": "workspace:*",
-    "@aether/proof-contracts": "workspace:*",
-    "@aether/proof-runner": "workspace:*",
+    "@aether/shared": "*",
+    "@aether/proof-contracts": "*",
+    "@aether/proof-runner": "*",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"
   }

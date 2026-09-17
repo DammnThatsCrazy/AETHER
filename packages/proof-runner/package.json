@@ -1,7 +1,7 @@
 {
   "name": "@aether/proof-runner",
   "version": "0.1.0-alpha.0",
-  "description": "Aether Functionality Proof \u2014 runner engine for executing proof steps",
+  "description": "Aether Functionality Proof — runner engine for executing proof steps",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "source": "./src/index.ts",
@@ -23,12 +23,12 @@
   },
   "license": "UNLICENSED",
   "dependencies": {
-    "@aether/shared": "workspace:*",
-    "@aether/proof-contracts": "workspace:*"
+    "@aether/shared": "*",
+    "@aether/proof-contracts": "*"
   },
   "devDependencies": {
-    "@aether/shared": "workspace:*",
-    "@aether/proof-contracts": "workspace:*",
+    "@aether/shared": "*",
+    "@aether/proof-contracts": "*",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"
   }

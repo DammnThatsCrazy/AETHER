@@ -1,7 +1,7 @@
 {
   "name": "@aether/proof-contracts",
   "version": "0.1.0-alpha.0",
-  "description": "Aether Functionality Proof \u2014 type contracts and interfaces for proof spine",
+  "description": "Aether Functionality Proof — type contracts and interfaces for proof spine",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "source": "./src/index.ts",
@@ -23,10 +23,10 @@
   },
   "license": "UNLICENSED",
   "dependencies": {
-    "@aether/shared": "workspace:*"
+    "@aether/shared": "*"
   },
   "devDependencies": {
-    "@aether/shared": "workspace:*",
+    "@aether/shared": "*",
     "typescript": "^5.4.0",
     "vitest": "^1.6.0"
   }

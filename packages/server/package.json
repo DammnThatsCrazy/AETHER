@@ -1,7 +1,7 @@
 {
   "name": "@aether/server",
   "version": "0.1.0-alpha.0",
-  "description": "Aether Server SDK \u2014 Node.js server-side event observation client with consent, retry, and scrubbing.",
+  "description": "Aether Server SDK — Node.js server-side event observation client with consent, retry, and scrubbing.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "source": "./src/index.ts",
@@ -26,10 +26,10 @@
     "registry": "https://registry.npmjs.org"
   },
   "peerDependencies": {
-    "@aether/shared": "workspace:*"
+    "@aether/shared": "*"
   },
   "devDependencies": {
-    "@aether/shared": "workspace:*",
+    "@aether/shared": "*",
     "@vitest/coverage-v8": "^1.6.0",
     "vitest": "^1.6.0",
     "typescript": "^5.4.0"
