@@ -20,9 +20,12 @@ export default defineConfig({
     ),
   },
   resolve: {
-    alias: {
-      '@kyber': path.resolve(__dirname, 'src'),
-    },
+    alias: [
+      { find: '@kyber', replacement: path.resolve(__dirname, 'src') },
+      { find: '@aether/web', replacement: path.resolve(__dirname, '../../packages/web/src/index.ts') },
+      { find: /^@aether\/shared\/(.+)$/, replacement: path.resolve(__dirname, '../../packages/shared') + '/$1.ts' },
+      { find: /^@aether\/shared$/, replacement: path.resolve(__dirname, '../../packages/shared/index.ts') },
+    ],
   },
   server: {
     port: 5174,
