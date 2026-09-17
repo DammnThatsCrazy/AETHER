@@ -445,8 +445,11 @@ jobs:
       - name: Install dependencies (pnpm)
         run: pnpm install
 
+      - name: Install Playwright browsers
+        run: pnpm --filter '@aether/kyber' exec playwright install --with-deps chromium
+
       - name: Run e2e tests
-        run: pnpm test:e2e
+        run: pnpm --filter '@aether/kyber' run test:e2e
 
   # -------------------------------------------------------------------
   # build — Production build across all workspaces. Blocks merge if the
