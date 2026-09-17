@@ -1,0 +1,167 @@
+name: Staging Smoke Test (Proof Gate)
+
+# ---------------------------------------------------------------------
+# STAGING SMOKE TEST — PROOF GATE
+# ---------------------------------------------------------------------
+# This workflow provides a single manual gate that validates the staging
+# environment is healthy enough to proceed with a release. It is the
+# "proof" step that confirms staging smoke tests pass and produces a
+# release-proof report artifact.
+#
+# BLOCKING BEHAVIOR (release approval):
+#   - smoke-staging ... P0 smoke failure BLOCKS release approval.
+#                       If the staging smoke tests fail, the release gate
+#                       is closed and no release can proceed until the
+#                       smoke tests pass again.
+#   - release-proof .. produces the release proof report artifact.
+#                      Runs only after smoke-staging succeeds.
+#
+# ARTIFACT:
+#   The final report is uploaded as:
+#     aether-functionality-proof-report-YYYY-MM-DD.md
+#   (dated file name for easy identification in the release-readiness
+#   reports directory).
+# ---------------------------------------------------------------------
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment to smoke test'
+        type: string
+        default: 'staging'
+        required: false
+      proof_tenant_id:
+        description: 'Proof tenant ID for smoke test authentication'
+        type: string
+        default: 'aether-proof-tenant'
+        required: false
+  push:
+    branches: [main]
+    paths:
+      - 'services/backend/**'
+      - 'packages/shared/**'
+      - 'packages/web/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AETHER_STAGING_URL: ${{ secrets.AETHER_STAGING_URL }}
+  PROOF_TENANT_ID: ${{ secrets.PROOF_TENANT_ID }}
+  PROOF_WORKSPACE_ID: ${{ secrets.PROOF_WORKSPACE_ID }}
+
+jobs:
+  # -------------------------------------------------------------------
+  # smoke-staging — P0 smoke test against the staging environment.
+  #
+  # This job runs the pnpm smoke:staging script which validates that
+  # the staging environment is serving correctly, key endpoints respond,
+  # and the proof tenant can authenticate and perform basic operations.
+  #
+  # BLOCKS RELEASE: A failure here means the staging environment is NOT
+  # healthy and release approval must be withheld until the smoke tests
+  # pass.
+  #
+  # The smoke report is uploaded as an artifact to
+  # reports/release-readiness/ for review by the release process.
+  # -------------------------------------------------------------------
+  smoke-staging:
+    name: Smoke Test Staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies (pnpm)
+        run: pnpm install
+
+      - name: Run staging smoke test
+        env:
+          AETHER_STAGING_URL: ${{ secrets.AETHER_STAGING_URL }}
+          PROOF_TENANT_ID: ${{ secrets.PROOF_TENANT_ID }}
+          PROOF_WORKSPACE_ID: ${{ secrets.PROOF_WORKSPACE_ID }}
+          AETHER_ENV: staging
+        run: pnpm smoke:staging
+
+      - name: Upload smoke report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aether-smoke-report-${{ github.run_id }}
+          path: reports/release-readiness/
+          retention-days: 30
+          if-no-files-found: warn
+
+  # -------------------------------------------------------------------
+  # release-proof — Release proof report generation.
+  #
+  # Runs only after smoke-staging succeeds. This job generates the
+  # release proof report that documents the smoke test results and
+  # confirms the staging environment is ready for release.
+  #
+  # The report is uploaded as:
+  #   aether-functionality-proof-report-YYYY-MM-DD.md
+  # where YYYY-MM-DD is the current date, making it easy to identify
+  # the report in the release-readiness reports directory.
+  # -------------------------------------------------------------------
+  release-proof:
+    name: Release Proof Report
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: smoke-staging
+    if: needs.smoke-staging.result == 'success'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies (pnpm)
+        run: pnpm install
+
+      - name: Determine report date for artifact naming
+        id: date
+        run: echo "date=$(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release proof report
+        env:
+          AETHER_STAGING_URL: ${{ secrets.AETHER_STAGING_URL }}
+          PROOF_TENANT_ID: ${{ secrets.PROOF_TENANT_ID }}
+          PROOF_WORKSPACE_ID: ${{ secrets.PROOF_WORKSPACE_ID }}
+          REPORT_DATE: ${{ steps.date.outputs.date }}
+        run: pnpm release:proof
+
+      - name: Upload release proof report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aether-functionality-proof-report-${{ steps.date.outputs.date }}
+          path: reports/release-readiness/aether-functionality-proof-report-*.md
+          retention-days: 90
+          if-no-files-found: warn
