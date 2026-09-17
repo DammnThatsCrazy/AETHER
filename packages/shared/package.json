@@ -7,17 +7,17 @@
   "source": "./index.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./index.ts",
       "default": "./dist/index.js"
     },
     "./consent-receipt": {
-      "types": "./dist/consent-receipt.d.ts",
+      "types": "./consent-receipt.ts",
       "import": "./dist/esm/consent-receipt.js",
       "require": "./dist/consent-receipt.js",
       "default": "./dist/esm/consent-receipt.js"
     },
     "./*": {
-      "types": "./dist/*.d.ts",
+      "types": "./*.ts",
       "import": "./dist/esm/*.js",
       "require": "./dist/*.js",
       "default": "./dist/*.js"
