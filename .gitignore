@@ -127,3 +127,9 @@ release-evidence/
 
 # FPS SDK keys (secrets — never commit)
 .proof-keys.json
+
+# Scratch + throwaway (excluded from PR)
+tmp/
+Smart Contracts/
+.claude/settings.json
+scripts/fix_logger_kwargs.py
