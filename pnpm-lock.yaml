@@ -857,7 +857,7 @@ importers:
   packages/react-native:
     dependencies:
       '@aether/shared':
-        specifier: '*'
+        specifier: ^0.1.0-alpha.0
         version: link:../shared
       '@react-native-async-storage/async-storage':
         specifier: '>=1.0.0'
@@ -906,7 +906,7 @@ importers:
   packages/web:
     dependencies:
       '@aether/shared':
-        specifier: '*'
+        specifier: ^0.1.0-alpha.0
         version: link:../shared
       react:
         specifier: '>=18.0.0'
