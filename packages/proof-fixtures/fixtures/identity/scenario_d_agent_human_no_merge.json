@@ -1,0 +1,16 @@
+{
+  "_fixture_version": 1,
+  "scenario": "D \u2014 Agent \u2194 human must never merge",
+  "blueprint_ref": "\u00a78.3 AGENT_PERSON_MERGE_ATTEMPT, \u00a714",
+  "description": "Agent identity and human person share no merge path even with matching email/user_id; AGENT_PERSON_MERGE_ATTEMPT veto blocks it. Deployment/agent signals are observational only.",
+  "tenant_id": "tenant_agent_human_no_merge",
+  "pair": {
+    "human_user_id": "human_user_1",
+    "agent_id": "agent_001"
+  },
+  "expected": {
+    "veto": "agent_person_merge_attempt",
+    "decision": "blocked"
+  },
+  "invariant": "agent_human_never_merges"
+}

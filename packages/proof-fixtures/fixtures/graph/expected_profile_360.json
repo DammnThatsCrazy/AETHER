@@ -1,0 +1,16 @@
+{
+  "user_id": "user-1",
+  "email": "user@example.com",
+  "name": "Graph User",
+  "identity_sources": ["web-v2"],
+  "attributes": {
+    "device": "desktop",
+    "session_id": "sess-abc123",
+    "first_event": "2025-01-15T10:30:00.000Z",
+    "last_event": "2025-01-15T10:30:00.000Z"
+  },
+  "lifetime_value": 0,
+  "last_active": "2025-01-15T10:30:00.000Z",
+  "total_events": 1,
+  "engagement_score": 0.5
+}

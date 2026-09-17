@@ -1,0 +1,36 @@
+[
+  {
+    "node_id": "node-customer-1",
+    "type": "user",
+    "properties": {
+      "user_id": "cust-1",
+      "email": "buyer@example.com",
+      "platform": "shopify",
+      "shop_id": "shop-001"
+    },
+    "created_at": "2025-01-15T10:30:00.000Z"
+  },
+  {
+    "node_id": "node-order-1001",
+    "type": "conversion",
+    "properties": {
+      "order_id": "order-1001",
+      "total_value": 49.99,
+      "currency": "USD",
+      "platform": "shopify"
+    },
+    "created_at": "2025-01-15T10:30:00.000Z"
+  },
+  {
+    "node_id": "node-item-widget",
+    "type": "event",
+    "properties": {
+      "product_id": "prod-1",
+      "name": "Widget",
+      "quantity": 2,
+      "unit_price": 24.99,
+      "platform": "shopify"
+    },
+    "created_at": "2025-01-15T10:30:00.000Z"
+  }
+]

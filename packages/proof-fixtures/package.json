@@ -1,0 +1,35 @@
+{
+  "name": "@aether/proof-fixtures",
+  "version": "0.1.0-alpha.0",
+  "description": "Aether Functionality Proof Spine — fixture stubs for FPS test scaffolding",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "source": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "fixtures"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@aether/shared": "^0.1.0-alpha.0"
+  },
+  "devDependencies": {
+    "@aether/shared": "^0.1.0-alpha.0",
+    "@aether/proof-contracts": "^0.1.0-alpha.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  }
+}

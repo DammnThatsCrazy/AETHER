@@ -1,0 +1,35 @@
+{
+  "_fixture_version": 1,
+  "scenario": "Anonymous \u2192 known binding",
+  "blueprint_ref": "\u00a77.3, \u00a78.4",
+  "description": "Anonymous SDK activity creates provisional visitor; later identify with matching verified email binds safely to pre-imported profile.",
+  "tenant_id": "tenant_anonymous_to_known",
+  "steps": [
+    {
+      "order": 1,
+      "action": "import_csv",
+      "email": "anon_to_known@example.com",
+      "external_id": "known_contact_001"
+    },
+    {
+      "order": 2,
+      "action": "sdk_heartbeat",
+      "anonymous_id": "anon_anon_to_known"
+    },
+    {
+      "order": 3,
+      "action": "sdk_identify",
+      "anonymous_id": "anon_anon_to_known",
+      "user_id": "user_anon_known",
+      "traits": {
+        "email": "anon_to_known@example.com"
+      }
+    }
+  ],
+  "expected": {
+    "provisional_status": "unresolved",
+    "after_identify_status": "merge_candidate_resolved",
+    "decision": "auto_merge"
+  },
+  "invariant": "anonymous_provisional_then_safe_bind"
+}

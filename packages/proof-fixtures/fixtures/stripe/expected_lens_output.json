@@ -1,0 +1,26 @@
+{
+  "workspace_id": "workspace-001",
+  "lens_name": "payments_lens",
+  "metrics": {
+    "total_payments": 1,
+    "total_revenue_cents": 9999,
+    "avg_payment_cents": 9999,
+    "unique_customers": 1
+  },
+  "top_events": [
+    {
+      "event_type": "checkout.session.completed",
+      "count": 1
+    }
+  ],
+  "segments": [
+    {
+      "segment_id": "seg-stripe-customers",
+      "user_count": 1,
+      "key_properties": {
+        "platform": "stripe"
+      }
+    }
+  ],
+  "computed_at": "2025-01-15T10:30:00.000Z"
+}

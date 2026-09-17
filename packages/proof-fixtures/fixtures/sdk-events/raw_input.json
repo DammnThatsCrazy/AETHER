@@ -1,0 +1,20 @@
+[
+  {
+    "event_type": "pageview",
+    "sdk": "web-v2",
+    "session": "sess-abc123",
+    "device": "desktop",
+    "identity": { "user_id": "user-1", "email": "user@example.com" },
+    "timestamp": "2025-01-15T10:30:00Z",
+    "properties": { "url": "https://example.com/home", "path": "/home" }
+  },
+  {
+    "event_type": "click",
+    "sdk": "web-v2",
+    "session": "sess-abc123",
+    "device": "desktop",
+    "identity": { "user_id": "user-1", "email": "user@example.com" },
+    "timestamp": "2025-01-15T10:31:00Z",
+    "properties": { "element": "button#submit", "text": "Submit" }
+  }
+]

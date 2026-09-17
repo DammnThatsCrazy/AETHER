@@ -1,0 +1,16 @@
+{
+  "user_id": "user-lens-1",
+  "email": "user@example.com",
+  "name": "Lens User",
+  "identity_sources": ["web-v2"],
+  "attributes": {
+    "device_type": "desktop",
+    "lens_name": "user_behavior_lens",
+    "first_event": "2025-01-15T10:30:00.000Z",
+    "last_event": "2025-01-15T10:31:00.000Z"
+  },
+  "lifetime_value": 0,
+  "last_active": "2025-01-15T10:31:00.000Z",
+  "total_events": 2,
+  "engagement_score": 0.5
+}

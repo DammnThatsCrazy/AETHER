@@ -1,0 +1,30 @@
+{
+  "tenant_id": "aether-proof-tenant",
+  "workspace_id": "proof-lab",
+  "platform_id": "web",
+  "environment": "staging",
+  "event_type": "identify",
+  "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+  "session": { "session_id": "sess_abc123" },
+  "device": { "device_id": "dev_web_001", "platform": "web" },
+  "identity": { "anonymous_id": "anon_001", "user_id": "user_002" },
+  "timestamp": "2024-09-11T12:05:00.000Z",
+  "properties": {
+    "traits": {
+      "email": "test@example.com",
+      "plan": "premium",
+      "name": "Test User",
+      "company": "Acme Corp",
+      "job_title": "Engineering Lead",
+      "phone": "+1-555-0100",
+      "locale": "en-US",
+      "timezone": "America/Los_Angeles"
+    }
+  },
+  "source": {
+    "platform": "web",
+    "data_type": "identity",
+    "sdk": "@aether/web",
+    "environment": "staging"
+  }
+}

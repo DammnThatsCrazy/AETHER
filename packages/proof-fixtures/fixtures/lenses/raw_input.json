@@ -1,0 +1,26 @@
+{
+  "workspace_id": "workspace-001",
+  "lens_name": "user_behavior_lens",
+  "lens_type": "behavioral",
+  "input": {
+    "event_types": ["pageview", "click", "purchase"],
+    "time_window": { "start": "2025-01-01T00:00:00Z", "end": "2025-01-15T23:59:59Z" },
+    "filters": { "device_type": "desktop" },
+    "group_by": ["device_type", "event_type"],
+    "aggregations": [
+      { "metric": "count", "field": "events", "operation": "sum", "alias": "total_events" },
+      { "metric": "count", "field": "users", "operation": "distinct", "alias": "unique_users" },
+      { "metric": "avg", "field": "session_duration_ms", "operation": "avg", "alias": "avg_session_duration" }
+    ],
+    "sort": [{ "field": "total_events", "direction": "desc" }],
+    "limit": 50,
+    "offset": 0,
+    "include_distribution": true,
+    "percentiles": [50, 90, 95]
+  },
+  "source": {
+    "platform": "lens",
+    "data_type": "lens",
+    "environment": "staging"
+  }
+}

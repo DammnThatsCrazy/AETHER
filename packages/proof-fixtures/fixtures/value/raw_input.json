@@ -1,0 +1,36 @@
+{
+  "workspace_id": "workspace-001",
+  "value_events": [
+    {
+      "event_id": "val-001",
+      "event_type": "subscription_created",
+      "timestamp": "2025-01-15T10:30:00Z",
+      "user_id": "user-1",
+      "value_type": "recurring",
+      "amount": 29.99,
+      "currency": "USD",
+      "interval": "monthly",
+      "lifetime_value": 359.88
+    },
+    {
+      "event_id": "val-002",
+      "event_type": "purchase",
+      "timestamp": "2025-01-14T15:00:00Z",
+      "user_id": "user-1",
+      "value_type": "one-time",
+      "amount": 49.99,
+      "currency": "USD",
+      "lifetime_value": 49.99
+    },
+    {
+      "event_id": "val-003",
+      "event_type": "refund",
+      "timestamp": "2025-01-13T10:00:00Z",
+      "user_id": "user-2",
+      "value_type": "refund",
+      "amount": -15.00,
+      "currency": "USD",
+      "lifetime_value": -15.00
+    }
+  ]
+}

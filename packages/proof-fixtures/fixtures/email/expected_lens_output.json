@@ -1,0 +1,27 @@
+{
+  "workspace_id": "workspace-001",
+  "lens_name": "email_engagement_lens",
+  "metrics": {
+    "total_messages": 1,
+    "delivered": 1,
+    "opened": 0,
+    "clicked": 0,
+    "bounce_rate": 0
+  },
+  "top_events": [
+    {
+      "event_type": "delivered",
+      "count": 1
+    }
+  ],
+  "segments": [
+    {
+      "segment_id": "seg-email-users",
+      "user_count": 1,
+      "key_properties": {
+        "platform": "email"
+      }
+    }
+  ],
+  "computed_at": "2025-01-15T10:30:00.000Z"
+}

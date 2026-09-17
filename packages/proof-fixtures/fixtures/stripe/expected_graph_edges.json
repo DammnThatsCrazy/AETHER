@@ -1,0 +1,9 @@
+[
+  {
+    "edge_id": "edge-stripe-cust-payment",
+    "source": "node-customer-stripe-1",
+    "target": "node-payment-evt_1",
+    "relation": "paid",
+    "created_at": "2025-01-15T10:30:00.000Z"
+  }
+]

@@ -1,0 +1,80 @@
+[
+  {
+    "node_id": "node-user-1",
+    "type": "user",
+    "labels": ["user", "premium"],
+    "properties": { "user_id": "user-1", "email": "user@example.com", "plan": "pro" },
+    "created_at": "2025-01-01T00:00:00.000Z",
+    "updated_at": "2025-01-15T10:31:00.000Z",
+    "confidence": 0.95,
+    "source": "auth0",
+    "metadata": {
+      "derived_from": ["auth0"],
+      "provenance": ["auth0", "ingestion_pipeline", "graph_db"],
+      "version": "1.0"
+    }
+  },
+  {
+    "node_id": "node-user-2",
+    "type": "user",
+    "labels": ["user", "free"],
+    "properties": { "user_id": "user-2", "email": "visitor@example.com", "plan": "free" },
+    "created_at": "2025-01-10T00:00:00.000Z",
+    "updated_at": "2025-01-15T10:31:00.000Z",
+    "confidence": 0.6,
+    "source": "website",
+    "metadata": {
+      "derived_from": ["website"],
+      "provenance": ["website", "ingestion_pipeline", "graph_db"],
+      "version": "1.0"
+    }
+  },
+  {
+    "node_id": "node-session-1",
+    "type": "session",
+    "labels": ["session", "web"],
+    "properties": { "session_id": "sess-abc123", "device": "desktop", "sdk": "web-v2" },
+    "created_at": "2025-01-15T10:30:00.000Z",
+    "source": "web-v2"
+  },
+  {
+    "node_id": "node-event-1",
+    "type": "event",
+    "labels": ["event", "pageview"],
+    "properties": { "event_type": "pageview", "sdk": "web-v2", "url": "https://example.com/home", "path": "/home" },
+    "created_at": "2025-01-15T10:30:00.000Z",
+    "source": "web-v2"
+  },
+  {
+    "node_id": "node-event-2",
+    "type": "event",
+    "labels": ["event", "click"],
+    "properties": { "event_type": "click", "sdk": "web-v2", "element": "button#submit", "text": "Submit" },
+    "created_at": "2025-01-15T10:31:00.000Z",
+    "source": "web-v2"
+  },
+  {
+    "node_id": "node-campaign-1",
+    "type": "campaign",
+    "labels": ["campaign", "onboarding"],
+    "properties": { "campaign_id": "camp-001", "name": "Welcome Series", "type": "onboarding" },
+    "created_at": "2025-01-01T00:00:00.000Z",
+    "source": "marketing"
+  },
+  {
+    "node_id": "node-conversion-1",
+    "type": "conversion",
+    "labels": ["conversion", "purchase"],
+    "properties": { "conversion_id": "conv-001", "event_type": "purchase", "value": 49.99, "currency": "USD" },
+    "created_at": "2025-01-14T15:00:00.000Z",
+    "source": "shopify"
+  },
+  {
+    "node_id": "node-communication-1",
+    "type": "communication",
+    "labels": ["communication", "email"],
+    "properties": { "communication_id": "comm-001", "type": "email", "subject": "Welcome!", "status": "delivered" },
+    "created_at": "2025-01-15T10:30:00.000Z",
+    "source": "sendgrid"
+  }
+]

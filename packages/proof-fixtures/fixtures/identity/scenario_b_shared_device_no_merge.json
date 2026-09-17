@@ -1,0 +1,16 @@
+{
+  "_fixture_version": 1,
+  "scenario": "B \u2014 Shared device must NOT merge",
+  "blueprint_ref": "\u00a78.3 SHARED_DEVICE, fingerprint_only",
+  "description": "Two people share one device fingerprint; device alone must never trigger auto-merge.",
+  "tenant_id": "tenant_shared_device_no_merge",
+  "signals": [
+    "device_fingerprint: fp_shared_123"
+  ],
+  "expected": {
+    "decision": "blocked",
+    "tier": "blocked",
+    "veto": "shared_device_or_fingerprint_only"
+  },
+  "invariant": "fingerprint_only_blocked"
+}

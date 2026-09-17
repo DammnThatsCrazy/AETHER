@@ -1,0 +1,37 @@
+[
+  {
+    "communication_id": "comm-001",
+    "type": "email",
+    "campaign_id": "camp-001",
+    "recipient": "user@example.com",
+    "recipient_id": "user-1",
+    "subject": "Welcome!",
+    "status": "delivered",
+    "timestamp": "2025-01-15T10:30:00.000Z",
+    "delivered_at": "2025-01-15T10:30:05.000Z",
+    "opened_at": "2025-01-15T10:30:15.000Z",
+    "template": { "template_id": "tpl_welcome_001", "template_name": "Welcome Email" },
+    "source": {
+      "platform": "email",
+      "data_type": "communication",
+      "environment": "staging"
+    }
+  },
+  {
+    "communication_id": "comm-002",
+    "type": "push",
+    "campaign_id": "camp-001",
+    "recipient": "user@example.com",
+    "recipient_id": "user-1",
+    "subject": "Getting Started",
+    "status": "delivered",
+    "timestamp": "2025-01-15T11:00:00.000Z",
+    "delivered_at": "2025-01-15T11:00:02.000Z",
+    "template": { "template_id": "tpl_push_001", "template_name": "Welcome Push" },
+    "source": {
+      "platform": "mobile",
+      "data_type": "communication",
+      "environment": "staging"
+    }
+  }
+]

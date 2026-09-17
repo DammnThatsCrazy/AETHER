@@ -1,0 +1,14 @@
+{
+  "_fixture_version": 1,
+  "scenario": "Deleted / suppressed identity suppression",
+  "blueprint_ref": "\u00a78.3 DELETED_SUPPRESSED_IDENTITY, \u00a715, \u00a741",
+  "description": "Suppressed email identifier blocks verified merge; deleted candidate emits DELETED_SUPPRESSED_IDENTITY veto; source_identity mark_suppressed propagates to claims.",
+  "tenant_id": "tenant_deleted_suppression",
+  "email": "suppress@example.com",
+  "expected": {
+    "suppression_blocks_merge": true,
+    "deleted_veto": "deleted_suppressed_identity",
+    "claims_suppressed": true
+  },
+  "invariant": "deleted_suppressed_blocks_resolution"
+}

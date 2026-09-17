@@ -1,0 +1,49 @@
+{
+  "tenant_id": "aether-proof-tenant",
+  "workspace_id": "proof-lab",
+  "platform_id": "mobile",
+  "environment": "staging",
+  "event_type": "sdk_batch_sent",
+  "sdk": { "name": "@aether/ios", "version": "0.1.0-alpha.0" },
+  "session": { "session_id": "sess_offline_001" },
+  "device": { "device_id": "dev_ios_001", "platform": "ios" },
+  "identity": { "anonymous_id": "anon_offline_001", "user_id": "user_004" },
+  "timestamp": "2024-09-11T12:25:00.000Z",
+  "properties": {
+    "batch_id": "batch_offline_001",
+    "queued_events": [
+      {
+        "id": "q_001",
+        "type": "track",
+        "payload": { "eventName": "page_view", "properties": { "path": "/demo" } },
+        "enqueuedAt": "2024-09-11T10:00:00.000Z",
+        "retryCount": 0
+      },
+      {
+        "id": "q_002",
+        "type": "track",
+        "payload": { "eventName": "button_click", "properties": { "button": "cta" } },
+        "enqueuedAt": "2024-09-11T10:01:00.000Z",
+        "retryCount": 1
+      },
+      {
+        "id": "q_003",
+        "type": "identify",
+        "payload": { "userId": "user_004", "traits": { "email": "offline@example.com" } },
+        "enqueuedAt": "2024-09-11T10:02:00.000Z",
+        "retryCount": 0
+      }
+    ],
+    "total_queued": 3,
+    "delivered_count": 3,
+    "failed_count": 0,
+    "queue_duration_ms": 86400000,
+    "sync_reason": "back_online"
+  },
+  "source": {
+    "platform": "mobile",
+    "data_type": "event",
+    "sdk": "@aether/ios",
+    "environment": "staging"
+  }
+}

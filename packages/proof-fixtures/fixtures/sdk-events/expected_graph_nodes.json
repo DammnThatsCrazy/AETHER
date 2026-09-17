@@ -1,0 +1,43 @@
+[
+  {
+    "node_id": "node-user-1",
+    "type": "user",
+    "properties": {
+      "user_id": "user-1",
+      "email": "user@example.com"
+    },
+    "created_at": "2025-01-15T10:30:00.000Z"
+  },
+  {
+    "node_id": "node-session-1",
+    "type": "session",
+    "properties": {
+      "session_id": "sess-abc123",
+      "device": "desktop",
+      "sdk": "web-v2"
+    },
+    "created_at": "2025-01-15T10:30:00.000Z"
+  },
+  {
+    "node_id": "node-event-1",
+    "type": "event",
+    "properties": {
+      "event_type": "pageview",
+      "sdk": "web-v2",
+      "url": "https://example.com/home",
+      "path": "/home"
+    },
+    "created_at": "2025-01-15T10:30:00.000Z"
+  },
+  {
+    "node_id": "node-event-2",
+    "type": "event",
+    "properties": {
+      "event_type": "click",
+      "sdk": "web-v2",
+      "element": "button#submit",
+      "text": "Submit"
+    },
+    "created_at": "2025-01-15T10:31:00.000Z"
+  }
+]

@@ -1,0 +1,71 @@
+{
+  "workspace_id": "workspace-001",
+  "lens_name": "user_behavior_lens",
+  "lens_type": "behavioral",
+  "metrics": {
+    "total_events": 150,
+    "unique_users": 42,
+    "average_session_duration_ms": 340000,
+    "conversion_rate": 0.085,
+    "bounce_rate": 0.25,
+    "avg_events_per_session": 3.57
+  },
+  "top_events": [
+    { "event_type": "pageview", "count": 80, "percentage": 0.533 },
+    { "event_type": "click", "count": 50, "percentage": 0.333 },
+    { "event_type": "purchase", "count": 20, "percentage": 0.133 }
+  ],
+  "segments": [
+    {
+      "segment_id": "seg-desktop-users",
+      "name": "Desktop Users",
+      "user_count": 42,
+      "percentage": 0.82,
+      "rank": 1,
+      "key_properties": { "device_type": "desktop" },
+      "description": "Users on desktop devices",
+      "metrics": { "total_value": 2800.00, "conversion_count": 18, "average_value": 155.56 }
+    },
+    {
+      "segment_id": "seg-mobile-users",
+      "name": "Mobile Users",
+      "user_count": 9,
+      "percentage": 0.18,
+      "rank": 2,
+      "key_properties": { "device_type": "mobile" },
+      "description": "Users on mobile devices",
+      "metrics": { "total_value": 700.00, "conversion_count": 2, "average_value": 350.00 }
+    }
+  ],
+  "distribution": {
+    "session_duration": [
+      { "bucket": "0-30s", "count": 30, "percentage": 0.2 },
+      { "bucket": "30-60s", "count": 45, "percentage": 0.3 },
+      { "bucket": "1-2m", "count": 40, "percentage": 0.267 },
+      { "bucket": "2-5m", "count": 25, "percentage": 0.167 },
+      { "bucket": "5m+", "count": 10, "percentage": 0.067 }
+    ],
+    "event_type": [
+      { "bucket": "pageview", "count": 80, "percentage": 0.533 },
+      { "bucket": "click", "count": 50, "percentage": 0.333 },
+      { "bucket": "purchase", "count": 20, "percentage": 0.133 }
+    ]
+  },
+  "time_series": [
+    { "timestamp": "2025-01-01T00:00:00.000Z", "value": 8 },
+    { "timestamp": "2025-01-02T00:00:00.000Z", "value": 12 },
+    { "timestamp": "2025-01-03T00:00:00.000Z", "value": 10 },
+    { "timestamp": "2025-01-04T00:00:00.000Z", "value": 15 },
+    { "timestamp": "2025-01-05T00:00:00.000Z", "value": 18 }
+  ],
+  "computed_at": "2025-01-15T10:31:00.000Z",
+  "computation_time_ms": 234,
+  "total_records": 150,
+  "is_partial": false,
+  "warnings": [],
+  "source": {
+    "platform": "lens",
+    "data_type": "lens",
+    "environment": "staging"
+  }
+}

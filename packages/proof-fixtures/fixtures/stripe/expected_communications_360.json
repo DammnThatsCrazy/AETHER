@@ -1,0 +1,19 @@
+[
+  {
+    "communication_id": "comm-stripe-001",
+    "type": "email",
+    "channel": "email",
+    "campaign_id": "camp-payment-receipt",
+    "recipient": "payer@example.com",
+    "subject": "Payment Receipt",
+    "status": "delivered",
+    "timestamp": "2025-01-15T10:30:05.000Z",
+    "delivered_at": "2025-01-15T10:30:06.000Z",
+    "source": {
+      "platform": "stripe",
+      "data_type": "communication",
+      "platform_id": "acct_1234567890",
+      "environment": "staging"
+    }
+  }
+]

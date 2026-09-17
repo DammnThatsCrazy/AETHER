@@ -1,0 +1,15 @@
+{
+  "user_id": "user-1",
+  "email": "user@example.com",
+  "name": "Jane User",
+  "identity_sources": ["web-v2"],
+  "attributes": {
+    "device": "desktop",
+    "first_seen": "2025-01-15T10:30:00.000Z",
+    "last_seen": "2025-01-15T10:31:00.000Z"
+  },
+  "lifetime_value": 0,
+  "last_active": "2025-01-15T10:31:00.000Z",
+  "total_events": 2,
+  "engagement_score": 0.5
+}

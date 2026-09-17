@@ -1,0 +1,26 @@
+{
+  "workspace_id": "workspace-001",
+  "lens_name": "commerce_lens",
+  "metrics": {
+    "total_orders": 1,
+    "total_revenue": 49.99,
+    "avg_order_value": 49.99,
+    "unique_customers": 1
+  },
+  "top_events": [
+    {
+      "event_type": "order_created",
+      "count": 1
+    }
+  ],
+  "segments": [
+    {
+      "segment_id": "seg-shopify-buyers",
+      "user_count": 1,
+      "key_properties": {
+        "platform": "shopify"
+      }
+    }
+  ],
+  "computed_at": "2025-01-15T10:30:00.000Z"
+}

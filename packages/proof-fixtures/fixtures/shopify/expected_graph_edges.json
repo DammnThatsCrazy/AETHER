@@ -1,0 +1,16 @@
+[
+  {
+    "edge_id": "edge-cust-order",
+    "source": "node-customer-1",
+    "target": "node-order-1001",
+    "relation": "placed",
+    "created_at": "2025-01-15T10:30:00.000Z"
+  },
+  {
+    "edge_id": "edge-order-items",
+    "source": "node-order-1001",
+    "target": "node-item-widget",
+    "relation": "contains",
+    "created_at": "2025-01-15T10:30:00.000Z"
+  }
+]

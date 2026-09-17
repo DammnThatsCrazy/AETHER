@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Proof Android",
+    "slug": "proof-android",
+    "scheme": "aether-proof-android",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "com.aether.proof.android",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.aether.proof.android",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "proof.aether.example" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "plugins": [],
+    "extra": {
+      "appKind": "proof-android"
+    }
+  }
+}

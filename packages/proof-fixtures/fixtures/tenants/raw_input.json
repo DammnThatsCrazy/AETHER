@@ -1,0 +1,17 @@
+{
+  "tenant_id": "tenant-001",
+  "workspace_id": "workspace-001",
+  "platform_id": "web",
+  "environment": "production",
+  "raw_events": [
+    {
+      "event_type": "pageview",
+      "sdk": "web-v2",
+      "session": " sess-abc123",
+      "device": "desktop",
+      "identity": { "user_id": "user-1", "email": "user@example.com" },
+      "timestamp": "2025-01-15T10:30:00Z",
+      "properties": { "url": "https://example.com/home", "path": "/home" }
+    }
+  ]
+}

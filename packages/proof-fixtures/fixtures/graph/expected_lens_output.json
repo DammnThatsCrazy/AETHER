@@ -1,0 +1,26 @@
+{
+  "workspace_id": "workspace-001",
+  "lens_name": "graph_overview_lens",
+  "metrics": {
+    "total_nodes": 3,
+    "total_edges": 2,
+    "unique_users": 1,
+    "avg_degree": 1
+  },
+  "top_events": [
+    {
+      "event_type": "pageview",
+      "count": 1
+    }
+  ],
+  "segments": [
+    {
+      "segment_id": "seg-graph-users",
+      "user_count": 1,
+      "key_properties": {
+        "device": "desktop"
+      }
+    }
+  ],
+  "computed_at": "2025-01-15T10:30:00.000Z"
+}

@@ -1,0 +1,36 @@
+{
+  "workspace_id": "workspace-001",
+  "normalized_journeys": [
+    {
+      "journey_id": "journey-001",
+      "name": "First Purchase",
+      "description": "Onboarding journey to first purchase",
+      "journey_type": "onboarding",
+      "status": "active",
+      "created_at": "2025-01-01T00:00:00.000Z",
+      "updated_at": "2025-01-15T00:00:00.000Z",
+      "started_at": "2025-01-15T10:30:00.000Z",
+      "steps": [
+        { "step_id": "step-1", "name": "Sign Up", "order": 1, "required": true, "description": "Create account", "entry_conditions": {}, "completion_conditions": { "event": "signup_completed" } },
+        { "step_id": "step-2", "name": "Browse Products", "order": 2, "required": true, "description": "View product catalog", "entry_conditions": {}, "completion_conditions": { "event": "product_viewed" } },
+        { "step_id": "step-3", "name": "Add to Cart", "order": 3, "required": true, "description": "Add item to cart", "entry_conditions": {}, "completion_conditions": { "event": "cart_item_added" } },
+        { "step_id": "step-4", "name": "Purchase", "order": 4, "required": true, "description": "Complete checkout", "entry_conditions": {}, "completion_conditions": { "event": "order_completed" } }
+      ],
+      "entered_count": 150,
+      "completed_count": 85
+    },
+    {
+      "journey_id": "journey-002",
+      "name": "Winback Campaign",
+      "description": "Re-engage dormant users",
+      "journey_type": "reengagement",
+      "status": "draft",
+      "created_at": "2025-01-10T00:00:00.000Z",
+      "steps": [
+        { "step_id": "step-5", "name": "Send Email", "order": 1, "required": true, "description": "Send winback email", "entry_conditions": {}, "completion_conditions": { "event": "email_sent" } },
+        { "step_id": "step-6", "name": "Wait 3 Days", "order": 2, "required": false, "description": "Wait for response", "timeout_ms": 259200000 },
+        { "step_id": "step-7", "name": "Send Push", "order": 3, "required": true, "description": "Send push notification", "entry_conditions": { "condition": "no_open" }, "completion_conditions": { "event": "notification_delivered" } }
+      ]
+    }
+  ]
+}

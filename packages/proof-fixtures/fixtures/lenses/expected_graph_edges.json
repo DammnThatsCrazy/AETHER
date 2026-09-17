@@ -1,0 +1,16 @@
+[
+  {
+    "edge_id": "edge-lens-user-event-1",
+    "source": "node-user-lens-1",
+    "target": "node-event-lens-1",
+    "relation": "generated",
+    "created_at": "2025-01-15T10:30:00.000Z"
+  },
+  {
+    "edge_id": "edge-lens-user-event-2",
+    "source": "node-user-lens-1",
+    "target": "node-event-lens-2",
+    "relation": "generated",
+    "created_at": "2025-01-15T10:31:00.000Z"
+  }
+]

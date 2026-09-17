@@ -1,0 +1,33 @@
+{
+  "_fixture_version": 1,
+  "scenario": "Connector reimport idempotency",
+  "blueprint_ref": "\u00a716.1",
+  "description": "Repeated Shopify/CSV/SDK imports with same external_id / idempotency_key must not duplicate source identities, claims, profiles, journeys, or revenue.",
+  "tenant_id": "tenant_connector_reimport_idempotency",
+  "reimports": [
+    {
+      "source": "shopify",
+      "external_id": "shopify_cust_123",
+      "times": 2,
+      "expect_same_id": true
+    },
+    {
+      "source": "csv",
+      "external_id": "csv_row_001",
+      "times": 2,
+      "expect_same_id": true
+    },
+    {
+      "source": "sdk",
+      "user_id": "user_idem_001",
+      "anonymous_id": "anon_idem_001",
+      "times": 2,
+      "expect_same_id": true
+    }
+  ],
+  "expected": {
+    "duplicate_claims": 0,
+    "duplicate_profiles": 0
+  },
+  "invariant": "idempotent_reimport"
+}

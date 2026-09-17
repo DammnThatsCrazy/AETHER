@@ -1,0 +1,32 @@
+{
+  "platform": "email",
+  "provider": "sendgrid",
+  "api_key_ref": "sg_api_key_xxx",
+  "messages": [
+    {
+      "msg_id": "msg-1",
+      "from": "noreply@example.com",
+      "to": ["user@example.com"],
+      "subject": "Welcome!",
+      "event": "delivered",
+      "timestamp": "2025-01-15T10:30:00Z"
+    },
+    {
+      "msg_id": "msg-2",
+      "from": "noreply@example.com",
+      "to": ["user@example.com"],
+      "subject": "Getting Started",
+      "event": "opened",
+      "timestamp": "2025-01-15T10:35:00Z"
+    },
+    {
+      "msg_id": "msg-3",
+      "from": "noreply@example.com",
+      "to": ["bounce@example.com"],
+      "subject": "Welcome!",
+      "event": "bounced",
+      "timestamp": "2025-01-15T10:40:00Z",
+      "reason": "hard_bounce"
+    }
+  ]
+}

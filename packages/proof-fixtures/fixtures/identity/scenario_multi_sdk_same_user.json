@@ -1,0 +1,19 @@
+{
+  "_fixture_version": 1,
+  "scenario": "Multi-SDK same user",
+  "blueprint_ref": "\u00a714.3",
+  "description": "Web SDK, iOS SDK, Android SDK each identify as same user_id; all must map to one canonical entity.",
+  "tenant_id": "tenant_multi_sdk_same_user",
+  "platforms": [
+    "aether-web:marketing_site",
+    "aether-ios:consumer_app",
+    "aether-android:consumer_app"
+  ],
+  "user_id": "user_multi_sdk",
+  "email": "multi_sdk@example.com",
+  "expected": {
+    "canonical_count": 1,
+    "source_identities": 3
+  },
+  "invariant": "single_canonical_for_same_user_across_sdks"
+}

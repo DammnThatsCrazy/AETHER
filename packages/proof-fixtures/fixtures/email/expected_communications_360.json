@@ -1,0 +1,11 @@
+[
+  {
+    "communication_id": "comm-email-001",
+    "type": "email",
+    "campaign_id": "camp-email-default",
+    "recipient": "user@example.com",
+    "subject": "Welcome!",
+    "status": "delivered",
+    "timestamp": "2025-01-15T10:30:00.000Z"
+  }
+]

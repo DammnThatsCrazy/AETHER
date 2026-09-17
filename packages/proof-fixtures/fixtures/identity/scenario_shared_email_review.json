@@ -1,0 +1,17 @@
+{
+  "_fixture_version": 1,
+  "scenario": "Shared inbox \u2192 review, not merge",
+  "blueprint_ref": "\u00a78.3 SHARED_INBOX",
+  "description": "Role addresses like support@, info@, family@ indicate shared inbox, not personal identity. Must emit SHARED_INBOX veto and require manual review.",
+  "tenant_id": "tenant_shared_email_review",
+  "emails": [
+    "support@example.com",
+    "info@example.com",
+    "family@example.com"
+  ],
+  "expected": {
+    "veto": "shared_inbox",
+    "decision": "candidate_not_merge"
+  },
+  "invariant": "shared_inbox_queues_review"
+}

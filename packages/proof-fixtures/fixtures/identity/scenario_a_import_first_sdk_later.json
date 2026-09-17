@@ -1,0 +1,53 @@
+{
+  "_fixture_version": 1,
+  "scenario": "A \u2014 CSV+Shopify import then SDK late binding",
+  "blueprint_ref": "\u00a77.2, \u00a714.3, \u00a718.3",
+  "description": "Two pre-existing source identities (CSV row + Shopify customer) share email jordan@example.com. Later SDK heartbeat+identify with same email must resolve to existing canonical without duplicating profile, journey restated, Profile 360 explains merge.",
+  "tenant_id": "tenant_import_first_sdk_later",
+  "steps": [
+    {
+      "order": 1,
+      "action": "import_csv",
+      "email": "jordan@example.com",
+      "external_id": "csv_row_001",
+      "verification": "observed"
+    },
+    {
+      "order": 2,
+      "action": "import_shopify",
+      "email": "jordan@example.com",
+      "external_id": "shopify_cust_123",
+      "verification": "provider_verified"
+    },
+    {
+      "order": 3,
+      "action": "sdk_heartbeat",
+      "anonymous_id": "anon_001"
+    },
+    {
+      "order": 4,
+      "action": "sdk_page_view",
+      "anonymous_id": "anon_001"
+    },
+    {
+      "order": 5,
+      "action": "sdk_identify",
+      "anonymous_id": "anon_001",
+      "user_id": "app_user_99",
+      "traits": {
+        "email": "jordan@example.com"
+      }
+    }
+  ],
+  "expected": {
+    "duplicate_profiles": 0,
+    "resolved_canonical": "person_abc123",
+    "confidence": 0.98,
+    "decision": "auto_merge",
+    "restated_projections": [
+      "profile_360",
+      "journey"
+    ]
+  },
+  "invariant": "no_duplicate_profile_on_late_binding"
+}

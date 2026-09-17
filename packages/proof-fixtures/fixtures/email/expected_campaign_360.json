@@ -1,0 +1,8 @@
+{
+  "campaign_id": "camp-email-default",
+  "name": "Email Welcome",
+  "campaign_type": "onboarding",
+  "status": "active",
+  "created_at": "2025-01-15T10:30:00.000Z",
+  "channels": ["email"]
+}

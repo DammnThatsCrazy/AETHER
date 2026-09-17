@@ -1,0 +1,13 @@
+[
+  {
+    "communication_id": "comm-sdk-001",
+    "type": "email",
+    "channel": "email",
+    "campaign_id": "camp-none",
+    "recipient": "user@example.com",
+    "subject": "None",
+    "status": "none",
+    "timestamp": "2025-01-15T10:31:00.000Z",
+    "properties": { "note": "No communication data in SDK events scenario" }
+  }
+]

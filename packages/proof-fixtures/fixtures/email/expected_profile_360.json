@@ -1,0 +1,15 @@
+{
+  "user_id": "user-email-1",
+  "email": "user@example.com",
+  "name": "Email User",
+  "identity_sources": ["sendgrid"],
+  "attributes": {
+    "platform": "email",
+    "provider": "sendgrid",
+    "first_message": "2025-01-15T10:30:00.000Z"
+  },
+  "lifetime_value": 0,
+  "last_active": "2025-01-15T10:30:00.000Z",
+  "total_events": 1,
+  "engagement_score": 0.4
+}

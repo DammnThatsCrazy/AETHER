@@ -1,0 +1,24 @@
+{
+  "tenant_id": "aether-proof-tenant",
+  "workspace_id": "proof-lab",
+  "platform_id": "web",
+  "environment": "staging",
+  "event_type": "heartbeat",
+  "sdk": { "name": "@aether/web", "version": "0.1.0-alpha.0" },
+  "session": { "session_id": "sess_test_001" },
+  "device": { "device_id": "dev_web_001", "platform": "web" },
+  "identity": { "anonymous_id": "anon_001" },
+  "timestamp": "2024-09-11T12:00:00.000Z",
+  "properties": {
+    "status": "alive",
+    "uptime_ms": 1800000,
+    "memory_mb": 42,
+    "cpu_percent": 2.5
+  },
+  "source": {
+    "platform": "web",
+    "data_type": "event",
+    "sdk": "@aether/web",
+    "environment": "staging"
+  }
+}
