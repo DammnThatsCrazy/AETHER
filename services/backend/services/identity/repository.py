@@ -21,6 +21,7 @@ from .models import (
     EdgeType,
     EntityType,
     IdentityAlias,
+    IdentityClaimRecord,
     IdentityCluster,
     IdentityConflict,
     IdentityEdge,
@@ -31,9 +32,9 @@ from .models import (
     IdentitySubject,
     IdentitySplitEvent,
     MergeDecision,
+    SourceIdentityRecord,
     SubjectStatus,
     ProjectionRestatementJobRecord,
-    SourceIdentityRecord,
 )
 
 

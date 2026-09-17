@@ -23,9 +23,9 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
-from shared.runner import run_cmd, log
+from shared.runner import log, run_cmd
 
 # --------------------------------------------------------------------------- #
 # Constants
@@ -46,7 +46,7 @@ DATA_MODULE_NAMES = [
 ]
 
 # Map manifest module key -> filename on CDN
-_MODULE_FILE_MAP: Dict[str, str] = {
+_MODULE_FILE_MAP: dict[str, str] = {
     "chainRegistry": "chain-registry",
     "protocolRegistry": "protocol-registry",
     "walletLabels": "wallet-labels",
@@ -54,7 +54,7 @@ _MODULE_FILE_MAP: Dict[str, str] = {
 }
 
 # Default check interval per platform (ms)
-_CHECK_INTERVAL: Dict[str, int] = {
+_CHECK_INTERVAL: dict[str, int] = {
     "web": 3_600_000,          # 1 hour
     "ios": 14_400_000,         # 4 hours
     "android": 14_400_000,     # 4 hours
@@ -83,7 +83,7 @@ def _file_size(path: str) -> int:
 def _collect_data_module_info(
     data_modules_dir: str,
     cdn_base: str,
-) -> Dict[str, Dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     """
     Scan the data-modules output directory and collect version, hash, and
     size metadata for each module.
@@ -93,7 +93,7 @@ def _collect_data_module_info(
 
     Returns a dict keyed by manifest module name (camelCase).
     """
-    modules: Dict[str, Dict[str, Any]] = {}
+    modules: dict[str, dict[str, Any]] = {}
     dm_path = Path(data_modules_dir)
 
     for module_key, file_stem in _MODULE_FILE_MAP.items():
@@ -142,7 +142,7 @@ def _collect_data_module_info(
 def generate_manifest(
     platform: str,
     sdk_version: str,
-    data_modules_info: Dict[str, Dict[str, Any]],
+    data_modules_info: dict[str, dict[str, Any]],
     cdn_base: str = DEFAULT_CDN_BASE,
 ) -> dict:
     """
@@ -159,7 +159,7 @@ def generate_manifest(
     """
     now = datetime.now(timezone.utc).isoformat()
 
-    manifest: Dict[str, Any] = {
+    manifest: dict[str, Any] = {
         "latestVersion": sdk_version,
         "minimumVersion": _derive_minimum_version(sdk_version),
         "updateUrgency": "normal",
@@ -218,7 +218,7 @@ def _derive_minimum_version(latest: str) -> str:
     return "1.0.0"
 
 
-def _default_feature_flags(platform: str) -> Dict[str, bool]:
+def _default_feature_flags(platform: str) -> dict[str, bool]:
     """Return default feature flags per platform."""
     base_flags = {
         "otaDataUpdates": True,
@@ -239,7 +239,7 @@ def publish_manifests(
     cdn_base: str = DEFAULT_CDN_BASE,
     data_modules_dir: str = "data-modules",
     dry_run: bool = False,
-) -> Dict[str, dict]:
+) -> dict[str, dict]:
     """
     Generate and publish manifest files for all platforms.
 
@@ -264,9 +264,9 @@ def publish_manifests(
     data_info = _collect_data_module_info(data_modules_dir, cdn_base)
     log(f"Collected metadata for {len(data_info)} data modules", stage=STAGE)
 
-    results: Dict[str, dict] = {}
-    s3_paths: List[str] = []
-    cf_paths: List[str] = []
+    results: dict[str, dict] = {}
+    s3_paths: list[str] = []
+    cf_paths: list[str] = []
 
     for platform in PLATFORMS:
         # Step 2 -- Generate manifest
@@ -310,7 +310,7 @@ def publish_manifests(
     return results
 
 
-def _invalidate_cloudfront(paths: List[str]) -> bool:
+def _invalidate_cloudfront(paths: list[str]) -> bool:
     """
     Create a CloudFront invalidation for the given paths.
 

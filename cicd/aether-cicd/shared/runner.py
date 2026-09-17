@@ -9,7 +9,7 @@ from __future__ import annotations
 import subprocess
 import time
 from dataclasses import dataclass
-from typing import Callable, Optional, TypeVar
+from typing import Callable, TypeVar
 
 T = TypeVar("T")
 
@@ -44,7 +44,7 @@ def run_cmd(
     cmd: str,
     cwd: str = ".",
     timeout: int = 600,
-    env: Optional[dict] = None,
+    env: dict | None = None,
     capture: bool = True,
 ) -> CommandResult:
     """

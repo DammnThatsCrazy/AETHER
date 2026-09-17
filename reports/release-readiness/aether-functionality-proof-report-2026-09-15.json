@@ -1,0 +1,90 @@
+{
+  "report_version": "1.0.0",
+  "generated_at": "2026-09-16T00:07:58.798Z",
+  "ticket": "FPS-100",
+  "release_metadata": {
+    "release_version": "0.1.0-alpha.0",
+    "commit_sha": "b4546703348ee78c62cd404583935f787d4b0fb4",
+    "environment": "staging",
+    "proof_tenant_id": "aether-proof-tenant",
+    "proof_workspace_id": "proof-lab"
+  },
+  "sdk_status": [
+    {
+      "platform": "web",
+      "status": "not-run",
+      "evidence": ""
+    },
+    {
+      "platform": "react",
+      "status": "not-run",
+      "evidence": ""
+    },
+    {
+      "platform": "ios",
+      "status": "not-run",
+      "evidence": ""
+    },
+    {
+      "platform": "android",
+      "status": "not-run",
+      "evidence": ""
+    }
+  ],
+  "connector_status": [
+    {
+      "connector": "stripe",
+      "status": "not-run",
+      "evidence": ""
+    },
+    {
+      "connector": "shopify",
+      "status": "not-run",
+      "evidence": ""
+    },
+    {
+      "connector": "email",
+      "status": "not-run",
+      "evidence": ""
+    }
+  ],
+  "pipeline_status": {
+    "ingestion": "not-run",
+    "graph": "not-run",
+    "identity": "not-run",
+    "lens": "not-run"
+  },
+  "surface_360_status": [
+    {
+      "surface": "profile",
+      "status": "not-run",
+      "evidence": ""
+    },
+    {
+      "surface": "campaign",
+      "status": "not-run",
+      "evidence": ""
+    },
+    {
+      "surface": "communications",
+      "status": "not-run",
+      "evidence": ""
+    }
+  ],
+  "real_device_status": "no-evidence",
+  "known_failures": [
+    "No staging smoke report found — smoke tests may not have run."
+  ],
+  "degraded_features": [],
+  "manual_verification_evidence": [
+    "No automated evidence available; manual verification required."
+  ],
+  "automated_verification_evidence": [],
+  "release_blockers": [
+    "Missing staging smoke report — cannot verify P0 gates."
+  ],
+  "go_no_go": {
+    "decision": "NO-GO",
+    "reason": "1 P0 blocker(s) present. Graph write did not pass. Lens activation did not pass. Therefore, the release is NO-GO."
+  }
+}

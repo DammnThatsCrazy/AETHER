@@ -28,6 +28,7 @@ import { Web3Module } from './web3';
 import { SemanticContextCollector } from './context/semantic-context';
 import { TrafficSourceTracker } from './tracking/traffic-source-tracker';
 import { RewardClient, createRewardClient } from './rewards/reward-client';
+import type { Diagnostics } from './health';
 import { EcommerceModule } from './modules/ecommerce';
 import { FormAnalyticsModule } from './modules/form-analytics';
 import { FeatureFlagModule } from './modules/feature-flags';
@@ -397,9 +398,9 @@ class AetherSDK implements AetherSDKInterface {
     try {
       await this.eventQueue.flush();
       this.healthAgent?.setLastFlushStatus('success');
-    } catch {
+    } catch (e) {
       this.healthAgent?.setLastFlushStatus('failed');
-      throw;
+      throw e;
     }
   }
 

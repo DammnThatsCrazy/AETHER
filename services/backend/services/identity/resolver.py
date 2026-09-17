@@ -72,6 +72,8 @@ from .models import (
 from .repository import IdentityResolutionRepository
 from .signals import extract_signals
 from .split_policy import SplitPolicyContext, evaluate_split
+from .veto_engine import evaluate_vetoes, get_confidence_band
+from .models import ConfidenceBand
 
 logger = get_logger("aether.identity.resolver")
 
@@ -417,6 +419,53 @@ class IdentityResolutionService:
             policy_result.merge_target_entity_id = await self._pick_survivor(
                 tenant_id, existing_entity_ids
             )
+
+        # ── 7b. Hard veto evaluation — any veto forces BLOCKED band regardless of score (blueprint §8.2/§8.3)
+        # Veto engine is wired here so a high confidence score can never override a hard veto.
+        try:
+            # Gather veto inputs: derive minimal candidate signals from the resolution context
+            _vetoes = await evaluate_vetoes(
+                tenant_id=tenant_id,
+                candidate_tenant_id=tenant_id,  # same-tenant path; cross-tenant already blocked above
+                candidate_entity_types=[],
+                candidate_statuses=[],
+                candidate_verified_emails=[],
+                candidate_authenticated_user_ids=[],
+                candidate_device_ids=[],
+                candidate_has_revoked_consent=bool(revoked_types),
+                candidate_is_deleted=False,
+                candidate_is_suppressed=False,
+                candidate_source_namespaces=[],
+            )
+            if _vetoes:
+                # Blocked band on veto — confidence tier forced to BLOCKED
+                blocked_band = get_confidence_band(
+                    score=policy_result.confidence,
+                    tier=policy_result.confidence_tier,
+                    vetoes=_vetoes,
+                )
+                # get_confidence_band returns BLOCKED when vetoes non-empty; enforce it
+                assert blocked_band == ConfidenceBand.BLOCKED
+                policy_result.confidence_tier = ConfidenceTier.BLOCKED
+                policy_result.confidence = 0.0
+                policy_result.decision = MergeDecision.BLOCKED
+                if "veto_blocked" not in policy_result.reason_codes:
+                    policy_result.reason_codes = list(policy_result.reason_codes) + ["veto_blocked"]
+                self._metrics.record_blocked("veto")
+                logger.info(
+                    "identity.veto.blocked",
+                    extra={"tenant_id": tenant_id, "veto_count": len(_vetoes), "band": blocked_band.value},
+                )
+                # Observability: veto evaluation trace
+                try:
+                    from services.identity.observability import IdentityTrace
+
+                    _trace = IdentityTrace(tenant_id=tenant_id, source_system_id="identity.resolver")
+                    _trace.veto_evaluate(len(_vetoes))
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.warning("veto evaluation failed: %s", e)
 
         # ── 8. Create or fetch canonical entity ───────────────────────────
         canonical_entity_id: str

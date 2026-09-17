@@ -8,8 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional
-
 
 # --------------------------------------------------------------------------- #
 # ENVIRONMENTS
@@ -63,7 +61,7 @@ BRANCH_CONFIG = BranchConfig()
 # MONOREPO STRUCTURE  (Turborepo)
 # --------------------------------------------------------------------------- #
 
-REPO_PACKAGES: Dict[str, Dict[str, str]] = {
+REPO_PACKAGES: dict[str, dict[str, str]] = {
     "packages/web":              {"lang": "typescript", "tool": "esbuild"},
     "packages/ios":              {"lang": "swift",      "tool": "xcodebuild"},
     "packages/android":          {"lang": "kotlin",     "tool": "gradle"},
@@ -71,7 +69,7 @@ REPO_PACKAGES: Dict[str, Dict[str, str]] = {
     "packages/shared":           {"lang": "typescript", "tool": "esbuild"},
 }
 
-REPO_SERVICES: Dict[str, Dict[str, str]] = {
+REPO_SERVICES: dict[str, dict[str, str]] = {
     "services/backend/services/ingestion":    {"lang": "python", "runtime": "python", "tool": "docker"},
     "services/backend/services/identity":     {"lang": "python", "runtime": "python", "tool": "docker"},
     "services/backend/services/analytics":    {"lang": "python", "runtime": "python", "tool": "docker"},
@@ -83,7 +81,7 @@ REPO_SERVICES: Dict[str, Dict[str, str]] = {
     "services/backend/services/admin":        {"lang": "python", "runtime": "python", "tool": "docker"},
 }
 
-REPO_OTHER: Dict[str, str] = {
+REPO_OTHER: dict[str, str] = {
     "deploy/aws/terraform/": "Terraform IaC for all AWS resources",
     "services/ml/":          "ML training pipelines, serving, and model configs",
     "frontend/aether/":      "Customer-facing React application",
@@ -100,10 +98,10 @@ class CIStage:
     name: str
     actions: str
     quality_gate: str
-    tools: List[str]
+    tools: list[str]
     timeout_minutes: int = 15
     required: bool = True
-    parallelisable_with: List[int] = field(default_factory=list)
+    parallelisable_with: list[int] = field(default_factory=list)
 
 
 CI_STAGES = [
@@ -162,7 +160,7 @@ class CDStage:
     name: str
     actions: str
     rollback_trigger: str
-    traffic_pct: Optional[int] = None
+    traffic_pct: int | None = None
     validation_minutes: int = 5
     requires_approval: bool = False
 
@@ -237,7 +235,7 @@ class QualityThresholds:
     max_canary_error_rate_pct: float = 1.0
     max_canary_p99_latency_ms: int = 500
     canary_traffic_pct: int = 5
-    progressive_rollout_steps: List[int] = field(
+    progressive_rollout_steps: list[int] = field(
         default_factory=lambda: [5, 25, 50, 100]
     )
     progressive_step_wait_minutes: int = 5
@@ -299,7 +297,7 @@ class TerraformConfig:
     lock_table: str = "aether-terraform-locks"
     plan_review_tool: str = "atlantis"
     drift_detection_cron: str = "0 6 * * *"
-    modules: List[str] = field(default_factory=lambda: [
+    modules: list[str] = field(default_factory=lambda: [
         "vpc", "ecs", "rds", "elasticache", "neptune",
         "s3", "cloudfront", "sagemaker", "iam", "monitoring",
     ])
@@ -359,14 +357,14 @@ class ChangeDetectionConfig:
     enabled: bool = True
     base_ref: str = "origin/develop"
     # Paths that trigger full pipeline (no skipping)
-    always_run_paths: List[str] = field(default_factory=lambda: [
+    always_run_paths: list[str] = field(default_factory=lambda: [
         ".github/",
         "config/",
         "deploy/aws/",
         "packages/shared/",
     ])
     # Map from path prefix to affected service names
-    service_path_map: Dict[str, str] = field(default_factory=lambda: {
+    service_path_map: dict[str, str] = field(default_factory=lambda: {
         "services/backend/services/ingestion": "ingestion",
         "services/backend/services/identity":     "identity",
         "services/backend/services/analytics":    "analytics",

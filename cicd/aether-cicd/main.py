@@ -14,12 +14,19 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config.pipeline_config import (
-    CI_STAGES, CD_STAGES, BRANCH_CONFIG, AWS_ACCOUNTS,
-    REPO_SERVICES, REPO_PACKAGES, TERRAFORM_CONFIG,
-    NOTIFICATION_CONFIG, CACHE_CONFIG, CHANGE_DETECTION_CONFIG,
+    AWS_ACCOUNTS,
+    BRANCH_CONFIG,
+    CACHE_CONFIG,
+    CD_STAGES,
+    CHANGE_DETECTION_CONFIG,
+    CI_STAGES,
+    NOTIFICATION_CONFIG,
+    REPO_PACKAGES,
+    REPO_SERVICES,
+    TERRAFORM_CONFIG,
 )
 from quality_gates.gate import QualityGate
-from stages.sdk.sdk_release import release_all_sdks, BumpType, PreRelease
+from stages.sdk.sdk_release import BumpType, PreRelease, release_all_sdks
 
 
 def print_header(title: str) -> None:
@@ -136,7 +143,7 @@ def demo_sdk_release() -> None:
     print_header("SDK RELEASE PIPELINE DEMO")
 
     # Stable release (dry-run)
-    results = release_all_sdks(
+    release_all_sdks(
         current_versions={
             "web": "1.2.3",
             "ios": "1.2.3",
@@ -150,7 +157,7 @@ def demo_sdk_release() -> None:
 
     # Beta pre-release (single platform, dry-run)
     print("\n  --- Single platform beta release ---")
-    beta_results = release_all_sdks(
+    release_all_sdks(
         current_versions={"web": "1.3.0"},
         bump=BumpType.PATCH,
         commit_sha="def789abc012",

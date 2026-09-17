@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0.0",
+  "description": "Identity continuity contract manifest — all identity contract registries for the identity continuity and late binding runtime. These contracts define the canonical data model for source identities, claims, canonical entities, edges, decisions, conflicts, graph versions, and projection restatement jobs.",
+  "contracts": [
+    { "name": "source-system", "file": "source-system.json", "description": "Source system registry — origins of identity evidence." },
+    { "name": "source-identity", "file": "source-identity.json", "description": "Source identity — source-scoped identity records." },
+    { "name": "identity-claim", "file": "identity-claim.json", "description": "Identity claim — pieces of identity evidence." },
+    { "name": "canonical-entity", "file": "canonical-entity.json", "description": "Canonical entity — resolved profile target." },
+    { "name": "identity-edge", "file": "identity-edge.json", "description": "Identity edge — relationships in the identity graph." },
+    { "name": "identity-decision", "file": "identity-decision.json", "description": "Identity decision — auditable resolution outcomes." },
+    { "name": "identity-conflict", "file": "identity-conflict.json", "description": "Identity conflict — detected conflicts requiring review." },
+    { "name": "identity-graph-version", "file": "identity-graph-version.json", "description": "Identity graph version — versioned graph snapshots." },
+    { "name": "projection-restatement-job", "file": "projection-restatement-job.json", "description": "Projection restatement job — downstream update tracking." }
+  ]
+}

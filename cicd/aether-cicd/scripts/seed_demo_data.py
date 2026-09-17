@@ -29,7 +29,7 @@ import sys
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List
+from typing import Any
 
 try:
     import requests
@@ -45,10 +45,10 @@ except ImportError:
 BASE_URL = os.environ.get("DEMO_URL", "https://demo.olympuslabsml.com")
 API_KEY = os.environ.get("DEMO_API_KEY", "demo_api_key_placeholder")
 
-HEADERS: Dict[str, str] = {}
+HEADERS: dict[str, str] = {}
 
 
-def _headers() -> Dict[str, str]:
+def _headers() -> dict[str, str]:
     return {
         "Content-Type": "application/json",
         "X-API-Key": API_KEY,
@@ -257,11 +257,11 @@ def seed_events(count: int = 500) -> int:
     print(f"\n--- Seeding {count} SDK events ---")
     success = 0
     batch_size = 50
-    batch: List[Dict] = []
+    batch: list[dict] = []
 
     for i in range(count):
         event_type = random.choice(EVENT_TYPES)
-        event: Dict[str, Any] = {
+        event: dict[str, Any] = {
             "type": event_type,
             "userId": _uid(),
             "timestamp": _random_timestamp(days_back=7),
@@ -324,9 +324,8 @@ def seed_events(count: int = 500) -> int:
             batch = []
 
     # Flush remaining
-    if batch:
-        if _post("/v1/batch", {"events": batch}):
-            success += len(batch)
+    if batch and _post("/v1/batch", {"events": batch}):
+        success += len(batch)
 
     print(f"  Seeded {success}/{count} events")
     return success
@@ -339,7 +338,7 @@ def seed_defi_positions(count: int = 30) -> int:
 
     for i in range(count):
         protocol = DEFI_PROTOCOLS[i % len(DEFI_PROTOCOLS)]
-        position: Dict[str, Any] = {
+        position: dict[str, Any] = {
             "userId": _uid(),
             "protocol": protocol["name"],
             "category": protocol["category"],

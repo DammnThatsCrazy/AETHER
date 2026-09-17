@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractVersion": "1.0.0",
+  "description": "Canonical field registry for identity_claim — a piece of identity evidence. Claims are normalized values extracted from source identities: email, phone, name, external_customer_id, app_user_id, anonymous_id, device_id, installation_id, wallet_address, account_id, agent_id, runtime_id, address, company, domain, consent_grant, auth_subject. Raw records are immutable — identity resolution may change but claims do not.",
+  "envelope_required_fields": [
+    "id",
+    "tenant_id",
+    "source_identity_id",
+    "claim_type",
+    "normalized_value",
+    "verification_status",
+    "ingested_at",
+    "pii_classification",
+    "status"
+  ],
+  "blocks": [
+    {
+      "name": "identity_claim",
+      "kind": "object",
+      "required": true,
+      "description": "A piece of identity evidence extracted from a source identity.",
+      "fields": [
+        { "name": "id", "type": "string", "required": true },
+        { "name": "tenant_id", "type": "string", "required": true },
+        { "name": "source_identity_id", "type": "string", "required": true },
+        { "name": "claim_type", "type": "enum", "required": true, "values": ["email", "phone", "name", "external_customer_id", "app_user_id", "anonymous_id", "device_id", "installation_id", "wallet_address", "account_id", "agent_id", "runtime_id", "address", "company", "domain", "consent_grant", "auth_subject"], "description": "Type of identity claim." },
+        { "name": "normalized_value", "type": "string", "required": true, "description": "Normalized claim value (lowercased email, E.164 phone, etc.)." },
+        { "name": "raw_value", "type": "string", "required": false, "description": "Original raw value before normalization." },
+        { "name": "verification_status", "type": "enum", "required": true, "values": ["unknown", "observed", "claimed", "verified", "provider_verified", "tenant_verified"], "description": "How this claim was verified." },
+        { "name": "confidence_hint", "type": "number", "required": false, "description": "Optional confidence hint (0.0-1.0) from the source." },
+        { "name": "occurred_at", "type": "iso8601", "required": false, "description": "When this claim was observed in the source system." },
+        { "name": "ingested_at", "type": "iso8601", "required": true, "description": "When Aether ingested this claim." },
+        { "name": "expires_at", "type": "iso8601", "required": false, "description": "Optional expiration for time-bounded claims." },
+        { "name": "pii_classification", "type": "enum", "required": true, "values": ["none", "low", "moderate", "sensitive"], "description": "PII classification for storage/secrecy." },
+        { "name": "status", "type": "enum", "required": true, "values": ["active", "suppressed", "deleted", "expired", "conflicted"], "description": "Claim lifecycle status." },
+        { "name": "created_at", "type": "iso8601", "required": true }
+      ]
+    }
+  ]
+}

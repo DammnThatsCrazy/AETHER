@@ -9,8 +9,6 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import Dict
-
 
 # --------------------------------------------------------------------------- #
 # Parser result types
@@ -136,7 +134,7 @@ def parse_snyk_json(json_str: str) -> VulnerabilityResult:
     try:
         data = json.loads(json_str)
         vulns = data.get("vulnerabilities", [])
-        counts: Dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+        counts: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
         for v in vulns:
             sev = v.get("severity", "low").lower()
             if sev in counts:
@@ -157,7 +155,7 @@ def parse_trivy_json(json_str: str) -> VulnerabilityResult:
     """
     try:
         data = json.loads(json_str)
-        counts: Dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+        counts: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
         for result in data.get("Results", []):
             for vuln in result.get("Vulnerabilities", []):
                 sev = vuln.get("Severity", "LOW").lower()

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractVersion": "1.0.0",
+  "description": "Canonical field registry for projection_restatement_job — created after identity changes. Tracks restatement of Profile 360, Journey, Campaign 360, Communications 360, Value, Signals, Syndicates, Agent 360, Execution 360, Account 360.",
+  "envelope_required_fields": [
+    "id",
+    "tenant_id",
+    "trigger_decision_id",
+    "graph_version_before",
+    "graph_version_after",
+    "affected_canonical_entity_ids",
+    "projections",
+    "status",
+    "created_at"
+  ],
+  "blocks": [
+    {
+      "name": "projection_restatement_job",
+      "kind": "object",
+      "required": true,
+      "description": "A job to restate downstream projections after an identity change.",
+      "fields": [
+        { "name": "id", "type": "string", "required": true },
+        { "name": "tenant_id", "type": "string", "required": true },
+        { "name": "trigger_decision_id", "type": "string", "required": true, "description": "Identity decision that triggered this restatement." },
+        { "name": "graph_version_before", "type": "string", "required": true, "description": "Graph version before the change." },
+        { "name": "graph_version_after", "type": "string", "required": true, "description": "Graph version after the change." },
+        { "name": "affected_canonical_entity_ids", "type": "array", "required": true, "item_type": "string", "description": "Canonical entities affected by this restatement." },
+        { "name": "projections", "type": "array", "required": true, "item_type": "string", "description": "Projections to restate: profile_360, journey, campaign_360, communications_360, value, signals, syndicates, agent_360, execution_360, account_360." },
+        { "name": "status", "type": "enum", "required": true, "values": ["queued", "running", "completed", "failed", "partially_completed"], "description": "Restatement job status." },
+        { "name": "error", "type": "string", "required": false, "description": "Error message if job failed." },
+        { "name": "created_at", "type": "iso8601", "required": true },
+        { "name": "started_at", "type": "iso8601", "required": false },
+        { "name": "completed_at", "type": "iso8601", "required": false }
+      ]
+    }
+  ]
+}

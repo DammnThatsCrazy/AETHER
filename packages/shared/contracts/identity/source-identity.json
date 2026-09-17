@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractVersion": "1.0.0",
+  "description": "Canonical field registry for source_identity — a source-scoped identity. Each external identifier (shopify_customer_id, stripe_customer_id, sdk_user_id, csv_row_id, anonymous_id, device_id, installation_id, agent_id) becomes a source_identity. Never collapsed directly into one profile without preserving provenance.",
+  "envelope_required_fields": [
+    "id",
+    "tenant_id",
+    "source_system_id",
+    "source_kind",
+    "source_namespace",
+    "status",
+    "first_seen_at",
+    "last_seen_at"
+  ],
+  "blocks": [
+    {
+      "name": "source_identity",
+      "kind": "object",
+      "required": true,
+      "description": "A source-scoped identity record.",
+      "fields": [
+        { "name": "id", "type": "string", "required": true },
+        { "name": "tenant_id", "type": "string", "required": true },
+        { "name": "source_system_id", "type": "string", "required": true },
+        { "name": "source_kind", "type": "string", "required": true },
+        { "name": "source_namespace", "type": "string", "required": true },
+        { "name": "external_id", "type": "string", "required": false, "description": "Provider/customer external ID (shopify_customer_id, stripe_customer_id, etc.)." },
+        { "name": "anonymous_id", "type": "string", "required": false },
+        { "name": "user_id", "type": "string", "required": false },
+        { "name": "device_id", "type": "string", "required": false },
+        { "name": "installation_id", "type": "string", "required": false },
+        { "name": "session_id", "type": "string", "required": false },
+        { "name": "account_id", "type": "string", "required": false },
+        { "name": "agent_id", "type": "string", "required": false },
+        { "name": "runtime_id", "type": "string", "required": false },
+        { "name": "canonical_entity_id", "type": "string", "required": false, "description": "Resolved canonical entity, if any." },
+        { "name": "status", "type": "enum", "required": true, "values": ["unresolved", "provisional", "resolved", "conflicted", "suppressed", "split"], "description": "Source identity resolution status." },
+        { "name": "first_seen_at", "type": "iso8601", "required": true },
+        { "name": "last_seen_at", "type": "iso8601", "required": true },
+        { "name": "created_at", "type": "iso8601", "required": true },
+        { "name": "updated_at", "type": "iso8601", "required": true }
+      ]
+    }
+  ]
+}

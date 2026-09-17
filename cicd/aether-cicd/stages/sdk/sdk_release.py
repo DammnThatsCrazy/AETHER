@@ -22,10 +22,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Dict, List, Optional
+from typing import Callable
 
-from shared.runner import run_cmd, log
 from shared.notifier import Notifier, NotifyEvent
+from shared.runner import log, run_cmd
 
 
 class BumpType(str, Enum):
@@ -50,9 +50,9 @@ class ReleaseContext:
     commit_sha: str
     pre_release: PreRelease = PreRelease.NONE
     dry_run: bool = False
-    changelog: List[str] = field(default_factory=list)
-    artifacts: List[str] = field(default_factory=list)
-    published_to: List[str] = field(default_factory=list)
+    changelog: list[str] = field(default_factory=list)
+    artifacts: list[str] = field(default_factory=list)
+    published_to: list[str] = field(default_factory=list)
     success: bool = False
     error: str = ""
 
@@ -100,7 +100,7 @@ def bump_version(
 
 def _execute_steps(
     ctx: ReleaseContext,
-    steps: List[tuple],
+    steps: list[tuple],
 ) -> bool:
     """
     Execute a list of (label, command) pairs for a release.
@@ -160,7 +160,7 @@ def release_web_sdk(
         ("Test",             "cd packages/web && npx jest --ci || true"),
         ("Changelog",        "npx conventional-changelog -p angular -i CHANGELOG.md -s --commit-path packages/web || true"),
         ("Publish npm",      f"cd packages/web && npm publish --access public {npm_tag} || true"),
-        ("Upload CDN",       f"aws s3 sync packages/web/dist/ s3://cdn.aether.network/ --acl public-read || true"),
+        ("Upload CDN",       "aws s3 sync packages/web/dist/ s3://cdn.aether.network/ --acl public-read || true"),
         ("CDN latest",       "aws s3 sync packages/web/dist/ s3://cdn.aether.network/latest/ --acl public-read || true"),
         ("Extract data modules", "cd packages/web && python ../../cicd/aether-cicd/stages/sdk/data_module_publisher.py || true"),
         ("Publish manifests", f"python cicd/aether-cicd/stages/sdk/manifest_publisher.py --version {new_version} || true"),
@@ -177,7 +177,7 @@ def release_web_sdk(
     ]
     ctx.published_to = [
         f"npm: @aether/sdk@{new_version}",
-        f"CDN: https://cdn.aether.network/v1.js",
+        "CDN: https://cdn.aether.network/v1.js",
         "Manifests: https://cdn.aether.network/sdk/manifests/{platform}/latest.json",
     ]
     ctx.success = success
@@ -208,11 +208,11 @@ def release_ios_sdk(
         ("Version bump podspec",
          f"sed -i '' 's/s.version.*=.*/s.version = \"{new_version}\"/' packages/ios/AetherSDK.podspec || true"),
         ("Build",
-         "cd packages/ios && xcodebuild -scheme AetherSDK -sdk iphonesimulator "
-         "-destination 'platform=iOS Simulator,name=iPhone 15' build || true"),
+         ("cd packages/ios && xcodebuild -scheme AetherSDK -sdk iphonesimulator "
+         "-destination 'platform=iOS Simulator,name=iPhone 15' build || true")),
         ("Unit tests",
-         "cd packages/ios && xcodebuild test -scheme AetherSDK -sdk iphonesimulator "
-         "-destination 'platform=iOS Simulator,name=iPhone 15' || true"),
+         ("cd packages/ios && xcodebuild test -scheme AetherSDK -sdk iphonesimulator "
+         "-destination 'platform=iOS Simulator,name=iPhone 15' || true")),
         ("Pod lint",
          "cd packages/ios && pod lib lint AetherSDK.podspec --allow-warnings || true"),
         ("Pod push",
@@ -252,8 +252,8 @@ def release_android_sdk(
 
     steps = [
         ("Version bump",
-         f"cd packages/android && "
-         f"sed -i '' 's/version = .*/version = \"{new_version}\"/' build.gradle.kts || true"),
+         (f"cd packages/android && "
+         f"sed -i '' 's/version = .*/version = \"{new_version}\"/' build.gradle.kts || true")),
         ("Gradle build",
          "cd packages/android && ./gradlew assembleRelease || true"),
         ("Unit tests",
@@ -261,9 +261,9 @@ def release_android_sdk(
         ("Lint",
          "cd packages/android && ./gradlew ktlintCheck || true"),
         ("Firebase Test Lab",
-         "gcloud firebase test android run --type instrumentation "
+         ("gcloud firebase test android run --type instrumentation "
          "--app packages/android/app/build/outputs/apk/release/app-release.apk "
-         "--test packages/android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk || true"),
+         "--test packages/android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk || true")),
         ("Publish Maven Central",
          "cd packages/android && ./gradlew publishToMavenCentral --no-configuration-cache || true"),
         ("Git tag",
@@ -325,13 +325,13 @@ def release_react_native_sdk(
 # =========================================================================== #
 
 def release_all_sdks(
-    current_versions: Dict[str, str],
+    current_versions: dict[str, str],
     bump: BumpType,
     commit_sha: str,
     pre_release: PreRelease = PreRelease.NONE,
     dry_run: bool = False,
-    platforms: Optional[List[str]] = None,
-) -> Dict[str, ReleaseContext]:
+    platforms: list[str] | None = None,
+) -> dict[str, ReleaseContext]:
     """
     Coordinated release of SDKs.
 
@@ -345,7 +345,7 @@ def release_all_sdks(
     print(f"  COORDINATED SDK RELEASE -- {bump.value} bump{pre}{mode}")
     print(f"{'=' * 60}")
 
-    release_fns: Dict[str, Callable] = {
+    release_fns: dict[str, Callable] = {
         "web":          release_web_sdk,
         "ios":          release_ios_sdk,
         "android":      release_android_sdk,
@@ -356,7 +356,7 @@ def release_all_sdks(
     if platforms:
         release_fns = {k: v for k, v in release_fns.items() if k in platforms}
 
-    results: Dict[str, ReleaseContext] = {}
+    results: dict[str, ReleaseContext] = {}
     notifier = Notifier(dry_run=dry_run)
 
     for platform, fn in release_fns.items():

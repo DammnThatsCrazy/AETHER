@@ -38,6 +38,65 @@ from shared.integration_contracts.normalization import EventNormalizer, Normaliz
 
 from services.providers.shopify.payloads import ShopifyOrder
 
+# Identity continuity: source identity creation for Shopify customers (via SourceIdentityRegistry)
+from services.identity.integration import IdentityIngestionWire
+from services.identity.repository import IdentityResolutionRepository
+from services.identity.source_identity_registry import SourceIdentityRegistry
+from shared.logger.logger import get_logger as _get_logger
+
+_logger = _get_logger("aether.providers.shopify.identity")
+
+
+async def register_shopify_customer_identity(
+    tenant_id: str,
+    source_system_id: str,
+    customer_data: dict,
+) -> object | None:
+    """Register a source identity from a Shopify customer record.
+
+    Wires SourceIdentityRegistry via IdentityIngestionWire (identity continuity runtime).
+    Called by pull/webhook sync when customer data is ingested.
+    """
+    try:
+        repo = IdentityResolutionRepository()
+        registry = SourceIdentityRegistry(repo)
+        wire = IdentityIngestionWire(registry)
+        rec = await wire.extract_and_register_from_provider_customer(
+            tenant_id=tenant_id,
+            source_system_id=source_system_id,
+            provider="shopify",
+            customer_data=customer_data,
+        )
+        if rec:
+            from services.identity.observability import IdentityTrace, identity_metrics
+
+            trace = IdentityTrace(tenant_id=tenant_id, source_system_id=source_system_id)
+            trace.source_identity_register(rec.id)
+            identity_metrics.record_source_identity_created()
+            # Also upsert email/phone claims when present
+            if customer_data.get("email"):
+                await registry.upsert_identity_claim(
+                    tenant_id=tenant_id,
+                    source_identity_id=rec.id,
+                    claim_type="email",
+                    raw_value=customer_data["email"],
+                    verification_status="observed",
+                    pii_classification="sensitive",
+                )
+            if customer_data.get("phone"):
+                await registry.upsert_identity_claim(
+                    tenant_id=tenant_id,
+                    source_identity_id=rec.id,
+                    claim_type="phone",
+                    raw_value=customer_data["phone"],
+                    verification_status="observed",
+                    pii_classification="sensitive",
+                )
+        return rec
+    except Exception as e:
+        _logger.warning("shopify source identity registration failed: %s", e)
+        return None
+
 NORMALIZER_VERSION = "1"
 SUPPORTED_RECORD_TYPE = "order"
 

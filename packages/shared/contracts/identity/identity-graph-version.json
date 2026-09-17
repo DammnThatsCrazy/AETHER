@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractVersion": "1.0.0",
+  "description": "Canonical field registry for identity_graph_version — every merge/split creates a new graph version. Versions are sequential, tenant-scoped, and linked to the decisions that caused them.",
+  "envelope_required_fields": [
+    "id",
+    "tenant_id",
+    "version_number",
+    "reason",
+    "decision_ids",
+    "created_at"
+  ],
+  "blocks": [
+    {
+      "name": "identity_graph_version",
+      "kind": "object",
+      "required": true,
+      "description": "A versioned snapshot of the identity graph state.",
+      "fields": [
+        { "name": "id", "type": "string", "required": true },
+        { "name": "tenant_id", "type": "string", "required": true },
+        { "name": "previous_version_id", "type": "string", "required": false, "description": "Previous graph version, if any." },
+        { "name": "version_number", "type": "integer", "required": true, "description": "Sequential version number." },
+        { "name": "reason", "type": "enum", "required": true, "values": ["initial_import", "connector_backfill", "sdk_late_binding", "manual_merge", "manual_split", "conflict_resolution", "dsr_suppression", "policy_change", "replay"], "description": "Reason for this graph version." },
+        { "name": "decision_ids", "type": "array", "required": true, "item_type": "string", "description": "Decision IDs that triggered this version." },
+        { "name": "created_at", "type": "iso8601", "required": true }
+      ]
+    }
+  ]
+}

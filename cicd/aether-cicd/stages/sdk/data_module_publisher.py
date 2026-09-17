@@ -31,9 +31,9 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from shared.runner import run_cmd, log
+from shared.runner import log, run_cmd
 
 # --------------------------------------------------------------------------- #
 # Constants
@@ -43,7 +43,7 @@ STAGE = "SDK-DATA"
 
 # Mapping of module key -> (TypeScript source path relative to web_src_dir,
 #                           output directory name on CDN)
-_MODULE_SOURCES: Dict[str, Dict[str, str]] = {
+_MODULE_SOURCES: dict[str, dict[str, str]] = {
     "chain-registry": {
         "ts_path": "web3/chains/chain-registry.ts",
         "cdn_dir": "chain-registry",
@@ -100,7 +100,7 @@ def _date_version() -> str:
 # Extraction
 # --------------------------------------------------------------------------- #
 
-def extract_data_modules(web_src_dir: str) -> Dict[str, Dict[str, Any]]:
+def extract_data_modules(web_src_dir: str) -> dict[str, dict[str, Any]]:
     """
     Extract data modules from the pre-generated data-modules directory, or
     fall back to reading from TypeScript source files.
@@ -126,7 +126,7 @@ def extract_data_modules(web_src_dir: str) -> Dict[str, Dict[str, Any]]:
     src_path = Path(web_src_dir)
     data_modules_dir = src_path.parent / "data-modules"
 
-    results: Dict[str, Dict[str, Any]] = {}
+    results: dict[str, dict[str, Any]] = {}
 
     for module_name, meta in _MODULE_SOURCES.items():
         # Prefer pre-generated JSON
@@ -190,7 +190,7 @@ def _extract_from_typescript(ts_path: str, module_name: str) -> dict:
 
     # Strategy: find the first large exported Record/object and extract
     # a summary rather than trying to fully parse TS.
-    data: Dict[str, Any] = {
+    data: dict[str, Any] = {
         "_module": module_name,
         "_source": ts_path,
         "_extractedAt": datetime.now(timezone.utc).isoformat(),
@@ -249,9 +249,9 @@ def _extract_from_typescript(ts_path: str, module_name: str) -> dict:
 def publish_data_modules(
     web_src_dir: str,
     cdn_base: str = DEFAULT_CDN_BASE,
-    version: Optional[str] = None,
+    version: str | None = None,
     dry_run: bool = False,
-) -> Dict[str, Dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     """
     Extract, version-stamp, hash, upload, and regenerate manifests for all
     data modules.
@@ -273,8 +273,8 @@ def publish_data_modules(
     # Step 1 -- Extract
     modules = extract_data_modules(web_src_dir)
 
-    results: Dict[str, Dict[str, Any]] = {}
-    cf_paths: List[str] = []
+    results: dict[str, dict[str, Any]] = {}
+    cf_paths: list[str] = []
     output_dir = Path("/tmp/aether-data-modules")
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -364,7 +364,7 @@ def publish_data_modules(
     return results
 
 
-def _invalidate_cloudfront_data(paths: List[str]) -> bool:
+def _invalidate_cloudfront_data(paths: list[str]) -> bool:
     """Create a CloudFront invalidation for data module paths."""
     dist_id = os.environ.get("CLOUDFRONT_DISTRIBUTION_ID", "")
     if not dist_id:

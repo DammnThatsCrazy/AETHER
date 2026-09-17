@@ -10,9 +10,8 @@ import json
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Optional
 
-from shared.runner import run_cmd, log
+from shared.runner import log, run_cmd
 
 
 class NotifyEvent(str, Enum):
@@ -29,7 +28,7 @@ class NotifyEvent(str, Enum):
 
 
 # Icon map for Slack messages
-_ICONS: Dict[NotifyEvent, str] = {
+_ICONS: dict[NotifyEvent, str] = {
     NotifyEvent.CI_STARTED:      ":gear:",
     NotifyEvent.CI_PASSED:       ":white_check_mark:",
     NotifyEvent.CI_FAILED:       ":x:",
@@ -56,15 +55,15 @@ class Notifier:
 
     # -- Slack ----------------------------------------------------------------
 
-    def _slack_webhook(self) -> Optional[str]:
+    def _slack_webhook(self) -> str | None:
         return os.environ.get(self.slack_webhook_env)
 
     def slack(
         self,
         event: NotifyEvent,
         message: str,
-        channel: Optional[str] = None,
-        fields: Optional[Dict[str, str]] = None,
+        channel: str | None = None,
+        fields: dict[str, str] | None = None,
     ) -> bool:
         """Send a Slack notification via incoming webhook."""
         webhook = self._slack_webhook()
@@ -107,7 +106,7 @@ class Notifier:
         summary: str,
         severity: str = "critical",
         source: str = "aether-cicd",
-        dedup_key: Optional[str] = None,
+        dedup_key: str | None = None,
     ) -> bool:
         """Trigger a PagerDuty event via Events API v2."""
         routing_key = os.environ.get(self.pagerduty_key_env)

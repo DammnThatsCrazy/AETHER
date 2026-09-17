@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractVersion": "1.0.0",
+  "description": "SDK contract requirements for Aether identity continuity — defines the minimum fields every SDK (web, React, React Native, iOS, Android, server/API) must emit for late binding identity resolution. Per blueprint §14.1-14.3.",
+  "envelope_required_fields": [
+    "tenant_app_key",
+    "source_namespace",
+    "sdk_name",
+    "sdk_version",
+    "event_id",
+    "idempotency_key",
+    "occurred_at",
+    "ingested_at",
+    "event_name"
+  ],
+  "blocks": [
+    {
+      "name": "sdk_ingestion",
+      "kind": "object",
+      "required": true,
+      "description": "Minimum SDK event payload for identity continuity late binding.",
+      "fields": [
+        { "name": "tenant_app_key", "type": "string", "required": true, "description": "Tenant/app key — identifies the SDK instance." },
+        { "name": "source_namespace", "type": "string", "required": true, "description": "Source namespace for this SDK event (e.g. web_sdk:marketing_site, ios_sdk:consumer_app)." },
+        { "name": "sdk_name", "type": "string", "required": true, "description": "SDK name (aether-web, aether-react, aether-ios, aether-android, aether-server)." },
+        { "name": "sdk_version", "type": "string", "required": true, "description": "SDK version string." },
+        { "name": "event_id", "type": "string", "required": true, "description": "Unique event identifier — used for idempotency." },
+        { "name": "idempotency_key", "type": "string", "required": true, "description": "Idempotency key — prevents duplicate processing on retry." },
+        { "name": "anonymous_id", "type": "string", "required": false, "description": "Anonymous ID — present for anonymous events." },
+        { "name": "installation_id", "type": "string", "required": false, "description": "Installation ID — mobile SDKs." },
+        { "name": "session_id", "type": "string", "required": false, "description": "Session ID." },
+        { "name": "user_id", "type": "string", "required": false, "description": "User ID — present after identify() call." },
+        { "name": "device_id", "type": "string", "required": false, "description": "Device ID — mobile SDKs." },
+        { "name": "app_instance_id", "type": "string", "required": false, "description": "App instance ID — mobile SDKs." },
+        { "name": "occurred_at", "type": "iso8601", "required": true, "description": "When the event occurred (client clock)." },
+        { "name": "sent_at", "type": "iso8601", "required": true, "description": "When the event was sent (client clock)." },
+        { "name": "ingested_at", "type": "iso8601", "required": true, "description": "When Aether ingested the event (server clock)." },
+        { "name": "consent_state", "type": "object", "required": false, "description": "Consent state at time of event. {grant_id, purposes, status: valid|missing|revoked|unknown}." },
+        { "name": "traits", "type": "object", "required": false, "description": "User traits from identify() call. traits.email, traits.phone, traits.name if available." },
+        { "name": "traits_email", "type": "string", "required": false, "description": "Email from traits — extracted for identity claim." },
+        { "name": "traits_phone", "type": "string", "required": false, "description": "Phone from traits — extracted for identity claim." },
+        { "name": "traits_name", "type": "string", "required": false, "description": "Name from traits — extracted for identity claim." },
+        { "name": "verification_status", "type": "string", "required": false, "description": "Verification status of traits if available (verified, unverified, unknown)." },
+        { "name": "event_name", "type": "string", "required": true, "description": "Event name (heartbeat, page, track, identify, alias, reset, consent)." },
+        { "name": "properties", "type": "object", "required": false, "description": "Event properties." }
+      ]
+    },
+    {
+      "name": "sdk_required_methods",
+      "kind": "object",
+      "required": true,
+      "description": "Required SDK methods per blueprint §14.1.",
+      "fields": [
+        { "name": "heartbeat", "type": "method", "required": true, "description": "Send a heartbeat to prove SDK is active." },
+        { "name": "track", "type": "method", "required": true, "description": "Send an event with name and properties." },
+        { "name": "identify", "type": "method", "required": true, "description": "Identify a user — binds anonymous_id to user_id." },
+        { "name": "alias", "type": "method", "required": true, "description": "Alias previousId to userId — backward compatibility." },
+        { "name": "reset", "type": "method", "required": true, "description": "Reset identity context — clears anonymous_id." },
+        { "name": "setConsent", "type": "method", "required": true, "description": "Set consent state." },
+        { "name": "flush", "type": "method", "required": true, "description": "Flush pending events." }
+      ]
+    },
+    {
+      "name": "mobile_sdk_additional",
+      "kind": "object",
+      "required": false,
+      "description": "Mobile SDK additional requirements per blueprint §14.1.",
+      "fields": [
+        { "name": "installation_id", "type": "field", "required": true, "description": "Mobile installation ID — required for iOS/Android." },
+        { "name": "device_id", "type": "field", "required": true, "description": "Device ID — required for iOS/Android." },
+        { "name": "app_instance_id", "type": "field", "required": true, "description": "App instance ID — required for iOS/Android." },
+        { "name": "offline_queue", "type": "capability", "required": true, "description": "Offline event queue — mobile SDKs." },
+        { "name": "retry_idempotency", "type": "capability", "required": true, "description": "Retry with idempotency — mobile SDKs." }
+      ]
+    },
+    {
+      "name": "sdk_late_binding_requirement",
+      "kind": "object",
+      "required": true,
+      "description": "SDK-late-binding requirement per blueprint §14.3.",
+      "fields": [
+        { "name": "anonymous_activity", "type": "flow", "required": true, "description": "SDK sends anonymous events before identify." },
+        { "name": "identify_call", "type": "flow", "required": true, "description": "identify(userId, traits) binds anonymous history to imported/canonical profile if safe." },
+        { "name": "no_sdk_canonical_decision", "type": "rule", "required": true, "description": "The SDK must NOT decide the canonical profile — backend resolves." }
+      ]
+    }
+  ]
+}

@@ -527,6 +527,15 @@ function buildSDKCertification(
 function generateMarkdownReport(data: CertificationData): string {
   const lines: string[] = [];
 
+  lines.push("---");
+  lines.push("title: SDK Certification Report");
+  lines.push("slug: reports/sdk-certification-report");
+  lines.push("section: architecture");
+  lines.push("visibility: P");
+  lines.push("audience: [dev-senior, architect]");
+  lines.push("status: beta");
+  lines.push("---");
+  lines.push("");
   lines.push("# SDK Certification Report");
   lines.push("");
   lines.push(`**Generated:** ${data.generatedAt}`);

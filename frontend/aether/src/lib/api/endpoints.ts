@@ -677,11 +677,11 @@ export const api = {
 
     /** §13.2 explainability payload for a canonical profile. */
     explanation: (profileId: string) =>
-      restClient.get(`/v1/profiles/${profileId}/identity/explanation`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/identity/profiles/${profileId}/identity/explanation`, wrap(unknownSchema)).then(r => r.data),
 
     /** Full decision details with evidence for a decision_id. */
     decisionDetail: (decisionId: string, tenantId: string) =>
-      restClient.get(`/v1/profiles/decision/${decisionId}?tenant_id=${tenantId}`, wrap(unknownSchema)).then(r => r.data),
+      restClient.get(`/v1/identity/profiles/${tenantId}/identity/decision/${decisionId}`, wrap(unknownSchema)).then(r => r.data),
 
     /** Admin: list open conflicts/reviews with candidate A/B, evidence, recommended action. */
     reviewQueue: (tenantId: string, limit = 50) =>
