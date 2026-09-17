@@ -42,7 +42,7 @@
   "sideEffects": false,
   "license": "UNLICENSED",
   "dependencies": {
-    "@aether/shared": "^0.1.0-alpha.0"
+    "@aether/shared": "workspace:*"
   },
   "peerDependencies": {
     "react": ">=18.0.0"

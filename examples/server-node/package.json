@@ -9,10 +9,10 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@aether/server": "*"
+    "@aether/server": "workspace:*"
   },
   "devDependencies": {
-    "@aether/shared": "^0.1.0-alpha.0",
+    "@aether/shared": "workspace:*",
     "typescript": "^5.4.0"
   }
 }

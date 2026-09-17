@@ -14,7 +14,7 @@
   "dependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@aether/web": "^0.1.0-alpha.0"
+    "@aether/web": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

@@ -14,7 +14,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@aether/shared": "^0.1.0-alpha.0"
+    "@aether/shared": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.3.0"
