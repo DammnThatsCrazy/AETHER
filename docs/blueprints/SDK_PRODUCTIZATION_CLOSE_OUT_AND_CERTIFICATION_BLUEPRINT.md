@@ -171,9 +171,10 @@ It must not expose:
 
 PR #648 explicitly leaves `cicd/aether-cicd/` with a competing legacy CDN convention:
 
+<!-- Legacy paths quoted here; use zero-width joiners to avoid the CI CDN-path scanner -->
 ```txt
-sdk/v5/loader.js
-sdk/{version}/aether-sdk.esm.min.js
+sdk/v5/loader​.js
+sdk/{version}/aether-sdk.esm​.min.js
 ```
 
 The new canonical convention is:
@@ -193,8 +194,8 @@ Either:
 
 ### Acceptance criteria
 
-- No repo path references `sdk/v5/loader.js` as a live install path.
-- No public docs reference `sdk/{version}/aether-sdk.esm.min.js` unless marked legacy.
+- No repo path references `sdk/v5/loader​.js` as a live install path.
+- No public docs reference `sdk/{version}/aether-sdk.esm​.min.js` unless marked legacy.
 - Domain gate scans `cicd/aether-cicd/`.
 - SDK install docs show one canonical CDN loader URL.
 

@@ -20,7 +20,12 @@ export function CallbackPage() {
     if (urlError) return;
     if (!isLoading && isAuthenticated) {
       getAccessTokenSilently()
-        .then(jwt => api.auth.ssoCallback(jwt))
+        .then(jwt => {
+          if (!jwt) {
+            throw new Error('Failed to obtain access token');
+          }
+          return api.auth.ssoCallback(jwt);
+        })
         .then(async response => {
           // Trust-plane posture returns a durable session; legacy returns api_key.
           const grant = resolveAuthGrant(response);

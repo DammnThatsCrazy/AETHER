@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider, ToastProvider } from '@aether/ui';
 import { SdkFleetSection } from '@aether-app/pages/settings/sdk-fleet-section';
@@ -90,7 +90,7 @@ function renderAt(section: ReactElement, route: string) {
   return render(
     <ThemeProvider>
       <ToastProvider>
-        <MemoryRouter initialEntries={[route]}>{section}</MemoryRouter>
+        <MemoryRouter initialEntries={[route]}>{section as ReactNode as any}</MemoryRouter>
       </ToastProvider>
     </ThemeProvider>,
   );

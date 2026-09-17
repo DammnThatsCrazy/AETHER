@@ -58,11 +58,16 @@ export function useAuth(): AetherAuth {
           returnTo: env.VITE_AUTH0_LOGOUT_URI ?? window.location.origin,
         },
       }),
-    getAccessToken: () =>
-      auth0.getAccessTokenSilently(
+    getAccessToken: async () => {
+      const token = await auth0.getAccessTokenSilently(
         env.VITE_AUTH0_AUDIENCE
           ? { authorizationParams: { audience: env.VITE_AUTH0_AUDIENCE } }
           : undefined,
-      ),
+      );
+      if (!token) {
+        throw new Error('[Aether] Failed to obtain access token.');
+      }
+      return token;
+    },
   };
 }

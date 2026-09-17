@@ -97,7 +97,7 @@ export const Profile360IdentityPanel: FC<{
   const { data: profileData } = useIdentityProfile(userId);
 
   const { data: explanation, isLoading, error, refetch } = useQuery<IdentityExplanationData>({
-    key: ['identity-explanation', userId],
+    key: `identity-explanation:${userId}`,
     fetcher: () => fetchIdentityExplanation(userId),
     enabled: enabled && !!userId,
     staleTime: STALE,

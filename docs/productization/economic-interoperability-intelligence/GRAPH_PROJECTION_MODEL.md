@@ -9,9 +9,9 @@ since_version: 0.1.0
 source_files: [services/backend/shared/graph/graph.py, services/backend/shared/graph/relationship_layers.py, packages/shared/graph-contract.ts]
 canonical_owner: platform@aether
 source_hashes:
-  services/backend/shared/graph/graph.py: sha256:689f7581a371f6f4f48ca17745a2fb31f88d45f5614da95d69e9d805c4212428
-  services/backend/shared/graph/relationship_layers.py: sha256:0136d18ace82541dbb684d486ad12e93be47f0b726de9b9ba0120bcff753c48e
-  packages/shared/graph-contract.ts: sha256:e8344420da6181b78831c95bc132fdbdfac8ebb92235524ab2191bb4ab74004a
+  "packages/shared/graph-contract.ts": "sha256:22f04a5932fd36c169c27cab2cf3107df3a8ea6150b02796ce30bc77affd6a94"
+  "services/backend/shared/graph/graph.py": "sha256:689f7581a371f6f4f48ca17745a2fb31f88d45f5614da95d69e9d805c4212428"
+  "services/backend/shared/graph/relationship_layers.py": "sha256:0136d18ace82541dbb684d486ad12e93be47f0b726de9b9ba0120bcff753c48e"
 ---
 
 # Graph Projection Model

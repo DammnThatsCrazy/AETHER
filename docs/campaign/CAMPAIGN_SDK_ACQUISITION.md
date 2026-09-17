@@ -8,8 +8,8 @@ status: experimental
 since_version: 0.1.0
 source_files: [packages/shared/acquisition-evidence.ts, packages/web/src/types.ts, packages/web/src/index.ts, packages/web/src/tracking/traffic-source-tracker.ts]
 source_hashes:
-  "packages/shared/acquisition-evidence.ts": "sha256:9f4b8011f9a596a08969cbf5ef1b14f8212715e00e8d6f920f23f48f09c5f855"
-  "packages/web/src/index.ts": "sha256:a7c850464612259a5e4fb9d760d0e5018c61f89f5447ebe4957fa28a93d591be"
+  "packages/shared/acquisition-evidence.ts": "sha256:deb3c17644361b9efae9580a03b6e77e7f153d6b5b59430a3495fa0064f77b7d"
+  "packages/web/src/index.ts": "sha256:ab8e89f8d3bd62e4059cf4cb14e643933bbef51d928fe4bc8bf40cd4d42fa1b7"
   "packages/web/src/tracking/traffic-source-tracker.ts": "sha256:392b73c57579e4b890252cd4cb79b804108467e69e720f5906723d4a3f2cd2c9"
   "packages/web/src/types.ts": "sha256:d124245b75221272b787f67b08000fb6d4ddf4db5d61f0ccc45d91ffc779585b"
 ---

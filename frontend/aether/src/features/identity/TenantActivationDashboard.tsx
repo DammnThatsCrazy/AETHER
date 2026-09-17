@@ -61,7 +61,7 @@ export const TenantActivationDashboard: FC<{ readonly children?: ReactNode }> = 
   const enabled = isFeatureEnabled('tenant_identity_activation_dashboard_enabled');
 
   const { data, isLoading, error, refetch } = useQuery<ActivationStatusData>({
-    key: ['activation-status', tenantId],
+    key: `activation-status:${tenantId}`,
     fetcher: () => fetchActivationStatus(tenantId),
     enabled: enabled && !!tenantId,
     staleTime: STALE,
