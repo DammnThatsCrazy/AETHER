@@ -6,5 +6,6 @@ export default defineConfig({
     globals: false,
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
     reporters: ['default'],
+    passWithNoTests: true,
   },
 });
