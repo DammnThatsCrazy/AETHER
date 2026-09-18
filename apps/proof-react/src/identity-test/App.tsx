@@ -2,22 +2,21 @@
  * FPS — React SDK Identity Late Binding Test
  */
 import { useEffect, useState } from 'react';
-import { AetherReactSDK } from '@aether/react';
+import { AetherSDK } from '@aether/web';
 
 export default function IdentityTest() {
   const [results, setResults] = useState<string[]>([]);
 
   useEffect(() => {
-    const sdk = new AetherReactSDK({ apiKey: 'ak_test_key' });
+    const sdk = new AetherSDK();
     const log: string[] = [];
 
     const run = async () => {
-      try { await sdk.heartbeat(); log.push('heartbeat: OK'); } catch (e) { log.push('heartbeat: FAIL'); }
-      try { await sdk.track('page_view', { url: '/' }); log.push('track: OK'); } catch (e) { log.push('track: FAIL'); }
-      try { await sdk.identify('user_123', { email: 'test@example.com' }); log.push('identify: OK'); } catch (e) { log.push('identify: FAIL'); }
-      try { await sdk.alias('old_id', 'user_123'); log.push('alias: OK'); } catch (e) { log.push('alias: FAIL'); }
-      try { await sdk.reset(); log.push('reset: OK'); } catch (e) { log.push('reset: FAIL'); }
-      try { await sdk.setConsent({ purposes: { identity: true } }); log.push('consent: OK'); } catch (e) { log.push('consent: FAIL'); }
+      try { sdk.init({ apiKey: 'ak_test_key' }); log.push('init: OK'); } catch { log.push('init: FAIL'); }
+      try { sdk.track('page_view', { url: '/' }); log.push('track: OK'); } catch { log.push('track: FAIL'); }
+      try { sdk.hydrateIdentity({ userId: 'user_123', traits: { email: 'test@example.com' } }); log.push('hydrateIdentity: OK'); } catch { log.push('hydrateIdentity: FAIL'); }
+      try { sdk.reset(); log.push('reset: OK'); } catch { log.push('reset: FAIL'); }
+      try { await sdk.flush(); log.push('flush: OK'); } catch { log.push('flush: FAIL'); }
       setResults(log);
     };
 
