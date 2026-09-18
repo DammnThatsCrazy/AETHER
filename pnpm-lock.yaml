@@ -134,6 +134,9 @@ importers:
 
   apps/proof-connectors:
     dependencies:
+      '@aether/proof-fixtures':
+        specifier: '*'
+        version: link:../../packages/proof-fixtures
       '@aether/web':
         specifier: '*'
         version: link:../../packages/web
