@@ -27,7 +27,7 @@ vi.mock('@aether/react-native', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@aether/react-native')>();
   return {
     ...actual,
-    useAether: () => ({ sdk: mockSdk, isInitialized: true, config: { apiKey: 'ak_test_12345678901234567890123456789012' }, identity: null }),
+    useAether: () => ({ sdk: mockSdk, isInitialized: true, config: { apiKey: 'ak_test_placeholder_example_key_00000' }, identity: null }),
   };
 });
 

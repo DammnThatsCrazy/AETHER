@@ -83,7 +83,7 @@ describe('FPS-054: React Hooks', () => {
   it('should expose config shape from fixture SDK info', () => {
     // Simulates what useAether().config would return
     const config = {
-      apiKey: 'ak_test_fake_key_for_hooks',
+      apiKey: 'ak_test_placeholder_example_hooks',
       endpoint: 'https://api.example.com',
       debug: true,
       sdkName: trackEventFixture.sdk.name,
