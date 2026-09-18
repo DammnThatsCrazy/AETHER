@@ -11,7 +11,7 @@ canonical_owner: platform@aether
 source_hashes:
   "packages/shared/contracts/consent-registry.json": "sha256:40d6fca088c2aa8e7f6699ad12232be20a8c72fb5d62191c7ba1bbd1b4afeb30"
   "services/backend/shared/auth/auth.py": "sha256:26b570c6eeb17ab53db612a14ffe5146b1eb2a76ea102b2c297a3a4a9b5544aa"
-  "services/backend/shared/privacy/consent_enforcement.py": "sha256:e7fe650bd8f1f0b95c86c55954a3f5b8367c94850ba57b0aff6130955cb5d7f6"
+  "services/backend/shared/privacy/consent_enforcement.py": "sha256:1508745af0a8b2085f109d69050e49524bfcffc93d62316529056bf76fb67bd1"
 ---
 
 # Governance and Consent
