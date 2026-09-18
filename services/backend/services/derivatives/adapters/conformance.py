@@ -12,10 +12,13 @@ from typing import Any
 from repositories.typed_repo import as_decimal
 from services.derivatives.adapters.base import DerivativesAdapter
 
-_REGISTRY_PATH = (
-    pathlib.Path(__file__).resolve().parents[5]
-    / "packages" / "shared" / "contracts" / "event-registry.json"
-)
+try:
+    _REGISTRY_PATH = (
+        pathlib.Path(__file__).resolve().parents[5]
+        / "packages" / "shared" / "contracts" / "event-registry.json"
+    )
+except IndexError:
+    _REGISTRY_PATH = pathlib.Path("/nonexistent/event-registry.json")
 
 _AMOUNT_KEYS = {
     "quantity", "price", "limit_price", "amount", "size", "entry_price",

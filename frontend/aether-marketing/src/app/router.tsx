@@ -14,6 +14,8 @@ import { PricingPage } from '@aether-marketing/pages/pricing-page';
 import { SectionPage } from '@aether-marketing/pages/section-page';
 import { SolutionPage } from '@aether-marketing/pages/solution-page';
 import { SolutionsPage } from '@aether-marketing/pages/solutions-page';
+import { ContactPage } from '@aether-marketing/pages/contact-page';
+import { StartPilotPage } from '@aether-marketing/pages/start-pilot-page';
 import { ForgotPasswordPage } from '@aether-marketing/pages/auth/forgot-password-page';
 import { LoginPage } from '@aether-marketing/pages/auth/login-page';
 import { SignupPage } from '@aether-marketing/pages/auth/signup-page';
@@ -90,6 +92,14 @@ export function AppRouter() {
         <Route
           path="/solutions/:solutionSlug"
           element={<LaunchPackRoute fallback={<SolutionPage />} />}
+        />
+        <Route
+          path="/start-pilot"
+          element={<LaunchPackRoute fallback={<StartPilotPage />} />}
+        />
+        <Route
+          path="/contact"
+          element={<LaunchPackRoute fallback={<ContactPage />} />}
         />
         <Route path="*" element={<LaunchPackRoute fallback={<NotFoundPage />} />} />
       </Route>

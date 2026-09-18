@@ -11,11 +11,13 @@ from __future__ import annotations
 import json
 import pathlib
 
-# parents[5] is the repository root from services/backend/services/silver/projectors/.
-_REGISTRY_PATH = (
-    pathlib.Path(__file__).resolve().parents[5]
-    / "packages" / "shared" / "contracts" / "event-registry.json"
-)
+try:
+    _REGISTRY_PATH = (
+        pathlib.Path(__file__).resolve().parents[5]
+        / "packages" / "shared" / "contracts" / "event-registry.json"
+    )
+except IndexError:
+    _REGISTRY_PATH = pathlib.Path("/nonexistent/event-registry.json")
 
 
 def registry_handles(family: str, silver_projection: str) -> frozenset[str]:
