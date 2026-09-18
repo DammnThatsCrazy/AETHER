@@ -2088,6 +2088,27 @@ class Social360Config:
     noesis_enabled: bool = _env_bool("AETHER_RELATIONSHIP_SPINE_NOESIS_ENABLED", False)
 
 @dataclass(frozen=True)
+class IdentityContinuityConfig:
+    resolution_enabled: bool = _env_bool("IDENTITY_RESOLUTION_ENABLED", False)
+    auto_merge_enabled: bool = _env_bool("IDENTITY_AUTO_MERGE_ENABLED", False)
+    manual_review_enabled: bool = _env_bool("IDENTITY_MANUAL_REVIEW_ENABLED", False)
+    conflict_detection_enabled: bool = _env_bool("IDENTITY_CONFLICT_DETECTION_ENABLED", False)
+    split_enabled: bool = _env_bool("IDENTITY_SPLIT_ENABLED", False)
+    manual_split_enabled: bool = _env_bool("IDENTITY_MANUAL_SPLIT_ENABLED", False)
+    auto_split_candidates_enabled: bool = _env_bool("IDENTITY_AUTO_SPLIT_CANDIDATES_ENABLED", False)
+    sdk_late_binding_enabled: bool = _env_bool("SDK_LATE_BINDING_ENABLED", False)
+    anonymous_to_known_binding_enabled: bool = _env_bool("ANONYMOUS_TO_KNOWN_BINDING_ENABLED", False)
+    multi_sdk_stitching_enabled: bool = _env_bool("MULTI_SDK_IDENTITY_STITCHING_ENABLED", False)
+    connector_backfill_enabled: bool = _env_bool("CONNECTOR_BACKFILL_IDENTITY_RESOLUTION_ENABLED", False)
+    projection_restatement_enabled: bool = _env_bool("PROJECTION_RESTATEMENT_ENABLED", False)
+    campaign_restatement_enabled: bool = _env_bool("CAMPAIGN_RESTATEMENT_ENABLED", False)
+    value_restatement_enabled: bool = _env_bool("VALUE_RESTATEMENT_ENABLED", False)
+    explainability_enabled: bool = _env_bool("IDENTITY_EXPLAINABILITY_ENABLED", False)
+    activation_dashboard_enabled: bool = _env_bool("TENANT_IDENTITY_ACTIVATION_DASHBOARD_ENABLED", False)
+    agent_resolution_enabled: bool = _env_bool("AGENT_IDENTITY_RESOLUTION_ENABLED", False)
+
+
+@dataclass(frozen=True)
 class RiskFraud360Config:
     # Risk360 / Fraud360 intelligence-projection convergence planes
     # (services/risk360, services/fraud360). Default OFF: flag-gated until the
@@ -2281,6 +2302,9 @@ class Settings:
     mobile: MobileConfig = field(default_factory=MobileConfig)
     comparison: ComparisonConfig = field(default_factory=ComparisonConfig)
     risk_fraud_360: RiskFraud360Config = field(default_factory=RiskFraud360Config)
+
+    # Identity Continuity runtime (blueprint §15)
+    identity_continuity: IdentityContinuityConfig = field(default_factory=IdentityContinuityConfig)
 
     # Social360 + Relationship Fidelity product-surface rollout flags
     social360: Social360Config = field(default_factory=Social360Config)
