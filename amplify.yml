@@ -7,6 +7,7 @@ applications:
         preBuild:
           commands:
             - npm ci
+            - npm run build --workspace=packages/shared
         build:
           commands:
             - npm run build --workspace=frontend/olympus-marketing
@@ -24,6 +25,7 @@ applications:
         preBuild:
           commands:
             - npm ci
+            - npm run build --workspace=packages/shared
         build:
           commands:
             - npm run build --workspace=frontend/aether-marketing
@@ -75,6 +77,8 @@ applications:
         preBuild:
           commands:
             - npm ci
+            - npm run build --workspace=packages/shared
+            - npm run build --workspace=packages/web
         build:
           commands:
             - npm run build --workspace=frontend/aether
