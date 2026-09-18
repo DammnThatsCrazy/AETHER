@@ -1,9 +1,11 @@
 import type { AetherConfig, AetherSDKInterface, AetherPlugin, IdentityData, Identity, ResolvedIdentity, WalletInterface, ConsentInterface, CommerceInterface, AgentInterface, X402Interface, CurrentJourney, JourneyPayload } from './types';
+import type { Diagnostics } from './health';
 import { EcommerceModule } from './modules/ecommerce';
 import { FormAnalyticsModule } from './modules/form-analytics';
 import { FeatureFlagModule } from './modules/feature-flags';
 import { HeatmapModule } from './modules/heatmaps';
 import { FunnelModule } from './modules/funnels';
+import { SDKHealthAgent } from './health/sdk-health-agent';
 declare class AetherSDK implements AetherSDKInterface {
     private config;
     private eventQueue;
@@ -81,6 +83,12 @@ declare class AetherSDK implements AetherSDKInterface {
     getIdentity(): Identity | null;
     reset(): void;
     flush(): Promise<void>;
+    /** Return current dropped-event diagnostics (blueprint §3.5). */
+    getDiagnostics(): Diagnostics | null;
+    /** Return the current event queue depth. */
+    getQueueDepth(): number;
+    /** Return the last flush result status. */
+    getLastFlushStatus(): SDKHealthAgent['lastFlushStatus'] | null;
     destroy(): void;
     wallet: WalletInterface;
     commerce: CommerceInterface;
@@ -162,4 +170,4 @@ export default aether;
 export { AetherSDK };
 export type { AetherConfig, AetherSDKInterface, ResolvedIdentity, JourneyPayload, CurrentJourney, JourneyStatus, JourneyLifecycleEventType, AcquisitionEvidence, CampaignContext } from './types';
 export { SDKHealthAgent } from './health';
-export type { SDKHealthAgentConfig, SDKHeartbeatPayload, SDKManifest, ManifestUpdateCallback } from './health';
+export type { SDKHealthAgentConfig, SDKHeartbeatPayload, SDKManifest, ManifestUpdateCallback, Diagnostics, DroppedEventCounts, DroppedEventReason } from './health';

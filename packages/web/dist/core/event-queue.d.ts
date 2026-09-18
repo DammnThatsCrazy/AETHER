@@ -1,5 +1,18 @@
 import type { AetherEvent, RetryConfig, ConsentState, BatchHealth } from '../types';
 export type { BatchHealth } from '../types';
+export type DroppedEventReason = 'consent_denied' | 'schema_invalid' | 'queue_full' | 'offline_expired' | 'retry_exhausted' | 'manifest_blocked' | 'unsupported_sdk_version' | 'payload_too_large' | 'auth_failed' | 'shutdown_unflushed';
+interface DroppedEventCounts {
+    consent_denied: number;
+    schema_invalid: number;
+    queue_full: number;
+    offline_expired: number;
+    retry_exhausted: number;
+    manifest_blocked: number;
+    unsupported_sdk_version: number;
+    payload_too_large: number;
+    auth_failed: number;
+    shutdown_unflushed: number;
+}
 interface QueueConfig {
     endpoint: string;
     apiKey: string;
@@ -31,11 +44,32 @@ export declare class EventQueue {
     private isFlushing;
     private isDestroyed;
     private consent;
+    private droppedCounts;
+    private lastFlushStatus;
     constructor(config: Omit<Partial<QueueConfig>, 'retry'> & Pick<QueueConfig, 'endpoint' | 'apiKey'> & {
         retry?: RetryConfig;
     });
     setConsent(consent: ConsentState): void;
     enqueue(event: AetherEvent): void;
+    /**
+     * Public API: get diagnostics including dropped-event counts by reason.
+     */
+    getDiagnostics(): {
+        droppedEvents: DroppedEventCounts;
+        queueDepth: number;
+        lastFlushStatus: 'pending' | 'flushing' | 'success' | 'failed' | 'no_events';
+    };
+    /**
+     * Public API: get current queue depth.
+     */
+    getQueueDepth(): number;
+    /**
+     * Public API: get last flush status.
+     */
+    getLastFlushStatus(): 'pending' | 'flushing' | 'success' | 'failed' | 'no_events';
+    /**
+     * Public API: flush the queue immediately.
+     */
     flush(): Promise<void>;
     get size(): number;
     destroy(): void;
