@@ -1,11 +1,5 @@
 [
   {
-    "path": "Smart Contracts",
-    "role": "house",
-    "owner": "platform@aether",
-    "note": "monorepo house directory; route new work into canonical trees."
-  },
-  {
     "path": "apps",
     "role": "house",
     "owner": "platform@aether",
