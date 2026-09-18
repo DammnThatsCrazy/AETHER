@@ -35,7 +35,10 @@ from shared.logger.logger import get_logger
 
 logger = get_logger("aether.privacy.retention")
 
-_REGISTRY_PATH = pathlib.Path(__file__).resolve().parents[4] / "packages" / "shared" / "contracts" / "consent-registry.json"
+try:
+    _REGISTRY_PATH = pathlib.Path(__file__).resolve().parents[4] / "packages" / "shared" / "contracts" / "consent-registry.json"
+except IndexError:
+    _REGISTRY_PATH = pathlib.Path("/nonexistent/consent-registry.json")
 
 def _load_purpose_retention() -> dict[str, dict]:
     try:

@@ -24,10 +24,13 @@ from services.policy.repositories import ConsentPolicyDecisionRepository
 from services.security.audit_ledger import audit_ledger
 from services.security.contracts import ActorType, sanitize_metadata
 
-_CONSENT_REGISTRY = (
-    Path(__file__).resolve().parents[4]
-    / "packages" / "shared" / "contracts" / "consent-registry.json"
-)
+try:
+    _CONSENT_REGISTRY = (
+        Path(__file__).resolve().parents[4]
+        / "packages" / "shared" / "contracts" / "consent-registry.json"
+    )
+except IndexError:
+    _CONSENT_REGISTRY = Path("/nonexistent/consent-registry.json")
 
 # Actions that touch a subject's sensitive data and always warrant an evidence
 # record even when allowed.

@@ -8,8 +8,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-# Repo root: manifest.py -> export -> services -> backend -> services -> root
-_REPO_ROOT = Path(__file__).resolve().parents[4]
+try:
+    _REPO_ROOT = Path(__file__).resolve().parents[4]
+except IndexError:
+    _REPO_ROOT = Path("/nonexistent")
 
 _SENSITIVE_PARAM_TOKENS = ("secret", "token", "password", "key", "credential")
 

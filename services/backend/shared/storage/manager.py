@@ -35,8 +35,10 @@ from shared.storage.object_store import ObjectStore, get_object_store
 
 logger = get_logger("aether.storage.manager")
 
-# Repo root: parents[4] from services/backend/shared/storage/manager.py.
-_REPO_ROOT = Path(__file__).resolve().parents[4]
+try:
+    _REPO_ROOT = Path(__file__).resolve().parents[4]
+except IndexError:
+    _REPO_ROOT = Path("/nonexistent")
 DEFAULT_POLICIES_PATH = _REPO_ROOT / "config" / "storage_policies.yaml"
 
 

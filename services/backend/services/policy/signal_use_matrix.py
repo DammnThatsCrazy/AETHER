@@ -12,10 +12,13 @@ from functools import lru_cache
 from pathlib import Path
 
 # services/backend/services/policy/ -> services/backend -> services -> <repo root>
-_MATRIX_PATH = (
-    Path(__file__).resolve().parents[4]
-    / "packages" / "shared" / "contracts" / "signal-use-matrix.json"
-)
+try:
+    _MATRIX_PATH = (
+        Path(__file__).resolve().parents[4]
+        / "packages" / "shared" / "contracts" / "signal-use-matrix.json"
+    )
+except IndexError:
+    _MATRIX_PATH = Path("/nonexistent/signal-use-matrix.json")
 
 
 @lru_cache(maxsize=1)

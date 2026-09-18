@@ -28,7 +28,10 @@ router = APIRouter(prefix="/v1/consent", tags=["Consent"])
 _repo = ConsentRepository()
 DSR_TYPES = ["access", "rectification", "erasure", "portability", "restriction", "objection"]
 
-_REGISTRY_PATH = pathlib.Path(__file__).resolve().parents[4] / "packages" / "shared" / "contracts" / "consent-registry.json"
+try:
+    _REGISTRY_PATH = pathlib.Path(__file__).resolve().parents[4] / "packages" / "shared" / "contracts" / "consent-registry.json"
+except IndexError:
+    _REGISTRY_PATH = pathlib.Path("/nonexistent/consent-registry.json")
 
 def _load_registry() -> dict:
     try:

@@ -36,9 +36,12 @@ from services.agent_access_intelligence.models import CapabilityKind
 SCHEMA_VERSION = 1
 
 #: Canonical pack directory: <repo root>/config/agent_access_reference_packs.
-PACK_DIR = (
-    Path(__file__).resolve().parents[4] / "config" / "agent_access_reference_packs"
-)
+try:
+    PACK_DIR = (
+        Path(__file__).resolve().parents[4] / "config" / "agent_access_reference_packs"
+    )
+except IndexError:
+    PACK_DIR = Path("/nonexistent/agent_access_reference_packs")
 
 #: Both suffixes are read. A stray ``.yml`` pack must not be invisible — an ignored
 #: file is a silently dropped pack, the exact failure this module refuses to have.
