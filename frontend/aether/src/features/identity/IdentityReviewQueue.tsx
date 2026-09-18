@@ -69,7 +69,7 @@ export const IdentityReviewQueue: FC<{ readonly className?: string; readonly chi
   const tenantId = user?.id ?? '';
 
   const { data, isLoading, error, refetch } = useQuery<ReviewQueueData>({
-    key: ['identity-review-queue', tenantId],
+    key: `identity-review-queue:${tenantId}`,
     fetcher: () => fetchReviewQueue(tenantId, 50),
     enabled: !!tenantId,
     staleTime: STALE,
@@ -94,7 +94,7 @@ export const IdentityReviewQueue: FC<{ readonly className?: string; readonly chi
 
   const handleApprove = async (conflictId: string, e: MouseEvent) => {
     e.stopPropagation();
-    await approveMutation.mutateAsync(conflictId);
+    await approveMutation.mutate(conflictId);
   };
 
   const handleReject = async (conflictId: string, reason: string, e: MouseEvent) => {
@@ -198,10 +198,10 @@ export const IdentityReviewQueue: FC<{ readonly className?: string; readonly chi
                       <div className="flex items-center gap-2">
                         <button
                           className="rounded bg-theme-success px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
-                          disabled={approveMutation.isPaused || approveMutation.isError}
+                          disabled={approveMutation.isLoading || approveMutation.error !== null}
                           onClick={(e) => handleApprove(entry.conflict_id, e)}
                         >
-                          {approveMutation.isPaused ? '...' : 'Approve'}
+                          {approveMutation.isLoading ? '...' : 'Approve'}
                         </button>
                         <button
                           className="rounded border border-surface-border bg-surface-elevated px-3 py-1 text-xs font-medium text-text-primary hover:bg-surface-accent"

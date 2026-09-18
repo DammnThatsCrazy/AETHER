@@ -537,7 +537,7 @@ async function stepVerifyGraph(): Promise<{
 
   const lines: string[] = [];
   let pass = false;
-  let reason?: string;
+  let reason: string | undefined;
 
   if (!nodesResult.ok || nodesResult.status >= 400) {
     lines.push(`Graph nodes query failed: ${nodesResult.status} — ${nodesResult.body}`);
@@ -593,7 +593,7 @@ async function stepVerify360(): Promise<{
 
   const lines: string[] = [];
   let overallPass = true;
-  let firstReason?: string;
+  let firstReason: string | undefined;
 
   // Profile 360
   {
@@ -669,7 +669,7 @@ async function stepVerifyLens(): Promise<{
 
   const lines: string[] = [];
   let overallPass = true;
-  let firstReason?: string;
+  let firstReason: string | undefined;
 
   // Step 1: Apply / activate a lens.
   {

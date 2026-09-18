@@ -23,6 +23,7 @@ name: Identity Continuity Gates
 
 on:
   pull_request:
+    types: [ready_for_review]
     branches: [feature/functionality-proof-spine]
   workflow_dispatch:
 

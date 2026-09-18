@@ -86,10 +86,10 @@ export interface CanonicalGraphQuery extends Omit<UniversalGraphQueryRequest, 't
   readonly version: '1';
   readonly scope: GraphScope;
   readonly roots: readonly GraphObjectRef[];
-  readonly entity_types?: readonly string[];
-  readonly relationship_types?: readonly string[];
-  readonly layers?: readonly RelationshipLayer[];
-  readonly predicates?: FilterGroup | null;
+  readonly entity_types?: readonly string[] | undefined;
+  readonly relationship_types?: readonly string[] | undefined;
+  readonly layers?: readonly RelationshipLayer[] | undefined;
+  readonly predicates?: FilterGroup | null | undefined;
   readonly traversal: Readonly<{ direction: 'in' | 'out' | 'both'; max_depth: number; shortest_path?: boolean }>;
   readonly temporal?: Readonly<{ mode: 'live' | 'point' | 'range' | 'compare' | 'diff'; range?: TemporalRange | null; as_of?: string | null; known_then?: string | null; known_now?: string | null }>;
   readonly evidence_policy?: 'omit' | 'include' | 'required';
@@ -98,7 +98,7 @@ export interface CanonicalGraphQuery extends Omit<UniversalGraphQueryRequest, 't
   readonly minimum_confidence?: number | null;
   readonly aggregation?: Readonly<{ group_by: readonly string[]; measures: readonly string[] }> | null;
   readonly ordering?: readonly Readonly<{ field: string; direction: 'asc' | 'desc' }>[];
-  readonly limit?: number;
+  readonly limit?: number | undefined;
   readonly projection?: ProjectionId | null;
 }
 

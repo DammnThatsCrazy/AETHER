@@ -14,7 +14,7 @@ export interface PaymentCatalogEntity {
   source_url?: string;
   first_seen_at: string;
   last_seen_at: string;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 const seenAt = '2026-07-10T00:00:00.000Z';

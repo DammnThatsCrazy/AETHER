@@ -513,20 +513,20 @@ export interface FilterGroup {
 
 export interface UniversalGraphQueryRequest {
   tenant_id: string;
-  anchors?: string[];                  // start vertex IDs for traversal
-  node_types?: string[];               // VertexType strings to include
-  edge_types?: string[];               // EdgeType strings to include
-  layers?: RelationshipLayer[];        // restrict to these layers
-  filter?: FilterGroup;                // boolean filter tree
-  depth?: number;                      // BFS depth 1–6 (default 2)
-  limit?: number;                      // max nodes 1–500 (default 100)
-  cursor?: string;                     // opaque pagination cursor
-  include_overlays?: string[];         // 'risk' | 'economic' | 'campaign' | 'geography' | 'consent'
-  as_of?: string;                      // ISO8601 point-in-time (replay)
-  include_evidence?: boolean;
-  include_provenance?: boolean;
-  include_clusters?: boolean;
-  explain?: boolean;                   // return query plan instead of results
+  anchors?: string[] | undefined;                  // start vertex IDs for traversal
+  node_types?: string[] | undefined;               // VertexType strings to include
+  edge_types?: string[] | undefined;               // EdgeType strings to include
+  layers?: RelationshipLayer[] | undefined;        // restrict to these layers
+  filter?: FilterGroup | undefined;                // boolean filter tree
+  depth?: number | undefined;                      // BFS depth 1–6 (default 2)
+  limit?: number | undefined;                      // max nodes 1–500 (default 100)
+  cursor?: string | undefined;                     // opaque pagination cursor
+  include_overlays?: string[] | undefined;         // 'risk' | 'economic' | 'campaign' | 'geography' | 'consent'
+  as_of?: string | undefined;                      // ISO8601 point-in-time (replay)
+  include_evidence?: boolean | undefined;
+  include_provenance?: boolean | undefined;
+  include_clusters?: boolean | undefined;
+  explain?: boolean | undefined;                   // return query plan instead of results
 }
 
 // ── Graph result metadata (Phase 4) ──────────────────────────────────────────

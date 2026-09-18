@@ -56,7 +56,7 @@ export const SdkHealth: FC<{ readonly className?: string; readonly children?: Re
   const tenantId = user?.id ?? '';
 
   const { data, isLoading, error, refetch } = useQuery<SdkHealthData>({
-    key: ['sdk-health', tenantId],
+    key: `sdk-health:${tenantId}`,
     fetcher: () => fetchSdkHealth(tenantId),
     enabled: !!tenantId,
     staleTime: STALE,

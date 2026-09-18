@@ -12,7 +12,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 10
 toc_depth: 3
 source_hashes:
-  "cicd/aether-cicd/stages/cd/": "sha256:fffa21adcbacfea59ac5fb7c55ac50b423fd559532d833be37076c9e20507ff8"
+  "cicd/aether-cicd/stages/cd/": "sha256:5ee749c2505c1339950a3edacd226a837b3511864a30f33facab18c736a3ed47"
 ---
 # Rollback Runbook — Aether Platform v0.1.0-alpha.0
 

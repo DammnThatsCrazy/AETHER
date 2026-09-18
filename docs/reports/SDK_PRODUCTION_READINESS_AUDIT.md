@@ -15,7 +15,7 @@ source_hashes:
   "packages/shared/sdk-version.ts": "sha256:3301384a8b98d5ecf06981a00d56439479fc72b218e07b5ebc061cd52d7b98b8"
   "packages/web/src/core/event-queue.ts": "sha256:051105933fa4b11add2ab8d5548a18400bcb5f592b8b70dd42197363f885121d"
   "packages/web/src/health/sdk-health-agent.ts": "sha256:3cca664a5ca1b53a50bed15af670685bdc22840451a95d330dda572345348c20"
-  "packages/web/src/index.ts": "sha256:a7c850464612259a5e4fb9d760d0e5018c61f89f5447ebe4957fa28a93d591be"
+  "packages/web/src/index.ts": "sha256:ab8e89f8d3bd62e4059cf4cb14e643933bbef51d928fe4bc8bf40cd4d42fa1b7"
 ---
 
 # Aether SDK Production Readiness Audit

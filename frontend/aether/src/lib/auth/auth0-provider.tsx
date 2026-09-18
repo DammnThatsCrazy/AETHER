@@ -52,7 +52,8 @@ export function AetherAuth0Provider({ children }: AetherAuth0ProviderProps) {
         scope: 'openid profile email',
       }}
     >
-      {children}
+      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- cross-version React type mismatch between this app's @types/react and Auth0Provider's */}
+      {children as any}
     </Auth0Provider>
   );
 }

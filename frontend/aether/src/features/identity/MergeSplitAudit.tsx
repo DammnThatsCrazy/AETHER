@@ -61,7 +61,7 @@ export const MergeSplitAudit: FC<{ readonly className?: string; readonly childre
   const tenantId = user?.id ?? '';
 
   const { data, isLoading, error, refetch } = useQuery<AuditData>({
-    key: ['identity-merge-split-audit', tenantId],
+    key: `identity-merge-split-audit:${tenantId}`,
     fetcher: () => fetchMergeSplitAudit(tenantId, 50),
     enabled: !!tenantId,
     staleTime: STALE,

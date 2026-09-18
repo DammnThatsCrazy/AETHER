@@ -20,14 +20,14 @@
 
 export interface AcquisitionEvidence {
   // UTM parameters (URL-decoded, raw values preserved as captured)
-  utmSource?: string;
-  utmMedium?: string;
+  utmSource?: string | undefined;
+  utmMedium?: string | undefined;
   /** utm_campaign — the campaign identifier token, NOT the human display name. */
-  utmCampaign?: string;
-  utmContent?: string;
-  utmTerm?: string;
+  utmCampaign?: string | undefined;
+  utmContent?: string | undefined;
+  utmTerm?: string | undefined;
   /** utm_id — when present, highest-confidence UTM alias (0.99). */
-  utmId?: string;
+  utmId?: string | undefined;
 
   // Platform identity — supply when available from the ad platform SDK or
   // URL parameters (e.g. ttclid → platform=tiktok_ads).
@@ -40,7 +40,7 @@ export interface AcquisitionEvidence {
    * token (e.g. via a tracking template). Always validated server-side against
    * tenant ownership — a forged UUID is rejected, not trusted.
    */
-  canonicalCampaignId?: string;
+  canonicalCampaignId?: string | undefined;
 
   // Click IDs — preserved as evidence for audit; NOT used for auto-resolution.
   clickIds?: {
@@ -51,10 +51,10 @@ export interface AcquisitionEvidence {
     liEFatId?: string;
     rdtCid?: string;
     [key: string]: string | undefined;
-  };
+  } | undefined;
 
   // Landing context
-  referrer?: string;
+  referrer?: string | undefined;
   referrerDomain?: string;
   landingPage?: string;
 
@@ -63,7 +63,7 @@ export interface AcquisitionEvidence {
    * The SDK does not parse or trust this value; verification and interpretation
    * are server-owned.
    */
-  referralToken?: string;
+  referralToken?: string | undefined;
 
   /**
    * How the entry evidence was physically observed (canonical EntryMethod from

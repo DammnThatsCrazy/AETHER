@@ -38,7 +38,7 @@ export type ActionRuntimeExecution = Execution;
 
 export type RuntimeTransitionErrorCode = 'unauthorized'|'approval_required'|'invalid_transition'|'tenant_mismatch'|'environment_mismatch'|'capability_denied'|'consent_or_policy_required'|'fake_rollback'|'missing_linkage'|'expired_approval'|'binding_mismatch'|'invalid_contract';
 export class ActionRuntimeTransitionError extends Error { readonly code: RuntimeTransitionErrorCode; constructor(code: RuntimeTransitionErrorCode,message:string){super(message);this.name='ActionRuntimeTransitionError';this.code=code;} }
-export interface ApprovalValidationInput { readonly approval?: ApprovalReference; readonly now: string; readonly tenant_id: string; readonly decision_id?: string; readonly action_id?: string; readonly execution_id?: string; readonly required_level?: ApprovalLevel; readonly required_scope?: PermissionScope; }
+export interface ApprovalValidationInput { readonly approval?: ApprovalReference | undefined; readonly now: string; readonly tenant_id: string; readonly decision_id?: string | undefined; readonly action_id?: string | undefined; readonly execution_id?: string | undefined; readonly required_level?: ApprovalLevel | undefined; readonly required_scope?: PermissionScope | undefined; }
 const level: Record<ApprovalLevel,number>={none:0,standard:1,elevated:2,critical:3};
 export function validateApproval(input: ApprovalValidationInput): boolean {
   const approval = input.approval;
