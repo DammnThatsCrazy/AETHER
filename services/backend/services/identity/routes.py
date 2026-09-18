@@ -56,7 +56,6 @@ from .schemas import (
     AdminIdentitySplitResponse,
     AdminIdentityReconcileRequest,
     AdminIdentityReconcileResponse,
-    IdentityClaimRecord,
     IdentityConflictResponse,
     IdentityDecisionDetailsResponse,
     IdentityExplanationResponse,
