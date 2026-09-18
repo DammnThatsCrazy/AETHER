@@ -19,7 +19,7 @@ export class JsonReportGenerator {
       steps: result.steps.map((step: ProofStepResult) => ({
         step_id: step.stepId,
         status: step.status,
-        message: step.message,
+        reason: step.reason,
         duration_ms: step.durationMs,
         details: step.details,
       })),

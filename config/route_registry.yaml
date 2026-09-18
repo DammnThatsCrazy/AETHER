@@ -78,7 +78,13 @@ known_prefixes:
   - "/"
   - /health
   - /ready
+  - /sdk/alias
+  - /sdk/consent
+  - /sdk/health
+  - /sdk/heartbeat
   - /sdk/identity
+  - /sdk/identify
+  - /sdk/reset
   - /v1/activation
   - /v1/admin
   - /v1/account-lifecycle

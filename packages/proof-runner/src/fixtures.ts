@@ -8,7 +8,7 @@ import {
   loadExpectedLensOutput,
   listAvailableFixtures,
   findFixtureDir,
-} from "@aether/proof-fixtures";
+} from "@aether/proof-fixtures/loaders";
 
 // ---------------------------------------------------------------------------
 // Typed fixture access

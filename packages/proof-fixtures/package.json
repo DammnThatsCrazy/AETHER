@@ -9,12 +9,23 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./loaders": {
+      "types": "./dist/loaders.d.ts",
+      "default": "./dist/loaders.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "loaders": ["./dist/loaders.d.ts"]
     }
   },
   "files": [
     "dist",
     "src",
-    "fixtures"
+    "fixtures",
+    "loaders.js",
+    "loaders.d.ts"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
