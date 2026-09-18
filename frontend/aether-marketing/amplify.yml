@@ -11,6 +11,7 @@ frontend:
         # npm workspaces resolve from the repo root, so `ci` runs two levels
         # up even though this Amplify app's root is this directory.
         - cd ../.. && npm ci
+        - cd ../.. && npm run build --workspace=packages/shared
     build:
       commands:
         - cd ../.. && npm run build --workspace=frontend/aether-marketing

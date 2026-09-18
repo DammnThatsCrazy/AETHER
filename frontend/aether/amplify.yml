@@ -4,6 +4,8 @@ frontend:
     preBuild:
       commands:
         - cd ../.. && npm ci
+        - cd ../.. && npm run build --workspace=packages/shared
+        - cd ../.. && npm run build --workspace=packages/web
     build:
       commands:
         - cd ../.. && npm run build --workspace=frontend/aether
