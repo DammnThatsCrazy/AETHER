@@ -39,6 +39,7 @@ name: Functionality Proof Spine (CI)
 
 on:
   pull_request:
+    types: [ready_for_review]
     branches: [main]
   push:
     branches: [main]
