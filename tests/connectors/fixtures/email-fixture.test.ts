@@ -14,7 +14,7 @@
  */
 import { describe, it, expect } from 'vitest';
 
-import { findFixtureDir } from '@aether/proof-fixtures';
+import { findFixtureDir } from '@aether/proof-fixtures/loaders';
 import { EventEnvelope } from '@aether/proof-contracts';
 import {
   emailSentFixture,

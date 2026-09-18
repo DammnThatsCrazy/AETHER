@@ -1541,15 +1541,3 @@ export function getCanonicalJourneyStepCount(): number {
   return canonicalFirstValueJourney.journey.steps.length;
 }
 
-// ─────────────────────────────────────────────
-// Re-export loader functions for test use
-// ─────────────────────────────────────────────
-export {
-  loadRawFixture,
-  loadExpectedNormalized,
-  loadExpectedGraphOutputs,
-  loadExpected360Outputs,
-  loadExpectedLensOutput,
-  listAvailableFixtures,
-  findFixtureDir,
-} from './loaders';

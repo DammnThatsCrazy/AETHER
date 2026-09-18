@@ -335,46 +335,6 @@ export async function load360FixtureLegacy(
 }
 
 // ─────────────────────────────────────────────
-//  Barrel exports — re-export inline fixture objects from index.ts
-// ─────────────────────────────────────────────
-
-export {
-  heartbeatFixture,
-  trackEventFixture,
-  identifyEventFixture,
-  conversionEventFixture,
-  invalidKeyFixture,
-  consentDisabledFixture,
-  offlineQueueFixture,
-  stripeCustomerFixture,
-  stripePaymentFixture,
-  stripeRefundFixture,
-  shopifyCustomerFixture,
-  shopifyOrderFixture,
-  shopifyProductFixture,
-  emailSentFixture,
-  emailOpenFixture,
-  emailClickFixture,
-  emailBounceFixture,
-  emailUnsubscribeFixture,
-  missingFieldsFixture,
-  duplicateFixture,
-  providerErrorFixture,
-  graphProfileNodeFixture,
-  graphJourneyNodeFixture,
-  graphCampaignNodeFixture,
-  graphCommunicationNodeFixture,
-  graphConversionNodeFixture,
-  graphValueNodeFixture,
-  graphTouchpointEdgeFixture,
-  graphAttributionEdgeFixture,
-  provenanceFixture,
-  lensInputFixture,
-  lensOutputFixture,
-  surface360QueryFixture,
-} from "./index";
-
-// ─────────────────────────────────────────────
 //  internal helpers
 // ─────────────────────────────────────────────
 
