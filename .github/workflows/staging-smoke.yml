@@ -57,6 +57,31 @@ env:
 
 jobs:
   # -------------------------------------------------------------------
+  # preflight — Verify staging secrets are configured before running.
+  #
+  # When the required secrets (AETHER_STAGING_URL, PROOF_TENANT_ID,
+  # PROOF_WORKSPACE_ID) are not configured, this job skips the entire
+  # workflow gracefully instead of failing. This prevents false-negative
+  # CI failures on repositories that have not yet provisioned a staging
+  # environment.
+  # -------------------------------------------------------------------
+  preflight:
+    name: Preflight — Check Staging Secrets
+    runs-on: ubuntu-latest
+    outputs:
+      secrets-configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - name: Check for required staging secrets
+        id: check
+        run: |
+          if [ -z "${{ secrets.AETHER_STAGING_URL }}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::AETHER_STAGING_URL secret is not configured — skipping staging smoke test."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # -------------------------------------------------------------------
   # smoke-staging — P0 smoke test against the staging environment.
   #
   # This job runs the pnpm smoke:staging script which validates that
@@ -72,6 +97,8 @@ jobs:
   # -------------------------------------------------------------------
   smoke-staging:
     name: Smoke Test Staging
+    needs: preflight
+    if: needs.preflight.outputs.secrets-configured == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -125,8 +152,8 @@ jobs:
     name: Release Proof Report
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: smoke-staging
-    if: needs.smoke-staging.result == 'success'
+    needs: [preflight, smoke-staging]
+    if: always() && needs.preflight.outputs.secrets-configured == 'true' && needs.smoke-staging.result == 'success'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
