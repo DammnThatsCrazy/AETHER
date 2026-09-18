@@ -27,8 +27,8 @@ export class MarkdownReportGenerator {
 
     lines.push("## Steps");
     lines.push("");
-    lines.push("| Step | Status | Duration | Message |");
-    lines.push("|------|--------|----------|---------|");
+    lines.push("| Step | Status | Duration | Reason |");
+    lines.push("|------|--------|----------|--------|");
 
     for (const step of result.steps) {
       const statusIcon =
@@ -42,7 +42,7 @@ export class MarkdownReportGenerator {
 
       lines.push(
         `${statusIcon} | \`${step.stepId}\` | ${step.status} | ${step.durationMs ?? "—"}ms | ${
-          step.message ?? "—"
+          step.reason ?? "—"
         } |`
       );
     }
