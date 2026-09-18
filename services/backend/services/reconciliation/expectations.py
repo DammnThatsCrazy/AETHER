@@ -16,7 +16,10 @@ from pathlib import Path
 from typing import Any, Optional
 
 _DAY = 24 * 60 * 60
-_REPO_ROOT = Path(__file__).resolve().parents[4]
+try:
+    _REPO_ROOT = Path(__file__).resolve().parents[4]
+except IndexError:
+    _REPO_ROOT = Path("/nonexistent")
 _DEFAULT_CONFIG_PATH = _REPO_ROOT / "config" / "reconciliation_expectations.json"
 
 

@@ -105,10 +105,13 @@ _DNT_SUPPRESSED_PURPOSES = frozenset({"analytics"})
 
 # ── explicit-opt-in purpose set (registry-derived, fail-closed) ─────────────
 
-_REGISTRY_PATH = (
-    pathlib.Path(__file__).resolve().parents[4]
-    / "packages" / "shared" / "contracts" / "consent-registry.json"
-)
+try:
+    _REGISTRY_PATH = (
+        pathlib.Path(__file__).resolve().parents[4]
+        / "packages" / "shared" / "contracts" / "consent-registry.json"
+    )
+except IndexError:
+    _REGISTRY_PATH = pathlib.Path("/nonexistent/consent-registry.json")
 
 
 def _load_explicit_opt_in_purposes() -> frozenset[str]:

@@ -19,11 +19,13 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
-# parents[4] is the repository root from services/backend/services/model_governance/.
-_REGISTRY_PATH = (
-    Path(__file__).resolve().parents[4]
-    / "packages" / "shared" / "contracts" / "consent-registry.json"
-)
+try:
+    _REGISTRY_PATH = (
+        Path(__file__).resolve().parents[4]
+        / "packages" / "shared" / "contracts" / "consent-registry.json"
+    )
+except IndexError:
+    _REGISTRY_PATH = Path("/nonexistent/consent-registry.json")
 
 
 @lru_cache(maxsize=1)

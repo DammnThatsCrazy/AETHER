@@ -24,13 +24,16 @@ from shared.graph.graph import EdgeType
 
 # repo-root/packages/shared/contracts/relationship-predicate-registry.json
 # relationship_spine is at <root>/services/backend/shared/relationship_spine
-_REGISTRY_PATH = (
-    Path(__file__).resolve().parents[4]
-    / "packages"
-    / "shared"
-    / "contracts"
-    / "relationship-predicate-registry.json"
-)
+try:
+    _REGISTRY_PATH = (
+        Path(__file__).resolve().parents[4]
+        / "packages"
+        / "shared"
+        / "contracts"
+        / "relationship-predicate-registry.json"
+    )
+except IndexError:
+    _REGISTRY_PATH = Path("/nonexistent/relationship-predicate-registry.json")
 
 
 def _edge_type_values() -> frozenset[str]:

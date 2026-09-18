@@ -21,15 +21,16 @@ import re
 from pathlib import Path
 from typing import Optional
 
-# Canonical outcome-type registry path, repo-root-relative (parents[5] is the
-# repository root from services/backend/services/measurement/outcome/registry.py).
-_OUTCOME_TYPE_REGISTRY_PATH = (
-    Path(__file__).resolve().parents[5]
-    / "packages"
-    / "shared"
-    / "contracts"
-    / "outcome-type-registry.json"
-)
+try:
+    _OUTCOME_TYPE_REGISTRY_PATH = (
+        Path(__file__).resolve().parents[5]
+        / "packages"
+        / "shared"
+        / "contracts"
+        / "outcome-type-registry.json"
+    )
+except IndexError:
+    _OUTCOME_TYPE_REGISTRY_PATH = Path("/nonexistent/outcome-type-registry.json")
 
 _IDENT_RE = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)*$")
 
