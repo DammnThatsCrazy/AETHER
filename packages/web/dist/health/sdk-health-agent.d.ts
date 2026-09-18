@@ -48,6 +48,8 @@ export interface SDKHeartbeatPayload {
     wallet_connected: boolean;
     config_version: string;
     rollout_cohort: string;
+    manifest_status: ManifestStatus;
+    dropped_event_counts: DroppedEventCounts;
 }
 export interface SDKManifest {
     manifest_version: string;
@@ -59,8 +61,30 @@ export interface SDKManifest {
     flags: Record<string, unknown>;
     published_at: string;
     signature: string;
+    /** Manifest fetch status for diagnostics */
+    status?: 'healthy' | 'forbidden' | 'expired' | 'signature_invalid' | 'unavailable';
 }
 export type ManifestUpdateCallback = (manifest: SDKManifest) => void;
+export type ManifestStatus = SDKManifest['status'];
+export type DroppedEventReason = 'consent_denied' | 'schema_invalid' | 'queue_full' | 'offline_expired' | 'retry_exhausted' | 'manifest_blocked' | 'unsupported_sdk_version' | 'payload_too_large' | 'auth_failed' | 'shutdown_unflushed';
+export interface DroppedEventCounts {
+    consent_denied: number;
+    schema_invalid: number;
+    queue_full: number;
+    offline_expired: number;
+    retry_exhausted: number;
+    manifest_blocked: number;
+    unsupported_sdk_version: number;
+    payload_too_large: number;
+    auth_failed: number;
+    shutdown_unflushed: number;
+}
+export interface Diagnostics {
+    droppedEvents: DroppedEventCounts;
+    queueDepth: number;
+    lastFlushStatus: 'pending' | 'flushing' | 'success' | 'failed' | 'no_events';
+    manifestStatus: ManifestStatus;
+}
 export declare class SDKHealthAgent {
     private readonly config;
     private readonly eventQueue;
@@ -70,6 +94,9 @@ export declare class SDKHealthAgent {
     private currentManifest;
     private manifestCallbacks;
     private isRunning;
+    private manifestStatus;
+    private droppedCounts;
+    private lastFlushStatus;
     constructor(config: SDKHealthAgentConfig, eventQueue: EventQueue);
     /** Start the health agent — emits first heartbeat immediately. */
     start(): void;
@@ -78,9 +105,19 @@ export declare class SDKHealthAgent {
     /** Register a callback to be invoked when the manifest is updated. */
     onManifestUpdate(callback: ManifestUpdateCallback): void;
     /** Record a dropped event (called by EventQueue on consent filter / error). */
-    recordDroppedEvent(): void;
+    recordDroppedEvent(reason?: DroppedEventReason): void;
     /** Record a successful event dispatch. */
     recordAttempt(latencyMs: number, success: boolean): void;
+    /** Set the manifest fetch status for diagnostics. */
+    setManifestStatus(status: ManifestStatus): void;
+    /** Set the last flush status. */
+    setLastFlushStatus(status: Diagnostics['lastFlushStatus']): void;
+    /** Return current diagnostics for the SDK. */
+    getDiagnostics(): Diagnostics;
+    /** Return the current queue depth. */
+    getQueueDepth(): number;
+    /** Return the last flush status. */
+    getLastFlushStatus(): Diagnostics['lastFlushStatus'];
     sendHeartbeat(): Promise<void>;
     fetchManifest(): Promise<SDKManifest | null>;
     /** Return the currently cached manifest (null if not yet fetched). */
