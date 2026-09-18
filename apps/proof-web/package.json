@@ -12,6 +12,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@aether/shared": "*",
     "@aether/web": "*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

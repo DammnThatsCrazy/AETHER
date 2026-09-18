@@ -230,6 +230,9 @@ importers:
 
   apps/proof-web:
     dependencies:
+      '@aether/shared':
+        specifier: '*'
+        version: link:../../packages/shared
       '@aether/web':
         specifier: '*'
         version: link:../../packages/web
