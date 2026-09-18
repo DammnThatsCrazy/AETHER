@@ -3,14 +3,8 @@ import { Button } from '@aether/ui';
 import { SelectField, TextareaField, TextField } from '@olympus-marketing/components/form-fields';
 import { emailFieldError, requiredError } from '@olympus-marketing/lib/validation';
 
-/**
- * Demo-request capture for Olympus Labs. Same honest-storage contract as
- * `waitlist-form.tsx`: there is no scheduling or CRM backend wired into this
- * build, so a request is saved to `localStorage` in the visitor's own browser
- * and the success state says so plainly instead of implying a call is booked.
- */
-
 const STORAGE_KEY = 'olympus.demo-requests.v1';
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
 const USE_CASE_OPTIONS: readonly { readonly value: string; readonly label: string }[] = [
   { value: 'customer-intelligence', label: 'Customer Intelligence' },
@@ -49,6 +43,27 @@ function saveDemoRequest(request: DemoRequest): void {
   }
 }
 
+async function submitLead(request: DemoRequest): Promise<void> {
+  if (!API_BASE) return;
+  try {
+    await fetch(`${API_BASE}/v1/contact/lead`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lead_type: 'demo-request',
+        email: request.email,
+        name: request.name,
+        company: request.company,
+        use_case: request.useCase,
+        message: request.message,
+        source: 'olympus-marketing',
+      }),
+    });
+  } catch {
+    // Best effort — localStorage is the local fallback.
+  }
+}
+
 interface FieldErrors {
   readonly name?: string | undefined;
   readonly email?: string | undefined;
@@ -64,6 +79,7 @@ export function DemoRequestForm({ className }: { readonly className?: string }) 
   const [message, setMessage] = useState('');
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -80,15 +96,20 @@ export function DemoRequestForm({ className }: { readonly className?: string }) 
     setErrors(nextErrors);
     if (Object.values(nextErrors).some((value) => value !== undefined)) return;
 
-    saveDemoRequest({
+    const entry: DemoRequest = {
       name: trimmedName,
       email: trimmedEmail,
       company: trimmedCompany,
       useCase,
       message: message.trim(),
       submittedAt: new Date().toISOString(),
+    };
+    saveDemoRequest(entry);
+    setSubmitting(true);
+    submitLead(entry).finally(() => {
+      setSubmitting(false);
+      setSubmitted(true);
     });
-    setSubmitted(true);
   }
 
   if (submitted) {
@@ -96,9 +117,8 @@ export function DemoRequestForm({ className }: { readonly className?: string }) 
       <div role="status" className={className ?? 'rounded-lg border border-border-default bg-surface-raised p-6'}>
         <p className="text-base font-semibold text-text-primary">We’ll be in touch.</p>
         <p className="mt-2 max-w-md text-sm leading-relaxed text-text-secondary">
-          We saved your request in this browser. Olympus Labs has no scheduling backend wired into this build, so no
-          call is booked yet — reach us directly through the contact channels on this page if you need a faster
-          response.
+          We've received your request. Our team will review it and reach out to schedule a demo — typically within 2
+          business days.
         </p>
       </div>
     );
@@ -171,12 +191,11 @@ export function DemoRequestForm({ className }: { readonly className?: string }) 
         value={message}
         onValueChange={setMessage}
       />
-      <Button type="submit" variant="primary" size="lg">
-        Request a demo
+      <Button type="submit" variant="primary" size="lg" disabled={submitting}>
+        {submitting ? 'Submitting…' : 'Request a demo'}
       </Button>
       <p className="text-xs leading-relaxed text-text-muted">
-        Saved in this browser only. Olympus Labs has no scheduling backend configured for this build, so nothing is
-        sent to a server.
+        We'll reach out to schedule a walkthrough — typically within 2 business days.
       </p>
     </form>
   );

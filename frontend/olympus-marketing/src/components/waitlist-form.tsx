@@ -3,13 +3,8 @@ import { Button } from '@aether/ui';
 import { SelectField, TextField } from '@olympus-marketing/components/form-fields';
 import { emailFieldError, requiredError } from '@olympus-marketing/lib/validation';
 
-/**
- * Olympus Labs waitlist capture. Submissions are saved to `localStorage` in
- * the visitor's browser. A real intake channel can read
- * `readWaitlistEntries()` once one exists.
- */
-
 const STORAGE_KEY = 'olympus.waitlist.entries.v1';
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
 const ROLE_OPTIONS: readonly { readonly value: string; readonly label: string }[] = [
   { value: 'founder-executive', label: 'Founder / executive' },
@@ -28,8 +23,6 @@ export interface WaitlistEntry {
   readonly submittedAt: string;
 }
 
-/** Read every entry saved in this browser. Never throws — a blocked or absent
- * `localStorage` (private browsing, disabled storage) yields an empty list. */
 export function readWaitlistEntries(): readonly WaitlistEntry[] {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -50,6 +43,26 @@ function saveWaitlistEntry(entry: WaitlistEntry): void {
   }
 }
 
+async function submitLead(entry: WaitlistEntry): Promise<void> {
+  if (!API_BASE) return;
+  try {
+    await fetch(`${API_BASE}/v1/contact/lead`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lead_type: 'waitlist',
+        email: entry.email,
+        name: entry.name,
+        company: entry.company,
+        role: entry.role,
+        source: 'olympus-marketing',
+      }),
+    });
+  } catch {
+    // Best effort — localStorage is the local fallback.
+  }
+}
+
 interface FieldErrors {
   readonly name?: string | undefined;
   readonly email?: string | undefined;
@@ -62,6 +75,7 @@ export function WaitlistForm({ className }: { readonly className?: string }) {
   const [role, setRole] = useState('');
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submittedEmail, setSubmittedEmail] = useState<string | undefined>(undefined);
+  const [submitting, setSubmitting] = useState(false);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -79,22 +93,27 @@ export function WaitlistForm({ className }: { readonly className?: string }) {
     setErrors(nextErrors);
     if (nextErrors.name !== undefined || nextErrors.email !== undefined) return;
 
-    saveWaitlistEntry({
+    const entry: WaitlistEntry = {
       name: trimmedName,
       email: trimmedEmail,
       company: company.trim(),
       role,
       submittedAt: new Date().toISOString(),
+    };
+    saveWaitlistEntry(entry);
+    setSubmitting(true);
+    submitLead(entry).finally(() => {
+      setSubmitting(false);
+      setSubmittedEmail(trimmedEmail);
     });
-    setSubmittedEmail(trimmedEmail);
   }
 
   if (submittedEmail !== undefined) {
     return (
       <div role="status" className={className ?? 'rounded-lg border border-border-default bg-surface-raised p-6'}>
-        <p className="text-base font-semibold text-text-primary">You’re on the list.</p>
+        <p className="text-base font-semibold text-text-primary">You're on the list.</p>
         <p className="mt-2 max-w-md text-sm leading-relaxed text-text-secondary">
-          We saved {submittedEmail}. Aether is coming soon — we’re preparing for a closed alpha and will
+          We saved {submittedEmail}. Aether is coming soon — we're preparing for a closed alpha and will
           notify you when early access opens.
         </p>
       </div>
@@ -151,8 +170,8 @@ export function WaitlistForm({ className }: { readonly className?: string }) {
           placeholder="Select a role"
         />
       </div>
-      <Button type="submit" variant="primary" size="lg">
-        Join the waitlist
+      <Button type="submit" variant="primary" size="lg" disabled={submitting}>
+        {submitting ? 'Submitting…' : 'Join the waitlist'}
       </Button>
       <p className="text-xs leading-relaxed text-text-muted">
         Aether is coming soon. Join the waitlist and we'll notify you when the closed alpha opens.

@@ -4,15 +4,8 @@ import { Button } from '@aether/ui';
 import { Eyebrow } from '@aether-marketing/components/marketing-section';
 import { emailError, TextField } from '@aether-marketing/pages/auth/auth-ui';
 
-/**
- * Reusable early-access capture, embeddable on any marketing page. Aether
- * already has a real workspace hand-off at `/signup`, so this section is
- * deliberately secondary to it: the primary path for a visitor ready now is
- * still the real sign-up flow, and this form is for a visitor who wants to be
- * notified when the closed alpha opens.
- */
-
 const STORAGE_KEY = 'aether.marketing.early-access.v1';
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
 function saveEmail(email: string): void {
   try {
@@ -23,6 +16,23 @@ function saveEmail(email: string): void {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
   } catch {
     // Best effort only — a full or blocked store must never break the form.
+  }
+}
+
+async function submitLead(email: string, variant: string): Promise<void> {
+  if (!API_BASE) return;
+  try {
+    await fetch(`${API_BASE}/v1/contact/lead`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lead_type: variant === 'waitlist' ? 'waitlist' : 'early-access',
+        email,
+        source: 'aether-marketing',
+      }),
+    });
+  } catch {
+    // Best effort — localStorage is the local fallback.
   }
 }
 
@@ -48,6 +58,7 @@ export function WaitlistSection({
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | undefined>(undefined);
   const [submittedEmail, setSubmittedEmail] = useState<string | undefined>(undefined);
+  const [submitting, setSubmitting] = useState(false);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -56,7 +67,11 @@ export function WaitlistSection({
     setError(problem);
     if (problem !== undefined) return;
     saveEmail(trimmed);
-    setSubmittedEmail(trimmed);
+    setSubmitting(true);
+    submitLead(trimmed, variant).finally(() => {
+      setSubmitting(false);
+      setSubmittedEmail(trimmed);
+    });
   }
 
   const actionLabel = variant === 'waitlist' ? 'Join the waitlist' : 'Request early access';
@@ -80,9 +95,9 @@ export function WaitlistSection({
           <div className="rounded-md border border-border-default bg-surface-base p-6">
             {submittedEmail !== undefined ? (
               <div role="status">
-                <p className="text-base font-semibold text-text-primary">You’re on the list.</p>
+                <p className="text-base font-semibold text-text-primary">You're on the list.</p>
                 <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-                  We saved {submittedEmail}. Aether is coming soon — we’re preparing for a closed alpha and will
+                  We saved {submittedEmail}. Aether is coming soon — we're preparing for a closed alpha and will
                   notify you when early access opens.
                 </p>
               </div>
@@ -101,8 +116,8 @@ export function WaitlistSection({
                   }}
                   error={error}
                 />
-                <Button type="submit" variant="primary" size="lg">
-                  {actionLabel}
+                <Button type="submit" variant="primary" size="lg" disabled={submitting}>
+                  {submitting ? 'Submitting…' : actionLabel}
                 </Button>
                 <p className="text-xs leading-relaxed text-text-muted">
                   Aether is coming soon. We'll notify you when the closed alpha opens.

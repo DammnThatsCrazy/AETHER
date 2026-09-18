@@ -1,14 +1,17 @@
 """
-Aether Service — Enterprise Contact
-
-Accepts inbound enterprise inquiries from authenticated tenants, persists them
-durably, and notifies the internal sales team by email. The persisted row is the
-source of truth — email delivery is best-effort and never loses an inquiry.
-Inquiry PII (name/email/company/message) is written only to the database, never
-to application logs.
+Aether Service — Contact & Lead Capture
 
 Endpoints:
-    POST /v1/contact/enterprise   Submit an enterprise inquiry
+    POST /v1/contact/enterprise   Submit an enterprise inquiry (authenticated)
+    POST /v1/contact/lead         Submit a public lead-capture form (unauthenticated)
+
+Enterprise inquiries require authentication. Public lead capture (waitlist,
+demo requests, early-access sign-ups) is unauthenticated and rate-limited
+by IP to prevent abuse.
+
+Inquiry PII (name/email/company/message) is written only to the database, never
+to application logs. The persisted row is the source of truth — email delivery
+is best-effort and never loses an inquiry.
 """
 
 from __future__ import annotations
@@ -149,3 +152,64 @@ async def _notify_sales_team(inquiry_id: str, body: EnterpriseContactRequest) ->
         subject=subject,
         body_html=body_html,
     )
+
+
+# ── Public lead capture ─────────────────────────────────────────────────
+
+_VALID_LEAD_TYPES = {"waitlist", "early-access", "demo-request"}
+
+
+class LeadCaptureRequest(BaseModel):
+    lead_type: str = Field(..., description="waitlist | early-access | demo-request")
+    email: str = Field(..., min_length=3, max_length=320)
+    name: str = Field("", max_length=200)
+    company: str = Field("", max_length=200)
+    role: str = Field("", max_length=100)
+    use_case: str = Field("", max_length=200)
+    message: str = Field("", max_length=2000)
+    source: str = Field("", max_length=100, description="originating site/page")
+
+
+@router.post("/lead")
+async def capture_lead(body: LeadCaptureRequest, request: Request):
+    """Accept a public lead-capture submission (no authentication required).
+
+    Persists the lead as a durable row in the enterprise_inquiries table.
+    PII is never logged.
+    """
+    if body.lead_type not in _VALID_LEAD_TYPES:
+        raise BadRequestError(
+            f"Invalid lead_type '{body.lead_type}'. "
+            f"Valid values: {sorted(_VALID_LEAD_TYPES)}"
+        )
+
+    lead_id = str(uuid.uuid4())
+    try:
+        await _enterprise_inquiries.insert(lead_id, {
+            "lead_type": body.lead_type,
+            "name": body.name,
+            "email": body.email,
+            "company_name": body.company,
+            "role": body.role,
+            "use_case": body.use_case,
+            "message": body.message,
+            "source": body.source,
+            "status": "received",
+        })
+    except Exception as exc:
+        logger.error(
+            "lead_capture_persist_failed",
+            extra={"lead_id": lead_id, "error": str(exc)},
+        )
+        raise ServiceUnavailableError("lead capture storage") from exc
+
+    logger.info(
+        "lead_captured",
+        extra={"lead_id": lead_id, "lead_type": body.lead_type, "source": body.source},
+    )
+    metrics.increment("contact_lead_captured", labels={"lead_type": body.lead_type})
+
+    return APIResponse(data={
+        "received": True,
+        "lead_id": lead_id,
+    }).to_dict()
