@@ -14,7 +14,8 @@
   "dependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@aether/web": "*"
+    "@aether/web": "*",
+    "@aether/proof-fixtures": "*"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

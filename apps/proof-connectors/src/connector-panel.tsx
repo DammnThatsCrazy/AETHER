@@ -70,15 +70,15 @@ async function postBatch(events: unknown[]): Promise<{
   return {
     ok: response.ok,
     status: response.status,
-    batchId: body.batchId,
-    receivedAt: body.receivedAt,
+    ...(body.batchId !== undefined ? { batchId: body.batchId } : {}),
+    ...(body.receivedAt !== undefined ? { receivedAt: body.receivedAt } : {}),
     accepted: body.accepted ?? 0,
     rejected: body.rejected ?? 0,
     duplicates: body.duplicates ?? 0,
     eventResults: (body.events ?? []).map((e) => ({
       eventId: e.eventId ?? 'unknown',
       status: e.status ?? 'unknown',
-      error: e.error,
+      ...(e.error !== undefined ? { error: e.error } : {}),
     })),
   };
 }
