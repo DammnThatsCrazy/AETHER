@@ -198,7 +198,15 @@ class BaseRepository(ABC):
     Local: in-memory dicts for development, shared across instances of the
     same table so route-level singletons and the Profile 360 aggregator
     observe one consistent view.
+
+    Subclasses whose migration creates explicit named columns (instead of a
+    single ``data JSONB`` bag) set ``_jsonb_mode = False``.  The CRUD helpers
+    then use ``SELECT *`` / direct column references instead of
+    ``SELECT data`` / ``data->>'key'``.
     """
+
+    _jsonb_mode: bool = True
+    _default_sort: str = "created_at"
 
     def __init__(self, table_name: str) -> None:
         self.table_name = table_name
@@ -221,6 +229,9 @@ class BaseRepository(ABC):
         if pool is None:
             self._table_ensured = True
             return
+        if not self._jsonb_mode:
+            self._table_ensured = True
+            return
         safe_name = self.table_name.replace("-", "_").replace(" ", "_")
         if not _TABLE_NAME_RE.match(safe_name):
             raise ValueError(f"Invalid table name: {safe_name!r} — must be alphanumeric/underscores only")
@@ -239,17 +250,33 @@ class BaseRepository(ABC):
         """)
         self._table_ensured = True
 
+    @staticmethod
+    def _row_to_dict(row: Any) -> dict:
+        """Convert an asyncpg Record to a plain dict, serialising datetimes."""
+        result = dict(row)
+        for k, v in result.items():
+            if hasattr(v, "isoformat"):
+                result[k] = v.isoformat()
+        return result
+
     async def find_by_id(self, record_id: str) -> Optional[dict]:
         pool = await self._ensure_pool()
         if pool is None:
             return self._store.get(record_id)
         await self._ensure_table()
+        if self._jsonb_mode:
+            row = await pool.fetchrow(
+                f"SELECT data FROM {self.table_name} WHERE id = $1", record_id
+            )
+            if row is None:
+                return None
+            return json.loads(row["data"])
         row = await pool.fetchrow(
-            f"SELECT data FROM {self.table_name} WHERE id = $1", record_id
+            f"SELECT * FROM {self.table_name} WHERE id = $1", record_id
         )
         if row is None:
             return None
-        return json.loads(row["data"])
+        return self._row_to_dict(row)
 
     async def find_by_id_or_fail(self, record_id: str) -> dict:
         record = await self.find_by_id(record_id)
@@ -279,7 +306,7 @@ class BaseRepository(ABC):
             return results[offset: offset + limit]
 
         await self._ensure_table()
-        # Build JSONB filter conditions
+        # Build filter conditions
         conditions = ["1=1"]
         params: list[Any] = []
         idx = 1
@@ -296,7 +323,7 @@ class BaseRepository(ABC):
                     continue
                 if key == "tenant_id":
                     conditions.append(f"tenant_id = ${idx}")
-                else:
+                elif self._jsonb_mode:
                     if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", key):
                         raise ValueError(f"Invalid filter key: {key!r}")
                     if value is None:
@@ -306,20 +333,31 @@ class BaseRepository(ABC):
                         conditions.append(f"data->>'{key}' IS NULL")
                         continue
                     conditions.append(f"data->>'{key}' = ${idx}")
+                else:
+                    if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", key):
+                        raise ValueError(f"Invalid filter key: {key!r}")
+                    if value is None:
+                        conditions.append(f"{key} IS NULL")
+                        continue
+                    conditions.append(f"{key} = ${idx}")
                 params.append(_jsonb_text(value))
                 idx += 1
 
         direction = "DESC" if sort_order == "desc" else "ASC"
-        safe_sort = sort_by if sort_by in ("created_at", "updated_at") else "created_at"
+        allowed_sorts = {"created_at", "updated_at", "detected_at"}
+        safe_sort = sort_by if sort_by in allowed_sorts else self._default_sort
+        select_expr = "data" if self._jsonb_mode else "*"
         query = f"""
-            SELECT data FROM {self.table_name}
+            SELECT {select_expr} FROM {self.table_name}
             WHERE {' AND '.join(conditions)}
             ORDER BY {safe_sort} {direction}
             LIMIT ${idx} OFFSET ${idx + 1}
         """
         params.extend([limit, offset])
         rows = await pool.fetch(query, *params)
-        return [json.loads(row["data"]) for row in rows]
+        if self._jsonb_mode:
+            return [json.loads(row["data"]) for row in rows]
+        return [self._row_to_dict(row) for row in rows]
 
     async def count(self, filters: Optional[dict[str, Any]] = None) -> int:
         pool = await self._ensure_pool()
@@ -343,14 +381,18 @@ class BaseRepository(ABC):
                     continue
                 if key == "tenant_id":
                     conditions.append(f"tenant_id = ${idx}")
-                else:
+                elif self._jsonb_mode:
                     if value is None:
-                        # `data->>'k'` is SQL NULL both when the key is absent
-                        # and when it holds JSON null, and NULL equals nothing —
-                        # so `= $n` could never have matched either.
                         conditions.append(f"data->>'{key}' IS NULL")
                         continue
                     conditions.append(f"data->>'{key}' = ${idx}")
+                else:
+                    if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", key):
+                        raise ValueError(f"Invalid filter key: {key!r}")
+                    if value is None:
+                        conditions.append(f"{key} IS NULL")
+                        continue
+                    conditions.append(f"{key} = ${idx}")
                 params.append(_jsonb_text(value))
                 idx += 1
 
@@ -399,13 +441,41 @@ class BaseRepository(ABC):
             return data
 
         await self._ensure_table()
-        tenant_id = data.get("tenant_id", "")
-        await pool.execute(
-            f"""INSERT INTO {self.table_name} (id, data, tenant_id, created_at, updated_at)
-                VALUES ($1, $2::jsonb, $3, NOW(), NOW())
-                ON CONFLICT (id) DO UPDATE SET data = $2::jsonb, updated_at = NOW()""",
-            record_id, json.dumps(data, default=str), tenant_id,
-        )
+        if self._jsonb_mode:
+            tenant_id = data.get("tenant_id", "")
+            await pool.execute(
+                f"""INSERT INTO {self.table_name} (id, data, tenant_id, created_at, updated_at)
+                    VALUES ($1, $2::jsonb, $3, NOW(), NOW())
+                    ON CONFLICT (id) DO UPDATE SET data = $2::jsonb, updated_at = NOW()""",
+                record_id, json.dumps(data, default=str), tenant_id,
+            )
+        else:
+            cols: list[str] = []
+            vals: list[Any] = []
+            casts: list[str] = []
+            for col, val in data.items():
+                if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", col):
+                    raise ValueError(f"Invalid column name: {col!r}")
+                cols.append(col)
+                if isinstance(val, (dict, list)):
+                    vals.append(json.dumps(val, default=str))
+                    casts.append("::jsonb")
+                else:
+                    vals.append(val)
+                    casts.append("")
+            col_list = ", ".join(cols)
+            placeholders = ", ".join(
+                f"${i + 1}{casts[i]}" for i in range(len(cols))
+            )
+            update_set = ", ".join(
+                f"{c} = EXCLUDED.{c}" for c in cols if c != "id"
+            )
+            await pool.execute(
+                f"""INSERT INTO {self.table_name} ({col_list})
+                    VALUES ({placeholders})
+                    ON CONFLICT (id) DO UPDATE SET {update_set}""",
+                *vals,
+            )
         logger.info(f"INSERT {self.table_name} id={record_id}")
         return data
 
@@ -420,10 +490,29 @@ class BaseRepository(ABC):
             logger.info(f"UPDATE {self.table_name} id={record_id} (in-memory)")
             return existing
 
-        await pool.execute(
-            f"UPDATE {self.table_name} SET data = $1::jsonb, updated_at = NOW() WHERE id = $2",
-            json.dumps(existing, default=str), record_id,
-        )
+        if self._jsonb_mode:
+            await pool.execute(
+                f"UPDATE {self.table_name} SET data = $1::jsonb, updated_at = NOW() WHERE id = $2",
+                json.dumps(existing, default=str), record_id,
+            )
+        else:
+            set_parts: list[str] = []
+            vals: list[Any] = []
+            idx = 1
+            for col, val in existing.items():
+                if col == "id":
+                    continue
+                if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", col):
+                    raise ValueError(f"Invalid column name: {col!r}")
+                cast = "::jsonb" if isinstance(val, (dict, list)) else ""
+                set_parts.append(f"{col} = ${idx}{cast}")
+                vals.append(json.dumps(val, default=str) if isinstance(val, (dict, list)) else val)
+                idx += 1
+            vals.append(record_id)
+            await pool.execute(
+                f"UPDATE {self.table_name} SET {', '.join(set_parts)} WHERE id = ${idx}",
+                *vals,
+            )
         logger.info(f"UPDATE {self.table_name} id={record_id}")
         return existing
 
@@ -476,8 +565,12 @@ class BaseRepository(ABC):
         await self._ensure_table()
         if not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", entity_field):
             raise ValueError(f"Invalid entity_field: {entity_field!r}")
+        if self._jsonb_mode:
+            where_clause = f"data->>'{entity_field}' = $1"
+        else:
+            where_clause = f"{entity_field} = $1"
         result = await pool.execute(
-            f"DELETE FROM {self.table_name} WHERE data->>'{entity_field}' = $1",
+            f"DELETE FROM {self.table_name} WHERE {where_clause}",
             entity_id,
         )
         # result is like "DELETE 5"
@@ -1764,6 +1857,9 @@ class NotificationIntelligenceRepository(BaseRepository):
     and by deduplication_key for dedupe checks.
     """
 
+    _jsonb_mode = False
+    _default_sort = "detected_at"
+
     def __init__(self) -> None:
         super().__init__("notification_intelligence_events")
 
@@ -1801,6 +1897,8 @@ class OperatorActionRepository(BaseRepository):
     Table: operator_actions
     """
 
+    _jsonb_mode = False
+
     def __init__(self) -> None:
         super().__init__("operator_actions")
 
@@ -1827,6 +1925,8 @@ class TenantNotificationConfigRepository(BaseRepository):
     Keyed by tenant_id (one config per tenant).
     """
 
+    _jsonb_mode = False
+
     def __init__(self) -> None:
         super().__init__("tenant_notification_configs")
 
@@ -1845,6 +1945,8 @@ class UserNotificationChannelRepository(BaseRepository):
     Stores channel configs for Slack, Discord, Telegram, and generic webhooks.
     `credentials_ref` holds only the vault key ID — never the raw credential.
     """
+
+    _jsonb_mode = False
 
     def __init__(self) -> None:
         super().__init__("user_notification_channels")
@@ -1874,6 +1976,8 @@ class SlackOAuthStateRepository(BaseRepository):
     Each state nonce has a 10-minute TTL. Rows are written on OAuth initiation
     and deleted (or expired) after the callback completes.
     """
+
+    _jsonb_mode = False
 
     def __init__(self) -> None:
         super().__init__("slack_oauth_states")
