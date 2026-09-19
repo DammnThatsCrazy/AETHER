@@ -14,6 +14,8 @@ Usage:
     tasks = await store.find(tenant_id="t-001")
 
 The store automatically:
+  - Uses DynamoDB when CACHE_BACKEND=dynamodb and DYNAMODB_CACHE_TABLE is set
+    (the lean/staging multi-instance-safe backend)
   - Uses Redis when REDIS_HOST or REDIS_URL is configured (multi-instance safe)
   - Falls back to in-memory with threading locks (single-instance)
   - Provides TTL-based expiration
@@ -22,6 +24,7 @@ The store automatically:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import threading
@@ -32,6 +35,14 @@ from typing import Optional
 from shared.logger.logger import get_logger
 
 logger = get_logger("aether.store")
+
+try:
+    import boto3 as _boto3_store
+
+    BOTO3_STORE_AVAILABLE = True
+except ImportError:  # pragma: no cover - the production dependency is declared
+    _boto3_store = None  # type: ignore[assignment]
+    BOTO3_STORE_AVAILABLE = False
 
 
 def _inmemory_allowed() -> bool:
@@ -261,6 +272,142 @@ class RedisStore(DurableStore):
 
 
 # =========================================================================
+# DynamoDB Store (lean/staging production backend)
+# =========================================================================
+
+class DynamoDBStore(DurableStore):
+    """DynamoDB-backed durable store for profiles that replace Redis.
+
+    The Terraform-managed lean/staging profiles deliberately select DynamoDB
+    instead of ElastiCache Redis. ``shared.store`` must honor that same
+    selector: constructing an ``InMemoryStore`` in a non-local process fails
+    closed by design, which previously made the API crash during import when
+    the observability trace store was initialized.
+
+    Items share the profile's cache table but use a store-specific key prefix,
+    so they cannot collide with the cache client's entries. Values are JSON
+    strings in the table's existing ``val`` attribute; list values use a
+    separate DynamoDB list attribute and the same namespaced key.
+    """
+
+    def __init__(self, name: str, table_name: str):
+        if not BOTO3_STORE_AVAILABLE:
+            raise RuntimeError(
+                "boto3 is required for the DynamoDB durable store. "
+                "Install boto3>=1.34.0."
+            )
+        if not table_name:
+            raise RuntimeError(
+                f"DynamoDB table is required for durable store '{name}'. "
+                "Set DYNAMODB_CACHE_TABLE."
+            )
+        self.name = name
+        self._table_name = table_name
+        self._prefix = f"aether:store:{name}:"
+        self._list_prefix = f"{self._prefix}list:"
+        self._table = None
+
+    def _get_table(self):
+        if self._table is None:
+            self._table = _boto3_store.resource("dynamodb").Table(self._table_name)  # type: ignore[union-attr]
+        return self._table
+
+    async def _run(self, fn):
+        return await asyncio.to_thread(fn)
+
+    def _key(self, key: str) -> str:
+        return self._prefix + key
+
+    def _list_key(self, key: str) -> str:
+        return self._list_prefix + key
+
+    @staticmethod
+    def _expired(item: dict) -> bool:
+        ttl_value = item.get("ttl")
+        return ttl_value is not None and int(ttl_value) < int(time.time())
+
+    async def get(self, key: str) -> Optional[dict]:
+        response = await self._run(
+            lambda: self._get_table().get_item(Key={"cache_key": self._key(key)})
+        )
+        item = response.get("Item")
+        if not item or self._expired(item):
+            return None
+        raw = item.get("val")
+        return json.loads(raw) if raw else None
+
+    async def set(self, key: str, value: dict, ttl_seconds: int = 0) -> None:
+        item = {"cache_key": self._key(key), "val": json.dumps(value)}
+        if ttl_seconds > 0:
+            item["ttl"] = int(time.time()) + ttl_seconds
+        await self._run(lambda: self._get_table().put_item(Item=item))
+
+    async def delete(self, key: str) -> bool:
+        response = await self._run(
+            lambda: self._get_table().delete_item(
+                Key={"cache_key": self._key(key)},
+                ReturnValues="ALL_OLD",
+            )
+        )
+        return bool(response.get("Attributes"))
+
+    async def find(self, **filters) -> list[dict]:
+        def _scan() -> list[dict]:
+            table = self._get_table()
+            results: list[dict] = []
+            last_key = None
+            while True:
+                kwargs = {
+                    "ProjectionExpression": "cache_key, #value, #ttl",
+                    "ExpressionAttributeNames": {"#value": "val", "#ttl": "ttl"},
+                }
+                if last_key:
+                    kwargs["ExclusiveStartKey"] = last_key
+                response = table.scan(**kwargs)
+                for item in response.get("Items", []):
+                    item_key = item.get("cache_key", "")
+                    if not item_key.startswith(self._prefix) or item_key.startswith(self._list_prefix):
+                        continue
+                    if self._expired(item):
+                        continue
+                    raw = item.get("val")
+                    if not raw:
+                        continue
+                    record = json.loads(raw)
+                    if all(record.get(k) == v for k, v in filters.items()):
+                        results.append(record)
+                last_key = response.get("LastEvaluatedKey")
+                if not last_key:
+                    return results
+
+        return await self._run(_scan)
+
+    async def append_list(self, key: str, value: dict) -> None:
+        await self._run(
+            lambda: self._get_table().update_item(
+                Key={"cache_key": self._list_key(key)},
+                UpdateExpression="SET #items = list_append(if_not_exists(#items, :empty), :item)",
+                ExpressionAttributeNames={"#items": "items"},
+                ExpressionAttributeValues={":empty": [], ":item": [value]},
+            )
+        )
+
+    async def get_list(self, key: str, limit: int = 100) -> list[dict]:
+        response = await self._run(
+            lambda: self._get_table().get_item(
+                Key={"cache_key": self._list_key(key)},
+                ProjectionExpression="#items",
+                ExpressionAttributeNames={"#items": "items"},
+            )
+        )
+        items = (response.get("Item") or {}).get("items", [])
+        return items[-limit:] if limit > 0 else []
+
+    async def count(self, **filters) -> int:
+        return len(await self.find(**filters))
+
+
+# =========================================================================
 # Store Factory
 # =========================================================================
 
@@ -288,17 +435,22 @@ def get_store(name: str, prefer_redis: bool = True) -> DurableStore:
 
     Args:
         name: Store name (e.g., "agent_tasks", "export_jobs")
-        prefer_redis: If True, attempt Redis first with in-memory fallback
+        prefer_redis: If True, use the configured hosted durable backend before
+            considering the local-only in-memory implementation.
 
     Returns:
         A DurableStore instance (Redis-backed or in-memory).
     """
     if name not in _stores:
+        dynamodb_table = os.getenv("DYNAMODB_CACHE_TABLE", "")
+        cache_backend = os.getenv("CACHE_BACKEND", "").lower()
         # RedisStore connects via REDIS_URL (falling back to REDIS_HOST/PORT), so
         # honour either here — otherwise a hosted deployment that sets only the
         # common REDIS_URL silently gets an in-memory store and fails closed.
         redis_configured = os.getenv("REDIS_HOST", "") or os.getenv("REDIS_URL", "")
-        if prefer_redis and redis_configured:
+        if prefer_redis and cache_backend == "dynamodb" and dynamodb_table:
+            _stores[name] = DynamoDBStore(name, dynamodb_table)
+        elif prefer_redis and redis_configured:
             _stores[name] = RedisStore(name)
         else:
             _stores[name] = InMemoryStore(name)

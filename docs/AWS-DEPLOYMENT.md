@@ -317,7 +317,7 @@ deliberately not scaled.
 | Store | Provisioned on | Notes |
 |---|---|---|
 | Aurora Serverless v2 Postgres + writer | **all profiles** | Database, graph and analytics of record. Isolated subnets, customer-managed KMS key (or AWS-managed in express mode), AWS-managed master password rotation into `aether/db-password`. |
-| DynamoDB cache table | **all profiles** | Read/write autoscaling, TTL-backed. |
+| DynamoDB cache table | **all profiles** | Read/write autoscaling, TTL-backed. The staging and production-lean `shared.store` durable-store path uses this table when `CACHE_BACKEND=dynamodb`; it does not enable an in-memory fallback. |
 | SNS fanout topic → per-role SQS queues + DLQs | **all profiles** | One queue per role, so a consolidated task binds one queue per hosted role. |
 | S3 object lake, log archive, SPA origins | **all profiles** | Public access blocked, SSE configured. |
 | Secrets Manager + KMS | **all profiles** | Stubs created empty; rotation Lambda. |

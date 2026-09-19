@@ -222,7 +222,7 @@ empty.
 | Dimension | Selection | Realised as | Terraform selector |
 |---|---|---|---|
 | Database | `aurora_postgres` | Aurora Serverless v2 Postgres, 0.5–4 ACU | always on (`enable_aurora = true`) |
-| Cache | `dynamodb` | DynamoDB table with read/write autoscaling, TTL-backed | `local.cache_backend == "dynamodb"` |
+| Cache | `dynamodb` | DynamoDB table with read/write autoscaling, TTL-backed; the shared durable-store path uses the same table | `local.cache_backend == "dynamodb"` |
 | Event broker | `sns_sqs` | SNS fanout topic → per-role SQS queues + DLQs | `local.event_broker == "sns_sqs"` |
 | Graph | `postgres` | stored in the same Aurora cluster; no separate graph resource | `local.graph_backend == "postgres"` |
 | Analytics | `postgres` | stored in the same Aurora cluster | `local.analytics_backend == "postgres"` |
