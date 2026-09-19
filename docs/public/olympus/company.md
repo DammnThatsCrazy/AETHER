@@ -15,9 +15,8 @@ Olympus Labs is the company building governed intelligence infrastructure for
 systems that connect people, software, agents, and value flows.
 ## The company and the product
 Olympus Labs is the parent company and infrastructure builder. Aether is the
-customer-facing product. Kyber is the internal operator and readiness system
-that helps Olympus Labs understand deployment, evidence, revenue, and support
-needs.
+customer-facing product that helps organizations understand connections,
+relationships, and evidence across their systems.
 The hierarchy matters because the company thesis is broader than any one
 application, while the product must remain specific enough to create value for
 the people using it today.

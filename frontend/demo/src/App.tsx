@@ -188,7 +188,6 @@ export function App({ config = getDemoConfig() }: { readonly config?: DemoConfig
 
       <footer className="flex flex-wrap gap-3 border-t border-border-default pt-4 text-sm">
         <a className="text-accent underline" href={config.aetherUrl}>Open Aether</a>
-        <a className="text-accent underline" href={config.kyberUrl}>Open Kyber</a>
       </footer>
     </div>
   );
