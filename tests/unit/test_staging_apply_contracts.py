@@ -189,6 +189,15 @@ def test_kyber_workforce_runtime_contract_is_explicit_and_secret_backed() -> Non
     assert 'api_base_url         = "https://${var.domain_name}"' in root
 
 
+def test_backend_task_definition_has_an_explicit_api_runtime_role() -> None:
+    """The Terraform-managed public task must not inherit the local `all` default."""
+    ecs = (TF / "modules/ecs/main.tf").read_text(encoding="utf-8")
+    start = ecs.index('resource "aws_ecs_task_definition" "backend"')
+    end = ecs.index('resource "aws_ecs_service" "backend"', start)
+    backend = ecs[start:end]
+    assert '{ name = "AETHER_ROLE", value = "api" }' in backend
+
+
 def test_provider_mocked_profile_plans_cover_the_untagged_aws_alias() -> None:
     """Every provider-mocked profile plan must stay offline-capable.
 

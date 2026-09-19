@@ -418,6 +418,11 @@ resource "aws_ecs_task_definition" "backend" {
           { name = "DATABASE_NAME", value = var.database_name },
           { name = "CORS_ORIGINS", value = var.api_cors_origins },
           { name = "PORT", value = "8000" },
+          # The container image defaults AETHER_ROLE to `all` for local
+          # development. The Terraform-managed public API task must override
+          # that default explicitly; staging and production reject `all` so a
+          # missing role cannot accidentally start every worker in the API.
+          { name = "AETHER_ROLE", value = "api" },
           { name = "LOG_LEVEL", value = var.environment == "production" ? "INFO" : "DEBUG" },
           { name = "CACHE_BACKEND", value = var.cache_backend },
           { name = "GRAPH_BACKEND", value = var.graph_backend },
