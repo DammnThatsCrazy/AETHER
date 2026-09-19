@@ -209,7 +209,63 @@ async def capture_lead(body: LeadCaptureRequest, request: Request):
     )
     metrics.increment("contact_lead_captured", labels={"lead_type": body.lead_type})
 
+    notified = await _notify_lead_team(lead_id, body)
+    if not notified:
+        await _enterprise_inquiries.update(lead_id, {"status": "email_failed"})
+        logger.warning(
+            "lead_notification_email_failed",
+            extra={"lead_id": lead_id, "lead_type": body.lead_type},
+        )
+    else:
+        await _enterprise_inquiries.update(lead_id, {"status": "notified"})
+
     return APIResponse(data={
         "received": True,
         "lead_id": lead_id,
     }).to_dict()
+
+
+_LEAD_TYPE_LABELS = {
+    "waitlist": "Waitlist sign-up",
+    "early-access": "Early access request",
+    "demo-request": "Demo request",
+}
+
+
+async def _notify_lead_team(lead_id: str, body: LeadCaptureRequest) -> bool:
+    """Deliver a notification email to the team for a new lead.
+
+    All user-controlled fields are HTML-escaped before interpolation.
+    """
+    from config.settings import settings
+
+    label = _LEAD_TYPE_LABELS.get(body.lead_type, body.lead_type)
+    subject = (
+        f"[{label}] {body.email}"
+    ).replace("\r", " ").replace("\n", " ")
+
+    email = escape(body.email, quote=True)
+    name = escape(body.name, quote=True) if body.name else "—"
+    company = escape(body.company, quote=True) if body.company else "—"
+    role = escape(body.role, quote=True) if body.role else "—"
+    use_case = escape(body.use_case, quote=True) if body.use_case else "—"
+    message = escape(body.message, quote=True) if body.message else "—"
+    source = escape(body.source, quote=True) if body.source else "—"
+
+    body_html = _base(label, f"""
+<p><strong>Type:</strong> {label}</p>
+<p><strong>Email:</strong> {email}</p>
+<p><strong>Name:</strong> {name}</p>
+<p><strong>Company:</strong> {company}</p>
+<p><strong>Role:</strong> {role}</p>
+<p><strong>Use case:</strong> {use_case}</p>
+<hr>
+<p><strong>Message:</strong> {message}</p>
+<p><strong>Source:</strong> {source}</p>
+<p><em>Lead id: {lead_id}</em></p>
+""")
+    return await email_service.send_email(
+        to=settings.email.lead_notification_email,
+        subject=subject,
+        body_html=body_html,
+    )

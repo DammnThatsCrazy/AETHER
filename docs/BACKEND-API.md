@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:5912f5267d946c25628ae67e62f81a3799d23fdb8bc9b0ecabfdf4f52171d773"
+  "services/backend/services/": "sha256:e1031f2b1f96f4a4555c93ce6f1a6e776bbdbeccf62ef8fef559d0d53e008f18"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -179,7 +179,7 @@ not exposed by this model.
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
 | `/v1/contact/enterprise` | POST | API key | Submit an enterprise inquiry. Persists the inquiry as the durable record (source of truth), then best-effort emails `ENTERPRISE_INQUIRY_EMAIL`. A persistence failure fails the request (never a fake success); an email-delivery failure is non-fatal and the inquiry is retained with a `status` marker. Inquiry PII (name/email/company/message) is written only to the database, never to application logs. |
-| `/v1/contact/lead` | POST | Public | Accept a public lead-capture submission (waitlist, early-access, demo-request). Persists the lead as a durable row. Accepted `lead_type` values: `waitlist`, `early-access`, `demo-request`. Optional fields: `name`, `company`, `role`, `use_case`, `message`, `source`. Rate-limited by IP. |
+| `/v1/contact/lead` | POST | Public | Accept a public lead-capture submission (waitlist, early-access, demo-request). Persists the lead as a durable row, then best-effort emails `LEAD_NOTIFICATION_EMAIL` (default `team@olympuslabsml.com`). Accepted `lead_type` values: `waitlist`, `early-access`, `demo-request`. Optional fields: `name`, `company`, `role`, `use_case`, `message`, `source`. Rate-limited by IP. |
 
 ### Self-service billing (`/v1/billing/*`)
 
