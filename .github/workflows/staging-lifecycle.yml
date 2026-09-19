@@ -928,8 +928,12 @@ jobs:
       - name: Wait for staging infrastructure readiness
         run: |
           set -euo pipefail
-          aws ecs describe-clusters --cluster "$STAGING_CLUSTER" --query 'failures' --output text \
-            | grep -q '^None$\|^$'
+          cluster_failures="$(aws ecs describe-clusters --cluster "$STAGING_CLUSTER" \
+            --query 'failures' --output json)"
+          if ! printf '%s' "$cluster_failures" | jq -e 'length == 0' >/dev/null; then
+            echo '::error::staging ECS cluster returned failures after wake'
+            exit 1
+          fi
           # The AWS call is made on its own so its exit status is observed: a
           # process substitution would hand `mapfile` an empty array on failure.
           if ! services_raw="$(aws ecs list-services --cluster "$STAGING_CLUSTER" \
