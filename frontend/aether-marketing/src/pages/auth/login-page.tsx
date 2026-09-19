@@ -1,76 +1,40 @@
-import { useState, type FormEvent } from 'react';
 import { Button } from '@aether/ui';
-import {
-  APP_LOGIN_PATH,
-  buildAppHandoffUrl,
-  EMAIL_LABEL,
-} from '@aether-marketing/lib/handoff';
 import { usePageMeta } from '@aether-marketing/lib/meta';
-import { AuthCard, AUTH_PAGE_META, TextField, emailError } from '@aether-marketing/pages/auth/auth-ui';
-
-/** Full-page document navigation is the correct handoff: the tenant session
- * lives on the application origin, so the public page moves the browser there
- * instead of pretending to authenticate in-place. Tests inject `navigate` so a
- * submit never fires a real navigation. */
-function defaultNavigate(url: string): void {
-  window.location.assign(url);
-}
+import { AuthCard, AUTH_PAGE_META } from '@aether-marketing/pages/auth/auth-ui';
 
 export function LoginPage({
-  navigate,
+  navigate: _navigate,
 }: {
   readonly navigate?: (url: string) => void;
 }) {
   usePageMeta({
     title: 'Sign in — Aether by Olympus Labs',
-    description: 'Sign in to your Aether workspace.',
+    description: 'Aether is not yet generally available. Sign-in will open when early access begins.',
     ...AUTH_PAGE_META,
   });
-
-  const [email, setEmail] = useState('');
-  const [emailProblem, setEmailProblem] = useState<string | undefined>(undefined);
-
-  const go = navigate ?? defaultNavigate;
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
-    event.preventDefault();
-    const value = email.trim();
-    const problem = emailError(value);
-    setEmailProblem(problem);
-    if (problem === undefined) {
-      go(buildAppHandoffUrl(APP_LOGIN_PATH, { email: value }));
-    }
-  }
 
   return (
     <AuthCard
       eyebrow="Sign in"
       title="Sign in to your workspace"
-      lead="Your workspace session lives in the Aether application. Enter your workspace email to continue there."
+      lead="Aether is not yet generally available. When early access opens, you will sign in to your workspace from here."
       links={[
-        { label: 'Create an account', to: '/signup' },
-        { label: 'Forgot your password?', to: '/forgot-password' },
+        { label: 'Join the waitlist', to: '/signup' },
       ]}
-      note="Aether never stores your email or session on this public site — sign-in completes on the application origin."
+      note="Workspace sign-in, SSO, and session management will be available in the Aether application when Aether opens to customers."
     >
-      <form noValidate onSubmit={handleSubmit} className="mt-8 flex flex-col gap-5">
-        <TextField
-          id="email"
-          label={EMAIL_LABEL}
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onValueChange={(value) => {
-            setEmail(value);
-            setEmailProblem(undefined);
-          }}
-          error={emailProblem}
-        />
-        <Button type="submit" variant="primary" size="lg" className="w-full">
-          Continue to sign-in
-        </Button>
-      </form>
+      <div className="mt-8 rounded-md border border-accent/30 bg-accent/5 p-5">
+        <p className="text-sm font-medium text-text-primary">Coming soon</p>
+        <p className="mt-2 text-sm leading-relaxed text-text-secondary">
+          Aether is preparing for a closed alpha. Join the waitlist and we will notify you when
+          workspace sign-in is available.
+        </p>
+        <p className="mt-4">
+          <Button asChild variant="primary" size="md">
+            <a href="/signup">Join the waitlist</a>
+          </Button>
+        </p>
+      </div>
     </AuthCard>
   );
 }

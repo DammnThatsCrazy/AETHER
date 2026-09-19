@@ -67,7 +67,7 @@
       "title": "Agent Controller — Multi-Controller Architecture",
       "slug": "ai/agent-controller",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "architect"
       ],
@@ -203,7 +203,7 @@
       "title": "Agentic Commerce — Approval Model",
       "slug": "ai/approval-model",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
@@ -219,7 +219,7 @@
       "title": "Aether Architecture Guide",
       "slug": "architecture/system-map",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "architect",
         "dev-senior",
@@ -313,7 +313,7 @@
       "title": "Aether Backend API — Endpoint Specification",
       "slug": "api/backend-reference",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior",
@@ -455,7 +455,7 @@
       "title": "Canonical Path Intelligence",
       "slug": "concepts/canonical-path-intelligence",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
@@ -468,7 +468,7 @@
       "title": "Changelog",
       "slug": "changelog",
       "section": "changelog",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior",
@@ -502,7 +502,7 @@
       "title": "Agentic Commerce — Control Plane",
       "slug": "api/commerce-control-plane",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
@@ -740,7 +740,7 @@
       "title": "Data Freshness SLA",
       "slug": "operations/data-freshness-sla",
       "section": "operations",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "architect",
@@ -773,7 +773,7 @@
       "title": "Data Ingestion — Architecture & API Reference",
       "slug": "data/ingestion",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior",
@@ -1116,7 +1116,7 @@
       "title": "Economic Observability",
       "slug": "concepts/economic-observability",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -1132,7 +1132,7 @@
       "title": "Economic Value Framing",
       "slug": "concepts/economic-value-framing",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -1571,7 +1571,7 @@
       "title": "Identity Resolution",
       "slug": "concepts/identity-resolution",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -1666,7 +1666,7 @@
       "title": "Unified Intelligence Graph",
       "slug": "concepts/intelligence-graph",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
@@ -2016,7 +2016,7 @@
       "title": "SDK Migration Guide — v6.x to v7.0",
       "slug": "sdks/migration-v7",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -2032,7 +2032,7 @@
       "title": "ML Model Training Guide",
       "slug": "ai/ml-training",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
@@ -2048,7 +2048,7 @@
       "title": "Model Extraction Defense",
       "slug": "ai/extraction-defense",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "security",
         "architect"
@@ -2064,7 +2064,7 @@
       "title": "Multi-Hop Traversal Algorithms",
       "slug": "concepts/multi-hop-traversal",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
@@ -2254,7 +2254,7 @@
       "title": "Phase 20 Gap Ledger",
       "slug": "reference/phase-20-gap-ledger",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
@@ -2498,7 +2498,7 @@
       "title": "Profile 360 Aggregation Layer",
       "slug": "api/profile-360-aggregation",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -2837,7 +2837,7 @@
       "title": "Aether Android SDK — Integration Guide",
       "slug": "sdks/android",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -2899,7 +2899,7 @@
       "title": "Aether iOS SDK — Integration Guide",
       "slug": "sdks/ios",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -2915,7 +2915,7 @@
       "title": "Aether React Native SDK — Integration Guide",
       "slug": "sdks/react-native",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -2961,7 +2961,7 @@
       "title": "Aether Web SDK — Integration Guide",
       "slug": "sdks/web",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -2977,7 +2977,7 @@
       "title": "Aether SDK — Web2 Quickstart",
       "slug": "sdk-web2-quickstart",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior",
@@ -3126,7 +3126,7 @@
       "title": "Semantic Context Intelligence Layer",
       "slug": "ai/semantic-context",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "architect",
         "dev-senior"
@@ -3302,7 +3302,7 @@
       "title": "Stablecoin Rails",
       "slug": "concepts/stablecoin-rails",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -3335,7 +3335,7 @@
       "title": "Start Here",
       "slug": "start-here",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -3363,7 +3363,7 @@
       "title": "Stripe Billing — Alpha–Omega Integration",
       "slug": "concepts/stripe-billing",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "ops",
@@ -3417,7 +3417,7 @@
       "title": "Cache / Redis Subsystem",
       "slug": "data/cache",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect",
@@ -3434,7 +3434,7 @@
       "title": "PostgreSQL / Repository Subsystem",
       "slug": "data/postgres",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect",
@@ -3451,7 +3451,7 @@
       "title": "Events / Kafka Subsystem",
       "slug": "data/kafka",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect",
@@ -3516,7 +3516,7 @@
       "title": "Tenant System Status",
       "slug": "reliability/tenant-status",
       "section": "operations",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "ops",
@@ -3548,7 +3548,7 @@
       "title": "TVL vs GMV vs Revenue Metrics",
       "slug": "concepts/tvl-gmv-revenue-metrics",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -3561,7 +3561,7 @@
       "title": "Unified Economic Graph",
       "slug": "concepts/unified-economic-graph",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -3710,7 +3710,7 @@
       "title": "x402 Protocol Support Audit",
       "slug": "security/x402-audit",
       "section": "security",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "security",
         "architect",
@@ -3852,7 +3852,7 @@
       "title": "API Authentication",
       "slug": "api/authentication",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -3868,7 +3868,7 @@
       "title": "Event Ingestion API",
       "slug": "api/ingestion",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -3884,7 +3884,7 @@
       "title": "Profiles API",
       "slug": "api/profiles",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior"
       ],
@@ -3899,7 +3899,7 @@
       "title": "Webhooks",
       "slug": "api/webhooks",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "ops"
@@ -4073,7 +4073,7 @@
       "title": "Connector Architecture",
       "slug": "architecture/current/connector-architecture",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -4086,7 +4086,7 @@
       "title": "Graph Architecture",
       "slug": "architecture/current/graph-architecture",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -4112,7 +4112,7 @@
       "title": "Ingestion Architecture",
       "slug": "architecture/current/ingestion-architecture",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -4125,7 +4125,7 @@
       "title": "Runtime Architecture",
       "slug": "architecture/current/runtime-architecture",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -4138,7 +4138,7 @@
       "title": "SDK Architecture",
       "slug": "architecture/current/sdk-architecture",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -4164,7 +4164,7 @@
       "title": "System Overview",
       "slug": "architecture/current/system-overview",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -4177,7 +4177,7 @@
       "title": "Tenant Runtime",
       "slug": "architecture/current/tenant-runtime",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -4203,7 +4203,7 @@
       "title": "ADR-0001: Contract Spine",
       "slug": "architecture/decisions/adr-0001-contract-spine",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4216,7 +4216,7 @@
       "title": "ADR-0002: Thin SDK and Batch Ingestion",
       "slug": "architecture/decisions/adr-0002-thin-sdk-batch-ingestion",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4229,7 +4229,7 @@
       "title": "ADR-0003: Provider vs Connector Boundary",
       "slug": "architecture/decisions/adr-0003-provider-vs-connector-boundary",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4242,7 +4242,7 @@
       "title": "ADR-0004: Pre-1.0 Versioning",
       "slug": "architecture/decisions/adr-0004-pre-1-0-versioning",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4255,7 +4255,7 @@
       "title": "ADR-0005: Documentation Source-of-Truth Policy",
       "slug": "architecture/decisions/adr-0005-docs-source-of-truth-policy",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4268,7 +4268,7 @@
       "title": "ADR-0006: Tenant-Scoped Graph Projections",
       "slug": "architecture/decisions/adr-0006-tenant-scoped-graph-projections",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4281,7 +4281,7 @@
       "title": "ADR-0007: 360s as Productized Graph Surfaces",
       "slug": "architecture/decisions/adr-0007-360s-as-productized-graph-surfaces",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4294,7 +4294,7 @@
       "title": "ADR-0008: No Direct Graph Writes",
       "slug": "architecture/decisions/adr-0008-no-direct-graph-writes",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4307,7 +4307,7 @@
       "title": "ADR-0009: Release Tags and Internal Milestones",
       "slug": "architecture/decisions/adr-0009-release-tags-and-internal-milestones",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4320,7 +4320,7 @@
       "title": "360 System Blueprint",
       "slug": "architecture/target/360-system-blueprint",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4369,7 +4369,7 @@
       "title": "Contract Governance Spine",
       "slug": "architecture/target/contract-governance-spine",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4382,7 +4382,7 @@
       "title": "Design Partner Readiness",
       "slug": "architecture/target/design-partner-readiness",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4421,7 +4421,7 @@
       "title": "Production Readiness",
       "slug": "architecture/target/production-readiness",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4446,7 +4446,7 @@
       "title": "Staging Readiness",
       "slug": "architecture/target/staging-readiness",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4459,7 +4459,7 @@
       "title": "Tenant Activation Readiness Spine",
       "slug": "architecture/target/tenant-activation-readiness-spine",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4543,7 +4543,7 @@
       "title": "SDK Productization Close-Out Blueprint",
       "slug": "blueprints/sdk-close-out",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4619,7 +4619,7 @@
       "title": "Identity Continuity Current State Inventory",
       "slug": "blueprints/identity-continuity/current-state-inventory",
       "section": "blueprints",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4631,7 +4631,7 @@
       "title": "Identity Continuity Fixtures",
       "slug": "blueprints/identity-continuity/fixtures",
       "section": "blueprints",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4643,7 +4643,7 @@
       "title": "Identity Continuity Implementation Plan",
       "slug": "blueprints/identity-continuity/implementation-plan",
       "section": "blueprints",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4655,7 +4655,7 @@
       "title": "Identity Continuity Proof Plan",
       "slug": "blueprints/identity-continuity/proof-plan",
       "section": "blueprints",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -4667,7 +4667,7 @@
       "title": "Identity Continuity Rollout Plan",
       "slug": "blueprints/identity-continuity/rollout-plan",
       "section": "blueprints",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -5428,7 +5428,7 @@
       "title": "Generic Signed Communications Webhook",
       "slug": "comms/comms-generic-webhook",
       "section": "operations",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "dev-junior"
@@ -5494,7 +5494,7 @@
       "title": "Journeys",
       "slug": "concepts/journeys",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior",
@@ -5511,7 +5511,7 @@
       "title": "Lenses",
       "slug": "concepts/lenses",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -5527,7 +5527,7 @@
       "title": "Profiles",
       "slug": "concepts/profiles",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -5543,7 +5543,7 @@
       "title": "Signals",
       "slug": "concepts/signals",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior",
@@ -5560,7 +5560,7 @@
       "title": "Sources",
       "slug": "concepts/sources",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior",
@@ -5577,7 +5577,7 @@
       "title": "Tenants",
       "slug": "concepts/tenants",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect",
@@ -5594,7 +5594,7 @@
       "title": "Connector Auth and Credentials",
       "slug": "connectors/auth-and-credentials",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior"
       ],
@@ -5606,7 +5606,7 @@
       "title": "Connector Capability Coverage",
       "slug": "connectors/capability-coverage",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior"
       ],
@@ -5618,7 +5618,7 @@
       "title": "Connector Lifecycle",
       "slug": "connectors/connector-lifecycle",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior"
       ],
@@ -5630,7 +5630,7 @@
       "title": "Cursors and Retries",
       "slug": "connectors/cursors-and-retries",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior"
       ],
@@ -5642,7 +5642,7 @@
       "title": "Custom Connectors",
       "slug": "custom-connectors",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -5667,7 +5667,7 @@
       "title": "Connector Graph Projection",
       "slug": "connectors/graph-projection",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior"
       ],
@@ -5691,7 +5691,7 @@
       "title": "Normalization",
       "slug": "connectors/normalization",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior"
       ],
@@ -5703,7 +5703,7 @@
       "title": "Aether Connectors",
       "slug": "connectors/overview",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior"
       ],
@@ -5715,7 +5715,7 @@
       "title": "Provider Manifests",
       "slug": "connectors/provider-manifests",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior"
       ],
@@ -5727,7 +5727,7 @@
       "title": "Provider Normalization",
       "slug": "connectors/provider-normalization",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior"
       ],
@@ -5739,7 +5739,7 @@
       "title": "Provider vs Connector",
       "slug": "connectors/provider-vs-connector",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior"
       ],
@@ -5775,7 +5775,7 @@
       "title": "Connector Subsystem Registry",
       "slug": "connectors/subsystem-registry",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior"
       ],
@@ -5787,7 +5787,7 @@
       "title": "Sync Jobs",
       "slug": "connectors/sync-jobs",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior"
       ],
@@ -5799,7 +5799,7 @@
       "title": "Webhook Handling",
       "slug": "connectors/webhook-handling",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior"
       ],
@@ -6201,7 +6201,7 @@
       "title": "Install the SDK",
       "slug": "install-the-sdk",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -6214,7 +6214,7 @@
       "title": "Local Development",
       "slug": "local-development",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -6227,7 +6227,7 @@
       "title": "Query the Graph",
       "slug": "query-the-graph",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -6240,7 +6240,7 @@
       "title": "Developer Quickstart",
       "slug": "developer/quickstart",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -6253,7 +6253,7 @@
       "title": "Send Your First Event",
       "slug": "send-first-event",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -6266,7 +6266,7 @@
       "title": "Tenant Setup",
       "slug": "tenant-setup",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -6279,7 +6279,7 @@
       "title": "Verify Heartbeat",
       "slug": "verify-heartbeat",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -6292,7 +6292,7 @@
       "title": "Verify Android SDK Installation — Aether",
       "slug": "developers/sdk/android/verify-installation",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -6305,7 +6305,7 @@
       "title": "Verify iOS SDK Installation — Aether",
       "slug": "developers/sdk/ios/verify-installation",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -6318,7 +6318,7 @@
       "title": "Verify React SDK Installation — Aether",
       "slug": "developers/sdk/react/verify-installation",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -6331,7 +6331,7 @@
       "title": "Verify Web SDK Installation — Aether",
       "slug": "developers/sdk/web/verify-installation",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -6344,7 +6344,7 @@
       "title": "Reward Enablement Demo — Web2 Rails (recommend_only + tenant_webhook)",
       "slug": "examples/reward-demo-web2",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -6359,7 +6359,7 @@
       "title": "Reward Enablement Demo — Web3 / On-Chain Claim (onchain_claim rail)",
       "slug": "examples/reward-demo-web3",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -6880,7 +6880,7 @@
       "title": "360 Surfaces",
       "slug": "360-surfaces",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -6893,7 +6893,7 @@
       "title": "Agent 360",
       "slug": "product/360s/agent-360",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -6906,7 +6906,7 @@
       "title": "Campaign 360",
       "slug": "product/360s/campaign-360",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -6919,7 +6919,7 @@
       "title": "Communications 360",
       "slug": "product/360s/communications-360",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -6932,7 +6932,7 @@
       "title": "Episode 360",
       "slug": "product/360s/episode-360",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -6945,7 +6945,7 @@
       "title": "Journey 360",
       "slug": "product/360s/journey-360",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -6958,7 +6958,7 @@
       "title": "Profile 360",
       "slug": "product/360s/profile-360",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -6971,7 +6971,7 @@
       "title": "Risk 360",
       "slug": "product/360s/risk-360",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -6984,7 +6984,7 @@
       "title": "Value 360",
       "slug": "product/360s/value-360",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -6997,7 +6997,7 @@
       "title": "Aether Surface",
       "slug": "product-aether-surface",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer"
       ],
@@ -7009,7 +7009,7 @@
       "title": "Agents",
       "slug": "product-agents",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer"
       ],
@@ -7021,7 +7021,7 @@
       "title": "Campaigns",
       "slug": "product-campaigns",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer"
       ],
@@ -7033,7 +7033,7 @@
       "title": "Communications",
       "slug": "product-communications",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer"
       ],
@@ -7045,7 +7045,7 @@
       "title": "Contract Model",
       "slug": "product-contract-model",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -7058,7 +7058,7 @@
       "title": "Graph Model",
       "slug": "product-graph-model",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -7071,7 +7071,7 @@
       "title": "Journeys",
       "slug": "product-journeys",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer"
       ],
@@ -7083,7 +7083,7 @@
       "title": "Kyber Surface",
       "slug": "product-kyber-surface",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer"
       ],
@@ -7095,7 +7095,7 @@
       "title": "Canonical Language",
       "slug": "product/language-system/canonical-language",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -7108,7 +7108,7 @@
       "title": "Deprecated Language",
       "slug": "product/language-system/deprecated-language",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -7145,7 +7145,7 @@
       "title": "Journeys Lens",
       "slug": "product/lenses/journeys",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -7158,7 +7158,7 @@
       "title": "Risk Lens",
       "slug": "product/lenses/risk",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -7171,7 +7171,7 @@
       "title": "Signals Lens",
       "slug": "product/lenses/signals",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -7184,7 +7184,7 @@
       "title": "Syndicates Lens",
       "slug": "product/lenses/syndicates",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -7197,7 +7197,7 @@
       "title": "Value Lens",
       "slug": "product/lenses/value",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -7210,7 +7210,7 @@
       "title": "Lenses",
       "slug": "product-lenses",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -7223,7 +7223,7 @@
       "title": "Noesis Surface",
       "slug": "product-noesis-surface",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer"
       ],
@@ -7235,7 +7235,7 @@
       "title": "Product Overview",
       "slug": "product-overview",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer"
       ],
@@ -7247,7 +7247,7 @@
       "title": "Aether Positioning",
       "slug": "product/positioning/aether-positioning",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -7260,7 +7260,7 @@
       "title": "Olympus Positioning",
       "slug": "product/positioning/olympus-positioning",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -7273,7 +7273,7 @@
       "title": "Platform Narrative",
       "slug": "product/positioning/platform-narrative",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -7286,7 +7286,7 @@
       "title": "Profiles",
       "slug": "product-profiles",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer"
       ],
@@ -7298,7 +7298,7 @@
       "title": "Risk",
       "slug": "product-risk",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer"
       ],
@@ -7310,7 +7310,7 @@
       "title": "Signals",
       "slug": "product-signals",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer"
       ],
@@ -7322,7 +7322,7 @@
       "title": "Aether Console",
       "slug": "product/surfaces/aether-console",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -7335,7 +7335,7 @@
       "title": "Developer Portal",
       "slug": "product/surfaces/developer-portal",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -7348,7 +7348,7 @@
       "title": "Kyber Operator Console",
       "slug": "product/surfaces/kyber-operator-console",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -7361,7 +7361,7 @@
       "title": "Marketing Sites",
       "slug": "product/surfaces/marketing-sites",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -7374,7 +7374,7 @@
       "title": "Noesis",
       "slug": "product/surfaces/noesis",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer",
         "dev-senior"
@@ -7387,7 +7387,7 @@
       "title": "Syndicates",
       "slug": "product-syndicates",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer"
       ],
@@ -7399,7 +7399,7 @@
       "title": "Tenant Model",
       "slug": "product-tenant-model",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect",
@@ -7413,7 +7413,7 @@
       "title": "Value",
       "slug": "product-value",
       "section": "concepts",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "buyer"
       ],
@@ -8732,7 +8732,7 @@
       "title": "Getting Started with the Node SDK",
       "slug": "quickstart/node-sdk",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -8748,7 +8748,7 @@
       "title": "Getting Started with the React SDK",
       "slug": "quickstart/react-sdk",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -8764,7 +8764,7 @@
       "title": "Getting Started with the Web SDK",
       "slug": "quickstart/web-sdk",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -8845,7 +8845,7 @@
       "title": "Release Policy",
       "slug": "releases/release-policy",
       "section": "changelog",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -8858,7 +8858,7 @@
       "title": "Retrospective Milestones",
       "slug": "releases/retrospective-milestones",
       "section": "changelog",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -8871,7 +8871,7 @@
       "title": "Tag Policy",
       "slug": "releases/tag-policy",
       "section": "changelog",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -8884,7 +8884,7 @@
       "title": "Unreleased",
       "slug": "releases/unreleased",
       "section": "changelog",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -8897,7 +8897,7 @@
       "title": "v0.1.0-alpha.0",
       "slug": "releases/v0-1-0-alpha-0",
       "section": "changelog",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -8910,7 +8910,7 @@
       "title": "Version Scheme",
       "slug": "version-scheme",
       "section": "changelog",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -8987,7 +8987,7 @@
       "title": "SDK Certification Report",
       "slug": "reports/sdk-certification-report",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -9026,7 +9026,7 @@
       "title": "Responsiveness Spine",
       "slug": "responsiveness-spine/readme",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -9038,7 +9038,7 @@
       "title": "Activation Milestones",
       "slug": "responsiveness-spine/activation-milestones",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -9050,7 +9050,7 @@
       "title": "Endpoints",
       "slug": "responsiveness-spine/endpoints",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -9062,7 +9062,7 @@
       "title": "Frontend Integration",
       "slug": "responsiveness-spine/frontend-integration",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -9074,7 +9074,7 @@
       "title": "Integration Guide",
       "slug": "responsiveness-spine/integration-guide",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -9086,7 +9086,7 @@
       "title": "Performance Budget",
       "slug": "responsiveness-spine/performance-budget",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -9098,7 +9098,7 @@
       "title": "Surface Readiness",
       "slug": "responsiveness-spine/surface-readiness",
       "section": "architecture",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -9642,7 +9642,7 @@
       "title": "Aether Android SDK",
       "slug": "sdks/android",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -9655,7 +9655,7 @@
       "title": "Batching and Retries",
       "slug": "sdks/batching-and-retries",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -9668,7 +9668,7 @@
       "title": "SDK Event Contracts",
       "slug": "sdks/event-contracts",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -9681,7 +9681,7 @@
       "title": "SDK Events Registry",
       "slug": "events-registry",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior"
       ],
@@ -9706,7 +9706,7 @@
       "title": "SDK Heartbeat",
       "slug": "sdks/heartbeat",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -9719,7 +9719,7 @@
       "title": "SDK Ingestion Contract",
       "slug": "ingestion-contract",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior",
         "architect"
@@ -9732,7 +9732,7 @@
       "title": "Aether iOS SDK",
       "slug": "sdks/ios",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -9745,7 +9745,7 @@
       "title": "Aether SDKs",
       "slug": "sdks/overview",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -9758,7 +9758,7 @@
       "title": "SDK Parity Matrix",
       "slug": "sdks/parity-matrix",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -9771,7 +9771,7 @@
       "title": "Privacy and Redaction",
       "slug": "sdks/privacy-and-redaction",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -9784,7 +9784,7 @@
       "title": "Aether React Native SDK",
       "slug": "sdks/react-native",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -9797,7 +9797,7 @@
       "title": "Aether React SDK",
       "slug": "sdks/react",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -9810,7 +9810,7 @@
       "title": "SDK Version Compatibility",
       "slug": "version-compatibility",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-senior"
       ],
@@ -9822,7 +9822,7 @@
       "title": "Aether Web SDK",
       "slug": "sdks/web",
       "section": "reference",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior"
@@ -11879,7 +11879,7 @@
       "title": "Shopify Integration Guide",
       "slug": "tutorials/shopify-integration",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior",
@@ -11896,7 +11896,7 @@
       "title": "Stripe Integration Guide",
       "slug": "tutorials/stripe-integration",
       "section": "developer",
-      "visibility": "P",
+      "visibility": "I",
       "audience": [
         "dev-junior",
         "dev-senior",

@@ -22,7 +22,6 @@ import type {
   ExperienceToken,
 } from "@aether-marketing/content/connectors";
 import { findSection } from "@aether-marketing/content/sections";
-import { buildIntegrationsHandoffUrl } from "@aether-marketing/lib/handoff";
 import { AETHER_DOCS_URL } from "@aether-marketing/lib/env";
 import { usePageMeta } from "@aether-marketing/lib/meta";
 import { getLaunchPackPage, launchPackHeading } from "../../../marketing/src/content-loader";
@@ -389,22 +388,49 @@ export function IntegrationsPage() {
   );
 }
 
+const CATEGORY_ICONS: Readonly<Record<string, string>> = {
+  commerce: '🛒',
+  crm: '👥',
+  communications: '💬',
+  analytics: '📊',
+  support: '🎧',
+  advertising: '📣',
+  work: '⚡',
+  payments: '💳',
+  social: '🌐',
+};
+
+function ConnectorIcon({ name, category }: { readonly name: string; readonly category: string }) {
+  const icon = CATEGORY_ICONS[category];
+  if (icon) {
+    return (
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border-default bg-surface-raised text-lg" aria-hidden="true">
+        {icon}
+      </span>
+    );
+  }
+  return (
+    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border-default bg-surface-raised font-mono text-sm font-bold text-text-secondary" aria-hidden="true">
+      {name.charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
 /** One searchable/filterable row for a connectable catalog family. */
 function ConnectorRow({ connector }: { readonly connector: ConnectorRecord }) {
-  const connectHref = buildIntegrationsHandoffUrl({
-    family: connector.id,
-    experience: connector.experience,
-  });
   return (
     <li className="rounded-md border border-border-default bg-surface-base p-6">
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-        <div className="min-w-0 max-w-3xl">
-          <h3 className="text-base font-semibold tracking-tight text-text-primary">
-            {connector.name}
-          </h3>
-          <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
-            {connector.description}
-          </p>
+        <div className="flex min-w-0 max-w-3xl items-start gap-4">
+          <ConnectorIcon name={connector.name} category={connector.category} />
+          <div>
+            <h3 className="text-base font-semibold tracking-tight text-text-primary">
+              {connector.name}
+            </h3>
+            <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
+              {connector.description}
+            </p>
+          </div>
         </div>
         <p
           className="mkt-chip"
@@ -444,16 +470,15 @@ function ConnectorRow({ connector }: { readonly connector: ConnectorRecord }) {
       </ul>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-border-default pt-4">
         <p className="text-sm text-text-secondary">
-          Open the Aether app to sign in and run the real connect flow for this
-          provider.
+          Join the waitlist to get access when the connect flow for this provider opens.
         </p>
-        <a
-          href={connectHref}
+        <Link
+          to="/signup"
           aria-label={`Connect ${connector.name}`}
           className="inline-flex items-center gap-2 rounded-md border border-border-default bg-surface-raised px-3 py-2 text-sm font-medium text-text-primary mkt-motion-color hover:border-accent hover:text-text-primary"
         >
-          Connect
-        </a>
+          Get access
+        </Link>
       </div>
     </li>
   );

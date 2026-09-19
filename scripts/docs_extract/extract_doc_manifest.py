@@ -114,6 +114,11 @@ def main() -> int:
         for key in KEPT_KEYS:
             if key in fm:
                 entry[key] = fm[key]
+        # Safety: docs outside docs/public/ are internal by default.
+        # Only docs/public/** may be visibility P in the public manifest.
+        rel = path.relative_to(DOCS_DIR)
+        if rel.parts[0] != "public" and entry.get("visibility") == "P":
+            entry["visibility"] = "I"
         docs.append(entry)
 
     result = {

@@ -76,7 +76,7 @@ export function PlatformPage() {
       <CtaBand
         title="Keep exploring Aether"
         body="Start with the graph loop, then bring one relationship question and one governed connection into a pilot."
-        primary={{ label: launchPack?.primaryCta ?? 'Start building', to: '/intelligence-graph' }}
+        primary={{ label: launchPack?.primaryCta ?? 'Start building', to: '/developers' }}
         secondary={{ label: launchPack?.secondaryCta ?? 'Start building', to: '/start-pilot' }}
       />
     </>
