@@ -712,6 +712,8 @@ jobs:
             canary-secret-seed
             extraction-canary-seed
             sdk-config-secret
+            kyber-google-client-id
+            kyber-google-client-secret
           )
           for name in "${required_secrets[@]}"; do
             describe_file="$(mktemp)"

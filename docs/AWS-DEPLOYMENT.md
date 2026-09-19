@@ -25,15 +25,15 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/staging-lifecycle.yml": "sha256:6defa4e93f8b8389ab2cda44f5f36a7b7433948137c820f0c527db90cba7ccdb"
-  ".github/workflows/staging-state-reconcile.yml": "sha256:b7dd5cef545fdf60ac882b917ddde4dcada633a4eb0f321759bc5fc5b3e7f38a"
+  ".github/workflows/staging-state-reconcile.yml": "sha256:85f002aa68578d0e5e71a4a16afd237257db41f6b5975703bd6b2c23c346c1ef"
   ".github/workflows/staging-ttl-guard.yml": "sha256:4fe2250c0ccb0f8486800c6e09c8f1adcf6c38371944e911269f103053f0f1da"
-  ".github/workflows/terraform-promote.yml": "sha256:ba383bc8b71527e6e90c9bc8bcc44ccc7221f6ba8ab7c33b9eb3ef2ac4250051"
+  ".github/workflows/terraform-promote.yml": "sha256:625caac71bb1960cec2191cc8ed3486d199d626d9197b1c7082f2f66e7bcf185"
   "config/staging_apply_iam_policy.yaml": "sha256:87e3f96de932225bfb87344e93f7bea10338ce8189967a92d1aa829915ddbd47"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:84cc2d5a0cdb621f0dc2ba271fd9e66228e36a80cabf52133cf51d410a85f21e"
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:06681490f1dbcf1cd47fffdcc70d840f77a36d2d3e08d2b86e5a6f20a012f7d4"
+  "deploy/aws/terraform/": "sha256:42338f72ab52b456b125c9244105a4698235a6dc1da07d080fe234d4dc4b1803"
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:20998a03fdd484635cc80667220794fb1970be3f2e198ac067ec7c7bda12f2f1"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:08dff05b2a886af751d7e0b1c7886951b240b6a31f18ef14d26f73085ae59145"
   "scripts/release/verify_terraform_state_role.py": "sha256:80dce5faa3a69a530f24a72105f7b340bc52726906a641540ed7ef08fb6e46ac"
@@ -720,7 +720,14 @@ accounts when their names would otherwise collide.
    string, so a JSON wrapper needs a JSON-key suffix on the ARN and is
    error-prone. `aether/db-password` is populated automatically by Aurora's
    managed rotation; `aether/redis-auth-token` exists only on profiles that
-   provision Redis.
+   provision Redis. Staging and production-class Kyber workloads additionally
+   require `aether/kyber-google-client-id` and
+   `aether/kyber-google-client-secret`. The Google Web OAuth client must allow
+   the backend callback `https://<api-domain>/v1/kyber/auth/callback`; the
+   browser's Kyber origin is a separate `TF_KYBER_APP_URL` input used for
+   WebAuthn. Populate those two values through the secure bootstrap, then let
+   the reviewed state-reconciliation workflow import only their metadata. Do
+   not put either value in Terraform variables, state, plans, or logs.
 3. **Push images.** Task definitions pin an immutable digest, so a new digest is
    a new task definition and deploys itself. The ML image is only needed on
    profiles that run the dedicated ML service.

@@ -234,10 +234,16 @@ def test_deploy_builds_each_spa_with_its_own_auth0_client_and_endpoints():
     workflow = _workflow("deploy.yml")
     assert "secrets.AETHER_AUTH0_CLIENT_ID" in workflow
     assert "secrets.KYBER_AUTH0_CLIENT_ID" in workflow
+    assert "vars.KYBER_GOOGLE_CLIENT_ID" in workflow
+    assert "secrets.KYBER_GOOGLE_CLIENT_ID" in workflow
     assert "vars.KYBER_API_BASE_URL" in workflow
     assert "vars.KYBER_WS_BASE_URL" in workflow
     kyber_build = workflow.split("npm --workspace frontend/kyber run build")[0]
     assert 'VITE_AUTH0_CLIENT_ID="$KYBER_AUTH0_CLIENT_ID"' in kyber_build
+    assert 'VITE_KYBER_ENV=staging' in kyber_build
+    assert 'VITE_OIDC_AUTHORITY="https://accounts.google.com"' in kyber_build
+    assert 'VITE_OIDC_CLIENT_ID="$KYBER_GOOGLE_CLIENT_ID"' in kyber_build
+    assert 'VITE_OIDC_REDIRECT_URI="$KYBER_API_BASE_URL/v1/kyber/auth/callback"' in kyber_build
     assert 'VITE_API_BASE_URL="$KYBER_API_BASE_URL"' in kyber_build
     assert 'VITE_WS_BASE_URL="$KYBER_WS_BASE_URL"' in kyber_build
 

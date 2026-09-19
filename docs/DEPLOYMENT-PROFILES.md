@@ -14,11 +14,11 @@ source_hashes:
   "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
-  "deploy/aws/terraform/main.tf": "sha256:d70b7d80e1bef2b35cef49814a53940bab53e8b379636832e1785db3a61ba701"
+  "deploy/aws/terraform/main.tf": "sha256:33ab3399a831c294bc5d24df294c627ec28307f701d66a47d4d60e3f5d1c5749"
   "deploy/aws/terraform/modules/alb/main.tf": "sha256:d019a2c18cda9a4e96d89165a4977e627dccacef34293c69e86c61ed43522097"
   "deploy/aws/terraform/modules/aurora/main.tf": "sha256:c1c005d1f9662dc4dfcc72ca8fbaeda01f4b1c95ea020578c09d5d368516b863"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
-  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:f9eca9796663c747d2e9b103ce940e2c5abbb59e31aaaa2032826c6ae1568a22"
+  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:18b6900d5b62ac98c1bdcea37acd74cf05185e9b22161831f40d59a747c22383"
   "deploy/aws/terraform/modules/secrets/rotation.tf": "sha256:bf7623169658a9272a007df782216956b750f30bee3c5d8095f708c44a9d2239"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
   "deploy/aws/terraform/variables.tf": "sha256:b7d0ffae68cd9c7215b815dfd54aaa18529a71131f93ce158b20747d7e9d51e0"
@@ -149,6 +149,12 @@ Paid accounts may proceed after the normal policy and cost gates. State
 reconciliation can import pre-existing Secrets Manager metadata only after
 verifying the exact staging CMK and `AWSCURRENT` version; values are populated
 through the separate secure bootstrap and are never read by CI.
+The staging ECS API and consolidated worker mount the Google workforce client
+ID and secret from those reviewed secret records. Workforce enforcement,
+backend authorization, device trust, scope v2, and step-up are explicitly on;
+the legacy operator identity and bootstrap paths are explicitly off. The
+Google callback uses the staging API origin, while the Kyber application origin
+is reserved for WebAuthn relying-party validation.
 
 ---
 

@@ -24,12 +24,12 @@ estimated_read_minutes: 20
 toc_depth: 3
 source_hashes:
   ".github/workflows/infrastructure.yml": "sha256:ff68dd9188c9686dfbe9abf0390ae4b6d795f430791258c7720b97625c5d60e7"
-  ".github/workflows/terraform-promote.yml": "sha256:ba383bc8b71527e6e90c9bc8bcc44ccc7221f6ba8ab7c33b9eb3ef2ac4250051"
+  ".github/workflows/terraform-promote.yml": "sha256:625caac71bb1960cec2191cc8ed3486d199d626d9197b1c7082f2f66e7bcf185"
   "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "config/terraform_resource_contracts.yaml": "sha256:6a7edfeedfc7e75e79fce21054ed164b86f0495bf4cc25c2dfb865ee5f5a23d1"
   "deploy/aws/terraform/DECOMMISSION.md": "sha256:a37cb94abdcbc9472eb4881722289412f4adcc79fa75755946bbef0fc93b8dec"
-  "deploy/aws/terraform/main.tf": "sha256:d70b7d80e1bef2b35cef49814a53940bab53e8b379636832e1785db3a61ba701"
+  "deploy/aws/terraform/main.tf": "sha256:33ab3399a831c294bc5d24df294c627ec28307f701d66a47d4d60e3f5d1c5749"
   "deploy/aws/terraform/moved.tf": "sha256:aec15de07e356364018e3bdf09fdb6196d252bdb4e0451212f5b6a27a7b26816"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
   "deploy/aws/terraform/profiles/production-lean.tfvars": "sha256:ba173dfc337349057b0d4f02d8be3e3c6d8d2ef92408e76b29166a881a5c13d2"
@@ -371,6 +371,13 @@ rejected before AWS credentials are assumed. The job then produces an
 | `reviewed.cost.txt` | cost-model report |
 
 The plan identity table is written to the job summary for the reviewer.
+
+The reviewed plan supplies the API and Kyber application origins separately to
+the ECS module. Kyber's Google workforce client ID and secret remain mounted
+from Secrets Manager, while the Google callback is fixed to the API origin
+(`https://<api-domain>/v1/kyber/auth/callback`) and WebAuthn remains bound to
+the Kyber application origin. This keeps the operator browser surface and the
+backend identity exchange on their intended trust boundaries.
 
 ### Apply
 

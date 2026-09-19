@@ -158,6 +158,12 @@ locals {
     "first-admin-bootstrap-token" = {
       description = "One-time staging first-admin bootstrap token"
     }
+    "kyber-google-client-id" = {
+      description = "Google Workspace OAuth client ID for the Kyber workforce identity plane"
+    }
+    "kyber-google-client-secret" = {
+      description = "Google Workspace OAuth client secret for the Kyber workforce identity plane"
+    }
   }
 }
 

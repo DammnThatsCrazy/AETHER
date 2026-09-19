@@ -294,6 +294,34 @@ resource "aws_iam_role_policy" "task" {
 # --------------------------------------------------------------------------
 
 locals {
+  kyber_app_origin = trimsuffix(trimspace(var.kyber_app_url), "/")
+  kyber_rp_id      = regex("^https://([^/:]+)", local.kyber_app_origin)[0]
+  api_base_origin  = trimsuffix(trimspace(var.api_base_url), "/")
+
+  # Kyber is a backend-owned Google OIDC + WebAuthn flow. Keep the deployment
+  # anchors in the reviewed task definition so every API and worker process
+  # receives the same fail-closed workforce contract. The client ID and secret
+  # remain Secrets Manager references below; no credential value enters the
+  # Terraform plan or task definition JSON.
+  kyber_runtime_environment = [
+    { name = "KYBER_WORKFORCE_IDENTITY_ENABLED", value = "true" },
+    { name = "KYBER_DEVICE_TRUST_REQUIRED", value = "true" },
+    { name = "KYBER_BACKEND_AUTHZ_ENFORCED", value = "true" },
+    { name = "KYBER_SCOPE_V2_ENABLED", value = "true" },
+    { name = "KYBER_STEP_UP_REQUIRED", value = "true" },
+    { name = "KYBER_LEGACY_OPERATOR_IDENTITY_ALLOWED", value = "false" },
+    { name = "KYBER_BOOTSTRAP_ENABLED", value = "false" },
+    { name = "KYBER_SESSION_COOKIE_SECURE", value = "true" },
+    { name = "POLICY_ENFORCEMENT_ENABLED", value = "true" },
+    { name = "ROUTE_REGISTRY_ENFORCED", value = "true" },
+    { name = "KYBER_OPERATOR_GATE_ENFORCED", value = "true" },
+    # The callback is a backend route, so it must use the API origin rather
+    # than the browser origin. WebAuthn remains bound to the Kyber SPA origin.
+    { name = "KYBER_GOOGLE_REDIRECT_URI", value = "${local.api_base_origin}/v1/kyber/auth/callback" },
+    { name = "KYBER_WEBAUTHN_RP_ID", value = local.kyber_rp_id },
+    { name = "KYBER_WEBAUTHN_ORIGIN", value = local.kyber_app_origin },
+  ]
+
   # Secrets the tasks are allowed to read. The Redis AUTH token is only
   # reachable when ElastiCache is part of the profile, so lean tasks hold no
   # permission for a secret they never mount.
@@ -322,6 +350,8 @@ locals {
       EXTRACTION_CANARY_SEED      = lookup(var.secret_arns, "extraction-canary-seed", "")
       SDK_CONFIG_SECRET           = lookup(var.secret_arns, "sdk-config-secret", "")
       FIRST_ADMIN_BOOTSTRAP_TOKEN = lookup(var.secret_arns, "first-admin-bootstrap-token", "")
+      KYBER_GOOGLE_CLIENT_ID      = lookup(var.secret_arns, "kyber-google-client-id", "")
+      KYBER_GOOGLE_CLIENT_SECRET  = lookup(var.secret_arns, "kyber-google-client-secret", "")
     },
     # Redis AUTH token — read by shared/cache/cache.py as REDIS_PASSWORD.
     # Only mounted when ElastiCache exists; every task (API and workers)
@@ -395,6 +425,7 @@ resource "aws_ecs_task_definition" "backend" {
           { name = "ML_SERVING_URL", value = var.ml_serving_url },
           { name = "ML_SERVING_INLINE", value = var.ml_serving_inline ? "true" : "false" },
         ],
+        local.kyber_runtime_environment,
         # Provider-credential envelope-encryption CMK. The backend's
         # AwsKmsEnvelopeCredentialCipher reads this key id to call
         # kms:GenerateDataKey / kms:Decrypt. Only injected when the profile
@@ -592,6 +623,7 @@ resource "aws_ecs_task_definition" "runtime_service" {
         { name = "ANALYTICS_BACKEND", value = var.analytics_backend },
         { name = "ML_SERVING_INLINE", value = var.ml_serving_inline ? "true" : "false" },
       ],
+      local.kyber_runtime_environment,
       # Provider-credential envelope-encryption CMK (mirrors the API task).
       var.credential_kms_key_id != "" ? [
         { name = "CREDENTIAL_KMS_KEY_ID", value = var.credential_kms_key_id },

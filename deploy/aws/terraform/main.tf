@@ -438,6 +438,8 @@ module "ecs" {
   database_host        = local.database_host
   database_port        = local.database_port
   database_name        = local.database_name
+  kyber_app_url        = var.kyber_app_url
+  api_base_url         = "https://${var.domain_name}"
 
   # E3: Aurora Serverless v2 replaces RDS as the active database.
   # entrypoint.sh reads this ARN via DATABASE_URL_SECRET and builds DATABASE_URL.

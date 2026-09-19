@@ -149,6 +149,8 @@ def test_staging_apply_fails_closed_on_unpopulated_secret_stubs() -> None:
         "canary-secret-seed",
         "extraction-canary-seed",
         "sdk-config-secret",
+        "kyber-google-client-id",
+        "kyber-google-client-secret",
     ):
         assert name in guard
     assert "secretsmanager describe-secret" in guard
@@ -159,6 +161,31 @@ def test_staging_apply_fails_closed_on_unpopulated_secret_stubs() -> None:
     manifest = yaml.safe_load(POLICY.read_text(encoding="utf-8"))
     secret_read = next(s for s in manifest["statements"] if "secretsmanager:DescribeSecret" in s["actions"])
     assert secret_read["resource"] == "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*"
+
+
+def test_kyber_workforce_runtime_contract_is_explicit_and_secret_backed() -> None:
+    ecs = (TF / "modules/ecs/main.tf").read_text(encoding="utf-8")
+    root = (TF / "main.tf").read_text(encoding="utf-8")
+    secrets = (TF / "modules/secrets/main.tf").read_text(encoding="utf-8")
+    for name in (
+        "KYBER_WORKFORCE_IDENTITY_ENABLED",
+        "KYBER_DEVICE_TRUST_REQUIRED",
+        "KYBER_BACKEND_AUTHZ_ENFORCED",
+        "KYBER_SCOPE_V2_ENABLED",
+        "KYBER_STEP_UP_REQUIRED",
+        "KYBER_LEGACY_OPERATOR_IDENTITY_ALLOWED",
+        "KYBER_BOOTSTRAP_ENABLED",
+        "KYBER_GOOGLE_REDIRECT_URI",
+        "KYBER_WEBAUTHN_RP_ID",
+        "KYBER_WEBAUTHN_ORIGIN",
+    ):
+        assert name in ecs
+    assert "kyber-google-client-id" in ecs
+    assert "kyber-google-client-secret" in ecs
+    assert "kyber-google-client-id" in secrets
+    assert "kyber-google-client-secret" in secrets
+    assert "kyber_app_url        = var.kyber_app_url" in root
+    assert 'api_base_url         = "https://${var.domain_name}"' in root
 
 
 def test_staging_secret_reconciliation_handles_absent_kms_alias() -> None:

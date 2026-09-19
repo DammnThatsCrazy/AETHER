@@ -21,7 +21,7 @@ toc_depth: 3
 source_hashes:
   ".github/workflows/staging-lifecycle.yml": "sha256:6defa4e93f8b8389ab2cda44f5f36a7b7433948137c820f0c527db90cba7ccdb"
   ".github/workflows/staging-ttl-guard.yml": "sha256:4fe2250c0ccb0f8486800c6e09c8f1adcf6c38371944e911269f103053f0f1da"
-  ".github/workflows/terraform-promote.yml": "sha256:ba383bc8b71527e6e90c9bc8bcc44ccc7221f6ba8ab7c33b9eb3ef2ac4250051"
+  ".github/workflows/terraform-promote.yml": "sha256:625caac71bb1960cec2191cc8ed3486d199d626d9197b1c7082f2f66e7bcf185"
   "config/deployment_profiles.yaml": "sha256:a53bd94966ad34f70fc54cbf17f536064cba1f25e2c68c625992b51dbb64a8e0"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
@@ -328,7 +328,14 @@ Steps, in order, with what each proves:
    Secrets Manager name has an `AWSCURRENT` version. Terraform creates the
    encrypted secret stubs but never invents their values; bootstrap or import
    those values through the secure operator procedure before a wake. The check
-   reads metadata only and never uploads or prints secret material.
+   reads metadata only and never uploads or prints secret material. The Kyber
+   workforce pair (`aether/kyber-google-client-id` and
+   `aether/kyber-google-client-secret`) is part of this required set. The
+   Google client must use the API callback
+   `https://<api-domain>/v1/kyber/auth/callback`; the Kyber SPA origin is the
+   separate WebAuthn origin. This prevents a green infrastructure plan from
+   producing the earlier task-start failure caused by missing workforce
+   identity anchors.
 5. **Tenant isolation.** The run uses the encrypted staging admin bootstrap
    key to create two fresh, free, run-scoped tenants and one API key for each.
    The raw keys are masked and held only in the runner environment; they are

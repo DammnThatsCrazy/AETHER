@@ -41,6 +41,8 @@ Secret paths (stored as individual SecretString, matching Terraform):
     aether/grafana-admin-password
     aether/stripe-secret-key          (manual — from Stripe Dashboard)
     aether/stripe-webhook-secret      (manual — from Stripe Dashboard)
+    aether/kyber-google-client-id     (manual — from Google Cloud OAuth)
+    aether/kyber-google-client-secret (manual — from Google Cloud OAuth)
 """
 
 from __future__ import annotations
@@ -72,6 +74,8 @@ _ENV_VAR_TO_SECRET_PATH: dict[str, str] = {
     "STRIPE_PRICE_EPSILON": "stripe-price-epsilon",
     "STRIPE_PRICE_OMICRON": "stripe-price-omicron",
     "STRIPE_PRICE_OMEGA": "stripe-price-omega",
+    "KYBER_GOOGLE_CLIENT_ID": "kyber-google-client-id",
+    "KYBER_GOOGLE_CLIENT_SECRET": "kyber-google-client-secret",
 }
 
 # These are generated automatically; others must be supplied manually.

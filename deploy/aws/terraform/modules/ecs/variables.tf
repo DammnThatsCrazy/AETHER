@@ -172,6 +172,26 @@ variable "database_name" {
   default     = "aether"
 }
 
+variable "kyber_app_url" {
+  type        = string
+  description = "Canonical Kyber operator-console origin used for workforce OIDC and WebAuthn runtime configuration"
+
+  validation {
+    condition     = can(regex("^https://[^/]+/?$", trimspace(var.kyber_app_url)))
+    error_message = "kyber_app_url must be an HTTPS origin without a path."
+  }
+}
+
+variable "api_base_url" {
+  type        = string
+  description = "Canonical HTTPS API origin used as the backend OAuth callback origin"
+
+  validation {
+    condition     = can(regex("^https://[^/]+/?$", trimspace(var.api_base_url)))
+    error_message = "api_base_url must be an HTTPS origin without a path."
+  }
+}
+
 # The backend (api) task's sizing, baseline and autoscaling envelope carry no
 # defaults on purpose. They come from the api service in the schema-v2runtime
 # matrix via the root's local.api_* values, and a default here would be a

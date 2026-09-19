@@ -22,7 +22,7 @@ canonical_owner: platform@aether
 estimated_read_minutes: 15
 toc_depth: 3
 source_hashes:
-  ".github/workflows/": "sha256:97af20064a604eeb33a992a0d07aaafa6d1427f5e05df64e0864929e9f0e37f1"
+  ".github/workflows/": "sha256:1626de156ff32efd54407b33a784c69052f6b01c6e92b551f41e0994d2de513b"
   "cicd/aether-cicd/README.md": "sha256:ca102c45cda00d0bd46a2fa56456019362e1151e15dc39105345467720c80ca9"
   "cicd/aether-cicd/main.py": "sha256:aa0be4b12e05595a469df83ab97b8a36ab08206029422d2bd5af183e6fb60e48"
   "cicd/aether-cicd/quality_gates/": "sha256:795084ef52b4a288a64549b279677e0d5a66aa030ebb89f662014d78729320a6"
@@ -31,7 +31,7 @@ source_hashes:
   "deploy/aws/terraform/modules/aurora/main.tf": "sha256:c1c005d1f9662dc4dfcc72ca8fbaeda01f4b1c95ea020578c09d5d368516b863"
   "deploy/aws/terraform/modules/ecr/main.tf": "sha256:f8b30aba132a19ae65a39ac0ccafe0a08e35be1cc83d2abaa440414c8f0103e7"
   "deploy/aws/terraform/modules/kms_credentials/main.tf": "sha256:c1f29a39c56575b2a62de519767aa984cb80827644c4fd6ab79d021c53172bc6"
-  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:f9eca9796663c747d2e9b103ce940e2c5abbb59e31aaaa2032826c6ae1568a22"
+  "deploy/aws/terraform/modules/secrets/main.tf": "sha256:18b6900d5b62ac98c1bdcea37acd74cf05185e9b22161831f40d59a747c22383"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:08dff05b2a886af751d7e0b1c7886951b240b6a31f18ef14d26f73085ae59145"
 ---
 
@@ -127,6 +127,12 @@ When the operator supplies `staging_secret_names`, reconciliation first checks
 the exact Secrets Manager names, staging CMK, and `AWSCURRENT` metadata, then
 imports only the reviewed Terraform addresses. It never calls
 `get-secret-value`; secret materialization remains a separate secure bootstrap.
+The reviewed immutable frontend build also requires the Kyber Google client ID
+and passes only the public client identifier into the Kyber bundle. The client
+secret is backend-only and is mounted from Secrets Manager at task start. The
+build and promotion gates fail closed when either required credential is absent,
+so a successful build cannot produce a staging backend that immediately dies
+from missing workforce identity configuration.
 The staging promotion also probes the account plan and fails closed before any
 mutation when a Free plan cannot support the reviewed Aurora topology. Its IAM
 manifest therefore includes the ECR scan, account-plan read, S3 bucket-level

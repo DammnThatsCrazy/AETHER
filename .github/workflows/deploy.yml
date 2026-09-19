@@ -254,8 +254,13 @@ jobs:
           KYBER_AUTH0_CLIENT_ID: ${{ secrets.KYBER_AUTH0_CLIENT_ID }}
           KYBER_API_BASE_URL: ${{ vars.KYBER_API_BASE_URL || format('https://{0}', secrets.TF_DOMAIN_NAME) }}
           KYBER_WS_BASE_URL: ${{ vars.KYBER_WS_BASE_URL || format('wss://{0}', secrets.TF_DOMAIN_NAME) }}
+          KYBER_GOOGLE_CLIENT_ID: ${{ vars.KYBER_GOOGLE_CLIENT_ID || secrets.KYBER_GOOGLE_CLIENT_ID }}
         run: |
           set -euo pipefail
+          test -n "${KYBER_GOOGLE_CLIENT_ID:-}" || {
+            echo '::error::KYBER_GOOGLE_CLIENT_ID is required for the staging Kyber SPA build; configure the approved Google Workspace OAuth client ID before delivery.'
+            exit 1
+          }
           npm ci
           # The frontends import @aether/shared from the local workspace.
           # npm ci installs dependencies but does not build that workspace,
@@ -271,10 +276,18 @@ jobs:
           test -f packages/web/dist/aether.cjs.js
           test -f packages/web/dist/health/index.js
           test -f packages/web/dist/react.js
-          VITE_AUTH0_CLIENT_ID="$AETHER_AUTH0_CLIENT_ID" \
+          VITE_AETHER_ENV=staging \
+            VITE_AETHER_ENDPOINT="$AETHER_API_BASE_URL" \
+            VITE_AUTH0_CLIENT_ID="$AETHER_AUTH0_CLIENT_ID" \
             VITE_API_BASE_URL="$AETHER_API_BASE_URL" \
             npm --workspace frontend/aether run build
-          VITE_AUTH0_CLIENT_ID="$KYBER_AUTH0_CLIENT_ID" \
+          VITE_KYBER_ENV=staging \
+            VITE_AETHER_ENDPOINT="$KYBER_API_BASE_URL" \
+            VITE_GRAPHQL_URL="$KYBER_API_BASE_URL/v1/analytics/graphql" \
+            VITE_OIDC_AUTHORITY="https://accounts.google.com" \
+            VITE_OIDC_CLIENT_ID="$KYBER_GOOGLE_CLIENT_ID" \
+            VITE_OIDC_REDIRECT_URI="$KYBER_API_BASE_URL/v1/kyber/auth/callback" \
+            VITE_AUTH0_CLIENT_ID="$KYBER_AUTH0_CLIENT_ID" \
             VITE_API_BASE_URL="$KYBER_API_BASE_URL" \
             VITE_WS_BASE_URL="$KYBER_WS_BASE_URL" \
             npm --workspace frontend/kyber run build
