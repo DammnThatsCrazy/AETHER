@@ -1,11 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
-import {
-  APP_LOGIN_PATH,
-  AETHER_APP_URL,
-  buildAppHandoffUrl,
-} from '@aether-marketing/lib/handoff';
+import { describe, expect, it } from 'vitest';
+import { AETHER_APP_URL } from '@aether-marketing/lib/handoff';
 import { LoginPage } from '@aether-marketing/pages/auth/login-page';
 
 function renderLoginPage(navigate: (url: string) => void = () => {}) {
@@ -16,8 +12,6 @@ function renderLoginPage(navigate: (url: string) => void = () => {}) {
   );
 }
 
-/** The public→private handoff is a submit action, never a visible anchor: the
- * public page must not render a link that points straight at the app. */
 function expectNoApplicationOriginLink(): void {
   const origin = AETHER_APP_URL.replace(/\/$/, '');
   for (const link of screen.getAllByRole('link')) {
@@ -26,65 +20,21 @@ function expectNoApplicationOriginLink(): void {
 }
 
 describe('LoginPage', () => {
-  it('renders the sign-in form', () => {
+  it('renders the coming-soon sign-in page', () => {
     renderLoginPage();
 
     expect(screen.getByRole('heading', { name: 'Sign in to your workspace' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Work email')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Continue to sign-in' })).toBeInTheDocument();
+    expect(screen.getByText('Coming soon')).toBeInTheDocument();
   });
 
-  it('treats an empty email as required', () => {
-    const navigate = vi.fn();
-    renderLoginPage(navigate);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to sign-in' }));
-
-    expect(screen.getByText('Enter your work email to continue.')).toBeInTheDocument();
-    expect(navigate).not.toHaveBeenCalled();
-  });
-
-  it('blocks an invalid email with an accessible inline error', () => {
+  it('links to the waitlist signup', () => {
     renderLoginPage();
 
-    const email = screen.getByLabelText('Work email');
-    fireEvent.change(email, { target: { value: 'not-an-email' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to sign-in' }));
-
-    expect(email).toHaveAttribute('aria-invalid', 'true');
-    const message = screen.getByText('Enter a valid work email address.');
-    expect(message).toBeInTheDocument();
-    // The error is wired to the control so it is discoverable by assistive tech.
-    expect(email).toHaveAttribute('aria-describedby', 'email-error');
-    expect(message.id).toBe('email-error');
-  });
-
-  it('navigates to the app login handoff on a valid submit', () => {
-    const navigate = vi.fn();
-    renderLoginPage(navigate);
-
-    fireEvent.change(screen.getByLabelText('Work email'), {
-      target: { value: 'ada@example.com' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to sign-in' }));
-
-    expect(navigate).toHaveBeenCalledTimes(1);
-    expect(navigate).toHaveBeenCalledWith(
-      buildAppHandoffUrl(APP_LOGIN_PATH, { email: 'ada@example.com' }),
-    );
-  });
-
-  it('links to the internal sign-up and recovery routes', () => {
-    renderLoginPage();
-
-    expect(screen.getByRole('link', { name: 'Create an account' })).toHaveAttribute(
-      'href',
-      '/signup',
-    );
-    expect(screen.getByRole('link', { name: 'Forgot your password?' })).toHaveAttribute(
-      'href',
-      '/forgot-password',
-    );
+    const links = screen.getAllByRole('link', { name: 'Join the waitlist' });
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(link).toHaveAttribute('href', '/signup');
+    }
   });
 
   it('renders no element pointing at the application origin as a link', () => {

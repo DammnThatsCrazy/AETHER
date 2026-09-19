@@ -52,10 +52,9 @@ describe('Aether marketing shell', () => {
       </MemoryRouter>,
     );
 
-    // The login page is a real form now, not an external link out to the app.
+    // The login page shows a coming-soon state directing visitors to the waitlist.
     expect(screen.getByRole('heading', { name: /sign in to your workspace/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/work email/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Continue to sign-in' })).toBeInTheDocument();
+    expect(screen.getByText('Coming soon')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Continue to the Aether app' })).not.toBeInTheDocument();
 
     // AuthLayout keeps the quiet cross-links only.

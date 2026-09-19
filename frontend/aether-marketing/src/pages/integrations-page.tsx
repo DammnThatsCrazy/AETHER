@@ -22,7 +22,6 @@ import type {
   ExperienceToken,
 } from "@aether-marketing/content/connectors";
 import { findSection } from "@aether-marketing/content/sections";
-import { buildIntegrationsHandoffUrl } from "@aether-marketing/lib/handoff";
 import { AETHER_DOCS_URL } from "@aether-marketing/lib/env";
 import { usePageMeta } from "@aether-marketing/lib/meta";
 import { getLaunchPackPage, launchPackHeading } from "../../../marketing/src/content-loader";
@@ -389,22 +388,83 @@ export function IntegrationsPage() {
   );
 }
 
+const BRAND_ICON_SLUGS: Readonly<Record<string, string>> = {
+  slack: 'slack',
+  shopify: 'shopify',
+  stripe: 'stripe',
+  hubspot: 'hubspot',
+  salesforce: 'salesforce',
+  klaviyo: 'klaviyo',
+  segment: 'segment',
+  posthog: 'posthog',
+  ga4: 'googleanalytics',
+  jira: 'jira',
+  linear: 'linear',
+  zendesk: 'zendesk',
+  intercom: 'intercom',
+  sendgrid: 'sendgrid',
+  mailchimp: 'mailchimp',
+  braze: 'braze',
+  google_ads: 'googleads',
+  meta_ads: 'meta',
+  tiktok_ads: 'tiktok',
+  linkedin_ads: 'linkedin',
+  x_ads: 'x',
+  reddit_ads: 'reddit',
+  microsoft_ads: 'microsoftadvertising',
+  customerio: 'customerio',
+  postmark: 'postmark',
+  iterable: 'iterable',
+  dune: 'dune',
+};
+
+function ConnectorIcon({ id, name }: { readonly id: string; readonly name: string }) {
+  const slug = BRAND_ICON_SLUGS[id];
+  if (slug) {
+    return (
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border-default bg-white p-1.5 dark:bg-surface-raised" aria-hidden="true">
+        <img
+          src={`https://cdn.simpleicons.org/${slug}`}
+          alt=""
+          width={24}
+          height={24}
+          loading="lazy"
+          className="h-6 w-6 object-contain"
+          onError={(e) => {
+            const target = e.currentTarget;
+            target.style.display = 'none';
+            const fallback = target.nextElementSibling;
+            if (fallback instanceof HTMLElement) fallback.style.display = '';
+          }}
+        />
+        <span className="font-mono text-sm font-bold text-text-secondary" style={{ display: 'none' }}>
+          {name.charAt(0).toUpperCase()}
+        </span>
+      </span>
+    );
+  }
+  return (
+    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border-default bg-surface-raised font-mono text-sm font-bold text-text-secondary" aria-hidden="true">
+      {name.charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
 /** One searchable/filterable row for a connectable catalog family. */
 function ConnectorRow({ connector }: { readonly connector: ConnectorRecord }) {
-  const connectHref = buildIntegrationsHandoffUrl({
-    family: connector.id,
-    experience: connector.experience,
-  });
   return (
     <li className="rounded-md border border-border-default bg-surface-base p-6">
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-        <div className="min-w-0 max-w-3xl">
-          <h3 className="text-base font-semibold tracking-tight text-text-primary">
-            {connector.name}
-          </h3>
-          <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
-            {connector.description}
-          </p>
+        <div className="flex min-w-0 max-w-3xl items-start gap-4">
+          <ConnectorIcon id={connector.id} name={connector.name} />
+          <div>
+            <h3 className="text-base font-semibold tracking-tight text-text-primary">
+              {connector.name}
+            </h3>
+            <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
+              {connector.description}
+            </p>
+          </div>
         </div>
         <p
           className="mkt-chip"
@@ -444,16 +504,15 @@ function ConnectorRow({ connector }: { readonly connector: ConnectorRecord }) {
       </ul>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-border-default pt-4">
         <p className="text-sm text-text-secondary">
-          Open the Aether app to sign in and run the real connect flow for this
-          provider.
+          Join the waitlist to get access when the connect flow for this provider opens.
         </p>
-        <a
-          href={connectHref}
+        <Link
+          to="/signup"
           aria-label={`Connect ${connector.name}`}
           className="inline-flex items-center gap-2 rounded-md border border-border-default bg-surface-raised px-3 py-2 text-sm font-medium text-text-primary mkt-motion-color hover:border-accent hover:text-text-primary"
         >
-          Connect
-        </a>
+          Get access
+        </Link>
       </div>
     </li>
   );

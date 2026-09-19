@@ -1,11 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
-import {
-  APP_SIGNUP_PATH,
-  AETHER_APP_URL,
-  buildAppHandoffUrl,
-} from '@aether-marketing/lib/handoff';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AETHER_APP_URL } from '@aether-marketing/lib/handoff';
 import { SignupPage } from '@aether-marketing/pages/auth/signup-page';
 
 function renderSignupPage(navigate: (url: string) => void = () => {}) {
@@ -16,7 +12,6 @@ function renderSignupPage(navigate: (url: string) => void = () => {}) {
   );
 }
 
-/** The public→private handoff is a submit action, never a visible anchor. */
 function expectNoApplicationOriginLink(): void {
   const origin = AETHER_APP_URL.replace(/\/$/, '');
   for (const link of screen.getAllByRole('link')) {
@@ -24,34 +19,39 @@ function expectNoApplicationOriginLink(): void {
   }
 }
 
+afterEach(() => {
+  try {
+    window.localStorage.removeItem('aether.marketing.signup.v1');
+  } catch {
+    // noop
+  }
+});
+
 describe('SignupPage', () => {
-  it('renders the sign-up form', () => {
+  it('renders the waitlist form', () => {
     renderSignupPage();
 
     expect(screen.getByRole('heading', { name: 'Create a workspace' })).toBeInTheDocument();
     expect(screen.getByLabelText('Your name')).toBeInTheDocument();
     expect(screen.getByLabelText('Work email')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Continue to sign-up' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Join the waitlist' })).toBeInTheDocument();
   });
 
-  it('requires a name before handing off', () => {
-    const navigate = vi.fn();
-    renderSignupPage(navigate);
+  it('requires a name before submitting', () => {
+    renderSignupPage();
 
     fireEvent.change(screen.getByLabelText('Work email'), {
       target: { value: 'ada@example.com' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to sign-up' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Join the waitlist' }));
 
     const name = screen.getByLabelText('Your name');
     expect(name).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByText('Enter your name to get started.')).toBeInTheDocument();
-    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('blocks an invalid email with an accessible inline error', () => {
-    const navigate = vi.fn();
-    renderSignupPage(navigate);
+    renderSignupPage();
 
     fireEvent.change(screen.getByLabelText('Your name'), {
       target: { value: 'Ada Lovelace' },
@@ -59,7 +59,7 @@ describe('SignupPage', () => {
     fireEvent.change(screen.getByLabelText('Work email'), {
       target: { value: 'not-an-email' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to sign-up' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Join the waitlist' }));
 
     const email = screen.getByLabelText('Work email');
     expect(email).toHaveAttribute('aria-invalid', 'true');
@@ -67,12 +67,10 @@ describe('SignupPage', () => {
     expect(message).toBeInTheDocument();
     expect(email).toHaveAttribute('aria-describedby', 'email-error');
     expect(message.id).toBe('email-error');
-    expect(navigate).not.toHaveBeenCalled();
   });
 
-  it('navigates to the app sign-up handoff on a valid submit', () => {
-    const navigate = vi.fn();
-    renderSignupPage(navigate);
+  it('saves to localStorage and shows confirmation on valid submit', async () => {
+    renderSignupPage();
 
     fireEvent.change(screen.getByLabelText('Your name'), {
       target: { value: 'Ada Lovelace' },
@@ -80,12 +78,15 @@ describe('SignupPage', () => {
     fireEvent.change(screen.getByLabelText('Work email'), {
       target: { value: 'ada@example.com' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Continue to sign-up' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Join the waitlist' }));
 
-    expect(navigate).toHaveBeenCalledTimes(1);
-    expect(navigate).toHaveBeenCalledWith(
-      buildAppHandoffUrl(APP_SIGNUP_PATH, { name: 'Ada Lovelace', email: 'ada@example.com' }),
-    );
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: "We'll be in touch" })).toBeInTheDocument();
+    });
+
+    const stored = JSON.parse(window.localStorage.getItem('aether.marketing.signup.v1') ?? '{}');
+    expect(stored.name).toBe('Ada Lovelace');
+    expect(stored.email).toBe('ada@example.com');
   });
 
   it('links to the internal sign-in route', () => {

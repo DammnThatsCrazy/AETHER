@@ -3,7 +3,6 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { IntegrationsPage } from "./integrations-page";
 import { CONNECTORS } from "@aether-marketing/content/connectors";
-import { buildIntegrationsHandoffUrl } from "@aether-marketing/lib/handoff";
 
 function renderPage() {
   return render(
@@ -134,23 +133,14 @@ describe("IntegrationsPage", () => {
     expect(resultCount()).toContain("2 of");
   });
 
-  it("offers a Connect action per family that deep-links the app Settings → Integrations surface", () => {
+  it("routes each connector's access action to the public signup threshold", () => {
     renderPage();
     const connect = screen.getByRole("link", { name: "Connect Shopify" });
-    expect(connect).toHaveAttribute(
-      "href",
-      buildIntegrationsHandoffUrl({
-        family: "shopify",
-        experience: "commerce_revenue",
-      }),
-    );
+    expect(connect).toHaveAttribute("href", "/signup");
+    expect(connect).not.toHaveAttribute("target");
+
     const ads = screen.getByRole("link", { name: "Connect Google Ads" });
-    expect(ads).toHaveAttribute(
-      "href",
-      buildIntegrationsHandoffUrl({
-        family: "google_ads",
-        experience: "advertising_campaigns",
-      }),
-    );
+    expect(ads).toHaveAttribute("href", "/signup");
+    expect(ads).not.toHaveAttribute("target");
   });
 });
