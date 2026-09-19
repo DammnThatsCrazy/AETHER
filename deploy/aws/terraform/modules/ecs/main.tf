@@ -383,6 +383,9 @@ resource "aws_ecs_task_definition" "backend" {
         [
           { name = "APP_ENV", value = var.environment },
           { name = "AETHER_ENV", value = var.environment },
+          { name = "DATABASE_HOST", value = var.database_host },
+          { name = "DATABASE_PORT", value = tostring(var.database_port) },
+          { name = "DATABASE_NAME", value = var.database_name },
           { name = "CORS_ORIGINS", value = var.api_cors_origins },
           { name = "PORT", value = "8000" },
           { name = "LOG_LEVEL", value = var.environment == "production" ? "INFO" : "DEBUG" },
@@ -580,6 +583,9 @@ resource "aws_ecs_task_definition" "runtime_service" {
       [
         { name = "APP_ENV", value = var.environment },
         { name = "AETHER_ENV", value = var.environment },
+        { name = "DATABASE_HOST", value = var.database_host },
+        { name = "DATABASE_PORT", value = tostring(var.database_port) },
+        { name = "DATABASE_NAME", value = var.database_name },
         { name = "AETHER_ROLE", value = each.key },
         { name = "CACHE_BACKEND", value = var.cache_backend },
         { name = "GRAPH_BACKEND", value = var.graph_backend },

@@ -289,6 +289,20 @@ locals {
   redis_port            = try(module.elasticache[0].port, 6379)
   redis_auth_secret_arn = try(module.elasticache[0].auth_token_secret_arn, "")
 
+  # AWS-managed RDS/Aurora credential secrets contain username/password only.
+  # Keep the connection endpoint and database name as ordinary task
+  # environment values sourced from the provisioned database outputs; the
+  # entrypoint combines them with the mounted secret at runtime.
+  database_host = try(module.aurora[0].cluster_endpoint, local.legacy_rds_endpoint)
+  database_port = try(
+    module.aurora[0].port,
+    local.legacy_rds_port > 0 ? local.legacy_rds_port : 5432,
+  )
+  database_name = try(
+    module.aurora[0].db_name,
+    local.legacy_rds_db_name != "" ? local.legacy_rds_db_name : var.db_name,
+  )
+
   # MSK Kafka (absent unless local.event_broker == "kafka").
   kafka_bootstrap_servers = try(module.msk[0].bootstrap_brokers_tls, "")
 
@@ -407,6 +421,9 @@ module "ecs" {
   ml_image_digest      = var.ml_image_digest
   alb_backend_tg_arn   = module.alb.backend_target_group_arn
   alb_ml_tg_arn        = module.alb.ml_target_group_arn
+  database_host        = local.database_host
+  database_port        = local.database_port
+  database_name        = local.database_name
 
   # E3: Aurora Serverless v2 replaces RDS as the active database.
   # entrypoint.sh reads this ARN via DATABASE_URL_SECRET and builds DATABASE_URL.

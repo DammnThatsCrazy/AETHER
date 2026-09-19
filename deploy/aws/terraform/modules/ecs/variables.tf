@@ -154,6 +154,24 @@ variable "companion_secret_arns" {
   default     = {}
 }
 
+variable "database_host" {
+  type        = string
+  description = "Database writer endpoint injected alongside the AWS-managed credential secret"
+  default     = ""
+}
+
+variable "database_port" {
+  type        = number
+  description = "Database port injected alongside the AWS-managed credential secret"
+  default     = 5432
+}
+
+variable "database_name" {
+  type        = string
+  description = "Database name injected alongside the AWS-managed credential secret"
+  default     = "aether"
+}
+
 # The backend (api) task's sizing, baseline and autoscaling envelope carry no
 # defaults on purpose. They come from the api service in the schema-v2runtime
 # matrix via the root's local.api_* values, and a default here would be a
