@@ -731,6 +731,7 @@ moved {
 # --------------------------------------------------------------------------
 
 resource "aws_appautoscaling_target" "runtime_service" {
+  provider           = aws.untagged
   for_each           = var.runtime_services
   max_capacity       = each.value.autoscaling.max_capacity
   min_capacity       = each.value.autoscaling.min_capacity
@@ -1046,6 +1047,7 @@ resource "aws_ecs_service" "ml" {
 # --------------------------------------------------------------------------
 
 resource "aws_appautoscaling_target" "backend" {
+  provider           = aws.untagged
   max_capacity       = var.backend_max_capacity
   min_capacity       = var.backend_min_capacity
   resource_id        = "service/${aws_ecs_cluster.this.name}/${aws_ecs_service.backend.name}"
@@ -1093,6 +1095,7 @@ resource "aws_appautoscaling_policy" "backend_memory" {
 # --------------------------------------------------------------------------
 
 resource "aws_appautoscaling_target" "ml" {
+  provider           = aws.untagged
   count              = var.enable_dedicated_ml ? 1 : 0
   max_capacity       = var.ml_max_capacity
   min_capacity       = var.ml_min_capacity

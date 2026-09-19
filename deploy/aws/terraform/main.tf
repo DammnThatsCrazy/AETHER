@@ -31,6 +31,15 @@ provider "aws" {
   }
 }
 
+# Application Auto Scaling's TagResource call can race the eventual
+# registration of a newly-created scalable target. The ECS module uses this
+# untagged provider only for scalable-target resources; all other AWS
+# resources retain the canonical default tags above.
+provider "aws" {
+  alias  = "untagged"
+  region = var.aws_region
+}
+
 # ---------------------------------------------------------------------------
 # AZ Discovery
 # ---------------------------------------------------------------------------
@@ -409,6 +418,11 @@ locals {
 
 module "ecs" {
   source = "./modules/ecs"
+
+  providers = {
+    aws          = aws
+    aws.untagged = aws.untagged
+  }
 
   environment          = var.environment
   project              = var.project

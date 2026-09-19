@@ -31,6 +31,11 @@ provider "aws" {
   }
 }
 
+provider "aws" {
+  alias  = "untagged"
+  region = var.aws_region
+}
+
 # ── Variables ──────────────────────────────────────────────────────────
 
 variable "environment" {
@@ -157,6 +162,7 @@ module "s3" {
 
 module "ecs" {
   source             = "../../modules/ecs"
+  providers          = { aws = aws, aws.untagged = aws.untagged }
   environment        = var.environment
   vpc_id             = module.vpc.vpc_id
   public_subnet_ids  = module.vpc.public_subnet_ids
