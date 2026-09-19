@@ -400,7 +400,8 @@ class EmailConfig:
     from_name: str = _env("EMAIL_FROM_NAME", "AETHER")
     aws_region: str = _env("EMAIL_AWS_REGION", "us-east-1")
     sendgrid_api_key: str = _env("SENDGRID_API_KEY", "")
-    enterprise_inquiry_email: str = _env("ENTERPRISE_INQUIRY_EMAIL", "sales@aether.dev")
+    enterprise_inquiry_email: str = _env("ENTERPRISE_INQUIRY_EMAIL", "team@olympuslabsml.com")
+    lead_notification_email: str = _env("LEAD_NOTIFICATION_EMAIL", "team@olympuslabsml.com")
     app_url: str = _env("APP_URL", "http://localhost:3000")
 
 
