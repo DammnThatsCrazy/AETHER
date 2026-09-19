@@ -388,24 +388,58 @@ export function IntegrationsPage() {
   );
 }
 
-const CATEGORY_ICONS: Readonly<Record<string, string>> = {
-  commerce: '🛒',
-  crm: '👥',
-  communications: '💬',
-  analytics: '📊',
-  support: '🎧',
-  advertising: '📣',
-  work: '⚡',
-  payments: '💳',
-  social: '🌐',
+const BRAND_ICON_SLUGS: Readonly<Record<string, string>> = {
+  slack: 'slack',
+  shopify: 'shopify',
+  stripe: 'stripe',
+  hubspot: 'hubspot',
+  salesforce: 'salesforce',
+  klaviyo: 'klaviyo',
+  segment: 'segment',
+  posthog: 'posthog',
+  ga4: 'googleanalytics',
+  jira: 'jira',
+  linear: 'linear',
+  zendesk: 'zendesk',
+  intercom: 'intercom',
+  sendgrid: 'sendgrid',
+  mailchimp: 'mailchimp',
+  braze: 'braze',
+  google_ads: 'googleads',
+  meta_ads: 'meta',
+  tiktok_ads: 'tiktok',
+  linkedin_ads: 'linkedin',
+  x_ads: 'x',
+  reddit_ads: 'reddit',
+  microsoft_ads: 'microsoftadvertising',
+  customerio: 'customerio',
+  postmark: 'postmark',
+  iterable: 'iterable',
+  dune: 'dune',
 };
 
-function ConnectorIcon({ name, category }: { readonly name: string; readonly category: string }) {
-  const icon = CATEGORY_ICONS[category];
-  if (icon) {
+function ConnectorIcon({ id, name }: { readonly id: string; readonly name: string }) {
+  const slug = BRAND_ICON_SLUGS[id];
+  if (slug) {
     return (
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border-default bg-surface-raised text-lg" aria-hidden="true">
-        {icon}
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border-default bg-white p-1.5 dark:bg-surface-raised" aria-hidden="true">
+        <img
+          src={`https://cdn.simpleicons.org/${slug}`}
+          alt=""
+          width={24}
+          height={24}
+          loading="lazy"
+          className="h-6 w-6 object-contain"
+          onError={(e) => {
+            const target = e.currentTarget;
+            target.style.display = 'none';
+            const fallback = target.nextElementSibling;
+            if (fallback instanceof HTMLElement) fallback.style.display = '';
+          }}
+        />
+        <span className="font-mono text-sm font-bold text-text-secondary" style={{ display: 'none' }}>
+          {name.charAt(0).toUpperCase()}
+        </span>
       </span>
     );
   }
@@ -422,7 +456,7 @@ function ConnectorRow({ connector }: { readonly connector: ConnectorRecord }) {
     <li className="rounded-md border border-border-default bg-surface-base p-6">
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div className="flex min-w-0 max-w-3xl items-start gap-4">
-          <ConnectorIcon name={connector.name} category={connector.category} />
+          <ConnectorIcon id={connector.id} name={connector.name} />
           <div>
             <h3 className="text-base font-semibold tracking-tight text-text-primary">
               {connector.name}

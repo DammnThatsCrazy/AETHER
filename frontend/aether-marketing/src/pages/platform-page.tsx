@@ -100,18 +100,20 @@ function CapabilityExplorer() {
             <Link
               key={capability.slug}
               to={`/platform/${capability.slug}`}
-              className="group flex flex-col gap-3 rounded-md border border-border-default p-6 mkt-motion-color hover:border-accent"
+              className="group flex h-full flex-col rounded-md border border-border-default p-6 mkt-motion-color hover:border-accent"
             >
               <span aria-hidden="true" className="font-mono text-xs text-text-muted">
                 {String(index + 1).padStart(2, '0')}
               </span>
-              <h3 className="mkt-body font-medium text-text-primary group-hover:text-accent">
+              <h3 className="mt-3 text-base font-semibold tracking-tight text-text-primary group-hover:text-accent">
                 {capability.shortName}
               </h3>
-              <p className="text-sm leading-relaxed text-text-secondary">{capability.description}</p>
-              <span className="mkt-chip mt-auto">{capability.status}</span>
-              <span className="text-xs font-medium text-accent opacity-0 group-hover:opacity-100">
-                Learn more →
+              <p className="mt-2 text-sm leading-relaxed text-text-secondary">
+                {capability.description}
+              </p>
+              <span className="mt-auto flex items-center gap-1.5 pt-6 text-xs font-medium text-accent opacity-0 transition-opacity group-hover:opacity-100">
+                Learn more
+                <span aria-hidden="true">&rarr;</span>
               </span>
             </Link>
           ))}
