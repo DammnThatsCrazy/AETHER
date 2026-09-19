@@ -111,7 +111,7 @@ function CapabilityExplorer() {
               <p className="mt-2 text-sm leading-relaxed text-text-secondary">
                 {capability.description}
               </p>
-              <span className="mt-auto flex items-center gap-1.5 pt-6 text-xs font-medium text-accent opacity-0 transition-opacity group-hover:opacity-100">
+              <span className="mt-auto flex items-center gap-1.5 pt-6 text-xs font-medium text-accent opacity-0 group-hover:opacity-100">
                 Learn more
                 <span aria-hidden="true">&rarr;</span>
               </span>

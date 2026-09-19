@@ -150,6 +150,7 @@ export function AetherShell() {
               <FooterExternal to={OLYMPUS_SITE_URL} label="About Olympus Labs" />
               <FooterLink to="/security" label="Security" />
               <FooterLink to="/pricing" label="Pricing" />
+              <FooterLink to="/contact" label="Contact" />
               <FooterLink to="/resources" label="Resources" />
             </FooterColumn>
             <FooterColumn title="Sign in">
