@@ -69,10 +69,10 @@ describe('per-route head meta', () => {
     const view = renderAt('/login');
     expect(content('meta[name="robots"]')).toBe('noindex,nofollow');
 
-    fireEvent.click(screen.getByRole('link', { name: 'Back to the Aether home page' }));
-    await screen.findByRole('heading', { name: /connect the systems/i });
+    fireEvent.click(screen.getByRole('link', { name: 'Security' }));
+    await screen.findByRole('heading', { level: 1 });
 
-    expect(canonical()).toBe(`${AETHER_MARKETING_URL}/`);
+    expect(canonical()).toBe(`${AETHER_MARKETING_URL}/security`);
     expect(content('meta[name="robots"]')).toBe('index,follow');
     expect(countManaged('canonical')).toBe(1);
     expect(countManaged('robots')).toBe(1);
@@ -106,7 +106,7 @@ describe('per-route head meta', () => {
     renderAt('/platform');
     const main = within(screen.getByRole('main'));
     const primary = main.getByRole('link', { name: 'Explore the intelligence graph' });
-    expect(primary).toHaveAttribute('href', '/intelligence-graph');
+    expect(primary).toHaveAttribute('href', '/developers');
     expect(primary).not.toHaveAttribute('target');
     expect(primary).not.toHaveAttribute('rel');
     expect(main.getByRole('link', { name: 'Start a pilot' })).toHaveAttribute('href', '/start-pilot');
