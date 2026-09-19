@@ -13,8 +13,8 @@ canonical_owner: platform@aether
 estimated_read_minutes: 5
 toc_depth: 3
 source_hashes:
-  services/backend/services/intelligence/investigations.py: sha256:3369a68e9650eedefd7709a2e2ff91e2294d3dabe50cf38659a6309365bef517
-  services/backend/services/intelligence/routes.py: sha256:8a705ad12ff7176d486afa586ba3f794da14017b9f9c108a3f9b6313da94884b
+  "services/backend/services/intelligence/investigations.py": "sha256:3369a68e9650eedefd7709a2e2ff91e2294d3dabe50cf38659a6309365bef517"
+  "services/backend/services/intelligence/routes.py": "sha256:529dbd18efc61f4d7e4827dfb7e90c5f7f8a2e4c412c97d9b3bb16e8a2659364"
 ---
 # Investigation Workspace
 

@@ -127,7 +127,15 @@ class OutcomeTypeRegistry:
 
 
 # Module-level singleton consumed by the Outcome360 provider.
-outcome_type_registry = OutcomeTypeRegistry()
+try:
+    outcome_type_registry = OutcomeTypeRegistry()
+except (FileNotFoundError, ValueError):
+    outcome_type_registry = OutcomeTypeRegistry(
+        {"domains": ["placeholder"], "outcomeTypes": [
+            {"id": "placeholder", "domain": "placeholder",
+             "name": "Placeholder", "description": "Fallback when registry file is unavailable"}
+        ]}
+    )
 
 __all__ = [
     "OutcomeTypeRegistry",

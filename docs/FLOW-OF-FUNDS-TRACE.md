@@ -13,7 +13,7 @@ reviewed_source_commits:
   - commit: "54eaac5d"
     reason: "Reviewed the staging first-admin bootstrap change; flow-trace behavior and contracts are unaffected."
 source_hashes:
-  "services/backend/repositories/repos.py": "sha256:96341101e3ef8db15a80a953aa9d86e0d7a1804a02fe58e0a3e8fe53ffbbc4b8"
+  "services/backend/repositories/repos.py": "sha256:f5629be5826c063f36f8ca3e04855d36a96306d8dfa7f11ba03f64fdeb9f8e7f"
   "services/backend/services/flow_trace/": "sha256:ecabf31ddd0dacf96475c891836cc7d7ba3906c17a34f67669393eff874a3348"
 ---
 

@@ -52,6 +52,9 @@ PUBLIC_PATHS: frozenset[str] = frozenset({
     # One-time, staging-only first-admin bootstrap. The handler requires a
     # high-entropy Secrets Manager token and an allowlisted operator email.
     "/v1/auth/bootstrap/first-admin",
+    # Public lead capture: waitlist, early-access, and demo-request forms
+    # submitted from marketing sites (unauthenticated visitors).
+    "/v1/contact/lead",
 })
 
 # Path prefixes that bypass Aether API key auth.
