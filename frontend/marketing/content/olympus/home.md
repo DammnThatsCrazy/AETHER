@@ -48,14 +48,12 @@ boundary between evidence, inference, recommendation, approval, and outcome.
 - **Agent to human:** notification, recommendation, escalation, and decision.
 The infrastructure matters because it keeps the loop connected from its first
 observation through the perspective it creates and the outcome that follows.
-## Olympus Labs, Aether, and Kyber
+## Olympus Labs and Aether
 Olympus Labs is the company and infrastructure thesis. Aether is the
-customer-facing connection and relationship intelligence platform. Kyber is the
-internal operating system for readiness, deployments, evidence, revenue, and
-support.
+customer-facing connection and relationship intelligence platform.
 The company thesis is broader than one application. The product remains
-specific enough to create value now. The operating system keeps the company
-honest about what is connected, what is ready, and what is actually proven.
+specific enough to create value now, keeping the company honest about what is
+connected, what is ready, and what is actually proven.
 ## Start with the question, not the package
 The first conversation should begin with the relationship question you need to
 answer, the systems that hold the evidence, and the outcome that would matter.

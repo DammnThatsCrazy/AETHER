@@ -21,7 +21,7 @@ Olympus Labs is focused on that connective layer:
 - create perspectives that people and authorized systems can act on; and
 - observe what happened after the decision.
 We build the infrastructure behind accountable perspective. Aether is the first
-product expression of that work. Kyber remains the internal operator plane.
+product expression of that work.
 ## What makes the approach different
 Olympus treats relationships as first-class infrastructure. A campaign,
 connector, SDK, or model output matters because of the relationships it helps

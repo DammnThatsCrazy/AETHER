@@ -12,13 +12,11 @@ canonical_owner: strategy@olympus
 ---
 # Olympus Labs and Aether
 Olympus Labs is the company. Aether is the customer-facing connection and
-relationship intelligence platform. Kyber is the internal operator, readiness,
-revenue, and GTM system.
+relationship intelligence platform.
 The hierarchy keeps the public story clear:
 - Olympus Labs explains the infrastructure thesis and the standards behind it.
 - Aether gives organizations a practical way to connect evidence and understand
   relationships.
-- Kyber helps Olympus operate deployments, readiness, proof, and support.
 Aether begins with the connections a customer already controls and ends with
 governed perspectives and observed outcomes. Its initial commercial package is
 the Revenue Intelligence Graph for digital businesses. That package is an entry

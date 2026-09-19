@@ -34,8 +34,8 @@ From there, tenant scoping is enforced at every layer:
   are all tenant-prefixed or tenant-partitioned.
 - **APIs** — every read endpoint filters by the caller's tenant; there is no
   code path that returns another tenant's rows to a normal API key.
-- **Kyber (the operator console)** — the reverse boundary also holds: no
-  Aether tenant credential can reach Kyber's cross-tenant aggregate views,
+- **Operator console** — the reverse boundary also holds: no
+  Aether tenant credential can reach cross-tenant aggregate views,
   and those views are tenant-anonymous even for operators.
 
 ## API key scoping
