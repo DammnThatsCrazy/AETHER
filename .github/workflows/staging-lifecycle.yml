@@ -914,8 +914,8 @@ jobs:
           # calls. Verify the stable operator-managed CNAME target instead of
           # comparing transient IP intersections, then let the HTTPS probe
           # below validate that the endpoint is actually serving.
-          normalize_name() { printf '%s' "$1" | sed 's/\\.$//'; }
-          api_cname="$(dig +short CNAME "$API_HOST" | sed -n '1p' | sed 's/\\.$//')"
+          normalize_name() { printf '%s' "$1" | sed 's/\.$//'; }
+          api_cname="$(dig +short CNAME "$API_HOST" | sed -n '1p' | sed 's/\.$//')"
           alb_name="$(normalize_name "$ALB_DNS")"
           test -n "$api_cname" || {
             echo "::error::certificate-covered API hostname ${API_HOST} has no CNAME record"; exit 1;
