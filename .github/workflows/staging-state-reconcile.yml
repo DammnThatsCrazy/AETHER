@@ -320,7 +320,20 @@ jobs:
               rm -f "$describe_file"
               echo "::error::secret metadata name '$actual_name' does not match aether/$name"; exit 1;
             }
-            actual_kms="$(jq -r '.KmsKeyId // empty' "$describe_file")"
+            # Secrets Manager may report the configured CMK by alias (for
+            # example `alias/aether-staging-secrets`) or by ARN. Resolve both
+            # forms to the immutable key ARN before comparing them. Comparing
+            # the raw reference to the ARN falsely rejects correctly encrypted
+            # secrets and blocks state reconciliation before any mutation.
+            actual_kms_reference="$(jq -r '.KmsKeyId // empty' "$describe_file")"
+            actual_kms=""
+            if [ -n "$actual_kms_reference" ]; then
+              actual_kms="$(aws kms describe-key --key-id "$actual_kms_reference" \
+                --query 'KeyMetadata.Arn' --output text)" || {
+                rm -f "$describe_file"
+                echo "::error::secret aether/$name KMS reference could not be resolved; refusing import"; exit 1;
+              }
+            fi
             test "$actual_kms" = "$STAGING_SECRETS_KMS_KEY_ARN" || {
               rm -f "$describe_file"
               echo "::error::secret aether/$name is encrypted with a different CMK; refusing silent re-encryption"; exit 1;

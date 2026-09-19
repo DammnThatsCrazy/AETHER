@@ -213,6 +213,9 @@ def test_staging_secret_reconciliation_handles_absent_kms_alias() -> None:
         assert "kms list-aliases" in block
         assert "alias/aether-staging-secrets" in block
         assert "different CMK" in block
+    assert "actual_kms_reference" in metadata
+    assert "aws kms describe-key --key-id \"$actual_kms_reference\"" in metadata
+    assert "KeyMetadata.Arn" in metadata
     assert "leave it for the fresh reviewed plan to create" in metadata
     assert "leaving its Terraform address unmanaged" in imports
 
