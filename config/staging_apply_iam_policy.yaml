@@ -628,6 +628,11 @@ statements:
       - application-autoscaling:DescribeScalingPolicies
     resource: '*'
     scope: staging-write-required-by-api
+  - sid: RemoveStagingAutoScalingTags
+    actions:
+      - application-autoscaling:UntagResource
+    resource: arn:aws:application-autoscaling:us-east-1:${account_id}:scalable-target/*
+    scope: staging-autoscaling-targets
   # ----- SSM Parameters (root main.tf) -----
   - sid: ManageStagingParameters
     actions:

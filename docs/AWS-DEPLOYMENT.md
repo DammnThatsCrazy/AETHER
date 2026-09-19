@@ -24,16 +24,16 @@ canonical_owner: platform@aether
 estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
-  ".github/workflows/staging-lifecycle.yml": "sha256:38e9810399b549e10741393bd424dec755adb29a3aa7a350f9fe1c8ca8645007"
+  ".github/workflows/staging-lifecycle.yml": "sha256:6defa4e93f8b8389ab2cda44f5f36a7b7433948137c820f0c527db90cba7ccdb"
   ".github/workflows/staging-state-reconcile.yml": "sha256:b7dd5cef545fdf60ac882b917ddde4dcada633a4eb0f321759bc5fc5b3e7f38a"
   ".github/workflows/staging-ttl-guard.yml": "sha256:4fe2250c0ccb0f8486800c6e09c8f1adcf6c38371944e911269f103053f0f1da"
   ".github/workflows/terraform-promote.yml": "sha256:ba383bc8b71527e6e90c9bc8bcc44ccc7221f6ba8ab7c33b9eb3ef2ac4250051"
-  "config/staging_apply_iam_policy.yaml": "sha256:a8da8625cb23db18a6fa320521286d9d6292a2115fcb5f22985f283196c5178d"
+  "config/staging_apply_iam_policy.yaml": "sha256:87e3f96de932225bfb87344e93f7bea10338ce8189967a92d1aa829915ddbd47"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:84cc2d5a0cdb621f0dc2ba271fd9e66228e36a80cabf52133cf51d410a85f21e"
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
   "deploy/aws/main.py": "sha256:600161e7cc33279d8db25856f48568b9c2ee02408cbeb164ef44d19f37a03dd4"
-  "deploy/aws/terraform/": "sha256:baa11635b100e6be945fa3c82512aa231a9fb04f9101d184be38b64aed21010a"
+  "deploy/aws/terraform/": "sha256:06681490f1dbcf1cd47fffdcc70d840f77a36d2d3e08d2b86e5a6f20a012f7d4"
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:20998a03fdd484635cc80667220794fb1970be3f2e198ac067ec7c7bda12f2f1"
   "scripts/release/verify_effective_staging_apply_policy.py": "sha256:08dff05b2a886af751d7e0b1c7886951b240b6a31f18ef14d26f73085ae59145"
   "scripts/release/verify_terraform_state_role.py": "sha256:80dce5faa3a69a530f24a72105f7b340bc52726906a641540ed7ef08fb6e46ac"

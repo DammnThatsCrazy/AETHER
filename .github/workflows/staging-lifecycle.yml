@@ -943,7 +943,13 @@ jobs:
           fi
           mapfile -t services < <(printf '%s' "$services_raw" | tr '\t' '\n' | sed '/^$/d')
           test "${#services[@]}" -gt 0 || { echo '::error::staging cluster exposes no services after wake'; exit 1; }
-          aws ecs wait services-stable --cluster "$STAGING_CLUSTER" --services "${services[@]}"
+          if ! aws ecs wait services-stable --cluster "$STAGING_CLUSTER" --services "${services[@]}"; then
+            echo '::error::staging ECS services did not become stable after wake'
+            aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
+              --query 'services[].{name:serviceName,status:status,desired:desiredCount,running:runningCount,pending:pendingCount,deployments:deployments[].{status:status,desired:desiredCount,running:runningCount,pending:pendingCount}}' \
+              --output table || true
+            exit 1
+          fi
           aws ecs describe-services --cluster "$STAGING_CLUSTER" --services "${services[@]}" \
             --query 'services[].[serviceName,desiredCount,runningCount]' --output text
 

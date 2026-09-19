@@ -270,6 +270,7 @@ REQUIRED_ACTIONS = {
     "application-autoscaling:PutScalingPolicy",
     "application-autoscaling:DeleteScalingPolicy",
     "application-autoscaling:TagResource",
+    "application-autoscaling:UntagResource",
     "application-autoscaling:DescribeScalableTargets",
     "application-autoscaling:DescribeScalingPolicies",
     # IAM
@@ -883,6 +884,9 @@ def main() -> int:
         "application-autoscaling:DescribeScalingPolicies",
     ):
         expected_resources[_as] = "*"
+    expected_resources["application-autoscaling:UntagResource"] = (
+        "arn:aws:application-autoscaling:us-east-1:${account_id}:scalable-target/*"
+    )
 
     # EventBridge
     for _evt in (

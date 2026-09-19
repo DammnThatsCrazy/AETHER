@@ -686,6 +686,22 @@ def test_promotion_does_not_fail_after_apply_on_external_dns_propagation():
     assert "not the applied ALB" in dns_step["run"]
 
 
+def test_wake_readiness_handles_empty_cluster_failures_as_structured_json():
+    """An empty AWS failures array must not trip a text/pipefail guard."""
+    doc = _workflow_yaml(LIFECYCLE)
+    step = next(
+        s for s in _steps(doc, "wake-apply")
+        if s.get("name") == "Wait for staging infrastructure readiness"
+    )
+    run = step["run"]
+    assert "cluster_failures=\"$(aws ecs describe-clusters" in run
+    assert "--output json" in run
+    assert "jq -e 'length == 0'" in run
+    assert "grep -q '^None$\\|^$'" not in run
+    assert "did not become stable after wake" in run
+    assert "aws ecs describe-services" in run
+
+
 def test_deactivation_revokes_durable_api_keys_before_marking_inactive():
     source = (
         ROOT
