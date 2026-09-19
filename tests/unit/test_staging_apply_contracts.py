@@ -19,6 +19,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 TF = ROOT / "deploy/aws/terraform"
 ALB = TF / "modules/alb/main.tf"
+PROFILE_PLAN = TF / "tests/profile_plan.tftest.hcl"
 MONITORING = TF / "modules/monitoring/main.tf"
 PROMOTE = ROOT / ".github/workflows/terraform-promote.yml"
 REPO_HEALTH = ROOT / ".github/workflows/repo-health.yml"
@@ -186,6 +187,18 @@ def test_kyber_workforce_runtime_contract_is_explicit_and_secret_backed() -> Non
     assert "kyber-google-client-secret" in secrets
     assert "kyber_app_url        = var.kyber_app_url" in root
     assert 'api_base_url         = "https://${var.domain_name}"' in root
+
+
+def test_provider_mocked_profile_plans_cover_the_untagged_aws_alias() -> None:
+    """Every provider-mocked profile plan must stay offline-capable.
+
+    The ECS module passes an aliased AWS provider to Application Auto Scaling.
+    If this alias is not mocked alongside the default provider, the profile
+    matrix reaches the real AWS credential chain before any plan assertion.
+    """
+    text = PROFILE_PLAN.read_text(encoding="utf-8")
+    assert text.count('mock_provider "aws"') == 2
+    assert re.search(r'mock_provider "aws"\s*\{\s*alias\s*=\s*"untagged"', text)
 
 
 def test_staging_secret_reconciliation_handles_absent_kms_alias() -> None:

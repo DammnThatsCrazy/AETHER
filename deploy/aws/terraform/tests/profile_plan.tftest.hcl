@@ -137,6 +137,14 @@ mock_provider "aws" {
   }
 }
 
+# The ECS module receives a second provider for Application Auto Scaling
+# targets so those resources do not inherit default tags. Provider-mocked
+# profile plans must mock that alias too; otherwise every profile test falls
+# through to the real AWS credential chain before any assertion runs.
+mock_provider "aws" {
+  alias = "untagged"
+}
+
 mock_provider "random" {}
 mock_provider "auth0" {}
 mock_provider "archive" {}
