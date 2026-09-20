@@ -29,6 +29,15 @@ def test_control_plane_plan_is_typed_and_does_not_fan_out_builds() -> None:
     assert all(not job.get("suite_ids") or job["dependency_profile"] != "node-frontend" for job in plan["jobs"])
 
 
+def test_environment_authority_templates_are_classified() -> None:
+    plan = build_execution_plan([".env.production.example", ".env.staging.example"])
+
+    assert plan["status"] == "READY"
+    assert plan["domains"] == ["delivery"]
+    assert plan["selected_components"] == ["workspace-root"]
+    assert plan["build"]["node_required"] is False
+
+
 def test_unknown_path_is_blocked_instead_of_emitting_zero_work() -> None:
     plan = build_execution_plan(["new-runtime-surface/worker.py"])
 
