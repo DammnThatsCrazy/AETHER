@@ -32,189 +32,18 @@ export const SESSION_EXPIRED_EVENT = 'kyber:session-expired';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-/**
- * Session reads rotate the server-side CSRF hash and the paired HttpOnly
- * cookie. Browser tabs share that cookie jar, so token-issuing reads and
- * mutating requests must be serialized across tabs. The raw token is sent
- * only through this in-memory channel; the revision counter is deliberately
- * non-sensitive and is the only coordination value that touches storage.
- */
-const CSRF_COORDINATION_CHANNEL = 'aether:kyber:csrf:v1';
-const CSRF_COORDINATION_LOCK = 'aether:kyber:csrf:v1';
-const CSRF_REVISION_STORAGE_KEY = `${CSRF_COORDINATION_CHANNEL}:revision`;
-const MAX_CSRF_TOKEN_LENGTH = 512;
-
-type CsrfCoordinationMessage =
-  | {
-      readonly type: 'token';
-      readonly revision: number;
-      readonly token: string;
-    }
-  | {
-      readonly type: 'clear';
-      readonly revision: number;
-      readonly path?: string;
-    };
-type CsrfCoordinationEvent =
-  | { readonly type: 'token'; readonly token: string }
-  | { readonly type: 'clear'; readonly path?: string };
-
 // The CSRF cookie is deliberately HttpOnly and host-bound to the API. The
 // backend returns the raw value once in the authenticated session response;
 // retain only that value in memory so a cross-origin Kyber SPA can still echo
 // the paired token without weakening the cookie boundary.
 let sessionCsrfToken: string | null = null;
-let csrfRevision = 0;
-let csrfChannel: BroadcastChannel | null | undefined;
-let localCriticalSection: Promise<void> = Promise.resolve();
-
-function nextCsrfRevision(): number {
-  let sharedRevision = 0;
-  if (typeof localStorage !== 'undefined') {
-    try {
-      const stored = Number(localStorage.getItem(CSRF_REVISION_STORAGE_KEY));
-      if (Number.isSafeInteger(stored) && stored > 0) sharedRevision = stored;
-    } catch {
-      // Storage can be disabled by browser privacy settings. The channel and
-      // Web Locks path remain usable without its non-sensitive revision hint.
-    }
-  }
-
-  csrfRevision = Math.max(csrfRevision, sharedRevision) + 1;
-  if (typeof localStorage !== 'undefined') {
-    try {
-      localStorage.setItem(CSRF_REVISION_STORAGE_KEY, String(csrfRevision));
-    } catch {
-      // Best effort only; never persist the raw CSRF value.
-    }
-  }
-  return csrfRevision;
-}
-
-function isCsrfCoordinationMessage(
-  value: unknown,
-): value is CsrfCoordinationMessage {
-  if (value === null || typeof value !== 'object') return false;
-  const message = value as Record<string, unknown>;
-  if (
-    (message.type !== 'token' && message.type !== 'clear') ||
-    typeof message.revision !== 'number' ||
-    !Number.isSafeInteger(message.revision) ||
-    message.revision <= 0
-  ) {
-    return false;
-  }
-  return message.type === 'clear'
-    ? message.path === undefined || typeof message.path === 'string'
-    : typeof message.token === 'string' &&
-        message.token.length > 0 &&
-        message.token.length <= MAX_CSRF_TOKEN_LENGTH;
-}
-
-function handleCsrfCoordinationMessage(event: MessageEvent<unknown>): void {
-  if (
-    !isCsrfCoordinationMessage(event.data) ||
-    event.data.revision <= csrfRevision
-  )
-    return;
-
-  csrfRevision = event.data.revision;
-  if (event.data.type === 'token') {
-    sessionCsrfToken = event.data.token;
-    return;
-  }
-
-  sessionCsrfToken = null;
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(
-      new CustomEvent(SESSION_EXPIRED_EVENT, {
-        detail: { path: event.data.path ?? 'cross-tab' },
-      }),
-    );
-  }
-}
-
-function getCsrfCoordinationChannel(): BroadcastChannel | null {
-  if (csrfChannel !== undefined) return csrfChannel;
-  if (
-    typeof window === 'undefined' ||
-    typeof BroadcastChannel === 'undefined'
-  ) {
-    csrfChannel = null;
-    return csrfChannel;
-  }
-
-  try {
-    csrfChannel = new BroadcastChannel(CSRF_COORDINATION_CHANNEL);
-    csrfChannel.addEventListener('message', handleCsrfCoordinationMessage);
-  } catch {
-    // A restrictive browser context may expose the constructor but reject
-    // channel creation. Local transport remains functional in that case.
-    csrfChannel = null;
-  }
-  return csrfChannel;
-}
-
-function publishCsrfCoordinationMessage(message: CsrfCoordinationEvent): void {
-  const channel = getCsrfCoordinationChannel();
-  if (channel === null) return;
-  channel.postMessage({ ...message, revision: nextCsrfRevision() });
-}
-
-async function yieldForCrossTabMessages(): Promise<void> {
-  if (typeof window === 'undefined') return;
-  await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
-}
-
-function queueLocalCriticalSection<T>(task: () => Promise<T>): Promise<T> {
-  const previous = localCriticalSection;
-  let release!: () => void;
-  localCriticalSection = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-
-  return previous.then(task).finally(release);
-}
-
-/**
- * Serialize operations that either rotate the CSRF pair or consume it.
- * Chromium-family browsers use Web Locks for cross-tab exclusion; the local
- * queue still protects multiple callers in the same tab and lets older
- * browsers degrade without deadlocking the app.
- */
-export function withCsrfCriticalSection<T>(task: () => Promise<T>): Promise<T> {
-  return queueLocalCriticalSection(async () => {
-    const run = async (): Promise<T> => {
-      // Let a BroadcastChannel delivery queued by the previous lock holder
-      // update this tab before it reads its in-memory token.
-      await yieldForCrossTabMessages();
-      return task();
-    };
-
-    if (typeof navigator !== 'undefined' && navigator.locks !== undefined) {
-      return navigator.locks.request(
-        CSRF_COORDINATION_LOCK,
-        { mode: 'exclusive' },
-        run,
-      );
-    }
-    return run();
-  });
-}
 
 export function setSessionCsrfToken(token: string | null): void {
-  sessionCsrfToken =
-    token && token.length > 0 && token.length <= MAX_CSRF_TOKEN_LENGTH
-      ? token
-      : null;
-  if (sessionCsrfToken !== null) {
-    publishCsrfCoordinationMessage({ type: 'token', token: sessionCsrfToken });
-  }
+  sessionCsrfToken = token && token.length > 0 ? token : null;
 }
 
 export function clearSessionCsrfToken(): void {
   sessionCsrfToken = null;
-  publishCsrfCoordinationMessage({ type: 'clear' });
 }
 
 export class KyberAuthError extends Error {
@@ -293,7 +122,7 @@ export interface CredentialedRequestInit {
 /**
  * Cookie-authenticated fetch. Never attaches a bearer token — there is none.
  */
-async function credentialedFetchUnlocked(
+export async function credentialedFetch(
   path: string,
   init: CredentialedRequestInit = {},
 ): Promise<Response> {
@@ -343,25 +172,11 @@ async function credentialedFetchUnlocked(
   }
 }
 
-export async function credentialedFetch(
-  path: string,
-  init: CredentialedRequestInit = {},
-): Promise<Response> {
-  const method = (init.method ?? 'GET').toUpperCase();
-  if (SAFE_METHODS.has(method)) return credentialedFetchUnlocked(path, init);
-  return withCsrfCriticalSection(() => credentialedFetchUnlocked(path, init));
-}
-
 interface ProblemBody {
   readonly detail?: unknown;
   readonly title?: unknown;
   readonly code?: unknown;
   readonly message?: unknown;
-}
-
-export interface RequestOptions {
-  /** Set for safe-method endpoints that rotate the CSRF pair, such as /session. */
-  readonly csrfCritical?: boolean | undefined;
 }
 
 async function raiseForStatus(response: Response, path: string): Promise<never> {
@@ -392,21 +207,12 @@ export async function requestJson<T>(
   path: string,
   parse: (raw: unknown) => T,
   init: CredentialedRequestInit = {},
-  options: RequestOptions = {},
 ): Promise<T> {
-  const method = (init.method ?? 'GET').toUpperCase();
-  const execute = async (): Promise<T> => {
-    const response = await credentialedFetchUnlocked(path, init);
-    if (!response.ok) await raiseForStatus(response, path);
-    if (response.status === 204) return parse(null);
-    const raw: unknown = await response.json().catch(() => null);
-    return parse(raw);
-  };
-
-  if (options.csrfCritical === true || !SAFE_METHODS.has(method)) {
-    return withCsrfCriticalSection(execute);
-  }
-  return execute();
+  const response = await credentialedFetch(path, init);
+  if (!response.ok) await raiseForStatus(response, path);
+  if (response.status === 204) return parse(null);
+  const raw: unknown = await response.json().catch(() => null);
+  return parse(raw);
 }
 
 /** Fire-and-forget mutation that only cares whether the backend accepted it. */
@@ -414,14 +220,8 @@ export async function requestVoid(
   path: string,
   init: CredentialedRequestInit = {},
 ): Promise<void> {
-  const method = (init.method ?? 'GET').toUpperCase();
-  const execute = async (): Promise<void> => {
-    const response = await credentialedFetchUnlocked(path, init);
-    if (!response.ok) await raiseForStatus(response, path);
-  };
-
-  if (SAFE_METHODS.has(method)) return execute();
-  return withCsrfCriticalSection(execute);
+  const response = await credentialedFetch(path, init);
+  if (!response.ok) await raiseForStatus(response, path);
 }
 
 export function describeAuthError(err: unknown): string {
