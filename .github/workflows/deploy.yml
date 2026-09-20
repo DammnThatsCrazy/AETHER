@@ -17,6 +17,12 @@ on:
         options: [full, pilot]
         default: full
         required: true
+      delivery_mode:
+        description: "Build-only publishes the immutable release without touching ECS; deploy performs the reviewed rollout"
+        type: choice
+        options: [deploy, build-only]
+        default: deploy
+        required: false
       source_run_id:
         description: Successful staging build run containing the release manifest (required for production)
         type: string
@@ -168,6 +174,7 @@ jobs:
         env:
           TARGET_ENV: ${{ github.event_name == 'push' && 'staging' || inputs.environment }}
           DEPLOYMENT_LANE: ${{ github.event_name == 'push' && 'full' || inputs.deployment_lane || 'full' }}
+          DELIVERY_MODE: ${{ github.event_name == 'push' && 'deploy' || inputs.delivery_mode || 'deploy' }}
         run: |
           set -euo pipefail
           case "$DEPLOYMENT_LANE" in
@@ -176,6 +183,14 @@ jobs:
           esac
           if [ "$DEPLOYMENT_LANE" = pilot ] && [ "$TARGET_ENV" != staging ]; then
             echo '::error::deployment_lane=pilot is valid only with environment=staging'
+            exit 1
+          fi
+          case "$DELIVERY_MODE" in
+            deploy|build-only) ;;
+            *) echo "::error::delivery_mode must be deploy or build-only, got ${DELIVERY_MODE}"; exit 1 ;;
+          esac
+          if [ "$TARGET_ENV" = production ] && [ "$DELIVERY_MODE" != deploy ]; then
+            echo '::error::build-only delivery is limited to staging'
             exit 1
           fi
       - name: Install workflow validation dependencies
@@ -569,6 +584,7 @@ jobs:
     # an attempted runtime rollout before Terraform has provisioned services.
     if: >-
       always() && !cancelled() && needs.delivery-armed.outputs.armed == 'true'
+      && (github.event_name == 'push' || inputs.delivery_mode == 'deploy')
       && (github.event_name == 'workflow_dispatch' || vars.STAGING_RUNTIME_ENABLED == 'true')
       && ((needs.build.result == 'success' && needs.acquire-release.result == 'skipped')
           || (needs.acquire-release.result == 'success' && needs.build.result == 'skipped'))

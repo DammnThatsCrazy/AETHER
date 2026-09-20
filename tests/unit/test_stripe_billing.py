@@ -412,6 +412,46 @@ class TestWebhookHandling:
             acct = asyncio.run(stripe_repository.get_billing_account("t-async"))
             assert acct["stripe_customer_id"] == "cus_async"
             assert acct["stripe_subscription_id"] == "sub_async"
+            assert acct["subscription_status"] == "active"
+            assert wh._HANDLERS["checkout.session.async_payment_succeeded"] is not wh._handle_checkout_session_completed
+
+    def test_delayed_checkout_activation_email_waits_for_async_success(self, monkeypatch):
+        self._setup(monkeypatch)
+        with backend_path():
+            _reload_settings()
+            from shared.billing import stripe_repository
+            from shared.email import email_service
+
+            stripe_repository._reset_in_memory_for_tests()
+            send_email = AsyncMock()
+            monkeypatch.setattr(email_service, "send_email", send_email)
+            wh = importlib.import_module("services.admin.webhook_routes")
+            tenant_id = "t-async-email"
+
+            asyncio.run(wh._handle_checkout_session_completed({
+                "object": {
+                    "customer": "cus_async_email",
+                    "subscription": "sub_async_email",
+                    "client_reference_id": tenant_id,
+                    "payment_status": "unpaid",
+                    "metadata": {
+                        "tenant_id": tenant_id,
+                        "requested_plan_tier": "gamma",
+                        "contact_email": "pilot@example.com",
+                    },
+                },
+            }))
+            send_email.assert_not_awaited()
+
+            asyncio.run(wh._handle_checkout_session_async_payment_succeeded({
+                "object": {
+                    "customer": "cus_async_email",
+                    "subscription": "sub_async_email",
+                    "client_reference_id": tenant_id,
+                    "metadata": {"tenant_id": tenant_id},
+                },
+            }))
+            send_email.assert_awaited_once()
 
     def test_async_checkout_payment_failure_marks_subscription_past_due(self, monkeypatch):
         self._setup(monkeypatch)

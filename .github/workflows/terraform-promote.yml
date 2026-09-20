@@ -1469,9 +1469,9 @@ jobs:
               --db-cluster-identifier AETHER-staging-aurora --output json)"
             if jq -e '
               (.DBClusters | length) == 1 and
-              .[0].StorageEncrypted == true and
-              .[0].DeletionProtection == true and
-              .[0].MasterUserSecret.SecretStatus == "active"
+              .DBClusters[0].StorageEncrypted == true and
+              .DBClusters[0].DeletionProtection == true and
+              .DBClusters[0].MasterUserSecret.SecretStatus == "active"
             ' <<<"$cluster_json" >/dev/null; then
               echo 'Verified canonical staging Aurora encryption, deletion protection, and active RDS credential.'
               exit 0

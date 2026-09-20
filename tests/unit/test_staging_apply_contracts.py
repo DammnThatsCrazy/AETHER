@@ -173,6 +173,17 @@ def test_staging_apply_fails_closed_on_unpopulated_secret_stubs() -> None:
     assert secret_read["resource"] == "arn:aws:secretsmanager:us-east-1:${account_id}:secret:aether/*"
 
 
+def test_staging_aurora_safety_guard_indexes_dbclusters_array() -> None:
+    text = PROMOTE.read_text(encoding="utf-8")
+    start = text.index("Verify applied staging Aurora safety controls")
+    end = text.index("Verify applied staging ECS task-definition lane", start)
+    guard = text[start:end]
+    assert ".DBClusters[0].StorageEncrypted == true" in guard
+    assert ".DBClusters[0].DeletionProtection == true" in guard
+    assert ".DBClusters[0].MasterUserSecret.SecretStatus == \"active\"" in guard
+    assert ".[0].StorageEncrypted" not in guard
+
+
 def test_pilot_price_secrets_are_bootstrapped_and_reconcilable() -> None:
     """Every pilot price secret must have one secure-write and state path."""
     bootstrap = (ROOT / "scripts/bootstrap_aws_secrets.py").read_text(encoding="utf-8")
@@ -442,6 +453,44 @@ def test_effective_policy_checker_matches_resources_conditions_and_denies() -> N
         },
         "kms:CreateGrant",
         "arn:aws:kms:us-east-1:544471417928:key/contract-check",
+    )
+
+
+def test_effective_policy_checker_enforces_declared_forbidden_actions() -> None:
+    spec = importlib.util.spec_from_file_location(
+        "verify_effective_staging_apply_policy_forbidden", EFFECTIVE_POLICY_CHECKER
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module._forbidden_action_errors(
+        [{"Effect": "Allow", "Action": "secretsmanager:PutSecretValue"}],
+        ["secretsmanager:PutSecretValue"],
+        {"secretsmanager:GetSecretValue"},
+    )
+    assert module._forbidden_action_errors(
+        [{"Effect": "Allow", "Action": "iam:*"}],
+        ["iam:*"],
+        {"secretsmanager:GetSecretValue"},
+    )
+    # A required action may be listed under a broad forbidden marker, but the
+    # attached policy must grant the exact required action rather than the
+    # wildcard itself.
+    assert module._forbidden_action_errors(
+        [{"Effect": "Allow", "Action": "kms:Decrypt"}],
+        ["kms:*"],
+        {"kms:Decrypt"},
+    ) == []
+    assert module._forbidden_action_errors(
+        [{"Effect": "Allow", "Action": "kms:*"}],
+        ["kms:*"],
+        {"kms:Decrypt"},
+    )
+    assert module._forbidden_action_errors(
+        [{"Effect": "Allow", "NotAction": "kms:Decrypt"}],
+        ["kms:*"],
+        {"kms:Decrypt"},
     )
 
 

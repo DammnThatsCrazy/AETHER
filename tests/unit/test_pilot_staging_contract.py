@@ -56,6 +56,8 @@ def test_pilot_entrypoint_is_dispatch_only_and_uses_the_shared_lane_token():
     assert "staging-state-reconcile.yml" in text
     assert "reconcile_pilot_price_secret_state" in text
     assert "IMPORT-STAGING" in text
+    assert "gh run download" in text
+    assert "delivery_mode=build-only" in text
     for forbidden in (
         "check_kyber_staging_contract.py",
         "probe_kyber_staging_identity.py",
@@ -79,6 +81,10 @@ def test_canonical_staging_authorities_accept_full_and_pilot(name):
 def test_full_staging_push_path_remains_full_and_profile_choices_do_not_fork():
     deploy = (WORKFLOWS / "deploy.yml").read_text(encoding="utf-8")
     assert "github.event_name == 'push' && 'full'" in deploy
+    deploy_inputs = _on(_workflow("deploy.yml"))["workflow_dispatch"]["inputs"]
+    assert deploy_inputs["delivery_mode"]["options"] == ["deploy", "build-only"]
+    assert deploy_inputs["delivery_mode"]["default"] == "deploy"
+    assert "inputs.delivery_mode == 'deploy'" in deploy
 
     terraform = _workflow("terraform-promote.yml")
     profile_options = (

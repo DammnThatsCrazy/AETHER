@@ -53,7 +53,7 @@ on:
         default: "alias/aether-staging-secrets"
         required: false
       release_run_id:
-        description: Successful `Immutable delivery` run holding release.json (required for full-rehearsal)
+        description: Successful `Immutable delivery` build-only or deployed run holding release.json (required for full-rehearsal)
         type: string
         required: false
       release_manifest_checksum:
@@ -525,6 +525,10 @@ jobs:
             echo "::error::release run ${RELEASE_RUN_ID} concluded ${run_conclusion}, not success"
             exit 1
           fi
+          jobs_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RELEASE_RUN_ID}/jobs?per_page=100")"
+          build_conclusion="$(jq -r '[.jobs[] | select(.name == "Build immutable release once") | .conclusion] | last // "missing"' <<<"$jobs_json")"
+          test "$build_conclusion" = success \
+            || { echo "::error::release run ${RELEASE_RUN_ID} has no successful immutable build job"; exit 1; }
           test "$run_head_sha" = "$INTENDED_RELEASE_SHA" \
             || { echo "::error::release run ${RELEASE_RUN_ID} head ${run_head_sha} is not intended release ${INTENDED_RELEASE_SHA}"; exit 1; }
           cd "${RUNNER_TEMP}/release"

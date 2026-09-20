@@ -44,7 +44,7 @@ on:
         type: string
         required: false
       release_run_id:
-        description: Successful immutable delivery run for full-rehearsal
+        description: Successful immutable delivery or staging build-only run for full-rehearsal; omit both release inputs to build one automatically
         type: string
         required: false
       release_manifest_checksum:
@@ -316,6 +316,7 @@ jobs:
               sleep 10
             done
             test -n "$run_id" || { echo "::error::${workflow} dispatch never appeared"; exit 1; }
+            DISPATCHED_RUN_ID="$run_id"
             deadline="$(( $(date -u +%s) + PROMOTE_TIMEOUT_MINUTES * 60 ))"
             while :; do
               status="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')"
@@ -380,8 +381,24 @@ jobs:
                 -f proof_tenant_id="$PROOF_TENANT_ID" -f proof_workspace_id="$PROOF_WORKSPACE_ID"
               ;;
             full-rehearsal)
-              test -n "$RELEASE_RUN_ID" || { echo '::error::release_run_id is required for pilot full-rehearsal'; exit 1; }
-              test -n "$RELEASE_MANIFEST_CHECKSUM" || { echo '::error::release_manifest_checksum is required for pilot full-rehearsal'; exit 1; }
+              if [ -z "$RELEASE_RUN_ID" ] && [ -z "$RELEASE_MANIFEST_CHECKSUM" ]; then
+                # A sleeping staging environment cannot produce a successful
+                # ECS deploy, but it can safely produce the exact immutable
+                # release that the lifecycle wake will later consume.
+                dispatch_and_wait deploy.yml \
+                  -f environment=staging -f deployment_lane=pilot \
+                  -f delivery_mode=build-only
+                RELEASE_RUN_ID="$DISPATCHED_RUN_ID"
+                release_dir="$RUNNER_TEMP/pilot-release"
+                mkdir -p "$release_dir"
+                gh run download "$RELEASE_RUN_ID" \
+                  --name "release-${INTENDED_RELEASE_SHA}" \
+                  --dir "$release_dir"
+                RELEASE_MANIFEST_CHECKSUM="$(cat "$release_dir/release.json.sha256")"
+              elif [ -z "$RELEASE_RUN_ID" ] || [ -z "$RELEASE_MANIFEST_CHECKSUM" ]; then
+                echo '::error::release_run_id and release_manifest_checksum must be supplied together'
+                exit 1
+              fi
               dispatch_and_wait staging-lifecycle.yml \
                 -f action=full-rehearsal -f deployment_lane=pilot \
                 -f confirm_runtime_wake=true -f release_run_id="$RELEASE_RUN_ID" \

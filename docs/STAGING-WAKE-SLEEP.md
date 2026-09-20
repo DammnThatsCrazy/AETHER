@@ -31,14 +31,14 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:6b24ee13fb51366713cde866bc6d6fc5d4bef1be87dd91381e09627c1739c22f"
-  ".github/workflows/pilot-staging.yml": "sha256:bd1c3b55aed8b06e9c380f1053446e8e5198e261ae2029d48091538b6128d7f9"
-  ".github/workflows/staging-lifecycle.yml": "sha256:0f908f361c21e3211da1e186d2c43b724d3b1bf771fc8ded5883c6659e90911c"
+  ".github/workflows/pilot-staging.yml": "sha256:2662ba32392254f7b53893101dedcfe020dfa7876d83376f422f9ceecbc14b00"
+  ".github/workflows/staging-lifecycle.yml": "sha256:10e1d820332480f00951459f5a27e3ba79290c1eec080a3665299a6a6ebeddc1"
   ".github/workflows/staging-smoke.yml": "sha256:7ecf7d77441520e36e75f1f3a53d514ca4965a0065cbf34684526e9cacd07ac4"
   ".github/workflows/staging-ttl-guard.yml": "sha256:f5c66d618aad6b84887fa689dda91d9f68c43c397e39003f96efc440823a7111"
-  ".github/workflows/terraform-promote.yml": "sha256:89242263c6151b05c3b299c72fa8525cbb4cfecfb57273359e7c9a48c335edde"
+  ".github/workflows/terraform-promote.yml": "sha256:782c4760636b2a2089256ab26750b1d90435ffe946353c6540e3a6c9ef89b029"
   "config/deployment_profiles.yaml": "sha256:83715252d5052cd9ef78a33db51ea7f7f73c5b850821bdb37e35f47a9e8ced6b"
   "config/runtime_deployment.yaml": "sha256:7c6ebe1fafec7f7a2fae8e054cd09ffe0b0f78bd8c6694bdd4da1d517740d7d8"
-  "config/staging_secret_preflight_iam_policy.yaml": "sha256:8e8ade1e700682a42c8f8012d6debc4ca7d51175adb426cc2a8a5ea6ff0ed9b7"
+  "config/staging_secret_preflight_iam_policy.yaml": "sha256:9fbac99f2693435b11d93b768d52b8ff5e5f06a797980d0ffb7ac720f8598e80"
   "config/staging_secret_preflight_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
   "deploy/aws/terraform/profiles.tf": "sha256:e8db2b2d668be5f42c72f0cc9e45aedde9eb441e33ef8fba5fe2b55946e32560"
   "deploy/aws/terraform/profiles/staging.tfvars": "sha256:30b3fa7a866dbf24e67096fbe9ddff0bbe5afcd3fb414e01b04991914d0d0836"
@@ -46,8 +46,8 @@ source_hashes:
   "scripts/release/check_amplify_app_contract.py": "sha256:7c60acb5b3b270c10a6f3897124d7ac10484213768475bd7d6cac3b2f6139cfe"
   "scripts/release/check_staging_credential_contract.py": "sha256:b5960e8b08f2714ca2fa42f835cc2bb3f79bf3350745215ba58acd25e06a648c"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
-  "scripts/release/check_staging_secret_payload_contract.py": "sha256:3f12899f82d18f82ff9961c123e366da12568dc6040e416c292f981ac34ef90f"
-  "scripts/release/check_staging_secret_preflight_policy.py": "sha256:4ab78af2ac6c11571f4aa13a49233797196cfb9bcc467f70e0cf6baee4194560"
+  "scripts/release/check_staging_secret_payload_contract.py": "sha256:c61c73868cfc56350e10449f5579b6838bd483add5fe857f23262e5b08f3230d"
+  "scripts/release/check_staging_secret_preflight_policy.py": "sha256:cb23b553551e1f7de9a0f28e0b5b9b40fe324a664acabc59a1d1b3189e38b88c"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:7bce8901b3706085a0367526bcb6114d4221bff136cc380295d3e0c378e627b2"
 ---
 
@@ -140,7 +140,7 @@ gh workflow run staging-lifecycle.yml \
 gh workflow run staging-lifecycle.yml \
   -f action=full-rehearsal \
   -f ml_image_digest=sha256:<64hex> \
-  -f release_run_id=<successful "Immutable delivery" run id> \
+  -f release_run_id=<successful "Immutable delivery" build-only or deployed run id> \
   -f release_manifest_checksum=<approved release.json sha256> \
   -f max_awake_hours=4 \
   -f promote_timeout_minutes=180
@@ -153,7 +153,7 @@ gh workflow run staging-lifecycle.yml \
 | `action` | `validate` | one of the six above |
 | `ml_image_digest` | — | required for wake or sleep **plans** only when the selected profile has `remote_ml: true`; optional for inline-ML profiles such as staging |
 | `backend_image_digest` | — | ignored when `release_run_id` is supplied |
-| `release_run_id` | — | required for `full-rehearsal`; must be a successful `.github/workflows/deploy.yml` run |
+| `release_run_id` | — | required for `full-rehearsal`; must be a successful `.github/workflows/deploy.yml` build-only or deployed run with a successful immutable-build job |
 | `release_manifest_checksum` | — | required for `full-rehearsal` |
 | `plan_run_id` | — | required for a standalone `validate` / `apply-wake` |
 | `plan_checksum` | — | required for a standalone `apply-wake` |
@@ -383,12 +383,15 @@ Steps, in order, with what each proves:
    `aether/kyber-google-client-secret`) is intentionally deferred; the twelve
    core application secrets and four real self-service Stripe test-price
    secrets remain required, and the value-safe payload contract checks the
-   `sk_test_`, `whsec_`, and `price_` forms. In the full lane, the Kyber pair
-   remains part of this required set. The
+   `sk_test_`, `whsec_`, and `price_` forms. In the full lane, the twelve base
+   application secrets and Kyber pair remain required, while the pilot-only
+   Stripe price secrets are not required. The
    payload check assumes the dedicated `AetherStagingSecretPreflight` OIDC
-   role, whose only reviewed read is `secretsmanager:GetSecretValue` for the
-   `aether/*` prefix. The lifecycle role remains forbidden from reading secret
-   values. After a reviewed apply, `check_staging_task_definition_contract.py`
+   role, whose reviewed reads are `secretsmanager:GetSecretValue` for the
+   `aether/*` prefix plus `kms:Decrypt` only for the staging Secrets Manager
+   CMK under its alias and environment-tag conditions. The lifecycle role
+   remains forbidden from reading secret values. After a reviewed apply,
+   `check_staging_task_definition_contract.py`
    reads only ECS metadata and proves both the API and `lean-worker` revisions
    match the selected lane, including the pilot Stripe mounts and the absence
    of deferred Kyber mounts. A stale registered revision is a hard failure,

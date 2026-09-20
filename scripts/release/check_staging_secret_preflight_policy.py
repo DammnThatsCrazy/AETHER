@@ -9,8 +9,15 @@ from pathlib import Path
 import yaml
 
 
-EXPECTED_ACTION = "secretsmanager:GetSecretValue"
-EXPECTED_RESOURCE_SUFFIX = ":secret:aether/*"
+EXPECTED_SECRET_ACTION = "secretsmanager:GetSecretValue"
+EXPECTED_SECRET_RESOURCE_SUFFIX = ":secret:aether/*"
+EXPECTED_KMS_ACTION = "kms:Decrypt"
+EXPECTED_KMS_RESOURCE_SUFFIX = ":key/*"
+EXPECTED_KMS_SCOPE = "staging-secrets-kms-key"
+EXPECTED_KMS_CONDITIONS = {
+    "StringEquals": {"aws:ResourceTag/Environment": "staging"},
+    "StringLike": {"kms:ResourceAliases": ["alias/aether-staging-secrets"]},
+}
 REQUIRED_FORBIDDEN = {
     "secretsmanager:PutSecretValue",
     "secretsmanager:UpdateSecret",
@@ -31,18 +38,37 @@ def policy_errors(path: Path) -> list[str]:
     if document.get("role") != "AetherStagingSecretPreflight":
         errors.append("policy role must be AetherStagingSecretPreflight")
     statements = document.get("statements")
-    if not isinstance(statements, list) or len(statements) != 1:
-        errors.append("policy must contain exactly one statement")
+    if not isinstance(statements, list) or len(statements) != 2:
+        errors.append("policy must contain exactly two statements")
     else:
-        statement = statements[0]
-        actions = statement.get("actions") or []
-        if actions != [EXPECTED_ACTION]:
-            errors.append(f"policy actions must be exactly [{EXPECTED_ACTION!r}]")
-        resource = statement.get("resource")
-        if not isinstance(resource, str) or not resource.endswith(EXPECTED_RESOURCE_SUFFIX):
-            errors.append("policy resource must be limited to the staging aether/* secret prefix")
-        if statement.get("scope") != "staging-name-prefix":
-            errors.append("policy statement must declare staging-name-prefix scope")
+        by_sid = {statement.get("sid"): statement for statement in statements}
+        secret_statement = by_sid.get("ReadStagingApplicationSecretPayloads")
+        kms_statement = by_sid.get("DecryptStagingApplicationSecrets")
+        if not isinstance(secret_statement, dict):
+            errors.append("policy must declare ReadStagingApplicationSecretPayloads")
+        else:
+            actions = secret_statement.get("actions") or []
+            if actions != [EXPECTED_SECRET_ACTION]:
+                errors.append(
+                    f"secret payload actions must be exactly [{EXPECTED_SECRET_ACTION!r}]"
+                )
+            resource = secret_statement.get("resource")
+            if not isinstance(resource, str) or not resource.endswith(EXPECTED_SECRET_RESOURCE_SUFFIX):
+                errors.append("secret payload resource must be limited to the staging aether/* prefix")
+            if secret_statement.get("scope") != "staging-name-prefix":
+                errors.append("secret payload statement must declare staging-name-prefix scope")
+        if not isinstance(kms_statement, dict):
+            errors.append("policy must declare DecryptStagingApplicationSecrets")
+        else:
+            if kms_statement.get("actions") != [EXPECTED_KMS_ACTION]:
+                errors.append(f"KMS actions must be exactly [{EXPECTED_KMS_ACTION!r}]")
+            resource = kms_statement.get("resource")
+            if not isinstance(resource, str) or not resource.endswith(EXPECTED_KMS_RESOURCE_SUFFIX):
+                errors.append("KMS resource must be limited to staging customer-managed keys")
+            if kms_statement.get("scope") != EXPECTED_KMS_SCOPE:
+                errors.append(f"KMS statement must declare {EXPECTED_KMS_SCOPE} scope")
+            if kms_statement.get("conditions") != EXPECTED_KMS_CONDITIONS:
+                errors.append("KMS decrypt must be restricted to the staging secrets key alias and tag")
     forbidden = set(document.get("forbidden_actions") or [])
     missing_forbidden = sorted(REQUIRED_FORBIDDEN - forbidden)
     if missing_forbidden:
@@ -63,7 +89,7 @@ def main() -> int:
         for error in errors:
             print(f"::error::{error}")
         return 1
-    print("staging secret preflight IAM contract valid: one read-only aether/* payload permission")
+    print("staging secret preflight IAM contract valid: payload read plus scoped staging-key decrypt")
     return 0
 
 

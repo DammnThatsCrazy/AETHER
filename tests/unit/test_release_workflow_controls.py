@@ -265,6 +265,31 @@ def test_staging_smoke_uses_the_authoritative_proof_environment_and_fails_closed
     assert "STRIPE_SECRET_KEY" in workflow
 
 
+def test_staging_build_only_release_is_available_without_ecs_mutation():
+    deploy = _workflow_yaml("deploy.yml")
+    deploy_text = _workflow("deploy.yml")
+    triggers = deploy.get("on", deploy.get(True))
+    inputs = triggers["workflow_dispatch"]["inputs"]
+    assert inputs["delivery_mode"]["options"] == ["deploy", "build-only"]
+    assert "build-only delivery is limited to staging" in deploy_text
+    assert "inputs.delivery_mode == 'deploy'" in deploy_text
+
+    lifecycle = _workflow("staging-lifecycle.yml")
+    assert "Successful `Immutable delivery` build-only or deployed run" in lifecycle
+    assert "Build immutable release once" in lifecycle
+    assert "has no successful immutable build job" in lifecycle
+
+
+def test_stripe_smoke_uses_form_encoded_confirmed_test_payment():
+    smoke = (ROOT / "scripts/smoke/stripe-connector.ts").read_text(encoding="utf-8")
+    assert "URLSearchParams" in smoke
+    assert "application/x-www-form-urlencoded" in smoke
+    assert "JSON.stringify(payload)" not in smoke
+    assert "payment_method: 'pm_card_visa'" in smoke
+    assert "confirm: true" in smoke
+    assert "expand[]=latest_charge" in smoke
+
+
 def test_production_status_workflow_binds_the_canonical_build_and_runtime_links():
     workflow = _workflow("amplify-status-production.yml")
     assert "--repository \"$AMPLIFY_REPOSITORY\"" in workflow

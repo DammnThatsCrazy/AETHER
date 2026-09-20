@@ -35,13 +35,13 @@ estimated_read_minutes: 18
 toc_depth: 3
 source_hashes:
   ".github/workflows/amplify-status-production.yml": "sha256:6b24ee13fb51366713cde866bc6d6fc5d4bef1be87dd91381e09627c1739c22f"
-  ".github/workflows/staging-lifecycle.yml": "sha256:0f908f361c21e3211da1e186d2c43b724d3b1bf771fc8ded5883c6659e90911c"
+  ".github/workflows/staging-lifecycle.yml": "sha256:10e1d820332480f00951459f5a27e3ba79290c1eec080a3665299a6a6ebeddc1"
   ".github/workflows/staging-state-reconcile.yml": "sha256:942a4df69556a2b859c869c04edc0ca29dfbac3016e1809cdef3b38a995c401d"
   ".github/workflows/staging-ttl-guard.yml": "sha256:f5c66d618aad6b84887fa689dda91d9f68c43c397e39003f96efc440823a7111"
-  ".github/workflows/terraform-promote.yml": "sha256:89242263c6151b05c3b299c72fa8525cbb4cfecfb57273359e7c9a48c335edde"
+  ".github/workflows/terraform-promote.yml": "sha256:782c4760636b2a2089256ab26750b1d90435ffe946353c6540e3a6c9ef89b029"
   "config/staging_apply_iam_policy.yaml": "sha256:ed9ae866b562e8d127ce7d687f3992e8d7c041c21cadc9307911235cea082f9d"
   "config/staging_lifecycle_iam_policy.yaml": "sha256:a06f30da38ccac8ce5bc33f8fac086c89131aa509d106d9c1515012615e903bf"
-  "config/staging_secret_preflight_iam_policy.yaml": "sha256:8e8ade1e700682a42c8f8012d6debc4ca7d51175adb426cc2a8a5ea6ff0ed9b7"
+  "config/staging_secret_preflight_iam_policy.yaml": "sha256:9fbac99f2693435b11d93b768d52b8ff5e5f06a797980d0ffb7ac720f8598e80"
   "config/staging_secret_preflight_trust_policy.json": "sha256:35974a1b8ddb89cd605c79ea10bbf06510886b7a04f0e619fb301220c08b55c8"
   "deploy/aws/README.md": "sha256:97ad81d85a6ca46fa4d40639aed3bfa830998ed7353718bb065ba32ad38eaf34"
   "deploy/aws/config/": "sha256:3f7aa3ae2d4114741c23d34977d3a64eef820ae880c3487633e7330ac2d16e16"
@@ -51,10 +51,10 @@ source_hashes:
   "scripts/release/check_staging_credential_contract.py": "sha256:b5960e8b08f2714ca2fa42f835cc2bb3f79bf3350745215ba58acd25e06a648c"
   "scripts/release/check_staging_lane_contract.py": "sha256:7005ef21ff872335e729076c6c9e9e1e541e630e138b46589bf84f1985b968fb"
   "scripts/release/check_staging_lifecycle_policy.py": "sha256:68d70ad0a009244251eb3caec93186be55415685600c3f590270ffb05e0680ea"
-  "scripts/release/check_staging_secret_payload_contract.py": "sha256:3f12899f82d18f82ff9961c123e366da12568dc6040e416c292f981ac34ef90f"
-  "scripts/release/check_staging_secret_preflight_policy.py": "sha256:4ab78af2ac6c11571f4aa13a49233797196cfb9bcc467f70e0cf6baee4194560"
+  "scripts/release/check_staging_secret_payload_contract.py": "sha256:c61c73868cfc56350e10449f5579b6838bd483add5fe857f23262e5b08f3230d"
+  "scripts/release/check_staging_secret_preflight_policy.py": "sha256:cb23b553551e1f7de9a0f28e0b5b9b40fe324a664acabc59a1d1b3189e38b88c"
   "scripts/release/check_staging_task_definition_contract.py": "sha256:7bce8901b3706085a0367526bcb6114d4221bff136cc380295d3e0c378e627b2"
-  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:371031747e27ce1267ed6341994ff9410675289d92ed0b830dc50db5891ca4eb"
+  "scripts/release/verify_effective_staging_apply_policy.py": "sha256:ee8a6740c863b9906ad77486aa6efe3dfe009f8ec5fa88157792fa17e454f6c4"
   "scripts/release/verify_terraform_state_role.py": "sha256:80dce5faa3a69a530f24a72105f7b340bc52726906a641540ed7ef08fb6e46ac"
   "services/backend/Dockerfile": "sha256:a2f7f3ad14f5b2006359f0a582d48cf813f70edd53cc9964dbfc4ac365d8d068"
 ---
@@ -78,8 +78,8 @@ ViaService; CloudWatch Logs omits both `kms:ViaService` and
 `kms:CallerAccount` because it calls KMS as its own regional principal while
 creating encrypted log groups). The pre-apply verifier compares the
 attached policy statements with the reviewed staging manifest, including
-resource coverage, conditions, and explicit Deny statements, before any
-Terraform mutation.
+resource coverage, conditions, explicit Deny statements, and declared
+forbidden-action overlaps, before any Terraform mutation.
 
 The staging ECR repositories have one deliberate pre-existing exception:
 `aether-backend` is an immutable AES-256 repository created by the release
@@ -144,8 +144,10 @@ import or untaint may be reused.
 
 Secret payload validation is deliberately performed by the separate
 `AetherStagingSecretPreflight` OIDC role. Its reviewed policy grants only
-`secretsmanager:GetSecretValue` for the `aether/*` staging prefix and forbids
-secret mutation, KMS, and IAM actions. This keeps the lifecycle role's
+`secretsmanager:GetSecretValue` for the `aether/*` staging prefix plus a
+customer-managed-key-scoped `kms:Decrypt` grant constrained by the staging
+Secrets Manager alias and environment tag. It forbids secret mutation, every
+other KMS operation, and IAM actions. This keeps the lifecycle role's
 no-secret-values boundary intact while still proving that the actual values
 mounted by ECS are raw, non-placeholder staging values before a plan, wake, or
 smoke path proceeds. The post-apply ECS task-definition check is metadata-only
@@ -689,10 +691,12 @@ tenant isolation, observability, lifecycle/redeploy controls, migrations and
 smoke coverage — and intentionally defers only Kyber operator/workforce
 identity plus GCP/Google hosting and credentials. Its validator and apply
 preflight fail closed if the required ECS/bootstrap Stripe wiring is absent or
-if any of the seven real Stripe test price secrets is missing or stale. The
-secure bootstrap rejects malformed or placeholder IDs before writing them;
-the workflow preflight reads metadata only and never invents, reads, or prints
-a price ID.
+if any of the four real self-service Stripe test price secrets is missing or
+stale. The full lane does not require those pilot-only price secrets; it
+requires the twelve base application secrets plus the two Kyber workforce
+secrets. The secure bootstrap rejects malformed or placeholder IDs before
+writing them; the workflow preflight reads metadata only and never invents,
+reads, or prints a price ID.
 
 ### Staging apply prerequisites and collision safety
 

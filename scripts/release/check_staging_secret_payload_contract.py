@@ -59,7 +59,7 @@ def required_secret_names(lane: str) -> tuple[str, ...]:
     if lane == "pilot":
         return BASE_SECRETS + PILOT_PRICE_SECRETS
     if lane == "full":
-        return BASE_SECRETS + PILOT_PRICE_SECRETS + FULL_ONLY_SECRETS
+        return BASE_SECRETS + FULL_ONLY_SECRETS
     raise ValueError(f"deployment lane must be pilot or full, got {lane!r}")
 
 

@@ -149,6 +149,51 @@ def _statement_actions(statement: dict[str, Any]) -> list[str]:
     return [value for value in _as_list(statement.get("Action", [])) if isinstance(value, str)]
 
 
+def _action_patterns_overlap(left: str, right: str) -> bool:
+    """Return whether two IAM action patterns can describe one action."""
+    left = left.lower()
+    right = right.lower()
+    return fnmatch.fnmatchcase(left, right) or fnmatch.fnmatchcase(right, left)
+
+
+def _forbidden_action_errors(
+    statements: list[dict[str, Any]],
+    forbidden_actions: list[str],
+    required_actions: set[str],
+) -> list[str]:
+    """Find identity-policy Allows that violate the manifest deny contract.
+
+    A required operation is allowed when it appears as the exact reviewed
+    action (for example ``kms:Decrypt`` alongside a broad ``kms:*`` forbidden
+    marker). A wildcard or broader attached Allow is still rejected, because it
+    would grant capabilities outside the reviewed operation set.
+    """
+    errors: set[str] = set()
+    required = {action.lower() for action in required_actions}
+    for statement in statements:
+        if statement.get("Effect") != "Allow":
+            continue
+        actions = _statement_actions(statement)
+        not_actions = [
+            value
+            for value in _as_list(statement.get("NotAction", []))
+            if isinstance(value, str)
+        ]
+        for forbidden in forbidden_actions:
+            if actions:
+                for action in actions:
+                    if (
+                        action.lower() not in required
+                        and _action_patterns_overlap(action, forbidden)
+                    ):
+                        errors.add(f"{action} overlaps forbidden {forbidden}")
+            elif not_actions and _statement_matches_action(statement, forbidden):
+                errors.add(
+                    f"NotAction {','.join(not_actions)} leaves forbidden {forbidden} allowed"
+                )
+    return sorted(errors)
+
+
 def _statement_matches_action(statement: dict[str, Any], action: str) -> bool:
     normalized_action = action.lower()
     actions = _statement_actions(statement)
@@ -442,11 +487,28 @@ def main() -> int:
                     )
     if not required_operations:
         fail("staging apply IAM manifest declares no actions")
+    forbidden_actions = manifest.get("forbidden_actions", [])
+    if forbidden_actions is None:
+        forbidden_actions = []
+    if not isinstance(forbidden_actions, list) or not all(
+        isinstance(action, str) and action for action in forbidden_actions
+    ):
+        fail("staging apply manifest forbidden_actions must be a list of strings")
     effective, policy_names = load_effective_statements(role_name)
     boundary, boundary_arn = load_permissions_boundary_statements(role_name)
     if boundary_arn:
         policy_names.append(f"boundary:{boundary_arn}")
     all_statements = effective + boundary
+    forbidden = _forbidden_action_errors(
+        effective,
+        forbidden_actions,
+        {action for action, _resource, _conditions in required_operations},
+    )
+    if forbidden:
+        fail(
+            f"{args.expected_role} effective policy grants forbidden actions: "
+            + "; ".join(forbidden)
+        )
     denied = sorted(
         f"{action} on {resource}"
         for action, resource, conditions in required_operations

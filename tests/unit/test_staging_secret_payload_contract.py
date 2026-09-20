@@ -79,3 +79,15 @@ def test_full_requires_deferred_workforce_secrets():
     errors = checker.payload_errors(lane="full", runner=_runner(values, missing=set(checker.FULL_ONLY_SECRETS)))
     assert any("kyber-google-client-id" in error for error in errors)
     assert any("kyber-google-client-secret" in error for error in errors)
+
+
+def test_full_does_not_require_pilot_price_secrets():
+    values = _values()
+    for name in checker.PILOT_PRICE_SECRETS:
+        values.pop(name, None)
+    values.update({name: f"raw-{name}" for name in checker.FULL_ONLY_SECRETS})
+
+    assert set(checker.PILOT_PRICE_SECRETS).isdisjoint(
+        checker.required_secret_names("full")
+    )
+    assert checker.payload_errors(lane="full", runner=_runner(values)) == []

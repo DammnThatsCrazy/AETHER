@@ -22,7 +22,7 @@ reviewed_source_commits:
   - {'commit': '69185729', 'reason': 'Reviewed 69185729 (model-runtime adapter constructor hardening: explicit empty api_key/model/base_url values now override ambient environment values, preserving the documented precedence and fail-closed unconfigured-provider behavior). This is transport configuration behavior with no endpoint or response-shape change; the model-runtime endpoint tables remain accurate.'}
   - {'commit': '0efa07cb', 'reason': 'Reviewed the comparison watchlist client-sync change: watchlist upserts and deletes now carry durable mutation occurrences so retries remain idempotent while A-to-B-to-A and delete/recreate transitions produce distinct feed events. The endpoint inventory remains the same; the client-sync contract note below records the revision semantics.'}
 source_hashes:
-  "services/backend/services/": "sha256:96b9879a349ccf82808293fec6cc9ea8d5a50abe976c06908cdb36600b5d64c4"
+  "services/backend/services/": "sha256:5ba79e3424e6baf847908ca2fd4a41ad3c7b15807a722bf15b69d1ebfac19fff"
 ---
 # Aether Backend API v0.1.0-alpha.0 — Endpoint Specification
 
@@ -149,7 +149,7 @@ signature-verification failures.
 | `/v1/auth/sso/providers` | GET | List configured SSO providers (no auth) |
 | `/v1/auth/recover` | POST | Recover lost API key via signed email |
 | `/v1/billing/plans` | GET | Public plan catalog for signup and upgrade discovery |
-| `/v1/admin/billing/stripe/webhook` | POST | Stripe-signed webhook (subscription + invoice events) |
+| `/v1/admin/billing/stripe/webhook` | POST | Stripe-signed webhook (subscription, invoice, and delayed Checkout payment events; delayed activation is fulfilled only after async payment success) |
 
 ### Self-service caller endpoints (`/v1/me/*`, API key required)
 
@@ -3586,6 +3586,12 @@ Session inspection, elevation, and revocation for the Kyber workforce plane
 (`/v1/kyber/auth/*`). These routes only inspect and end what the identity-plane
 sign-in flow produced, plus raise and verify a step-up elevation — there is no
 route that mints, extends, or returns a raw session handle.
+
+The session and CSRF cookies are host-only `__Host-` cookies with `HttpOnly`
+and `SameSite=Strict`; `Secure` is enabled outside local/development/test
+environments. Logout and forced revocation delete them with the same security
+attributes used to set them, so browsers accept the tombstones and do not
+retain a stale workforce handle.
 
 ### GET /v1/kyber/auth/session
 
